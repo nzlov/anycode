@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+.worktree/
+data/
+workspaces/
+
+web/node_modules/
+web/dist/
+web/.quasar/
+
+tmp/
+coverage/

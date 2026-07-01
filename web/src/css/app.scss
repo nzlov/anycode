@@ -1,0 +1,56 @@
+:root {
+  --ac-surface: #ffffff;
+  --ac-surface-muted: #f8fafc;
+  --ac-border: #dbe3ef;
+  --ac-text-muted: #64748b;
+  --ac-sidebar: #0f172a;
+  --ac-sidebar-border: #1e293b;
+}
+
+.body--dark {
+  --ac-surface: #111827;
+  --ac-surface-muted: #0f172a;
+  --ac-border: #263449;
+  --ac-text-muted: #94a3b8;
+  --ac-sidebar: #020617;
+  --ac-sidebar-border: #1e293b;
+}
+
+body {
+  background: var(--ac-surface-muted);
+  color: #0f172a;
+}
+
+.body--dark {
+  color: #e2e8f0;
+}
+
+.app-drawer {
+  background: var(--ac-sidebar);
+  color: #e2e8f0;
+  border-color: var(--ac-sidebar-border);
+}
+
+.app-drawer .q-item {
+  border-radius: 8px;
+  margin: 4px 12px;
+}
+
+.app-drawer .q-item--active {
+  background: rgba(37, 99, 235, 0.18);
+  color: #f8fafc;
+}
+
+.workbench-page {
+  background: var(--ac-surface-muted);
+}
+
+.session-card {
+  border: 1px solid var(--ac-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.text-muted {
+  color: var(--ac-text-muted);
+}
