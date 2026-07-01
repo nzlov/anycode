@@ -7,7 +7,7 @@
           <div class="text-caption text-muted">配置项目、分支、模式和 Codex 运行参数</div>
         </div>
         <q-space />
-        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
+        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" :disable="creating" />
       </q-card-section>
 
       <q-separator />
@@ -21,14 +21,23 @@
             label="项目"
             emit-value
             map-options
+            :disable="creating"
             :options="projectOptions"
           />
-          <q-select v-model="branch" outlined dense label="基础分支" :options="branchOptions" />
+          <q-select
+            v-model="branch"
+            outlined
+            dense
+            label="基础分支"
+            :disable="creating"
+            :options="branchOptions"
+          />
           <q-btn-toggle
             v-model="mode"
             spread
             no-caps
             toggle-color="primary"
+            :disable="creating"
             :options="modeOptions"
           />
         </div>
@@ -41,7 +50,8 @@
                 :key="`${file.name}-${file.size}`"
                 removable
                 square
-                :clickable="canPreview(file)"
+                :clickable="!creating && canPreview(file)"
+                :disable="creating"
                 class="attachment-chip"
                 :icon="fileIcon(file)"
                 @click="openPreview(file)"
@@ -59,6 +69,7 @@
               append
               label="添加附件"
               class="file-picker"
+              :disable="creating"
             >
               <template #prepend>
                 <q-icon name="attach_file" />
@@ -73,14 +84,26 @@
             type="textarea"
             class="prompt-input"
             placeholder="描述你希望 Codex 完成的任务"
+            :disable="creating"
           />
         </div>
+
+        <q-banner v-if="createError" dense rounded class="bg-red-1 text-negative q-mt-sm">
+          {{ createError }}
+        </q-banner>
       </q-card-section>
 
       <q-separator />
 
       <q-card-actions class="new-session-actions">
-        <q-btn flat round icon="admin_panel_settings" color="primary" aria-label="运行权限">
+        <q-btn
+          flat
+          round
+          icon="admin_panel_settings"
+          color="primary"
+          aria-label="运行权限"
+          :disable="creating"
+        >
           <q-tooltip>运行权限：workspace-write</q-tooltip>
         </q-btn>
         <q-select
@@ -90,6 +113,7 @@
           emit-value
           map-options
           class="compact-select"
+          :disable="creating"
           :options="modelOptions"
         />
         <q-select
@@ -99,6 +123,7 @@
           emit-value
           map-options
           class="compact-select"
+          :disable="creating"
           :options="effortOptions"
         />
         <q-space />
@@ -108,6 +133,7 @@
           icon="add"
           label="创建卡片"
           no-caps
+          :disable="creating"
           :loading="creating"
           @click="createSession"
         />
@@ -145,7 +171,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { useProjects } from '@/composables/useProjects';
-import { createSession as createSessionRequest } from '@/services/sessions';
+import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
+import { graphqlFetch } from '@/services/graphqlClient';
+import type { CreateSessionInput } from '@/services/sessions';
 
 defineProps<{
   modelValue: boolean;
@@ -165,6 +193,7 @@ const files = ref<File[]>([]);
 const model = ref('cli-default');
 const effort = ref('medium');
 const creating = ref(false);
+const createError = ref('');
 const previewOpen = ref(false);
 const previewName = ref('');
 const previewKind = ref<'image' | 'video' | ''>('');
@@ -208,6 +237,7 @@ function canPreview(file: File) {
 }
 
 function openPreview(file: File) {
+  if (creating.value) return;
   if (!canPreview(file)) return;
   revokePreviewUrl();
   previewName.value = file.name;
@@ -231,11 +261,12 @@ function revokePreviewUrl() {
 }
 
 function removeFile(file: File) {
+  if (creating.value) return;
   files.value = files.value.filter((item) => item !== file);
 }
 
 async function createSession() {
-  const config = {
+  const config: CreateSessionInput['config'] = {
     reasoningEffort: effort.value,
     permissionMode: 'workspace-write',
   };
@@ -244,20 +275,68 @@ async function createSession() {
     Object.assign(config, { codexModel });
   }
 
+  const selectedFiles = [...files.value];
+  const stagedAttachmentIds: string[] = [];
+  let phase: 'upload' | 'create' = selectedFiles.length > 0 ? 'upload' : 'create';
+
   creating.value = true;
+  createError.value = '';
   try {
-    await createSessionRequest({
+    for (const file of selectedFiles) {
+      const attachment = await stageAttachment(file);
+      stagedAttachmentIds.push(attachment.id);
+    }
+
+    phase = 'create';
+    const input: CreateSessionInput = {
       projectId: projectId.value,
       requirement: prompt.value,
       mode: mode.value,
       baseBranch: branch.value,
       config,
-    });
+    };
+    if (stagedAttachmentIds.length > 0) {
+      input.stagedAttachmentIds = stagedAttachmentIds;
+    }
+    await createSessionRequest(input);
+    files.value = [];
+    prompt.value = '';
     emit('create');
     emit('update:modelValue', false);
+  } catch (error) {
+    const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
+    const prefix = phase === 'upload' ? '附件上传失败' : '创建卡片失败';
+    createError.value = cleanupError
+      ? `${prefix}：${errorMessage(error)}；${cleanupError}`
+      : `${prefix}：${errorMessage(error)}`;
   } finally {
     creating.value = false;
   }
+}
+
+async function createSessionRequest(input: CreateSessionInput) {
+  await graphqlFetch<{ createSession: { id: string } }, { input: CreateSessionInput }>({
+    query: `
+      mutation CreateSession($input: CreateSessionInput!) {
+        createSession(input: $input) {
+          id
+        }
+      }
+    `,
+    variables: { input },
+  });
+}
+
+async function cleanupStagedAttachments(ids: string[]) {
+  if (ids.length === 0) return '';
+  const results = await Promise.allSettled(ids.map((id) => deleteStagedAttachment(id)));
+  const failed = results.find((result) => result.status === 'rejected');
+  if (!failed || failed.status !== 'rejected') return '';
+  return `已上传附件清理失败：${errorMessage(failed.reason)}`;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 watch(

@@ -35,21 +35,19 @@ export function setGraphQLAccessKey(accessKey: string) {
   window.localStorage.setItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY, accessKey.trim());
 }
 
-export async function graphqlFetch<
-  TData,
-  TVariables extends Record<string, unknown> = Record<string, unknown>,
->({ query, variables, operationName }: GraphQLRequest<TVariables>) {
-  const headers = new Headers({ 'content-type': 'application/json' });
+function graphqlHeaders(contentType?: string) {
+  const headers = new Headers();
+  if (contentType) {
+    headers.set('content-type', contentType);
+  }
   const accessKey = getGraphQLAccessKey();
   if (accessKey) {
     headers.set('authorization', `Bearer ${accessKey}`);
   }
+  return headers;
+}
 
-  const response = await fetch(graphqlEndpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ query, variables, operationName }),
-  });
+async function parseGraphQLResponse<TData>(response: Response) {
   if (!response.ok) {
     throw new Error(`GraphQL request failed: ${response.status}`);
   }
@@ -62,4 +60,25 @@ export async function graphqlFetch<
     throw new Error('GraphQL response missing data');
   }
   return payload.data;
+}
+
+export async function graphqlFetch<
+  TData,
+  TVariables extends Record<string, unknown> = Record<string, unknown>,
+>({ query, variables, operationName }: GraphQLRequest<TVariables>) {
+  const response = await fetch(graphqlEndpoint, {
+    method: 'POST',
+    headers: graphqlHeaders('application/json'),
+    body: JSON.stringify({ query, variables, operationName }),
+  });
+  return parseGraphQLResponse<TData>(response);
+}
+
+export async function graphqlMultipartFetch<TData>(body: FormData) {
+  const response = await fetch(graphqlEndpoint, {
+    method: 'POST',
+    headers: graphqlHeaders(),
+    body,
+  });
+  return parseGraphQLResponse<TData>(response);
 }

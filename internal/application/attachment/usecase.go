@@ -32,6 +32,11 @@ const (
 	OpenDownload OpenMode = "download"
 )
 
+var (
+	ErrAttachmentNotFound = errors.New("attachment not found")
+	ErrNotPreviewable     = errors.New("attachment is not previewable")
+)
+
 type AttachmentDTO struct {
 	ID          string
 	Filename    string
@@ -102,7 +107,7 @@ func (s *Service) DeleteStagedAttachment(ctx context.Context, id domain.StagedAt
 		return errors.New("staged attachment id is required")
 	}
 	if _, err := s.repo.FindStagedAttachment(ctx, id); err != nil {
-		return fmt.Errorf("find staged attachment: %w", err)
+		return fmt.Errorf("%w: %v", ErrAttachmentNotFound, err)
 	}
 	if err := s.store.DeleteStaged(ctx, id); err != nil {
 		return fmt.Errorf("delete staged attachment file: %w", err)
@@ -127,7 +132,7 @@ func (s *Service) DeleteSessionAttachment(ctx context.Context, id domain.Session
 		return errors.New("session attachment id is required")
 	}
 	if _, err := s.repo.FindSessionAttachment(ctx, id); err != nil {
-		return fmt.Errorf("find session attachment: %w", err)
+		return fmt.Errorf("%w: %v", ErrAttachmentNotFound, err)
 	}
 	if err := s.store.DeleteSession(ctx, id); err != nil {
 		return fmt.Errorf("delete session attachment file: %w", err)
@@ -153,10 +158,10 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 	}
 	attachment, err := s.repo.FindSessionAttachment(ctx, domain.SessionAttachmentID(id))
 	if err != nil {
-		return Stream{}, fmt.Errorf("find session attachment: %w", err)
+		return Stream{}, fmt.Errorf("%w: %v", ErrAttachmentNotFound, err)
 	}
 	if mode == OpenPreview && !attachment.Previewable {
-		return Stream{}, errors.New("attachment is not previewable")
+		return Stream{}, ErrNotPreviewable
 	}
 	stream, err := s.store.Open(ctx, attachment.Path)
 	if err != nil {
