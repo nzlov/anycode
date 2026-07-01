@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
@@ -26,6 +27,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// EventRecord is the client for interacting with the EventRecord builders.
+	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
 	// Project is the client for interacting with the Project builders.
@@ -47,6 +50,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
@@ -144,6 +148,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                ctx,
 		config:             cfg,
+		EventRecord:        NewEventRecordClient(cfg),
 		MergeRecord:        NewMergeRecordClient(cfg),
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
@@ -168,6 +173,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                ctx,
 		config:             cfg,
+		EventRecord:        NewEventRecordClient(cfg),
 		MergeRecord:        NewMergeRecordClient(cfg),
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
@@ -179,7 +185,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		MergeRecord.
+//		EventRecord.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -201,26 +207,30 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
-	c.MergeRecord.Use(hooks...)
-	c.Project.Use(hooks...)
-	c.PromptAppend.Use(hooks...)
-	c.Session.Use(hooks...)
-	c.WorkflowDefinition.Use(hooks...)
+	for _, n := range []interface{ Use(...Hook) }{
+		c.EventRecord, c.MergeRecord, c.Project, c.PromptAppend, c.Session,
+		c.WorkflowDefinition,
+	} {
+		n.Use(hooks...)
+	}
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
-	c.MergeRecord.Intercept(interceptors...)
-	c.Project.Intercept(interceptors...)
-	c.PromptAppend.Intercept(interceptors...)
-	c.Session.Intercept(interceptors...)
-	c.WorkflowDefinition.Intercept(interceptors...)
+	for _, n := range []interface{ Intercept(...Interceptor) }{
+		c.EventRecord, c.MergeRecord, c.Project, c.PromptAppend, c.Session,
+		c.WorkflowDefinition,
+	} {
+		n.Intercept(interceptors...)
+	}
 }
 
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *EventRecordMutation:
+		return c.EventRecord.mutate(ctx, m)
 	case *MergeRecordMutation:
 		return c.MergeRecord.mutate(ctx, m)
 	case *ProjectMutation:
@@ -233,6 +243,139 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.WorkflowDefinition.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// EventRecordClient is a client for the EventRecord schema.
+type EventRecordClient struct {
+	config
+}
+
+// NewEventRecordClient returns a client for the EventRecord from the given config.
+func NewEventRecordClient(c config) *EventRecordClient {
+	return &EventRecordClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `eventrecord.Hooks(f(g(h())))`.
+func (c *EventRecordClient) Use(hooks ...Hook) {
+	c.hooks.EventRecord = append(c.hooks.EventRecord, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `eventrecord.Intercept(f(g(h())))`.
+func (c *EventRecordClient) Intercept(interceptors ...Interceptor) {
+	c.inters.EventRecord = append(c.inters.EventRecord, interceptors...)
+}
+
+// Create returns a builder for creating a EventRecord entity.
+func (c *EventRecordClient) Create() *EventRecordCreate {
+	mutation := newEventRecordMutation(c.config, OpCreate)
+	return &EventRecordCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of EventRecord entities.
+func (c *EventRecordClient) CreateBulk(builders ...*EventRecordCreate) *EventRecordCreateBulk {
+	return &EventRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *EventRecordClient) MapCreateBulk(slice any, setFunc func(*EventRecordCreate, int)) *EventRecordCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &EventRecordCreateBulk{err: fmt.Errorf("calling to EventRecordClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*EventRecordCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &EventRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for EventRecord.
+func (c *EventRecordClient) Update() *EventRecordUpdate {
+	mutation := newEventRecordMutation(c.config, OpUpdate)
+	return &EventRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *EventRecordClient) UpdateOne(_m *EventRecord) *EventRecordUpdateOne {
+	mutation := newEventRecordMutation(c.config, OpUpdateOne, withEventRecord(_m))
+	return &EventRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *EventRecordClient) UpdateOneID(id string) *EventRecordUpdateOne {
+	mutation := newEventRecordMutation(c.config, OpUpdateOne, withEventRecordID(id))
+	return &EventRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for EventRecord.
+func (c *EventRecordClient) Delete() *EventRecordDelete {
+	mutation := newEventRecordMutation(c.config, OpDelete)
+	return &EventRecordDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *EventRecordClient) DeleteOne(_m *EventRecord) *EventRecordDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *EventRecordClient) DeleteOneID(id string) *EventRecordDeleteOne {
+	builder := c.Delete().Where(eventrecord.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &EventRecordDeleteOne{builder}
+}
+
+// Query returns a query builder for EventRecord.
+func (c *EventRecordClient) Query() *EventRecordQuery {
+	return &EventRecordQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeEventRecord},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a EventRecord entity by its id.
+func (c *EventRecordClient) Get(ctx context.Context, id string) (*EventRecord, error) {
+	return c.Query().Where(eventrecord.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *EventRecordClient) GetX(ctx context.Context, id string) *EventRecord {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *EventRecordClient) Hooks() []Hook {
+	return c.hooks.EventRecord
+}
+
+// Interceptors returns the client interceptors.
+func (c *EventRecordClient) Interceptors() []Interceptor {
+	return c.inters.EventRecord
+}
+
+func (c *EventRecordClient) mutate(ctx context.Context, m *EventRecordMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&EventRecordCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&EventRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&EventRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&EventRecordDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown EventRecord mutation op: %q", m.Op())
 	}
 }
 
@@ -904,10 +1047,11 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		MergeRecord, Project, PromptAppend, Session, WorkflowDefinition []ent.Hook
+		EventRecord, MergeRecord, Project, PromptAppend, Session,
+		WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		MergeRecord, Project, PromptAppend, Session,
+		EventRecord, MergeRecord, Project, PromptAppend, Session,
 		WorkflowDefinition []ent.Interceptor
 	}
 )

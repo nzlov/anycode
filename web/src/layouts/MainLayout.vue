@@ -94,6 +94,23 @@
               </q-btn>
             </q-item-section>
           </q-item>
+
+          <q-separator spaced />
+
+          <q-item clickable @click="openAccessKeyDialog">
+            <q-item-section avatar>
+              <q-icon :name="accessKeyConfigured ? 'verified_user' : 'key'" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>{{ accessKeyConfigured ? '已连接' : '访问密钥' }}</q-item-label>
+              <q-item-label caption>
+                {{ accessKeyConfigured ? '当前请求使用已保存 key' : '配置 GraphQL 访问密钥' }}
+              </q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-icon name="settings" />
+            </q-item-section>
+          </q-item>
         </q-list>
       </q-scroll-area>
     </q-drawer>
@@ -108,6 +125,63 @@
 
     <new-session-dialog v-model="newSessionOpen" />
     <project-directory-dialog v-model="directoryDialogOpen" />
+
+    <q-dialog v-model="accessKeyDialogOpen">
+      <q-card class="access-key-dialog" style="width: 420px; max-width: calc(100vw - 32px)">
+        <q-card-section class="row items-center q-pb-sm">
+          <div>
+            <div class="text-subtitle1 text-weight-bold">访问密钥</div>
+            <div class="text-caption text-muted">保存后后续 GraphQL 请求会使用新 key</div>
+          </div>
+          <q-space />
+          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section>
+          <q-input
+            v-model="accessKeyInput"
+            outlined
+            dense
+            autofocus
+            label="访问密钥"
+            :type="accessKeyVisible ? 'text' : 'password'"
+            @keyup.enter="saveAccessKey"
+          >
+            <template #prepend>
+              <q-icon name="key" />
+            </template>
+            <template #append>
+              <q-btn
+                flat
+                round
+                dense
+                :icon="accessKeyVisible ? 'visibility_off' : 'visibility'"
+                aria-label="切换密钥可见性"
+                @click="accessKeyVisible = !accessKeyVisible"
+              />
+            </template>
+          </q-input>
+          <q-banner v-if="accessKeySaved" dense rounded class="q-mt-md bg-positive text-white">
+            已保存，后续请求会使用新 key。
+          </q-banner>
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat color="primary" label="取消" no-caps />
+          <q-btn
+            unelevated
+            color="primary"
+            icon="save"
+            label="保存"
+            no-caps
+            :loading="accessKeySaving"
+            @click="saveAccessKey"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-layout>
 </template>
 
@@ -118,18 +192,49 @@ import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
+import { getGraphQLAccessKey, setGraphQLAccessKey } from '@/services/graphqlClient';
 
 const leftDrawerOpen = ref(false);
 const newSessionOpen = ref(false);
 const directoryDialogOpen = ref(false);
+const accessKeyDialogOpen = ref(false);
+const accessKeyInput = ref('');
+const accessKeyConfigured = ref(false);
+const accessKeySaving = ref(false);
+const accessKeySaved = ref(false);
+const accessKeyVisible = ref(false);
 const { themeMode, themeModes } = useThemeMode();
 const { projects, loadProjects } = useProjects();
 
 onMounted(() => {
+  refreshAccessKeyStatus();
   void loadProjects();
 });
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value;
+}
+
+function refreshAccessKeyStatus() {
+  accessKeyConfigured.value = getGraphQLAccessKey().trim() !== '';
+}
+
+function openAccessKeyDialog() {
+  accessKeyInput.value = getGraphQLAccessKey();
+  accessKeySaved.value = false;
+  accessKeyVisible.value = false;
+  accessKeyDialogOpen.value = true;
+}
+
+async function saveAccessKey() {
+  accessKeySaving.value = true;
+  try {
+    setGraphQLAccessKey(accessKeyInput.value);
+    refreshAccessKeyStatus();
+    await loadProjects();
+    accessKeySaved.value = true;
+  } finally {
+    accessKeySaving.value = false;
+  }
 }
 </script>

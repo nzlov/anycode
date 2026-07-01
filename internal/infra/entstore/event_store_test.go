@@ -1,0 +1,111 @@
+package entstore
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/nzlov/anycode/internal/domain/event"
+)
+
+func TestEventStoreAppendAfterAndScopeFilters(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	events := store.Events()
+	session1 := event.SessionID("session-1")
+	session2 := event.SessionID("session-2")
+	base := time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)
+	appendEvents(t, ctx, events,
+		event.DomainEvent{
+			ID:        "event-1",
+			Scope:     event.Scope{ProjectID: "project-1", SessionID: &session1},
+			SessionID: &session1,
+			Type:      "session.started",
+			Payload:   map[string]any{"message": "started"},
+			CreatedAt: base,
+		},
+		event.DomainEvent{
+			ID:        "event-2",
+			Scope:     event.Scope{ProjectID: "project-1", SessionID: &session1},
+			SessionID: &session1,
+			Type:      "session.output",
+			Payload:   map[string]any{"tokens": 12},
+			CreatedAt: base,
+		},
+		event.DomainEvent{
+			ID:        "event-3",
+			Scope:     event.Scope{ProjectID: "project-1", SessionID: &session2},
+			SessionID: &session2,
+			Type:      "session.started",
+			Payload:   map[string]any{"other": true},
+			CreatedAt: base.Add(time.Second),
+		},
+		event.DomainEvent{
+			ID:        "event-4",
+			Scope:     event.Scope{ProjectID: "project-2", SessionID: &session1},
+			SessionID: &session1,
+			Type:      "session.started",
+			Payload:   map[string]any{"project": "two"},
+			CreatedAt: base.Add(2 * time.Second),
+		},
+	)
+
+	got, err := events.After(ctx, event.Scope{ProjectID: "project-1", SessionID: &session1}, "")
+	if err != nil {
+		t.Fatalf("After() error = %v", err)
+	}
+	assertEventIDs(t, got, []event.ID{"event-1", "event-2"})
+	if got[0].Payload["message"] != "started" {
+		t.Fatalf("payload mismatch: %#v", got[0].Payload)
+	}
+
+	got, err = events.After(ctx, event.Scope{ProjectID: "project-1", SessionID: &session1}, "event-1")
+	if err != nil {
+		t.Fatalf("After(event-1) error = %v", err)
+	}
+	assertEventIDs(t, got, []event.ID{"event-2"})
+
+	got, err = events.After(ctx, event.Scope{ProjectID: "project-1"}, "")
+	if err != nil {
+		t.Fatalf("After(project) error = %v", err)
+	}
+	assertEventIDs(t, got, []event.ID{"event-1", "event-2", "event-3"})
+
+	got, err = events.After(ctx, event.Scope{SessionID: &session1}, "")
+	if err != nil {
+		t.Fatalf("After(session) error = %v", err)
+	}
+	assertEventIDs(t, got, []event.ID{"event-1", "event-2", "event-4"})
+}
+
+func appendEvents(t *testing.T, ctx context.Context, store *EventStore, events ...event.DomainEvent) {
+	t.Helper()
+	for _, event := range events {
+		if err := store.Append(ctx, event); err != nil {
+			t.Fatalf("append event %s: %v", event.ID, err)
+		}
+	}
+}
+
+func assertEventIDs(t *testing.T, got []event.DomainEvent, want []event.ID) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("event count = %d, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].ID != want[i] {
+			t.Fatalf("event[%d] = %q, want %q: %#v", i, got[i].ID, want[i], got)
+		}
+	}
+}

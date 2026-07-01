@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	eventapp "github.com/nzlov/anycode/internal/application/event"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -59,5 +60,6 @@ func newGraphQLUseCases(store *entstore.Store) (graph.UseCases, error) {
 	return graph.UseCases{
 		Projects: projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
 		Sessions: sessionapp.New(store.Sessions(), store.Projects()),
+		Events:   eventapp.New(store.Events()),
 	}, nil
 }

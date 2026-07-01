@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// EventRecord is the predicate function for eventrecord builders.
+type EventRecord func(*sql.Selector)
+
 // MergeRecord is the predicate function for mergerecord builders.
 type MergeRecord func(*sql.Selector)
 

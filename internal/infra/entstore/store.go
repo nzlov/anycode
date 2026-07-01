@@ -93,6 +93,10 @@ func (s *Store) Sessions() *SessionRepository {
 	return NewSessionRepository(s.client)
 }
 
+func (s *Store) Events() *EventStore {
+	return NewEventStore(s.client)
+}
+
 func sqliteDSN(opts OpenOptions) (string, error) {
 	url := strings.TrimSpace(opts.DatabaseURL)
 	switch {

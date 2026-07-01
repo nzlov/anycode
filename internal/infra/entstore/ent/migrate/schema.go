@@ -8,6 +8,38 @@ import (
 )
 
 var (
+	// EventRecordsColumns holds the columns for the "event_records" table.
+	EventRecordsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString, Nullable: true},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "type", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// EventRecordsTable holds the schema information for the "event_records" table.
+	EventRecordsTable = &schema.Table{
+		Name:       "event_records",
+		Columns:    EventRecordsColumns,
+		PrimaryKey: []*schema.Column{EventRecordsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "eventrecord_project_id_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{EventRecordsColumns[2], EventRecordsColumns[5], EventRecordsColumns[0]},
+			},
+			{
+				Name:    "eventrecord_session_id_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{EventRecordsColumns[1], EventRecordsColumns[5], EventRecordsColumns[0]},
+			},
+			{
+				Name:    "eventrecord_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{EventRecordsColumns[5], EventRecordsColumns[0]},
+			},
+		},
+	}
 	// MergeRecordsColumns holds the columns for the "merge_records" table.
 	MergeRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -154,6 +186,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		EventRecordsTable,
 		MergeRecordsTable,
 		ProjectsTable,
 		PromptAppendsTable,

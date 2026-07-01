@@ -9,6 +9,18 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
+// The EventRecordFunc type is an adapter to allow the use of ordinary
+// function as EventRecord mutator.
+type EventRecordFunc func(context.Context, *ent.EventRecordMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f EventRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.EventRecordMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.EventRecordMutation", m)
+}
+
 // The MergeRecordFunc type is an adapter to allow the use of ordinary
 // function as MergeRecord mutator.
 type MergeRecordFunc func(context.Context, *ent.MergeRecordMutation) (ent.Value, error)

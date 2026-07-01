@@ -5,6 +5,7 @@ package ent
 import (
 	"time"
 
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
@@ -17,6 +18,24 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	eventrecordFields := schema.EventRecord{}.Fields()
+	_ = eventrecordFields
+	// eventrecordDescProjectID is the schema descriptor for project_id field.
+	eventrecordDescProjectID := eventrecordFields[2].Descriptor()
+	// eventrecord.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	eventrecord.ProjectIDValidator = eventrecordDescProjectID.Validators[0].(func(string) error)
+	// eventrecordDescType is the schema descriptor for type field.
+	eventrecordDescType := eventrecordFields[3].Descriptor()
+	// eventrecord.TypeValidator is a validator for the "type" field. It is called by the builders before save.
+	eventrecord.TypeValidator = eventrecordDescType.Validators[0].(func(string) error)
+	// eventrecordDescPayload is the schema descriptor for payload field.
+	eventrecordDescPayload := eventrecordFields[4].Descriptor()
+	// eventrecord.DefaultPayload holds the default value on creation for the payload field.
+	eventrecord.DefaultPayload = eventrecordDescPayload.Default.(map[string]interface{})
+	// eventrecordDescCreatedAt is the schema descriptor for created_at field.
+	eventrecordDescCreatedAt := eventrecordFields[5].Descriptor()
+	// eventrecord.DefaultCreatedAt holds the default value on creation for the created_at field.
+	eventrecord.DefaultCreatedAt = eventrecordDescCreatedAt.Default.(func() time.Time)
 	mergerecordFields := schema.MergeRecord{}.Fields()
 	_ = mergerecordFields
 	// mergerecordDescSessionID is the schema descriptor for session_id field.
