@@ -112,17 +112,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
-import { projects } from '@/mocks/workbench';
 
 const leftDrawerOpen = ref(false);
 const newSessionOpen = ref(false);
 const directoryDialogOpen = ref(false);
 const { themeMode, themeModes } = useThemeMode();
+const { projects, loadProjects } = useProjects();
+
+onMounted(() => {
+  void loadProjects();
+});
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value;

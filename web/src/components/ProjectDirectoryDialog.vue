@@ -21,9 +21,10 @@
         <q-tree
           v-model:selected="selected"
           :nodes="directoryTree"
-          node-key="label"
+          node-key="path"
           selected-color="primary"
           :filter="filter"
+          :loading="loading"
           class="q-mt-md"
         />
       </q-card-section>
@@ -31,12 +32,14 @@
       <q-card-actions align="right">
         <q-btn v-close-popup flat color="primary" label="取消" no-caps />
         <q-btn
-          v-close-popup
           unelevated
           color="primary"
           icon="folder_open"
           label="使用目录"
           no-caps
+          :loading="creating"
+          :disable="!selected"
+          @click="useSelectedDirectory"
         />
       </q-card-actions>
     </q-card>
@@ -44,11 +47,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 
-import { directoryTree } from '@/mocks/workbench';
+import { useDirectoryBrowser } from '@/composables/useDirectoryBrowser';
+import { useProjects } from '@/composables/useProjects';
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean;
 }>();
 
@@ -57,9 +61,32 @@ const emit = defineEmits<{
 }>();
 
 const filter = ref('');
-const selected = ref('anycode');
+const selected = ref('');
+const creating = ref(false);
+const { directoryTree, loading, loadDirectory } = useDirectoryBrowser();
+const { createProjectFromPath } = useProjects();
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      void loadDirectory();
+    }
+  },
+);
 
 function emitModel(value: boolean) {
   emit('update:modelValue', value);
+}
+
+async function useSelectedDirectory() {
+  if (!selected.value) return;
+  creating.value = true;
+  try {
+    await createProjectFromPath(selected.value);
+    emit('update:modelValue', false);
+  } finally {
+    creating.value = false;
+  }
 }
 </script>

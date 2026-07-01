@@ -141,9 +141,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-import { projects } from '@/mocks/workbench';
+import { useProjects } from '@/composables/useProjects';
 
 defineProps<{
   modelValue: boolean;
@@ -154,8 +154,9 @@ const emit = defineEmits<{
   create: [];
 }>();
 
-const projectId = ref(projects[0]?.id ?? '');
-const branch = ref(projects[0]?.defaultBranch ?? 'main');
+const { projects, projectOptions, loadProjects } = useProjects();
+const projectId = ref(projects.value[0]?.id ?? '');
+const branch = ref(projects.value[0]?.defaultBranch ?? 'main');
 const mode = ref<'workflow' | 'chat'>('workflow');
 const prompt = ref('');
 const files = ref<File[]>([]);
@@ -166,14 +167,11 @@ const previewName = ref('');
 const previewKind = ref<'image' | 'video' | ''>('');
 const previewUrl = ref('');
 
-const projectOptions = computed(() =>
-  projects.map((project) => ({
-    label: project.name,
-    value: project.id,
-  })),
-);
-
-const branchOptions = ['main', 'master', 'dev-foundation', 'feature/session-ui'];
+const branchOptions = computed(() => {
+  const selectedProject = projects.value.find((project) => project.id === projectId.value);
+  const defaultBranch = selectedProject?.defaultBranch ?? 'main';
+  return Array.from(new Set([defaultBranch, 'main', 'master', 'dev-foundation']));
+});
 
 const modeOptions = [
   { label: '流程模式', value: 'workflow', icon: 'account_tree' },
@@ -237,6 +235,26 @@ function createSession() {
   emit('create');
   emit('update:modelValue', false);
 }
+
+watch(
+  projects,
+  (items) => {
+    const currentProject = items.find((project) => project.id === projectId.value);
+    if (!currentProject && items[0]) {
+      projectId.value = items[0].id;
+      branch.value = items[0].defaultBranch;
+      return;
+    }
+    if (currentProject) {
+      branch.value = currentProject.defaultBranch;
+    }
+  },
+  { immediate: true },
+);
+
+onMounted(() => {
+  void loadProjects();
+});
 
 onBeforeUnmount(revokePreviewUrl);
 </script>
