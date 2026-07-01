@@ -14,7 +14,10 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -23,8 +26,14 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// MergeRecord is the client for interacting with the MergeRecord builders.
+	MergeRecord *MergeRecordClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// PromptAppend is the client for interacting with the PromptAppend builders.
+	PromptAppend *PromptAppendClient
+	// Session is the client for interacting with the Session builders.
+	Session *SessionClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
 }
@@ -38,7 +47,10 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.Project = NewProjectClient(c.config)
+	c.PromptAppend = NewPromptAppendClient(c.config)
+	c.Session = NewSessionClient(c.config)
 	c.WorkflowDefinition = NewWorkflowDefinitionClient(c.config)
 }
 
@@ -132,7 +144,10 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                ctx,
 		config:             cfg,
+		MergeRecord:        NewMergeRecordClient(cfg),
 		Project:            NewProjectClient(cfg),
+		PromptAppend:       NewPromptAppendClient(cfg),
+		Session:            NewSessionClient(cfg),
 		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
@@ -153,7 +168,10 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                ctx,
 		config:             cfg,
+		MergeRecord:        NewMergeRecordClient(cfg),
 		Project:            NewProjectClient(cfg),
+		PromptAppend:       NewPromptAppendClient(cfg),
+		Session:            NewSessionClient(cfg),
 		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
@@ -161,7 +179,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Project.
+//		MergeRecord.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -183,26 +201,171 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
+	c.MergeRecord.Use(hooks...)
 	c.Project.Use(hooks...)
+	c.PromptAppend.Use(hooks...)
+	c.Session.Use(hooks...)
 	c.WorkflowDefinition.Use(hooks...)
 }
 
 // Intercept adds the query interceptors to all the entity clients.
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
+	c.MergeRecord.Intercept(interceptors...)
 	c.Project.Intercept(interceptors...)
+	c.PromptAppend.Intercept(interceptors...)
+	c.Session.Intercept(interceptors...)
 	c.WorkflowDefinition.Intercept(interceptors...)
 }
 
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *MergeRecordMutation:
+		return c.MergeRecord.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
+	case *PromptAppendMutation:
+		return c.PromptAppend.mutate(ctx, m)
+	case *SessionMutation:
+		return c.Session.mutate(ctx, m)
 	case *WorkflowDefinitionMutation:
 		return c.WorkflowDefinition.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// MergeRecordClient is a client for the MergeRecord schema.
+type MergeRecordClient struct {
+	config
+}
+
+// NewMergeRecordClient returns a client for the MergeRecord from the given config.
+func NewMergeRecordClient(c config) *MergeRecordClient {
+	return &MergeRecordClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `mergerecord.Hooks(f(g(h())))`.
+func (c *MergeRecordClient) Use(hooks ...Hook) {
+	c.hooks.MergeRecord = append(c.hooks.MergeRecord, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `mergerecord.Intercept(f(g(h())))`.
+func (c *MergeRecordClient) Intercept(interceptors ...Interceptor) {
+	c.inters.MergeRecord = append(c.inters.MergeRecord, interceptors...)
+}
+
+// Create returns a builder for creating a MergeRecord entity.
+func (c *MergeRecordClient) Create() *MergeRecordCreate {
+	mutation := newMergeRecordMutation(c.config, OpCreate)
+	return &MergeRecordCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of MergeRecord entities.
+func (c *MergeRecordClient) CreateBulk(builders ...*MergeRecordCreate) *MergeRecordCreateBulk {
+	return &MergeRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *MergeRecordClient) MapCreateBulk(slice any, setFunc func(*MergeRecordCreate, int)) *MergeRecordCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &MergeRecordCreateBulk{err: fmt.Errorf("calling to MergeRecordClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*MergeRecordCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &MergeRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for MergeRecord.
+func (c *MergeRecordClient) Update() *MergeRecordUpdate {
+	mutation := newMergeRecordMutation(c.config, OpUpdate)
+	return &MergeRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *MergeRecordClient) UpdateOne(_m *MergeRecord) *MergeRecordUpdateOne {
+	mutation := newMergeRecordMutation(c.config, OpUpdateOne, withMergeRecord(_m))
+	return &MergeRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *MergeRecordClient) UpdateOneID(id string) *MergeRecordUpdateOne {
+	mutation := newMergeRecordMutation(c.config, OpUpdateOne, withMergeRecordID(id))
+	return &MergeRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for MergeRecord.
+func (c *MergeRecordClient) Delete() *MergeRecordDelete {
+	mutation := newMergeRecordMutation(c.config, OpDelete)
+	return &MergeRecordDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *MergeRecordClient) DeleteOne(_m *MergeRecord) *MergeRecordDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *MergeRecordClient) DeleteOneID(id string) *MergeRecordDeleteOne {
+	builder := c.Delete().Where(mergerecord.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &MergeRecordDeleteOne{builder}
+}
+
+// Query returns a query builder for MergeRecord.
+func (c *MergeRecordClient) Query() *MergeRecordQuery {
+	return &MergeRecordQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeMergeRecord},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a MergeRecord entity by its id.
+func (c *MergeRecordClient) Get(ctx context.Context, id string) (*MergeRecord, error) {
+	return c.Query().Where(mergerecord.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *MergeRecordClient) GetX(ctx context.Context, id string) *MergeRecord {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *MergeRecordClient) Hooks() []Hook {
+	return c.hooks.MergeRecord
+}
+
+// Interceptors returns the client interceptors.
+func (c *MergeRecordClient) Interceptors() []Interceptor {
+	return c.inters.MergeRecord
+}
+
+func (c *MergeRecordClient) mutate(ctx context.Context, m *MergeRecordMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&MergeRecordCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&MergeRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&MergeRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&MergeRecordDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown MergeRecord mutation op: %q", m.Op())
 	}
 }
 
@@ -336,6 +499,272 @@ func (c *ProjectClient) mutate(ctx context.Context, m *ProjectMutation) (Value, 
 		return (&ProjectDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Project mutation op: %q", m.Op())
+	}
+}
+
+// PromptAppendClient is a client for the PromptAppend schema.
+type PromptAppendClient struct {
+	config
+}
+
+// NewPromptAppendClient returns a client for the PromptAppend from the given config.
+func NewPromptAppendClient(c config) *PromptAppendClient {
+	return &PromptAppendClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `promptappend.Hooks(f(g(h())))`.
+func (c *PromptAppendClient) Use(hooks ...Hook) {
+	c.hooks.PromptAppend = append(c.hooks.PromptAppend, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `promptappend.Intercept(f(g(h())))`.
+func (c *PromptAppendClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PromptAppend = append(c.inters.PromptAppend, interceptors...)
+}
+
+// Create returns a builder for creating a PromptAppend entity.
+func (c *PromptAppendClient) Create() *PromptAppendCreate {
+	mutation := newPromptAppendMutation(c.config, OpCreate)
+	return &PromptAppendCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PromptAppend entities.
+func (c *PromptAppendClient) CreateBulk(builders ...*PromptAppendCreate) *PromptAppendCreateBulk {
+	return &PromptAppendCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PromptAppendClient) MapCreateBulk(slice any, setFunc func(*PromptAppendCreate, int)) *PromptAppendCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PromptAppendCreateBulk{err: fmt.Errorf("calling to PromptAppendClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PromptAppendCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PromptAppendCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PromptAppend.
+func (c *PromptAppendClient) Update() *PromptAppendUpdate {
+	mutation := newPromptAppendMutation(c.config, OpUpdate)
+	return &PromptAppendUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PromptAppendClient) UpdateOne(_m *PromptAppend) *PromptAppendUpdateOne {
+	mutation := newPromptAppendMutation(c.config, OpUpdateOne, withPromptAppend(_m))
+	return &PromptAppendUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PromptAppendClient) UpdateOneID(id string) *PromptAppendUpdateOne {
+	mutation := newPromptAppendMutation(c.config, OpUpdateOne, withPromptAppendID(id))
+	return &PromptAppendUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PromptAppend.
+func (c *PromptAppendClient) Delete() *PromptAppendDelete {
+	mutation := newPromptAppendMutation(c.config, OpDelete)
+	return &PromptAppendDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PromptAppendClient) DeleteOne(_m *PromptAppend) *PromptAppendDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PromptAppendClient) DeleteOneID(id string) *PromptAppendDeleteOne {
+	builder := c.Delete().Where(promptappend.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PromptAppendDeleteOne{builder}
+}
+
+// Query returns a query builder for PromptAppend.
+func (c *PromptAppendClient) Query() *PromptAppendQuery {
+	return &PromptAppendQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePromptAppend},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PromptAppend entity by its id.
+func (c *PromptAppendClient) Get(ctx context.Context, id string) (*PromptAppend, error) {
+	return c.Query().Where(promptappend.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PromptAppendClient) GetX(ctx context.Context, id string) *PromptAppend {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PromptAppendClient) Hooks() []Hook {
+	return c.hooks.PromptAppend
+}
+
+// Interceptors returns the client interceptors.
+func (c *PromptAppendClient) Interceptors() []Interceptor {
+	return c.inters.PromptAppend
+}
+
+func (c *PromptAppendClient) mutate(ctx context.Context, m *PromptAppendMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PromptAppendCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PromptAppendUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PromptAppendUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PromptAppendDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PromptAppend mutation op: %q", m.Op())
+	}
+}
+
+// SessionClient is a client for the Session schema.
+type SessionClient struct {
+	config
+}
+
+// NewSessionClient returns a client for the Session from the given config.
+func NewSessionClient(c config) *SessionClient {
+	return &SessionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `session.Hooks(f(g(h())))`.
+func (c *SessionClient) Use(hooks ...Hook) {
+	c.hooks.Session = append(c.hooks.Session, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `session.Intercept(f(g(h())))`.
+func (c *SessionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Session = append(c.inters.Session, interceptors...)
+}
+
+// Create returns a builder for creating a Session entity.
+func (c *SessionClient) Create() *SessionCreate {
+	mutation := newSessionMutation(c.config, OpCreate)
+	return &SessionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Session entities.
+func (c *SessionClient) CreateBulk(builders ...*SessionCreate) *SessionCreateBulk {
+	return &SessionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionClient) MapCreateBulk(slice any, setFunc func(*SessionCreate, int)) *SessionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionCreateBulk{err: fmt.Errorf("calling to SessionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Session.
+func (c *SessionClient) Update() *SessionUpdate {
+	mutation := newSessionMutation(c.config, OpUpdate)
+	return &SessionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionClient) UpdateOne(_m *Session) *SessionUpdateOne {
+	mutation := newSessionMutation(c.config, OpUpdateOne, withSession(_m))
+	return &SessionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionClient) UpdateOneID(id string) *SessionUpdateOne {
+	mutation := newSessionMutation(c.config, OpUpdateOne, withSessionID(id))
+	return &SessionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Session.
+func (c *SessionClient) Delete() *SessionDelete {
+	mutation := newSessionMutation(c.config, OpDelete)
+	return &SessionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionClient) DeleteOne(_m *Session) *SessionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionClient) DeleteOneID(id string) *SessionDeleteOne {
+	builder := c.Delete().Where(session.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SessionDeleteOne{builder}
+}
+
+// Query returns a query builder for Session.
+func (c *SessionClient) Query() *SessionQuery {
+	return &SessionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSession},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Session entity by its id.
+func (c *SessionClient) Get(ctx context.Context, id string) (*Session, error) {
+	return c.Query().Where(session.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionClient) GetX(ctx context.Context, id string) *Session {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SessionClient) Hooks() []Hook {
+	return c.hooks.Session
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionClient) Interceptors() []Interceptor {
+	return c.inters.Session
+}
+
+func (c *SessionClient) mutate(ctx context.Context, m *SessionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Session mutation op: %q", m.Op())
 	}
 }
 
@@ -475,9 +904,10 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Project, WorkflowDefinition []ent.Hook
+		MergeRecord, Project, PromptAppend, Session, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		Project, WorkflowDefinition []ent.Interceptor
+		MergeRecord, Project, PromptAppend, Session,
+		WorkflowDefinition []ent.Interceptor
 	}
 )

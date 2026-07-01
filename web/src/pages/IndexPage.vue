@@ -106,34 +106,41 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 
-import {
-  getProjectName,
-  projects,
-  sessions,
-  type SessionMode,
-  type SessionStatus,
-} from '@/mocks/workbench';
+import { useSessionsPage } from '@/composables/useSessionsPage';
+import { getProjectName, projects, type SessionMode, type SessionStatus } from '@/mocks/workbench';
 
-const recentCards = computed(() => sessions.slice(0, 2));
-const historyCards = computed(() => sessions.slice(2));
+const { rows, loadSessions } = useSessionsPage({
+  scope: 'overview',
+  range: 'all',
+  page: 1,
+  pageSize: 8,
+  sort: 'updated_at desc',
+});
+
+const recentCards = computed(() => rows.value.slice(0, 2));
+const historyCards = computed(() => rows.value.slice(2));
 
 const stats = computed(() => [
   {
     label: '运行中卡片',
-    value: sessions.filter((item) => item.status === 'running').length,
+    value: rows.value.filter((item) => item.status === 'running').length,
     icon: 'play_circle',
     color: 'positive',
   },
   {
     label: '待回答',
-    value: sessions.filter((item) => item.pendingQuestion).length,
+    value: rows.value.filter((item) => item.pendingQuestion).length,
     icon: 'help',
     color: 'warning',
   },
   { label: '项目', value: projects.length, icon: 'folder_open', color: 'primary' },
 ]);
+
+onMounted(() => {
+  void loadSessions();
+});
 
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';

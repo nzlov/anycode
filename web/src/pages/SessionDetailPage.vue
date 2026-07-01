@@ -16,7 +16,7 @@
     <div class="detail-grid">
       <section class="event-panel">
         <q-card flat bordered class="stream-card">
-          <q-card-section v-for="event in sessionEvents" :key="event.id" class="event-item">
+          <q-card-section v-for="event in events" :key="event.id" class="event-item">
             <div class="event-icon">
               <q-icon :name="eventIcon(event.kind)" />
             </div>
@@ -39,7 +39,16 @@
             placeholder="追加描述，发送给当前会话"
           />
           <q-card-actions align="right">
-            <q-btn unelevated color="primary" icon="send" label="发送" no-caps />
+            <q-btn
+              unelevated
+              color="primary"
+              icon="send"
+              label="发送"
+              no-caps
+              :loading="appending"
+              :disable="appendText.trim().length === 0"
+              @click="sendAppend"
+            />
           </q-card-actions>
         </q-card>
       </section>
@@ -115,19 +124,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
-import { diffFiles, getProjectName, getSessionById, sessionEvents } from '@/mocks/workbench';
+import { useSessionDetail } from '@/composables/useSessionDetail';
+import { diffFiles, getProjectName, type DiffFile, type SessionEvent } from '@/mocks/workbench';
 
 const route = useRoute();
+const sessionId = String(route.params.id ?? '');
 const appendText = ref('');
 const tab = ref('info');
+const { session, events, appending, loadSessionDetail, appendDescription } =
+  useSessionDetail(sessionId);
 
-const session = computed(() => getSessionById(String(route.params.id ?? '')));
-
-function eventIcon(kind: (typeof sessionEvents)[number]['kind']) {
-  const icons: Record<(typeof sessionEvents)[number]['kind'], string> = {
+function eventIcon(kind: SessionEvent['kind']) {
+  const icons: Record<SessionEvent['kind'], string> = {
     thought: 'psychology',
     tool: 'terminal',
     assistant: 'smart_toy',
@@ -137,11 +148,21 @@ function eventIcon(kind: (typeof sessionEvents)[number]['kind']) {
   return icons[kind];
 }
 
-function fileIcon(status: (typeof diffFiles)[number]['status']) {
+function fileIcon(status: DiffFile['status']) {
   return status === 'added' ? 'add_circle' : status === 'deleted' ? 'remove_circle' : 'edit';
 }
 
-function fileColor(status: (typeof diffFiles)[number]['status']) {
+function fileColor(status: DiffFile['status']) {
   return status === 'added' ? 'positive' : status === 'deleted' ? 'negative' : 'primary';
 }
+
+async function sendAppend() {
+  const text = appendText.value;
+  await appendDescription(text);
+  appendText.value = '';
+}
+
+onMounted(() => {
+  void loadSessionDetail();
+});
 </script>

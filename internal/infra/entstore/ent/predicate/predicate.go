@@ -6,8 +6,17 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// MergeRecord is the predicate function for mergerecord builders.
+type MergeRecord func(*sql.Selector)
+
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
+
+// PromptAppend is the predicate function for promptappend builders.
+type PromptAppend func(*sql.Selector)
+
+// Session is the predicate function for session builders.
+type Session func(*sql.Selector)
 
 // WorkflowDefinition is the predicate function for workflowdefinition builders.
 type WorkflowDefinition func(*sql.Selector)

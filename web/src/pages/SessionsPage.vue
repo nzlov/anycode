@@ -19,9 +19,10 @@
 
       <q-table
         flat
-        :rows="filteredRows"
+        :rows="rows"
         :columns="columns"
         row-key="id"
+        :loading="loading"
         :pagination="{ rowsPerPage: 8 }"
         class="session-table"
       >
@@ -63,11 +64,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
-import { getProjectName, sessions, type SessionStatus } from '@/mocks/workbench';
+import { useSessionsPage } from '@/composables/useSessionsPage';
+import { getProjectName, type SessionCard, type SessionStatus } from '@/mocks/workbench';
 
-const filter = ref('');
+const { rows, loading, filter, scope, loadSessions } = useSessionsPage({
+  page: 1,
+  pageSize: 8,
+  sort: 'updated_at desc',
+});
 const status = ref<SessionStatus | 'all'>('all');
 
 const statusOptions = [
@@ -84,7 +90,7 @@ const columns = [
   {
     name: 'project',
     label: '项目',
-    field: (row: (typeof sessions)[number]) => getProjectName(row.projectId),
+    field: (row: SessionCard) => getProjectName(row.projectId),
     align: 'left' as const,
     sortable: true,
   },
@@ -101,17 +107,16 @@ const columns = [
   { name: 'actions', label: '', field: 'actions', align: 'right' as const },
 ];
 
-const filteredRows = computed(() => {
-  const needle = filter.value.trim().toLowerCase();
-  return sessions.filter((session) => {
-    const matchesStatus = status.value === 'all' || session.status === status.value;
-    const matchesFilter =
-      needle.length === 0 ||
-      [session.title, session.summary, session.branch, getProjectName(session.projectId)].some(
-        (value) => value.toLowerCase().includes(needle),
-      );
-    return matchesStatus && matchesFilter;
-  });
+watch(status, (value) => {
+  scope.value = value === 'all' ? '' : value;
+});
+
+watch([filter, scope], () => {
+  void loadSessions();
+});
+
+onMounted(() => {
+  void loadSessions();
 });
 
 function statusColor(value: SessionStatus) {

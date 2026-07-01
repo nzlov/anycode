@@ -8,6 +8,36 @@ import (
 )
 
 var (
+	// MergeRecordsColumns holds the columns for the "merge_records" table.
+	MergeRecordsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "node_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "strategy", Type: field.TypeString, Default: ""},
+		{Name: "base_branch", Type: field.TypeString, Default: ""},
+		{Name: "worktree_branch", Type: field.TypeString, Default: ""},
+		{Name: "base_commit", Type: field.TypeString, Default: ""},
+		{Name: "head_commit", Type: field.TypeString, Default: ""},
+		{Name: "merge_commit", Type: field.TypeString, Default: ""},
+		{Name: "status", Type: field.TypeString, Default: ""},
+		{Name: "failure_code", Type: field.TypeString, Default: ""},
+		{Name: "failure_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "merged_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// MergeRecordsTable holds the schema information for the "merge_records" table.
+	MergeRecordsTable = &schema.Table{
+		Name:       "merge_records",
+		Columns:    MergeRecordsColumns,
+		PrimaryKey: []*schema.Column{MergeRecordsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "mergerecord_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{MergeRecordsColumns[1], MergeRecordsColumns[13]},
+			},
+		},
+	}
 	// ProjectsColumns holds the columns for the "projects" table.
 	ProjectsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -28,6 +58,73 @@ var (
 				Name:    "project_path",
 				Unique:  true,
 				Columns: []*schema.Column{ProjectsColumns[2]},
+			},
+		},
+	}
+	// PromptAppendsColumns holds the columns for the "prompt_appends" table.
+	PromptAppendsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "body", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// PromptAppendsTable holds the schema information for the "prompt_appends" table.
+	PromptAppendsTable = &schema.Table{
+		Name:       "prompt_appends",
+		Columns:    PromptAppendsColumns,
+		PrimaryKey: []*schema.Column{PromptAppendsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "promptappend_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[3]},
+			},
+		},
+	}
+	// SessionsColumns holds the columns for the "sessions" table.
+	SessionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "project_id", Type: field.TypeString},
+		{Name: "requirement", Type: field.TypeString, Default: ""},
+		{Name: "mode", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString},
+		{Name: "close_reason", Type: field.TypeString, Nullable: true},
+		{Name: "base_branch", Type: field.TypeString, Default: ""},
+		{Name: "worktree_path", Type: field.TypeString, Default: ""},
+		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
+		{Name: "codex_model", Type: field.TypeString, Default: ""},
+		{Name: "reasoning_effort", Type: field.TypeString, Default: ""},
+		{Name: "permission_mode", Type: field.TypeString, Default: ""},
+		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "closed_at", Type: field.TypeTime, Nullable: true},
+	}
+	// SessionsTable holds the schema information for the "sessions" table.
+	SessionsTable = &schema.Table{
+		Name:       "sessions",
+		Columns:    SessionsColumns,
+		PrimaryKey: []*schema.Column{SessionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "session_project_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionsColumns[1]},
+			},
+			{
+				Name:    "session_project_id_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[14]},
+			},
+			{
+				Name:    "session_project_id_last_run_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[12]},
+			},
+			{
+				Name:    "session_status",
+				Unique:  false,
+				Columns: []*schema.Column{SessionsColumns[4]},
 			},
 		},
 	}
@@ -57,7 +154,10 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		MergeRecordsTable,
 		ProjectsTable,
+		PromptAppendsTable,
+		SessionsTable,
 		WorkflowDefinitionsTable,
 	}
 )

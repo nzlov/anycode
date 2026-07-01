@@ -108,6 +108,7 @@
           icon="add"
           label="创建卡片"
           no-caps
+          :loading="creating"
           @click="createSession"
         />
       </q-card-actions>
@@ -144,6 +145,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { useProjects } from '@/composables/useProjects';
+import { createSession as createSessionRequest } from '@/services/sessions';
 
 defineProps<{
   modelValue: boolean;
@@ -162,6 +164,7 @@ const prompt = ref('');
 const files = ref<File[]>([]);
 const model = ref('cli-default');
 const effort = ref('medium');
+const creating = ref(false);
 const previewOpen = ref(false);
 const previewName = ref('');
 const previewKind = ref<'image' | 'video' | ''>('');
@@ -231,9 +234,30 @@ function removeFile(file: File) {
   files.value = files.value.filter((item) => item !== file);
 }
 
-function createSession() {
-  emit('create');
-  emit('update:modelValue', false);
+async function createSession() {
+  const config = {
+    reasoningEffort: effort.value,
+    permissionMode: 'workspace-write',
+  };
+  const codexModel = model.value === 'cli-default' ? '' : model.value;
+  if (codexModel) {
+    Object.assign(config, { codexModel });
+  }
+
+  creating.value = true;
+  try {
+    await createSessionRequest({
+      projectId: projectId.value,
+      requirement: prompt.value,
+      mode: mode.value,
+      baseBranch: branch.value,
+      config,
+    });
+    emit('create');
+    emit('update:modelValue', false);
+  } finally {
+    creating.value = false;
+  }
 }
 
 watch(

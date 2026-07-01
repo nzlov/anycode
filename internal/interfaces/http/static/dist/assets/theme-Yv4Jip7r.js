@@ -1,0 +1,1 @@
+import{n as e}from"./index-CYr5pfsK.js";import{n as t,t as n}from"./tokens-xvy3ib9I.js";var r=e(()=>{n(t())});export{r as default};

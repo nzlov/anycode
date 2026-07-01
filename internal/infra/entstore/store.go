@@ -89,6 +89,10 @@ func (s *Store) Projects() *ProjectRepository {
 	return NewProjectRepository(s.client)
 }
 
+func (s *Store) Sessions() *SessionRepository {
+	return NewSessionRepository(s.client)
+}
+
 func sqliteDSN(opts OpenOptions) (string, error) {
 	url := strings.TrimSpace(opts.DatabaseURL)
 	switch {

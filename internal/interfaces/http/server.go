@@ -3,13 +3,11 @@ package http
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"io/fs"
 	"net/http"
 	"strings"
 
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/99designs/gqlgen/graphql/executor"
+	"github.com/99designs/gqlgen/graphql/handler"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
@@ -28,7 +26,7 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 	return func(opts *handlerOptions) {
 		resolver := graph.NewResolver(useCases)
 		schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
-		opts.graphqlHandler = graphqlHTTPHandler{executor: executor.New(schema)}
+		opts.graphqlHandler = handler.NewDefaultServer(schema)
 	}
 }
 
@@ -99,46 +97,6 @@ func withPrincipal(accessKey string, next http.Handler) http.Handler {
 
 func graphqlNotConfigured(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "graphql not configured", http.StatusServiceUnavailable)
-}
-
-type graphqlHTTPHandler struct {
-	executor graphql.GraphExecutor
-}
-
-func (h graphqlHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.executor == nil {
-		graphqlNotConfigured(w, r)
-		return
-	}
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	ctx := graphql.StartOperationTrace(r.Context())
-	params := graphql.RawParams{Headers: r.Header}
-	params.ReadTime.Start = graphql.Now()
-	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-		http.Error(w, "invalid graphql json body", http.StatusBadRequest)
-		return
-	}
-	params.ReadTime.End = graphql.Now()
-
-	opCtx, errs := h.executor.CreateOperationContext(ctx, &params)
-	w.Header().Set("Content-Type", "application/json")
-	if len(errs) > 0 {
-		resp := h.executor.DispatchError(graphql.WithOperationContext(ctx, opCtx), errs)
-		_ = json.NewEncoder(w).Encode(resp)
-		return
-	}
-
-	responses, ctx := h.executor.DispatchOperation(ctx, opCtx)
-	resp := responses(ctx)
-	if resp == nil {
-		resp = &graphql.Response{}
-	}
-	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func playgroundHandler(w http.ResponseWriter, _ *http.Request) {

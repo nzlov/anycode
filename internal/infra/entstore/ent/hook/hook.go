@@ -9,6 +9,18 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
+// The MergeRecordFunc type is an adapter to allow the use of ordinary
+// function as MergeRecord mutator.
+type MergeRecordFunc func(context.Context, *ent.MergeRecordMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f MergeRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.MergeRecordMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MergeRecordMutation", m)
+}
+
 // The ProjectFunc type is an adapter to allow the use of ordinary
 // function as Project mutator.
 type ProjectFunc func(context.Context, *ent.ProjectMutation) (ent.Value, error)
@@ -19,6 +31,30 @@ func (f ProjectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectMutation", m)
+}
+
+// The PromptAppendFunc type is an adapter to allow the use of ordinary
+// function as PromptAppend mutator.
+type PromptAppendFunc func(context.Context, *ent.PromptAppendMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PromptAppendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PromptAppendMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PromptAppendMutation", m)
+}
+
+// The SessionFunc type is an adapter to allow the use of ordinary
+// function as Session mutator.
+type SessionFunc func(context.Context, *ent.SessionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SessionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionMutation", m)
 }
 
 // The WorkflowDefinitionFunc type is an adapter to allow the use of ordinary

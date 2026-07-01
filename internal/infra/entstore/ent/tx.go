@@ -12,8 +12,14 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// MergeRecord is the client for interacting with the MergeRecord builders.
+	MergeRecord *MergeRecordClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// PromptAppend is the client for interacting with the PromptAppend builders.
+	PromptAppend *PromptAppendClient
+	// Session is the client for interacting with the Session builders.
+	Session *SessionClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
 
@@ -147,7 +153,10 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.MergeRecord = NewMergeRecordClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
+	tx.PromptAppend = NewPromptAppendClient(tx.config)
+	tx.Session = NewSessionClient(tx.config)
 	tx.WorkflowDefinition = NewWorkflowDefinitionClient(tx.config)
 }
 
@@ -158,7 +167,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Project.QueryXXX(), the query will be executed
+// applies a query, for example: MergeRecord.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

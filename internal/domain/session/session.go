@@ -128,6 +128,7 @@ type Repository interface {
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error
+	ListPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
 }
 

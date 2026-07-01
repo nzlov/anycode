@@ -5,8 +5,11 @@ package ent
 import (
 	"time"
 
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -14,6 +17,52 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	mergerecordFields := schema.MergeRecord{}.Fields()
+	_ = mergerecordFields
+	// mergerecordDescSessionID is the schema descriptor for session_id field.
+	mergerecordDescSessionID := mergerecordFields[1].Descriptor()
+	// mergerecord.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	mergerecord.SessionIDValidator = mergerecordDescSessionID.Validators[0].(func(string) error)
+	// mergerecordDescStrategy is the schema descriptor for strategy field.
+	mergerecordDescStrategy := mergerecordFields[3].Descriptor()
+	// mergerecord.DefaultStrategy holds the default value on creation for the strategy field.
+	mergerecord.DefaultStrategy = mergerecordDescStrategy.Default.(string)
+	// mergerecordDescBaseBranch is the schema descriptor for base_branch field.
+	mergerecordDescBaseBranch := mergerecordFields[4].Descriptor()
+	// mergerecord.DefaultBaseBranch holds the default value on creation for the base_branch field.
+	mergerecord.DefaultBaseBranch = mergerecordDescBaseBranch.Default.(string)
+	// mergerecordDescWorktreeBranch is the schema descriptor for worktree_branch field.
+	mergerecordDescWorktreeBranch := mergerecordFields[5].Descriptor()
+	// mergerecord.DefaultWorktreeBranch holds the default value on creation for the worktree_branch field.
+	mergerecord.DefaultWorktreeBranch = mergerecordDescWorktreeBranch.Default.(string)
+	// mergerecordDescBaseCommit is the schema descriptor for base_commit field.
+	mergerecordDescBaseCommit := mergerecordFields[6].Descriptor()
+	// mergerecord.DefaultBaseCommit holds the default value on creation for the base_commit field.
+	mergerecord.DefaultBaseCommit = mergerecordDescBaseCommit.Default.(string)
+	// mergerecordDescHeadCommit is the schema descriptor for head_commit field.
+	mergerecordDescHeadCommit := mergerecordFields[7].Descriptor()
+	// mergerecord.DefaultHeadCommit holds the default value on creation for the head_commit field.
+	mergerecord.DefaultHeadCommit = mergerecordDescHeadCommit.Default.(string)
+	// mergerecordDescMergeCommit is the schema descriptor for merge_commit field.
+	mergerecordDescMergeCommit := mergerecordFields[8].Descriptor()
+	// mergerecord.DefaultMergeCommit holds the default value on creation for the merge_commit field.
+	mergerecord.DefaultMergeCommit = mergerecordDescMergeCommit.Default.(string)
+	// mergerecordDescStatus is the schema descriptor for status field.
+	mergerecordDescStatus := mergerecordFields[9].Descriptor()
+	// mergerecord.DefaultStatus holds the default value on creation for the status field.
+	mergerecord.DefaultStatus = mergerecordDescStatus.Default.(string)
+	// mergerecordDescFailureCode is the schema descriptor for failure_code field.
+	mergerecordDescFailureCode := mergerecordFields[10].Descriptor()
+	// mergerecord.DefaultFailureCode holds the default value on creation for the failure_code field.
+	mergerecord.DefaultFailureCode = mergerecordDescFailureCode.Default.(string)
+	// mergerecordDescFailureReason is the schema descriptor for failure_reason field.
+	mergerecordDescFailureReason := mergerecordFields[11].Descriptor()
+	// mergerecord.DefaultFailureReason holds the default value on creation for the failure_reason field.
+	mergerecord.DefaultFailureReason = mergerecordDescFailureReason.Default.(string)
+	// mergerecordDescCreatedAt is the schema descriptor for created_at field.
+	mergerecordDescCreatedAt := mergerecordFields[13].Descriptor()
+	// mergerecord.DefaultCreatedAt holds the default value on creation for the created_at field.
+	mergerecord.DefaultCreatedAt = mergerecordDescCreatedAt.Default.(func() time.Time)
 	projectFields := schema.Project{}.Fields()
 	_ = projectFields
 	// projectDescName is the schema descriptor for name field.
@@ -38,6 +87,72 @@ func init() {
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	project.UpdateDefaultUpdatedAt = projectDescUpdatedAt.UpdateDefault.(func() time.Time)
+	promptappendFields := schema.PromptAppend{}.Fields()
+	_ = promptappendFields
+	// promptappendDescSessionID is the schema descriptor for session_id field.
+	promptappendDescSessionID := promptappendFields[1].Descriptor()
+	// promptappend.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	promptappend.SessionIDValidator = promptappendDescSessionID.Validators[0].(func(string) error)
+	// promptappendDescBody is the schema descriptor for body field.
+	promptappendDescBody := promptappendFields[2].Descriptor()
+	// promptappend.DefaultBody holds the default value on creation for the body field.
+	promptappend.DefaultBody = promptappendDescBody.Default.(string)
+	// promptappendDescCreatedAt is the schema descriptor for created_at field.
+	promptappendDescCreatedAt := promptappendFields[3].Descriptor()
+	// promptappend.DefaultCreatedAt holds the default value on creation for the created_at field.
+	promptappend.DefaultCreatedAt = promptappendDescCreatedAt.Default.(func() time.Time)
+	sessionFields := schema.Session{}.Fields()
+	_ = sessionFields
+	// sessionDescProjectID is the schema descriptor for project_id field.
+	sessionDescProjectID := sessionFields[1].Descriptor()
+	// session.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	session.ProjectIDValidator = sessionDescProjectID.Validators[0].(func(string) error)
+	// sessionDescRequirement is the schema descriptor for requirement field.
+	sessionDescRequirement := sessionFields[2].Descriptor()
+	// session.DefaultRequirement holds the default value on creation for the requirement field.
+	session.DefaultRequirement = sessionDescRequirement.Default.(string)
+	// sessionDescMode is the schema descriptor for mode field.
+	sessionDescMode := sessionFields[3].Descriptor()
+	// session.ModeValidator is a validator for the "mode" field. It is called by the builders before save.
+	session.ModeValidator = sessionDescMode.Validators[0].(func(string) error)
+	// sessionDescStatus is the schema descriptor for status field.
+	sessionDescStatus := sessionFields[4].Descriptor()
+	// session.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	session.StatusValidator = sessionDescStatus.Validators[0].(func(string) error)
+	// sessionDescBaseBranch is the schema descriptor for base_branch field.
+	sessionDescBaseBranch := sessionFields[6].Descriptor()
+	// session.DefaultBaseBranch holds the default value on creation for the base_branch field.
+	session.DefaultBaseBranch = sessionDescBaseBranch.Default.(string)
+	// sessionDescWorktreePath is the schema descriptor for worktree_path field.
+	sessionDescWorktreePath := sessionFields[7].Descriptor()
+	// session.DefaultWorktreePath holds the default value on creation for the worktree_path field.
+	session.DefaultWorktreePath = sessionDescWorktreePath.Default.(string)
+	// sessionDescCodexSessionID is the schema descriptor for codex_session_id field.
+	sessionDescCodexSessionID := sessionFields[8].Descriptor()
+	// session.DefaultCodexSessionID holds the default value on creation for the codex_session_id field.
+	session.DefaultCodexSessionID = sessionDescCodexSessionID.Default.(string)
+	// sessionDescCodexModel is the schema descriptor for codex_model field.
+	sessionDescCodexModel := sessionFields[9].Descriptor()
+	// session.DefaultCodexModel holds the default value on creation for the codex_model field.
+	session.DefaultCodexModel = sessionDescCodexModel.Default.(string)
+	// sessionDescReasoningEffort is the schema descriptor for reasoning_effort field.
+	sessionDescReasoningEffort := sessionFields[10].Descriptor()
+	// session.DefaultReasoningEffort holds the default value on creation for the reasoning_effort field.
+	session.DefaultReasoningEffort = sessionDescReasoningEffort.Default.(string)
+	// sessionDescPermissionMode is the schema descriptor for permission_mode field.
+	sessionDescPermissionMode := sessionFields[11].Descriptor()
+	// session.DefaultPermissionMode holds the default value on creation for the permission_mode field.
+	session.DefaultPermissionMode = sessionDescPermissionMode.Default.(string)
+	// sessionDescCreatedAt is the schema descriptor for created_at field.
+	sessionDescCreatedAt := sessionFields[13].Descriptor()
+	// session.DefaultCreatedAt holds the default value on creation for the created_at field.
+	session.DefaultCreatedAt = sessionDescCreatedAt.Default.(func() time.Time)
+	// sessionDescUpdatedAt is the schema descriptor for updated_at field.
+	sessionDescUpdatedAt := sessionFields[14].Descriptor()
+	// session.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	session.DefaultUpdatedAt = sessionDescUpdatedAt.Default.(func() time.Time)
+	// session.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	session.UpdateDefaultUpdatedAt = sessionDescUpdatedAt.UpdateDefault.(func() time.Time)
 	workflowdefinitionFields := schema.WorkflowDefinition{}.Fields()
 	_ = workflowdefinitionFields
 	// workflowdefinitionDescProjectID is the schema descriptor for project_id field.

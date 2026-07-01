@@ -8,6 +8,7 @@ import (
 	"time"
 
 	projectapp "github.com/nzlov/anycode/internal/application/project"
+	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/infra/entstore"
 	"github.com/nzlov/anycode/internal/infra/fsbrowser"
@@ -57,5 +58,6 @@ func newGraphQLUseCases(store *entstore.Store) (graph.UseCases, error) {
 	}
 	return graph.UseCases{
 		Projects: projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
+		Sessions: sessionapp.New(store.Sessions(), store.Projects()),
 	}, nil
 }
