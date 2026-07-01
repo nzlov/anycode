@@ -1,0 +1,77 @@
+package question
+
+import (
+	"context"
+	"time"
+)
+
+type BatchID string
+type QuestionID string
+type SessionID string
+type WorkflowRunID string
+type OptionID string
+
+type BatchStatus string
+
+const (
+	BatchPending   BatchStatus = "pending"
+	BatchAnswered  BatchStatus = "answered"
+	BatchCancelled BatchStatus = "cancelled"
+)
+
+type Batch struct {
+	ID            BatchID
+	SessionID     SessionID
+	WorkflowRunID *WorkflowRunID
+	Status        BatchStatus
+	Questions     []Question
+	CreatedAt     time.Time
+	AnsweredAt    *time.Time
+}
+
+type Question struct {
+	ID               QuestionID
+	BatchID          BatchID
+	Title            string
+	Body             string
+	Type             string
+	Options          []Option
+	AllowCustom      bool
+	SelectedOptionID *OptionID
+	CustomAnswer     string
+	Answer           map[string]any
+	Status           string
+}
+
+type Option struct {
+	ID          OptionID
+	Label       string
+	Description string
+	Payload     map[string]any
+}
+
+type Answer struct {
+	QuestionID       QuestionID
+	SelectedOptionID *OptionID
+	CustomAnswer     string
+	Payload          map[string]any
+}
+
+type Policy interface {
+	CanSubmit(batch Batch, answers []Answer) error
+	ApplyAnswers(batch Batch, answers []Answer) (Batch, error)
+	Cancel(batch Batch, reason string) (Batch, error)
+}
+
+type Repository interface {
+	CreateBatch(ctx context.Context, batch Batch) error
+	FindBatch(ctx context.Context, id BatchID) (Batch, error)
+	SubmitAnswers(ctx context.Context, id BatchID, answers []Answer) error
+	CancelPendingBySession(ctx context.Context, sessionID SessionID, reason string) error
+}
+
+type AnswerWaiter interface {
+	Wait(ctx context.Context, batchID BatchID) ([]Answer, error)
+	Resume(ctx context.Context, batchID BatchID, answers []Answer) error
+	Cancel(ctx context.Context, batchID BatchID, reason string) error
+}
