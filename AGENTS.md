@@ -189,7 +189,7 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - HTTP 地址通过 `ANYCODE_HTTP_ADDR` 配置，默认 `:8080`。
 - Codex 可执行文件通过 `CODEX_BIN` 配置，默认 `codex`。
 - 应用数据目录通过 `ANYCODE_DATA_DIR` 配置；本地直接运行默认 `./data`，Docker Compose 默认 `/data`。
-- 数据目录下按职责存放 `attachments/`、`codex/`、`logs/`、`worktrees/`、`workdirs/`。
+- 数据目录下按职责存放 `attachments/`、`logs/`、`worktrees/`；`codex/` 仅在需要隔离 Codex 配置、临时 MCP 配置或运行期辅助文件时使用。
 - HTTP/GraphQL 使用 `Authorization: Bearer <ANYCODE_ACCESS_KEY>`；WebSocket 使用 `connection_init` payload；MCP endpoint 使用后端注入的内部凭据。
 - 日志、事件 payload 和错误响应必须脱敏访问密钥、Turso token、Codex 凭据和敏感宿主路径片段。
 - 后端错误必须结构化返回 `code/category/message/details/retryable/userAction`；前端根据错误码和附加内容处理，不解析日志字符串。
