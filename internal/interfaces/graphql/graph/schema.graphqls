@@ -1,0 +1,459 @@
+scalar Time
+scalar JSON
+scalar Upload
+scalar Int64
+
+type Query {
+  projects: [Project!]!
+  browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
+  sessions(input: ListSessionsInput): SessionCardPage!
+  session(id: ID!): SessionDetail!
+  sessionEvents(input: ListSessionEventsInput!): SessionEventPage!
+  sessionDiff(input: SessionDiffInput!): SessionDiff!
+  workflowDefinition(id: ID!): WorkflowDefinition
+  questionBatch(id: ID!): QuestionBatch!
+}
+
+type Mutation {
+  createProject(input: CreateProjectInput!): Project!
+  setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
+  createSession(input: CreateSessionInput!): Session!
+  startSession(id: ID!): Session!
+  stopSession(id: ID!): Session!
+  resumeSession(id: ID!): Session!
+  closeSession(input: CloseSessionInput!): Session!
+  appendPrompt(input: AppendPromptInput!): PromptAppend!
+  stageAttachment(file: Upload!): Attachment!
+  deleteStagedAttachment(id: ID!): Boolean!
+  deleteSessionAttachment(id: ID!): Boolean!
+  saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): WorkflowDefinition!
+  activateWorkflowDefinition(id: ID!): Boolean!
+  submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
+  submitQuestionBatch(input: SubmitQuestionBatchInput!): QuestionBatch!
+}
+
+type Subscription {
+  sessionEvents(input: SessionEventsInput!): SessionEvent!
+  sessionStatusChanged(projectId: ID, sessionId: ID): Session!
+  pendingQuestionBatches(sessionId: ID!): QuestionBatch!
+}
+
+type PageInfo {
+  page: Int!
+  pageSize: Int!
+  total: Int!
+  nextCursor: String!
+}
+
+type Project {
+  id: ID!
+  name: String!
+  path: String!
+  isGit: Boolean!
+  defaultWorkflowId: ID
+  gitState: GitState!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type GitState {
+  isRepository: Boolean!
+  currentBranch: String!
+  branches: [GitBranch!]!
+  errorCode: String!
+  errorMessage: String!
+}
+
+type GitBranch {
+  name: String!
+  isCurrent: Boolean!
+}
+
+type DirectoryPage {
+  path: String!
+  parent: String!
+  entries: [DirectoryEntry!]!
+}
+
+type DirectoryEntry {
+  name: String!
+  path: String!
+  isDir: Boolean!
+  isGit: Boolean!
+  canRead: Boolean!
+  errorCode: String!
+}
+
+type Session {
+  id: ID!
+  projectId: ID!
+  requirement: String!
+  mode: String!
+  status: String!
+  baseBranch: String!
+  worktreePath: String!
+  codexSessionId: String!
+  config: SessionConfig!
+  lastRunAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type SessionCard {
+  id: ID!
+  projectId: ID!
+  projectName: String!
+  requirement: String!
+  requirementSummary: String!
+  mode: String!
+  status: String!
+  baseBranch: String!
+  currentNodeTitle: String!
+  pendingQuestion: Boolean!
+  availableActions: [String!]!
+  lastRunAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type SessionCardPage {
+  items: [SessionCard!]!
+  pageInfo: PageInfo!
+}
+
+type SessionDetail {
+  id: ID!
+  projectId: ID!
+  requirement: String!
+  mode: String!
+  status: String!
+  closeReason: String
+  baseBranch: String!
+  worktreePath: String!
+  codexSessionId: String!
+  config: SessionConfig!
+  attachments: [SessionAttachment!]!
+  promptAppends: [PromptAppend!]!
+  availableActions: [String!]!
+  canResume: Boolean!
+  lastRunAt: Time
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type SessionConfig {
+  codexModel: String!
+  reasoningEffort: String!
+  permissionMode: String!
+}
+
+type SessionAttachment {
+  id: ID!
+  sessionId: ID!
+  kind: String!
+  filename: String!
+  mimeType: String!
+  size: Int64!
+  previewable: Boolean!
+  createdAt: Time!
+}
+
+type Attachment {
+  id: ID!
+  filename: String!
+  mimeType: String!
+  size: Int64!
+  previewable: Boolean!
+}
+
+type PromptAppend {
+  id: ID!
+  sessionId: ID!
+  body: String!
+  createdAt: Time!
+}
+
+type SessionEventPage {
+  items: [SessionEvent!]!
+  pageInfo: PageInfo!
+}
+
+type SessionEvent {
+  id: ID!
+  scope: EventScope!
+  sessionId: ID
+  type: String!
+  payload: JSON!
+  createdAt: String!
+}
+
+type EventScope {
+  sessionId: ID
+  projectId: ID!
+}
+
+type SessionDiff {
+  mode: String!
+  filePath: String!
+  files: DiffFilePage!
+  fileDiff: FileDiff
+  allDiff: [FileDiff!]!
+  available: Boolean!
+}
+
+type DiffFilePage {
+  items: [DiffFile!]!
+  pageInfo: PageInfo!
+}
+
+type DiffFile {
+  path: String!
+  status: String!
+  additions: Int!
+  deletions: Int!
+}
+
+type FileDiff {
+  file: DiffFile!
+  hunks: [DiffHunk!]!
+}
+
+type DiffHunk {
+  header: String!
+  oldStart: Int!
+  newStart: Int!
+  lines: [DiffLine!]!
+}
+
+type DiffLine {
+  kind: String!
+  content: String!
+}
+
+type WorkflowDefinition {
+  id: ID!
+  projectId: ID!
+  name: String!
+  version: Int!
+  graph: WorkflowGraph!
+  active: Boolean!
+}
+
+type WorkflowGraph {
+  nodes: [WorkflowNode!]!
+  edges: [WorkflowEdge!]!
+}
+
+type WorkflowNode {
+  id: ID!
+  type: String!
+  title: String!
+  prompt: String!
+  approval: ApprovalConfig!
+  retry: RetryConfig!
+  merge: MergeConfig
+}
+
+type ApprovalConfig {
+  beforeRun: Boolean!
+  afterRun: Boolean!
+}
+
+type RetryConfig {
+  maxAttempts: Int!
+}
+
+type MergeConfig {
+  strategy: String!
+}
+
+type WorkflowEdge {
+  from: ID!
+  to: ID!
+  priority: Int!
+  condition: WorkflowCondition!
+}
+
+type WorkflowCondition {
+  field: String!
+  op: String!
+  value: JSON
+  all: [WorkflowCondition!]!
+  any: [WorkflowCondition!]!
+  not: WorkflowCondition
+}
+
+type WorkflowRun {
+  id: ID!
+  sessionId: ID!
+  status: String!
+  currentNodeId: ID!
+  context: JSON!
+}
+
+type QuestionBatch {
+  id: ID!
+  sessionId: ID!
+  status: String!
+  questions: [Question!]!
+}
+
+type Question {
+  id: ID!
+  batchId: ID!
+  title: String!
+  body: String!
+  type: String!
+  options: [QuestionOption!]!
+  allowCustom: Boolean!
+  selectedOptionId: ID
+  customAnswer: String!
+  answer: JSON!
+  status: String!
+}
+
+type QuestionOption {
+  id: ID!
+  label: String!
+  description: String!
+  payload: JSON!
+}
+
+input BrowseDirectoryInput {
+  path: String!
+}
+
+input CreateProjectInput {
+  path: String!
+  name: String!
+}
+
+input SetDefaultWorkflowInput {
+  projectId: ID!
+  workflowId: ID!
+}
+
+input ListSessionsInput {
+  projectId: ID
+  scope: String
+  range: String
+  page: Int
+  pageSize: Int
+  filter: String
+  sort: String
+}
+
+input CreateSessionInput {
+  projectId: ID!
+  requirement: String!
+  mode: String!
+  baseBranch: String
+  config: SessionConfigInput
+  stagedAttachmentIds: [ID!]
+}
+
+input SessionConfigInput {
+  codexModel: String
+  reasoningEffort: String
+  permissionMode: String
+}
+
+input CloseSessionInput {
+  sessionId: ID!
+  reason: String!
+}
+
+input AppendPromptInput {
+  sessionId: ID!
+  body: String!
+}
+
+input ListSessionEventsInput {
+  sessionId: ID!
+  afterEventId: ID
+  page: Int
+  pageSize: Int
+}
+
+input SessionEventsInput {
+  sessionId: ID
+  projectId: ID
+  afterEventId: ID
+}
+
+input SessionDiffInput {
+  sessionId: ID!
+  mode: String
+  filePath: String
+  page: Int
+  pageSize: Int
+}
+
+input SaveWorkflowDefinitionInput {
+  projectId: ID!
+  name: String!
+  graph: WorkflowGraphInput!
+}
+
+input WorkflowGraphInput {
+  nodes: [WorkflowNodeInput!]!
+  edges: [WorkflowEdgeInput!]!
+}
+
+input WorkflowNodeInput {
+  id: ID!
+  type: String!
+  title: String!
+  prompt: String
+  approval: ApprovalConfigInput
+  retry: RetryConfigInput
+  merge: MergeConfigInput
+}
+
+input ApprovalConfigInput {
+  beforeRun: Boolean
+  afterRun: Boolean
+}
+
+input RetryConfigInput {
+  maxAttempts: Int
+}
+
+input MergeConfigInput {
+  strategy: String!
+}
+
+input WorkflowEdgeInput {
+  from: ID!
+  to: ID!
+  priority: Int
+  condition: WorkflowConditionInput
+}
+
+input WorkflowConditionInput {
+  field: String
+  op: String
+  value: JSON
+  all: [WorkflowConditionInput!]
+  any: [WorkflowConditionInput!]
+  not: WorkflowConditionInput
+}
+
+input SubmitWorkflowApprovalInput {
+  workflowRunId: ID!
+  nodeId: ID!
+  approved: Boolean!
+  comment: String
+}
+
+input SubmitQuestionBatchInput {
+  batchId: ID!
+  answers: [QuestionAnswerInput!]!
+}
+
+input QuestionAnswerInput {
+  questionId: ID!
+  selectedOptionId: ID
+  customAnswer: String
+  payload: JSON
+}

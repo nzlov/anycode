@@ -1,0 +1,29 @@
+schema:
+  - internal/interfaces/graphql/graph/schema.graphqls
+
+exec:
+  filename: internal/interfaces/graphql/graph/generated/generated.go
+  package: generated
+
+model:
+  filename: internal/interfaces/graphql/graph/model/models_gen.go
+  package: model
+
+resolver:
+  layout: follow-schema
+  dir: internal/interfaces/graphql/graph
+  package: graph
+
+models:
+  Time:
+    model:
+      - github.com/99designs/gqlgen/graphql.Time
+  JSON:
+    model:
+      - github.com/99designs/gqlgen/graphql.Map
+  Upload:
+    model:
+      - github.com/99designs/gqlgen/graphql.Upload
+  Int64:
+    model:
+      - github.com/99designs/gqlgen/graphql.Int64
