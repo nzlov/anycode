@@ -11,6 +11,8 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -172,6 +174,70 @@ func init() {
 	session.DefaultUpdatedAt = sessionDescUpdatedAt.Default.(func() time.Time)
 	// session.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	session.UpdateDefaultUpdatedAt = sessionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	sessionattachmentFields := schema.SessionAttachment{}.Fields()
+	_ = sessionattachmentFields
+	// sessionattachmentDescSessionID is the schema descriptor for session_id field.
+	sessionattachmentDescSessionID := sessionattachmentFields[1].Descriptor()
+	// sessionattachment.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	sessionattachment.SessionIDValidator = sessionattachmentDescSessionID.Validators[0].(func(string) error)
+	// sessionattachmentDescKind is the schema descriptor for kind field.
+	sessionattachmentDescKind := sessionattachmentFields[2].Descriptor()
+	// sessionattachment.DefaultKind holds the default value on creation for the kind field.
+	sessionattachment.DefaultKind = sessionattachmentDescKind.Default.(string)
+	// sessionattachmentDescFilename is the schema descriptor for filename field.
+	sessionattachmentDescFilename := sessionattachmentFields[3].Descriptor()
+	// sessionattachment.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
+	sessionattachment.FilenameValidator = sessionattachmentDescFilename.Validators[0].(func(string) error)
+	// sessionattachmentDescPath is the schema descriptor for path field.
+	sessionattachmentDescPath := sessionattachmentFields[4].Descriptor()
+	// sessionattachment.PathValidator is a validator for the "path" field. It is called by the builders before save.
+	sessionattachment.PathValidator = sessionattachmentDescPath.Validators[0].(func(string) error)
+	// sessionattachmentDescMimeType is the schema descriptor for mime_type field.
+	sessionattachmentDescMimeType := sessionattachmentFields[5].Descriptor()
+	// sessionattachment.DefaultMimeType holds the default value on creation for the mime_type field.
+	sessionattachment.DefaultMimeType = sessionattachmentDescMimeType.Default.(string)
+	// sessionattachmentDescSize is the schema descriptor for size field.
+	sessionattachmentDescSize := sessionattachmentFields[6].Descriptor()
+	// sessionattachment.DefaultSize holds the default value on creation for the size field.
+	sessionattachment.DefaultSize = sessionattachmentDescSize.Default.(int64)
+	// sessionattachmentDescPreviewable is the schema descriptor for previewable field.
+	sessionattachmentDescPreviewable := sessionattachmentFields[7].Descriptor()
+	// sessionattachment.DefaultPreviewable holds the default value on creation for the previewable field.
+	sessionattachment.DefaultPreviewable = sessionattachmentDescPreviewable.Default.(bool)
+	// sessionattachmentDescCreatedAt is the schema descriptor for created_at field.
+	sessionattachmentDescCreatedAt := sessionattachmentFields[8].Descriptor()
+	// sessionattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sessionattachment.DefaultCreatedAt = sessionattachmentDescCreatedAt.Default.(func() time.Time)
+	stagedattachmentFields := schema.StagedAttachment{}.Fields()
+	_ = stagedattachmentFields
+	// stagedattachmentDescOwnerKeyHash is the schema descriptor for owner_key_hash field.
+	stagedattachmentDescOwnerKeyHash := stagedattachmentFields[1].Descriptor()
+	// stagedattachment.DefaultOwnerKeyHash holds the default value on creation for the owner_key_hash field.
+	stagedattachment.DefaultOwnerKeyHash = stagedattachmentDescOwnerKeyHash.Default.(string)
+	// stagedattachmentDescFilename is the schema descriptor for filename field.
+	stagedattachmentDescFilename := stagedattachmentFields[2].Descriptor()
+	// stagedattachment.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
+	stagedattachment.FilenameValidator = stagedattachmentDescFilename.Validators[0].(func(string) error)
+	// stagedattachmentDescPath is the schema descriptor for path field.
+	stagedattachmentDescPath := stagedattachmentFields[3].Descriptor()
+	// stagedattachment.PathValidator is a validator for the "path" field. It is called by the builders before save.
+	stagedattachment.PathValidator = stagedattachmentDescPath.Validators[0].(func(string) error)
+	// stagedattachmentDescMimeType is the schema descriptor for mime_type field.
+	stagedattachmentDescMimeType := stagedattachmentFields[4].Descriptor()
+	// stagedattachment.DefaultMimeType holds the default value on creation for the mime_type field.
+	stagedattachment.DefaultMimeType = stagedattachmentDescMimeType.Default.(string)
+	// stagedattachmentDescSize is the schema descriptor for size field.
+	stagedattachmentDescSize := stagedattachmentFields[5].Descriptor()
+	// stagedattachment.DefaultSize holds the default value on creation for the size field.
+	stagedattachment.DefaultSize = stagedattachmentDescSize.Default.(int64)
+	// stagedattachmentDescPreviewable is the schema descriptor for previewable field.
+	stagedattachmentDescPreviewable := stagedattachmentFields[6].Descriptor()
+	// stagedattachment.DefaultPreviewable holds the default value on creation for the previewable field.
+	stagedattachment.DefaultPreviewable = stagedattachmentDescPreviewable.Default.(bool)
+	// stagedattachmentDescCreatedAt is the schema descriptor for created_at field.
+	stagedattachmentDescCreatedAt := stagedattachmentFields[7].Descriptor()
+	// stagedattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
+	stagedattachment.DefaultCreatedAt = stagedattachmentDescCreatedAt.Default.(func() time.Time)
 	workflowdefinitionFields := schema.WorkflowDefinition{}.Fields()
 	_ = workflowdefinitionFields
 	// workflowdefinitionDescProjectID is the schema descriptor for project_id field.

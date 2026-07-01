@@ -110,6 +110,7 @@ type SessionCard {
   baseBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
+  attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
   createdAt: Time!

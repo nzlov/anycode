@@ -1,13 +1,51 @@
-import {
-  getSessionById,
-  sessionEvents as mockSessionEvents,
-  sessions as mockSessions,
-  type SessionCard,
-  type SessionEvent,
-  type SessionMode,
-  type SessionStatus,
-} from '@/mocks/workbench';
+import { sessions as mockSessions } from '@/mocks/workbench';
 import { graphqlFetch } from '@/services/graphqlClient';
+
+export type SessionMode = 'workflow' | 'chat';
+export type SessionStatus =
+  | 'created'
+  | 'starting'
+  | 'running'
+  | 'waiting_user'
+  | 'stopping'
+  | 'stopped'
+  | 'resume_failed'
+  | 'failed'
+  | 'blocked'
+  | 'completed'
+  | 'closed';
+
+export interface SessionCard {
+  id: string;
+  projectId: string;
+  title: string;
+  summary: string;
+  mode: SessionMode;
+  status: SessionStatus;
+  branch: string;
+  node: string;
+  updatedAt: string;
+  pendingQuestion: boolean;
+  filesChanged: number;
+}
+
+export interface SessionDetail extends SessionCard {
+  config: {
+    codexModel: string;
+    reasoningEffort: string;
+    permissionMode: string;
+  };
+  availableActions: string[];
+  canResume: boolean;
+}
+
+export interface SessionEvent {
+  id: string;
+  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question';
+  title: string;
+  body: string;
+  time: string;
+}
 
 export interface PageInfo {
   page: number;
@@ -32,7 +70,7 @@ export interface SessionPage {
 }
 
 export interface SessionDetailData {
-  session: SessionCard;
+  session: SessionDetail;
   events: SessionEvent[];
 }
 
@@ -84,6 +122,25 @@ interface GraphQLSessionDetail {
     reasoningEffort: string;
     permissionMode: string;
   };
+  availableActions: string[];
+  canResume: boolean;
+  lastRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface GraphQLSession {
+  id: string;
+  projectId: string;
+  requirement: string;
+  mode: string;
+  status: string;
+  baseBranch: string;
+  config: {
+    codexModel: string;
+    reasoningEffort: string;
+    permissionMode: string;
+  };
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -113,6 +170,25 @@ const sessionCardFields = `
 `;
 
 const sessionDetailFields = `
+  id
+  projectId
+  requirement
+  mode
+  status
+  baseBranch
+  config {
+    codexModel
+    reasoningEffort
+    permissionMode
+  }
+  availableActions
+  canResume
+  lastRunAt
+  createdAt
+  updatedAt
+`;
+
+const sessionFields = `
   id
   projectId
   requirement
@@ -162,108 +238,99 @@ export async function listSessions(input: ListSessionsInput = {}): Promise<Sessi
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
-  try {
-    const sessionData = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
+  const [sessionData, eventsData] = await Promise.all([
+    graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
       query: `
-          query Session($id: ID!) {
-            session(id: $id) {
-              ${sessionDetailFields}
-            }
-          }
-        `,
-      variables: { id: sessionId },
-    });
-    let events = [...mockSessionEvents];
-    try {
-      const eventsData = await graphqlFetch<
-        { sessionEvents: { items: GraphQLSessionEvent[]; pageInfo: GraphQLPageInfo } },
-        { input: { sessionId: string; page: number; pageSize: number } }
-      >({
-        query: `
-          query SessionEvents($input: ListSessionEventsInput!) {
-            sessionEvents(input: $input) {
-              items {
-                id
-                type
-                payload
-                createdAt
-              }
-              pageInfo {
-                page
-                pageSize
-                total
-                nextCursor
-              }
-            }
-          }
-        `,
-        variables: { input: { sessionId, page: 1, pageSize: 50 } },
-      });
-      events = eventsData.sessionEvents.items.map(normalizeSessionEvent);
-    } catch {
-      events = [...mockSessionEvents];
-    }
-
-    return {
-      session: normalizeSessionDetail(sessionData.session),
-      events,
-    };
-  } catch {
-    return {
-      session: getSessionById(sessionId),
-      events: [...mockSessionEvents],
-    };
-  }
-}
-
-export async function appendPrompt(sessionId: string, body: string) {
-  try {
-    return await graphqlFetch<
-      { appendPrompt: { id: string; sessionId: string; body: string; createdAt: string } },
-      { input: { sessionId: string; body: string } }
-    >({
-      query: `
-        mutation AppendPrompt($input: AppendPromptInput!) {
-          appendPrompt(input: $input) {
-            id
-            sessionId
-            body
-            createdAt
+        query Session($id: ID!) {
+          session(id: $id) {
+            ${sessionDetailFields}
           }
         }
       `,
-      variables: { input: { sessionId, body } },
-    });
-  } catch {
-    return {
-      appendPrompt: {
-        id: `local-${Date.now()}`,
-        sessionId,
-        body,
-        createdAt: new Date().toISOString(),
-      },
-    };
-  }
+      variables: { id: sessionId },
+    }),
+    graphqlFetch<
+      { sessionEvents: { items: GraphQLSessionEvent[]; pageInfo: GraphQLPageInfo } },
+      { input: { sessionId: string; page: number; pageSize: number } }
+    >({
+      query: `
+        query SessionEvents($input: ListSessionEventsInput!) {
+          sessionEvents(input: $input) {
+            items {
+              id
+              type
+              payload
+              createdAt
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
+            }
+          }
+        }
+      `,
+      variables: { input: { sessionId, page: 1, pageSize: 50 } },
+    }),
+  ]);
+
+  return {
+    session: normalizeSessionDetail(sessionData.session),
+    events: eventsData.sessionEvents.items.map(normalizeSessionEvent),
+  };
+}
+
+export async function appendPrompt(sessionId: string, body: string) {
+  return graphqlFetch<
+    { appendPrompt: { id: string; sessionId: string; body: string; createdAt: string } },
+    { input: { sessionId: string; body: string } }
+  >({
+    query: `
+      mutation AppendPrompt($input: AppendPromptInput!) {
+        appendPrompt(input: $input) {
+          id
+          sessionId
+          body
+          createdAt
+        }
+      }
+    `,
+    variables: { input: { sessionId, body } },
+  });
+}
+
+export async function stopSession(sessionId: string) {
+  return graphqlFetch<{ stopSession: GraphQLSession }, { id: string }>({
+    query: `
+      mutation StopSession($id: ID!) {
+        stopSession(id: $id) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+  });
 }
 
 export async function createSession(input: CreateSessionInput) {
   try {
     const data = await graphqlFetch<
-      { createSession: GraphQLSessionDetail },
+      { createSession: GraphQLSession },
       { input: CreateSessionInput }
     >({
       query: `
         mutation CreateSession($input: CreateSessionInput!) {
           createSession(input: $input) {
-            ${sessionDetailFields}
+            ${sessionFields}
           }
         }
       `,
       variables: { input },
     });
-    return normalizeSessionDetail(data.createSession);
+    return normalizeSession(data.createSession);
   } catch {
-    return normalizeSessionDetail({
+    return normalizeSession({
       id: `local-${Date.now()}`,
       projectId: input.projectId,
       requirement: input.requirement,
@@ -298,7 +365,27 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
   };
 }
 
-function normalizeSessionDetail(session: GraphQLSessionDetail): SessionCard {
+function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
+  const status = normalizeStatus(session.status);
+  return {
+    id: session.id,
+    projectId: session.projectId,
+    title: firstLine(session.requirement),
+    summary: session.requirement,
+    mode: normalizeMode(session.mode),
+    status,
+    branch: session.baseBranch || 'main',
+    node: statusNode(status),
+    updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
+    pendingQuestion: status === 'waiting_user',
+    filesChanged: 0,
+    config: session.config,
+    availableActions: session.availableActions,
+    canResume: session.canResume,
+  };
+}
+
+function normalizeSession(session: GraphQLSession): SessionCard {
   const status = normalizeStatus(session.status);
   return {
     id: session.id,
@@ -349,14 +436,21 @@ function normalizeMode(mode: string): SessionMode {
 }
 
 function normalizeStatus(status: string): SessionStatus {
-  if (
-    status === 'running' ||
-    status === 'waiting_user' ||
-    status === 'stopped' ||
-    status === 'blocked' ||
-    status === 'completed'
-  ) {
-    return status;
+  const statuses = new Set<SessionStatus>([
+    'created',
+    'starting',
+    'running',
+    'waiting_user',
+    'stopping',
+    'stopped',
+    'resume_failed',
+    'failed',
+    'blocked',
+    'completed',
+    'closed',
+  ]);
+  if (statuses.has(status as SessionStatus)) {
+    return status as SessionStatus;
   }
   return 'stopped';
 }
@@ -379,11 +473,17 @@ function eventTitle(type: string) {
 
 function statusNode(status: SessionStatus) {
   const labels: Record<SessionStatus, string> = {
+    created: '待运行',
+    starting: '启动中',
     running: '运行中',
     waiting_user: '待回答',
+    stopping: '停止中',
     stopped: '已停止',
+    resume_failed: '恢复失败',
+    failed: '失败',
     blocked: '阻塞',
     completed: '已完成',
+    closed: '已关闭',
   };
   return labels[status];
 }

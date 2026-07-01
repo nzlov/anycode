@@ -30,7 +30,7 @@ func TestPreviewable(t *testing.T) {
 
 func TestStageOpenPromoteAndDelete(t *testing.T) {
 	store := New(t.TempDir())
-	staged, err := store.Stage(context.Background(), StageInput{
+	staged, err := store.Stage(context.Background(), session.StageAttachmentInput{
 		OwnerKeyHash: "owner",
 		Filename:     "../image.png",
 		MimeType:     "image/png",
@@ -87,7 +87,7 @@ func TestStageOpenPromoteAndDelete(t *testing.T) {
 
 func TestDeleteStaged(t *testing.T) {
 	store := New(t.TempDir())
-	staged, err := store.Stage(context.Background(), StageInput{
+	staged, err := store.Stage(context.Background(), session.StageAttachmentInput{
 		Filename: "note.txt",
 		Reader:   strings.NewReader("hello"),
 	})

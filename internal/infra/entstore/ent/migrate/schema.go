@@ -160,6 +160,65 @@ var (
 			},
 		},
 	}
+	// SessionAttachmentsColumns holds the columns for the "session_attachments" table.
+	SessionAttachmentsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "kind", Type: field.TypeString, Default: "file"},
+		{Name: "filename", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString},
+		{Name: "mime_type", Type: field.TypeString, Default: "application/octet-stream"},
+		{Name: "size", Type: field.TypeInt64, Default: 0},
+		{Name: "previewable", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// SessionAttachmentsTable holds the schema information for the "session_attachments" table.
+	SessionAttachmentsTable = &schema.Table{
+		Name:       "session_attachments",
+		Columns:    SessionAttachmentsColumns,
+		PrimaryKey: []*schema.Column{SessionAttachmentsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sessionattachment_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[1]},
+			},
+			{
+				Name:    "sessionattachment_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[8]},
+			},
+		},
+	}
+	// StagedAttachmentsColumns holds the columns for the "staged_attachments" table.
+	StagedAttachmentsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "owner_key_hash", Type: field.TypeString, Default: ""},
+		{Name: "filename", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString},
+		{Name: "mime_type", Type: field.TypeString, Default: "application/octet-stream"},
+		{Name: "size", Type: field.TypeInt64, Default: 0},
+		{Name: "previewable", Type: field.TypeBool, Default: false},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// StagedAttachmentsTable holds the schema information for the "staged_attachments" table.
+	StagedAttachmentsTable = &schema.Table{
+		Name:       "staged_attachments",
+		Columns:    StagedAttachmentsColumns,
+		PrimaryKey: []*schema.Column{StagedAttachmentsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "stagedattachment_owner_key_hash",
+				Unique:  false,
+				Columns: []*schema.Column{StagedAttachmentsColumns[1]},
+			},
+			{
+				Name:    "stagedattachment_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{StagedAttachmentsColumns[7]},
+			},
+		},
+	}
 	// WorkflowDefinitionsColumns holds the columns for the "workflow_definitions" table.
 	WorkflowDefinitionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -191,6 +250,8 @@ var (
 		ProjectsTable,
 		PromptAppendsTable,
 		SessionsTable,
+		SessionAttachmentsTable,
+		StagedAttachmentsTable,
 		WorkflowDefinitionsTable,
 	}
 )

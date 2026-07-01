@@ -184,6 +184,72 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 }
 
+func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	repo := store.Attachments()
+	createdAt := time.Now().UTC()
+	staged := session.StagedAttachment{
+		ID:           "staged-1",
+		OwnerKeyHash: "owner",
+		Filename:     "note.txt",
+		Path:         "/data/attachments/staged/staged-1/note.txt",
+		MimeType:     "text/plain",
+		Size:         12,
+		Previewable:  false,
+		CreatedAt:    createdAt,
+	}
+	if err := repo.SaveStagedAttachment(ctx, staged); err != nil {
+		t.Fatalf("save staged attachment: %v", err)
+	}
+	foundStaged, err := repo.FindStagedAttachment(ctx, staged.ID)
+	if err != nil {
+		t.Fatalf("find staged attachment: %v", err)
+	}
+	if foundStaged.ID != staged.ID || foundStaged.Path != staged.Path || foundStaged.OwnerKeyHash != "owner" {
+		t.Fatalf("staged attachment mismatch: %#v", foundStaged)
+	}
+
+	attachment := session.SessionAttachment{
+		ID:          "attachment-1",
+		SessionID:   "session-1",
+		Kind:        "file",
+		Filename:    "note.txt",
+		Path:        "/data/attachments/sessions/session-1/attachment-1/note.txt",
+		MimeType:    "text/plain",
+		Size:        12,
+		Previewable: false,
+		CreatedAt:   createdAt.Add(time.Second),
+	}
+	if err := repo.SaveSessionAttachment(ctx, attachment); err != nil {
+		t.Fatalf("save session attachment: %v", err)
+	}
+	attachments, err := repo.ListSessionAttachments(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("list session attachments: %v", err)
+	}
+	if len(attachments) != 1 || attachments[0].ID != attachment.ID || attachments[0].Path != attachment.Path {
+		t.Fatalf("session attachments mismatch: %#v", attachments)
+	}
+	if err := repo.DeleteStagedAttachment(ctx, staged.ID); err != nil {
+		t.Fatalf("delete staged attachment: %v", err)
+	}
+	if err := repo.DeleteSessionAttachment(ctx, attachment.ID); err != nil {
+		t.Fatalf("delete session attachment: %v", err)
+	}
+}
+
 func saveSessions(t *testing.T, ctx context.Context, repo *SessionRepository, sessions ...session.Session) {
 	t.Helper()
 	for _, s := range sessions {

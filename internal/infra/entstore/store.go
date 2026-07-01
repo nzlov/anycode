@@ -93,6 +93,10 @@ func (s *Store) Sessions() *SessionRepository {
 	return NewSessionRepository(s.client)
 }
 
+func (s *Store) Attachments() *AttachmentRepository {
+	return NewAttachmentRepository(s.client)
+}
+
 func (s *Store) Events() *EventStore {
 	return NewEventStore(s.client)
 }

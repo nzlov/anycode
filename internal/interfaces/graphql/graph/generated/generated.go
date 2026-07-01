@@ -229,6 +229,7 @@ type ComplexityRoot struct {
 	}
 
 	SessionCard struct {
+		Attachments        func(childComplexity int) int
 		AvailableActions   func(childComplexity int) int
 		BaseBranch         func(childComplexity int) int
 		CreatedAt          func(childComplexity int) int
@@ -1250,6 +1251,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionAttachment.Size(childComplexity), true
 
+	case "SessionCard.attachments":
+		if e.ComplexityRoot.SessionCard.Attachments == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.Attachments(childComplexity), true
 	case "SessionCard.availableActions":
 		if e.ComplexityRoot.SessionCard.AvailableActions == nil {
 			break
@@ -2011,6 +2018,7 @@ type SessionCard {
   baseBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
+  attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
   createdAt: Time!
@@ -7278,6 +7286,53 @@ func (ec *executionContext) fieldContext_SessionCard_pendingQuestion(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_attachments(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_attachments,
+		func(ctx context.Context) (any, error) {
+			return obj.Attachments, nil
+		},
+		nil,
+		ec.marshalNSessionAttachment2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionAttachmentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_attachments(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SessionAttachment_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_SessionAttachment_sessionId(ctx, field)
+			case "kind":
+				return ec.fieldContext_SessionAttachment_kind(ctx, field)
+			case "filename":
+				return ec.fieldContext_SessionAttachment_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_SessionAttachment_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_SessionAttachment_size(ctx, field)
+			case "previewable":
+				return ec.fieldContext_SessionAttachment_previewable(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionAttachment_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionAttachment", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_availableActions(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7438,6 +7493,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
 			case "pendingQuestion":
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
+			case "attachments":
+				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
 				return ec.fieldContext_SessionCard_availableActions(ctx, field)
 			case "lastRunAt":
@@ -13822,6 +13879,11 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			}
 		case "pendingQuestion":
 			out.Values[i] = ec._SessionCard_pendingQuestion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "attachments":
+			out.Values[i] = ec._SessionCard_attachments(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

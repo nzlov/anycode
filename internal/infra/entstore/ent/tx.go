@@ -22,6 +22,10 @@ type Tx struct {
 	PromptAppend *PromptAppendClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
+	// SessionAttachment is the client for interacting with the SessionAttachment builders.
+	SessionAttachment *SessionAttachmentClient
+	// StagedAttachment is the client for interacting with the StagedAttachment builders.
+	StagedAttachment *StagedAttachmentClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
 
@@ -160,6 +164,8 @@ func (tx *Tx) init() {
 	tx.Project = NewProjectClient(tx.config)
 	tx.PromptAppend = NewPromptAppendClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
+	tx.SessionAttachment = NewSessionAttachmentClient(tx.config)
+	tx.StagedAttachment = NewStagedAttachmentClient(tx.config)
 	tx.WorkflowDefinition = NewWorkflowDefinitionClient(tx.config)
 }
 

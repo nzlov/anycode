@@ -66,6 +66,73 @@ func TestCreateSessionValidatesProjectAndRequirement(t *testing.T) {
 	}
 }
 
+func TestCreateSessionArchivesStagedAttachments(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:        "staged-1",
+		Filename:  "note.txt",
+		Path:      "/attachments/staged/staged-1/note.txt",
+		MimeType:  "text/plain",
+		Size:      5,
+		CreatedAt: time.Unix(9, 0).UTC(),
+	}
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+	if _, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:           "project-1",
+		Requirement:         "use attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	}); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if _, ok := repo.stagedAttachments["staged-1"]; ok {
+		t.Fatal("staged attachment metadata was not deleted")
+	}
+	attachment, ok := repo.sessionAttachments["staged-1"]
+	if !ok {
+		t.Fatal("session attachment metadata was not saved")
+	}
+	if attachment.SessionID != "session-1" || attachment.Filename != "note.txt" {
+		t.Fatalf("session attachment = %#v", attachment)
+	}
+	if !files.promoted["staged-1"] {
+		t.Fatal("staged attachment file was not promoted")
+	}
+}
+
+func TestCreateSessionMarksFailedWhenAttachmentArchiveFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+	}
+	files := newFakeAttachmentStore()
+	files.promoteErr = errors.New("disk failed")
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+	if _, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:           "project-1",
+		Requirement:         "use attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	}); err == nil {
+		t.Fatal("CreateSession() expected attachment archive error")
+	}
+	got, err := repo.Find(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("Find() session after archive failure: %v", err)
+	}
+	if got.Status != domain.StatusFailed {
+		t.Fatalf("session status after archive failure = %q", got.Status)
+	}
+}
+
 func TestListSessionsReturnsCardsPage(t *testing.T) {
 	ctx := context.Background()
 	projectID := domain.ProjectID("project-1")
@@ -75,7 +142,12 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 		{ID: "running", ProjectID: projectID, Requirement: "running card", Status: domain.StatusRunning},
 	}
 	repo.listTotal = 7
-	service := New(repo, newFakeProjectRepository("project-1"))
+	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+		ID:        "attachment-1",
+		SessionID: "created",
+		Filename:  "note.txt",
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
 
 	got, err := service.ListSessions(ctx, ListSessionsInput{
 		ProjectID: &projectID,
@@ -93,6 +165,9 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 	}
 	if got.Items[0].RequirementSummary != "created card" {
 		t.Fatalf("RequirementSummary = %q", got.Items[0].RequirementSummary)
+	}
+	if len(got.Items[0].Attachments) != 1 || got.Items[0].Attachments[0].Filename != "note.txt" {
+		t.Fatalf("ListSessions() attachments = %#v", got.Items[0].Attachments)
 	}
 	if !slices.Equal(got.Items[0].AvailableActions, []string{"run", "close"}) {
 		t.Fatalf("created actions = %#v", got.Items[0].AvailableActions)
@@ -115,7 +190,14 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	repo.appends = []domain.PromptAppend{
 		{ID: "append-1", SessionID: "session-1", Body: "extra context", CreatedAt: time.Unix(11, 0).UTC()},
 	}
-	service := New(repo, newFakeProjectRepository("project-1"))
+	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+		ID:        "attachment-1",
+		SessionID: "session-1",
+		Filename:  "note.txt",
+		MimeType:  "text/plain",
+		Size:      5,
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
 
 	got, err := service.GetSession(ctx, "session-1")
 	if err != nil {
@@ -124,8 +206,11 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	if !got.CanResume {
 		t.Fatal("GetSession() CanResume = false")
 	}
-	if len(got.Attachments) != 0 || len(got.PromptAppends) != 1 {
+	if len(got.Attachments) != 1 || len(got.PromptAppends) != 1 {
 		t.Fatalf("GetSession() detail collections, got attachments=%d appends=%d", len(got.Attachments), len(got.PromptAppends))
+	}
+	if got.Attachments[0].Filename != "note.txt" {
+		t.Fatalf("GetSession() attachments = %#v", got.Attachments)
 	}
 	if got.PromptAppends[0].Body != "extra context" {
 		t.Fatalf("GetSession() prompt appends = %#v", got.PromptAppends)
@@ -253,16 +338,22 @@ func TestAvailableActionsByStatus(t *testing.T) {
 }
 
 type fakeRepository struct {
-	saved         []domain.Session
-	sessions      map[domain.ID]domain.Session
-	listSessions  []domain.Session
-	listTotal     int
-	lastListQuery domain.ListQuery
-	appends       []domain.PromptAppend
+	saved              []domain.Session
+	sessions           map[domain.ID]domain.Session
+	listSessions       []domain.Session
+	listTotal          int
+	lastListQuery      domain.ListQuery
+	appends            []domain.PromptAppend
+	stagedAttachments  map[domain.StagedAttachmentID]domain.StagedAttachment
+	sessionAttachments map[domain.SessionAttachmentID]domain.SessionAttachment
 }
 
 func newFakeRepository() *fakeRepository {
-	return &fakeRepository{sessions: map[domain.ID]domain.Session{}}
+	return &fakeRepository{
+		sessions:           map[domain.ID]domain.Session{},
+		stagedAttachments:  map[domain.StagedAttachmentID]domain.StagedAttachment{},
+		sessionAttachments: map[domain.SessionAttachmentID]domain.SessionAttachment{},
+	}
 }
 
 func (r *fakeRepository) Save(_ context.Context, session domain.Session) error {
@@ -305,6 +396,100 @@ func (r *fakeRepository) ListPromptAppends(_ context.Context, sessionID domain.I
 
 func (r *fakeRepository) AddMergeRecord(context.Context, domain.MergeRecord) error {
 	return errors.New("unexpected AddMergeRecord call")
+}
+
+func (r *fakeRepository) SaveStagedAttachment(_ context.Context, attachment domain.StagedAttachment) error {
+	r.stagedAttachments[attachment.ID] = attachment
+	return nil
+}
+
+func (r *fakeRepository) FindStagedAttachment(_ context.Context, id domain.StagedAttachmentID) (domain.StagedAttachment, error) {
+	attachment, ok := r.stagedAttachments[id]
+	if !ok {
+		return domain.StagedAttachment{}, errors.New("not found")
+	}
+	return attachment, nil
+}
+
+func (r *fakeRepository) DeleteStagedAttachment(_ context.Context, id domain.StagedAttachmentID) error {
+	delete(r.stagedAttachments, id)
+	return nil
+}
+
+func (r *fakeRepository) SaveSessionAttachment(_ context.Context, attachment domain.SessionAttachment) error {
+	r.sessionAttachments[attachment.ID] = attachment
+	return nil
+}
+
+func (r *fakeRepository) FindSessionAttachment(_ context.Context, id domain.SessionAttachmentID) (domain.SessionAttachment, error) {
+	attachment, ok := r.sessionAttachments[id]
+	if !ok {
+		return domain.SessionAttachment{}, errors.New("not found")
+	}
+	return attachment, nil
+}
+
+func (r *fakeRepository) ListSessionAttachments(_ context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
+	attachments := make([]domain.SessionAttachment, 0, len(r.sessionAttachments))
+	for _, attachment := range r.sessionAttachments {
+		if attachment.SessionID == sessionID {
+			attachments = append(attachments, attachment)
+		}
+	}
+	return attachments, nil
+}
+
+func (r *fakeRepository) DeleteSessionAttachment(_ context.Context, id domain.SessionAttachmentID) error {
+	delete(r.sessionAttachments, id)
+	return nil
+}
+
+type fakeAttachmentStore struct {
+	promoted        map[domain.StagedAttachmentID]bool
+	deletedSessions map[domain.SessionAttachmentID]bool
+	promoteErr      error
+}
+
+func newFakeAttachmentStore() *fakeAttachmentStore {
+	return &fakeAttachmentStore{
+		promoted:        map[domain.StagedAttachmentID]bool{},
+		deletedSessions: map[domain.SessionAttachmentID]bool{},
+	}
+}
+
+func (s *fakeAttachmentStore) Stage(context.Context, domain.StageAttachmentInput) (domain.StagedAttachment, error) {
+	return domain.StagedAttachment{}, errors.New("unexpected Stage call")
+}
+
+func (s *fakeAttachmentStore) Promote(_ context.Context, staged domain.StagedAttachment, sessionID domain.ID) (domain.SessionAttachment, error) {
+	if s.promoteErr != nil {
+		return domain.SessionAttachment{}, s.promoteErr
+	}
+	s.promoted[staged.ID] = true
+	return domain.SessionAttachment{
+		ID:          domain.SessionAttachmentID(staged.ID),
+		SessionID:   sessionID,
+		Kind:        "file",
+		Filename:    staged.Filename,
+		Path:        "/attachments/sessions/" + string(sessionID) + "/" + string(staged.ID) + "/" + staged.Filename,
+		MimeType:    staged.MimeType,
+		Size:        staged.Size,
+		Previewable: staged.Previewable,
+		CreatedAt:   time.Unix(11, 0).UTC(),
+	}, nil
+}
+
+func (s *fakeAttachmentStore) DeleteStaged(context.Context, domain.StagedAttachmentID) error {
+	return errors.New("unexpected DeleteStaged call")
+}
+
+func (s *fakeAttachmentStore) DeleteSession(_ context.Context, id domain.SessionAttachmentID) error {
+	s.deletedSessions[id] = true
+	return nil
+}
+
+func (s *fakeAttachmentStore) Open(context.Context, string) (domain.AttachmentStream, error) {
+	return domain.AttachmentStream{}, errors.New("unexpected Open call")
 }
 
 type fakeProjectRepository struct {

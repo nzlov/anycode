@@ -246,20 +246,21 @@ type SessionAttachment struct {
 }
 
 type SessionCard struct {
-	ID                 string     `json:"id"`
-	ProjectID          string     `json:"projectId"`
-	ProjectName        string     `json:"projectName"`
-	Requirement        string     `json:"requirement"`
-	RequirementSummary string     `json:"requirementSummary"`
-	Mode               string     `json:"mode"`
-	Status             string     `json:"status"`
-	BaseBranch         string     `json:"baseBranch"`
-	CurrentNodeTitle   string     `json:"currentNodeTitle"`
-	PendingQuestion    bool       `json:"pendingQuestion"`
-	AvailableActions   []string   `json:"availableActions"`
-	LastRunAt          *time.Time `json:"lastRunAt,omitempty"`
-	CreatedAt          time.Time  `json:"createdAt"`
-	UpdatedAt          time.Time  `json:"updatedAt"`
+	ID                 string               `json:"id"`
+	ProjectID          string               `json:"projectId"`
+	ProjectName        string               `json:"projectName"`
+	Requirement        string               `json:"requirement"`
+	RequirementSummary string               `json:"requirementSummary"`
+	Mode               string               `json:"mode"`
+	Status             string               `json:"status"`
+	BaseBranch         string               `json:"baseBranch"`
+	CurrentNodeTitle   string               `json:"currentNodeTitle"`
+	PendingQuestion    bool                 `json:"pendingQuestion"`
+	Attachments        []*SessionAttachment `json:"attachments"`
+	AvailableActions   []string             `json:"availableActions"`
+	LastRunAt          *time.Time           `json:"lastRunAt,omitempty"`
+	CreatedAt          time.Time            `json:"createdAt"`
+	UpdatedAt          time.Time            `json:"updatedAt"`
 }
 
 type SessionCardPage struct {

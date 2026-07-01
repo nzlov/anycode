@@ -109,7 +109,8 @@
 import { computed, onMounted } from 'vue';
 
 import { useSessionsPage } from '@/composables/useSessionsPage';
-import { getProjectName, projects, type SessionMode, type SessionStatus } from '@/mocks/workbench';
+import { getProjectName, projects } from '@/mocks/workbench';
+import type { SessionMode, SessionStatus } from '@/services/sessions';
 
 const { rows, loadSessions } = useSessionsPage({
   scope: 'overview',
@@ -148,22 +149,34 @@ function modeLabel(mode: SessionMode) {
 
 function statusColor(status: SessionStatus) {
   const colors: Record<SessionStatus, string> = {
+    created: 'blue-grey',
+    starting: 'primary',
     running: 'positive',
     waiting_user: 'warning',
+    stopping: 'warning',
     stopped: 'blue-grey',
+    resume_failed: 'negative',
+    failed: 'negative',
     blocked: 'negative',
     completed: 'primary',
+    closed: 'grey',
   };
   return colors[status];
 }
 
 function statusIcon(status: SessionStatus) {
   const icons: Record<SessionStatus, string> = {
+    created: 'radio_button_unchecked',
+    starting: 'pending',
     running: 'play_arrow',
     waiting_user: 'help',
+    stopping: 'pause_circle',
     stopped: 'stop_circle',
+    resume_failed: 'sync_problem',
+    failed: 'error',
     blocked: 'error',
     completed: 'check_circle',
+    closed: 'archive',
   };
   return icons[status];
 }

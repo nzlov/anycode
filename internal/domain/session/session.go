@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -88,6 +89,20 @@ type StagedAttachment struct {
 	CreatedAt    time.Time
 }
 
+type StageAttachmentInput struct {
+	OwnerKeyHash string
+	Filename     string
+	MimeType     string
+	Size         int64
+	Reader       io.Reader
+}
+
+type AttachmentStream struct {
+	Filename string
+	MimeType string
+	Reader   io.ReadCloser
+}
+
 type PromptAppend struct {
 	ID        string
 	SessionID ID
@@ -132,6 +147,16 @@ type Repository interface {
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
 }
 
+type AttachmentRepository interface {
+	SaveStagedAttachment(ctx context.Context, attachment StagedAttachment) error
+	FindStagedAttachment(ctx context.Context, id StagedAttachmentID) (StagedAttachment, error)
+	DeleteStagedAttachment(ctx context.Context, id StagedAttachmentID) error
+	SaveSessionAttachment(ctx context.Context, attachment SessionAttachment) error
+	FindSessionAttachment(ctx context.Context, id SessionAttachmentID) (SessionAttachment, error)
+	ListSessionAttachments(ctx context.Context, sessionID ID) ([]SessionAttachment, error)
+	DeleteSessionAttachment(ctx context.Context, id SessionAttachmentID) error
+}
+
 type Policy interface {
 	CanStart(session Session) error
 	CanStop(session Session) error
@@ -144,10 +169,11 @@ type ConfigPolicy interface {
 }
 
 type AttachmentStore interface {
-	Stage(ctx context.Context, attachment StagedAttachment) (StagedAttachment, error)
-	Promote(ctx context.Context, stagedID StagedAttachmentID, sessionID ID) (SessionAttachment, error)
+	Stage(ctx context.Context, input StageAttachmentInput) (StagedAttachment, error)
+	Promote(ctx context.Context, staged StagedAttachment, sessionID ID) (SessionAttachment, error)
 	DeleteStaged(ctx context.Context, id StagedAttachmentID) error
 	DeleteSession(ctx context.Context, id SessionAttachmentID) error
+	Open(ctx context.Context, path string) (AttachmentStream, error)
 }
 
 type WorktreeManager interface {

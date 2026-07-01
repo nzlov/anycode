@@ -19,6 +19,8 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -37,6 +39,10 @@ type Client struct {
 	PromptAppend *PromptAppendClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
+	// SessionAttachment is the client for interacting with the SessionAttachment builders.
+	SessionAttachment *SessionAttachmentClient
+	// StagedAttachment is the client for interacting with the StagedAttachment builders.
+	StagedAttachment *StagedAttachmentClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
 }
@@ -55,6 +61,8 @@ func (c *Client) init() {
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
 	c.Session = NewSessionClient(c.config)
+	c.SessionAttachment = NewSessionAttachmentClient(c.config)
+	c.StagedAttachment = NewStagedAttachmentClient(c.config)
 	c.WorkflowDefinition = NewWorkflowDefinitionClient(c.config)
 }
 
@@ -153,6 +161,8 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
 		Session:            NewSessionClient(cfg),
+		SessionAttachment:  NewSessionAttachmentClient(cfg),
+		StagedAttachment:   NewStagedAttachmentClient(cfg),
 		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
@@ -178,6 +188,8 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
 		Session:            NewSessionClient(cfg),
+		SessionAttachment:  NewSessionAttachmentClient(cfg),
+		StagedAttachment:   NewStagedAttachmentClient(cfg),
 		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
@@ -209,7 +221,7 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.EventRecord, c.MergeRecord, c.Project, c.PromptAppend, c.Session,
-		c.WorkflowDefinition,
+		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -220,7 +232,7 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.EventRecord, c.MergeRecord, c.Project, c.PromptAppend, c.Session,
-		c.WorkflowDefinition,
+		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -239,6 +251,10 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PromptAppend.mutate(ctx, m)
 	case *SessionMutation:
 		return c.Session.mutate(ctx, m)
+	case *SessionAttachmentMutation:
+		return c.SessionAttachment.mutate(ctx, m)
+	case *StagedAttachmentMutation:
+		return c.StagedAttachment.mutate(ctx, m)
 	case *WorkflowDefinitionMutation:
 		return c.WorkflowDefinition.mutate(ctx, m)
 	default:
@@ -911,6 +927,272 @@ func (c *SessionClient) mutate(ctx context.Context, m *SessionMutation) (Value, 
 	}
 }
 
+// SessionAttachmentClient is a client for the SessionAttachment schema.
+type SessionAttachmentClient struct {
+	config
+}
+
+// NewSessionAttachmentClient returns a client for the SessionAttachment from the given config.
+func NewSessionAttachmentClient(c config) *SessionAttachmentClient {
+	return &SessionAttachmentClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sessionattachment.Hooks(f(g(h())))`.
+func (c *SessionAttachmentClient) Use(hooks ...Hook) {
+	c.hooks.SessionAttachment = append(c.hooks.SessionAttachment, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sessionattachment.Intercept(f(g(h())))`.
+func (c *SessionAttachmentClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SessionAttachment = append(c.inters.SessionAttachment, interceptors...)
+}
+
+// Create returns a builder for creating a SessionAttachment entity.
+func (c *SessionAttachmentClient) Create() *SessionAttachmentCreate {
+	mutation := newSessionAttachmentMutation(c.config, OpCreate)
+	return &SessionAttachmentCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SessionAttachment entities.
+func (c *SessionAttachmentClient) CreateBulk(builders ...*SessionAttachmentCreate) *SessionAttachmentCreateBulk {
+	return &SessionAttachmentCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SessionAttachmentClient) MapCreateBulk(slice any, setFunc func(*SessionAttachmentCreate, int)) *SessionAttachmentCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SessionAttachmentCreateBulk{err: fmt.Errorf("calling to SessionAttachmentClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SessionAttachmentCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SessionAttachmentCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SessionAttachment.
+func (c *SessionAttachmentClient) Update() *SessionAttachmentUpdate {
+	mutation := newSessionAttachmentMutation(c.config, OpUpdate)
+	return &SessionAttachmentUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SessionAttachmentClient) UpdateOne(_m *SessionAttachment) *SessionAttachmentUpdateOne {
+	mutation := newSessionAttachmentMutation(c.config, OpUpdateOne, withSessionAttachment(_m))
+	return &SessionAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SessionAttachmentClient) UpdateOneID(id string) *SessionAttachmentUpdateOne {
+	mutation := newSessionAttachmentMutation(c.config, OpUpdateOne, withSessionAttachmentID(id))
+	return &SessionAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SessionAttachment.
+func (c *SessionAttachmentClient) Delete() *SessionAttachmentDelete {
+	mutation := newSessionAttachmentMutation(c.config, OpDelete)
+	return &SessionAttachmentDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SessionAttachmentClient) DeleteOne(_m *SessionAttachment) *SessionAttachmentDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SessionAttachmentClient) DeleteOneID(id string) *SessionAttachmentDeleteOne {
+	builder := c.Delete().Where(sessionattachment.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SessionAttachmentDeleteOne{builder}
+}
+
+// Query returns a query builder for SessionAttachment.
+func (c *SessionAttachmentClient) Query() *SessionAttachmentQuery {
+	return &SessionAttachmentQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSessionAttachment},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SessionAttachment entity by its id.
+func (c *SessionAttachmentClient) Get(ctx context.Context, id string) (*SessionAttachment, error) {
+	return c.Query().Where(sessionattachment.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SessionAttachmentClient) GetX(ctx context.Context, id string) *SessionAttachment {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SessionAttachmentClient) Hooks() []Hook {
+	return c.hooks.SessionAttachment
+}
+
+// Interceptors returns the client interceptors.
+func (c *SessionAttachmentClient) Interceptors() []Interceptor {
+	return c.inters.SessionAttachment
+}
+
+func (c *SessionAttachmentClient) mutate(ctx context.Context, m *SessionAttachmentMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SessionAttachmentCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SessionAttachmentUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SessionAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SessionAttachmentDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SessionAttachment mutation op: %q", m.Op())
+	}
+}
+
+// StagedAttachmentClient is a client for the StagedAttachment schema.
+type StagedAttachmentClient struct {
+	config
+}
+
+// NewStagedAttachmentClient returns a client for the StagedAttachment from the given config.
+func NewStagedAttachmentClient(c config) *StagedAttachmentClient {
+	return &StagedAttachmentClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `stagedattachment.Hooks(f(g(h())))`.
+func (c *StagedAttachmentClient) Use(hooks ...Hook) {
+	c.hooks.StagedAttachment = append(c.hooks.StagedAttachment, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `stagedattachment.Intercept(f(g(h())))`.
+func (c *StagedAttachmentClient) Intercept(interceptors ...Interceptor) {
+	c.inters.StagedAttachment = append(c.inters.StagedAttachment, interceptors...)
+}
+
+// Create returns a builder for creating a StagedAttachment entity.
+func (c *StagedAttachmentClient) Create() *StagedAttachmentCreate {
+	mutation := newStagedAttachmentMutation(c.config, OpCreate)
+	return &StagedAttachmentCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of StagedAttachment entities.
+func (c *StagedAttachmentClient) CreateBulk(builders ...*StagedAttachmentCreate) *StagedAttachmentCreateBulk {
+	return &StagedAttachmentCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *StagedAttachmentClient) MapCreateBulk(slice any, setFunc func(*StagedAttachmentCreate, int)) *StagedAttachmentCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &StagedAttachmentCreateBulk{err: fmt.Errorf("calling to StagedAttachmentClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*StagedAttachmentCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &StagedAttachmentCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for StagedAttachment.
+func (c *StagedAttachmentClient) Update() *StagedAttachmentUpdate {
+	mutation := newStagedAttachmentMutation(c.config, OpUpdate)
+	return &StagedAttachmentUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *StagedAttachmentClient) UpdateOne(_m *StagedAttachment) *StagedAttachmentUpdateOne {
+	mutation := newStagedAttachmentMutation(c.config, OpUpdateOne, withStagedAttachment(_m))
+	return &StagedAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *StagedAttachmentClient) UpdateOneID(id string) *StagedAttachmentUpdateOne {
+	mutation := newStagedAttachmentMutation(c.config, OpUpdateOne, withStagedAttachmentID(id))
+	return &StagedAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for StagedAttachment.
+func (c *StagedAttachmentClient) Delete() *StagedAttachmentDelete {
+	mutation := newStagedAttachmentMutation(c.config, OpDelete)
+	return &StagedAttachmentDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *StagedAttachmentClient) DeleteOne(_m *StagedAttachment) *StagedAttachmentDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *StagedAttachmentClient) DeleteOneID(id string) *StagedAttachmentDeleteOne {
+	builder := c.Delete().Where(stagedattachment.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &StagedAttachmentDeleteOne{builder}
+}
+
+// Query returns a query builder for StagedAttachment.
+func (c *StagedAttachmentClient) Query() *StagedAttachmentQuery {
+	return &StagedAttachmentQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeStagedAttachment},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a StagedAttachment entity by its id.
+func (c *StagedAttachmentClient) Get(ctx context.Context, id string) (*StagedAttachment, error) {
+	return c.Query().Where(stagedattachment.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *StagedAttachmentClient) GetX(ctx context.Context, id string) *StagedAttachment {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *StagedAttachmentClient) Hooks() []Hook {
+	return c.hooks.StagedAttachment
+}
+
+// Interceptors returns the client interceptors.
+func (c *StagedAttachmentClient) Interceptors() []Interceptor {
+	return c.inters.StagedAttachment
+}
+
+func (c *StagedAttachmentClient) mutate(ctx context.Context, m *StagedAttachmentMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&StagedAttachmentCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&StagedAttachmentUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&StagedAttachmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&StagedAttachmentDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown StagedAttachment mutation op: %q", m.Op())
+	}
+}
+
 // WorkflowDefinitionClient is a client for the WorkflowDefinition schema.
 type WorkflowDefinitionClient struct {
 	config
@@ -1047,11 +1329,11 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		EventRecord, MergeRecord, Project, PromptAppend, Session,
-		WorkflowDefinition []ent.Hook
+		EventRecord, MergeRecord, Project, PromptAppend, Session, SessionAttachment,
+		StagedAttachment, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		EventRecord, MergeRecord, Project, PromptAppend, Session,
-		WorkflowDefinition []ent.Interceptor
+		EventRecord, MergeRecord, Project, PromptAppend, Session, SessionAttachment,
+		StagedAttachment, WorkflowDefinition []ent.Interceptor
 	}
 )

@@ -86,6 +86,10 @@ func mapSessionCardPage(page port.Page[sessionapp.CardDTO]) *model.SessionCardPa
 }
 
 func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
+	attachments := make([]*model.SessionAttachment, 0, len(dto.Attachments))
+	for _, attachment := range dto.Attachments {
+		attachments = append(attachments, mapSessionAttachment(attachment))
+	}
 	return &model.SessionCard{
 		ID:                 string(dto.ID),
 		ProjectID:          string(dto.ProjectID),
@@ -97,6 +101,7 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		BaseBranch:         dto.BaseBranch,
 		CurrentNodeTitle:   dto.CurrentNodeTitle,
 		PendingQuestion:    dto.PendingQuestion,
+		Attachments:        attachments,
 		AvailableActions:   dto.AvailableActions,
 		LastRunAt:          dto.LastRunAt,
 		CreatedAt:          dto.CreatedAt,

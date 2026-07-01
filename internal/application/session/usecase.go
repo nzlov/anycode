@@ -75,6 +75,7 @@ type CardDTO struct {
 	RequirementSummary string
 	CurrentNodeTitle   string
 	PendingQuestion    bool
+	Attachments        []domain.SessionAttachment
 	AvailableActions   []string
 }
 
@@ -103,19 +104,34 @@ const (
 var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not wired")
 
 type Service struct {
-	repo       domain.Repository
-	projects   projectdomain.Repository
-	now        func() time.Time
-	generateID func() (domain.ID, error)
+	repo        domain.Repository
+	projects    projectdomain.Repository
+	attachments domain.AttachmentRepository
+	files       domain.AttachmentStore
+	now         func() time.Time
+	generateID  func() (domain.ID, error)
 }
 
-func New(repo domain.Repository, projects projectdomain.Repository) *Service {
-	return &Service{
+type Option func(*Service)
+
+func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentStore) Option {
+	return func(s *Service) {
+		s.attachments = repo
+		s.files = store
+	}
+}
+
+func New(repo domain.Repository, projects projectdomain.Repository, options ...Option) *Service {
+	service := &Service{
 		repo:       repo,
 		projects:   projects,
 		now:        time.Now,
 		generateID: generateID,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error) {
@@ -146,6 +162,10 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	if err != nil {
 		return DTO{}, fmt.Errorf("generate session id: %w", err)
 	}
+	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
+	if err != nil {
+		return DTO{}, err
+	}
 	now := s.now()
 	session := domain.Session{
 		ID:          id,
@@ -160,6 +180,13 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	if err := s.repo.Save(ctx, session); err != nil {
 		return DTO{}, fmt.Errorf("save session: %w", err)
+	}
+	if err := s.archiveStagedAttachments(ctx, id, stagedAttachments); err != nil {
+		failedAt := s.now()
+		session.Status = domain.StatusFailed
+		session.UpdatedAt = failedAt
+		_ = s.repo.Save(ctx, session)
+		return DTO{}, err
 	}
 	return toDTO(session), nil
 }
@@ -283,7 +310,11 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 	if err != nil {
 		return DetailDTO{}, fmt.Errorf("list prompt appends: %w", err)
 	}
-	return toDetailDTO(session, appends), nil
+	attachments, err := s.listSessionAttachments(ctx, id)
+	if err != nil {
+		return DetailDTO{}, err
+	}
+	return toDetailDTO(session, attachments, appends), nil
 }
 
 func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error) {
@@ -306,7 +337,11 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 	}
 	items := make([]CardDTO, 0, len(sessions))
 	for _, session := range sessions {
-		items = append(items, toCardDTO(session))
+		attachments, err := s.listSessionAttachments(ctx, session.ID)
+		if err != nil {
+			return port.Page[CardDTO]{}, err
+		}
+		items = append(items, toCardDTO(session, attachments))
 	}
 	return port.Page[CardDTO]{
 		Items:    items,
@@ -333,15 +368,16 @@ func toDTO(session domain.Session) DTO {
 	}
 }
 
-func toCardDTO(session domain.Session) CardDTO {
+func toCardDTO(session domain.Session, attachments []domain.SessionAttachment) CardDTO {
 	return CardDTO{
 		DTO:                toDTO(session),
 		RequirementSummary: session.Requirement,
+		Attachments:        attachments,
 		AvailableActions:   availableActions(session),
 	}
 }
 
-func toDetailDTO(session domain.Session, appends []domain.PromptAppend) DetailDTO {
+func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment, appends []domain.PromptAppend) DetailDTO {
 	promptAppends := make([]PromptAppendDTO, 0, len(appends))
 	for _, promptAppend := range appends {
 		promptAppends = append(promptAppends, toPromptAppendDTO(promptAppend))
@@ -349,11 +385,63 @@ func toDetailDTO(session domain.Session, appends []domain.PromptAppend) DetailDT
 	return DetailDTO{
 		DTO:              toDTO(session),
 		CloseReason:      session.CloseReason,
-		Attachments:      []domain.SessionAttachment{},
+		Attachments:      attachments,
 		PromptAppends:    promptAppends,
 		AvailableActions: availableActions(session),
 		CanResume:        canResume(session),
 	}
+}
+
+func (s *Service) findStagedAttachments(ctx context.Context, ids []domain.StagedAttachmentID) ([]domain.StagedAttachment, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if s.attachments == nil {
+		return nil, errors.New("attachment repository is required")
+	}
+	if s.files == nil {
+		return nil, errors.New("attachment store is required")
+	}
+	attachments := make([]domain.StagedAttachment, 0, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			return nil, errors.New("staged attachment id is required")
+		}
+		staged, err := s.attachments.FindStagedAttachment(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("find staged attachment %s: %w", id, err)
+		}
+		attachments = append(attachments, staged)
+	}
+	return attachments, nil
+}
+
+func (s *Service) archiveStagedAttachments(ctx context.Context, sessionID domain.ID, stagedAttachments []domain.StagedAttachment) error {
+	for _, staged := range stagedAttachments {
+		attachment, err := s.files.Promote(ctx, staged, sessionID)
+		if err != nil {
+			return fmt.Errorf("promote staged attachment %s: %w", staged.ID, err)
+		}
+		if err := s.attachments.SaveSessionAttachment(ctx, attachment); err != nil {
+			_ = s.files.DeleteSession(ctx, attachment.ID)
+			return fmt.Errorf("save session attachment %s: %w", attachment.ID, err)
+		}
+		if err := s.attachments.DeleteStagedAttachment(ctx, staged.ID); err != nil {
+			return fmt.Errorf("delete staged attachment %s: %w", staged.ID, err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) listSessionAttachments(ctx context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
+	if s.attachments == nil {
+		return []domain.SessionAttachment{}, nil
+	}
+	attachments, err := s.attachments.ListSessionAttachments(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("list session attachments: %w", err)
+	}
+	return attachments, nil
 }
 
 func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {

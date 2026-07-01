@@ -20,21 +20,6 @@ type Store struct {
 	dataDir string
 }
 
-type StageInput struct {
-	OwnerKeyHash string
-	Filename     string
-	MimeType     string
-	Size         int64
-	Reader       io.Reader
-}
-
-type Stream struct {
-	Filename string
-	MimeType string
-	Size     int64
-	Reader   io.ReadCloser
-}
-
 type Error struct {
 	Code string
 	Path string
@@ -68,7 +53,7 @@ func New(dataDir string) *Store {
 	return &Store{dataDir: dataDir}
 }
 
-func (s *Store) Stage(ctx context.Context, input StageInput) (session.StagedAttachment, error) {
+func (s *Store) Stage(ctx context.Context, input session.StageAttachmentInput) (session.StagedAttachment, error) {
 	if input.Reader == nil {
 		return session.StagedAttachment{}, &Error{Code: "missing_reader"}
 	}
@@ -174,26 +159,20 @@ func (s *Store) DeleteSession(ctx context.Context, id session.SessionAttachmentI
 	return removeDir(found)
 }
 
-func (s *Store) Open(ctx context.Context, path string) (Stream, error) {
+func (s *Store) Open(ctx context.Context, path string) (session.AttachmentStream, error) {
 	if err := ctx.Err(); err != nil {
-		return Stream{}, &Error{Code: "canceled", Path: path, Err: err}
+		return session.AttachmentStream{}, &Error{Code: "canceled", Path: path, Err: err}
 	}
 	if !s.underAttachments(path) {
-		return Stream{}, &Error{Code: "outside_attachment_root", Path: path}
+		return session.AttachmentStream{}, &Error{Code: "outside_attachment_root", Path: path}
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return Stream{}, &Error{Code: classify(err), Path: path, Err: err}
+		return session.AttachmentStream{}, &Error{Code: classify(err), Path: path, Err: err}
 	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return Stream{}, &Error{Code: classify(err), Path: path, Err: err}
-	}
-	return Stream{
+	return session.AttachmentStream{
 		Filename: filepath.Base(path),
 		MimeType: resolveMimeType(path, ""),
-		Size:     info.Size(),
 		Reader:   file,
 	}, nil
 }
