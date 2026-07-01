@@ -93,12 +93,31 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 
 - 每个运行卡片启动一个 `codex exec --json -C <workdir>` 进程。
 - git 项目的 `<workdir>` 是卡片 worktree；非 git 项目使用项目目录。
+- 同一 session 同一时间最多允许一个运行中的 Codex 进程；重复启动必须返回当前状态，不能创建第二个进程。
 - 流程模式由 workflow runner 编排；会话模式直接运行 Codex 会话，不创建 `WorkflowRun`。
 - Codex 启动参数必须来自会话配置：模型、思考强度、权限、文件附件和工作目录。
 - Codex JSONL 事件解析在 `codexcli` adapter 中完成；未知事件保留 raw payload。
 - `answer_user` MCP handler 创建问题批次后阻塞等待 UI 提交答案。
 - UI 提交完整批次的选项/自定义答案后，MCP handler 返回结构化答案给 Codex。
-- 停止会话时必须清理进程，并发布 WebSocket 状态事件。
+- 停止会话时必须标记 stopping、终止进程、释放阻塞中的 `answer_user` 等待、记录 exit 状态，并发布 WebSocket 状态事件。
+- 服务重启后，有 `codexSessionID` 但无本地进程的会话必须显示可恢复状态；恢复通过 `codex exec resume <id>` 完成。
+- `codex exec resume <id>` 失败时必须记录 `resume_failed` 事件并把 session 标记为 `resume_failed`；不能自动跳过节点，也不能静默改用普通 `codex exec`。
+- 恢复失败后 UI 必须提供重试恢复、从当前节点重新运行、停止会话三个动作。
+- 卡片详情页必须允许用户主动停止和追加描述；追加描述要持久化，用于恢复失败后重造 Codex 会话 prompt。
+
+## 流程节点与进程生命周期
+
+- workflow runner 是流程模式唯一的节点推进者；GraphQL resolver 不能直接推进节点。
+- 每个可执行节点创建 `NodeRun` attempt；需要 Codex 时再创建 `ProcessRun`，并把 `ProcessRun` 绑定到当前 `NodeRun`。
+- 人工审批前置状态不启动 Codex；审批通过后才启动当前节点进程。
+- 当前节点处于 `running`、`waiting_user`、`stopping` 时不能计算下一条边。
+- `answer_user` 期间 Codex 进程仍归属当前节点；提交完整答案后同一进程继续。
+- Codex 正常退出并产出节点结果后，`NodeRun` 标记 `succeeded`，runner 才按边 priority 评估下一节点。
+- Codex 启动失败、异常退出、附件准备失败或权限配置失败时，`NodeRun` 标记 `failed`；runner 先执行 retry，超过 retry 后再走失败分支或 blocked。
+- 如果节点结果已持久化但出边未计算，服务恢复后直接基于持久化结果继续评估出边，不需要恢复 Codex 进程。
+- 如果节点运行中服务重启，恢复成功后继续归属同一个 `NodeRun`；恢复失败时 workflow run 进入 `waiting_resume_action`，当前节点保持不变。
+- 用户选择“重试恢复”不增加 attempt；选择“从当前节点重新运行”创建新的 `NodeRun` attempt，并受 retry 限制。
+- 会话模式没有 `WorkflowRun`/`NodeRun`，恢复失败只影响 session，由用户选择重试恢复、重新运行会话或停止。
 
 ## GraphQL 与实时状态
 
@@ -107,6 +126,42 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - 所有列表分页、过滤、排序和 total 都由后端 GraphQL/application 计算；前端不能拉全量数据后本地分页过滤。
 - subscription 负责实时事件：会话状态、当前节点、待回答、回答完成、进程退出。
 - HTTP 和 WebSocket 必须使用同一访问密钥规则。
+- 前端刷新或 WebSocket 断线重连后，必须先 query 当前状态快照，再重新订阅；subscription 事件只做增量更新，不能作为唯一状态来源。
+- subscription 事件必须包含可排序的事件 id 或创建时间，用于忽略旧事件和补齐断线期间状态。
+- 状态变更、`ProcessEvent`、节点输出和待发布事件必须在同一事务写入；WebSocket 发布发生在事务提交之后，发布失败不能回滚已提交状态。
+- GraphQL resolver 只做 DTO 转换和 use case 调用，不能拼接 Codex 参数、直接执行 git 命令、直接读写附件文件或推进 workflow 节点。
+
+## 附件与文件访问
+
+- 新建卡片附件先进入 staged 状态；创建卡片成功后归档为 `SessionAttachment`。
+- staged 附件删除必须同时删除临时文件和暂存记录；创建失败必须清理本次未归档附件。
+- 附件支持任意文件类型；图片和视频通过后端鉴权 URL 预览，其他文件只展示元数据。
+- GraphQL 只返回附件元数据和鉴权预览/下载入口，不能返回裸磁盘路径。
+- 附件预览、文件下载、Diff 文件读取必须使用同一访问密钥鉴权，不能通过未鉴权静态目录暴露。
+- 传给 Codex 的附件路径只能由后端从已归档附件映射生成。
+- 附件永不过期；staged 附件、归档附件和会话附件都保留，除非用户显式删除附件。
+
+## Worktree 规则
+
+- git 项目卡片 worktree 默认创建在 `ANYCODE_DATA_DIR/worktrees/<projectID>/<sessionID>`。
+- worktree 路径只能由后端生成，不能直接拼接用户输入。
+- 非 git 项目不创建 worktree，直接使用项目目录作为 Codex 工作目录；Diff 页面显示不可用状态。
+- 合并必须由用户配置的流程节点控制；卡片完成不自动合并到基础分支。
+- 合并节点目标固定为卡片 `baseBranch`；策略支持 `merge` 或 `rebase`。
+- 合并节点执行时必须记录策略、base 分支、worktree 分支、base/head/merge commit 或合并失败错误码/原因。
+- 合并冲突或失败时可以通过 `answer_user` 询问用户解决方案，并把回答作为当前节点后续处理或条件分支输入。
+- 卡片完成、失败、停止、阻塞、待回答、恢复失败时都不自动清理 worktree。
+- 只有用户手动关闭卡片或合并节点正常关闭卡片时，才允许清理 AnyCode 创建的 worktree；关闭前必须停止仍在运行的进程并释放等待中的 `answer_user`。
+- `closed` 是终态，不能重新打开；关闭原因必须区分 `user_closed` 和 `merged_closed`；附件、事件、追加描述和合并记录都保留。
+- 删除项目或清理会话时，只允许删除 AnyCode 创建的 worktree，永不删除用户原始项目目录。
+- worktree 创建失败时必须回滚 session 创建或标记 failed，并清理本次创建的空目录和未归档附件。
+
+## Codex CLI 兼容
+
+- 服务启动时检查 `CODEX_BIN` 是否可执行，并记录版本和基础能力。
+- 模型、思考强度或权限参数被当前 Codex CLI 拒绝时，会话必须进入 failed 并显示明确错误，不能静默降级为默认参数。
+- Codex 命令行参数只在 `internal/infra/codexcli` 中拼装，领域层只保存配置值。
+- 新建卡片的模型、思考强度和权限默认复用同项目上一张卡片；如果没有历史卡片，则不强制指定，让 Codex CLI 使用自身默认选择。
 
 ## 前端规范
 
@@ -116,8 +171,10 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - 项目条目右侧有设置图标，点击后弹出菜单，菜单项包含“流程配置”。
 - 卡片分为最近和历史；最近定义为最近 3 天内运行过。
 - 历史区显示近 7 天运行记录，标题后有“更多”入口进入后端分页过滤的会话表格。
-- 卡片必须清晰显示用户需求摘要、运行中/已停止、当前流程节点、待回答状态。
-- 会话详情页必须提供“查看 Diff”按钮，打开类似 GitHub PR diff 的页面查看该卡片 worktree 变更；Diff 页必须支持“单个文件”和“全部 Diff”展示类型，diff 数据由后端计算。
+- 卡片必须清晰显示用户需求摘要、运行中/已停止、当前流程节点、待回答状态，并提供运行、恢复、停止、关闭动作。
+- 会话详情页左侧主体显示会话事件流，包括思考内容、工具调用、模型输出、待回答和状态事件；底部是追加描述输入框，复用新建卡片的提示词输入区域，但去掉创建卡片说明文字，按钮按当前状态显示停止或发送图标。
+- 会话详情页右侧使用 tab 面板：会话信息放在右侧 tab，模式模板只是会话信息里的小说明；当前分支变更 tab 显示文件列表，点击文件弹窗显示单文件 diff，并提供“查看全部”跳转完整 Diff 页面。
+- 会话详情页必须提供完整 Diff 入口，打开类似 GitHub PR diff 的页面查看该卡片 worktree 变更；Diff 页必须支持“单个文件”和“全部 Diff”展示类型，diff 数据由后端计算。
 - 新建卡片弹窗的需求输入区采用类似 Codex 的提示词编辑器形态，使用中性浅色开发工具配色；项目、分支、模式集中在顶部。附件列表放在提示词正文上方，支持任意文件类型，图片和视频附件可点击预览，每个附件可删除。底部只保留权限图标、模型下拉、思考强度下拉和一个“创建卡片”提交入口；不要出现全屏按钮、发送按钮、底部取消按钮、底部模式说明卡片或大附件卡片列表。
 - 卡片列表顶部不放“新卡片”等操作按钮；新建卡片使用右下角 FAB。
 - 响应式布局必须覆盖手机端：顶部栏、抽屉式侧边栏、单列卡片列表、右下 FAB。
@@ -132,6 +189,16 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - HTTP 地址通过 `ANYCODE_HTTP_ADDR` 配置，默认 `:8080`。
 - Codex 可执行文件通过 `CODEX_BIN` 配置，默认 `codex`。
 - 应用数据目录通过 `ANYCODE_DATA_DIR` 配置。
+- HTTP/GraphQL 使用 `Authorization: Bearer <ANYCODE_ACCESS_KEY>`；WebSocket 使用 `connection_init` payload；MCP endpoint 使用后端注入的内部凭据。
+- 日志、事件 payload 和错误响应必须脱敏访问密钥、Turso token、Codex 凭据和敏感宿主路径片段。
+- 后端错误必须结构化返回 `code/category/message/details/retryable/userAction`；前端根据错误码和附加内容处理，不解析日志字符串。
+- 事件、问题批次、追加描述、合并记录默认长期保留，用于之后查看和重造无法恢复的 Codex 会话。
+
+## Diff 规则
+
+- 有 worktree 的卡片按请求从 session worktree 实时计算 Diff；已执行合并节点的卡片也可从合并记录或 commit range 计算。
+- 单个文件模式只返回当前文件 hunks；全部 Diff 模式由后端按文件顺序返回。
+- 前端不能拉取全部 diff 后自行做分页、过滤或文件选择。
 
 ## Docker 规则
 
