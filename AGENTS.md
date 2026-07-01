@@ -68,6 +68,7 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - gqlgen 生成代码放在 `internal/interfaces/graphql/graph` 下，不放仓库根目录。
 - ent model 不直接穿透到领域层或前端；通过 repository/application DTO 转换。
 - GraphQL 输入输出模型不作为领域模型使用。
+- 具体领域对象、端口和应用用例以 `docs/plan/ddd-codex-agent-tool.md` 的“分层领域抽象”为准；实现时先放入对应上下文，不新增跨层 glue package。
 
 ## 领域边界
 
