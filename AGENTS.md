@@ -188,7 +188,8 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - 访问密钥通过 `ANYCODE_ACCESS_KEY` 配置。
 - HTTP 地址通过 `ANYCODE_HTTP_ADDR` 配置，默认 `:8080`。
 - Codex 可执行文件通过 `CODEX_BIN` 配置，默认 `codex`。
-- 应用数据目录通过 `ANYCODE_DATA_DIR` 配置。
+- 应用数据目录通过 `ANYCODE_DATA_DIR` 配置；本地直接运行默认 `./data`，Docker Compose 默认 `/data`。
+- 数据目录下按职责存放 `attachments/`、`codex/`、`logs/`、`worktrees/`、`workdirs/`。
 - HTTP/GraphQL 使用 `Authorization: Bearer <ANYCODE_ACCESS_KEY>`；WebSocket 使用 `connection_init` payload；MCP endpoint 使用后端注入的内部凭据。
 - 日志、事件 payload 和错误响应必须脱敏访问密钥、Turso token、Codex 凭据和敏感宿主路径片段。
 - 后端错误必须结构化返回 `code/category/message/details/retryable/userAction`；前端根据错误码和附加内容处理，不解析日志字符串。
@@ -202,7 +203,8 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 
 ## Docker 规则
 
-- Compose 默认提供 `./workspaces:/workspaces` 和 `./data:/data` 挂载。
+- Compose 默认提供 `./workspaces:/workspaces` 和 `./data:/data` 挂载，容器内 `ANYCODE_DATA_DIR=/data`。
+- Compose 默认导出 `8080:8080`；Web UI、GraphQL HTTP、GraphQL WebSocket、附件预览/下载共用同一个 HTTP 服务端口。
 - 不在代码中把目录选择限制为 `/workspaces`。
 - 由于目录浏览不限制范围，部署文档必须明确：持有访问密钥的人可以浏览后端进程可读路径。
 
