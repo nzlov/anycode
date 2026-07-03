@@ -33,6 +33,42 @@ func (f MergeRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.MergeRecordMutation", m)
 }
 
+// The NodeRunFunc type is an adapter to allow the use of ordinary
+// function as NodeRun mutator.
+type NodeRunFunc func(context.Context, *ent.NodeRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NodeRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NodeRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NodeRunMutation", m)
+}
+
+// The ProcessEventFunc type is an adapter to allow the use of ordinary
+// function as ProcessEvent mutator.
+type ProcessEventFunc func(context.Context, *ent.ProcessEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProcessEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProcessEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProcessEventMutation", m)
+}
+
+// The ProcessRunFunc type is an adapter to allow the use of ordinary
+// function as ProcessRun mutator.
+type ProcessRunFunc func(context.Context, *ent.ProcessRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProcessRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProcessRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProcessRunMutation", m)
+}
+
 // The ProjectFunc type is an adapter to allow the use of ordinary
 // function as Project mutator.
 type ProjectFunc func(context.Context, *ent.ProjectMutation) (ent.Value, error)
@@ -55,6 +91,18 @@ func (f PromptAppendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PromptAppendMutation", m)
+}
+
+// The QuestionBatchFunc type is an adapter to allow the use of ordinary
+// function as QuestionBatch mutator.
+type QuestionBatchFunc func(context.Context, *ent.QuestionBatchMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QuestionBatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QuestionBatchMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QuestionBatchMutation", m)
 }
 
 // The SessionFunc type is an adapter to allow the use of ordinary
@@ -103,6 +151,18 @@ func (f WorkflowDefinitionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkflowDefinitionMutation", m)
+}
+
+// The WorkflowRunFunc type is an adapter to allow the use of ordinary
+// function as WorkflowRun mutator.
+type WorkflowRunFunc func(context.Context, *ent.WorkflowRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f WorkflowRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.WorkflowRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkflowRunMutation", m)
 }
 
 // Condition is a hook condition function.

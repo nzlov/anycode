@@ -31,6 +31,13 @@ body {
   color: var(--ac-text);
 }
 
+html,
+body,
+#q-app {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 a {
   color: var(--q-primary);
   text-decoration: none;
@@ -266,10 +273,29 @@ a {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  width: 100%;
   padding: 14px;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);
+  color: var(--ac-text);
   background: var(--ac-surface-raised);
+  text-align: left;
+  transition:
+    border-color var(--ac-transition),
+    background-color var(--ac-transition),
+    box-shadow var(--ac-transition);
+}
+
+.workflow-node:hover,
+.workflow-node:focus-visible,
+.workflow-node--active {
+  border-color: var(--q-primary);
+  background: color-mix(in srgb, var(--q-primary) 7%, var(--ac-surface-raised));
+}
+
+.workflow-node:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--q-primary) 35%, transparent);
+  outline-offset: 2px;
 }
 
 .new-session-dialog {

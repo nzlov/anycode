@@ -126,6 +126,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		Status:           string(dto.Status),
 		CloseReason:      stringPtr(dto.CloseReason),
 		BaseBranch:       dto.BaseBranch,
+		CurrentNodeTitle: dto.CurrentNodeTitle,
 		WorktreePath:     dto.WorktreePath,
 		CodexSessionID:   dto.CodexSessionID,
 		Config:           mapSessionConfig(dto.Config),
@@ -384,6 +385,16 @@ func mapWorkflowRun(dto workflowapp.RunDTO) *model.WorkflowRun {
 		Status:        string(dto.Status),
 		CurrentNodeID: dto.CurrentNodeID,
 		Context:       dto.Context.Values,
+	}
+}
+
+func mapSessionWorkflowRun(dto sessionapp.WorkflowRunDTO) *model.WorkflowRun {
+	return &model.WorkflowRun{
+		ID:            string(dto.ID),
+		SessionID:     string(dto.SessionID),
+		Status:        dto.Status,
+		CurrentNodeID: dto.CurrentNodeID,
+		Context:       dto.Context,
 	}
 }
 

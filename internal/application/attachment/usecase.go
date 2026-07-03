@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	domain "github.com/nzlov/anycode/internal/domain/session"
 )
 
@@ -84,11 +85,11 @@ func (s *Service) StageAttachment(ctx context.Context, input StageAttachmentInpu
 		Reader:       input.Reader,
 	})
 	if err != nil {
-		return AttachmentDTO{}, fmt.Errorf("stage attachment file: %w", err)
+		return AttachmentDTO{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "stage attachment file failed").WithRetryable(true)
 	}
 	if err := s.repo.SaveStagedAttachment(ctx, staged); err != nil {
 		_ = s.store.DeleteStaged(ctx, staged.ID)
-		return AttachmentDTO{}, fmt.Errorf("save staged attachment: %w", err)
+		return AttachmentDTO{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "save staged attachment failed").WithRetryable(true)
 	}
 	return toAttachmentDTO(staged), nil
 }
@@ -107,13 +108,13 @@ func (s *Service) DeleteStagedAttachment(ctx context.Context, id domain.StagedAt
 		return errors.New("staged attachment id is required")
 	}
 	if _, err := s.repo.FindStagedAttachment(ctx, id); err != nil {
-		return fmt.Errorf("%w: %v", ErrAttachmentNotFound, err)
+		return apperror.Wrap(fmt.Errorf("%w: %v", ErrAttachmentNotFound, err), apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
 	}
 	if err := s.store.DeleteStaged(ctx, id); err != nil {
-		return fmt.Errorf("delete staged attachment file: %w", err)
+		return apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "delete staged attachment file failed").WithRetryable(true)
 	}
 	if err := s.repo.DeleteStagedAttachment(ctx, id); err != nil {
-		return fmt.Errorf("delete staged attachment: %w", err)
+		return apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "delete staged attachment failed").WithRetryable(true)
 	}
 	return nil
 }
@@ -132,13 +133,13 @@ func (s *Service) DeleteSessionAttachment(ctx context.Context, id domain.Session
 		return errors.New("session attachment id is required")
 	}
 	if _, err := s.repo.FindSessionAttachment(ctx, id); err != nil {
-		return fmt.Errorf("%w: %v", ErrAttachmentNotFound, err)
+		return apperror.Wrap(fmt.Errorf("%w: %v", ErrAttachmentNotFound, err), apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
 	}
 	if err := s.store.DeleteSession(ctx, id); err != nil {
-		return fmt.Errorf("delete session attachment file: %w", err)
+		return apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "delete session attachment file failed").WithRetryable(true)
 	}
 	if err := s.repo.DeleteSessionAttachment(ctx, id); err != nil {
-		return fmt.Errorf("delete session attachment: %w", err)
+		return apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "delete session attachment failed").WithRetryable(true)
 	}
 	return nil
 }
@@ -158,14 +159,14 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 	}
 	attachment, err := s.repo.FindSessionAttachment(ctx, domain.SessionAttachmentID(id))
 	if err != nil {
-		return Stream{}, fmt.Errorf("%w: %v", ErrAttachmentNotFound, err)
+		return Stream{}, apperror.Wrap(fmt.Errorf("%w: %v", ErrAttachmentNotFound, err), apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
 	}
 	if mode == OpenPreview && !attachment.Previewable {
-		return Stream{}, ErrNotPreviewable
+		return Stream{}, apperror.Wrap(ErrNotPreviewable, apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "attachment is not previewable")
 	}
 	stream, err := s.store.Open(ctx, attachment.Path)
 	if err != nil {
-		return Stream{}, fmt.Errorf("open attachment file: %w", err)
+		return Stream{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "open attachment file failed").WithRetryable(true)
 	}
 	return Stream{
 		Filename: stream.Filename,

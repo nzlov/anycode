@@ -16,15 +16,23 @@ export function useDirectoryBrowser() {
   const entries = ref<DirectoryEntry[]>([]);
   const loading = ref(false);
   const currentPath = ref(rootPath);
+  const parentPath = ref('');
+  const error = ref('');
 
   const directoryTree = computed(() => entries.value.map(directoryEntryToTreeNode));
 
   async function loadDirectory(path = rootPath) {
     loading.value = true;
+    error.value = '';
     try {
       const page = await browseDirectory(path);
       currentPath.value = page.path;
+      parentPath.value = page.parent;
       entries.value = page.entries;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '目录读取失败';
+      entries.value = [];
+      throw err;
     } finally {
       loading.value = false;
     }
@@ -32,7 +40,10 @@ export function useDirectoryBrowser() {
 
   return {
     currentPath,
+    parentPath,
+    entries,
     directoryTree,
+    error,
     loading,
     loadDirectory,
   };

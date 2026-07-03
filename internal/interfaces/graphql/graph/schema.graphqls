@@ -12,6 +12,7 @@ type Query {
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
+  pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
 }
 
 type Mutation {
@@ -130,6 +131,7 @@ type SessionDetail {
   status: String!
   closeReason: String
   baseBranch: String!
+  currentNodeTitle: String!
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!

@@ -2,10 +2,13 @@ package entstore
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/port"
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/project"
 )
 
@@ -64,5 +67,88 @@ func TestProjectRepositoryWithLocalSQLite(t *testing.T) {
 	}
 	if found.DefaultWorkflowID == nil || *found.DefaultWorkflowID != workflowID {
 		t.Fatalf("default workflow mismatch: %#v", found.DefaultWorkflowID)
+	}
+}
+
+func TestUnitOfWorkCommitsAndRollsBackRepositories(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	rollbackErr := errors.New("rollback")
+	err = store.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		if err := tx.Projects().Save(ctx, project.Project{
+			ID:        "project-rollback",
+			Name:      "rollback",
+			Path:      project.ProjectPath{Value: "/workspaces/rollback"},
+			CreatedAt: time.Unix(1, 0).UTC(),
+			UpdatedAt: time.Unix(1, 0).UTC(),
+		}); err != nil {
+			return err
+		}
+		if err := tx.Events().Append(ctx, eventdomain.DomainEvent{
+			ID:        "event-rollback",
+			Scope:     eventdomain.Scope{ProjectID: "project-rollback"},
+			Type:      "project.rollback",
+			Payload:   map[string]any{"status": "rollback"},
+			CreatedAt: time.Unix(1, 0).UTC(),
+		}); err != nil {
+			return err
+		}
+		return rollbackErr
+	})
+	if !errors.Is(err, rollbackErr) {
+		t.Fatalf("Do rollback error = %v", err)
+	}
+	if projects, err := store.Projects().List(ctx); err != nil {
+		t.Fatalf("list projects after rollback: %v", err)
+	} else if len(projects) != 0 {
+		t.Fatalf("projects after rollback = %#v", projects)
+	}
+	if events, err := store.Events().After(ctx, eventdomain.Scope{ProjectID: "project-rollback"}, ""); err != nil {
+		t.Fatalf("list events after rollback: %v", err)
+	} else if len(events) != 0 {
+		t.Fatalf("events after rollback = %#v", events)
+	}
+
+	err = store.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		if err := tx.Projects().Save(ctx, project.Project{
+			ID:        "project-commit",
+			Name:      "commit",
+			Path:      project.ProjectPath{Value: "/workspaces/commit"},
+			CreatedAt: time.Unix(2, 0).UTC(),
+			UpdatedAt: time.Unix(2, 0).UTC(),
+		}); err != nil {
+			return err
+		}
+		return tx.Events().Append(ctx, eventdomain.DomainEvent{
+			ID:        "event-commit",
+			Scope:     eventdomain.Scope{ProjectID: "project-commit"},
+			Type:      "project.commit",
+			Payload:   map[string]any{"status": "commit"},
+			CreatedAt: time.Unix(2, 0).UTC(),
+		})
+	})
+	if err != nil {
+		t.Fatalf("Do commit error = %v", err)
+	}
+	if projects, err := store.Projects().List(ctx); err != nil {
+		t.Fatalf("list projects after commit: %v", err)
+	} else if len(projects) != 1 || projects[0].ID != "project-commit" {
+		t.Fatalf("projects after commit = %#v", projects)
+	}
+	if events, err := store.Events().After(ctx, eventdomain.Scope{ProjectID: "project-commit"}, ""); err != nil {
+		t.Fatalf("list events after commit: %v", err)
+	} else if len(events) != 1 || events[0].ID != "event-commit" {
+		t.Fatalf("events after commit = %#v", events)
 	}
 }

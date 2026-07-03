@@ -11,6 +11,13 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
+	"github.com/nzlov/anycode/internal/application/port"
+	"github.com/nzlov/anycode/internal/domain/event"
+	"github.com/nzlov/anycode/internal/domain/process"
+	"github.com/nzlov/anycode/internal/domain/project"
+	"github.com/nzlov/anycode/internal/domain/question"
+	"github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	_ "modernc.org/sqlite"
 )
@@ -27,6 +34,8 @@ type Store struct {
 	client *ent.Client
 	db     *sql.DB
 }
+
+var _ port.UnitOfWork = (*Store)(nil)
 
 func OpenFromEnv(ctx context.Context) (*Store, error) {
 	return Open(ctx, OpenOptions{
@@ -99,6 +108,66 @@ func (s *Store) Attachments() *AttachmentRepository {
 
 func (s *Store) Events() *EventStore {
 	return NewEventStore(s.client)
+}
+
+func (s *Store) Processes() process.Repository {
+	return NewProcessRepository(s.client)
+}
+
+func (s *Store) Questions() question.Repository {
+	return NewQuestionRepository(s.client)
+}
+
+func (s *Store) Workflows() workflow.Repository {
+	return NewWorkflowRepository(s.client)
+}
+
+func (s *Store) Do(ctx context.Context, fn func(ctx context.Context, tx port.Tx) error) error {
+	if s == nil || s.client == nil {
+		return errors.New("entstore: nil store")
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	if err := fn(ctx, transaction{client: tx.Client()}); err != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("%w; rollback transaction: %v", err, rollbackErr)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
+type transaction struct {
+	client *ent.Client
+}
+
+func (t transaction) Projects() project.Repository {
+	return NewProjectRepository(t.client)
+}
+
+func (t transaction) Sessions() session.Repository {
+	return NewSessionRepository(t.client)
+}
+
+func (t transaction) Workflows() workflow.Repository {
+	return newWorkflowRepositoryInTx(t.client)
+}
+
+func (t transaction) Questions() question.Repository {
+	return NewQuestionRepository(t.client)
+}
+
+func (t transaction) Processes() process.Repository {
+	return NewProcessRepository(t.client)
+}
+
+func (t transaction) Events() event.Store {
+	return NewEventStore(t.client)
 }
 
 func sqliteDSN(opts OpenOptions) (string, error) {

@@ -160,14 +160,15 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		BrowseDirectory    func(childComplexity int, input model.BrowseDirectoryInput) int
-		Projects           func(childComplexity int) int
-		QuestionBatch      func(childComplexity int, id string) int
-		Session            func(childComplexity int, id string) int
-		SessionDiff        func(childComplexity int, input model.SessionDiffInput) int
-		SessionEvents      func(childComplexity int, input model.ListSessionEventsInput) int
-		Sessions           func(childComplexity int, input *model.ListSessionsInput) int
-		WorkflowDefinition func(childComplexity int, id string) int
+		BrowseDirectory        func(childComplexity int, input model.BrowseDirectoryInput) int
+		PendingQuestionBatches func(childComplexity int, sessionID string) int
+		Projects               func(childComplexity int) int
+		QuestionBatch          func(childComplexity int, id string) int
+		Session                func(childComplexity int, id string) int
+		SessionDiff            func(childComplexity int, input model.SessionDiffInput) int
+		SessionEvents          func(childComplexity int, input model.ListSessionEventsInput) int
+		Sessions               func(childComplexity int, input *model.ListSessionsInput) int
+		WorkflowDefinition     func(childComplexity int, id string) int
 	}
 
 	Question struct {
@@ -266,6 +267,7 @@ type ComplexityRoot struct {
 		CodexSessionID   func(childComplexity int) int
 		Config           func(childComplexity int) int
 		CreatedAt        func(childComplexity int) int
+		CurrentNodeTitle func(childComplexity int) int
 		ID               func(childComplexity int) int
 		LastRunAt        func(childComplexity int) int
 		Mode             func(childComplexity int) int
@@ -381,6 +383,7 @@ type QueryResolver interface {
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
 	WorkflowDefinition(ctx context.Context, id string) (*model.WorkflowDefinition, error)
 	QuestionBatch(ctx context.Context, id string) (*model.QuestionBatch, error)
+	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
 }
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context, input model.SessionEventsInput) (<-chan *model.SessionEvent, error)
@@ -932,6 +935,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.BrowseDirectory(childComplexity, args["input"].(model.BrowseDirectoryInput)), true
 
+	case "Query.pendingQuestionBatches":
+		if e.ComplexityRoot.Query.PendingQuestionBatches == nil {
+			break
+		}
+
+		args, err := ec.field_Query_pendingQuestionBatches_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.PendingQuestionBatches(childComplexity, args["sessionId"].(string)), true
 	case "Query.projects":
 		if e.ComplexityRoot.Query.Projects == nil {
 			break
@@ -1422,6 +1436,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.CreatedAt(childComplexity), true
+	case "SessionDetail.currentNodeTitle":
+		if e.ComplexityRoot.SessionDetail.CurrentNodeTitle == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.CurrentNodeTitle(childComplexity), true
 	case "SessionDetail.id":
 		if e.ComplexityRoot.SessionDetail.ID == nil {
 			break
@@ -1920,6 +1940,7 @@ type Query {
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
+  pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
 }
 
 type Mutation {
@@ -2038,6 +2059,7 @@ type SessionDetail {
   status: String!
   closeReason: String
   baseBranch: String!
+  currentNodeTitle: String!
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!
@@ -2558,6 +2580,17 @@ func (ec *executionContext) field_Query_browseDirectory_args(ctx context.Context
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_pendingQuestionBatches_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
 	return args, nil
 }
 
@@ -5440,6 +5473,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_closeReason(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_SessionDetail_baseBranch(ctx, field)
+			case "currentNodeTitle":
+				return ec.fieldContext_SessionDetail_currentNodeTitle(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -5680,6 +5715,57 @@ func (ec *executionContext) fieldContext_Query_questionBatch(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_questionBatch_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_pendingQuestionBatches(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_pendingQuestionBatches,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().PendingQuestionBatches(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNQuestionBatch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatchᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_pendingQuestionBatches(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_QuestionBatch_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_QuestionBatch_sessionId(ctx, field)
+			case "status":
+				return ec.fieldContext_QuestionBatch_status(ctx, field)
+			case "questions":
+				return ec.fieldContext_QuestionBatch_questions(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuestionBatch", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_pendingQuestionBatches_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7827,6 +7913,35 @@ func (ec *executionContext) _SessionDetail_baseBranch(ctx context.Context, field
 }
 
 func (ec *executionContext) fieldContext_SessionDetail_baseBranch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_currentNodeTitle(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_currentNodeTitle,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentNodeTitle, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_currentNodeTitle(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionDetail",
 		Field:      field,
@@ -13392,6 +13507,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "pendingQuestionBatches":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_pendingQuestionBatches(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -14060,6 +14197,11 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._SessionDetail_closeReason(ctx, field, obj)
 		case "baseBranch":
 			out.Values[i] = ec._SessionDetail_baseBranch(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentNodeTitle":
+			out.Values[i] = ec._SessionDetail_currentNodeTitle(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -15461,6 +15603,22 @@ func (ec *executionContext) unmarshalNQuestionAnswerInput2ᚖgithubᚗcomᚋnzlo
 
 func (ec *executionContext) marshalNQuestionBatch2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx context.Context, sel ast.SelectionSet, v model.QuestionBatch) graphql.Marshaler {
 	return ec._QuestionBatch(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNQuestionBatch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatchᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuestionBatch) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx context.Context, sel ast.SelectionSet, v *model.QuestionBatch) graphql.Marshaler {

@@ -8,6 +8,7 @@ import (
 
 type ID string
 type ProjectID string
+type WorkflowDefinitionID string
 type WorkflowRunID string
 type NodeRunID string
 type AttachmentID string
@@ -24,16 +25,18 @@ const (
 type Status string
 
 const (
-	StatusCreated      Status = "created"
-	StatusStarting     Status = "starting"
-	StatusRunning      Status = "running"
-	StatusWaitingUser  Status = "waiting_user"
-	StatusStopping     Status = "stopping"
-	StatusStopped      Status = "stopped"
-	StatusResumeFailed Status = "resume_failed"
-	StatusFailed       Status = "failed"
-	StatusCompleted    Status = "completed"
-	StatusClosed       Status = "closed"
+	StatusCreated         Status = "created"
+	StatusStarting        Status = "starting"
+	StatusRunning         Status = "running"
+	StatusWaitingUser     Status = "waiting_user"
+	StatusWaitingApproval Status = "waiting_approval"
+	StatusStopping        Status = "stopping"
+	StatusStopped         Status = "stopped"
+	StatusResumeFailed    Status = "resume_failed"
+	StatusFailed          Status = "failed"
+	StatusBlocked         Status = "blocked"
+	StatusCompleted       Status = "completed"
+	StatusClosed          Status = "closed"
 )
 
 type CloseReason string
@@ -141,10 +144,12 @@ type Repository interface {
 	Save(ctx context.Context, session Session) error
 	Find(ctx context.Context, id ID) (Session, error)
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
+	ListInterruptedWithCodexSession(ctx context.Context) ([]Session, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error
 	ListPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
+	LatestSuccessfulMergeRecord(ctx context.Context, sessionID ID) (MergeRecord, bool, error)
 }
 
 type AttachmentRepository interface {
@@ -177,7 +182,110 @@ type AttachmentStore interface {
 }
 
 type WorktreeManager interface {
-	Create(ctx context.Context, projectID ProjectID, sessionID ID, baseBranch string) (string, error)
+	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, baseBranch string) (string, error)
 	Remove(ctx context.Context, path string) error
 	PathForSession(projectID ProjectID, sessionID ID) string
+}
+
+type WorkflowStartInput struct {
+	ProjectID            ProjectID
+	SessionID            ID
+	WorkflowDefinitionID WorkflowDefinitionID
+	Requirement          string
+}
+
+type WorkflowStart struct {
+	WorkflowRunID    WorkflowRunID
+	NodeRunID        *NodeRunID
+	CurrentNodeID    string
+	CurrentNodeTitle string
+	Status           string
+	RequiresCodex    bool
+	Prompt           string
+	Merge            *WorkflowMerge
+}
+
+type WorkflowStartFailureInput struct {
+	WorkflowRunID WorkflowRunID
+	NodeRunID     *NodeRunID
+	Code          string
+	Message       string
+}
+
+type WorkflowResumeFailureInput struct {
+	SessionID ID
+	Code      string
+	Message   string
+}
+
+type WorkflowRerunCurrentNodeInput struct {
+	SessionID ID
+	Reason    string
+}
+
+type WorkflowResumeCurrentNodeInput struct {
+	SessionID ID
+	Reason    string
+}
+
+type WorkflowNodeFailInput struct {
+	WorkflowRunID WorkflowRunID
+	NodeRunID     NodeRunID
+	Code          string
+	Message       string
+}
+
+type WorkflowNodeCompleteInput struct {
+	WorkflowRunID WorkflowRunID
+	NodeRunID     NodeRunID
+	Output        map[string]any
+}
+
+type WorkflowApprovalInput struct {
+	WorkflowRunID WorkflowRunID
+	NodeID        string
+	Approved      bool
+	Comment       string
+}
+
+type WorkflowRunSnapshot struct {
+	ID            WorkflowRunID
+	SessionID     ID
+	Status        string
+	CurrentNodeID string
+	Context       map[string]any
+}
+
+type WorkflowApprovalResult struct {
+	Run     WorkflowRunSnapshot
+	Advance WorkflowAdvance
+}
+
+type WorkflowAdvance struct {
+	WorkflowRunID    WorkflowRunID
+	NodeRunID        *NodeRunID
+	CurrentNodeID    string
+	CurrentNodeTitle string
+	Status           string
+	RequiresCodex    bool
+	Prompt           string
+	Merge            *WorkflowMerge
+	Completed        bool
+	Blocked          bool
+	BlockedReason    string
+}
+
+type WorkflowMerge struct {
+	Strategy string
+}
+
+type WorkflowStarter interface {
+	StartForSession(ctx context.Context, input WorkflowStartInput) (WorkflowStart, error)
+	MarkStartFailed(ctx context.Context, input WorkflowStartFailureInput) error
+	MarkResumeFailedForSession(ctx context.Context, input WorkflowResumeFailureInput) (WorkflowRunSnapshot, error)
+	ResumeCurrentNodeForSession(ctx context.Context, input WorkflowResumeCurrentNodeInput) (WorkflowAdvance, error)
+	RerunCurrentNodeForSession(ctx context.Context, input WorkflowRerunCurrentNodeInput) (WorkflowAdvance, error)
+	CompleteNode(ctx context.Context, input WorkflowNodeCompleteInput) (WorkflowAdvance, error)
+	FailNode(ctx context.Context, input WorkflowNodeFailInput) (WorkflowAdvance, error)
+	SubmitApprovalForSession(ctx context.Context, input WorkflowApprovalInput) (WorkflowApprovalResult, error)
 }

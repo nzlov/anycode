@@ -3,7 +3,7 @@
     <div class="page-heading">
       <div>
         <div class="text-h5 text-weight-bold">会话表格</div>
-        <div class="text-body2 text-muted">分页、过滤和排序后续由 GraphQL 后端计算</div>
+        <div class="text-body2 text-muted">分页、过滤、排序和 total 均由 GraphQL 后端计算</div>
       </div>
     </div>
 
@@ -21,10 +21,14 @@
         flat
         :rows="rows"
         :columns="columns"
+        :visible-columns="visibleColumns"
         row-key="id"
         :loading="loading"
-        :pagination="{ rowsPerPage: 8 }"
+        v-model:pagination="pagination"
+        :rows-per-page-options="[8, 20, 50]"
+        binary-state-sort
         class="session-table"
+        @request="onTableRequest"
       >
         <template #body-cell-title="props">
           <q-td :props="props">
@@ -55,7 +59,14 @@
               color="primary"
               :to="`/sessions/${props.row.id}`"
             />
-            <q-btn flat round dense icon="difference" color="secondary" to="/diff" />
+            <q-btn
+              flat
+              round
+              dense
+              icon="difference"
+              color="secondary"
+              :to="{ path: '/diff', query: { sessionId: props.row.id, mode: 'all' } }"
+            />
           </q-td>
         </template>
       </q-table>
@@ -64,12 +75,26 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 
 import { useSessionsPage } from '@/composables/useSessionsPage';
-import { getProjectName, type SessionCard, type SessionStatus } from '@/mocks/workbench';
+import type { SessionCard, SessionStatus } from '@/services/sessions';
 
-const { rows, loading, filter, scope, loadSessions } = useSessionsPage({
+const $q = useQuasar();
+const {
+  rows,
+  pageInfo,
+  loading,
+  filter,
+  scope,
+  page,
+  pageSize,
+  sort,
+  loadSessions,
+  startLiveUpdates,
+  stopLiveUpdates,
+} = useSessionsPage({
   page: 1,
   pageSize: 8,
   sort: 'updated_at desc',
@@ -80,6 +105,7 @@ const statusOptions = [
   { label: '全部状态', value: 'all' },
   { label: '运行中', value: 'running' },
   { label: '待回答', value: 'waiting_user' },
+  { label: '待审批', value: 'waiting_approval' },
   { label: '已停止', value: 'stopped' },
   { label: '阻塞', value: 'blocked' },
   { label: '已完成', value: 'completed' },
@@ -90,7 +116,7 @@ const columns = [
   {
     name: 'project',
     label: '项目',
-    field: (row: SessionCard) => getProjectName(row.projectId),
+    field: (row: SessionCard) => row.projectName,
     align: 'left' as const,
     sortable: true,
   },
@@ -107,37 +133,124 @@ const columns = [
   { name: 'actions', label: '', field: 'actions', align: 'right' as const },
 ];
 
+const pagination = computed({
+  get() {
+    return {
+      page: pageInfo.value.page,
+      rowsPerPage: pageInfo.value.pageSize,
+      rowsNumber: pageInfo.value.total,
+      sortBy: tableSortBy(sort.value),
+      descending: isDescending(sort.value),
+    };
+  },
+  set(value: {
+    page?: number;
+    rowsPerPage?: number;
+    sortBy?: string | null;
+    descending?: boolean;
+  }) {
+    page.value = value.page ?? page.value;
+    pageSize.value = value.rowsPerPage ?? pageSize.value;
+    sort.value = sortValue(value.sortBy, value.descending ?? true);
+  },
+});
+const visibleColumns = computed(() =>
+  $q.screen.lt.sm
+    ? ['title', 'status', 'actions']
+    : ['title', 'project', 'branch', 'node', 'updatedAt', 'status', 'actions'],
+);
+
 watch(status, (value) => {
   scope.value = value === 'all' ? '' : value;
+  page.value = 1;
 });
 
 watch([filter, scope], () => {
+  page.value = 1;
   void loadSessions();
 });
 
 onMounted(() => {
   void loadSessions();
+  startLiveUpdates();
+});
+
+onUnmounted(() => {
+  stopLiveUpdates();
 });
 
 function statusColor(value: SessionStatus) {
   const colors: Record<SessionStatus, string> = {
+    created: 'blue-grey',
+    starting: 'primary',
     running: 'positive',
     waiting_user: 'warning',
+    waiting_approval: 'warning',
+    stopping: 'warning',
     stopped: 'blue-grey',
+    resume_failed: 'negative',
+    failed: 'negative',
     blocked: 'negative',
     completed: 'primary',
+    closed: 'grey',
   };
   return colors[value];
 }
 
 function statusLabel(value: SessionStatus) {
   const labels: Record<SessionStatus, string> = {
+    created: '待运行',
+    starting: '启动中',
     running: '运行中',
     waiting_user: '待回答',
+    waiting_approval: '待审批',
+    stopping: '停止中',
     stopped: '已停止',
+    resume_failed: '恢复失败',
+    failed: '失败',
     blocked: '阻塞',
     completed: '已完成',
+    closed: '已关闭',
   };
   return labels[value];
+}
+
+function onTableRequest(props: {
+  pagination: {
+    page: number;
+    rowsPerPage: number;
+    sortBy?: string | null;
+    descending?: boolean;
+  };
+}) {
+  pagination.value = props.pagination;
+  void loadSessions();
+}
+
+function sortValue(sortBy?: string | null, descending = true) {
+  const field = sortField(sortBy);
+  return `${field} ${descending ? 'desc' : 'asc'}`;
+}
+
+function sortField(sortBy?: string | null) {
+  if (sortBy === 'title') return 'requirement';
+  if (sortBy === 'project') return 'project_id';
+  if (sortBy === 'branch') return 'base_branch';
+  if (sortBy === 'status') return 'status';
+  if (sortBy === 'updatedAt') return 'updated_at';
+  return 'updated_at';
+}
+
+function tableSortBy(value: string) {
+  const field = value.trim().split(/\s+/)[0] ?? '';
+  if (field === 'requirement') return 'title';
+  if (field === 'project_id') return 'project';
+  if (field === 'base_branch') return 'branch';
+  if (field === 'status') return 'status';
+  return 'updatedAt';
+}
+
+function isDescending(value: string) {
+  return !/\sasc$/i.test(value.trim()) && !value.trim().startsWith('+');
 }
 </script>

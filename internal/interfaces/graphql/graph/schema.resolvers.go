@@ -207,11 +207,11 @@ func (r *mutationResolver) ActivateWorkflowDefinition(ctx context.Context, id st
 
 // SubmitWorkflowApproval is the resolver for the submitWorkflowApproval field.
 func (r *mutationResolver) SubmitWorkflowApproval(ctx context.Context, input model.SubmitWorkflowApprovalInput) (*model.WorkflowRun, error) {
-	if r.UseCases.Workflows == nil {
-		return nil, missingUseCase("workflows")
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Workflows.SubmitApproval(ctx, workflowapp.SubmitApprovalInput{
-		WorkflowRunID: workflowdomain.RunID(input.WorkflowRunID),
+	dto, err := r.UseCases.Sessions.SubmitWorkflowApproval(ctx, sessionapp.SubmitWorkflowApprovalInput{
+		WorkflowRunID: sessiondomain.WorkflowRunID(input.WorkflowRunID),
 		NodeID:        input.NodeID,
 		Approved:      input.Approved,
 		Comment:       stringValue(input.Comment, ""),
@@ -219,7 +219,7 @@ func (r *mutationResolver) SubmitWorkflowApproval(ctx context.Context, input mod
 	if err != nil {
 		return nil, err
 	}
-	return mapWorkflowRun(dto), nil
+	return mapSessionWorkflowRun(dto), nil
 }
 
 // SubmitQuestionBatch is the resolver for the submitQuestionBatch field.
@@ -233,6 +233,11 @@ func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.
 	})
 	if err != nil {
 		return nil, err
+	}
+	if r.UseCases.Sessions != nil {
+		if err := r.UseCases.Sessions.HandleQuestionBatchAnswered(ctx, dto); err != nil {
+			return nil, err
+		}
 	}
 	return mapQuestionBatch(dto), nil
 }
@@ -326,7 +331,14 @@ func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiff
 
 // WorkflowDefinition is the resolver for the workflowDefinition field.
 func (r *queryResolver) WorkflowDefinition(ctx context.Context, id string) (*model.WorkflowDefinition, error) {
-	return nil, unsupportedOperation("workflowDefinition query")
+	if r.UseCases.Workflows == nil {
+		return nil, missingUseCase("workflows")
+	}
+	dto, err := r.UseCases.Workflows.GetDefinition(ctx, workflowdomain.DefinitionID(id))
+	if err != nil {
+		return nil, err
+	}
+	return mapWorkflowDefinition(dto), nil
 }
 
 // QuestionBatch is the resolver for the questionBatch field.
@@ -339,6 +351,22 @@ func (r *queryResolver) QuestionBatch(ctx context.Context, id string) (*model.Qu
 		return nil, err
 	}
 	return mapQuestionBatch(dto), nil
+}
+
+// PendingQuestionBatches is the resolver for the pendingQuestionBatches field.
+func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error) {
+	if r.UseCases.Questions == nil {
+		return nil, missingUseCase("questions")
+	}
+	dtos, err := r.UseCases.Questions.ListPendingBySession(ctx, questiondomain.SessionID(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	batches := make([]*model.QuestionBatch, 0, len(dtos))
+	for _, dto := range dtos {
+		batches = append(batches, mapQuestionBatch(dto))
+	}
+	return batches, nil
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
@@ -373,12 +401,74 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, input model.Se
 
 // SessionStatusChanged is the resolver for the sessionStatusChanged field.
 func (r *subscriptionResolver) SessionStatusChanged(ctx context.Context, projectID *string, sessionID *string) (<-chan *model.Session, error) {
-	return nil, unsupportedOperation("sessionStatusChanged subscription")
+	if r.UseCases.Events == nil {
+		return nil, missingUseCase("events")
+	}
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	scope := eventdomain.Scope{}
+	if projectID != nil {
+		scope.ProjectID = *projectID
+	}
+	if sessionID != nil {
+		id := eventdomain.SessionID(*sessionID)
+		scope.SessionID = &id
+	}
+	source, err := r.UseCases.Events.SessionEvents(ctx, eventapp.SessionEventsInput{Scope: scope})
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.Session)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case eventDTO, ok := <-source:
+				if !ok {
+					return
+				}
+				if eventDTO.SessionID == nil {
+					continue
+				}
+				detail, err := r.UseCases.Sessions.GetSession(ctx, sessiondomain.ID(*eventDTO.SessionID))
+				if err != nil {
+					continue
+				}
+				out <- mapSession(detail.DTO)
+			}
+		}
+	}()
+	return out, nil
 }
 
 // PendingQuestionBatches is the resolver for the pendingQuestionBatches field.
 func (r *subscriptionResolver) PendingQuestionBatches(ctx context.Context, sessionID string) (<-chan *model.QuestionBatch, error) {
-	return nil, unsupportedOperation("pendingQuestionBatches subscription")
+	if r.UseCases.Questions == nil {
+		return nil, missingUseCase("questions")
+	}
+	source, err := r.UseCases.Questions.PendingQuestionBatches(ctx, questiondomain.SessionID(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.QuestionBatch)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case batch, ok := <-source:
+				if !ok {
+					return
+				}
+				out <- mapQuestionBatch(batch)
+			}
+		}
+	}()
+	return out, nil
 }
 
 // Mutation returns generated.MutationResolver implementation.

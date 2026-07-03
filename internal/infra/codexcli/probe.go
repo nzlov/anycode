@@ -15,8 +15,12 @@ import (
 const defaultBin = "codex"
 
 type Client struct {
-	bin string
+	bin          string
+	mcpBaseURL   string
+	mcpAuthToken string
 }
+
+type Option func(*Client)
 
 type ProbeError struct {
 	Code string
@@ -42,14 +46,25 @@ func (e *ProbeError) Unwrap() error {
 	return e.Err
 }
 
-func New(bin string) *Client {
+func WithMCP(baseURL string, authToken string) Option {
+	return func(c *Client) {
+		c.mcpBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+		c.mcpAuthToken = authToken
+	}
+}
+
+func New(bin string, options ...Option) *Client {
 	if bin == "" {
 		bin = os.Getenv("CODEX_BIN")
 	}
 	if bin == "" {
 		bin = defaultBin
 	}
-	return &Client{bin: bin}
+	client := &Client{bin: bin}
+	for _, option := range options {
+		option(client)
+	}
+	return client
 }
 
 func (c *Client) Bin() string {

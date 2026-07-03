@@ -16,12 +16,17 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowrun"
 )
 
 // Client is the client that holds all ent builders.
@@ -33,10 +38,18 @@ type Client struct {
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
+	// NodeRun is the client for interacting with the NodeRun builders.
+	NodeRun *NodeRunClient
+	// ProcessEvent is the client for interacting with the ProcessEvent builders.
+	ProcessEvent *ProcessEventClient
+	// ProcessRun is the client for interacting with the ProcessRun builders.
+	ProcessRun *ProcessRunClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
 	// PromptAppend is the client for interacting with the PromptAppend builders.
 	PromptAppend *PromptAppendClient
+	// QuestionBatch is the client for interacting with the QuestionBatch builders.
+	QuestionBatch *QuestionBatchClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
 	// SessionAttachment is the client for interacting with the SessionAttachment builders.
@@ -45,6 +58,8 @@ type Client struct {
 	StagedAttachment *StagedAttachmentClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
+	// WorkflowRun is the client for interacting with the WorkflowRun builders.
+	WorkflowRun *WorkflowRunClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -58,12 +73,17 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
+	c.NodeRun = NewNodeRunClient(c.config)
+	c.ProcessEvent = NewProcessEventClient(c.config)
+	c.ProcessRun = NewProcessRunClient(c.config)
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
+	c.QuestionBatch = NewQuestionBatchClient(c.config)
 	c.Session = NewSessionClient(c.config)
 	c.SessionAttachment = NewSessionAttachmentClient(c.config)
 	c.StagedAttachment = NewStagedAttachmentClient(c.config)
 	c.WorkflowDefinition = NewWorkflowDefinitionClient(c.config)
+	c.WorkflowRun = NewWorkflowRunClient(c.config)
 }
 
 type (
@@ -158,12 +178,17 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:             cfg,
 		EventRecord:        NewEventRecordClient(cfg),
 		MergeRecord:        NewMergeRecordClient(cfg),
+		NodeRun:            NewNodeRunClient(cfg),
+		ProcessEvent:       NewProcessEventClient(cfg),
+		ProcessRun:         NewProcessRunClient(cfg),
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
+		QuestionBatch:      NewQuestionBatchClient(cfg),
 		Session:            NewSessionClient(cfg),
 		SessionAttachment:  NewSessionAttachmentClient(cfg),
 		StagedAttachment:   NewStagedAttachmentClient(cfg),
 		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
+		WorkflowRun:        NewWorkflowRunClient(cfg),
 	}, nil
 }
 
@@ -185,12 +210,17 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:             cfg,
 		EventRecord:        NewEventRecordClient(cfg),
 		MergeRecord:        NewMergeRecordClient(cfg),
+		NodeRun:            NewNodeRunClient(cfg),
+		ProcessEvent:       NewProcessEventClient(cfg),
+		ProcessRun:         NewProcessRunClient(cfg),
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
+		QuestionBatch:      NewQuestionBatchClient(cfg),
 		Session:            NewSessionClient(cfg),
 		SessionAttachment:  NewSessionAttachmentClient(cfg),
 		StagedAttachment:   NewStagedAttachmentClient(cfg),
 		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
+		WorkflowRun:        NewWorkflowRunClient(cfg),
 	}, nil
 }
 
@@ -220,8 +250,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.EventRecord, c.MergeRecord, c.Project, c.PromptAppend, c.Session,
-		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessEvent, c.ProcessRun,
+		c.Project, c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
+		c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
 	} {
 		n.Use(hooks...)
 	}
@@ -231,8 +262,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.EventRecord, c.MergeRecord, c.Project, c.PromptAppend, c.Session,
-		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessEvent, c.ProcessRun,
+		c.Project, c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
+		c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -245,10 +277,18 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.EventRecord.mutate(ctx, m)
 	case *MergeRecordMutation:
 		return c.MergeRecord.mutate(ctx, m)
+	case *NodeRunMutation:
+		return c.NodeRun.mutate(ctx, m)
+	case *ProcessEventMutation:
+		return c.ProcessEvent.mutate(ctx, m)
+	case *ProcessRunMutation:
+		return c.ProcessRun.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
 	case *PromptAppendMutation:
 		return c.PromptAppend.mutate(ctx, m)
+	case *QuestionBatchMutation:
+		return c.QuestionBatch.mutate(ctx, m)
 	case *SessionMutation:
 		return c.Session.mutate(ctx, m)
 	case *SessionAttachmentMutation:
@@ -257,6 +297,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.StagedAttachment.mutate(ctx, m)
 	case *WorkflowDefinitionMutation:
 		return c.WorkflowDefinition.mutate(ctx, m)
+	case *WorkflowRunMutation:
+		return c.WorkflowRun.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
 	}
@@ -528,6 +570,405 @@ func (c *MergeRecordClient) mutate(ctx context.Context, m *MergeRecordMutation) 
 	}
 }
 
+// NodeRunClient is a client for the NodeRun schema.
+type NodeRunClient struct {
+	config
+}
+
+// NewNodeRunClient returns a client for the NodeRun from the given config.
+func NewNodeRunClient(c config) *NodeRunClient {
+	return &NodeRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `noderun.Hooks(f(g(h())))`.
+func (c *NodeRunClient) Use(hooks ...Hook) {
+	c.hooks.NodeRun = append(c.hooks.NodeRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `noderun.Intercept(f(g(h())))`.
+func (c *NodeRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NodeRun = append(c.inters.NodeRun, interceptors...)
+}
+
+// Create returns a builder for creating a NodeRun entity.
+func (c *NodeRunClient) Create() *NodeRunCreate {
+	mutation := newNodeRunMutation(c.config, OpCreate)
+	return &NodeRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NodeRun entities.
+func (c *NodeRunClient) CreateBulk(builders ...*NodeRunCreate) *NodeRunCreateBulk {
+	return &NodeRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NodeRunClient) MapCreateBulk(slice any, setFunc func(*NodeRunCreate, int)) *NodeRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NodeRunCreateBulk{err: fmt.Errorf("calling to NodeRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NodeRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NodeRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NodeRun.
+func (c *NodeRunClient) Update() *NodeRunUpdate {
+	mutation := newNodeRunMutation(c.config, OpUpdate)
+	return &NodeRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NodeRunClient) UpdateOne(_m *NodeRun) *NodeRunUpdateOne {
+	mutation := newNodeRunMutation(c.config, OpUpdateOne, withNodeRun(_m))
+	return &NodeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NodeRunClient) UpdateOneID(id string) *NodeRunUpdateOne {
+	mutation := newNodeRunMutation(c.config, OpUpdateOne, withNodeRunID(id))
+	return &NodeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NodeRun.
+func (c *NodeRunClient) Delete() *NodeRunDelete {
+	mutation := newNodeRunMutation(c.config, OpDelete)
+	return &NodeRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NodeRunClient) DeleteOne(_m *NodeRun) *NodeRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NodeRunClient) DeleteOneID(id string) *NodeRunDeleteOne {
+	builder := c.Delete().Where(noderun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NodeRunDeleteOne{builder}
+}
+
+// Query returns a query builder for NodeRun.
+func (c *NodeRunClient) Query() *NodeRunQuery {
+	return &NodeRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNodeRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NodeRun entity by its id.
+func (c *NodeRunClient) Get(ctx context.Context, id string) (*NodeRun, error) {
+	return c.Query().Where(noderun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NodeRunClient) GetX(ctx context.Context, id string) *NodeRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *NodeRunClient) Hooks() []Hook {
+	return c.hooks.NodeRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *NodeRunClient) Interceptors() []Interceptor {
+	return c.inters.NodeRun
+}
+
+func (c *NodeRunClient) mutate(ctx context.Context, m *NodeRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NodeRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NodeRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NodeRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NodeRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown NodeRun mutation op: %q", m.Op())
+	}
+}
+
+// ProcessEventClient is a client for the ProcessEvent schema.
+type ProcessEventClient struct {
+	config
+}
+
+// NewProcessEventClient returns a client for the ProcessEvent from the given config.
+func NewProcessEventClient(c config) *ProcessEventClient {
+	return &ProcessEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `processevent.Hooks(f(g(h())))`.
+func (c *ProcessEventClient) Use(hooks ...Hook) {
+	c.hooks.ProcessEvent = append(c.hooks.ProcessEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `processevent.Intercept(f(g(h())))`.
+func (c *ProcessEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ProcessEvent = append(c.inters.ProcessEvent, interceptors...)
+}
+
+// Create returns a builder for creating a ProcessEvent entity.
+func (c *ProcessEventClient) Create() *ProcessEventCreate {
+	mutation := newProcessEventMutation(c.config, OpCreate)
+	return &ProcessEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ProcessEvent entities.
+func (c *ProcessEventClient) CreateBulk(builders ...*ProcessEventCreate) *ProcessEventCreateBulk {
+	return &ProcessEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProcessEventClient) MapCreateBulk(slice any, setFunc func(*ProcessEventCreate, int)) *ProcessEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProcessEventCreateBulk{err: fmt.Errorf("calling to ProcessEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProcessEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProcessEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ProcessEvent.
+func (c *ProcessEventClient) Update() *ProcessEventUpdate {
+	mutation := newProcessEventMutation(c.config, OpUpdate)
+	return &ProcessEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProcessEventClient) UpdateOne(_m *ProcessEvent) *ProcessEventUpdateOne {
+	mutation := newProcessEventMutation(c.config, OpUpdateOne, withProcessEvent(_m))
+	return &ProcessEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProcessEventClient) UpdateOneID(id string) *ProcessEventUpdateOne {
+	mutation := newProcessEventMutation(c.config, OpUpdateOne, withProcessEventID(id))
+	return &ProcessEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ProcessEvent.
+func (c *ProcessEventClient) Delete() *ProcessEventDelete {
+	mutation := newProcessEventMutation(c.config, OpDelete)
+	return &ProcessEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProcessEventClient) DeleteOne(_m *ProcessEvent) *ProcessEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProcessEventClient) DeleteOneID(id string) *ProcessEventDeleteOne {
+	builder := c.Delete().Where(processevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProcessEventDeleteOne{builder}
+}
+
+// Query returns a query builder for ProcessEvent.
+func (c *ProcessEventClient) Query() *ProcessEventQuery {
+	return &ProcessEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProcessEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ProcessEvent entity by its id.
+func (c *ProcessEventClient) Get(ctx context.Context, id string) (*ProcessEvent, error) {
+	return c.Query().Where(processevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProcessEventClient) GetX(ctx context.Context, id string) *ProcessEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ProcessEventClient) Hooks() []Hook {
+	return c.hooks.ProcessEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProcessEventClient) Interceptors() []Interceptor {
+	return c.inters.ProcessEvent
+}
+
+func (c *ProcessEventClient) mutate(ctx context.Context, m *ProcessEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProcessEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProcessEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProcessEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProcessEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ProcessEvent mutation op: %q", m.Op())
+	}
+}
+
+// ProcessRunClient is a client for the ProcessRun schema.
+type ProcessRunClient struct {
+	config
+}
+
+// NewProcessRunClient returns a client for the ProcessRun from the given config.
+func NewProcessRunClient(c config) *ProcessRunClient {
+	return &ProcessRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `processrun.Hooks(f(g(h())))`.
+func (c *ProcessRunClient) Use(hooks ...Hook) {
+	c.hooks.ProcessRun = append(c.hooks.ProcessRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `processrun.Intercept(f(g(h())))`.
+func (c *ProcessRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ProcessRun = append(c.inters.ProcessRun, interceptors...)
+}
+
+// Create returns a builder for creating a ProcessRun entity.
+func (c *ProcessRunClient) Create() *ProcessRunCreate {
+	mutation := newProcessRunMutation(c.config, OpCreate)
+	return &ProcessRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ProcessRun entities.
+func (c *ProcessRunClient) CreateBulk(builders ...*ProcessRunCreate) *ProcessRunCreateBulk {
+	return &ProcessRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ProcessRunClient) MapCreateBulk(slice any, setFunc func(*ProcessRunCreate, int)) *ProcessRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ProcessRunCreateBulk{err: fmt.Errorf("calling to ProcessRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ProcessRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ProcessRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ProcessRun.
+func (c *ProcessRunClient) Update() *ProcessRunUpdate {
+	mutation := newProcessRunMutation(c.config, OpUpdate)
+	return &ProcessRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ProcessRunClient) UpdateOne(_m *ProcessRun) *ProcessRunUpdateOne {
+	mutation := newProcessRunMutation(c.config, OpUpdateOne, withProcessRun(_m))
+	return &ProcessRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ProcessRunClient) UpdateOneID(id string) *ProcessRunUpdateOne {
+	mutation := newProcessRunMutation(c.config, OpUpdateOne, withProcessRunID(id))
+	return &ProcessRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ProcessRun.
+func (c *ProcessRunClient) Delete() *ProcessRunDelete {
+	mutation := newProcessRunMutation(c.config, OpDelete)
+	return &ProcessRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ProcessRunClient) DeleteOne(_m *ProcessRun) *ProcessRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ProcessRunClient) DeleteOneID(id string) *ProcessRunDeleteOne {
+	builder := c.Delete().Where(processrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ProcessRunDeleteOne{builder}
+}
+
+// Query returns a query builder for ProcessRun.
+func (c *ProcessRunClient) Query() *ProcessRunQuery {
+	return &ProcessRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeProcessRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ProcessRun entity by its id.
+func (c *ProcessRunClient) Get(ctx context.Context, id string) (*ProcessRun, error) {
+	return c.Query().Where(processrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ProcessRunClient) GetX(ctx context.Context, id string) *ProcessRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ProcessRunClient) Hooks() []Hook {
+	return c.hooks.ProcessRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *ProcessRunClient) Interceptors() []Interceptor {
+	return c.inters.ProcessRun
+}
+
+func (c *ProcessRunClient) mutate(ctx context.Context, m *ProcessRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ProcessRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ProcessRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ProcessRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ProcessRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ProcessRun mutation op: %q", m.Op())
+	}
+}
+
 // ProjectClient is a client for the Project schema.
 type ProjectClient struct {
 	config
@@ -791,6 +1232,139 @@ func (c *PromptAppendClient) mutate(ctx context.Context, m *PromptAppendMutation
 		return (&PromptAppendDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown PromptAppend mutation op: %q", m.Op())
+	}
+}
+
+// QuestionBatchClient is a client for the QuestionBatch schema.
+type QuestionBatchClient struct {
+	config
+}
+
+// NewQuestionBatchClient returns a client for the QuestionBatch from the given config.
+func NewQuestionBatchClient(c config) *QuestionBatchClient {
+	return &QuestionBatchClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `questionbatch.Hooks(f(g(h())))`.
+func (c *QuestionBatchClient) Use(hooks ...Hook) {
+	c.hooks.QuestionBatch = append(c.hooks.QuestionBatch, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `questionbatch.Intercept(f(g(h())))`.
+func (c *QuestionBatchClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QuestionBatch = append(c.inters.QuestionBatch, interceptors...)
+}
+
+// Create returns a builder for creating a QuestionBatch entity.
+func (c *QuestionBatchClient) Create() *QuestionBatchCreate {
+	mutation := newQuestionBatchMutation(c.config, OpCreate)
+	return &QuestionBatchCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QuestionBatch entities.
+func (c *QuestionBatchClient) CreateBulk(builders ...*QuestionBatchCreate) *QuestionBatchCreateBulk {
+	return &QuestionBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QuestionBatchClient) MapCreateBulk(slice any, setFunc func(*QuestionBatchCreate, int)) *QuestionBatchCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QuestionBatchCreateBulk{err: fmt.Errorf("calling to QuestionBatchClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QuestionBatchCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QuestionBatchCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QuestionBatch.
+func (c *QuestionBatchClient) Update() *QuestionBatchUpdate {
+	mutation := newQuestionBatchMutation(c.config, OpUpdate)
+	return &QuestionBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QuestionBatchClient) UpdateOne(_m *QuestionBatch) *QuestionBatchUpdateOne {
+	mutation := newQuestionBatchMutation(c.config, OpUpdateOne, withQuestionBatch(_m))
+	return &QuestionBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QuestionBatchClient) UpdateOneID(id string) *QuestionBatchUpdateOne {
+	mutation := newQuestionBatchMutation(c.config, OpUpdateOne, withQuestionBatchID(id))
+	return &QuestionBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QuestionBatch.
+func (c *QuestionBatchClient) Delete() *QuestionBatchDelete {
+	mutation := newQuestionBatchMutation(c.config, OpDelete)
+	return &QuestionBatchDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QuestionBatchClient) DeleteOne(_m *QuestionBatch) *QuestionBatchDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QuestionBatchClient) DeleteOneID(id string) *QuestionBatchDeleteOne {
+	builder := c.Delete().Where(questionbatch.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QuestionBatchDeleteOne{builder}
+}
+
+// Query returns a query builder for QuestionBatch.
+func (c *QuestionBatchClient) Query() *QuestionBatchQuery {
+	return &QuestionBatchQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQuestionBatch},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QuestionBatch entity by its id.
+func (c *QuestionBatchClient) Get(ctx context.Context, id string) (*QuestionBatch, error) {
+	return c.Query().Where(questionbatch.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QuestionBatchClient) GetX(ctx context.Context, id string) *QuestionBatch {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QuestionBatchClient) Hooks() []Hook {
+	return c.hooks.QuestionBatch
+}
+
+// Interceptors returns the client interceptors.
+func (c *QuestionBatchClient) Interceptors() []Interceptor {
+	return c.inters.QuestionBatch
+}
+
+func (c *QuestionBatchClient) mutate(ctx context.Context, m *QuestionBatchMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QuestionBatchCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QuestionBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QuestionBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QuestionBatchDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QuestionBatch mutation op: %q", m.Op())
 	}
 }
 
@@ -1326,14 +1900,149 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 	}
 }
 
+// WorkflowRunClient is a client for the WorkflowRun schema.
+type WorkflowRunClient struct {
+	config
+}
+
+// NewWorkflowRunClient returns a client for the WorkflowRun from the given config.
+func NewWorkflowRunClient(c config) *WorkflowRunClient {
+	return &WorkflowRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `workflowrun.Hooks(f(g(h())))`.
+func (c *WorkflowRunClient) Use(hooks ...Hook) {
+	c.hooks.WorkflowRun = append(c.hooks.WorkflowRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `workflowrun.Intercept(f(g(h())))`.
+func (c *WorkflowRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.WorkflowRun = append(c.inters.WorkflowRun, interceptors...)
+}
+
+// Create returns a builder for creating a WorkflowRun entity.
+func (c *WorkflowRunClient) Create() *WorkflowRunCreate {
+	mutation := newWorkflowRunMutation(c.config, OpCreate)
+	return &WorkflowRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of WorkflowRun entities.
+func (c *WorkflowRunClient) CreateBulk(builders ...*WorkflowRunCreate) *WorkflowRunCreateBulk {
+	return &WorkflowRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *WorkflowRunClient) MapCreateBulk(slice any, setFunc func(*WorkflowRunCreate, int)) *WorkflowRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &WorkflowRunCreateBulk{err: fmt.Errorf("calling to WorkflowRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*WorkflowRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &WorkflowRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for WorkflowRun.
+func (c *WorkflowRunClient) Update() *WorkflowRunUpdate {
+	mutation := newWorkflowRunMutation(c.config, OpUpdate)
+	return &WorkflowRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *WorkflowRunClient) UpdateOne(_m *WorkflowRun) *WorkflowRunUpdateOne {
+	mutation := newWorkflowRunMutation(c.config, OpUpdateOne, withWorkflowRun(_m))
+	return &WorkflowRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *WorkflowRunClient) UpdateOneID(id string) *WorkflowRunUpdateOne {
+	mutation := newWorkflowRunMutation(c.config, OpUpdateOne, withWorkflowRunID(id))
+	return &WorkflowRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for WorkflowRun.
+func (c *WorkflowRunClient) Delete() *WorkflowRunDelete {
+	mutation := newWorkflowRunMutation(c.config, OpDelete)
+	return &WorkflowRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *WorkflowRunClient) DeleteOne(_m *WorkflowRun) *WorkflowRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *WorkflowRunClient) DeleteOneID(id string) *WorkflowRunDeleteOne {
+	builder := c.Delete().Where(workflowrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &WorkflowRunDeleteOne{builder}
+}
+
+// Query returns a query builder for WorkflowRun.
+func (c *WorkflowRunClient) Query() *WorkflowRunQuery {
+	return &WorkflowRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeWorkflowRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a WorkflowRun entity by its id.
+func (c *WorkflowRunClient) Get(ctx context.Context, id string) (*WorkflowRun, error) {
+	return c.Query().Where(workflowrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *WorkflowRunClient) GetX(ctx context.Context, id string) *WorkflowRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *WorkflowRunClient) Hooks() []Hook {
+	return c.hooks.WorkflowRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *WorkflowRunClient) Interceptors() []Interceptor {
+	return c.inters.WorkflowRun
+}
+
+func (c *WorkflowRunClient) mutate(ctx context.Context, m *WorkflowRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&WorkflowRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&WorkflowRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&WorkflowRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&WorkflowRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown WorkflowRun mutation op: %q", m.Op())
+	}
+}
+
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		EventRecord, MergeRecord, Project, PromptAppend, Session, SessionAttachment,
-		StagedAttachment, WorkflowDefinition []ent.Hook
+		EventRecord, MergeRecord, NodeRun, ProcessEvent, ProcessRun, Project,
+		PromptAppend, QuestionBatch, Session, SessionAttachment, StagedAttachment,
+		WorkflowDefinition, WorkflowRun []ent.Hook
 	}
 	inters struct {
-		EventRecord, MergeRecord, Project, PromptAppend, Session, SessionAttachment,
-		StagedAttachment, WorkflowDefinition []ent.Interceptor
+		EventRecord, MergeRecord, NodeRun, ProcessEvent, ProcessRun, Project,
+		PromptAppend, QuestionBatch, Session, SessionAttachment, StagedAttachment,
+		WorkflowDefinition, WorkflowRun []ent.Interceptor
 	}
 )

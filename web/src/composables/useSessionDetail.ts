@@ -1,8 +1,18 @@
 import { ref } from 'vue';
 
+import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import {
   appendPrompt,
+  closeSession as closeSessionRequest,
+  getPendingQuestionBatches,
   getSessionDetail,
+  subscribePendingQuestionBatches,
+  subscribeSessionEvents,
+  resumeSession as resumeSessionRequest,
+  startSession as startSessionRequest,
+  submitQuestionBatch,
+  type QuestionAnswerInput,
+  type QuestionBatch,
   stopSession as stopSessionRequest,
   type SessionDetailData,
 } from '@/services/sessions';
@@ -12,8 +22,18 @@ export function useSessionDetail(sessionId: string) {
   const events = ref<SessionDetailData['events']>([]);
   const loading = ref(false);
   const appending = ref(false);
+  const starting = ref(false);
+  const resuming = ref(false);
   const stopping = ref(false);
+  const closing = ref(false);
+  const questionsLoading = ref(false);
+  const questionsSubmitting = ref(false);
+  const pendingQuestionBatches = ref<QuestionBatch[]>([]);
   const error = ref('');
+  let liveStopped = true;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let eventSubscription: { unsubscribe: () => void } | null = null;
+  let questionSubscription: { unsubscribe: () => void } | null = null;
 
   async function loadSessionDetail() {
     loading.value = true;
@@ -59,15 +79,183 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
+  async function closeSession() {
+    closing.value = true;
+    error.value = '';
+    try {
+      await closeSessionRequest(sessionId);
+      await loadSessionDetail();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '关闭会话失败';
+      throw err;
+    } finally {
+      closing.value = false;
+    }
+  }
+
+  async function startSession() {
+    starting.value = true;
+    error.value = '';
+    try {
+      await startSessionRequest(sessionId);
+      await loadSessionDetail();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '运行会话失败';
+      throw err;
+    } finally {
+      starting.value = false;
+    }
+  }
+
+  async function resumeSession() {
+    resuming.value = true;
+    error.value = '';
+    try {
+      await resumeSessionRequest(sessionId);
+      await loadSessionDetail();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '恢复会话失败';
+      throw err;
+    } finally {
+      resuming.value = false;
+    }
+  }
+
+  async function loadPendingQuestions() {
+    questionsLoading.value = true;
+    error.value = '';
+    try {
+      pendingQuestionBatches.value = await getPendingQuestionBatches(sessionId);
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '加载待回答问题失败';
+    } finally {
+      questionsLoading.value = false;
+    }
+  }
+
+  async function submitPendingAnswers(batchId: string, answers: QuestionAnswerInput[]) {
+    questionsSubmitting.value = true;
+    error.value = '';
+    try {
+      await submitQuestionBatch(batchId, answers);
+      await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '提交回答失败';
+      throw err;
+    } finally {
+      questionsSubmitting.value = false;
+    }
+  }
+
+  function startLiveUpdates() {
+    liveStopped = false;
+    openSubscriptions();
+  }
+
+  function stopLiveUpdates() {
+    liveStopped = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    eventSubscription?.unsubscribe();
+    questionSubscription?.unsubscribe();
+    eventSubscription = null;
+    questionSubscription = null;
+  }
+
+  function openSubscriptions() {
+    eventSubscription?.unsubscribe();
+    questionSubscription?.unsubscribe();
+    const afterEventId = events.value.at(-1)?.id;
+    eventSubscription = subscribeSessionEvents(
+      { sessionId, ...(afterEventId ? { afterEventId } : {}) },
+      {
+        onData: (event) => {
+          if (!events.value.some((item) => item.id === event.id)) {
+            events.value = [...events.value, event];
+          }
+          if (event.rawType.startsWith('session.') || event.rawType.startsWith('workflow.')) {
+            void loadSessionDetail();
+          }
+        },
+        onError: (err) => {
+          error.value = err.message;
+          if (shouldReconnectLiveError(err)) {
+            scheduleReconnect();
+          }
+        },
+        onClose: scheduleReconnect,
+      },
+    );
+    questionSubscription = subscribePendingQuestionBatches(sessionId, {
+      onData: (batch) => {
+        pendingQuestionBatches.value = mergeQuestionBatch(pendingQuestionBatches.value, batch);
+        if (batch.status !== 'pending') {
+          void loadSessionDetail();
+        }
+      },
+      onError: (err) => {
+        error.value = err.message;
+        if (shouldReconnectLiveError(err)) {
+          scheduleReconnect();
+        }
+      },
+      onClose: scheduleReconnect,
+    });
+  }
+
+  function scheduleReconnect() {
+    if (liveStopped || reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void reconnectFromSnapshot();
+    }, 1500);
+  }
+
+  async function reconnectFromSnapshot() {
+    if (liveStopped) return;
+    await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
+    if (!liveStopped) {
+      openSubscriptions();
+    }
+  }
+
   return {
     session,
     events,
+    pendingQuestionBatches,
     loading,
     appending,
+    starting,
+    resuming,
     stopping,
+    closing,
+    questionsLoading,
+    questionsSubmitting,
     error,
     loadSessionDetail,
     appendDescription,
+    startSession,
+    resumeSession,
     stopSession,
+    closeSession,
+    loadPendingQuestions,
+    submitPendingAnswers,
+    startLiveUpdates,
+    stopLiveUpdates,
   };
+}
+
+function shouldReconnectLiveError(err: Error) {
+  return !(err instanceof AnyCodeGraphQLError && err.code === 'auth_failed');
+}
+
+function mergeQuestionBatch(existing: QuestionBatch[], batch: QuestionBatch) {
+  if (batch.status !== 'pending') {
+    return existing.filter((item) => item.id !== batch.id);
+  }
+  const next = existing.filter((item) => item.id !== batch.id);
+  next.push(batch);
+  return next;
 }

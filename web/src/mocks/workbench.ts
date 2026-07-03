@@ -1,5 +1,5 @@
 export type SessionMode = 'workflow' | 'chat';
-export type SessionStatus = 'running' | 'waiting_user' | 'stopped' | 'blocked' | 'completed';
+export type SessionStatus = 'running' | 'waiting_user' | 'waiting_approval' | 'stopped' | 'blocked' | 'completed';
 
 export interface ProjectSummary {
   id: string;
@@ -27,6 +27,7 @@ export interface SessionCard {
 export interface SessionEvent {
   id: string;
   kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question';
+  rawType: string;
   title: string;
   body: string;
   time: string;
@@ -139,6 +140,7 @@ export const sessionEvents: SessionEvent[] = [
   {
     id: 'evt-1',
     kind: 'status',
+    rawType: 'session.running',
     title: '流程节点启动',
     body: '进入“验证构建结果”，绑定当前 NodeRun attempt。',
     time: '09:42',
@@ -146,6 +148,7 @@ export const sessionEvents: SessionEvent[] = [
   {
     id: 'evt-2',
     kind: 'thought',
+    rawType: 'process.codex_event',
     title: '思考',
     body: '先确认前端路由和主题入口，再补齐 mock 页面，避免提前接 GraphQL。',
     time: '09:43',
@@ -153,6 +156,7 @@ export const sessionEvents: SessionEvent[] = [
   {
     id: 'evt-3',
     kind: 'tool',
+    rawType: 'process.codex_event',
     title: '工具调用',
     body: 'npm --prefix web run lint',
     time: '09:44',
@@ -160,6 +164,7 @@ export const sessionEvents: SessionEvent[] = [
   {
     id: 'evt-4',
     kind: 'assistant',
+    rawType: 'process.codex_event',
     title: '模型输出',
     body: '已完成页面骨架，等待构建验证结果。',
     time: '09:45',
@@ -167,6 +172,7 @@ export const sessionEvents: SessionEvent[] = [
   {
     id: 'evt-5',
     kind: 'question',
+    rawType: 'session.waiting_user',
     title: '待回答',
     body: '请选择下一步动作：继续修复、暂停、或进入收尾。',
     time: '09:46',

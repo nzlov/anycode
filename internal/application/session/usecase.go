@@ -9,18 +9,30 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/application/port"
+	questionapp "github.com/nzlov/anycode/internal/application/question"
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
+	gitdiffdomain "github.com/nzlov/anycode/internal/domain/gitdiff"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
+	questiondomain "github.com/nzlov/anycode/internal/domain/question"
+	"github.com/nzlov/anycode/internal/domain/redaction"
 	domain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type UseCase interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error)
+	MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error)
 	StartSession(ctx context.Context, id domain.ID) (DTO, error)
 	StopSession(ctx context.Context, id domain.ID) (DTO, error)
 	ResumeSession(ctx context.Context, id domain.ID) (DTO, error)
 	CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error)
+	MarkWaitingUser(ctx context.Context, id domain.ID) (DTO, error)
+	MarkRunningAfterUserWait(ctx context.Context, id domain.ID) (DTO, error)
 	AppendPrompt(ctx context.Context, input AppendPromptInput) (PromptAppendDTO, error)
+	SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error)
+	HandleQuestionBatchAnswered(ctx context.Context, batch questionapp.BatchDTO) error
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error)
 }
@@ -42,6 +54,13 @@ type CloseSessionInput struct {
 type AppendPromptInput struct {
 	SessionID domain.ID
 	Body      string
+}
+
+type SubmitWorkflowApprovalInput struct {
+	WorkflowRunID domain.WorkflowRunID
+	NodeID        string
+	Approved      bool
+	Comment       string
 }
 
 type ListSessionsInput struct {
@@ -82,6 +101,7 @@ type CardDTO struct {
 type DetailDTO struct {
 	DTO
 	CloseReason      *domain.CloseReason
+	CurrentNodeTitle string
 	Attachments      []domain.SessionAttachment
 	PromptAppends    []PromptAppendDTO
 	AvailableActions []string
@@ -95,6 +115,14 @@ type PromptAppendDTO struct {
 	CreatedAt time.Time
 }
 
+type WorkflowRunDTO struct {
+	ID            domain.WorkflowRunID
+	SessionID     domain.ID
+	Status        string
+	CurrentNodeID string
+	Context       map[string]any
+}
+
 const (
 	defaultPage     = 1
 	defaultPageSize = 20
@@ -105,11 +133,26 @@ var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not w
 
 type Service struct {
 	repo        domain.Repository
+	uow         port.UnitOfWork
+	locker      port.SessionLocker
 	projects    projectdomain.Repository
 	attachments domain.AttachmentRepository
 	files       domain.AttachmentStore
+	worktrees   domain.WorktreeManager
+	workflows   domain.WorkflowStarter
+	merge       gitdiffdomain.MergePort
+	processes   processdomain.Repository
+	codex       processdomain.CodexProcess
+	events      eventdomain.Store
+	publisher   eventdomain.Publisher
+	questions   questionCoordinator
 	now         func() time.Time
 	generateID  func() (domain.ID, error)
+}
+
+type questionCoordinator interface {
+	CreateBatch(ctx context.Context, input questionapp.CreateBatchInput) (questionapp.BatchDTO, error)
+	CancelPendingBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
 }
 
 type Option func(*Service)
@@ -118,6 +161,61 @@ func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentSt
 	return func(s *Service) {
 		s.attachments = repo
 		s.files = store
+	}
+}
+
+func WithWorktrees(worktrees domain.WorktreeManager) Option {
+	return func(s *Service) {
+		s.worktrees = worktrees
+	}
+}
+
+func WithWorkflows(workflows domain.WorkflowStarter) Option {
+	return func(s *Service) {
+		s.workflows = workflows
+	}
+}
+
+func WithMergePort(merge gitdiffdomain.MergePort) Option {
+	return func(s *Service) {
+		s.merge = merge
+	}
+}
+
+func WithProcesses(repo processdomain.Repository, codex processdomain.CodexProcess) Option {
+	return func(s *Service) {
+		s.processes = repo
+		s.codex = codex
+	}
+}
+
+func WithEvents(store eventdomain.Store) Option {
+	return func(s *Service) {
+		s.events = store
+	}
+}
+
+func WithEventPublisher(publisher eventdomain.Publisher) Option {
+	return func(s *Service) {
+		s.publisher = publisher
+	}
+}
+
+func WithQuestions(questions questionCoordinator) Option {
+	return func(s *Service) {
+		s.questions = questions
+	}
+}
+
+func WithUnitOfWork(uow port.UnitOfWork) Option {
+	return func(s *Service) {
+		s.uow = uow
+	}
+}
+
+func WithSessionLocker(locker port.SessionLocker) Option {
+	return func(s *Service) {
+		s.locker = locker
 	}
 }
 
@@ -134,6 +232,30 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 	return service
 }
 
+func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error) {
+	if s == nil {
+		return 0, errors.New("session usecase: nil service")
+	}
+	sessions, err := s.repo.ListInterruptedWithCodexSession(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list interrupted sessions: %w", err)
+	}
+	now := s.now()
+	for _, session := range sessions {
+		previousStatus := session.Status
+		session.Status = domain.StatusStopped
+		session.UpdatedAt = now
+		if err := s.saveSessionWithEvent(ctx, session, "session.recoverable", map[string]any{
+			"reason":         "service_restarted",
+			"previousStatus": string(previousStatus),
+			"codexSessionId": session.CodexSessionID,
+		}); err != nil {
+			return 0, fmt.Errorf("mark session %s recoverable: %w", session.ID, err)
+		}
+	}
+	return len(sessions), nil
+}
+
 func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("session usecase: nil service")
@@ -144,7 +266,8 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	if s.projects == nil {
 		return DTO{}, errors.New("project repository is required")
 	}
-	if _, err := s.projects.Find(ctx, projectdomain.ID(input.ProjectID)); err != nil {
+	project, err := s.projects.Find(ctx, projectdomain.ID(input.ProjectID))
+	if err != nil {
 		return DTO{}, fmt.Errorf("find project: %w", err)
 	}
 	requirement := strings.TrimSpace(input.Requirement)
@@ -158,6 +281,18 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	if mode != domain.ModeChat && mode != domain.ModeWorkflow {
 		return DTO{}, fmt.Errorf("unsupported session mode %q", mode)
 	}
+	config, err := s.resolveSessionConfig(ctx, input.ProjectID, input.Config)
+	if err != nil {
+		return DTO{}, err
+	}
+	if mode == domain.ModeWorkflow {
+		if s.workflows == nil {
+			return DTO{}, errors.New("session workflow starter is required for workflow mode")
+		}
+		if project.DefaultWorkflowID == nil || strings.TrimSpace(string(*project.DefaultWorkflowID)) == "" {
+			return DTO{}, errors.New("project default workflow is required for workflow mode")
+		}
+	}
 	id, err := s.generateID()
 	if err != nil {
 		return DTO{}, fmt.Errorf("generate session id: %w", err)
@@ -167,18 +302,44 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return DTO{}, err
 	}
 	now := s.now()
+	baseBranch := strings.TrimSpace(input.BaseBranch)
+	worktreePath := project.Path.Value
+	createdWorktree := false
+	if project.IsGit {
+		if baseBranch == "" {
+			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "base branch is required for git project").WithDetails(map[string]any{
+				"projectId": string(input.ProjectID),
+			}).WithUserAction("select_base_branch")
+		}
+		if s.worktrees == nil {
+			return DTO{}, errors.New("session worktree manager is required for git project")
+		}
+		worktreePath, err = s.worktrees.Create(ctx, project.Path.Value, input.ProjectID, id, baseBranch)
+		if err != nil {
+			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "create session worktree failed").WithDetails(map[string]any{
+				"projectId":  string(input.ProjectID),
+				"sessionId":  string(id),
+				"baseBranch": baseBranch,
+			}).WithRetryable(true)
+		}
+		createdWorktree = true
+	}
 	session := domain.Session{
-		ID:          id,
-		ProjectID:   input.ProjectID,
-		Requirement: requirement,
-		Mode:        mode,
-		Status:      domain.StatusCreated,
-		BaseBranch:  strings.TrimSpace(input.BaseBranch),
-		Config:      input.Config,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           id,
+		ProjectID:    input.ProjectID,
+		Requirement:  requirement,
+		Mode:         mode,
+		Status:       domain.StatusCreated,
+		BaseBranch:   baseBranch,
+		WorktreePath: worktreePath,
+		Config:       config,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	if err := s.repo.Save(ctx, session); err != nil {
+		if createdWorktree {
+			_ = s.worktrees.Remove(ctx, worktreePath)
+		}
 		return DTO{}, fmt.Errorf("save session: %w", err)
 	}
 	if err := s.archiveStagedAttachments(ctx, id, stagedAttachments); err != nil {
@@ -186,12 +347,39 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		session.Status = domain.StatusFailed
 		session.UpdatedAt = failedAt
 		_ = s.repo.Save(ctx, session)
+		if createdWorktree {
+			_ = s.worktrees.Remove(ctx, worktreePath)
+		}
 		return DTO{}, err
+	}
+	if mode == domain.ModeWorkflow {
+		dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID))
+		if startErr != nil {
+			failedAt := s.now()
+			session.Status = domain.StatusFailed
+			session.UpdatedAt = failedAt
+			_ = s.repo.Save(ctx, session)
+			if createdWorktree {
+				_ = s.worktrees.Remove(ctx, worktreePath)
+			}
+			return DTO{}, startErr
+		}
+		return dto, nil
 	}
 	return toDTO(session), nil
 }
 
 func (s *Service) StartSession(ctx context.Context, id domain.ID) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
+		var err error
+		dto, err = s.startSession(ctx, id)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) startSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("session usecase: nil service")
 	}
@@ -199,15 +387,138 @@ func (s *Service) StartSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
-	switch session.Status {
-	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
-	default:
-		return DTO{}, fmt.Errorf("session cannot start from status %q", session.Status)
+	if session.Mode == domain.ModeWorkflow {
+		switch session.Status {
+		case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusWaitingApproval, domain.StatusStopping:
+			return toDTO(session), nil
+		case domain.StatusResumeFailed:
+			return s.rerunWorkflowCurrentNode(ctx, session)
+		case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
+		default:
+			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
+		}
+		project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+		if err != nil {
+			return DTO{}, fmt.Errorf("find project: %w", err)
+		}
+		if project.DefaultWorkflowID == nil || strings.TrimSpace(string(*project.DefaultWorkflowID)) == "" {
+			return DTO{}, apperror.New(apperror.CodeWorkflowBlocked, apperror.CategoryWorkflowError, "project default workflow is required for workflow mode").WithUserAction("configure_project_workflow")
+		}
+		return s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID))
 	}
-	return DTO{}, ErrProcessLifecycleNotWired
+	switch session.Status {
+	case domain.StatusCreated, domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
+	default:
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
+	}
+	return s.startCodex(ctx, session, codexStartOptions{})
+}
+
+func (s *Service) rerunWorkflowCurrentNode(ctx context.Context, session domain.Session) (DTO, error) {
+	if s.workflows == nil {
+		return DTO{}, errors.New("session workflow starter is required for workflow mode")
+	}
+	advance, err := s.workflows.RerunCurrentNodeForSession(ctx, domain.WorkflowRerunCurrentNodeInput{
+		SessionID: session.ID,
+		Reason:    "user requested rerun after resume failure",
+	})
+	if err != nil {
+		return DTO{}, fmt.Errorf("rerun workflow current node: %w", err)
+	}
+	return s.applyWorkflowAdvance(ctx, session, advance)
+}
+
+func (s *Service) startWorkflowSession(ctx context.Context, session domain.Session, workflowDefinitionID domain.WorkflowDefinitionID) (DTO, error) {
+	if s.workflows == nil {
+		return DTO{}, errors.New("session workflow starter is required for workflow mode")
+	}
+	start, err := s.workflows.StartForSession(ctx, domain.WorkflowStartInput{
+		ProjectID:            session.ProjectID,
+		SessionID:            session.ID,
+		WorkflowDefinitionID: workflowDefinitionID,
+		Requirement:          session.Requirement,
+	})
+	if err != nil {
+		return DTO{}, fmt.Errorf("start workflow: %w", err)
+	}
+	if start.Merge != nil {
+		return s.executeWorkflowMerge(ctx, session, domain.WorkflowAdvance{
+			WorkflowRunID:    start.WorkflowRunID,
+			NodeRunID:        start.NodeRunID,
+			CurrentNodeID:    start.CurrentNodeID,
+			CurrentNodeTitle: start.CurrentNodeTitle,
+			Status:           start.Status,
+			Merge:            start.Merge,
+		})
+	}
+	if !start.RequiresCodex {
+		session.Status = domain.StatusWaitingApproval
+		session.UpdatedAt = s.now()
+		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
+			"workflowRunId": string(start.WorkflowRunID),
+			"nodeRunId":     stringValuePtr(start.NodeRunID),
+		}); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	}
+	dto, err := s.startCodex(ctx, session, codexStartOptions{
+		workflowRunID: start.WorkflowRunID,
+		nodeRunID:     workflowNodeRunID(start.NodeRunID),
+		prompt:        start.Prompt,
+	})
+	if err != nil {
+		return s.handleWorkflowNodeFailure(ctx, session, start.WorkflowRunID, start.NodeRunID, "codex_start_failed", err.Error())
+	}
+	return dto, nil
+}
+
+func (s *Service) resolveSessionConfig(ctx context.Context, projectID domain.ProjectID, requested domain.Config) (domain.Config, error) {
+	if strings.TrimSpace(requested.CodexModel) != "" &&
+		strings.TrimSpace(requested.ReasoningEffort) != "" &&
+		strings.TrimSpace(requested.PermissionMode) != "" {
+		return trimConfig(requested), nil
+	}
+	previous, ok, err := s.repo.LastConfigForProject(ctx, projectID)
+	if err != nil {
+		return domain.Config{}, fmt.Errorf("last config for project: %w", err)
+	}
+	config := trimConfig(requested)
+	if !ok {
+		return config, nil
+	}
+	previous = trimConfig(previous)
+	if config.CodexModel == "" {
+		config.CodexModel = previous.CodexModel
+	}
+	if config.ReasoningEffort == "" {
+		config.ReasoningEffort = previous.ReasoningEffort
+	}
+	if config.PermissionMode == "" {
+		config.PermissionMode = previous.PermissionMode
+	}
+	return config, nil
+}
+
+func trimConfig(config domain.Config) domain.Config {
+	return domain.Config{
+		CodexModel:      strings.TrimSpace(config.CodexModel),
+		ReasoningEffort: strings.TrimSpace(config.ReasoningEffort),
+		PermissionMode:  strings.TrimSpace(config.PermissionMode),
+	}
 }
 
 func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
+		var err error
+		dto, err = s.stopSession(ctx, id)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("session usecase: nil service")
 	}
@@ -216,14 +527,70 @@ func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
 	switch session.Status {
-	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping, domain.StatusResumeFailed:
 	default:
-		return DTO{}, fmt.Errorf("session cannot stop from status %q", session.Status)
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
-	return DTO{}, ErrProcessLifecycleNotWired
+	if s.processes == nil || s.codex == nil {
+		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
+	}
+	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(id))
+	if err != nil {
+		return DTO{}, fmt.Errorf("find active process run: %w", err)
+	}
+	if !ok {
+		now := s.now()
+		session.Status = domain.StatusStopped
+		session.UpdatedAt = now
+		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "no_active_process"}); err != nil {
+			return DTO{}, err
+		}
+		if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	}
+	now := s.now()
+	session.Status = domain.StatusStopping
+	session.UpdatedAt = now
+	if err := s.saveSessionWithEvent(ctx, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
+		return DTO{}, err
+	}
+	if err := s.codex.Stop(ctx, active.ID); err != nil {
+		return DTO{}, fmt.Errorf("stop codex process: %w", err)
+	}
+	finishedAt := s.now()
+	session.Status = domain.StatusStopped
+	session.UpdatedAt = finishedAt
+	if err := s.markProcessExitedWithSessionEvents(ctx, active.ID, processdomain.ExitResult{
+		FailureReason: "stopped by user",
+		FinishedAt:    finishedAt,
+	}, nil, session, true, []sessionEventInput{{
+		eventType: "session.stopped",
+		payload: map[string]any{
+			"processRunId": string(active.ID),
+			"reason":       "user_stopped",
+		},
+	}}); err != nil {
+		return DTO{}, err
+	}
+	if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
+		return DTO{}, err
+	}
+	return toDTO(session), nil
 }
 
 func (s *Service) ResumeSession(ctx context.Context, id domain.ID) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
+		var err error
+		dto, err = s.resumeSession(ctx, id)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) resumeSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("session usecase: nil service")
 	}
@@ -234,15 +601,1160 @@ func (s *Service) ResumeSession(ctx context.Context, id domain.ID) (DTO, error) 
 	switch session.Status {
 	case domain.StatusStopped, domain.StatusResumeFailed:
 	default:
-		return DTO{}, fmt.Errorf("session cannot resume from status %q", session.Status)
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot resume from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
 	if strings.TrimSpace(session.CodexSessionID) == "" {
-		return DTO{}, errors.New("session cannot resume without codex session id")
+		return DTO{}, apperror.New(apperror.CodeResumeFailed, apperror.CategoryValidationError, "session cannot resume without codex session id").WithUserAction("rerun_session")
 	}
-	return DTO{}, ErrProcessLifecycleNotWired
+	options := codexStartOptions{resumeCodexSessionID: session.CodexSessionID}
+	if session.Mode == domain.ModeWorkflow {
+		if s.workflows == nil {
+			return DTO{}, errors.New("session workflow starter is required for workflow mode")
+		}
+		advance, err := s.workflows.ResumeCurrentNodeForSession(ctx, domain.WorkflowResumeCurrentNodeInput{
+			SessionID: session.ID,
+			Reason:    "user requested codex resume",
+		})
+		if err != nil {
+			return DTO{}, fmt.Errorf("resume workflow current node: %w", err)
+		}
+		options.workflowRunID = advance.WorkflowRunID
+		options.nodeRunID = workflowNodeRunID(advance.NodeRunID)
+		options.prompt = advance.Prompt
+	}
+	return s.startCodex(ctx, session, options)
+}
+
+func (s *Service) MarkWaitingUser(ctx context.Context, id domain.ID) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	session, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find session: %w", err)
+	}
+	switch session.Status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser:
+	default:
+		return DTO{}, fmt.Errorf("session cannot wait for user from status %q", session.Status)
+	}
+	session.Status = domain.StatusWaitingUser
+	session.UpdatedAt = s.now()
+	if err := s.saveSessionWithEvent(ctx, session, "session.waiting_user", nil); err != nil {
+		if cancelErr := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(session.ID), "merge failure question abandoned"); cancelErr != nil {
+			return DTO{}, fmt.Errorf("%w; cancel merge failure question: %v", err, cancelErr)
+		}
+		return DTO{}, err
+	}
+	return toDTO(session), nil
+}
+
+func (s *Service) MarkRunningAfterUserWait(ctx context.Context, id domain.ID) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	session, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find session: %w", err)
+	}
+	if session.Status != domain.StatusWaitingUser {
+		return toDTO(session), nil
+	}
+	session.Status = domain.StatusRunning
+	session.UpdatedAt = s.now()
+	if err := s.saveSessionWithEvent(ctx, session, "session.running", map[string]any{"reason": "user_answered"}); err != nil {
+		return DTO{}, err
+	}
+	return toDTO(session), nil
+}
+
+type codexStartOptions struct {
+	resumeCodexSessionID string
+	workflowRunID        domain.WorkflowRunID
+	nodeRunID            *processdomain.NodeRunID
+	prompt               string
+}
+
+func (s *Service) startCodex(ctx context.Context, session domain.Session, options codexStartOptions) (DTO, error) {
+	if s.processes == nil || s.codex == nil {
+		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
+	}
+	_, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+	if err != nil {
+		return DTO{}, fmt.Errorf("find active process run: %w", err)
+	}
+	if ok {
+		return toDTO(session), nil
+	}
+	runIDValue, err := s.generateID()
+	if err != nil {
+		return DTO{}, fmt.Errorf("generate process run id: %w", err)
+	}
+	runID := processdomain.RunID(runIDValue)
+	now := s.now()
+	run := processdomain.Run{
+		ID:        runID,
+		SessionID: processdomain.SessionID(session.ID),
+		NodeRunID: options.nodeRunID,
+		Status:    processdomain.StatusStarting,
+		StartedAt: now,
+	}
+	session.Status = domain.StatusStarting
+	session.LastRunAt = &now
+	session.UpdatedAt = now
+	if err := s.createProcessRunWithSessionEvent(ctx, run, session, "session.starting", map[string]any{"processRunId": string(runID)}); err != nil {
+		return DTO{}, err
+	}
+
+	handle, err := s.startCodexProcess(ctx, session, runID, options)
+	if err != nil {
+		failedAt := s.now()
+		processEventType := "start_failed"
+		sessionEventType := "session.failed"
+		status := domain.StatusFailed
+		if options.resumeCodexSessionID != "" {
+			processEventType = "resume_failed"
+			sessionEventType = "session.resume_failed"
+			status = domain.StatusResumeFailed
+		}
+		var processEvent *processdomain.Event
+		if eventID, genErr := s.generateID(); genErr == nil {
+			processRunID := runID
+			processEvent = &processdomain.Event{
+				ID:           string(eventID),
+				SessionID:    processdomain.SessionID(session.ID),
+				ProcessRunID: &processRunID,
+				Type:         processEventType,
+				Payload:      map[string]any{"reason": err.Error()},
+				CreatedAt:    failedAt,
+			}
+		}
+		session.Status = status
+		session.UpdatedAt = failedAt
+		if saveErr := s.markProcessExitedWithSessionEvents(ctx, runID, processdomain.ExitResult{
+			FailureReason: err.Error(),
+			FinishedAt:    failedAt,
+		}, processEvent, session, true, []sessionEventInput{
+			{
+				eventType: "process." + processEventType,
+				payload: map[string]any{
+					"processRunId": string(runID),
+					"reason":       err.Error(),
+				},
+			},
+			{
+				eventType: sessionEventType,
+				payload: map[string]any{
+					"processRunId": string(runID),
+					"reason":       err.Error(),
+				},
+			},
+		}); saveErr != nil {
+			return DTO{}, saveErr
+		}
+		if options.resumeCodexSessionID != "" && session.Mode == domain.ModeWorkflow && s.workflows != nil {
+			if run, markErr := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
+				SessionID: session.ID,
+				Code:      processEventType,
+				Message:   err.Error(),
+			}); markErr == nil {
+				s.appendSessionEvent(ctx, session, "workflow.waiting_resume_action", map[string]any{
+					"workflowRunId": string(run.ID),
+					"currentNodeId": run.CurrentNodeID,
+				})
+			} else {
+				s.appendSessionEvent(ctx, session, "workflow.resume_action_failed", map[string]any{
+					"reason": markErr.Error(),
+				})
+			}
+		}
+		code := apperror.CodeCodexStartFailed
+		if options.resumeCodexSessionID != "" {
+			code = apperror.CodeResumeFailed
+		}
+		return DTO{}, apperror.Wrap(err, code, apperror.CategoryCodexError, "start codex process failed").WithDetails(map[string]any{
+			"processRunId": string(runID),
+			"sessionId":    string(session.ID),
+		}).WithRetryable(options.resumeCodexSessionID != "")
+	}
+	session.Status = domain.StatusRunning
+	if handle.CodexSessionID != "" {
+		session.CodexSessionID = handle.CodexSessionID
+	}
+	session.UpdatedAt = s.now()
+	if err := s.markProcessRunningWithSessionEvent(ctx, runID, handle.PID, handle.CodexSessionID, session, "session.running", map[string]any{
+		"processRunId":   string(runID),
+		"pid":            handle.PID,
+		"codexSessionId": handle.CodexSessionID,
+	}); err != nil {
+		return DTO{}, err
+	}
+	s.consumeCodexEvents(handle, session, options)
+	return toDTO(session), nil
+}
+
+func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions) (processdomain.CodexHandle, error) {
+	if options.resumeCodexSessionID != "" {
+		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
+			ProcessRunID:   runID,
+			SessionID:      processdomain.SessionID(session.ID),
+			CodexSessionID: options.resumeCodexSessionID,
+			Workdir:        session.WorktreePath,
+		})
+	}
+	attachmentPaths, imagePaths, err := s.codexAttachmentPaths(ctx, session.ID)
+	if err != nil {
+		return processdomain.CodexHandle{}, err
+	}
+	prompt := strings.TrimSpace(options.prompt)
+	if prompt == "" {
+		prompt = session.Requirement
+	}
+	return s.codex.Start(ctx, processdomain.CodexStartInput{
+		ProcessRunID:    runID,
+		SessionID:       processdomain.SessionID(session.ID),
+		Workdir:         session.WorktreePath,
+		Prompt:          promptWithAttachments(prompt, attachmentPaths),
+		Model:           strings.TrimSpace(session.Config.CodexModel),
+		ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
+		PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
+		AttachmentPaths: attachmentPaths,
+		ImagePaths:      imagePaths,
+	})
+}
+
+func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID) ([]string, []string, error) {
+	attachments, err := s.listSessionAttachments(ctx, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	paths := make([]string, 0, len(attachments))
+	imagePaths := make([]string, 0, len(attachments))
+	for _, attachment := range attachments {
+		path := strings.TrimSpace(attachment.Path)
+		if path == "" {
+			continue
+		}
+		paths = append(paths, path)
+		if strings.HasPrefix(strings.ToLower(attachment.MimeType), "image/") {
+			imagePaths = append(imagePaths, path)
+		}
+	}
+	return paths, imagePaths, nil
+}
+
+func promptWithAttachments(prompt string, paths []string) string {
+	if len(paths) == 0 {
+		return prompt
+	}
+	var builder strings.Builder
+	builder.WriteString(prompt)
+	builder.WriteString("\n\nAttached files available on disk:\n")
+	for _, path := range paths {
+		builder.WriteString("- ")
+		builder.WriteString(path)
+		builder.WriteByte('\n')
+	}
+	return strings.TrimRight(builder.String(), "\n")
+}
+
+func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions) {
+	go func() {
+		events, err := s.codex.Events(context.Background(), handle)
+		if err != nil {
+			return
+		}
+		exitResult := processdomain.ExitResult{}
+		for event := range events {
+			if result, ok := exitResultFromEvent(event); ok {
+				exitResult = result
+			}
+			eventID, err := s.generateID()
+			if err != nil {
+				continue
+			}
+			runID := handle.ProcessRunID
+			_ = s.saveProcessEventWithSessionEvent(context.Background(), session, processdomain.Event{
+				ID:           string(eventID),
+				SessionID:    processdomain.SessionID(session.ID),
+				ProcessRunID: &runID,
+				EventID:      event.EventID,
+				Type:         event.Type,
+				Payload:      processEventPayload(event),
+				CreatedAt:    s.now(),
+			}, "process.codex_event", codexSessionEventPayload(handle.ProcessRunID, event))
+			if codexSessionID := codexSessionIDFromEvent(event); codexSessionID != "" {
+				if current, err := s.repo.Find(context.Background(), session.ID); err == nil && current.CodexSessionID == "" {
+					current.CodexSessionID = codexSessionID
+					current.UpdatedAt = s.now()
+					_ = s.saveProcessRunningSession(context.Background(), handle.ProcessRunID, handle.PID, codexSessionID, current)
+				}
+			}
+		}
+		finishedAt := s.now()
+		exitResult.FinishedAt = finishedAt
+		_ = s.markProcessExitedWithSessionEvents(context.Background(), handle.ProcessRunID, exitResult, nil, session, false, []sessionEventInput{
+			{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, exitResult)},
+		})
+		if current, err := s.repo.Find(context.Background(), session.ID); err == nil {
+			if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil {
+				switch current.Status {
+				case domain.StatusStopping, domain.StatusStopped, domain.StatusClosed:
+					return
+				}
+				if processExitFailed(exitResult) {
+					s.failWorkflowAfterProcessExit(current, handle, options, exitResult)
+					return
+				}
+				s.advanceWorkflowAfterProcessExit(current, handle, options)
+				return
+			}
+			switch current.Status {
+			case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+				if processExitFailed(exitResult) && current.Status != domain.StatusStopping {
+					current.Status = domain.StatusFailed
+				} else {
+					current.Status = domain.StatusStopped
+				}
+				current.UpdatedAt = finishedAt
+				eventType := "session.stopped"
+				if current.Status == domain.StatusFailed {
+					eventType = "session.failed"
+				}
+				payload := processExitPayload(handle.ProcessRunID, exitResult)
+				payload["reason"] = "process_exited"
+				_ = s.saveSessionWithEvent(context.Background(), current, eventType, payload)
+			}
+		}
+	}()
+}
+
+func (s *Service) failWorkflowAfterProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, result processdomain.ExitResult) {
+	if s.workflows == nil || options.nodeRunID == nil {
+		return
+	}
+	nodeRunID := domain.NodeRunID(*options.nodeRunID)
+	message := result.FailureReason
+	if strings.TrimSpace(message) == "" {
+		message = "codex process exited unsuccessfully"
+	}
+	advance, err := s.workflows.FailNode(context.Background(), domain.WorkflowNodeFailInput{
+		WorkflowRunID: options.workflowRunID,
+		NodeRunID:     nodeRunID,
+		Code:          codexProcessFailureCode(result),
+		Message:       message,
+	})
+	if err != nil {
+		session.Status = domain.StatusFailed
+		session.UpdatedAt = s.now()
+		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
+			"workflowRunId": string(options.workflowRunID),
+			"nodeRunId":     string(nodeRunID),
+			"reason":        err.Error(),
+		})
+		return
+	}
+	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance)
+}
+
+func exitResultFromEvent(event processdomain.CodexEvent) (processdomain.ExitResult, bool) {
+	if event.Type != "process.exit" {
+		return processdomain.ExitResult{}, false
+	}
+	result := processdomain.ExitResult{}
+	if value, ok := event.Payload["exitCode"].(int); ok {
+		result.ExitCode = &value
+	} else if value, ok := event.Payload["exitCode"].(float64); ok {
+		code := int(value)
+		result.ExitCode = &code
+	}
+	if reason, ok := event.Payload["failureReason"].(string); ok {
+		result.FailureReason = strings.TrimSpace(reason)
+	}
+	return result, true
+}
+
+func processExitPayload(processRunID processdomain.RunID, result processdomain.ExitResult) map[string]any {
+	payload := map[string]any{"processRunId": string(processRunID)}
+	if result.ExitCode != nil {
+		payload["exitCode"] = *result.ExitCode
+	}
+	if result.FailureReason != "" {
+		payload["failureReason"] = result.FailureReason
+		payload["failureCode"] = codexProcessFailureCode(result)
+	}
+	return payload
+}
+
+func processExitFailed(result processdomain.ExitResult) bool {
+	if result.FailureReason != "" {
+		return true
+	}
+	return result.ExitCode != nil && *result.ExitCode != 0
+}
+
+func codexProcessFailureCode(result processdomain.ExitResult) string {
+	reason := strings.ToLower(result.FailureReason)
+	if strings.Contains(reason, "model_reasoning_effort") ||
+		strings.Contains(reason, "reasoning effort") ||
+		strings.Contains(reason, "unsupported model") ||
+		strings.Contains(reason, "model ") && strings.Contains(reason, "not supported") ||
+		strings.Contains(reason, "--model") && strings.Contains(reason, "invalid") ||
+		strings.Contains(reason, "--sandbox") && strings.Contains(reason, "invalid") ||
+		strings.Contains(reason, "unknown sandbox") {
+		return apperror.CodeCodexParamRejected
+	}
+	return "codex_process_failed"
+}
+
+func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions) {
+	if s.workflows == nil {
+		return
+	}
+	nodeRunID := domain.NodeRunID(*options.nodeRunID)
+	advance, err := s.workflows.CompleteNode(context.Background(), domain.WorkflowNodeCompleteInput{
+		WorkflowRunID: options.workflowRunID,
+		NodeRunID:     nodeRunID,
+		Output: map[string]any{
+			"processRunId": string(handle.ProcessRunID),
+			"exit":         "completed",
+		},
+	})
+	if err != nil {
+		session.Status = domain.StatusFailed
+		session.UpdatedAt = s.now()
+		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
+			"workflowRunId": string(options.workflowRunID),
+			"nodeRunId":     string(nodeRunID),
+			"reason":        err.Error(),
+		})
+		return
+	}
+	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance)
+}
+
+func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) (DTO, error) {
+	switch {
+	case advance.Blocked:
+		session.Status = domain.StatusBlocked
+		session.UpdatedAt = s.now()
+		if err := s.saveSessionWithEvent(ctx, session, "session.blocked", map[string]any{
+			"workflowRunId": string(advance.WorkflowRunID),
+			"reason":        advance.BlockedReason,
+		}); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	case advance.Completed:
+		session.Status = domain.StatusCompleted
+		session.UpdatedAt = s.now()
+		if err := s.saveSessionWithEvent(ctx, session, "session.completed", map[string]any{
+			"workflowRunId": string(advance.WorkflowRunID),
+		}); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	case advance.Merge != nil:
+		return s.executeWorkflowMerge(ctx, session, advance)
+	case !advance.RequiresCodex:
+		session.Status = domain.StatusWaitingApproval
+		session.UpdatedAt = s.now()
+		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
+			"workflowRunId":    string(advance.WorkflowRunID),
+			"nodeRunId":        stringValuePtr(advance.NodeRunID),
+			"currentNodeId":    advance.CurrentNodeID,
+			"currentNodeTitle": advance.CurrentNodeTitle,
+		}); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	default:
+		dto, err := s.startCodex(ctx, session, codexStartOptions{
+			workflowRunID: advance.WorkflowRunID,
+			nodeRunID:     workflowNodeRunID(advance.NodeRunID),
+			prompt:        advance.Prompt,
+		})
+		if err != nil {
+			return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, "codex_start_failed", err.Error())
+		}
+		return dto, nil
+	}
+}
+
+func (s *Service) executeWorkflowMerge(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) (DTO, error) {
+	if s.merge == nil {
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, apperror.CodeMergeFailed, "merge port is not configured")
+	}
+	if advance.NodeRunID == nil {
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, nil, apperror.CodeMergeFailed, "merge node run id is missing")
+	}
+	strategy := "merge"
+	if advance.Merge != nil && strings.TrimSpace(advance.Merge.Strategy) != "" {
+		strategy = strings.TrimSpace(strings.ToLower(advance.Merge.Strategy))
+	}
+	var result gitdiffdomain.MergeResult
+	var err error
+	switch strategy {
+	case "rebase":
+		result, err = s.merge.RebaseOntoBase(ctx, gitdiffdomain.RebaseInput{
+			WorktreePath: session.WorktreePath,
+			BaseBranch:   session.BaseBranch,
+		})
+	default:
+		strategy = "merge"
+		result, err = s.merge.MergeToBase(ctx, gitdiffdomain.MergeInput{
+			WorktreePath: session.WorktreePath,
+			BaseBranch:   session.BaseBranch,
+		})
+	}
+	if err != nil {
+		result = gitdiffdomain.MergeResult{
+			Strategy:      strategy,
+			BaseBranch:    session.BaseBranch,
+			Status:        "failed",
+			FailureCode:   apperror.CodeMergeFailed,
+			FailureReason: err.Error(),
+		}
+	}
+	if result.Strategy == "" {
+		result.Strategy = strategy
+	}
+	if result.BaseBranch == "" {
+		result.BaseBranch = session.BaseBranch
+	}
+	if recordErr := s.recordMergeResult(ctx, session, *advance.NodeRunID, result); recordErr != nil {
+		return DTO{}, recordErr
+	}
+	s.appendSessionEvent(ctx, session, "workflow.merge", map[string]any{
+		"workflowRunId": string(advance.WorkflowRunID),
+		"nodeRunId":     stringValuePtr(advance.NodeRunID),
+		"strategy":      result.Strategy,
+		"status":        result.Status,
+		"failureCode":   result.FailureCode,
+	})
+	if result.Status != "merged" {
+		code := result.FailureCode
+		if code == "" {
+			code = apperror.CodeMergeFailed
+		}
+		if s.questions != nil {
+			return s.askMergeFailure(ctx, session, advance, result, code)
+		}
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, code, result.FailureReason)
+	}
+	next, err := s.workflows.CompleteNode(ctx, domain.WorkflowNodeCompleteInput{
+		WorkflowRunID: advance.WorkflowRunID,
+		NodeRunID:     *advance.NodeRunID,
+		Output:        mergeOutput(result),
+	})
+	if err != nil {
+		return DTO{}, err
+	}
+	if next.Completed {
+		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonMergedClosed})
+	}
+	return s.applyWorkflowAdvance(ctx, session, next)
+}
+
+func (s *Service) recordMergeResult(ctx context.Context, session domain.Session, nodeRunID domain.NodeRunID, result gitdiffdomain.MergeResult) error {
+	id, err := s.generateID()
+	if err != nil {
+		return fmt.Errorf("generate merge record id: %w", err)
+	}
+	now := s.now()
+	mergedAt := (*time.Time)(nil)
+	if result.Status == "merged" {
+		mergedAt = &now
+	}
+	return s.repo.AddMergeRecord(ctx, domain.MergeRecord{
+		ID:             string(id),
+		SessionID:      session.ID,
+		NodeRunID:      &nodeRunID,
+		Strategy:       result.Strategy,
+		BaseBranch:     result.BaseBranch,
+		WorktreeBranch: result.WorktreeBranch,
+		BaseCommit:     result.BaseCommit,
+		HeadCommit:     result.HeadCommit,
+		MergeCommit:    result.MergeCommit,
+		Status:         result.Status,
+		FailureCode:    result.FailureCode,
+		FailureReason:  result.FailureReason,
+		MergedAt:       mergedAt,
+		CreatedAt:      now,
+	})
+}
+
+func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, result gitdiffdomain.MergeResult, code string) (DTO, error) {
+	if advance.NodeRunID == nil {
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, nil, code, result.FailureReason)
+	}
+	workflowRunID := questiondomain.WorkflowRunID(advance.WorkflowRunID)
+	metadata := mergeFailureQuestionMetadata(advance, result, code)
+	batch, err := s.questions.CreateBatch(ctx, questionapp.CreateBatchInput{
+		SessionID:     questiondomain.SessionID(session.ID),
+		WorkflowRunID: &workflowRunID,
+		Questions: []questiondomain.Question{
+			{
+				Title:       "合并失败处理",
+				Body:        mergeFailureQuestionBody(result),
+				Type:        "merge_failure_action",
+				AllowCustom: true,
+				Metadata:    metadata,
+				Status:      string(questiondomain.BatchPending),
+				Options: []questiondomain.Option{
+					{
+						ID:          "retry_merge",
+						Label:       "我已处理，重试合并",
+						Description: "适用于已手动解决冲突或清理 worktree 后重新执行当前合并节点。",
+						Payload:     mergeFailureActionPayload(metadata, "retry_merge"),
+					},
+					{
+						ID:          "fail_node",
+						Label:       "标记节点失败",
+						Description: "执行节点失败处理，按流程重试、失败分支或阻塞规则继续。",
+						Payload:     mergeFailureActionPayload(metadata, "fail_node"),
+					},
+					{
+						ID:          "stop_session",
+						Label:       "停止卡片",
+						Description: "停止当前卡片，保留事件、附件和 worktree。",
+						Payload:     mergeFailureActionPayload(metadata, "stop_session"),
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return DTO{}, fmt.Errorf("create merge failure question: %w", err)
+	}
+	session.Status = domain.StatusWaitingUser
+	session.UpdatedAt = s.now()
+	if err := s.repo.Save(ctx, session); err != nil {
+		if cancelErr := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(session.ID), "merge failure question abandoned"); cancelErr != nil {
+			return DTO{}, fmt.Errorf("save session: %w; cancel merge failure question: %v", err, cancelErr)
+		}
+		return DTO{}, fmt.Errorf("save session: %w", err)
+	}
+	s.appendSessionEvent(ctx, session, "workflow.merge_waiting_user", map[string]any{
+		"workflowRunId": string(advance.WorkflowRunID),
+		"nodeRunId":     stringValuePtr(advance.NodeRunID),
+		"batchId":       string(batch.ID),
+		"failureCode":   code,
+		"failureReason": result.FailureReason,
+	})
+	return toDTO(session), nil
+}
+
+func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questionapp.BatchDTO) error {
+	if s == nil {
+		return errors.New("session usecase: nil service")
+	}
+	if batch.Status != questiondomain.BatchAnswered {
+		return nil
+	}
+	action, metadata, ok, err := mergeFailureDecision(batch)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	session, err := s.repo.Find(ctx, domain.ID(batch.SessionID))
+	if err != nil {
+		return fmt.Errorf("find session: %w", err)
+	}
+	workflowRunID := domain.WorkflowRunID(stringFromMap(metadata, "workflowRunId"))
+	nodeRunIDValue := domain.NodeRunID(stringFromMap(metadata, "nodeRunId"))
+	if workflowRunID == "" || nodeRunIDValue == "" {
+		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "merge failure question metadata is incomplete").
+			WithDetails(map[string]any{"batchId": string(batch.ID)})
+	}
+	nodeRunID := nodeRunIDValue
+	code := stringFromMap(metadata, "failureCode")
+	if code == "" {
+		code = apperror.CodeMergeFailed
+	}
+	reason := stringFromMap(metadata, "failureReason")
+	switch action {
+	case "retry_merge":
+		strategy := stringFromMap(metadata, "strategy")
+		if strategy == "" {
+			strategy = "merge"
+		}
+		_, err := s.executeWorkflowMerge(ctx, session, domain.WorkflowAdvance{
+			WorkflowRunID: workflowRunID,
+			NodeRunID:     &nodeRunID,
+			Status:        "running",
+			Merge:         &domain.WorkflowMerge{Strategy: strategy},
+		})
+		return err
+	case "stop_session":
+		_, err := s.StopSession(ctx, session.ID)
+		return err
+	case "fail_node":
+		_, err := s.handleWorkflowNodeFailure(ctx, session, workflowRunID, &nodeRunID, code, reason)
+		return err
+	default:
+		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported merge failure action").
+			WithDetails(map[string]any{"action": action})
+	}
+}
+
+func mergeFailureQuestionMetadata(advance domain.WorkflowAdvance, result gitdiffdomain.MergeResult, code string) map[string]any {
+	metadata := map[string]any{
+		"kind":          "merge_failure_action",
+		"workflowRunId": string(advance.WorkflowRunID),
+		"strategy":      result.Strategy,
+		"failureCode":   code,
+		"failureReason": result.FailureReason,
+	}
+	if advance.NodeRunID != nil {
+		metadata["nodeRunId"] = string(*advance.NodeRunID)
+	}
+	return metadata
+}
+
+func mergeFailureActionPayload(metadata map[string]any, action string) map[string]any {
+	payload := mapStringAnyClone(metadata)
+	payload["action"] = action
+	return payload
+}
+
+func mergeFailureQuestionBody(result gitdiffdomain.MergeResult) string {
+	reason := strings.TrimSpace(result.FailureReason)
+	if reason == "" {
+		reason = "Codex 合并节点执行失败，需要选择后续处理方式。"
+	}
+	return fmt.Sprintf("策略：%s\n状态：%s\n原因：%s", result.Strategy, result.Status, reason)
+}
+
+func mergeFailureDecision(batch questionapp.BatchDTO) (string, map[string]any, bool, error) {
+	for _, question := range batch.Questions {
+		if question.Type != "merge_failure_action" && stringFromMap(question.Metadata, "kind") != "merge_failure_action" {
+			continue
+		}
+		metadata := mapStringAnyClone(question.Metadata)
+		action := mergeFailureAction(question)
+		if action == "" && strings.TrimSpace(question.CustomAnswer) != "" {
+			action = "retry_merge"
+		}
+		if action == "" {
+			return "", nil, true, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "merge failure question answer is missing action")
+		}
+		switch action {
+		case "retry_merge", "fail_node", "stop_session":
+		default:
+			return "", nil, true, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported merge failure action").
+				WithDetails(map[string]any{"action": action})
+		}
+		return action, metadata, true, nil
+	}
+	return "", nil, false, nil
+}
+
+func mergeFailureAction(question questiondomain.Question) string {
+	if question.SelectedOptionID != nil {
+		for _, option := range question.Options {
+			if option.ID == *question.SelectedOptionID {
+				return stringFromMap(option.Payload, "action")
+			}
+		}
+	}
+	return ""
+}
+
+func mapStringAnyClone(input map[string]any) map[string]any {
+	output := make(map[string]any, len(input))
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
+}
+
+func stringFromMap(input map[string]any, key string) string {
+	value, ok := input[key]
+	if !ok {
+		return ""
+	}
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+}
+
+func mergeOutput(result gitdiffdomain.MergeResult) map[string]any {
+	return map[string]any{
+		"merge": map[string]any{
+			"strategy":       result.Strategy,
+			"baseBranch":     result.BaseBranch,
+			"worktreeBranch": result.WorktreeBranch,
+			"baseCommit":     result.BaseCommit,
+			"headCommit":     result.HeadCommit,
+			"mergeCommit":    result.MergeCommit,
+			"status":         result.Status,
+		},
+	}
+}
+
+func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.Session, workflowRunID domain.WorkflowRunID, nodeRunID *domain.NodeRunID, code string, message string) (DTO, error) {
+	if s.workflows == nil || nodeRunID == nil {
+		session.Status = domain.StatusFailed
+		session.UpdatedAt = s.now()
+		if err := s.repo.Save(ctx, session); err != nil {
+			return DTO{}, fmt.Errorf("save session: %w", err)
+		}
+		return toDTO(session), nil
+	}
+	advance, err := s.workflows.FailNode(ctx, domain.WorkflowNodeFailInput{
+		WorkflowRunID: workflowRunID,
+		NodeRunID:     *nodeRunID,
+		Code:          code,
+		Message:       message,
+	})
+	if err != nil {
+		_ = s.workflows.MarkStartFailed(ctx, domain.WorkflowStartFailureInput{
+			WorkflowRunID: workflowRunID,
+			NodeRunID:     nodeRunID,
+			Code:          code,
+			Message:       message,
+		})
+		return DTO{}, err
+	}
+	return s.applyWorkflowAdvance(ctx, session, advance)
+}
+
+type sessionEventInput struct {
+	eventType string
+	payload   map[string]any
+}
+
+func (s *Service) appendCodexEvent(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent) {
+	s.appendSessionEvent(ctx, session, "process.codex_event", codexSessionEventPayload(processRunID, event))
+}
+
+func codexSessionEventPayload(processRunID processdomain.RunID, event processdomain.CodexEvent) map[string]any {
+	payload := processEventPayload(event)
+	payload["processRunId"] = string(processRunID)
+	payload["codexType"] = event.Type
+	if event.EventID != "" {
+		payload["codexEventId"] = event.EventID
+	}
+	return payload
+}
+
+func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run processdomain.Run, session domain.Session, eventType string, payload map[string]any) error {
+	if s.uow != nil {
+		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		if err != nil {
+			return err
+		}
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().CreateRun(ctx, run); err != nil {
+				return fmt.Errorf("create process run: %w", err)
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if ok {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if ok {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.processes.CreateRun(ctx, run); err != nil {
+		return fmt.Errorf("create process run: %w", err)
+	}
+	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+}
+
+func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session, eventType string, payload map[string]any) error {
+	if s.uow != nil {
+		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		if err != nil {
+			return err
+		}
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
+				return fmt.Errorf("mark process running: %w", err)
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if ok {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if ok {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.processes.MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
+		return fmt.Errorf("mark process running: %w", err)
+	}
+	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+}
+
+func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session) error {
+	if s.uow != nil {
+		return s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
+				return fmt.Errorf("mark process running: %w", err)
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			return nil
+		})
+	}
+	if err := s.processes.MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
+		return fmt.Errorf("mark process running: %w", err)
+	}
+	if err := s.repo.Save(ctx, session); err != nil {
+		return fmt.Errorf("save session: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session domain.Session, processEvent processdomain.Event, eventType string, payload map[string]any) error {
+	event, ok, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().SaveEvent(ctx, processEvent); err != nil {
+				return err
+			}
+			if ok {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if ok {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.processes.SaveEvent(ctx, processEvent); err != nil {
+		return err
+	}
+	if ok {
+		if err := s.events.Append(ctx, event); err != nil {
+			return err
+		}
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
+func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, processEvent *processdomain.Event, session domain.Session, saveSession bool, inputs []sessionEventInput) error {
+	events, err := s.newSessionEvents(session, inputs)
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
+				return fmt.Errorf("mark process exited: %w", err)
+			}
+			if processEvent != nil {
+				if err := tx.Processes().SaveEvent(ctx, *processEvent); err != nil {
+					return err
+				}
+			}
+			if saveSession {
+				if err := tx.Sessions().Save(ctx, session); err != nil {
+					return fmt.Errorf("save session: %w", err)
+				}
+			}
+			for _, event := range events {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, event := range events {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.processes.MarkExited(ctx, runID, result); err != nil {
+		return fmt.Errorf("mark process exited: %w", err)
+	}
+	if processEvent != nil {
+		if err := s.processes.SaveEvent(ctx, *processEvent); err != nil {
+			return err
+		}
+	}
+	if saveSession {
+		if err := s.repo.Save(ctx, session); err != nil {
+			return fmt.Errorf("save session: %w", err)
+		}
+	}
+	for _, event := range events {
+		if err := s.events.Append(ctx, event); err != nil {
+			return err
+		}
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
+func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Session, eventType string, payload map[string]any) error {
+	event, ok, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if ok {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if ok {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.repo.Save(ctx, session); err != nil {
+		return fmt.Errorf("save session: %w", err)
+	}
+	if ok {
+		if err := s.events.Append(ctx, event); err != nil {
+			return err
+		}
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
+func (s *Service) newSessionEvents(session domain.Session, inputs []sessionEventInput) ([]eventdomain.DomainEvent, error) {
+	events := make([]eventdomain.DomainEvent, 0, len(inputs))
+	for _, input := range inputs {
+		event, ok, err := s.newSessionEvent(session, input.eventType, input.payload)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			events = append(events, event)
+		}
+	}
+	return events, nil
+}
+
+func (s *Service) appendSessionEvent(ctx context.Context, session domain.Session, eventType string, payload map[string]any) {
+	event, ok, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil || !ok {
+		return
+	}
+	if err := s.events.Append(ctx, event); err == nil {
+		s.publishSessionEvent(ctx, event)
+	}
+}
+
+func (s *Service) newSessionEvent(session domain.Session, eventType string, payload map[string]any) (eventdomain.DomainEvent, bool, error) {
+	if s.events == nil {
+		return eventdomain.DomainEvent{}, false, nil
+	}
+	id, err := s.generateID()
+	if err != nil {
+		return eventdomain.DomainEvent{}, false, err
+	}
+	sessionID := eventdomain.SessionID(session.ID)
+	eventPayload := redaction.Map(payload)
+	eventPayload["status"] = string(session.Status)
+	return eventdomain.DomainEvent{
+		ID: eventdomain.ID(id),
+		Scope: eventdomain.Scope{
+			SessionID: &sessionID,
+			ProjectID: string(session.ProjectID),
+		},
+		SessionID: &sessionID,
+		Type:      eventType,
+		Payload:   eventPayload,
+		CreatedAt: s.now(),
+	}, true, nil
+}
+
+func (s *Service) publishSessionEvent(ctx context.Context, event eventdomain.DomainEvent) {
+	if s.publisher != nil {
+		_ = s.publisher.PublishAfterCommit(ctx, event)
+	}
+}
+
+func processEventPayload(event processdomain.CodexEvent) map[string]any {
+	payload := make(map[string]any, len(event.Payload)+1)
+	for key, value := range event.Payload {
+		payload[key] = value
+	}
+	if len(event.Raw) > 0 {
+		payload["raw"] = string(event.Raw)
+	}
+	return payload
+}
+
+func codexSessionIDFromEvent(event processdomain.CodexEvent) string {
+	for _, key := range []string{"session_id", "codex_session_id"} {
+		if value, ok := event.Payload[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	if msg, ok := event.Payload["msg"].(map[string]any); ok {
+		for _, key := range []string{"session_id", "codex_session_id"} {
+			if value, ok := msg[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
 }
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+		var err error
+		dto, err = s.closeSession(ctx, input)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("session usecase: nil service")
 	}
@@ -253,22 +1765,89 @@ func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DT
 	if session.Status == domain.StatusClosed {
 		return toDTO(session), nil
 	}
+	requiresStop, err := closeRequiresStop(ctx, s, session)
+	if err != nil {
+		return DTO{}, err
+	}
+	if requiresStop {
+		if _, err := s.stopSession(ctx, session.ID); err != nil {
+			return DTO{}, err
+		}
+		session, err = s.repo.Find(ctx, input.SessionID)
+		if err != nil {
+			return DTO{}, fmt.Errorf("find stopped session: %w", err)
+		}
+	}
 	reason := input.Reason
 	if reason == "" {
 		reason = domain.CloseReasonUserClosed
 	}
 	if reason != domain.CloseReasonUserClosed && reason != domain.CloseReasonMergedClosed {
-		return DTO{}, fmt.Errorf("unsupported close reason %q", reason)
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
+	}
+	if s.worktrees != nil && strings.TrimSpace(session.WorktreePath) != "" {
+		project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+		if err != nil {
+			return DTO{}, fmt.Errorf("find project for session worktree cleanup: %w", err)
+		}
+		if project.IsGit {
+			if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
+				return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "remove session worktree failed").WithDetails(map[string]any{
+					"sessionId": string(session.ID),
+				}).WithRetryable(true)
+			}
+			session.WorktreePath = ""
+		}
 	}
 	now := s.now()
 	session.Status = domain.StatusClosed
 	session.CloseReason = &reason
 	session.ClosedAt = &now
 	session.UpdatedAt = now
-	if err := s.repo.Save(ctx, session); err != nil {
-		return DTO{}, fmt.Errorf("save session: %w", err)
+	if err := s.saveSessionWithEvent(ctx, session, "session.closed", map[string]any{
+		"reason": string(reason),
+	}); err != nil {
+		return DTO{}, err
+	}
+	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
+		return DTO{}, err
 	}
 	return toDTO(session), nil
+}
+
+func closeRequiresStop(ctx context.Context, s *Service, session domain.Session) (bool, error) {
+	switch session.Status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping, domain.StatusResumeFailed:
+		return true, nil
+	case domain.StatusWaitingUser:
+		if s == nil || s.processes == nil || s.codex == nil {
+			return false, nil
+		}
+		_, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+		if err != nil {
+			return false, fmt.Errorf("find active process run: %w", err)
+		}
+		return ok, nil
+	default:
+		return false, nil
+	}
+}
+
+func (s *Service) withSessionLock(ctx context.Context, id domain.ID, fn func(context.Context) error) error {
+	if s == nil || s.locker == nil || id == "" {
+		return fn(ctx)
+	}
+	return s.locker.WithSessionLock(ctx, id, fn)
+}
+
+func (s *Service) cancelPendingQuestions(ctx context.Context, sessionID domain.ID, reason string) error {
+	if s.questions == nil {
+		return nil
+	}
+	if err := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(sessionID), reason); err != nil {
+		return apperror.Wrap(err, apperror.CodeAnswerUserCancelled, apperror.CategoryInfraError, "cancel pending questions failed").WithRetryable(true)
+	}
+	return nil
 }
 
 func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (PromptAppendDTO, error) {
@@ -298,6 +1877,46 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 	return toPromptAppendDTO(append), nil
 }
 
+func (s *Service) SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error) {
+	if s == nil {
+		return WorkflowRunDTO{}, errors.New("session usecase: nil service")
+	}
+	if s.workflows == nil {
+		return WorkflowRunDTO{}, errors.New("session workflow starter is required for workflow approval")
+	}
+	if input.WorkflowRunID == "" {
+		return WorkflowRunDTO{}, errors.New("workflow run id is required")
+	}
+	if strings.TrimSpace(input.NodeID) == "" {
+		return WorkflowRunDTO{}, errors.New("workflow node id is required")
+	}
+	result, err := s.workflows.SubmitApprovalForSession(ctx, domain.WorkflowApprovalInput{
+		WorkflowRunID: input.WorkflowRunID,
+		NodeID:        input.NodeID,
+		Approved:      input.Approved,
+		Comment:       input.Comment,
+	})
+	if err != nil {
+		return WorkflowRunDTO{}, fmt.Errorf("submit workflow approval: %w", err)
+	}
+	session, err := s.repo.Find(ctx, result.Run.SessionID)
+	if err != nil {
+		return WorkflowRunDTO{}, fmt.Errorf("find session: %w", err)
+	}
+	if session.Mode != domain.ModeWorkflow {
+		return WorkflowRunDTO{}, fmt.Errorf("session %q is not workflow mode", session.ID)
+	}
+	s.appendSessionEvent(ctx, session, "workflow.approval_submitted", map[string]any{
+		"workflowRunId": string(input.WorkflowRunID),
+		"nodeId":        input.NodeID,
+		"approved":      input.Approved,
+	})
+	if _, err := s.applyWorkflowAdvance(ctx, session, result.Advance); err != nil {
+		return WorkflowRunDTO{}, err
+	}
+	return toWorkflowRunDTO(result.Run), nil
+}
+
 func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, error) {
 	if s == nil {
 		return DetailDTO{}, errors.New("session usecase: nil service")
@@ -314,7 +1933,11 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 	if err != nil {
 		return DetailDTO{}, err
 	}
-	return toDetailDTO(session, attachments, appends), nil
+	currentNodeTitle, err := s.currentNodeTitle(ctx, session)
+	if err != nil {
+		return DetailDTO{}, err
+	}
+	return toDetailDTO(session, attachments, appends, currentNodeTitle), nil
 }
 
 func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error) {
@@ -341,7 +1964,11 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		if err != nil {
 			return port.Page[CardDTO]{}, err
 		}
-		items = append(items, toCardDTO(session, attachments))
+		currentNodeTitle, err := s.currentNodeTitle(ctx, session)
+		if err != nil {
+			return port.Page[CardDTO]{}, err
+		}
+		items = append(items, toCardDTO(session, attachments, currentNodeTitle))
 	}
 	return port.Page[CardDTO]{
 		Items:    items,
@@ -368,16 +1995,52 @@ func toDTO(session domain.Session) DTO {
 	}
 }
 
-func toCardDTO(session domain.Session, attachments []domain.SessionAttachment) CardDTO {
+func toWorkflowRunDTO(run domain.WorkflowRunSnapshot) WorkflowRunDTO {
+	values := map[string]any{}
+	for key, value := range run.Context {
+		values[key] = value
+	}
+	return WorkflowRunDTO{
+		ID:            run.ID,
+		SessionID:     run.SessionID,
+		Status:        run.Status,
+		CurrentNodeID: run.CurrentNodeID,
+		Context:       values,
+	}
+}
+
+func (s *Service) currentNodeTitle(ctx context.Context, session domain.Session) (string, error) {
+	if s.events == nil || session.Mode != domain.ModeWorkflow {
+		return "", nil
+	}
+	sessionID := eventdomain.SessionID(session.ID)
+	events, err := s.events.After(ctx, eventdomain.Scope{ProjectID: string(session.ProjectID), SessionID: &sessionID}, "")
+	if err != nil {
+		return "", fmt.Errorf("list session events for current node: %w", err)
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		if !strings.HasPrefix(events[i].Type, "workflow.") {
+			continue
+		}
+		if title, ok := events[i].Payload["currentNodeTitle"].(string); ok {
+			return strings.TrimSpace(title), nil
+		}
+	}
+	return "", nil
+}
+
+func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, currentNodeTitle string) CardDTO {
 	return CardDTO{
 		DTO:                toDTO(session),
 		RequirementSummary: session.Requirement,
+		CurrentNodeTitle:   currentNodeTitle,
+		PendingQuestion:    session.Status == domain.StatusWaitingUser,
 		Attachments:        attachments,
 		AvailableActions:   availableActions(session),
 	}
 }
 
-func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment, appends []domain.PromptAppend) DetailDTO {
+func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string) DetailDTO {
 	promptAppends := make([]PromptAppendDTO, 0, len(appends))
 	for _, promptAppend := range appends {
 		promptAppends = append(promptAppends, toPromptAppendDTO(promptAppend))
@@ -385,6 +2048,7 @@ func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment,
 	return DetailDTO{
 		DTO:              toDTO(session),
 		CloseReason:      session.CloseReason,
+		CurrentNodeTitle: currentNodeTitle,
 		Attachments:      attachments,
 		PromptAppends:    promptAppends,
 		AvailableActions: availableActions(session),
@@ -463,6 +2127,10 @@ func availableActions(session domain.Session) []string {
 		return actions
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
 		return []string{"stop"}
+	case domain.StatusWaitingApproval:
+		return []string{"close"}
+	case domain.StatusBlocked:
+		return []string{"close"}
 	case domain.StatusResumeFailed:
 		return []string{"run", "resume", "stop", "close"}
 	case domain.StatusClosed:
@@ -470,6 +2138,21 @@ func availableActions(session domain.Session) []string {
 	default:
 		return []string{"close"}
 	}
+}
+
+func stringValuePtr(value *domain.NodeRunID) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func workflowNodeRunID(value *domain.NodeRunID) *processdomain.NodeRunID {
+	if value == nil {
+		return nil
+	}
+	id := processdomain.NodeRunID(*value)
+	return &id
 }
 
 func canResume(session domain.Session) bool {

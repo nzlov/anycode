@@ -143,6 +143,37 @@ func (c *Client) PathForSession(projectID session.ProjectID, sessionID session.I
 	return filepath.Join(base, "worktrees", string(projectID), string(sessionID))
 }
 
+func (c *Client) Create(ctx context.Context, projectPath string, projectID session.ProjectID, sessionID session.ID, baseBranch string) (string, error) {
+	path := c.PathForSession(projectID, sessionID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("prepare worktree parent: %w", err)
+	}
+	ref := strings.TrimSpace(baseBranch)
+	if ref == "" {
+		ref = "HEAD"
+	}
+	args := []string{"worktree", "add", "--detach", path, ref}
+	if _, err := c.run(ctx, projectPath, args...); err != nil {
+		_ = os.RemoveAll(path)
+		return "", err
+	}
+	return path, nil
+}
+
+func (c *Client) Remove(ctx context.Context, path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if _, err := c.run(ctx, path, "worktree", "remove", "--force", path); err != nil {
+		if removeErr := os.RemoveAll(path); removeErr != nil {
+			return fmt.Errorf("%w; remove path: %v", err, removeErr)
+		}
+		return err
+	}
+	return nil
+}
+
 func (c *Client) run(ctx context.Context, path string, args ...string) (string, error) {
 	gitBin := c.gitBin
 	if gitBin == "" {

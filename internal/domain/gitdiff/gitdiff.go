@@ -42,13 +42,15 @@ type SessionDiff struct {
 }
 
 type MergeResult struct {
-	Strategy      string
-	BaseCommit    string
-	HeadCommit    string
-	MergeCommit   string
-	Status        string
-	FailureCode   string
-	FailureReason string
+	Strategy       string
+	BaseBranch     string
+	WorktreeBranch string
+	BaseCommit     string
+	HeadCommit     string
+	MergeCommit    string
+	Status         string
+	FailureCode    string
+	FailureReason  string
 }
 
 type CreateWorktreeInput struct {

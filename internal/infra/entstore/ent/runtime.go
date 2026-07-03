@@ -7,13 +7,18 @@ import (
 
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowrun"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -84,6 +89,72 @@ func init() {
 	mergerecordDescCreatedAt := mergerecordFields[13].Descriptor()
 	// mergerecord.DefaultCreatedAt holds the default value on creation for the created_at field.
 	mergerecord.DefaultCreatedAt = mergerecordDescCreatedAt.Default.(func() time.Time)
+	noderunFields := schema.NodeRun{}.Fields()
+	_ = noderunFields
+	// noderunDescWorkflowRunID is the schema descriptor for workflow_run_id field.
+	noderunDescWorkflowRunID := noderunFields[1].Descriptor()
+	// noderun.WorkflowRunIDValidator is a validator for the "workflow_run_id" field. It is called by the builders before save.
+	noderun.WorkflowRunIDValidator = noderunDescWorkflowRunID.Validators[0].(func(string) error)
+	// noderunDescNodeID is the schema descriptor for node_id field.
+	noderunDescNodeID := noderunFields[2].Descriptor()
+	// noderun.NodeIDValidator is a validator for the "node_id" field. It is called by the builders before save.
+	noderun.NodeIDValidator = noderunDescNodeID.Validators[0].(func(string) error)
+	// noderunDescStatus is the schema descriptor for status field.
+	noderunDescStatus := noderunFields[3].Descriptor()
+	// noderun.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	noderun.StatusValidator = noderunDescStatus.Validators[0].(func(string) error)
+	// noderunDescAttempt is the schema descriptor for attempt field.
+	noderunDescAttempt := noderunFields[4].Descriptor()
+	// noderun.DefaultAttempt holds the default value on creation for the attempt field.
+	noderun.DefaultAttempt = noderunDescAttempt.Default.(int)
+	// noderunDescOutput is the schema descriptor for output field.
+	noderunDescOutput := noderunFields[8].Descriptor()
+	// noderun.DefaultOutput holds the default value on creation for the output field.
+	noderun.DefaultOutput = noderunDescOutput.Default.(map[string]interface{})
+	processeventFields := schema.ProcessEvent{}.Fields()
+	_ = processeventFields
+	// processeventDescSessionID is the schema descriptor for session_id field.
+	processeventDescSessionID := processeventFields[1].Descriptor()
+	// processevent.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	processevent.SessionIDValidator = processeventDescSessionID.Validators[0].(func(string) error)
+	// processeventDescEventID is the schema descriptor for event_id field.
+	processeventDescEventID := processeventFields[3].Descriptor()
+	// processevent.DefaultEventID holds the default value on creation for the event_id field.
+	processevent.DefaultEventID = processeventDescEventID.Default.(string)
+	// processeventDescType is the schema descriptor for type field.
+	processeventDescType := processeventFields[4].Descriptor()
+	// processevent.TypeValidator is a validator for the "type" field. It is called by the builders before save.
+	processevent.TypeValidator = processeventDescType.Validators[0].(func(string) error)
+	// processeventDescPayload is the schema descriptor for payload field.
+	processeventDescPayload := processeventFields[5].Descriptor()
+	// processevent.DefaultPayload holds the default value on creation for the payload field.
+	processevent.DefaultPayload = processeventDescPayload.Default.(map[string]interface{})
+	// processeventDescCreatedAt is the schema descriptor for created_at field.
+	processeventDescCreatedAt := processeventFields[6].Descriptor()
+	// processevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	processevent.DefaultCreatedAt = processeventDescCreatedAt.Default.(func() time.Time)
+	processrunFields := schema.ProcessRun{}.Fields()
+	_ = processrunFields
+	// processrunDescSessionID is the schema descriptor for session_id field.
+	processrunDescSessionID := processrunFields[1].Descriptor()
+	// processrun.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	processrun.SessionIDValidator = processrunDescSessionID.Validators[0].(func(string) error)
+	// processrunDescStatus is the schema descriptor for status field.
+	processrunDescStatus := processrunFields[3].Descriptor()
+	// processrun.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	processrun.StatusValidator = processrunDescStatus.Validators[0].(func(string) error)
+	// processrunDescCodexSessionID is the schema descriptor for codex_session_id field.
+	processrunDescCodexSessionID := processrunFields[5].Descriptor()
+	// processrun.DefaultCodexSessionID holds the default value on creation for the codex_session_id field.
+	processrun.DefaultCodexSessionID = processrunDescCodexSessionID.Default.(string)
+	// processrunDescFailureReason is the schema descriptor for failure_reason field.
+	processrunDescFailureReason := processrunFields[8].Descriptor()
+	// processrun.DefaultFailureReason holds the default value on creation for the failure_reason field.
+	processrun.DefaultFailureReason = processrunDescFailureReason.Default.(string)
+	// processrunDescStartedAt is the schema descriptor for started_at field.
+	processrunDescStartedAt := processrunFields[9].Descriptor()
+	// processrun.DefaultStartedAt holds the default value on creation for the started_at field.
+	processrun.DefaultStartedAt = processrunDescStartedAt.Default.(func() time.Time)
 	projectFields := schema.Project{}.Fields()
 	_ = projectFields
 	// projectDescName is the schema descriptor for name field.
@@ -122,6 +193,32 @@ func init() {
 	promptappendDescCreatedAt := promptappendFields[3].Descriptor()
 	// promptappend.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promptappend.DefaultCreatedAt = promptappendDescCreatedAt.Default.(func() time.Time)
+	questionbatchFields := schema.QuestionBatch{}.Fields()
+	_ = questionbatchFields
+	// questionbatchDescSessionID is the schema descriptor for session_id field.
+	questionbatchDescSessionID := questionbatchFields[1].Descriptor()
+	// questionbatch.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	questionbatch.SessionIDValidator = questionbatchDescSessionID.Validators[0].(func(string) error)
+	// questionbatchDescStatus is the schema descriptor for status field.
+	questionbatchDescStatus := questionbatchFields[3].Descriptor()
+	// questionbatch.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	questionbatch.StatusValidator = questionbatchDescStatus.Validators[0].(func(string) error)
+	// questionbatchDescQuestions is the schema descriptor for questions field.
+	questionbatchDescQuestions := questionbatchFields[4].Descriptor()
+	// questionbatch.DefaultQuestions holds the default value on creation for the questions field.
+	questionbatch.DefaultQuestions = questionbatchDescQuestions.Default.([]map[string]interface{})
+	// questionbatchDescAnswers is the schema descriptor for answers field.
+	questionbatchDescAnswers := questionbatchFields[5].Descriptor()
+	// questionbatch.DefaultAnswers holds the default value on creation for the answers field.
+	questionbatch.DefaultAnswers = questionbatchDescAnswers.Default.([]map[string]interface{})
+	// questionbatchDescCancelReason is the schema descriptor for cancel_reason field.
+	questionbatchDescCancelReason := questionbatchFields[6].Descriptor()
+	// questionbatch.DefaultCancelReason holds the default value on creation for the cancel_reason field.
+	questionbatch.DefaultCancelReason = questionbatchDescCancelReason.Default.(string)
+	// questionbatchDescCreatedAt is the schema descriptor for created_at field.
+	questionbatchDescCreatedAt := questionbatchFields[7].Descriptor()
+	// questionbatch.DefaultCreatedAt holds the default value on creation for the created_at field.
+	questionbatch.DefaultCreatedAt = questionbatchDescCreatedAt.Default.(func() time.Time)
 	sessionFields := schema.Session{}.Fields()
 	_ = sessionFields
 	// sessionDescProjectID is the schema descriptor for project_id field.
@@ -270,4 +367,26 @@ func init() {
 	workflowdefinition.DefaultUpdatedAt = workflowdefinitionDescUpdatedAt.Default.(func() time.Time)
 	// workflowdefinition.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	workflowdefinition.UpdateDefaultUpdatedAt = workflowdefinitionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	workflowrunFields := schema.WorkflowRun{}.Fields()
+	_ = workflowrunFields
+	// workflowrunDescSessionID is the schema descriptor for session_id field.
+	workflowrunDescSessionID := workflowrunFields[1].Descriptor()
+	// workflowrun.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	workflowrun.SessionIDValidator = workflowrunDescSessionID.Validators[0].(func(string) error)
+	// workflowrunDescWorkflowDefinitionID is the schema descriptor for workflow_definition_id field.
+	workflowrunDescWorkflowDefinitionID := workflowrunFields[2].Descriptor()
+	// workflowrun.WorkflowDefinitionIDValidator is a validator for the "workflow_definition_id" field. It is called by the builders before save.
+	workflowrun.WorkflowDefinitionIDValidator = workflowrunDescWorkflowDefinitionID.Validators[0].(func(string) error)
+	// workflowrunDescStatus is the schema descriptor for status field.
+	workflowrunDescStatus := workflowrunFields[3].Descriptor()
+	// workflowrun.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	workflowrun.StatusValidator = workflowrunDescStatus.Validators[0].(func(string) error)
+	// workflowrunDescCurrentNodeID is the schema descriptor for current_node_id field.
+	workflowrunDescCurrentNodeID := workflowrunFields[4].Descriptor()
+	// workflowrun.DefaultCurrentNodeID holds the default value on creation for the current_node_id field.
+	workflowrun.DefaultCurrentNodeID = workflowrunDescCurrentNodeID.Default.(string)
+	// workflowrunDescContext is the schema descriptor for context field.
+	workflowrunDescContext := workflowrunFields[5].Descriptor()
+	// workflowrun.DefaultContext holds the default value on creation for the context field.
+	workflowrun.DefaultContext = workflowrunDescContext.Default.(map[string]interface{})
 }

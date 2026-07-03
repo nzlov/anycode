@@ -2,8 +2,8 @@ package graph
 
 import (
 	"context"
-	"errors"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	authapp "github.com/nzlov/anycode/internal/application/auth"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
@@ -50,9 +50,12 @@ func PrincipalFromContext(ctx context.Context) (authdomain.AccessPrincipal, bool
 }
 
 func missingUseCase(name string) error {
-	return errors.New("graphql usecase not configured: " + name)
+	return apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "graphql usecase not configured").
+		WithDetails(map[string]any{"usecase": name}).
+		WithRetryable(true)
 }
 
 func unsupportedOperation(name string) error {
-	return errors.New("graphql operation is not supported by application usecases yet: " + name)
+	return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "graphql operation is not supported").
+		WithDetails(map[string]any{"operation": name})
 }

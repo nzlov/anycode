@@ -1,7 +1,9 @@
 import { computed, ref } from 'vue';
 
+import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import {
   listSessions,
+  subscribeSessionEvents,
   type ListSessionsInput,
   type PageInfo,
   type SessionPage,
@@ -24,6 +26,10 @@ export function useSessionsPage(defaultInput: ListSessionsInput = {}) {
   const page = ref(defaultInput.page ?? 1);
   const pageSize = ref(defaultInput.pageSize ?? 8);
   const sort = ref(defaultInput.sort ?? 'updated_at desc');
+  let liveStopped = true;
+  let eventSubscription: { unsubscribe: () => void } | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   const input = computed<ListSessionsInput>(() => {
     const value: ListSessionsInput = {
@@ -49,6 +55,69 @@ export function useSessionsPage(defaultInput: ListSessionsInput = {}) {
     }
   }
 
+  function startLiveUpdates() {
+    liveStopped = false;
+    openSubscription();
+  }
+
+  function stopLiveUpdates() {
+    liveStopped = true;
+    eventSubscription?.unsubscribe();
+    eventSubscription = null;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+  }
+
+  function openSubscription() {
+    eventSubscription?.unsubscribe();
+    eventSubscription = subscribeSessionEvents(
+      {},
+      {
+        onData: (event) => {
+          if (shouldRefreshForEvent(event.rawType)) {
+            scheduleRefresh();
+          }
+        },
+        onError: (err) => {
+          if (shouldReconnectLiveError(err)) {
+            scheduleReconnect();
+          }
+        },
+        onClose: scheduleReconnect,
+      },
+    );
+  }
+
+  function scheduleRefresh() {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      void loadSessions();
+    }, 300);
+  }
+
+  function scheduleReconnect() {
+    if (liveStopped || reconnectTimer) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void reconnectFromSnapshot();
+    }, 1500);
+  }
+
+  async function reconnectFromSnapshot() {
+    if (liveStopped) return;
+    await loadSessions();
+    if (!liveStopped) {
+      openSubscription();
+    }
+  }
+
   return {
     rows,
     pageInfo,
@@ -60,5 +129,21 @@ export function useSessionsPage(defaultInput: ListSessionsInput = {}) {
     pageSize,
     sort,
     loadSessions,
+    startLiveUpdates,
+    stopLiveUpdates,
   };
+}
+
+function shouldReconnectLiveError(err: Error) {
+  return !(err instanceof AnyCodeGraphQLError && err.code === 'auth_failed');
+}
+
+function shouldRefreshForEvent(type: string) {
+  return (
+    type.startsWith('session.') ||
+    type.startsWith('workflow.') ||
+    type === 'process.exited' ||
+    type === 'process.start_failed' ||
+    type === 'process.resume_failed'
+  );
 }

@@ -2,6 +2,8 @@ services:
   anycode:
     build:
       context: .
+      args:
+        CODEX_NPM_PACKAGE: ${CODEX_NPM_PACKAGE:-@openai/codex}
     environment:
       ANYCODE_ACCESS_KEY: ${ANYCODE_ACCESS_KEY:?set ANYCODE_ACCESS_KEY}
       ANYCODE_HTTP_ADDR: :8080

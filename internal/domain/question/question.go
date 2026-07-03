@@ -37,6 +37,7 @@ type Question struct {
 	Type             string
 	Options          []Option
 	AllowCustom      bool
+	Metadata         map[string]any
 	SelectedOptionID *OptionID
 	CustomAnswer     string
 	Answer           map[string]any
@@ -66,6 +67,7 @@ type Policy interface {
 type Repository interface {
 	CreateBatch(ctx context.Context, batch Batch) error
 	FindBatch(ctx context.Context, id BatchID) (Batch, error)
+	ListPendingBySession(ctx context.Context, sessionID SessionID) ([]Batch, error)
 	SubmitAnswers(ctx context.Context, id BatchID, answers []Answer) error
 	CancelPendingBySession(ctx context.Context, sessionID SessionID, reason string) error
 }

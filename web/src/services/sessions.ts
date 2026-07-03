@@ -1,5 +1,4 @@
-import { sessions as mockSessions } from '@/mocks/workbench';
-import { graphqlFetch } from '@/services/graphqlClient';
+import { graphqlFetch, graphqlSubscribe } from '@/services/graphqlClient';
 
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
@@ -7,6 +6,7 @@ export type SessionStatus =
   | 'starting'
   | 'running'
   | 'waiting_user'
+  | 'waiting_approval'
   | 'stopping'
   | 'stopped'
   | 'resume_failed'
@@ -18,6 +18,7 @@ export type SessionStatus =
 export interface SessionCard {
   id: string;
   projectId: string;
+  projectName: string;
   title: string;
   summary: string;
   mode: SessionMode;
@@ -35,16 +36,62 @@ export interface SessionDetail extends SessionCard {
     reasoningEffort: string;
     permissionMode: string;
   };
+  closeReason?: string | null;
+  promptAppends: PromptAppend[];
   availableActions: string[];
   canResume: boolean;
+}
+
+export interface PromptAppend {
+  id: string;
+  sessionId: string;
+  body: string;
+  createdAt: string;
+  time: string;
 }
 
 export interface SessionEvent {
   id: string;
   kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question';
+  rawType: string;
   title: string;
   body: string;
   time: string;
+}
+
+export interface QuestionOption {
+  id: string;
+  label: string;
+  description: string;
+  payload: Record<string, unknown>;
+}
+
+export interface AgentQuestion {
+  id: string;
+  batchId: string;
+  title: string;
+  body: string;
+  type: string;
+  options: QuestionOption[];
+  allowCustom: boolean;
+  selectedOptionId?: string | null;
+  customAnswer: string;
+  answer: Record<string, unknown>;
+  status: string;
+}
+
+export interface QuestionBatch {
+  id: string;
+  sessionId: string;
+  status: string;
+  questions: AgentQuestion[];
+}
+
+export interface QuestionAnswerInput {
+  questionId: string;
+  selectedOptionId?: string | null;
+  customAnswer?: string;
+  payload?: Record<string, unknown>;
 }
 
 export interface PageInfo {
@@ -72,6 +119,12 @@ export interface SessionPage {
 export interface SessionDetailData {
   session: SessionDetail;
   events: SessionEvent[];
+}
+
+export interface SessionEventsSubscriptionInput {
+  sessionId?: string;
+  projectId?: string;
+  afterEventId?: string;
 }
 
 export interface CreateSessionInput {
@@ -116,17 +169,27 @@ interface GraphQLSessionDetail {
   requirement: string;
   mode: string;
   status: string;
+  closeReason?: string | null;
   baseBranch: string;
+  currentNodeTitle: string;
   config: {
     codexModel: string;
     reasoningEffort: string;
     permissionMode: string;
   };
+  promptAppends: GraphQLPromptAppend[];
   availableActions: string[];
   canResume: boolean;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface GraphQLPromptAppend {
+  id: string;
+  sessionId: string;
+  body: string;
+  createdAt: string;
 }
 
 interface GraphQLSession {
@@ -153,6 +216,13 @@ interface GraphQLSessionEvent {
   createdAt: string;
 }
 
+interface GraphQLQuestionBatch {
+  id: string;
+  sessionId: string;
+  status: string;
+  questions: AgentQuestion[];
+}
+
 const sessionCardFields = `
   id
   projectId
@@ -175,11 +245,19 @@ const sessionDetailFields = `
   requirement
   mode
   status
+  closeReason
   baseBranch
+  currentNodeTitle
   config {
     codexModel
     reasoningEffort
     permissionMode
+  }
+  promptAppends {
+    id
+    sessionId
+    body
+    createdAt
   }
   availableActions
   canResume
@@ -205,36 +283,56 @@ const sessionFields = `
   updatedAt
 `;
 
+const questionBatchFields = `
+  id
+  sessionId
+  status
+  questions {
+    id
+    batchId
+    title
+    body
+    type
+    options {
+      id
+      label
+      description
+      payload
+    }
+    allowCustom
+    selectedOptionId
+    customAnswer
+    answer
+    status
+  }
+`;
+
 export async function listSessions(input: ListSessionsInput = {}): Promise<SessionPage> {
-  try {
-    const data = await graphqlFetch<
-      { sessions: { items: GraphQLSessionCard[]; pageInfo: GraphQLPageInfo } },
-      { input: ListSessionsInput }
-    >({
-      query: `
-        query Sessions($input: ListSessionsInput) {
-          sessions(input: $input) {
-            items {
-              ${sessionCardFields}
-            }
-            pageInfo {
-              page
-              pageSize
-              total
-              nextCursor
-            }
+  const data = await graphqlFetch<
+    { sessions: { items: GraphQLSessionCard[]; pageInfo: GraphQLPageInfo } },
+    { input: ListSessionsInput }
+  >({
+    query: `
+      query Sessions($input: ListSessionsInput) {
+        sessions(input: $input) {
+          items {
+            ${sessionCardFields}
+          }
+          pageInfo {
+            page
+            pageSize
+            total
+            nextCursor
           }
         }
-      `,
-      variables: { input },
-    });
-    return {
-      items: data.sessions.items.map(normalizeSessionCard),
-      pageInfo: data.sessions.pageInfo,
-    };
-  } catch {
-    return mockSessionPage(input);
-  }
+      }
+    `,
+    variables: { input },
+  });
+  return {
+    items: data.sessions.items.map(normalizeSessionCard),
+    pageInfo: data.sessions.pageInfo,
+  };
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
@@ -281,6 +379,72 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
   };
 }
 
+export function subscribeSessionEvents(
+  input: SessionEventsSubscriptionInput,
+  handlers: {
+    onData: (event: SessionEvent) => void;
+    onError?: (error: Error) => void;
+    onClose?: () => void;
+  },
+) {
+  const options = {
+    query: `
+      subscription SessionEvents($input: SessionEventsInput!) {
+        sessionEvents(input: $input) {
+          id
+          type
+          payload
+          createdAt
+        }
+      }
+    `,
+    variables: { input },
+    onData: (data: { sessionEvents: GraphQLSessionEvent }) =>
+      handlers.onData(normalizeSessionEvent(data.sessionEvents)),
+  };
+  if (handlers.onError) {
+    Object.assign(options, { onError: handlers.onError });
+  }
+  if (handlers.onClose) {
+    Object.assign(options, { onClose: handlers.onClose });
+  }
+  return graphqlSubscribe<
+    { sessionEvents: GraphQLSessionEvent },
+    { input: SessionEventsSubscriptionInput }
+  >(options);
+}
+
+export function subscribePendingQuestionBatches(
+  sessionId: string,
+  handlers: {
+    onData: (batch: QuestionBatch) => void;
+    onError?: (error: Error) => void;
+    onClose?: () => void;
+  },
+) {
+  const options = {
+    query: `
+      subscription PendingQuestionBatches($sessionId: ID!) {
+        pendingQuestionBatches(sessionId: $sessionId) {
+          ${questionBatchFields}
+        }
+      }
+    `,
+    variables: { sessionId },
+    onData: (data: { pendingQuestionBatches: GraphQLQuestionBatch }) =>
+      handlers.onData(normalizeQuestionBatch(data.pendingQuestionBatches)),
+  };
+  if (handlers.onError) {
+    Object.assign(options, { onError: handlers.onError });
+  }
+  if (handlers.onClose) {
+    Object.assign(options, { onClose: handlers.onClose });
+  }
+  return graphqlSubscribe<{ pendingQuestionBatches: GraphQLQuestionBatch }, { sessionId: string }>(
+    options,
+  );
+}
+
 export async function appendPrompt(sessionId: string, body: string) {
   return graphqlFetch<
     { appendPrompt: { id: string; sessionId: string; body: string; createdAt: string } },
@@ -313,46 +477,120 @@ export async function stopSession(sessionId: string) {
   });
 }
 
-export async function createSession(input: CreateSessionInput) {
-  try {
-    const data = await graphqlFetch<
-      { createSession: GraphQLSession },
-      { input: CreateSessionInput }
-    >({
-      query: `
-        mutation CreateSession($input: CreateSessionInput!) {
-          createSession(input: $input) {
-            ${sessionFields}
-          }
+export async function closeSession(sessionId: string) {
+  return graphqlFetch<
+    { closeSession: GraphQLSession },
+    { input: { sessionId: string; reason: 'user_closed' } }
+  >({
+    query: `
+      mutation CloseSession($input: CloseSessionInput!) {
+        closeSession(input: $input) {
+          ${sessionFields}
         }
-      `,
-      variables: { input },
-    });
-    return normalizeSession(data.createSession);
-  } catch {
-    return normalizeSession({
-      id: `local-${Date.now()}`,
-      projectId: input.projectId,
-      requirement: input.requirement,
-      mode: input.mode,
-      status: 'stopped',
-      baseBranch: input.baseBranch ?? 'main',
-      config: {
-        codexModel: input.config?.codexModel ?? '',
-        reasoningEffort: input.config?.reasoningEffort ?? '',
-        permissionMode: input.config?.permissionMode ?? '',
-      },
-      lastRunAt: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  }
+      }
+    `,
+    variables: { input: { sessionId, reason: 'user_closed' } },
+  });
+}
+
+export async function startSession(sessionId: string) {
+  return graphqlFetch<{ startSession: GraphQLSession }, { id: string }>({
+    query: `
+      mutation StartSession($id: ID!) {
+        startSession(id: $id) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+  });
+}
+
+export async function resumeSession(sessionId: string) {
+  return graphqlFetch<{ resumeSession: GraphQLSession }, { id: string }>({
+    query: `
+      mutation ResumeSession($id: ID!) {
+        resumeSession(id: $id) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+  });
+}
+
+export async function getPendingQuestionBatches(sessionId: string): Promise<QuestionBatch[]> {
+  const data = await graphqlFetch<
+    { pendingQuestionBatches: GraphQLQuestionBatch[] },
+    { sessionId: string }
+  >({
+    query: `
+      query PendingQuestionBatches($sessionId: ID!) {
+        pendingQuestionBatches(sessionId: $sessionId) {
+          ${questionBatchFields}
+        }
+      }
+    `,
+    variables: { sessionId },
+  });
+  return data.pendingQuestionBatches.map(normalizeQuestionBatch);
+}
+
+export async function submitQuestionBatch(batchId: string, answers: QuestionAnswerInput[]) {
+  const data = await graphqlFetch<
+    { submitQuestionBatch: GraphQLQuestionBatch },
+    { input: { batchId: string; answers: QuestionAnswerInput[] } }
+  >({
+    query: `
+      mutation SubmitQuestionBatch($input: SubmitQuestionBatchInput!) {
+        submitQuestionBatch(input: $input) {
+          ${questionBatchFields}
+        }
+      }
+    `,
+    variables: { input: { batchId, answers } },
+  });
+  return normalizeQuestionBatch(data.submitQuestionBatch);
+}
+
+export async function createSession(input: CreateSessionInput) {
+  const data = await graphqlFetch<
+    { createSession: GraphQLSession },
+    { input: CreateSessionInput }
+  >({
+    query: `
+      mutation CreateSession($input: CreateSessionInput!) {
+        createSession(input: $input) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return normalizeSession(data.createSession);
+}
+
+function normalizeQuestionBatch(batch: GraphQLQuestionBatch): QuestionBatch {
+  return {
+    id: batch.id,
+    sessionId: batch.sessionId,
+    status: batch.status,
+    questions: batch.questions.map((question) => ({
+      ...question,
+      options: question.options.map((option) => ({
+        ...option,
+        payload: option.payload ?? {},
+      })),
+      answer: question.answer ?? {},
+    })),
+  };
 }
 
 function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
   return {
     id: session.id,
     projectId: session.projectId,
+    projectName: session.projectName || session.projectId,
     title: session.requirementSummary || firstLine(session.requirement),
     summary: session.requirementSummary || session.requirement,
     mode: normalizeMode(session.mode),
@@ -370,18 +608,31 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
   return {
     id: session.id,
     projectId: session.projectId,
+    projectName: session.projectId,
     title: firstLine(session.requirement),
     summary: session.requirement,
     mode: normalizeMode(session.mode),
     status,
     branch: session.baseBranch || 'main',
-    node: statusNode(status),
+    node: session.currentNodeTitle || statusNode(status),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
     filesChanged: 0,
     config: session.config,
+    closeReason: session.closeReason ?? null,
+    promptAppends: session.promptAppends.map(normalizePromptAppend),
     availableActions: session.availableActions,
     canResume: session.canResume,
+  };
+}
+
+function normalizePromptAppend(promptAppend: GraphQLPromptAppend): PromptAppend {
+  return {
+    id: promptAppend.id,
+    sessionId: promptAppend.sessionId,
+    body: promptAppend.body,
+    createdAt: promptAppend.createdAt,
+    time: formatEventTime(promptAppend.createdAt),
   };
 }
 
@@ -390,6 +641,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
   return {
     id: session.id,
     projectId: session.projectId,
+    projectName: session.projectId,
     title: firstLine(session.requirement),
     summary: session.requirement,
     mode: normalizeMode(session.mode),
@@ -406,28 +658,13 @@ function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
   return {
     id: event.id,
     kind: eventKind(event.type),
+    rawType: event.type,
     title: stringPayload(event.payload, 'title') || eventTitle(event.type),
     body:
       stringPayload(event.payload, 'body') ||
       stringPayload(event.payload, 'message') ||
       JSON.stringify(event.payload),
     time: formatEventTime(event.createdAt),
-  };
-}
-
-function mockSessionPage(input: ListSessionsInput): SessionPage {
-  const page = input.page ?? 1;
-  const pageSize = input.pageSize ?? mockSessions.length;
-  const start = (page - 1) * pageSize;
-  const items = mockSessions.slice(start, start + pageSize);
-  return {
-    items,
-    pageInfo: {
-      page,
-      pageSize,
-      total: mockSessions.length,
-      nextCursor: start + pageSize < mockSessions.length ? String(page + 1) : '',
-    },
   };
 }
 
@@ -441,6 +678,7 @@ function normalizeStatus(status: string): SessionStatus {
     'starting',
     'running',
     'waiting_user',
+    'waiting_approval',
     'stopping',
     'stopped',
     'resume_failed',
@@ -477,6 +715,7 @@ function statusNode(status: SessionStatus) {
     starting: '启动中',
     running: '运行中',
     waiting_user: '待回答',
+    waiting_approval: '待审批',
     stopping: '停止中',
     stopped: '已停止',
     resume_failed: '恢复失败',

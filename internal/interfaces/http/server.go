@@ -1,23 +1,34 @@
 package http
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
 	"mime"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/lru"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/nzlov/anycode/internal/application/apperror"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
+	questionapp "github.com/nzlov/anycode/internal/application/question"
+	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
 	"github.com/nzlov/anycode/internal/interfaces/http/static"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 type HandlerOption func(*handlerOptions)
@@ -25,6 +36,9 @@ type HandlerOption func(*handlerOptions)
 type handlerOptions struct {
 	graphqlHandler http.Handler
 	attachments    attachmentapp.UseCase
+	questions      questionapp.UseCase
+	sessions       sessionapp.UseCase
+	accessKey      string
 	playground     bool
 }
 
@@ -32,7 +46,9 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 	return func(opts *handlerOptions) {
 		resolver := graph.NewResolver(useCases)
 		schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
-		opts.graphqlHandler = handler.NewDefaultServer(schema)
+		opts.graphqlHandler = newGraphQLServer(schema, opts.accessKey)
+		opts.questions = useCases.Questions
+		opts.sessions = useCases.Sessions
 	}
 }
 
@@ -57,6 +73,7 @@ func WithAttachmentUseCase(useCase attachmentapp.UseCase) HandlerOption {
 func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		graphqlHandler: http.HandlerFunc(graphqlNotConfigured),
+		accessKey:      cfg.AccessKey,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -65,10 +82,11 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.Handle("GET /api/healthz", bearerAuth(cfg.AccessKey, http.HandlerFunc(healthz)))
-	mux.Handle("/graphql", bearerAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
+	mux.Handle("/graphql", graphqlAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
 	attachmentHandler := newAttachmentHandler(opts.attachments)
 	mux.Handle("GET /attachments/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
 	mux.Handle("GET /attachments/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
+	mux.Handle("POST /mcp/sessions/{sessionID}", bearerAuth(cfg.AccessKey, newMCPHandler(opts.questions, opts.sessions)))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
@@ -77,8 +95,41 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	return mux
 }
 
+func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Handler {
+	srv := handler.New(schema)
+	srv.AddTransport(transport.Websocket{
+		KeepAlivePingInterval: 10 * time.Second,
+		InitFunc:              websocketInitFunc(accessKey),
+	})
+	srv.AddTransport(transport.Options{})
+	srv.AddTransport(transport.GET{})
+	srv.AddTransport(transport.POST{})
+	srv.AddTransport(transport.MultipartForm{})
+	srv.SetQueryCache(lru.New[*ast.QueryDocument](1000))
+	srv.SetErrorPresenter(graph.ErrorPresenter)
+	srv.Use(extension.Introspection{})
+	srv.Use(extension.AutomaticPersistedQuery{
+		Cache: lru.New[string](100),
+	})
+	return srv
+}
+
 func healthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func graphqlAuth(accessKey string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if accessKey == "" || isWebSocketUpgrade(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !validBearer(accessKey, r.Header.Get("Authorization")) {
+			writeApplicationError(w, http.StatusUnauthorized, apperror.New(apperror.CodeAuthFailed, apperror.CategoryAuthError, "unauthorized"))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func bearerAuth(accessKey string, next http.Handler) http.Handler {
@@ -87,12 +138,32 @@ func bearerAuth(accessKey string, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer "+accessKey {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !validBearer(accessKey, r.Header.Get("Authorization")) {
+			writeApplicationError(w, http.StatusUnauthorized, apperror.New(apperror.CodeAuthFailed, apperror.CategoryAuthError, "unauthorized"))
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func websocketInitFunc(accessKey string) transport.WebsocketInitFunc {
+	return func(ctx context.Context, payload transport.InitPayload) (context.Context, *transport.InitPayload, error) {
+		if accessKey == "" {
+			return ctx, nil, nil
+		}
+		if !validBearer(accessKey, payload.Authorization()) {
+			return ctx, nil, apperror.New(apperror.CodeAuthFailed, apperror.CategoryAuthError, "unauthorized")
+		}
+		return graph.WithPrincipal(ctx, accessPrincipal(accessKey, "websocket_connection_init")), nil, nil
+	}
+}
+
+func validBearer(accessKey string, authorization string) bool {
+	return authorization == "Bearer "+accessKey
+}
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }
 
 func withPrincipal(accessKey string, next http.Handler) http.Handler {
@@ -101,17 +172,20 @@ func withPrincipal(accessKey string, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		sum := sha256.Sum256([]byte(accessKey))
-		principal := authdomain.AccessPrincipal{
-			KeyHash: hex.EncodeToString(sum[:]),
-			Kind:    "http_bearer",
-		}
-		next.ServeHTTP(w, r.WithContext(graph.WithPrincipal(r.Context(), principal)))
+		next.ServeHTTP(w, r.WithContext(graph.WithPrincipal(r.Context(), accessPrincipal(accessKey, "http_bearer"))))
 	})
 }
 
+func accessPrincipal(accessKey string, kind string) authdomain.AccessPrincipal {
+	sum := sha256.Sum256([]byte(accessKey))
+	return authdomain.AccessPrincipal{
+		KeyHash: hex.EncodeToString(sum[:]),
+		Kind:    kind,
+	}
+}
+
 func graphqlNotConfigured(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "graphql not configured", http.StatusServiceUnavailable)
+	writeApplicationError(w, http.StatusServiceUnavailable, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "graphql not configured").WithRetryable(true))
 }
 
 type attachmentHandler struct {
@@ -136,7 +210,7 @@ func (h attachmentHandler) download() http.Handler {
 
 func (h attachmentHandler) serve(w http.ResponseWriter, r *http.Request, mode attachmentapp.OpenMode) {
 	if h.useCase == nil {
-		http.Error(w, "attachment service unavailable", http.StatusServiceUnavailable)
+		writeApplicationError(w, http.StatusServiceUnavailable, apperror.New(apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "attachment service unavailable").WithRetryable(true))
 		return
 	}
 	stream, err := h.useCase.OpenAttachment(r.Context(), sessiondomain.AttachmentID(r.PathValue("id")), mode)
@@ -162,12 +236,28 @@ func (h attachmentHandler) serve(w http.ResponseWriter, r *http.Request, mode at
 func writeAttachmentError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, attachmentapp.ErrNotPreviewable):
-		http.Error(w, "attachment is not previewable", http.StatusUnsupportedMediaType)
+		writeApplicationError(w, http.StatusUnsupportedMediaType, apperror.New(apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "attachment is not previewable"))
 	case errors.Is(err, attachmentapp.ErrAttachmentNotFound):
-		http.Error(w, "attachment not found", http.StatusNotFound)
+		writeApplicationError(w, http.StatusNotFound, apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found"))
 	default:
-		http.Error(w, "attachment unavailable", http.StatusInternalServerError)
+		writeApplicationError(w, http.StatusInternalServerError, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "attachment unavailable").WithRetryable(true))
 	}
+}
+
+func writeApplicationError(w http.ResponseWriter, status int, appErr *apperror.Error) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	response := map[string]any{
+		"code":       appErr.Code,
+		"category":   string(appErr.Category),
+		"message":    appErr.PublicMessage(),
+		"retryable":  appErr.Retryable,
+		"userAction": appErr.UserAction,
+	}
+	if details := appErr.PublicDetails(); len(details) > 0 {
+		response["details"] = details
+	}
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func playgroundHandler(w http.ResponseWriter, _ *http.Request) {

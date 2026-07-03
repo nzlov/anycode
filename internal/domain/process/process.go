@@ -68,6 +68,7 @@ type Repository interface {
 }
 
 type CodexStartInput struct {
+	ProcessRunID    RunID
 	SessionID       SessionID
 	Workdir         string
 	Prompt          string
@@ -75,9 +76,11 @@ type CodexStartInput struct {
 	ReasoningEffort string
 	PermissionMode  string
 	AttachmentPaths []string
+	ImagePaths      []string
 }
 
 type CodexResumeInput struct {
+	ProcessRunID   RunID
 	SessionID      SessionID
 	CodexSessionID string
 	Workdir        string

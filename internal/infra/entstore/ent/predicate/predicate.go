@@ -12,11 +12,23 @@ type EventRecord func(*sql.Selector)
 // MergeRecord is the predicate function for mergerecord builders.
 type MergeRecord func(*sql.Selector)
 
+// NodeRun is the predicate function for noderun builders.
+type NodeRun func(*sql.Selector)
+
+// ProcessEvent is the predicate function for processevent builders.
+type ProcessEvent func(*sql.Selector)
+
+// ProcessRun is the predicate function for processrun builders.
+type ProcessRun func(*sql.Selector)
+
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
 
 // PromptAppend is the predicate function for promptappend builders.
 type PromptAppend func(*sql.Selector)
+
+// QuestionBatch is the predicate function for questionbatch builders.
+type QuestionBatch func(*sql.Selector)
 
 // Session is the predicate function for session builders.
 type Session func(*sql.Selector)
@@ -29,3 +41,6 @@ type StagedAttachment func(*sql.Selector)
 
 // WorkflowDefinition is the predicate function for workflowdefinition builders.
 type WorkflowDefinition func(*sql.Selector)
+
+// WorkflowRun is the predicate function for workflowrun builders.
+type WorkflowRun func(*sql.Selector)

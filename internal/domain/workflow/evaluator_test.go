@@ -93,6 +93,39 @@ func TestDefaultConditionEvaluator(t *testing.T) {
 	}
 }
 
+func TestValidateCondition(t *testing.T) {
+	tests := []struct {
+		name      string
+		condition Condition
+		wantErr   bool
+	}{
+		{name: "empty condition is valid", condition: Condition{}},
+		{name: "simple op is valid", condition: Condition{Field: "last.status", Op: "eq", Value: "succeeded"}},
+		{name: "nested all any not is valid", condition: Condition{All: []Condition{
+			{Field: "last.status", Op: "ne", Value: "failed"},
+			{Any: []Condition{
+				{Field: "last.output.score", Op: "gte", Value: 80},
+				{Not: &Condition{Field: "last.output.skip", Op: "exists"}},
+			}},
+		}}},
+		{name: "unsupported op is rejected", condition: Condition{Field: "last.status", Op: "script", Value: "return true"}, wantErr: true},
+		{name: "missing field is rejected", condition: Condition{Op: "eq", Value: "ok"}, wantErr: true},
+		{name: "mixed branch and op is rejected", condition: Condition{Field: "last.status", Op: "eq", Value: "ok", Any: []Condition{{Field: "x", Op: "exists"}}}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateCondition(tt.condition)
+			if tt.wantErr && err == nil {
+				t.Fatal("expected error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("ValidateCondition() error = %v", err)
+			}
+		})
+	}
+}
+
 func TestDefaultPlannerNextNode(t *testing.T) {
 	planner := DefaultPlanner{}
 	def := Definition{Graph: Graph{Edges: []Edge{

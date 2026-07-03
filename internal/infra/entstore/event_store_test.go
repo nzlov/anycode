@@ -89,6 +89,42 @@ func TestEventStoreAppendAfterAndScopeFilters(t *testing.T) {
 	assertEventIDs(t, got, []event.ID{"event-1", "event-2", "event-4"})
 }
 
+func TestEventStoreRedactsSensitivePayload(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	events := store.Events()
+	sessionID := event.SessionID("session-1")
+	appendEvents(t, ctx, events, event.DomainEvent{
+		ID:        "event-secret",
+		Scope:     event.Scope{ProjectID: "project-1", SessionID: &sessionID},
+		SessionID: &sessionID,
+		Type:      "session.failed",
+		Payload: map[string]any{
+			"accessKey":    "secret",
+			"worktreePath": "/home/nzlov/workspaces/github/project",
+		},
+		CreatedAt: time.Now(),
+	})
+
+	got, err := events.After(ctx, event.Scope{ProjectID: "project-1", SessionID: &sessionID}, "")
+	if err != nil {
+		t.Fatalf("After() error = %v", err)
+	}
+	if got[0].Payload["accessKey"] != "[redacted]" || got[0].Payload["worktreePath"] != "[redacted_path]" {
+		t.Fatalf("payload was not redacted: %#v", got[0].Payload)
+	}
+}
+
 func appendEvents(t *testing.T, ctx context.Context, store *EventStore, events ...event.DomainEvent) {
 	t.Helper()
 	for _, event := range events {

@@ -116,7 +116,7 @@
     </q-drawer>
 
     <q-page-container>
-      <router-view @create-session="newSessionOpen = true" />
+      <router-view :key="$route.fullPath" @create-session="newSessionOpen = true" />
     </q-page-container>
 
     <q-page-sticky position="bottom-right" :offset="[24, 24]">

@@ -12,5 +12,9 @@ web/node_modules/
 web/dist/
 web/.quasar/
 
+internal/interfaces/http/static/dist/*
+!internal/interfaces/http/static/dist/.gitkeep
+
 tmp/
 coverage/
+.worktree/

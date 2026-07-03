@@ -3,6 +3,7 @@ package gitcli
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -88,6 +89,49 @@ func TestPathForSessionUsesANYCODEDataDir(t *testing.T) {
 	want := filepath.Join("/env-data", "worktrees", "project-1", "session-1")
 	if got != want {
 		t.Fatalf("PathForSession = %q, want %q", got, want)
+	}
+}
+
+func TestCreateAndRemoveWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	ctx := context.Background()
+	repo := t.TempDir()
+	dataDir := t.TempDir()
+	runGit(t, repo, "init")
+	runGit(t, repo, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "init")
+	runGit(t, repo, "checkout", "-b", "feature/base")
+
+	client := NewWorktrees(dataDir)
+	got, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "feature/base")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	want := filepath.Join(dataDir, "worktrees", "project-1", "session-1")
+	if got != want {
+		t.Fatalf("Create() path = %q, want %q", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(got, ".git")); err != nil {
+		t.Fatalf("worktree .git not found: %v", err)
+	}
+	head, err := client.HeadCommit(ctx, got, "")
+	if err != nil {
+		t.Fatalf("HeadCommit(worktree) error = %v", err)
+	}
+	base, err := client.HeadCommit(ctx, repo, "feature/base")
+	if err != nil {
+		t.Fatalf("HeadCommit(base) error = %v", err)
+	}
+	if head != base {
+		t.Fatalf("worktree head = %q, want %q", head, base)
+	}
+	if err := client.Remove(ctx, got); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if _, err := os.Stat(got); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("worktree still exists after Remove(): %v", err)
 	}
 }
 

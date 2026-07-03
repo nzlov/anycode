@@ -8,6 +8,7 @@ import (
 
 	domainsession "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
+	entmergerecord "github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	entpromptappend "github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
@@ -148,6 +149,29 @@ func (r *SessionRepository) LastConfigForProject(ctx context.Context, projectID 
 	}, true, nil
 }
 
+func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context) ([]domainsession.Session, error) {
+	rows, err := r.client.Session.Query().
+		Where(
+			entsession.StatusIn(
+				string(domainsession.StatusStarting),
+				string(domainsession.StatusRunning),
+				string(domainsession.StatusWaitingUser),
+				string(domainsession.StatusStopping),
+			),
+			entsession.CodexSessionIDNEQ(""),
+		).
+		Order(ent.Asc(entsession.FieldUpdatedAt), ent.Asc(entsession.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list interrupted sessions: %w", err)
+	}
+	sessions := make([]domainsession.Session, 0, len(rows))
+	for _, row := range rows {
+		sessions = append(sessions, toDomainSession(row))
+	}
+	return sessions, nil
+}
+
 func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsession.PromptAppend) error {
 	create := r.client.PromptAppend.Create().
 		SetID(append.ID).
@@ -210,9 +234,40 @@ func (r *SessionRepository) AddMergeRecord(ctx context.Context, record domainses
 	return nil
 }
 
+func (r *SessionRepository) LatestSuccessfulMergeRecord(ctx context.Context, sessionID domainsession.ID) (domainsession.MergeRecord, bool, error) {
+	row, err := r.client.MergeRecord.Query().
+		Where(
+			entmergerecord.SessionIDEQ(string(sessionID)),
+			entmergerecord.StatusEQ("merged"),
+		).
+		Order(ent.Desc(entmergerecord.FieldCreatedAt), ent.Desc(entmergerecord.FieldID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return domainsession.MergeRecord{}, false, nil
+		}
+		return domainsession.MergeRecord{}, false, fmt.Errorf("latest successful merge record: %w", err)
+	}
+	return toDomainMergeRecord(row), true, nil
+}
+
 func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery, now func() time.Time) *ent.SessionQuery {
 	if query.ProjectID != nil {
 		q.Where(entsession.ProjectIDEQ(string(*query.ProjectID)))
+	}
+	switch strings.ToLower(strings.TrimSpace(query.Scope)) {
+	case string(domainsession.StatusCreated),
+		string(domainsession.StatusStarting),
+		string(domainsession.StatusRunning),
+		string(domainsession.StatusWaitingUser),
+		string(domainsession.StatusStopping),
+		string(domainsession.StatusStopped),
+		string(domainsession.StatusResumeFailed),
+		string(domainsession.StatusFailed),
+		string(domainsession.StatusCompleted),
+		"blocked",
+		string(domainsession.StatusClosed):
+		q.Where(entsession.StatusEQ(strings.ToLower(strings.TrimSpace(query.Scope))))
 	}
 	switch strings.ToLower(strings.TrimSpace(query.Range)) {
 	case "recent3d":
@@ -291,6 +346,10 @@ func parseSessionSort(sort string) (string, bool) {
 		return entsession.FieldUpdatedAt, desc
 	case entsession.FieldLastRunAt, "last_run", "last":
 		return entsession.FieldLastRunAt, desc
+	case entsession.FieldRequirement, "title":
+		return entsession.FieldRequirement, desc
+	case entsession.FieldProjectID, "project":
+		return entsession.FieldProjectID, desc
 	case entsession.FieldStatus:
 		return entsession.FieldStatus, desc
 	case entsession.FieldBaseBranch, "base":
@@ -325,5 +384,29 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
 		ClosedAt:  row.ClosedAt,
+	}
+}
+
+func toDomainMergeRecord(row *ent.MergeRecord) domainsession.MergeRecord {
+	var nodeRunID *domainsession.NodeRunID
+	if row.NodeRunID != nil {
+		v := domainsession.NodeRunID(*row.NodeRunID)
+		nodeRunID = &v
+	}
+	return domainsession.MergeRecord{
+		ID:             row.ID,
+		SessionID:      domainsession.ID(row.SessionID),
+		NodeRunID:      nodeRunID,
+		Strategy:       row.Strategy,
+		BaseBranch:     row.BaseBranch,
+		WorktreeBranch: row.WorktreeBranch,
+		BaseCommit:     row.BaseCommit,
+		HeadCommit:     row.HeadCommit,
+		MergeCommit:    row.MergeCommit,
+		Status:         row.Status,
+		FailureCode:    row.FailureCode,
+		FailureReason:  row.FailureReason,
+		MergedAt:       row.MergedAt,
+		CreatedAt:      row.CreatedAt,
 	}
 }

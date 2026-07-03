@@ -16,10 +16,18 @@ type Tx struct {
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
 	MergeRecord *MergeRecordClient
+	// NodeRun is the client for interacting with the NodeRun builders.
+	NodeRun *NodeRunClient
+	// ProcessEvent is the client for interacting with the ProcessEvent builders.
+	ProcessEvent *ProcessEventClient
+	// ProcessRun is the client for interacting with the ProcessRun builders.
+	ProcessRun *ProcessRunClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
 	// PromptAppend is the client for interacting with the PromptAppend builders.
 	PromptAppend *PromptAppendClient
+	// QuestionBatch is the client for interacting with the QuestionBatch builders.
+	QuestionBatch *QuestionBatchClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
 	// SessionAttachment is the client for interacting with the SessionAttachment builders.
@@ -28,6 +36,8 @@ type Tx struct {
 	StagedAttachment *StagedAttachmentClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
+	// WorkflowRun is the client for interacting with the WorkflowRun builders.
+	WorkflowRun *WorkflowRunClient
 
 	// lazily loaded.
 	client     *Client
@@ -161,12 +171,17 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.EventRecord = NewEventRecordClient(tx.config)
 	tx.MergeRecord = NewMergeRecordClient(tx.config)
+	tx.NodeRun = NewNodeRunClient(tx.config)
+	tx.ProcessEvent = NewProcessEventClient(tx.config)
+	tx.ProcessRun = NewProcessRunClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.PromptAppend = NewPromptAppendClient(tx.config)
+	tx.QuestionBatch = NewQuestionBatchClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
 	tx.SessionAttachment = NewSessionAttachmentClient(tx.config)
 	tx.StagedAttachment = NewStagedAttachmentClient(tx.config)
 	tx.WorkflowDefinition = NewWorkflowDefinitionClient(tx.config)
+	tx.WorkflowRun = NewWorkflowRunClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

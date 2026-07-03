@@ -82,7 +82,111 @@ func TestListSessionEventsDefaultsAndCapsPageSize(t *testing.T) {
 	}
 }
 
-func TestSessionEventsSendsHistoryThenCloses(t *testing.T) {
+func TestListSessionEventsPreservesCodexDisplayPayloadShapes(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	store := &fakeStore{
+		events: []domain.DomainEvent{
+			{
+				ID:        "event-output",
+				Scope:     domain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+				SessionID: &sessionID,
+				Type:      "process.codex_event",
+				Payload: map[string]any{
+					"eventId":      "codex-event-output",
+					"processRunId": "process-run-1",
+					"codexType":    "assistant_message",
+					"message": map[string]any{
+						"role": "assistant",
+						"content": []any{
+							map[string]any{"type": "output_text", "text": "hello"},
+						},
+					},
+					"raw": `{"type":"assistant_message"}`,
+				},
+				CreatedAt: time.Unix(20, 0).UTC(),
+			},
+			{
+				ID:        "event-tool",
+				Scope:     domain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+				SessionID: &sessionID,
+				Type:      "process.codex_event",
+				Payload: map[string]any{
+					"eventId":      "codex-event-tool",
+					"processRunId": "process-run-1",
+					"codexType":    "tool_call",
+					"tool": map[string]any{
+						"name":      "shell",
+						"callId":    "call-1",
+						"arguments": map[string]any{"cmd": "go test ./..."},
+					},
+				},
+				CreatedAt: time.Unix(21, 0).UTC(),
+			},
+			{
+				ID:        "event-status",
+				Scope:     domain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+				SessionID: &sessionID,
+				Type:      "process.status_changed",
+				Payload: map[string]any{
+					"processRunId":   "process-run-1",
+					"status":         "running",
+					"pid":            float64(1234),
+					"codexSessionId": "codex-session-1",
+				},
+				CreatedAt: time.Unix(22, 0).UTC(),
+			},
+		},
+	}
+	service := New(store)
+
+	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
+		SessionID: "session-1",
+		Page:      1,
+		PageSize:  10,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() error = %v", err)
+	}
+	if len(got.Items) != 3 {
+		t.Fatalf("items length = %d, want 3: %#v", len(got.Items), got.Items)
+	}
+	outputPayload := got.Items[0].Payload
+	if outputPayload["eventId"] != "codex-event-output" || outputPayload["processRunId"] != "process-run-1" || outputPayload["codexType"] != "assistant_message" {
+		t.Fatalf("output payload identifiers mismatch: %#v", outputPayload)
+	}
+	message, ok := outputPayload["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("output message payload missing: %#v", outputPayload)
+	}
+	content, ok := message["content"].([]any)
+	if !ok || len(content) != 1 {
+		t.Fatalf("output content payload mismatch: %#v", message["content"])
+	}
+	firstContent, ok := content[0].(map[string]any)
+	if !ok || firstContent["type"] != "output_text" || firstContent["text"] != "hello" {
+		t.Fatalf("output content item mismatch: %#v", content[0])
+	}
+	if outputPayload["raw"] != `{"type":"assistant_message"}` {
+		t.Fatalf("raw payload mismatch: %#v", outputPayload["raw"])
+	}
+
+	toolPayload := got.Items[1].Payload
+	tool, ok := toolPayload["tool"].(map[string]any)
+	if !ok || tool["name"] != "shell" || tool["callId"] != "call-1" {
+		t.Fatalf("tool payload mismatch: %#v", toolPayload)
+	}
+	arguments, ok := tool["arguments"].(map[string]any)
+	if !ok || arguments["cmd"] != "go test ./..." {
+		t.Fatalf("tool arguments mismatch: %#v", tool)
+	}
+
+	statusPayload := got.Items[2].Payload
+	if statusPayload["processRunId"] != "process-run-1" || statusPayload["status"] != "running" || statusPayload["pid"] != float64(1234) || statusPayload["codexSessionId"] != "codex-session-1" {
+		t.Fatalf("status payload mismatch: %#v", statusPayload)
+	}
+}
+
+func TestSessionEventsSendsHistoryThenStreamsPublishedEvents(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	store := &fakeStore{
 		events: []domain.DomainEvent{
@@ -91,23 +195,132 @@ func TestSessionEventsSendsHistoryThenCloses(t *testing.T) {
 		},
 	}
 	service := New(store)
+	ctx, cancel := context.WithCancel(context.Background())
 
-	ch, err := service.SessionEvents(context.Background(), SessionEventsInput{
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{
 		Scope:        domain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
 		AfterEventID: "event-0",
 	})
 	if err != nil {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
-	var got []DTO
-	for event := range ch {
-		got = append(got, event)
-	}
+	got := []DTO{<-ch, <-ch}
 	if len(got) != 2 || got[0].ID != "event-1" || got[1].ID != "event-2" {
 		t.Fatalf("history events = %#v", got)
 	}
 	if store.lastAfter != "event-0" {
 		t.Fatalf("after id = %q", store.lastAfter)
+	}
+
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "event-3",
+		Scope:     domain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+		SessionID: &sessionID,
+		Type:      "three",
+		CreatedAt: time.Unix(3, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() error = %v", err)
+	}
+	if event := <-ch; event.ID != "event-3" || event.Type != "three" {
+		t.Fatalf("published event = %#v", event)
+	}
+	cancel()
+	if _, ok := <-ch; ok {
+		t.Fatal("SessionEvents() channel stayed open after context cancel")
+	}
+}
+
+func TestSessionEventsFiltersPublishedEventsByScope(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	otherSessionID := domain.SessionID("session-2")
+	service := New(&fakeStore{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{
+		Scope: domain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+	})
+	if err != nil {
+		t.Fatalf("SessionEvents() error = %v", err)
+	}
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "event-other-session",
+		Scope:     domain.Scope{SessionID: &otherSessionID, ProjectID: "project-1"},
+		SessionID: &otherSessionID,
+		Type:      "other",
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() other session error = %v", err)
+	}
+	select {
+	case event := <-ch:
+		t.Fatalf("received mismatched event = %#v", event)
+	default:
+	}
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "event-matching",
+		Scope:     domain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+		SessionID: &sessionID,
+		Type:      "matching",
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() matching error = %v", err)
+	}
+	if event := <-ch; event.ID != "event-matching" {
+		t.Fatalf("matching event = %#v", event)
+	}
+}
+
+func TestSessionEventsEmptyScopeReceivesAllPublishedEvents(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	otherSessionID := domain.SessionID("session-2")
+	service := New(&fakeStore{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{})
+	if err != nil {
+		t.Fatalf("SessionEvents() error = %v", err)
+	}
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "event-1",
+		Scope:     domain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+		SessionID: &sessionID,
+		Type:      "session.running",
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() first error = %v", err)
+	}
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "event-2",
+		Scope:     domain.Scope{SessionID: &otherSessionID, ProjectID: "project-2"},
+		SessionID: &otherSessionID,
+		Type:      "session.stopped",
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() second error = %v", err)
+	}
+	got := []DTO{<-ch, <-ch}
+	if got[0].ID != "event-1" || got[1].ID != "event-2" {
+		t.Fatalf("events = %#v", got)
+	}
+}
+
+func TestSessionEventsReturnsEmptyPayloadForNilDomainPayload(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	store := &fakeStore{
+		events: []domain.DomainEvent{
+			{ID: "event-1", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID, Type: "process.status_changed", CreatedAt: time.Unix(1, 0).UTC()},
+		},
+	}
+	service := New(store)
+
+	ch, err := service.SessionEvents(context.Background(), SessionEventsInput{
+		Scope: domain.Scope{SessionID: &sessionID},
+	})
+	if err != nil {
+		t.Fatalf("SessionEvents() error = %v", err)
+	}
+	got := <-ch
+	if got.Payload == nil {
+		t.Fatal("Payload is nil, want empty map")
+	}
+	if len(got.Payload) != 0 {
+		t.Fatalf("Payload = %#v, want empty map", got.Payload)
 	}
 }
 

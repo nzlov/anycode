@@ -288,6 +288,7 @@ type SessionDetail struct {
 	Status           string               `json:"status"`
 	CloseReason      *string              `json:"closeReason,omitempty"`
 	BaseBranch       string               `json:"baseBranch"`
+	CurrentNodeTitle string               `json:"currentNodeTitle"`
 	WorktreePath     string               `json:"worktreePath"`
 	CodexSessionID   string               `json:"codexSessionId"`
 	Config           *SessionConfig       `json:"config"`

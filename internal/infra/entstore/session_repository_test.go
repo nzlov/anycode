@@ -43,7 +43,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		},
 		LastRunAt: &now,
 		CreatedAt: now.Add(-10 * time.Minute),
-		UpdatedAt: now.Add(-5 * time.Minute),
+		UpdatedAt: now.Add(-25 * time.Minute),
 	}
 	if err := repo.Save(ctx, input); err != nil {
 		t.Fatalf("save session: %v", err)
@@ -155,6 +155,81 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		t.Fatalf("filtered overview mismatch: total=%d cards=%#v", total, cards)
 	}
 
+	cards, total, err = repo.ListCards(ctx, session.ListQuery{
+		Scope:    string(session.StatusRunning),
+		Page:     1,
+		PageSize: 10,
+	})
+	if err != nil {
+		t.Fatalf("list running cards: %v", err)
+	}
+	if total != 1 || len(cards) != 1 {
+		t.Fatalf("running status filter mismatch: total=%d cards=%#v", total, cards)
+	}
+	for _, card := range cards {
+		if card.Status != session.StatusRunning {
+			t.Fatalf("running status filter returned %#v", card)
+		}
+	}
+	saveSessions(t, ctx, repo,
+		session.Session{
+			ID:             "session-8",
+			ProjectID:      projectID,
+			Requirement:    "Interrupted running",
+			Mode:           session.ModeChat,
+			Status:         session.StatusRunning,
+			CodexSessionID: "codex-8",
+			CreatedAt:      now.Add(-40 * time.Minute),
+			UpdatedAt:      now.Add(-40 * time.Minute),
+		},
+		session.Session{
+			ID:             "session-5",
+			ProjectID:      projectID,
+			Requirement:    "Interrupted waiting user",
+			Mode:           session.ModeChat,
+			Status:         session.StatusWaitingUser,
+			CodexSessionID: "codex-5",
+			CreatedAt:      now.Add(-39 * time.Minute),
+			UpdatedAt:      now.Add(-39 * time.Minute),
+		},
+		session.Session{
+			ID:          "session-6",
+			ProjectID:   projectID,
+			Requirement: "Running without codex session id",
+			Mode:        session.ModeChat,
+			Status:      session.StatusRunning,
+			CreatedAt:   now.Add(-38 * time.Minute),
+			UpdatedAt:   now.Add(-38 * time.Minute),
+		},
+		session.Session{
+			ID:             "session-7",
+			ProjectID:      projectID,
+			Requirement:    "Already stopped",
+			Mode:           session.ModeChat,
+			Status:         session.StatusStopped,
+			CodexSessionID: "codex-7",
+			CreatedAt:      now.Add(-37 * time.Minute),
+			UpdatedAt:      now.Add(-37 * time.Minute),
+		},
+	)
+	interrupted, err := repo.ListInterruptedWithCodexSession(ctx)
+	if err != nil {
+		t.Fatalf("list interrupted sessions: %v", err)
+	}
+	gotInterruptedIDs := make([]session.ID, 0, len(interrupted))
+	for _, item := range interrupted {
+		gotInterruptedIDs = append(gotInterruptedIDs, item.ID)
+	}
+	wantInterruptedIDs := []session.ID{"session-8", "session-5"}
+	if len(gotInterruptedIDs) != len(wantInterruptedIDs) {
+		t.Fatalf("interrupted sessions = %#v, want %#v", gotInterruptedIDs, wantInterruptedIDs)
+	}
+	for i := range wantInterruptedIDs {
+		if gotInterruptedIDs[i] != wantInterruptedIDs[i] {
+			t.Fatalf("interrupted sessions = %#v, want %#v", gotInterruptedIDs, wantInterruptedIDs)
+		}
+	}
+
 	config, ok, err := repo.LastConfigForProject(ctx, projectID)
 	if err != nil {
 		t.Fatalf("last config: %v", err)
@@ -181,6 +256,57 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 	if len(appends) != 1 || appends[0].SessionID != input.ID || appends[0].Body != "continue with tests" {
 		t.Fatalf("prompt append mismatch: %#v", appends)
+	}
+
+	if err := repo.AddMergeRecord(ctx, session.MergeRecord{
+		ID:             "merge-record-failed",
+		SessionID:      input.ID,
+		Strategy:       "merge",
+		BaseBranch:     "main",
+		WorktreeBranch: "feature/session-1",
+		BaseCommit:     "base-0",
+		HeadCommit:     "head-0",
+		Status:         "failed",
+		FailureCode:    "merge_conflict",
+		CreatedAt:      now.Add(3 * time.Minute),
+	}); err != nil {
+		t.Fatalf("add failed merge record: %v", err)
+	}
+	if err := repo.AddMergeRecord(ctx, session.MergeRecord{
+		ID:             "merge-record-old",
+		SessionID:      input.ID,
+		Strategy:       "merge",
+		BaseBranch:     "main",
+		WorktreeBranch: "feature/session-1",
+		BaseCommit:     "base-1",
+		HeadCommit:     "head-1",
+		MergeCommit:    "merge-1",
+		Status:         "merged",
+		CreatedAt:      now.Add(4 * time.Minute),
+	}); err != nil {
+		t.Fatalf("add old merge record: %v", err)
+	}
+	if err := repo.AddMergeRecord(ctx, session.MergeRecord{
+		ID:             "merge-record-new",
+		SessionID:      input.ID,
+		Strategy:       "rebase",
+		BaseBranch:     "main",
+		WorktreeBranch: "feature/session-1",
+		BaseCommit:     "base-2",
+		HeadCommit:     "head-2",
+		MergeCommit:    "merge-2",
+		Status:         "merged",
+		MergedAt:       &appendAt,
+		CreatedAt:      now.Add(5 * time.Minute),
+	}); err != nil {
+		t.Fatalf("add new merge record: %v", err)
+	}
+	mergeRecord, ok, err := repo.LatestSuccessfulMergeRecord(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("latest successful merge record: %v", err)
+	}
+	if !ok || mergeRecord.ID != "merge-record-new" || mergeRecord.Strategy != "rebase" || mergeRecord.MergeCommit != "merge-2" {
+		t.Fatalf("latest merge record mismatch: ok=%v record=%#v", ok, mergeRecord)
 	}
 }
 

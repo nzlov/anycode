@@ -15,6 +15,10 @@ func (DefaultConditionEvaluator) Evaluate(condition Condition, context Context) 
 	return evalCondition(condition, context)
 }
 
+func ValidateCondition(condition Condition) error {
+	return validateCondition(condition)
+}
+
 type DefaultPlanner struct {
 	Evaluator ConditionEvaluator
 }
@@ -107,6 +111,56 @@ func evalCondition(condition Condition, context Context) (bool, error) {
 		return compareNumber(condition.Op, actual, condition.Value)
 	default:
 		return false, fmt.Errorf("unsupported workflow condition op %q", condition.Op)
+	}
+}
+
+func validateCondition(condition Condition) error {
+	branches := 0
+	if len(condition.All) > 0 {
+		branches++
+	}
+	if len(condition.Any) > 0 {
+		branches++
+	}
+	if condition.Not != nil {
+		branches++
+	}
+	if condition.Field != "" || condition.Op != "" {
+		branches++
+	}
+	if branches == 0 {
+		return nil
+	}
+	if branches > 1 {
+		return errors.New("workflow condition must use exactly one of all, any, not, or field/op")
+	}
+	for _, child := range condition.All {
+		if err := validateCondition(child); err != nil {
+			return err
+		}
+	}
+	if len(condition.All) > 0 {
+		return nil
+	}
+	for _, child := range condition.Any {
+		if err := validateCondition(child); err != nil {
+			return err
+		}
+	}
+	if len(condition.Any) > 0 {
+		return nil
+	}
+	if condition.Not != nil {
+		return validateCondition(*condition.Not)
+	}
+	if condition.Field == "" {
+		return errors.New("workflow condition field is required")
+	}
+	switch condition.Op {
+	case "exists", "eq", "ne", "contains", "gt", "gte", "lt", "lte":
+		return nil
+	default:
+		return fmt.Errorf("unsupported workflow condition op %q", condition.Op)
 	}
 }
 

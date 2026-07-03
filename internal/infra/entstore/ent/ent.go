@@ -14,12 +14,17 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowrun"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -82,12 +87,17 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			eventrecord.Table:        eventrecord.ValidColumn,
 			mergerecord.Table:        mergerecord.ValidColumn,
+			noderun.Table:            noderun.ValidColumn,
+			processevent.Table:       processevent.ValidColumn,
+			processrun.Table:         processrun.ValidColumn,
 			project.Table:            project.ValidColumn,
 			promptappend.Table:       promptappend.ValidColumn,
+			questionbatch.Table:      questionbatch.ValidColumn,
 			session.Table:            session.ValidColumn,
 			sessionattachment.Table:  sessionattachment.ValidColumn,
 			stagedattachment.Table:   stagedattachment.ValidColumn,
 			workflowdefinition.Table: workflowdefinition.ValidColumn,
+			workflowrun.Table:        workflowrun.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

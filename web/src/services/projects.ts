@@ -1,4 +1,3 @@
-import { directoryTree, projects as mockProjects } from '@/mocks/workbench';
 import { graphqlFetch } from '@/services/graphqlClient';
 
 export interface ProjectSummary {
@@ -7,6 +6,7 @@ export interface ProjectSummary {
   path: string;
   active: boolean;
   defaultBranch: string;
+  defaultWorkflowId: string;
   openSessions: number;
 }
 
@@ -30,6 +30,7 @@ interface GraphQLProject {
   id: string;
   name: string;
   path: string;
+  defaultWorkflowId?: string | null;
   gitState: {
     currentBranch: string;
     branches: {
@@ -48,17 +49,11 @@ interface GraphQLDirectoryEntry {
   errorCode: string;
 }
 
-interface MockDirectoryNode {
-  label: string;
-  icon: string;
-  selectable?: boolean;
-  children?: MockDirectoryNode[];
-}
-
 const projectFields = `
   id
   name
   path
+  defaultWorkflowId
   gitState {
     currentBranch
     branches {
@@ -69,87 +64,65 @@ const projectFields = `
 `;
 
 export async function listProjects() {
-  try {
-    const data = await graphqlFetch<{ projects: GraphQLProject[] }>({
-      query: `
-        query Projects {
-          projects {
-            ${projectFields}
-          }
+  const data = await graphqlFetch<{ projects: GraphQLProject[] }>({
+    query: `
+      query Projects {
+        projects {
+          ${projectFields}
         }
-      `,
-    });
-    return normalizeProjects(data.projects);
-  } catch {
-    return mockProjects.map((project, index) => ({
-      ...project,
-      active: index === 0,
-    }));
-  }
+      }
+    `,
+  });
+  return normalizeProjects(data.projects);
 }
 
 export async function browseDirectory(path = '/') {
-  try {
-    const data = await graphqlFetch<
-      {
-        browseDirectory: {
-          path: string;
-          parent: string;
-          entries: GraphQLDirectoryEntry[];
-        };
-      },
-      { input: { path: string } }
-    >({
-      query: `
-        query BrowseDirectory($input: BrowseDirectoryInput!) {
-          browseDirectory(input: $input) {
+  const data = await graphqlFetch<
+    {
+      browseDirectory: {
+        path: string;
+        parent: string;
+        entries: GraphQLDirectoryEntry[];
+      };
+    },
+    { input: { path: string } }
+  >({
+    query: `
+      query BrowseDirectory($input: BrowseDirectoryInput!) {
+        browseDirectory(input: $input) {
+          path
+          parent
+          entries {
+            name
             path
-            parent
-            entries {
-              name
-              path
-              isDir
-              isGit
-              canRead
-              errorCode
-            }
+            isDir
+            isGit
+            canRead
+            errorCode
           }
         }
-      `,
-      variables: { input: { path } },
-    });
-    return data.browseDirectory;
-  } catch {
-    return mockDirectoryPage();
-  }
+      }
+    `,
+    variables: { input: { path } },
+  });
+  return data.browseDirectory;
 }
 
 export async function createProject(input: { path: string; name: string }) {
-  try {
-    const data = await graphqlFetch<
-      { createProject: GraphQLProject },
-      { input: { path: string; name: string } }
-    >({
-      query: `
-        mutation CreateProject($input: CreateProjectInput!) {
-          createProject(input: $input) {
-            ${projectFields}
-          }
+  const data = await graphqlFetch<
+    { createProject: GraphQLProject },
+    { input: { path: string; name: string } }
+  >({
+    query: `
+      mutation CreateProject($input: CreateProjectInput!) {
+        createProject(input: $input) {
+          ${projectFields}
         }
-      `,
-      variables: { input },
-    });
-    return normalizeProject(data.createProject, false);
-  } catch {
-    return {
-      id: slugProjectId(input.name || input.path),
-      name: input.name || basename(input.path),
-      path: input.path,
-      active: false,
-      defaultBranch: 'main',
-      openSessions: 0,
-    };
-  }
+      }
+    `,
+    variables: { input },
+  });
+  return normalizeProject(data.createProject, false);
 }
 
 function normalizeProjects(projects: GraphQLProject[]) {
@@ -170,42 +143,7 @@ function normalizeProject(project: GraphQLProject, active: boolean): ProjectSumm
     path: project.path,
     active,
     defaultBranch,
+    defaultWorkflowId: project.defaultWorkflowId ?? '',
     openSessions: 0,
   };
-}
-
-function mockDirectoryPage(): DirectoryPage {
-  return {
-    path: '/',
-    parent: '',
-    entries: directoryTree.map((node) => mockNodeToDirectoryEntry(node, '')),
-  };
-}
-
-function mockNodeToDirectoryEntry(node: MockDirectoryNode, parentPath: string): DirectoryEntry {
-  const path = `${parentPath}/${node.label}`.replaceAll('//', '/');
-  const entry: DirectoryEntry = {
-    name: node.label,
-    path,
-    isDir: true,
-    isGit: Boolean(node.label !== 'workspaces'),
-    canRead: true,
-    errorCode: '',
-  };
-  if (node.children) {
-    entry.children = node.children.map((child) => mockNodeToDirectoryEntry(child, path));
-  }
-  return entry;
-}
-
-function basename(path: string) {
-  return path.split('/').filter(Boolean).at(-1) ?? path;
-}
-
-function slugProjectId(value: string) {
-  return (
-    basename(value)
-      .toLowerCase()
-      .replaceAll(/[^a-z0-9-]+/g, '-') || 'project'
-  );
 }

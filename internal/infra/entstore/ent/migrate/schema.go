@@ -70,6 +70,101 @@ var (
 			},
 		},
 	}
+	// NodeRunsColumns holds the columns for the "node_runs" table.
+	NodeRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "workflow_run_id", Type: field.TypeString},
+		{Name: "node_id", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString},
+		{Name: "attempt", Type: field.TypeInt, Default: 1},
+		{Name: "process_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+		{Name: "output", Type: field.TypeJSON},
+	}
+	// NodeRunsTable holds the schema information for the "node_runs" table.
+	NodeRunsTable = &schema.Table{
+		Name:       "node_runs",
+		Columns:    NodeRunsColumns,
+		PrimaryKey: []*schema.Column{NodeRunsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "noderun_workflow_run_id_node_id",
+				Unique:  false,
+				Columns: []*schema.Column{NodeRunsColumns[1], NodeRunsColumns[2]},
+			},
+			{
+				Name:    "noderun_workflow_run_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{NodeRunsColumns[1], NodeRunsColumns[3]},
+			},
+		},
+	}
+	// ProcessEventsColumns holds the columns for the "process_events" table.
+	ProcessEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "process_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "event_id", Type: field.TypeString, Default: ""},
+		{Name: "type", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeJSON},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// ProcessEventsTable holds the schema information for the "process_events" table.
+	ProcessEventsTable = &schema.Table{
+		Name:       "process_events",
+		Columns:    ProcessEventsColumns,
+		PrimaryKey: []*schema.Column{ProcessEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "processevent_session_id_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{ProcessEventsColumns[1], ProcessEventsColumns[6], ProcessEventsColumns[0]},
+			},
+			{
+				Name:    "processevent_process_run_id_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{ProcessEventsColumns[2], ProcessEventsColumns[6], ProcessEventsColumns[0]},
+			},
+			{
+				Name:    "processevent_event_id",
+				Unique:  false,
+				Columns: []*schema.Column{ProcessEventsColumns[3]},
+			},
+		},
+	}
+	// ProcessRunsColumns holds the columns for the "process_runs" table.
+	ProcessRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "node_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "status", Type: field.TypeString},
+		{Name: "pid", Type: field.TypeInt, Nullable: true},
+		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
+		{Name: "resume_of", Type: field.TypeString, Nullable: true},
+		{Name: "exit_code", Type: field.TypeInt, Nullable: true},
+		{Name: "failure_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "started_at", Type: field.TypeTime},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true},
+	}
+	// ProcessRunsTable holds the schema information for the "process_runs" table.
+	ProcessRunsTable = &schema.Table{
+		Name:       "process_runs",
+		Columns:    ProcessRunsColumns,
+		PrimaryKey: []*schema.Column{ProcessRunsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "processrun_session_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[3]},
+			},
+			{
+				Name:    "processrun_session_id_started_at",
+				Unique:  false,
+				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[9]},
+			},
+		},
+	}
 	// ProjectsColumns holds the columns for the "projects" table.
 	ProjectsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -110,6 +205,36 @@ var (
 				Name:    "promptappend_session_id_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[3]},
+			},
+		},
+	}
+	// QuestionBatchesColumns holds the columns for the "question_batches" table.
+	QuestionBatchesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "workflow_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "status", Type: field.TypeString},
+		{Name: "questions", Type: field.TypeJSON},
+		{Name: "answers", Type: field.TypeJSON},
+		{Name: "cancel_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "answered_at", Type: field.TypeTime, Nullable: true},
+	}
+	// QuestionBatchesTable holds the schema information for the "question_batches" table.
+	QuestionBatchesTable = &schema.Table{
+		Name:       "question_batches",
+		Columns:    QuestionBatchesColumns,
+		PrimaryKey: []*schema.Column{QuestionBatchesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "questionbatch_session_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[3]},
+			},
+			{
+				Name:    "questionbatch_session_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[7]},
 			},
 		},
 	}
@@ -243,16 +368,50 @@ var (
 			},
 		},
 	}
+	// WorkflowRunsColumns holds the columns for the "workflow_runs" table.
+	WorkflowRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
+		{Name: "workflow_definition_id", Type: field.TypeString},
+		{Name: "status", Type: field.TypeString},
+		{Name: "current_node_id", Type: field.TypeString, Default: ""},
+		{Name: "context", Type: field.TypeJSON},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "stopped_at", Type: field.TypeTime, Nullable: true},
+	}
+	// WorkflowRunsTable holds the schema information for the "workflow_runs" table.
+	WorkflowRunsTable = &schema.Table{
+		Name:       "workflow_runs",
+		Columns:    WorkflowRunsColumns,
+		PrimaryKey: []*schema.Column{WorkflowRunsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "workflowrun_session_id",
+				Unique:  false,
+				Columns: []*schema.Column{WorkflowRunsColumns[1]},
+			},
+			{
+				Name:    "workflowrun_workflow_definition_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{WorkflowRunsColumns[2], WorkflowRunsColumns[3]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		EventRecordsTable,
 		MergeRecordsTable,
+		NodeRunsTable,
+		ProcessEventsTable,
+		ProcessRunsTable,
 		ProjectsTable,
 		PromptAppendsTable,
+		QuestionBatchesTable,
 		SessionsTable,
 		SessionAttachmentsTable,
 		StagedAttachmentsTable,
 		WorkflowDefinitionsTable,
+		WorkflowRunsTable,
 	}
 )
 

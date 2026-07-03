@@ -94,12 +94,13 @@ type Run struct {
 type NodeRunStatus string
 
 const (
-	NodePending     NodeRunStatus = "pending"
-	NodeRunning     NodeRunStatus = "running"
-	NodeWaitingUser NodeRunStatus = "waiting_user"
-	NodeSucceeded   NodeRunStatus = "succeeded"
-	NodeFailed      NodeRunStatus = "failed"
-	NodeCanceled    NodeRunStatus = "canceled"
+	NodePending         NodeRunStatus = "pending"
+	NodeRunning         NodeRunStatus = "running"
+	NodeWaitingApproval NodeRunStatus = "waiting_approval"
+	NodeWaitingUser     NodeRunStatus = "waiting_user"
+	NodeSucceeded       NodeRunStatus = "succeeded"
+	NodeFailed          NodeRunStatus = "failed"
+	NodeCanceled        NodeRunStatus = "canceled"
 )
 
 type NodeRun struct {
@@ -140,8 +141,18 @@ type ConditionEvaluator interface {
 
 type Repository interface {
 	SaveDefinition(ctx context.Context, definition Definition) error
+	FindDefinition(ctx context.Context, id DefinitionID) (Definition, error)
 	FindActive(ctx context.Context, projectID ProjectID) (Definition, error)
+	FindRun(ctx context.Context, id RunID) (Run, error)
+	FindLatestRunBySession(ctx context.Context, sessionID SessionID) (Run, error)
+	FindLatestNodeRun(ctx context.Context, runID RunID, nodeID string) (NodeRun, error)
+	ActivateDefinition(ctx context.Context, id DefinitionID) error
+	CreateInitialRun(ctx context.Context, run Run, nodeRun NodeRun) error
 	CreateRun(ctx context.Context, run Run) error
+	UpdateRunState(ctx context.Context, run Run) error
 	SaveNodeRun(ctx context.Context, run NodeRun) error
+	CreateNodeRunAndUpdateRun(ctx context.Context, run Run, nodeRun NodeRun) error
+	CompleteNodeAndAdvance(ctx context.Context, completedNodeRun NodeRun, run Run, nextNodeRun *NodeRun) error
+	MarkRunFailed(ctx context.Context, runID RunID, nodeRunID NodeRunID, failure NodeFailure, finishedAt time.Time) error
 	UpdateRunContext(ctx context.Context, id RunID, context Context) error
 }
