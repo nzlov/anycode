@@ -1,81 +1,8 @@
 <template>
   <q-page class="page-shell detail-page">
-    <div class="page-heading">
-      <div>
-        <div class="text-h5 text-weight-bold">{{ session?.title ?? '会话详情' }}</div>
-        <div class="text-body2 text-muted">
-          <template v-if="session">
-            {{ session.branch }} · {{ statusLabel(session.status) }} ·
-            {{ priorityLabel(session.priority) }} · {{ session.updatedAt }}
-          </template>
-          <template v-else>{{ sessionId }}</template>
-        </div>
-      </div>
-      <div class="row q-gutter-sm detail-actions">
-        <q-btn
-          outline
-          color="primary"
-          icon="difference"
-          label="完整 Diff"
-          no-caps
-          :to="allDiffRoute"
-        />
-        <q-btn
-          v-if="canResume"
-          outline
-          color="primary"
-          icon="restart_alt"
-          label="恢复"
-          no-caps
-          :loading="resuming"
-          :disable="starting || stopping"
-          @click="resumeSession"
-        />
-        <q-btn
-          v-if="canRun"
-          unelevated
-          color="positive"
-          text-color="dark"
-          icon="play_arrow"
-          :label="runActionLabel"
-          no-caps
-          :loading="starting"
-          :disable="resuming || stopping"
-          @click="startSession"
-        />
-        <q-btn
-          v-if="canStop"
-          unelevated
-          color="negative"
-          icon="stop"
-          label="停止"
-          no-caps
-          :loading="stopping"
-          @click="stopSession"
-        />
-        <q-btn
-          v-if="canClose"
-          outline
-          color="grey-8"
-          icon="close"
-          label="关闭"
-          no-caps
-          :loading="closing"
-          :disable="starting || resuming || stopping"
-          @click="closeSession"
-        />
-      </div>
-    </div>
-
     <div class="detail-grid">
       <section class="event-panel">
         <q-card flat bordered class="stream-card">
-          <q-card-section class="stream-card__header">
-            <div class="text-subtitle1 text-weight-bold">会话事件流</div>
-            <div class="text-caption text-muted">思考内容、工具调用、模型输出和状态事件</div>
-          </q-card-section>
-          <q-separator />
-
           <q-inner-loading :showing="loading">
             <q-spinner color="primary" size="32px" />
           </q-inner-loading>
@@ -89,18 +16,13 @@
               暂无会话事件
             </q-card-section>
 
-            <q-card-section v-for="event in streamEntries" :key="event.id" class="event-item">
-              <div class="event-icon">
-                <q-icon :name="eventIcon(event.kind)" />
-              </div>
-              <div class="event-body">
-                <div class="row items-center q-gutter-sm">
-                  <div class="text-weight-medium">{{ event.title }}</div>
-                  <span class="text-caption text-muted">{{ event.time }}</span>
-                </div>
-                <div class="text-body2 event-body__text">{{ event.body || '已记录事件' }}</div>
-              </div>
-            </q-card-section>
+            <div class="event-list">
+              <SessionEventMessage
+                v-for="event in streamEntries"
+                :key="event.id"
+                :event="event"
+              />
+            </div>
           </div>
         </q-card>
 
@@ -193,6 +115,30 @@
               <q-list separator>
                 <q-item>
                   <q-item-section>
+                    <q-item-label caption>标题</q-item-label>
+                    <q-item-label>{{ session?.title ?? '会话详情' }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item>
+                  <q-item-section>
+                    <q-item-label caption>项目</q-item-label>
+                    <q-item-label>{{ session?.projectName ?? '-' }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item>
+                  <q-item-section>
+                    <q-item-label caption>分支</q-item-label>
+                    <q-item-label>{{ session?.branch ?? '-' }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item>
+                  <q-item-section>
+                    <q-item-label caption>更新时间</q-item-label>
+                    <q-item-label>{{ session?.updatedAt ?? '-' }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item>
+                  <q-item-section>
                     <q-item-label caption>模式</q-item-label>
                     <q-item-label>{{ session ? modeLabel(session.mode) : '-' }}</q-item-label>
                   </q-item-section>
@@ -256,6 +202,16 @@
             </q-tab-panel>
 
             <q-tab-panel name="changes">
+              <q-btn
+                class="full-width q-mb-md"
+                outline
+                color="primary"
+                icon="open_in_new"
+                label="完整 Diff"
+                no-caps
+                :to="allDiffRoute"
+              />
+
               <q-banner
                 v-if="diff && !diff.available"
                 dense
@@ -343,15 +299,6 @@
                 </q-card-section>
               </q-card>
 
-              <q-btn
-                class="full-width q-mt-md"
-                outline
-                color="primary"
-                icon="open_in_new"
-                label="查看全部"
-                no-caps
-                :to="allDiffRoute"
-              />
             </q-tab-panel>
           </q-tab-panels>
         </q-card>
@@ -418,6 +365,9 @@ import { useRoute } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
 import PromptComposer from '@/components/PromptComposer.vue';
+import SessionEventMessage, {
+  type SessionEventMessageEntry,
+} from '@/components/SessionEventMessage.vue';
 import {
   firstCodexModelValue,
   normalizeCodexModel,
@@ -427,12 +377,7 @@ import {
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { getSessionDiff } from '@/services/diff';
 import type { DiffFile, DiffLineKind, FileDiff, SessionDiff } from '@/services/diff';
-import type {
-  QuestionAnswerInput,
-  SessionEvent,
-  SessionMode,
-  SessionStatus,
-} from '@/services/sessions';
+import type { QuestionAnswerInput, SessionMode, SessionStatus } from '@/services/sessions';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -461,7 +406,6 @@ const {
   starting,
   resuming,
   stopping,
-  closing,
   questionsLoading,
   questionsSubmitting,
   loadSessionDetail,
@@ -469,7 +413,6 @@ const {
   startSession,
   resumeSession,
   stopSession,
-  closeSession,
   loadPendingQuestions,
   loadOlderEvents,
   submitPendingAnswers,
@@ -479,24 +422,10 @@ const {
 
 const canRun = computed(() => session.value?.availableActions.includes('run') ?? false);
 const canResume = computed(() => session.value?.availableActions.includes('resume') ?? false);
-const canStop = computed(() => session.value?.availableActions.includes('stop') ?? false);
-const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
-const runActionLabel = computed(() => {
-  if (session.value?.status === 'resume_failed') return '重新运行当前节点';
-  if (session.value?.status === 'queued') return '强制启动';
-  return '强制运行';
-});
 const isWaitingForAnswer = computed(
   () => session.value?.pendingQuestion || session.value?.status === 'waiting_user',
 );
-interface StreamEntry {
-  id: string;
-  kind: SessionEvent['kind'] | 'user';
-  title: string;
-  body: string;
-  createdAt: string;
-  time: string;
-}
+type StreamEntry = SessionEventMessageEntry;
 
 const streamEntries = computed<StreamEntry[]>(() => {
   const entries: StreamEntry[] = [];
@@ -508,6 +437,7 @@ const streamEntries = computed<StreamEntry[]>(() => {
       body: session.value.summary,
       createdAt: session.value.createdAt,
       time: session.value.createdTime,
+      rawType: 'user.input',
     });
     for (const item of session.value.promptAppends) {
       entries.push({
@@ -517,16 +447,18 @@ const streamEntries = computed<StreamEntry[]>(() => {
         body: item.body,
         createdAt: item.createdAt,
         time: item.time,
+        rawType: 'user.append',
       });
     }
   }
   for (const event of events.value) {
     entries.push(event);
   }
-  return entries.sort((left, right) => {
+  const sortedEntries = entries.sort((left, right) => {
     const diff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
     return diff === 0 ? left.id.localeCompare(right.id) : diff;
   });
+  return dedupeStreamEntries(sortedEntries);
 });
 const composerAction = computed(() => {
   const current = session.value;
@@ -631,16 +563,32 @@ const diffPageMax = computed(() => {
   return Math.max(1, Math.ceil(info.total / info.pageSize));
 });
 
-function eventIcon(kind: StreamEntry['kind']) {
-  const icons: Record<StreamEntry['kind'], string> = {
-    thought: 'psychology',
-    tool: 'terminal',
-    assistant: 'smart_toy',
-    status: 'radio_button_checked',
-    question: 'help',
-    user: 'person',
-  };
-  return icons[kind];
+function dedupeStreamEntries(entries: StreamEntry[]) {
+  const hasCodexProcessExit = entries.some(
+    (event) => event.rawType === 'process.codex_event' && event.title === '进程退出',
+  );
+  const result: StreamEntry[] = [];
+  for (const event of entries) {
+    if (hasCodexProcessExit && event.rawType === 'process.exited') {
+      continue;
+    }
+    if (event.title === '进程退出' && !event.body) {
+      continue;
+    }
+    const previous = result[result.length - 1];
+    if (
+      previous &&
+      event.kind === 'status' &&
+      previous.kind === 'status' &&
+      event.title === previous.title &&
+      event.body === previous.body &&
+      Math.abs(Date.parse(event.createdAt) - Date.parse(previous.createdAt)) < 1500
+    ) {
+      continue;
+    }
+    result.push(event);
+  }
+  return result;
 }
 
 function modeLabel(mode: SessionMode) {
@@ -889,19 +837,17 @@ async function scrollEventsToBottom() {
   overflow: hidden;
 }
 
-.detail-page .page-heading {
-  flex: 0 0 auto;
-}
-
 .detail-page .detail-grid {
   flex: 1 1 auto;
   min-height: 0;
+  align-items: stretch;
 }
 
 .event-panel {
   display: grid;
   min-height: 0;
   height: 100%;
+  gap: 0;
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
@@ -910,11 +856,8 @@ async function scrollEventsToBottom() {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-}
-
-.stream-card__header {
-  flex: 0 0 auto;
-  padding: 14px 16px;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .stream-card__body {
@@ -922,7 +865,7 @@ async function scrollEventsToBottom() {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 12px;
+  padding: 0 14px 14px;
 }
 
 .event-loading-more {
@@ -935,27 +878,10 @@ async function scrollEventsToBottom() {
   font-size: 12px;
 }
 
-.stream-card__body .q-list {
+.event-list {
   display: grid;
   gap: 10px;
-}
-
-.event-item {
-  min-height: 0;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface-raised);
-}
-
-.event-body {
   min-width: 0;
-}
-
-.event-body__text {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  white-space: pre-wrap;
 }
 
 .right-panel,
@@ -987,6 +913,8 @@ async function scrollEventsToBottom() {
   flex-direction: column;
   padding: 0;
   background: var(--ac-surface-raised);
+  border-top-right-radius: 0;
+  border-top-left-radius: 0;
 }
 
 .detail-answer-card {
@@ -1257,32 +1185,12 @@ async function scrollEventsToBottom() {
     height: 100%;
   }
 
-  .detail-page .page-heading {
-    gap: 10px;
-  }
-
-  .detail-actions {
-    width: 100%;
-    flex-wrap: nowrap;
-  }
-
-  .detail-actions :deep(.q-btn) {
-    flex: 1 1 0;
-    min-width: 0;
-    padding-right: 8px;
-    padding-left: 8px;
-  }
-
-  .detail-actions :deep(.q-btn__content) {
-    gap: 0;
-  }
-
-  .detail-actions :deep(.q-btn__content span:not(.q-icon)) {
-    display: none;
-  }
-
   .detail-page .detail-grid {
     gap: 12px;
+  }
+
+  .stream-card__body {
+    padding: 0 10px 10px;
   }
 
   .right-panel {

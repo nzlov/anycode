@@ -713,7 +713,7 @@ function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
   const readable = readableEventPayload(type, payload);
   return {
     id: event.id,
-    kind: eventKind(type),
+    kind: eventKind(type, payload),
     rawType: type,
     title: readable.title || stringPayload(payload, 'title') || eventTitle(type),
     body: readable.body || stringPayload(payload, 'body') || stringPayload(payload, 'message'),
@@ -732,7 +732,21 @@ function readableEventPayload(type: string, payload: Record<string, unknown>) {
   const blockedReason = stringPayload(payload, 'blockedReason');
   const exitCode = numberPayload(payload, 'exitCode');
   const failure = stringPayload(payload, 'failureReason');
+  const queueKind = stringPayload(payload, 'queueKind');
+  const priority = stringPayload(payload, 'priority');
 
+  if (type === 'session.queued') {
+    return {
+      title: '排队中',
+      body: [
+        queueKind === 'answer_user' ? '等待用户回答后的继续执行。' : '等待可用执行槽。',
+        priority ? `队列优先级：${statusText(priority)}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    };
+  }
+  if (type === 'session.starting') return { title: '启动中', body: '正在启动 Codex 进程。' };
   if (type === 'session.waiting_user') return { title: '待回答', body: 'Codex 正在等待用户回答。' };
   if (type === 'session.running') {
     return { title: '运行中', body: reason ? statusText(reason) : '会话正在运行。' };
@@ -740,13 +754,19 @@ function readableEventPayload(type: string, payload: Record<string, unknown>) {
   if (type === 'session.stopped') return { title: '已停止', body: failure || '会话已停止。' };
   if (type === 'session.stopping') return { title: '停止中', body: '正在停止 Codex 进程。' };
   if (type === 'session.started') return { title: '已启动', body: 'Codex 进程已启动。' };
+  if (type === 'session.failed') return { title: '失败', body: failure || reason || '会话执行失败。' };
+  if (type === 'session.resume_failed') return { title: '恢复失败', body: failure || reason || '恢复 Codex 会话失败。' };
+  if (type === 'session.completed') return { title: '已完成', body: '会话已完成。' };
   if (type === 'process.exited') {
+    const body =
+      exitCode === null
+        ? failure || 'Codex 进程已退出。'
+        : exitCode === 0 && !failure
+          ? ''
+          : `退出码 ${exitCode}${failure ? `，${failure}` : ''}`;
     return {
       title: '进程退出',
-      body:
-        exitCode === null
-          ? failure || 'Codex 进程已退出。'
-          : `退出码 ${exitCode}${failure ? `，${failure}` : ''}`,
+      body,
     };
   }
   if (type.startsWith('workflow.')) {
@@ -763,8 +783,11 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   const item = objectPayload(payload, 'item');
   const itemType = stringPayload(item, 'type');
   const output = stringPayload(item, 'aggregated_output');
+  const text = stringPayload(item, 'text') || stringPayload(payload, 'text');
   const command = stringPayload(item, 'command');
   const exitCode = numberPayload(item, 'exit_code');
+  const processExitCode = numberPayload(payload, 'exitCode');
+  const failure = stringPayload(payload, 'failureReason');
 
   if (codexType === 'thread.started') {
     const threadID =
@@ -772,10 +795,13 @@ function readableCodexEvent(payload: Record<string, unknown>) {
     return { title: '线程已创建', body: threadID ? `线程 ${threadID}` : statusText(status) };
   }
   if (codexType === 'turn.started')
-    return { title: '开始执行', body: statusText(status) || 'Codex 开始处理当前请求。' };
+    return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
   if (codexType === 'item.started') {
     if (itemType === 'command_execution') {
       return { title: '执行命令', body: command || 'Codex 正在执行命令。' };
+    }
+    if (itemType === 'agent_message') {
+      return { title: '模型输出', body: text || 'Codex 正在生成回复。' };
     }
     return {
       title: itemEventTitle(itemType, '开始'),
@@ -784,8 +810,11 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
-      const prefix = exitCode === null ? '命令完成' : `命令完成，退出码 ${exitCode}`;
+      const prefix = exitCode === null || exitCode === 0 ? '命令完成' : `命令完成，退出码 ${exitCode}`;
       return { title: '命令结果', body: [prefix, output].filter(Boolean).join('\n') };
+    }
+    if (itemType === 'agent_message') {
+      return { title: '模型输出', body: output || text || compactPayload(item) };
     }
     return {
       title: itemEventTitle(itemType, '完成'),
@@ -793,7 +822,19 @@ function readableCodexEvent(payload: Record<string, unknown>) {
     };
   }
   if (codexType === 'turn.completed')
-    return { title: '本轮完成', body: statusText(status) || 'Codex 已完成本轮处理。' };
+    return { title: '本轮完成', body: 'Codex 已完成本轮处理。' };
+  if (codexType === 'process.exit') {
+    const body =
+      processExitCode === null
+        ? failure || 'Codex 进程已退出。'
+        : processExitCode === 0 && !failure
+          ? ''
+          : `退出码 ${processExitCode}${failure ? `，${failure}` : ''}`;
+    return {
+      title: '进程退出',
+      body,
+    };
+  }
   if (codexType === 'error') {
     return {
       title: 'Codex 错误',
@@ -847,7 +888,15 @@ function normalizeAvailableActions(actions: unknown): string[] {
   return actions.filter((action): action is string => typeof action === 'string');
 }
 
-function eventKind(type: string): SessionEvent['kind'] {
+function eventKind(type: string, payload: Record<string, unknown> = {}): SessionEvent['kind'] {
+  if (type === 'process.codex_event') {
+    const codexType = stringPayload(payload, 'codexType');
+    const item = objectPayload(payload, 'item');
+    const itemType = stringPayload(item, 'type');
+    if (itemType === 'command_execution') return 'tool';
+    if (itemType === 'agent_message') return 'assistant';
+    if (codexType === 'error') return 'status';
+  }
   if (type.includes('tool')) return 'tool';
   if (type.includes('assistant')) return 'assistant';
   if (type.includes('question')) return 'question';
@@ -912,6 +961,13 @@ function statusText(value: string) {
     failed: '失败',
     blocked: '阻塞',
     user_answered: '用户已回答，继续运行。',
+    immediate: '最高',
+    high: '高',
+    medium: '中',
+    low: '低',
+    start: '启动',
+    resume: '恢复',
+    answer_user: '回答后继续',
   };
   return labels[value] ?? value;
 }

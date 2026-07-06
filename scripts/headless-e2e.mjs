@@ -145,7 +145,7 @@ try {
   await screenshot('08-overview-mobile.png');
 
   await navigate(`/#/sessions/${gitSession.id}`);
-  await waitForText('命令结果');
+  await waitForText('Shell result');
   await assertSessionDetailReadableLayout('mobile git session detail layout');
   await assertNoHorizontalOverflow('mobile git session detail');
   await screenshot('09-git-session-mobile.png');
@@ -621,15 +621,19 @@ async function assertSessionDetailReadableLayout(label) {
     const doc = document.documentElement;
     const page = document.querySelector('.detail-page');
     const pageContainer = document.querySelector('.q-page-container');
-    const eventTexts = Array.from(document.querySelectorAll('.event-body__text'))
+    const eventTexts = Array.from(document.querySelectorAll('.event-message__body, .event-status__body, .event-tool__header span'))
       .map((element) => element.innerText.trim())
       .filter(Boolean);
     const jsonLike = eventTexts.filter((text) => text.startsWith('{') || text.includes('"processRunId"') || text.includes('"raw"'));
     const stream = document.querySelector('.stream-card__body') || document.querySelector('.stream-card');
     const streamStyle = stream ? getComputedStyle(stream) : null;
+    const visibleText = document.body.innerText;
     return {
       eventCount: eventTexts.length,
       jsonLike,
+      hasEventStreamHeader: visibleText.includes('会话事件流'),
+      hasNormalExitText: visibleText.includes('正常退出') || visibleText.includes('退出码 0'),
+      expandedToolBodies: document.querySelectorAll('.event-tool__body').length,
       pageScrollHeight: doc.scrollHeight,
       innerHeight: window.innerHeight,
       bodyScrolls: doc.scrollHeight > window.innerHeight + 1,
@@ -641,6 +645,9 @@ async function assertSessionDetailReadableLayout(label) {
   })()`);
   assert(result.eventCount > 0, `${label} has no event text`);
   assert(result.jsonLike.length === 0, `${label} still shows JSON event payload: ${result.jsonLike.join('\\n')}`);
+  assert(!result.hasEventStreamHeader, `${label} still shows the event stream header`);
+  assert(!result.hasNormalExitText, `${label} still shows normal exit text`);
+  assert(result.expandedToolBodies === 0, `${label} tool messages are not collapsed by default`);
   assert(!result.bodyScrolls, `${label} scrolls the whole page: ${result.pageScrollHeight} > ${result.innerHeight}`);
   assert(!result.pageScrolls, `${label} scrolls the detail page`);
   assert(!result.pageContainerScrolls, `${label} scrolls the page container`);
