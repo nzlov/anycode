@@ -83,6 +83,7 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input model.Create
 		ProjectID:           sessiondomain.ProjectID(input.ProjectID),
 		Requirement:         input.Requirement,
 		Mode:                sessiondomain.Mode(input.Mode),
+		Priority:            sessiondomain.Priority(stringValue(input.Priority, "")),
 		BaseBranch:          stringValue(input.BaseBranch, ""),
 		Config:              buildSessionConfig(input.Config),
 		StagedAttachmentIDs: stagedAttachmentIDs,
@@ -94,11 +95,11 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input model.Create
 }
 
 // StartSession is the resolver for the startSession field.
-func (r *mutationResolver) StartSession(ctx context.Context, id string) (*model.Session, error) {
+func (r *mutationResolver) StartSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.StartSession(ctx, sessiondomain.ID(id))
+	dto, err := r.UseCases.Sessions.StartSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
 	if err != nil {
 		return nil, err
 	}
@@ -118,11 +119,11 @@ func (r *mutationResolver) StopSession(ctx context.Context, id string) (*model.S
 }
 
 // ResumeSession is the resolver for the resumeSession field.
-func (r *mutationResolver) ResumeSession(ctx context.Context, id string) (*model.Session, error) {
+func (r *mutationResolver) ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.ResumeSession(ctx, sessiondomain.ID(id))
+	dto, err := r.UseCases.Sessions.ResumeSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
 	if err != nil {
 		return nil, err
 	}

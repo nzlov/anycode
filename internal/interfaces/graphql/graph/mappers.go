@@ -62,18 +62,20 @@ func mapDirectoryPage(dto projectapp.DirectoryPageDTO) *model.DirectoryPage {
 
 func mapSession(dto sessionapp.DTO) *model.Session {
 	return &model.Session{
-		ID:             string(dto.ID),
-		ProjectID:      string(dto.ProjectID),
-		Requirement:    dto.Requirement,
-		Mode:           string(dto.Mode),
-		Status:         string(dto.Status),
-		BaseBranch:     dto.BaseBranch,
-		WorktreePath:   dto.WorktreePath,
-		CodexSessionID: dto.CodexSessionID,
-		Config:         mapSessionConfig(dto.Config),
-		LastRunAt:      dto.LastRunAt,
-		CreatedAt:      dto.CreatedAt,
-		UpdatedAt:      dto.UpdatedAt,
+		ID:               string(dto.ID),
+		ProjectID:        string(dto.ProjectID),
+		Requirement:      dto.Requirement,
+		Mode:             string(dto.Mode),
+		Status:           string(dto.Status),
+		Priority:         string(dto.Priority),
+		BaseBranch:       dto.BaseBranch,
+		WorktreePath:     dto.WorktreePath,
+		CodexSessionID:   dto.CodexSessionID,
+		Config:           mapSessionConfig(dto.Config),
+		AvailableActions: dto.AvailableActions,
+		LastRunAt:        dto.LastRunAt,
+		CreatedAt:        dto.CreatedAt,
+		UpdatedAt:        dto.UpdatedAt,
 	}
 }
 
@@ -98,6 +100,7 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		RequirementSummary: dto.RequirementSummary,
 		Mode:               string(dto.Mode),
 		Status:             string(dto.Status),
+		Priority:           string(dto.Priority),
 		BaseBranch:         dto.BaseBranch,
 		CurrentNodeTitle:   dto.CurrentNodeTitle,
 		PendingQuestion:    dto.PendingQuestion,
@@ -124,6 +127,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		Requirement:      dto.Requirement,
 		Mode:             string(dto.Mode),
 		Status:           string(dto.Status),
+		Priority:         string(dto.Priority),
 		CloseReason:      stringPtr(dto.CloseReason),
 		BaseBranch:       dto.BaseBranch,
 		CurrentNodeTitle: dto.CurrentNodeTitle,

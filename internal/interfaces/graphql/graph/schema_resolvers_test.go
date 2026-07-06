@@ -273,7 +273,7 @@ func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	}
 	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
 
-	got, err := resolver.ResumeSession(context.Background(), "session-1")
+	got, err := resolver.ResumeSession(context.Background(), "session-1", nil)
 	if err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
@@ -534,6 +534,11 @@ func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batc
 }
 
 func (f *fakeSessionUseCase) ResumeSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
+	f.gotResumeID = id
+	return f.resumeResult, f.err
+}
+
+func (f *fakeSessionUseCase) ResumeSessionWithOptions(_ context.Context, id sessiondomain.ID, _ sessionapp.StartSessionOptions) (sessionapp.DTO, error) {
 	f.gotResumeID = id
 	return f.resumeResult, f.err
 }

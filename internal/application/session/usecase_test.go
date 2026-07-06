@@ -2088,6 +2088,163 @@ func TestStartSessionReturnsCurrentSessionWhenProcessIsAlreadyActive(t *testing.
 	}
 }
 
+func TestStartSessionQueuesWhenAgentLimitReached(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+		Priority:     domain.PriorityHigh,
+	}
+	processes := newFakeProcessRepository()
+	processes.activeCount = 1
+	codex := &fakeCodexProcess{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1))
+	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
+
+	got, err := service.StartSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if got.Status != domain.StatusQueued {
+		t.Fatalf("StartSession() status = %q", got.Status)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.Status != domain.StatusQueued || saved.QueuedAt == nil || saved.Queue.Kind != domain.QueueKindStart {
+		t.Fatalf("queued session = %#v", saved)
+	}
+	if codex.startCalled || len(processes.created) != 0 {
+		t.Fatalf("queued start should not launch codex: called=%v created=%#v", codex.startCalled, processes.created)
+	}
+}
+
+func TestForceStartQueuedSessionBypassesAgentLimit(t *testing.T) {
+	ctx := context.Background()
+	queuedAt := time.Unix(41, 0).UTC()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusQueued,
+		WorktreePath: "/workspace/session-1",
+		QueuedAt:     &queuedAt,
+		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, Prompt: "implement session"},
+	}
+	processes := newFakeProcessRepository()
+	processes.activeCount = 1
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1))
+	service.now = func() time.Time { return time.Unix(43, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-force", nil }
+
+	got, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
+	if err != nil {
+		t.Fatalf("StartSessionWithOptions() error = %v", err)
+	}
+	if got.Status != domain.StatusRunning {
+		t.Fatalf("StartSessionWithOptions() status = %q", got.Status)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.QueuedAt != nil || saved.Queue.Kind != "" {
+		t.Fatalf("force start should clear queue fields: %#v", saved)
+	}
+	if !codex.startCalled || len(processes.created) != 1 || processes.created[0].ID != "process-run-force" {
+		t.Fatalf("force start did not launch process: called=%v created=%#v", codex.startCalled, processes.created)
+	}
+}
+
+func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
+	ctx := context.Background()
+	lowQueuedAt := time.Unix(40, 0).UTC()
+	highQueuedAt := time.Unix(41, 0).UTC()
+	repo := newFakeRepository()
+	repo.sessions["low-session"] = domain.Session{
+		ID:           "low-session",
+		ProjectID:    "project-1",
+		Requirement:  "low priority",
+		Status:       domain.StatusQueued,
+		Priority:     domain.PriorityLow,
+		WorktreePath: "/workspace/low-session",
+		QueuedAt:     &lowQueuedAt,
+		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, Prompt: "low priority"},
+	}
+	repo.sessions["high-session"] = domain.Session{
+		ID:           "high-session",
+		ProjectID:    "project-1",
+		Requirement:  "high priority",
+		Status:       domain.StatusQueued,
+		Priority:     domain.PriorityHigh,
+		WorktreePath: "/workspace/high-session",
+		QueuedAt:     &highQueuedAt,
+		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, Prompt: "high priority"},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1))
+	service.now = func() time.Time { return time.Unix(44, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-high", nil }
+
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+
+	if started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 1", started)
+	}
+	if codex.startInput.SessionID != "high-session" {
+		t.Fatalf("started session = %q, want high-session", codex.startInput.SessionID)
+	}
+	if repo.sessions["high-session"].Status != domain.StatusRunning || repo.sessions["low-session"].Status != domain.StatusQueued {
+		t.Fatalf("session statuses: high=%q low=%q", repo.sessions["high-session"].Status, repo.sessions["low-session"].Status)
+	}
+}
+
+func TestDrainQueuedSessionsSkipsSessionStoppedAfterSelection(t *testing.T) {
+	ctx := context.Background()
+	queuedAt := time.Unix(41, 0).UTC()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusQueued,
+		Priority:     domain.PriorityHigh,
+		WorktreePath: "/workspace/session-1",
+		QueuedAt:     &queuedAt,
+		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, Prompt: "implement session"},
+	}
+	repo.listQueuedHook = func() {
+		session := repo.sessions["session-1"]
+		session.Status = domain.StatusStopped
+		session.QueuedAt = nil
+		session.Queue = domain.QueueIntent{}
+		repo.sessions["session-1"] = session
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1), WithSessionLocker(NewMemorySessionLocker()))
+
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+
+	if started != 0 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 0", started)
+	}
+	if codex.startCalled || len(processes.created) != 0 {
+		t.Fatalf("stopped queued session should not launch codex: called=%v created=%#v", codex.startCalled, processes.created)
+	}
+	if repo.sessions["session-1"].Status != domain.StatusStopped {
+		t.Fatalf("session status = %q, want stopped", repo.sessions["session-1"].Status)
+	}
+}
+
 func TestResumeSessionStartsCodexResume(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -2700,6 +2857,11 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			want:    []string{"run", "stop", "close"},
 		},
 		{
+			name:    "queued",
+			session: domain.Session{Status: domain.StatusQueued},
+			want:    []string{"run", "stop", "close"},
+		},
+		{
 			name:    "closed",
 			session: domain.Session{Status: domain.StatusClosed},
 			want:    []string{},
@@ -2787,6 +2949,7 @@ type fakeRepository struct {
 	saveErr             error
 	listSessions        []domain.Session
 	interruptedSessions []domain.Session
+	listQueuedHook      func()
 	listTotal           int
 	lastListQuery       domain.ListQuery
 	lastConfig          domain.Config
@@ -2838,6 +3001,20 @@ func (r *fakeRepository) ListCards(_ context.Context, query domain.ListQuery) ([
 		total = len(filtered)
 	}
 	return append([]domain.Session(nil), filtered...), total, nil
+}
+
+func (r *fakeRepository) ListQueued(context.Context) ([]domain.Session, error) {
+	queued := make([]domain.Session, 0, len(r.sessions))
+	for _, session := range r.sessions {
+		if session.Status == domain.StatusQueued {
+			queued = append(queued, session)
+		}
+	}
+	if r.listQueuedHook != nil {
+		r.listQueuedHook()
+		r.listQueuedHook = nil
+	}
+	return queued, nil
 }
 
 func (r *fakeRepository) ListInterruptedWithCodexSession(context.Context) ([]domain.Session, error) {
@@ -3125,6 +3302,7 @@ type fakeProcessRepository struct {
 	created      []processdomain.Run
 	active       processdomain.Run
 	hasActive    bool
+	activeCount  int
 	runningID    processdomain.RunID
 	runningPID   int
 	runningCodex string
@@ -3149,6 +3327,16 @@ func (r *fakeProcessRepository) FindActiveBySession(_ context.Context, sessionID
 		return r.active, true, nil
 	}
 	return processdomain.Run{}, false, nil
+}
+
+func (r *fakeProcessRepository) CountActive(context.Context) (int, error) {
+	if r.activeCount > 0 {
+		return r.activeCount, nil
+	}
+	if r.hasActive {
+		return 1, nil
+	}
+	return 0, nil
 }
 
 func (r *fakeProcessRepository) MarkRunning(_ context.Context, id processdomain.RunID, pid int, codexSessionID string) error {

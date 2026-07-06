@@ -70,6 +70,7 @@ type CreateSessionInput struct {
 	ProjectID           string              `json:"projectId"`
 	Requirement         string              `json:"requirement"`
 	Mode                string              `json:"mode"`
+	Priority            *string             `json:"priority,omitempty"`
 	BaseBranch          *string             `json:"baseBranch,omitempty"`
 	Config              *SessionConfigInput `json:"config,omitempty"`
 	StagedAttachmentIds []string            `json:"stagedAttachmentIds,omitempty"`
@@ -243,18 +244,20 @@ type SaveWorkflowDefinitionInput struct {
 }
 
 type Session struct {
-	ID             string         `json:"id"`
-	ProjectID      string         `json:"projectId"`
-	Requirement    string         `json:"requirement"`
-	Mode           string         `json:"mode"`
-	Status         string         `json:"status"`
-	BaseBranch     string         `json:"baseBranch"`
-	WorktreePath   string         `json:"worktreePath"`
-	CodexSessionID string         `json:"codexSessionId"`
-	Config         *SessionConfig `json:"config"`
-	LastRunAt      *time.Time     `json:"lastRunAt,omitempty"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"projectId"`
+	Requirement      string         `json:"requirement"`
+	Mode             string         `json:"mode"`
+	Status           string         `json:"status"`
+	Priority         string         `json:"priority"`
+	BaseBranch       string         `json:"baseBranch"`
+	WorktreePath     string         `json:"worktreePath"`
+	CodexSessionID   string         `json:"codexSessionId"`
+	Config           *SessionConfig `json:"config"`
+	AvailableActions []string       `json:"availableActions"`
+	LastRunAt        *time.Time     `json:"lastRunAt,omitempty"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        time.Time      `json:"updatedAt"`
 }
 
 type SessionAttachment struct {
@@ -276,6 +279,7 @@ type SessionCard struct {
 	RequirementSummary string               `json:"requirementSummary"`
 	Mode               string               `json:"mode"`
 	Status             string               `json:"status"`
+	Priority           string               `json:"priority"`
 	BaseBranch         string               `json:"baseBranch"`
 	CurrentNodeTitle   string               `json:"currentNodeTitle"`
 	PendingQuestion    bool                 `json:"pendingQuestion"`
@@ -320,6 +324,7 @@ type SessionDetail struct {
 	Requirement      string               `json:"requirement"`
 	Mode             string               `json:"mode"`
 	Status           string               `json:"status"`
+	Priority         string               `json:"priority"`
 	CloseReason      *string              `json:"closeReason,omitempty"`
 	BaseBranch       string               `json:"baseBranch"`
 	CurrentNodeTitle string               `json:"currentNodeTitle"`

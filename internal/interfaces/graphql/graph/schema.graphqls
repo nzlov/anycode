@@ -22,9 +22,9 @@ type Mutation {
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
-  startSession(id: ID!): Session!
+  startSession(id: ID!, force: Boolean): Session!
   stopSession(id: ID!): Session!
-  resumeSession(id: ID!): Session!
+  resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
@@ -94,10 +94,12 @@ type Session {
   requirement: String!
   mode: String!
   status: String!
+  priority: String!
   baseBranch: String!
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!
+  availableActions: [String!]!
   lastRunAt: Time
   createdAt: Time!
   updatedAt: Time!
@@ -111,6 +113,7 @@ type SessionCard {
   requirementSummary: String!
   mode: String!
   status: String!
+  priority: String!
   baseBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
@@ -132,6 +135,7 @@ type SessionDetail {
   requirement: String!
   mode: String!
   status: String!
+  priority: String!
   closeReason: String
   baseBranch: String!
   currentNodeTitle: String!
@@ -372,6 +376,7 @@ input CreateSessionInput {
   projectId: ID!
   requirement: String!
   mode: String!
+  priority: String
   baseBranch: String
   config: SessionConfigInput
   stagedAttachmentIds: [ID!]

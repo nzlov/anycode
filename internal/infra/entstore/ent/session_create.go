@@ -52,6 +52,20 @@ func (_c *SessionCreate) SetStatus(v string) *SessionCreate {
 	return _c
 }
 
+// SetPriority sets the "priority" field.
+func (_c *SessionCreate) SetPriority(v string) *SessionCreate {
+	_c.mutation.SetPriority(v)
+	return _c
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (_c *SessionCreate) SetNillablePriority(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetPriority(*v)
+	}
+	return _c
+}
+
 // SetCloseReason sets the "close_reason" field.
 func (_c *SessionCreate) SetCloseReason(v string) *SessionCreate {
 	_c.mutation.SetCloseReason(v)
@@ -146,6 +160,90 @@ func (_c *SessionCreate) SetPermissionMode(v string) *SessionCreate {
 func (_c *SessionCreate) SetNillablePermissionMode(v *string) *SessionCreate {
 	if v != nil {
 		_c.SetPermissionMode(*v)
+	}
+	return _c
+}
+
+// SetQueuedAt sets the "queued_at" field.
+func (_c *SessionCreate) SetQueuedAt(v time.Time) *SessionCreate {
+	_c.mutation.SetQueuedAt(v)
+	return _c
+}
+
+// SetNillableQueuedAt sets the "queued_at" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueuedAt(v *time.Time) *SessionCreate {
+	if v != nil {
+		_c.SetQueuedAt(*v)
+	}
+	return _c
+}
+
+// SetQueueKind sets the "queue_kind" field.
+func (_c *SessionCreate) SetQueueKind(v string) *SessionCreate {
+	_c.mutation.SetQueueKind(v)
+	return _c
+}
+
+// SetNillableQueueKind sets the "queue_kind" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueKind(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueueKind(*v)
+	}
+	return _c
+}
+
+// SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
+func (_c *SessionCreate) SetQueueWorkflowRunID(v string) *SessionCreate {
+	_c.mutation.SetQueueWorkflowRunID(v)
+	return _c
+}
+
+// SetNillableQueueWorkflowRunID sets the "queue_workflow_run_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueWorkflowRunID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueueWorkflowRunID(*v)
+	}
+	return _c
+}
+
+// SetQueueNodeRunID sets the "queue_node_run_id" field.
+func (_c *SessionCreate) SetQueueNodeRunID(v string) *SessionCreate {
+	_c.mutation.SetQueueNodeRunID(v)
+	return _c
+}
+
+// SetNillableQueueNodeRunID sets the "queue_node_run_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueNodeRunID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueueNodeRunID(*v)
+	}
+	return _c
+}
+
+// SetQueuePrompt sets the "queue_prompt" field.
+func (_c *SessionCreate) SetQueuePrompt(v string) *SessionCreate {
+	_c.mutation.SetQueuePrompt(v)
+	return _c
+}
+
+// SetNillableQueuePrompt sets the "queue_prompt" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueuePrompt(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueuePrompt(*v)
+	}
+	return _c
+}
+
+// SetQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field.
+func (_c *SessionCreate) SetQueueResumeCodexSessionID(v string) *SessionCreate {
+	_c.mutation.SetQueueResumeCodexSessionID(v)
+	return _c
+}
+
+// SetNillableQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueResumeCodexSessionID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueueResumeCodexSessionID(*v)
 	}
 	return _c
 }
@@ -251,6 +349,10 @@ func (_c *SessionCreate) defaults() {
 		v := session.DefaultRequirement
 		_c.mutation.SetRequirement(v)
 	}
+	if _, ok := _c.mutation.Priority(); !ok {
+		v := session.DefaultPriority
+		_c.mutation.SetPriority(v)
+	}
 	if _, ok := _c.mutation.BaseBranch(); !ok {
 		v := session.DefaultBaseBranch
 		_c.mutation.SetBaseBranch(v)
@@ -274,6 +376,26 @@ func (_c *SessionCreate) defaults() {
 	if _, ok := _c.mutation.PermissionMode(); !ok {
 		v := session.DefaultPermissionMode
 		_c.mutation.SetPermissionMode(v)
+	}
+	if _, ok := _c.mutation.QueueKind(); !ok {
+		v := session.DefaultQueueKind
+		_c.mutation.SetQueueKind(v)
+	}
+	if _, ok := _c.mutation.QueueWorkflowRunID(); !ok {
+		v := session.DefaultQueueWorkflowRunID
+		_c.mutation.SetQueueWorkflowRunID(v)
+	}
+	if _, ok := _c.mutation.QueueNodeRunID(); !ok {
+		v := session.DefaultQueueNodeRunID
+		_c.mutation.SetQueueNodeRunID(v)
+	}
+	if _, ok := _c.mutation.QueuePrompt(); !ok {
+		v := session.DefaultQueuePrompt
+		_c.mutation.SetQueuePrompt(v)
+	}
+	if _, ok := _c.mutation.QueueResumeCodexSessionID(); !ok {
+		v := session.DefaultQueueResumeCodexSessionID
+		_c.mutation.SetQueueResumeCodexSessionID(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := session.DefaultCreatedAt()
@@ -314,6 +436,9 @@ func (_c *SessionCreate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Session.status": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.Priority(); !ok {
+		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "Session.priority"`)}
+	}
 	if _, ok := _c.mutation.BaseBranch(); !ok {
 		return &ValidationError{Name: "base_branch", err: errors.New(`ent: missing required field "Session.base_branch"`)}
 	}
@@ -331,6 +456,21 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.PermissionMode(); !ok {
 		return &ValidationError{Name: "permission_mode", err: errors.New(`ent: missing required field "Session.permission_mode"`)}
+	}
+	if _, ok := _c.mutation.QueueKind(); !ok {
+		return &ValidationError{Name: "queue_kind", err: errors.New(`ent: missing required field "Session.queue_kind"`)}
+	}
+	if _, ok := _c.mutation.QueueWorkflowRunID(); !ok {
+		return &ValidationError{Name: "queue_workflow_run_id", err: errors.New(`ent: missing required field "Session.queue_workflow_run_id"`)}
+	}
+	if _, ok := _c.mutation.QueueNodeRunID(); !ok {
+		return &ValidationError{Name: "queue_node_run_id", err: errors.New(`ent: missing required field "Session.queue_node_run_id"`)}
+	}
+	if _, ok := _c.mutation.QueuePrompt(); !ok {
+		return &ValidationError{Name: "queue_prompt", err: errors.New(`ent: missing required field "Session.queue_prompt"`)}
+	}
+	if _, ok := _c.mutation.QueueResumeCodexSessionID(); !ok {
+		return &ValidationError{Name: "queue_resume_codex_session_id", err: errors.New(`ent: missing required field "Session.queue_resume_codex_session_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Session.created_at"`)}
@@ -389,6 +529,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 		_spec.SetField(session.FieldStatus, field.TypeString, value)
 		_node.Status = value
 	}
+	if value, ok := _c.mutation.Priority(); ok {
+		_spec.SetField(session.FieldPriority, field.TypeString, value)
+		_node.Priority = value
+	}
 	if value, ok := _c.mutation.CloseReason(); ok {
 		_spec.SetField(session.FieldCloseReason, field.TypeString, value)
 		_node.CloseReason = &value
@@ -416,6 +560,30 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PermissionMode(); ok {
 		_spec.SetField(session.FieldPermissionMode, field.TypeString, value)
 		_node.PermissionMode = value
+	}
+	if value, ok := _c.mutation.QueuedAt(); ok {
+		_spec.SetField(session.FieldQueuedAt, field.TypeTime, value)
+		_node.QueuedAt = &value
+	}
+	if value, ok := _c.mutation.QueueKind(); ok {
+		_spec.SetField(session.FieldQueueKind, field.TypeString, value)
+		_node.QueueKind = value
+	}
+	if value, ok := _c.mutation.QueueWorkflowRunID(); ok {
+		_spec.SetField(session.FieldQueueWorkflowRunID, field.TypeString, value)
+		_node.QueueWorkflowRunID = value
+	}
+	if value, ok := _c.mutation.QueueNodeRunID(); ok {
+		_spec.SetField(session.FieldQueueNodeRunID, field.TypeString, value)
+		_node.QueueNodeRunID = value
+	}
+	if value, ok := _c.mutation.QueuePrompt(); ok {
+		_spec.SetField(session.FieldQueuePrompt, field.TypeString, value)
+		_node.QueuePrompt = value
+	}
+	if value, ok := _c.mutation.QueueResumeCodexSessionID(); ok {
+		_spec.SetField(session.FieldQueueResumeCodexSessionID, field.TypeString, value)
+		_node.QueueResumeCodexSessionID = value
 	}
 	if value, ok := _c.mutation.LastRunAt(); ok {
 		_spec.SetField(session.FieldLastRunAt, field.TypeTime, value)

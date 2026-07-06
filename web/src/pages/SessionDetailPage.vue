@@ -5,7 +5,8 @@
         <div class="text-h5 text-weight-bold">{{ session?.title ?? '会话详情' }}</div>
         <div class="text-body2 text-muted">
           <template v-if="session">
-            {{ session.branch }} · {{ statusLabel(session.status) }} · {{ session.updatedAt }}
+            {{ session.branch }} · {{ statusLabel(session.status) }} ·
+            {{ priorityLabel(session.priority) }} · {{ session.updatedAt }}
           </template>
           <template v-else>{{ sessionId }}</template>
         </div>
@@ -108,7 +109,9 @@
             <q-card-section class="detail-answer-card__header">
               <div>
                 <div class="text-subtitle2 text-weight-bold">待回答问题</div>
-                <div class="text-caption text-muted">回答后当前会话继续执行，输入框会恢复为追加描述。</div>
+                <div class="text-caption text-muted">
+                  回答后当前会话继续执行，输入框会恢复为追加描述。
+                </div>
               </div>
               <q-badge rounded color="warning" text-color="dark" label="待回答" />
             </q-card-section>
@@ -135,19 +138,19 @@
             :disabled="!session || appending || stopping"
           >
             <template #actions>
-            <q-btn
-              v-if="composerAction"
-              unelevated
-              class="detail-composer__primary-btn"
-              :color="composerAction.color"
-              :icon="composerAction.icon"
-              :aria-label="composerAction.tooltip"
-              :loading="composerAction.loading"
-              :disable="composerAction.disabled"
-              @click="composerAction.run"
-            >
-              <q-tooltip>{{ composerAction.tooltip }}</q-tooltip>
-            </q-btn>
+              <q-btn
+                v-if="composerAction"
+                unelevated
+                class="detail-composer__primary-btn"
+                :color="composerAction.color"
+                :icon="composerAction.icon"
+                :aria-label="composerAction.tooltip"
+                :loading="composerAction.loading"
+                :disable="composerAction.disabled"
+                @click="composerAction.run"
+              >
+                <q-tooltip>{{ composerAction.tooltip }}</q-tooltip>
+              </q-btn>
             </template>
           </PromptComposer>
         </div>
@@ -192,6 +195,14 @@
                   <q-item-section>
                     <q-item-label caption>模式</q-item-label>
                     <q-item-label>{{ session ? modeLabel(session.mode) : '-' }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item>
+                  <q-item-section>
+                    <q-item-label caption>优先级</q-item-label>
+                    <q-item-label>{{
+                      session ? priorityLabel(session.priority) : '-'
+                    }}</q-item-label>
                   </q-item-section>
                 </q-item>
                 <q-item>
@@ -397,7 +408,6 @@
         </q-card-section>
       </q-card>
     </q-dialog>
-
   </q-page>
 </template>
 
@@ -417,7 +427,12 @@ import {
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { getSessionDiff } from '@/services/diff';
 import type { DiffFile, DiffLineKind, FileDiff, SessionDiff } from '@/services/diff';
-import type { QuestionAnswerInput, SessionEvent, SessionMode, SessionStatus } from '@/services/sessions';
+import type {
+  QuestionAnswerInput,
+  SessionEvent,
+  SessionMode,
+  SessionStatus,
+} from '@/services/sessions';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -466,10 +481,14 @@ const canRun = computed(() => session.value?.availableActions.includes('run') ??
 const canResume = computed(() => session.value?.availableActions.includes('resume') ?? false);
 const canStop = computed(() => session.value?.availableActions.includes('stop') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
-const runActionLabel = computed(() =>
-  session.value?.status === 'resume_failed' ? '重新运行当前节点' : '强制运行',
+const runActionLabel = computed(() => {
+  if (session.value?.status === 'resume_failed') return '重新运行当前节点';
+  if (session.value?.status === 'queued') return '强制启动';
+  return '强制运行';
+});
+const isWaitingForAnswer = computed(
+  () => session.value?.pendingQuestion || session.value?.status === 'waiting_user',
 );
-const isWaitingForAnswer = computed(() => session.value?.pendingQuestion || session.value?.status === 'waiting_user');
 interface StreamEntry {
   id: string;
   kind: SessionEvent['kind'] | 'user';
@@ -572,7 +591,7 @@ const composerAction = computed(() => {
   };
 });
 const workflowProgressIndeterminate = computed(() =>
-  ['starting', 'running', 'waiting_user', 'waiting_approval', 'stopping'].includes(
+  ['queued', 'starting', 'running', 'waiting_user', 'waiting_approval', 'stopping'].includes(
     session.value?.status ?? '',
   ),
 );
@@ -628,9 +647,19 @@ function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
 }
 
+function priorityLabel(priority: 'high' | 'medium' | 'low') {
+  const labels: Record<'high' | 'medium' | 'low', string> = {
+    high: '高优先级',
+    medium: '中优先级',
+    low: '低优先级',
+  };
+  return labels[priority];
+}
+
 function statusColor(value: SessionStatus) {
   const colors: Record<SessionStatus, string> = {
     created: 'blue-grey',
+    queued: 'warning',
     starting: 'primary',
     running: 'positive',
     waiting_user: 'warning',
@@ -649,6 +678,7 @@ function statusColor(value: SessionStatus) {
 function statusLabel(value: SessionStatus) {
   const labels: Record<SessionStatus, string> = {
     created: '待运行',
+    queued: '排队中',
     starting: '启动中',
     running: '运行中',
     waiting_user: '待回答',

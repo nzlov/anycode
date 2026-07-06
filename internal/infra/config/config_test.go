@@ -21,4 +21,7 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 	if got.CodexBin != "codex" {
 		t.Fatalf("CodexBin = %q", got.CodexBin)
 	}
+	if got.AgentMaxConcurrent != 1 {
+		t.Fatalf("AgentMaxConcurrent = %d", got.AgentMaxConcurrent)
+	}
 }

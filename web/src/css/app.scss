@@ -258,6 +258,7 @@ a {
 .lane-status-chip--waiting_user,
 .lane-status-chip--waiting_approval,
 .lane-status-chip--stopping,
+.lane-status-chip--queued,
 .lane-status-chip--starting {
   color: #92400e;
   background: #fef3c7;
@@ -876,7 +877,7 @@ a {
 
 .commit-hash {
   color: var(--q-primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 }
 
 @media (max-width: 1023px) {

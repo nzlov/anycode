@@ -26,6 +26,7 @@ type Status string
 
 const (
 	StatusCreated         Status = "created"
+	StatusQueued          Status = "queued"
 	StatusStarting        Status = "starting"
 	StatusRunning         Status = "running"
 	StatusWaitingUser     Status = "waiting_user"
@@ -37,6 +38,21 @@ const (
 	StatusBlocked         Status = "blocked"
 	StatusCompleted       Status = "completed"
 	StatusClosed          Status = "closed"
+)
+
+type Priority string
+
+const (
+	PriorityHigh   Priority = "high"
+	PriorityMedium Priority = "medium"
+	PriorityLow    Priority = "low"
+)
+
+type QueueKind string
+
+const (
+	QueueKindStart  QueueKind = "start"
+	QueueKindResume QueueKind = "resume"
 )
 
 type CloseReason string
@@ -52,15 +68,26 @@ type Session struct {
 	Requirement    string
 	Mode           Mode
 	Status         Status
+	Priority       Priority
 	CloseReason    *CloseReason
 	BaseBranch     string
 	WorktreePath   string
 	CodexSessionID string
 	Config         Config
+	QueuedAt       *time.Time
+	Queue          QueueIntent
 	LastRunAt      *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	ClosedAt       *time.Time
+}
+
+type QueueIntent struct {
+	Kind                 QueueKind
+	WorkflowRunID        WorkflowRunID
+	NodeRunID            *NodeRunID
+	Prompt               string
+	ResumeCodexSessionID string
 }
 
 type Config struct {
@@ -144,6 +171,7 @@ type Repository interface {
 	Save(ctx context.Context, session Session) error
 	Find(ctx context.Context, id ID) (Session, error)
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
+	ListQueued(ctx context.Context) ([]Session, error)
 	ListInterruptedWithCodexSession(ctx context.Context) ([]Session, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error

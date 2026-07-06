@@ -105,7 +105,7 @@ export function useSessionDetail(sessionId: string) {
     starting.value = true;
     error.value = '';
     try {
-      await startSessionRequest(sessionId);
+      await startSessionRequest(sessionId, session.value?.status === 'queued');
       await loadSessionDetail();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '运行会话失败';
@@ -119,7 +119,7 @@ export function useSessionDetail(sessionId: string) {
     resuming.value = true;
     error.value = '';
     try {
-      await resumeSessionRequest(sessionId);
+      await resumeSessionRequest(sessionId, session.value?.status === 'queued');
       await loadSessionDetail();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '恢复会话失败';

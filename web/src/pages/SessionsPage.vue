@@ -192,6 +192,7 @@ onUnmounted(() => {
 function statusColor(value: SessionStatus) {
   const colors: Record<SessionStatus, string> = {
     created: 'blue-grey',
+    queued: 'warning',
     starting: 'primary',
     running: 'positive',
     waiting_user: 'warning',
@@ -210,6 +211,7 @@ function statusColor(value: SessionStatus) {
 function statusLabel(value: SessionStatus) {
   const labels: Record<SessionStatus, string> = {
     created: '待运行',
+    queued: '排队中',
     starting: '启动中',
     running: '运行中',
     waiting_user: '待回答',

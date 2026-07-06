@@ -340,6 +340,10 @@ func (r *fakeSessionRepository) ListCards(_ context.Context, query sessiondomain
 	return filtered[start:end], len(filtered), nil
 }
 
+func (r *fakeSessionRepository) ListQueued(context.Context) ([]sessiondomain.Session, error) {
+	return nil, nil
+}
+
 func (r *fakeSessionRepository) ListInterruptedWithCodexSession(context.Context) ([]sessiondomain.Session, error) {
 	return nil, nil
 }

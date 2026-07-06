@@ -84,6 +84,20 @@ func (_u *SessionUpdate) SetNillableStatus(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetPriority sets the "priority" field.
+func (_u *SessionUpdate) SetPriority(v string) *SessionUpdate {
+	_u.mutation.SetPriority(v)
+	return _u
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillablePriority(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetPriority(*v)
+	}
+	return _u
+}
+
 // SetCloseReason sets the "close_reason" field.
 func (_u *SessionUpdate) SetCloseReason(v string) *SessionUpdate {
 	_u.mutation.SetCloseReason(v)
@@ -184,6 +198,96 @@ func (_u *SessionUpdate) SetPermissionMode(v string) *SessionUpdate {
 func (_u *SessionUpdate) SetNillablePermissionMode(v *string) *SessionUpdate {
 	if v != nil {
 		_u.SetPermissionMode(*v)
+	}
+	return _u
+}
+
+// SetQueuedAt sets the "queued_at" field.
+func (_u *SessionUpdate) SetQueuedAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetQueuedAt(v)
+	return _u
+}
+
+// SetNillableQueuedAt sets the "queued_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueuedAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetQueuedAt(*v)
+	}
+	return _u
+}
+
+// ClearQueuedAt clears the value of the "queued_at" field.
+func (_u *SessionUpdate) ClearQueuedAt() *SessionUpdate {
+	_u.mutation.ClearQueuedAt()
+	return _u
+}
+
+// SetQueueKind sets the "queue_kind" field.
+func (_u *SessionUpdate) SetQueueKind(v string) *SessionUpdate {
+	_u.mutation.SetQueueKind(v)
+	return _u
+}
+
+// SetNillableQueueKind sets the "queue_kind" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueKind(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueKind(*v)
+	}
+	return _u
+}
+
+// SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
+func (_u *SessionUpdate) SetQueueWorkflowRunID(v string) *SessionUpdate {
+	_u.mutation.SetQueueWorkflowRunID(v)
+	return _u
+}
+
+// SetNillableQueueWorkflowRunID sets the "queue_workflow_run_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueWorkflowRunID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueWorkflowRunID(*v)
+	}
+	return _u
+}
+
+// SetQueueNodeRunID sets the "queue_node_run_id" field.
+func (_u *SessionUpdate) SetQueueNodeRunID(v string) *SessionUpdate {
+	_u.mutation.SetQueueNodeRunID(v)
+	return _u
+}
+
+// SetNillableQueueNodeRunID sets the "queue_node_run_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueNodeRunID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueNodeRunID(*v)
+	}
+	return _u
+}
+
+// SetQueuePrompt sets the "queue_prompt" field.
+func (_u *SessionUpdate) SetQueuePrompt(v string) *SessionUpdate {
+	_u.mutation.SetQueuePrompt(v)
+	return _u
+}
+
+// SetNillableQueuePrompt sets the "queue_prompt" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueuePrompt(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueuePrompt(*v)
+	}
+	return _u
+}
+
+// SetQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field.
+func (_u *SessionUpdate) SetQueueResumeCodexSessionID(v string) *SessionUpdate {
+	_u.mutation.SetQueueResumeCodexSessionID(v)
+	return _u
+}
+
+// SetNillableQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueResumeCodexSessionID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueResumeCodexSessionID(*v)
 	}
 	return _u
 }
@@ -319,6 +423,9 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(session.FieldStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Priority(); ok {
+		_spec.SetField(session.FieldPriority, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.CloseReason(); ok {
 		_spec.SetField(session.FieldCloseReason, field.TypeString, value)
 	}
@@ -342,6 +449,27 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.PermissionMode(); ok {
 		_spec.SetField(session.FieldPermissionMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueuedAt(); ok {
+		_spec.SetField(session.FieldQueuedAt, field.TypeTime, value)
+	}
+	if _u.mutation.QueuedAtCleared() {
+		_spec.ClearField(session.FieldQueuedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.QueueKind(); ok {
+		_spec.SetField(session.FieldQueueKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
+		_spec.SetField(session.FieldQueueWorkflowRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueNodeRunID(); ok {
+		_spec.SetField(session.FieldQueueNodeRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueuePrompt(); ok {
+		_spec.SetField(session.FieldQueuePrompt, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueResumeCodexSessionID(); ok {
+		_spec.SetField(session.FieldQueueResumeCodexSessionID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.LastRunAt(); ok {
 		_spec.SetField(session.FieldLastRunAt, field.TypeTime, value)
@@ -430,6 +558,20 @@ func (_u *SessionUpdateOne) SetStatus(v string) *SessionUpdateOne {
 func (_u *SessionUpdateOne) SetNillableStatus(v *string) *SessionUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetPriority sets the "priority" field.
+func (_u *SessionUpdateOne) SetPriority(v string) *SessionUpdateOne {
+	_u.mutation.SetPriority(v)
+	return _u
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillablePriority(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetPriority(*v)
 	}
 	return _u
 }
@@ -534,6 +676,96 @@ func (_u *SessionUpdateOne) SetPermissionMode(v string) *SessionUpdateOne {
 func (_u *SessionUpdateOne) SetNillablePermissionMode(v *string) *SessionUpdateOne {
 	if v != nil {
 		_u.SetPermissionMode(*v)
+	}
+	return _u
+}
+
+// SetQueuedAt sets the "queued_at" field.
+func (_u *SessionUpdateOne) SetQueuedAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetQueuedAt(v)
+	return _u
+}
+
+// SetNillableQueuedAt sets the "queued_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueuedAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueuedAt(*v)
+	}
+	return _u
+}
+
+// ClearQueuedAt clears the value of the "queued_at" field.
+func (_u *SessionUpdateOne) ClearQueuedAt() *SessionUpdateOne {
+	_u.mutation.ClearQueuedAt()
+	return _u
+}
+
+// SetQueueKind sets the "queue_kind" field.
+func (_u *SessionUpdateOne) SetQueueKind(v string) *SessionUpdateOne {
+	_u.mutation.SetQueueKind(v)
+	return _u
+}
+
+// SetNillableQueueKind sets the "queue_kind" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueKind(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueKind(*v)
+	}
+	return _u
+}
+
+// SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
+func (_u *SessionUpdateOne) SetQueueWorkflowRunID(v string) *SessionUpdateOne {
+	_u.mutation.SetQueueWorkflowRunID(v)
+	return _u
+}
+
+// SetNillableQueueWorkflowRunID sets the "queue_workflow_run_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueWorkflowRunID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueWorkflowRunID(*v)
+	}
+	return _u
+}
+
+// SetQueueNodeRunID sets the "queue_node_run_id" field.
+func (_u *SessionUpdateOne) SetQueueNodeRunID(v string) *SessionUpdateOne {
+	_u.mutation.SetQueueNodeRunID(v)
+	return _u
+}
+
+// SetNillableQueueNodeRunID sets the "queue_node_run_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueNodeRunID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueNodeRunID(*v)
+	}
+	return _u
+}
+
+// SetQueuePrompt sets the "queue_prompt" field.
+func (_u *SessionUpdateOne) SetQueuePrompt(v string) *SessionUpdateOne {
+	_u.mutation.SetQueuePrompt(v)
+	return _u
+}
+
+// SetNillableQueuePrompt sets the "queue_prompt" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueuePrompt(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueuePrompt(*v)
+	}
+	return _u
+}
+
+// SetQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field.
+func (_u *SessionUpdateOne) SetQueueResumeCodexSessionID(v string) *SessionUpdateOne {
+	_u.mutation.SetQueueResumeCodexSessionID(v)
+	return _u
+}
+
+// SetNillableQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueResumeCodexSessionID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueResumeCodexSessionID(*v)
 	}
 	return _u
 }
@@ -699,6 +931,9 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(session.FieldStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Priority(); ok {
+		_spec.SetField(session.FieldPriority, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.CloseReason(); ok {
 		_spec.SetField(session.FieldCloseReason, field.TypeString, value)
 	}
@@ -722,6 +957,27 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.PermissionMode(); ok {
 		_spec.SetField(session.FieldPermissionMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueuedAt(); ok {
+		_spec.SetField(session.FieldQueuedAt, field.TypeTime, value)
+	}
+	if _u.mutation.QueuedAtCleared() {
+		_spec.ClearField(session.FieldQueuedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.QueueKind(); ok {
+		_spec.SetField(session.FieldQueueKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
+		_spec.SetField(session.FieldQueueWorkflowRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueNodeRunID(); ok {
+		_spec.SetField(session.FieldQueueNodeRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueuePrompt(); ok {
+		_spec.SetField(session.FieldQueuePrompt, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueResumeCodexSessionID(); ok {
+		_spec.SetField(session.FieldQueueResumeCodexSessionID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.LastRunAt(); ok {
 		_spec.SetField(session.FieldLastRunAt, field.TypeTime, value)

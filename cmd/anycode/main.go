@@ -47,7 +47,7 @@ func main() {
 		log.Fatalf("migrate entstore: %s", redaction.Text(err.Error()))
 	}
 
-	useCases, err := newGraphQLUseCases(store, cfg.DataDir, cfg.CodexBin, cfg.HTTPAddr, cfg.AccessKey)
+	useCases, err := newGraphQLUseCases(store, cfg.DataDir, cfg.CodexBin, cfg.HTTPAddr, cfg.AccessKey, cfg.AgentMaxConcurrent)
 	if err != nil {
 		log.Fatalf("wire graphql usecases: %s", redaction.Text(err.Error()))
 	}
@@ -64,7 +64,7 @@ func main() {
 	}
 }
 
-func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, httpAddr string, accessKey string) (graph.UseCases, error) {
+func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, httpAddr string, accessKey string, maxConcurrentAgents int) (graph.UseCases, error) {
 	if store == nil {
 		return graph.UseCases{}, errors.New("nil entstore")
 	}
@@ -80,13 +80,20 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	questionService := questionapp.New(store.Questions(), questionWaiter)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(store.Processes(), codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()))
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(store.Processes(), codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents))
 	recoverableCount, err := sessionService.MarkInterruptedSessionsRecoverable(context.Background())
 	if err != nil {
 		return graph.UseCases{}, err
 	}
 	if recoverableCount > 0 {
 		log.Printf("marked interrupted codex sessions recoverable: count=%d", recoverableCount)
+	}
+	drainedCount, err := sessionService.DrainQueuedSessions(context.Background())
+	if err != nil {
+		return graph.UseCases{}, err
+	}
+	if drainedCount > 0 {
+		log.Printf("started queued codex sessions: count=%d", drainedCount)
 	}
 	return graph.UseCases{
 		Projects:    projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),

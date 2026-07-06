@@ -38,12 +38,27 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetRequirement(s.Requirement).
 			SetMode(string(s.Mode)).
 			SetStatus(string(s.Status)).
+			SetPriority(string(normalizePriority(s.Priority))).
 			SetBaseBranch(s.BaseBranch).
 			SetWorktreePath(s.WorktreePath).
 			SetCodexSessionID(s.CodexSessionID).
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
-			SetPermissionMode(s.Config.PermissionMode)
+			SetPermissionMode(s.Config.PermissionMode).
+			SetQueueKind(string(s.Queue.Kind)).
+			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
+			SetQueuePrompt(s.Queue.Prompt).
+			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
+		if s.Queue.NodeRunID == nil {
+			update.SetQueueNodeRunID("")
+		} else {
+			update.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
+		}
+		if s.QueuedAt == nil {
+			update.ClearQueuedAt()
+		} else {
+			update.SetQueuedAt(*s.QueuedAt)
+		}
 		if s.CloseReason == nil {
 			update.ClearCloseReason()
 		} else {
@@ -74,12 +89,23 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 		SetRequirement(s.Requirement).
 		SetMode(string(s.Mode)).
 		SetStatus(string(s.Status)).
+		SetPriority(string(normalizePriority(s.Priority))).
 		SetBaseBranch(s.BaseBranch).
 		SetWorktreePath(s.WorktreePath).
 		SetCodexSessionID(s.CodexSessionID).
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
-		SetPermissionMode(s.Config.PermissionMode)
+		SetPermissionMode(s.Config.PermissionMode).
+		SetQueueKind(string(s.Queue.Kind)).
+		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
+		SetQueuePrompt(s.Queue.Prompt).
+		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
+	if s.Queue.NodeRunID != nil {
+		create.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
+	}
+	if s.QueuedAt != nil {
+		create.SetQueuedAt(*s.QueuedAt)
+	}
 	if s.CloseReason != nil {
 		create.SetCloseReason(string(*s.CloseReason))
 	}
@@ -129,6 +155,21 @@ func (r *SessionRepository) ListCards(ctx context.Context, query domainsession.L
 		sessions = append(sessions, toDomainSession(row))
 	}
 	return sessions, total, nil
+}
+
+func (r *SessionRepository) ListQueued(ctx context.Context) ([]domainsession.Session, error) {
+	rows, err := r.client.Session.Query().
+		Where(entsession.StatusEQ(string(domainsession.StatusQueued))).
+		Order(ent.Asc(entsession.FieldQueuedAt), ent.Asc(entsession.FieldUpdatedAt), ent.Asc(entsession.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list queued sessions: %w", err)
+	}
+	sessions := make([]domainsession.Session, 0, len(rows))
+	for _, row := range rows {
+		sessions = append(sessions, toDomainSession(row))
+	}
+	return sessions, nil
 }
 
 func (r *SessionRepository) LastConfigForProject(ctx context.Context, projectID domainsession.ProjectID) (domainsession.Config, bool, error) {
@@ -257,6 +298,7 @@ func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery,
 	}
 	switch strings.ToLower(strings.TrimSpace(query.Scope)) {
 	case string(domainsession.StatusCreated),
+		string(domainsession.StatusQueued),
 		string(domainsession.StatusStarting),
 		string(domainsession.StatusRunning),
 		string(domainsession.StatusWaitingUser),
@@ -352,6 +394,8 @@ func parseSessionSort(sort string) (string, bool) {
 		return entsession.FieldProjectID, desc
 	case entsession.FieldStatus:
 		return entsession.FieldStatus, desc
+	case entsession.FieldPriority:
+		return entsession.FieldPriority, desc
 	case entsession.FieldBaseBranch, "base":
 		return entsession.FieldBaseBranch, desc
 	default:
@@ -365,12 +409,18 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		v := domainsession.CloseReason(*row.CloseReason)
 		closeReason = &v
 	}
+	var queueNodeRunID *domainsession.NodeRunID
+	if strings.TrimSpace(row.QueueNodeRunID) != "" {
+		v := domainsession.NodeRunID(row.QueueNodeRunID)
+		queueNodeRunID = &v
+	}
 	return domainsession.Session{
 		ID:             domainsession.ID(row.ID),
 		ProjectID:      domainsession.ProjectID(row.ProjectID),
 		Requirement:    row.Requirement,
 		Mode:           domainsession.Mode(row.Mode),
 		Status:         domainsession.Status(row.Status),
+		Priority:       normalizePriority(domainsession.Priority(row.Priority)),
 		CloseReason:    closeReason,
 		BaseBranch:     row.BaseBranch,
 		WorktreePath:   row.WorktreePath,
@@ -380,10 +430,27 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			ReasoningEffort: row.ReasoningEffort,
 			PermissionMode:  row.PermissionMode,
 		},
+		QueuedAt: row.QueuedAt,
+		Queue: domainsession.QueueIntent{
+			Kind:                 domainsession.QueueKind(row.QueueKind),
+			WorkflowRunID:        domainsession.WorkflowRunID(row.QueueWorkflowRunID),
+			NodeRunID:            queueNodeRunID,
+			Prompt:               row.QueuePrompt,
+			ResumeCodexSessionID: row.QueueResumeCodexSessionID,
+		},
 		LastRunAt: row.LastRunAt,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
 		ClosedAt:  row.ClosedAt,
+	}
+}
+
+func normalizePriority(priority domainsession.Priority) domainsession.Priority {
+	switch priority {
+	case domainsession.PriorityHigh, domainsession.PriorityLow:
+		return priority
+	default:
+		return domainsession.PriorityMedium
 	}
 }
 

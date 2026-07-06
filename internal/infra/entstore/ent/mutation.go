@@ -5982,28 +5982,35 @@ func (m *QuestionBatchMutation) ResetEdge(name string) error {
 // SessionMutation represents an operation that mutates the Session nodes in the graph.
 type SessionMutation struct {
 	config
-	op               Op
-	typ              string
-	id               *string
-	project_id       *string
-	requirement      *string
-	mode             *string
-	status           *string
-	close_reason     *string
-	base_branch      *string
-	worktree_path    *string
-	codex_session_id *string
-	codex_model      *string
-	reasoning_effort *string
-	permission_mode  *string
-	last_run_at      *time.Time
-	created_at       *time.Time
-	updated_at       *time.Time
-	closed_at        *time.Time
-	clearedFields    map[string]struct{}
-	done             bool
-	oldValue         func(context.Context) (*Session, error)
-	predicates       []predicate.Session
+	op                            Op
+	typ                           string
+	id                            *string
+	project_id                    *string
+	requirement                   *string
+	mode                          *string
+	status                        *string
+	priority                      *string
+	close_reason                  *string
+	base_branch                   *string
+	worktree_path                 *string
+	codex_session_id              *string
+	codex_model                   *string
+	reasoning_effort              *string
+	permission_mode               *string
+	queued_at                     *time.Time
+	queue_kind                    *string
+	queue_workflow_run_id         *string
+	queue_node_run_id             *string
+	queue_prompt                  *string
+	queue_resume_codex_session_id *string
+	last_run_at                   *time.Time
+	created_at                    *time.Time
+	updated_at                    *time.Time
+	closed_at                     *time.Time
+	clearedFields                 map[string]struct{}
+	done                          bool
+	oldValue                      func(context.Context) (*Session, error)
+	predicates                    []predicate.Session
 }
 
 var _ ent.Mutation = (*SessionMutation)(nil)
@@ -6252,6 +6259,42 @@ func (m *SessionMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *SessionMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetPriority sets the "priority" field.
+func (m *SessionMutation) SetPriority(s string) {
+	m.priority = &s
+}
+
+// Priority returns the value of the "priority" field in the mutation.
+func (m *SessionMutation) Priority() (r string, exists bool) {
+	v := m.priority
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPriority returns the old "priority" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldPriority(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPriority is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPriority requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPriority: %w", err)
+	}
+	return oldValue.Priority, nil
+}
+
+// ResetPriority resets all changes to the "priority" field.
+func (m *SessionMutation) ResetPriority() {
+	m.priority = nil
 }
 
 // SetCloseReason sets the "close_reason" field.
@@ -6519,6 +6562,235 @@ func (m *SessionMutation) ResetPermissionMode() {
 	m.permission_mode = nil
 }
 
+// SetQueuedAt sets the "queued_at" field.
+func (m *SessionMutation) SetQueuedAt(t time.Time) {
+	m.queued_at = &t
+}
+
+// QueuedAt returns the value of the "queued_at" field in the mutation.
+func (m *SessionMutation) QueuedAt() (r time.Time, exists bool) {
+	v := m.queued_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueuedAt returns the old "queued_at" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueuedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueuedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueuedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueuedAt: %w", err)
+	}
+	return oldValue.QueuedAt, nil
+}
+
+// ClearQueuedAt clears the value of the "queued_at" field.
+func (m *SessionMutation) ClearQueuedAt() {
+	m.queued_at = nil
+	m.clearedFields[session.FieldQueuedAt] = struct{}{}
+}
+
+// QueuedAtCleared returns if the "queued_at" field was cleared in this mutation.
+func (m *SessionMutation) QueuedAtCleared() bool {
+	_, ok := m.clearedFields[session.FieldQueuedAt]
+	return ok
+}
+
+// ResetQueuedAt resets all changes to the "queued_at" field.
+func (m *SessionMutation) ResetQueuedAt() {
+	m.queued_at = nil
+	delete(m.clearedFields, session.FieldQueuedAt)
+}
+
+// SetQueueKind sets the "queue_kind" field.
+func (m *SessionMutation) SetQueueKind(s string) {
+	m.queue_kind = &s
+}
+
+// QueueKind returns the value of the "queue_kind" field in the mutation.
+func (m *SessionMutation) QueueKind() (r string, exists bool) {
+	v := m.queue_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueKind returns the old "queue_kind" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueKind: %w", err)
+	}
+	return oldValue.QueueKind, nil
+}
+
+// ResetQueueKind resets all changes to the "queue_kind" field.
+func (m *SessionMutation) ResetQueueKind() {
+	m.queue_kind = nil
+}
+
+// SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
+func (m *SessionMutation) SetQueueWorkflowRunID(s string) {
+	m.queue_workflow_run_id = &s
+}
+
+// QueueWorkflowRunID returns the value of the "queue_workflow_run_id" field in the mutation.
+func (m *SessionMutation) QueueWorkflowRunID() (r string, exists bool) {
+	v := m.queue_workflow_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueWorkflowRunID returns the old "queue_workflow_run_id" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueWorkflowRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueWorkflowRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueWorkflowRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueWorkflowRunID: %w", err)
+	}
+	return oldValue.QueueWorkflowRunID, nil
+}
+
+// ResetQueueWorkflowRunID resets all changes to the "queue_workflow_run_id" field.
+func (m *SessionMutation) ResetQueueWorkflowRunID() {
+	m.queue_workflow_run_id = nil
+}
+
+// SetQueueNodeRunID sets the "queue_node_run_id" field.
+func (m *SessionMutation) SetQueueNodeRunID(s string) {
+	m.queue_node_run_id = &s
+}
+
+// QueueNodeRunID returns the value of the "queue_node_run_id" field in the mutation.
+func (m *SessionMutation) QueueNodeRunID() (r string, exists bool) {
+	v := m.queue_node_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueNodeRunID returns the old "queue_node_run_id" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueNodeRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueNodeRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueNodeRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueNodeRunID: %w", err)
+	}
+	return oldValue.QueueNodeRunID, nil
+}
+
+// ResetQueueNodeRunID resets all changes to the "queue_node_run_id" field.
+func (m *SessionMutation) ResetQueueNodeRunID() {
+	m.queue_node_run_id = nil
+}
+
+// SetQueuePrompt sets the "queue_prompt" field.
+func (m *SessionMutation) SetQueuePrompt(s string) {
+	m.queue_prompt = &s
+}
+
+// QueuePrompt returns the value of the "queue_prompt" field in the mutation.
+func (m *SessionMutation) QueuePrompt() (r string, exists bool) {
+	v := m.queue_prompt
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueuePrompt returns the old "queue_prompt" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueuePrompt(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueuePrompt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueuePrompt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueuePrompt: %w", err)
+	}
+	return oldValue.QueuePrompt, nil
+}
+
+// ResetQueuePrompt resets all changes to the "queue_prompt" field.
+func (m *SessionMutation) ResetQueuePrompt() {
+	m.queue_prompt = nil
+}
+
+// SetQueueResumeCodexSessionID sets the "queue_resume_codex_session_id" field.
+func (m *SessionMutation) SetQueueResumeCodexSessionID(s string) {
+	m.queue_resume_codex_session_id = &s
+}
+
+// QueueResumeCodexSessionID returns the value of the "queue_resume_codex_session_id" field in the mutation.
+func (m *SessionMutation) QueueResumeCodexSessionID() (r string, exists bool) {
+	v := m.queue_resume_codex_session_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueResumeCodexSessionID returns the old "queue_resume_codex_session_id" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueResumeCodexSessionID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueResumeCodexSessionID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueResumeCodexSessionID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueResumeCodexSessionID: %w", err)
+	}
+	return oldValue.QueueResumeCodexSessionID, nil
+}
+
+// ResetQueueResumeCodexSessionID resets all changes to the "queue_resume_codex_session_id" field.
+func (m *SessionMutation) ResetQueueResumeCodexSessionID() {
+	m.queue_resume_codex_session_id = nil
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (m *SessionMutation) SetLastRunAt(t time.Time) {
 	m.last_run_at = &t
@@ -6723,7 +6995,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 22)
 	if m.project_id != nil {
 		fields = append(fields, session.FieldProjectID)
 	}
@@ -6735,6 +7007,9 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, session.FieldStatus)
+	}
+	if m.priority != nil {
+		fields = append(fields, session.FieldPriority)
 	}
 	if m.close_reason != nil {
 		fields = append(fields, session.FieldCloseReason)
@@ -6756,6 +7031,24 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.permission_mode != nil {
 		fields = append(fields, session.FieldPermissionMode)
+	}
+	if m.queued_at != nil {
+		fields = append(fields, session.FieldQueuedAt)
+	}
+	if m.queue_kind != nil {
+		fields = append(fields, session.FieldQueueKind)
+	}
+	if m.queue_workflow_run_id != nil {
+		fields = append(fields, session.FieldQueueWorkflowRunID)
+	}
+	if m.queue_node_run_id != nil {
+		fields = append(fields, session.FieldQueueNodeRunID)
+	}
+	if m.queue_prompt != nil {
+		fields = append(fields, session.FieldQueuePrompt)
+	}
+	if m.queue_resume_codex_session_id != nil {
+		fields = append(fields, session.FieldQueueResumeCodexSessionID)
 	}
 	if m.last_run_at != nil {
 		fields = append(fields, session.FieldLastRunAt)
@@ -6785,6 +7078,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.Mode()
 	case session.FieldStatus:
 		return m.Status()
+	case session.FieldPriority:
+		return m.Priority()
 	case session.FieldCloseReason:
 		return m.CloseReason()
 	case session.FieldBaseBranch:
@@ -6799,6 +7094,18 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.ReasoningEffort()
 	case session.FieldPermissionMode:
 		return m.PermissionMode()
+	case session.FieldQueuedAt:
+		return m.QueuedAt()
+	case session.FieldQueueKind:
+		return m.QueueKind()
+	case session.FieldQueueWorkflowRunID:
+		return m.QueueWorkflowRunID()
+	case session.FieldQueueNodeRunID:
+		return m.QueueNodeRunID()
+	case session.FieldQueuePrompt:
+		return m.QueuePrompt()
+	case session.FieldQueueResumeCodexSessionID:
+		return m.QueueResumeCodexSessionID()
 	case session.FieldLastRunAt:
 		return m.LastRunAt()
 	case session.FieldCreatedAt:
@@ -6824,6 +7131,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldMode(ctx)
 	case session.FieldStatus:
 		return m.OldStatus(ctx)
+	case session.FieldPriority:
+		return m.OldPriority(ctx)
 	case session.FieldCloseReason:
 		return m.OldCloseReason(ctx)
 	case session.FieldBaseBranch:
@@ -6838,6 +7147,18 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldReasoningEffort(ctx)
 	case session.FieldPermissionMode:
 		return m.OldPermissionMode(ctx)
+	case session.FieldQueuedAt:
+		return m.OldQueuedAt(ctx)
+	case session.FieldQueueKind:
+		return m.OldQueueKind(ctx)
+	case session.FieldQueueWorkflowRunID:
+		return m.OldQueueWorkflowRunID(ctx)
+	case session.FieldQueueNodeRunID:
+		return m.OldQueueNodeRunID(ctx)
+	case session.FieldQueuePrompt:
+		return m.OldQueuePrompt(ctx)
+	case session.FieldQueueResumeCodexSessionID:
+		return m.OldQueueResumeCodexSessionID(ctx)
 	case session.FieldLastRunAt:
 		return m.OldLastRunAt(ctx)
 	case session.FieldCreatedAt:
@@ -6882,6 +7203,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case session.FieldPriority:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPriority(v)
 		return nil
 	case session.FieldCloseReason:
 		v, ok := value.(string)
@@ -6931,6 +7259,48 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPermissionMode(v)
+		return nil
+	case session.FieldQueuedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueuedAt(v)
+		return nil
+	case session.FieldQueueKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueKind(v)
+		return nil
+	case session.FieldQueueWorkflowRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueWorkflowRunID(v)
+		return nil
+	case session.FieldQueueNodeRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueNodeRunID(v)
+		return nil
+	case session.FieldQueuePrompt:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueuePrompt(v)
+		return nil
+	case session.FieldQueueResumeCodexSessionID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueResumeCodexSessionID(v)
 		return nil
 	case session.FieldLastRunAt:
 		v, ok := value.(time.Time)
@@ -6993,6 +7363,9 @@ func (m *SessionMutation) ClearedFields() []string {
 	if m.FieldCleared(session.FieldCloseReason) {
 		fields = append(fields, session.FieldCloseReason)
 	}
+	if m.FieldCleared(session.FieldQueuedAt) {
+		fields = append(fields, session.FieldQueuedAt)
+	}
 	if m.FieldCleared(session.FieldLastRunAt) {
 		fields = append(fields, session.FieldLastRunAt)
 	}
@@ -7015,6 +7388,9 @@ func (m *SessionMutation) ClearField(name string) error {
 	switch name {
 	case session.FieldCloseReason:
 		m.ClearCloseReason()
+		return nil
+	case session.FieldQueuedAt:
+		m.ClearQueuedAt()
 		return nil
 	case session.FieldLastRunAt:
 		m.ClearLastRunAt()
@@ -7042,6 +7418,9 @@ func (m *SessionMutation) ResetField(name string) error {
 	case session.FieldStatus:
 		m.ResetStatus()
 		return nil
+	case session.FieldPriority:
+		m.ResetPriority()
+		return nil
 	case session.FieldCloseReason:
 		m.ResetCloseReason()
 		return nil
@@ -7062,6 +7441,24 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case session.FieldPermissionMode:
 		m.ResetPermissionMode()
+		return nil
+	case session.FieldQueuedAt:
+		m.ResetQueuedAt()
+		return nil
+	case session.FieldQueueKind:
+		m.ResetQueueKind()
+		return nil
+	case session.FieldQueueWorkflowRunID:
+		m.ResetQueueWorkflowRunID()
+		return nil
+	case session.FieldQueueNodeRunID:
+		m.ResetQueueNodeRunID()
+		return nil
+	case session.FieldQueuePrompt:
+		m.ResetQueuePrompt()
+		return nil
+	case session.FieldQueueResumeCodexSessionID:
+		m.ResetQueueResumeCodexSessionID()
 		return nil
 	case session.FieldLastRunAt:
 		m.ResetLastRunAt()

@@ -25,6 +25,8 @@ type Session struct {
 	Mode string `json:"mode,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// Priority holds the value of the "priority" field.
+	Priority string `json:"priority,omitempty"`
 	// CloseReason holds the value of the "close_reason" field.
 	CloseReason *string `json:"close_reason,omitempty"`
 	// BaseBranch holds the value of the "base_branch" field.
@@ -39,6 +41,18 @@ type Session struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// PermissionMode holds the value of the "permission_mode" field.
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// QueuedAt holds the value of the "queued_at" field.
+	QueuedAt *time.Time `json:"queued_at,omitempty"`
+	// QueueKind holds the value of the "queue_kind" field.
+	QueueKind string `json:"queue_kind,omitempty"`
+	// QueueWorkflowRunID holds the value of the "queue_workflow_run_id" field.
+	QueueWorkflowRunID string `json:"queue_workflow_run_id,omitempty"`
+	// QueueNodeRunID holds the value of the "queue_node_run_id" field.
+	QueueNodeRunID string `json:"queue_node_run_id,omitempty"`
+	// QueuePrompt holds the value of the "queue_prompt" field.
+	QueuePrompt string `json:"queue_prompt,omitempty"`
+	// QueueResumeCodexSessionID holds the value of the "queue_resume_codex_session_id" field.
+	QueueResumeCodexSessionID string `json:"queue_resume_codex_session_id,omitempty"`
 	// LastRunAt holds the value of the "last_run_at" field.
 	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -55,9 +69,9 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case session.FieldID, session.FieldProjectID, session.FieldRequirement, session.FieldMode, session.FieldStatus, session.FieldCloseReason, session.FieldBaseBranch, session.FieldWorktreePath, session.FieldCodexSessionID, session.FieldCodexModel, session.FieldReasoningEffort, session.FieldPermissionMode:
+		case session.FieldID, session.FieldProjectID, session.FieldRequirement, session.FieldMode, session.FieldStatus, session.FieldPriority, session.FieldCloseReason, session.FieldBaseBranch, session.FieldWorktreePath, session.FieldCodexSessionID, session.FieldCodexModel, session.FieldReasoningEffort, session.FieldPermissionMode, session.FieldQueueKind, session.FieldQueueWorkflowRunID, session.FieldQueueNodeRunID, session.FieldQueuePrompt, session.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
-		case session.FieldLastRunAt, session.FieldCreatedAt, session.FieldUpdatedAt, session.FieldClosedAt:
+		case session.FieldQueuedAt, session.FieldLastRunAt, session.FieldCreatedAt, session.FieldUpdatedAt, session.FieldClosedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -104,6 +118,12 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Status = value.String
 			}
+		case session.FieldPriority:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field priority", values[i])
+			} else if value.Valid {
+				_m.Priority = value.String
+			}
 		case session.FieldCloseReason:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field close_reason", values[i])
@@ -146,6 +166,43 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field permission_mode", values[i])
 			} else if value.Valid {
 				_m.PermissionMode = value.String
+			}
+		case session.FieldQueuedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field queued_at", values[i])
+			} else if value.Valid {
+				_m.QueuedAt = new(time.Time)
+				*_m.QueuedAt = value.Time
+			}
+		case session.FieldQueueKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_kind", values[i])
+			} else if value.Valid {
+				_m.QueueKind = value.String
+			}
+		case session.FieldQueueWorkflowRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_workflow_run_id", values[i])
+			} else if value.Valid {
+				_m.QueueWorkflowRunID = value.String
+			}
+		case session.FieldQueueNodeRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_node_run_id", values[i])
+			} else if value.Valid {
+				_m.QueueNodeRunID = value.String
+			}
+		case session.FieldQueuePrompt:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_prompt", values[i])
+			} else if value.Valid {
+				_m.QueuePrompt = value.String
+			}
+		case session.FieldQueueResumeCodexSessionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_resume_codex_session_id", values[i])
+			} else if value.Valid {
+				_m.QueueResumeCodexSessionID = value.String
 			}
 		case session.FieldLastRunAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -221,6 +278,9 @@ func (_m *Session) String() string {
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
 	builder.WriteString(", ")
+	builder.WriteString("priority=")
+	builder.WriteString(_m.Priority)
+	builder.WriteString(", ")
 	if v := _m.CloseReason; v != nil {
 		builder.WriteString("close_reason=")
 		builder.WriteString(*v)
@@ -243,6 +303,26 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("permission_mode=")
 	builder.WriteString(_m.PermissionMode)
+	builder.WriteString(", ")
+	if v := _m.QueuedAt; v != nil {
+		builder.WriteString("queued_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("queue_kind=")
+	builder.WriteString(_m.QueueKind)
+	builder.WriteString(", ")
+	builder.WriteString("queue_workflow_run_id=")
+	builder.WriteString(_m.QueueWorkflowRunID)
+	builder.WriteString(", ")
+	builder.WriteString("queue_node_run_id=")
+	builder.WriteString(_m.QueueNodeRunID)
+	builder.WriteString(", ")
+	builder.WriteString("queue_prompt=")
+	builder.WriteString(_m.QueuePrompt)
+	builder.WriteString(", ")
+	builder.WriteString("queue_resume_codex_session_id=")
+	builder.WriteString(_m.QueueResumeCodexSessionID)
 	builder.WriteString(", ")
 	if v := _m.LastRunAt; v != nil {
 		builder.WriteString("last_run_at=")

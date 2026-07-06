@@ -3,6 +3,7 @@ import { graphqlFetch, graphqlSubscribe } from '@/services/graphqlClient';
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
   | 'created'
+  | 'queued'
   | 'starting'
   | 'running'
   | 'waiting_user'
@@ -14,6 +15,7 @@ export type SessionStatus =
   | 'blocked'
   | 'completed'
   | 'closed';
+export type SessionPriority = 'high' | 'medium' | 'low';
 
 export interface SessionCard {
   id: string;
@@ -23,6 +25,7 @@ export interface SessionCard {
   summary: string;
   mode: SessionMode;
   status: SessionStatus;
+  priority: SessionPriority;
   branch: string;
   node: string;
   createdAt: string;
@@ -136,6 +139,7 @@ export interface CreateSessionInput {
   projectId: string;
   requirement: string;
   mode: SessionMode;
+  priority?: SessionPriority;
   baseBranch?: string;
   config?: {
     codexModel?: string;
@@ -160,6 +164,7 @@ interface GraphQLSessionCard {
   requirementSummary: string;
   mode: string;
   status: string;
+  priority: string;
   baseBranch: string;
   currentNodeTitle: string;
   pendingQuestion: boolean;
@@ -175,6 +180,7 @@ interface GraphQLSessionDetail {
   requirement: string;
   mode: string;
   status: string;
+  priority: string;
   closeReason?: string | null;
   baseBranch: string;
   currentNodeTitle: string;
@@ -204,12 +210,14 @@ interface GraphQLSession {
   requirement: string;
   mode: string;
   status: string;
+  priority: string;
   baseBranch: string;
   config: {
     codexModel: string;
     reasoningEffort: string;
     permissionMode: string;
   };
+  availableActions: string[];
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -237,6 +245,7 @@ const sessionCardFields = `
   requirementSummary
   mode
   status
+  priority
   baseBranch
   currentNodeTitle
   pendingQuestion
@@ -251,6 +260,7 @@ const sessionDetailFields = `
   requirement
   mode
   status
+  priority
   closeReason
   baseBranch
   currentNodeTitle
@@ -278,6 +288,7 @@ const sessionFields = `
   requirement
   mode
   status
+  priority
   baseBranch
   config {
     codexModel
@@ -524,29 +535,29 @@ export async function closeSession(sessionId: string) {
   });
 }
 
-export async function startSession(sessionId: string) {
-  return graphqlFetch<{ startSession: GraphQLSession }, { id: string }>({
+export async function startSession(sessionId: string, force = false) {
+  return graphqlFetch<{ startSession: GraphQLSession }, { id: string; force: boolean }>({
     query: `
-      mutation StartSession($id: ID!) {
-        startSession(id: $id) {
+      mutation StartSession($id: ID!, $force: Boolean) {
+        startSession(id: $id, force: $force) {
           ${sessionFields}
         }
       }
     `,
-    variables: { id: sessionId },
+    variables: { id: sessionId, force },
   });
 }
 
-export async function resumeSession(sessionId: string) {
-  return graphqlFetch<{ resumeSession: GraphQLSession }, { id: string }>({
+export async function resumeSession(sessionId: string, force = false) {
+  return graphqlFetch<{ resumeSession: GraphQLSession }, { id: string; force: boolean }>({
     query: `
-      mutation ResumeSession($id: ID!) {
-        resumeSession(id: $id) {
+      mutation ResumeSession($id: ID!, $force: Boolean) {
+        resumeSession(id: $id, force: $force) {
           ${sessionFields}
         }
       }
     `,
-    variables: { id: sessionId },
+    variables: { id: sessionId, force },
   });
 }
 
@@ -585,19 +596,18 @@ export async function submitQuestionBatch(batchId: string, answers: QuestionAnsw
 }
 
 export async function createSession(input: CreateSessionInput) {
-  const data = await graphqlFetch<
-    { createSession: GraphQLSession },
-    { input: CreateSessionInput }
-  >({
-    query: `
+  const data = await graphqlFetch<{ createSession: GraphQLSession }, { input: CreateSessionInput }>(
+    {
+      query: `
       mutation CreateSession($input: CreateSessionInput!) {
         createSession(input: $input) {
           ${sessionFields}
         }
       }
     `,
-    variables: { input },
-  });
+      variables: { input },
+    },
+  );
   return normalizeSession(data.createSession);
 }
 
@@ -626,6 +636,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     summary: session.requirementSummary || session.requirement,
     mode: normalizeMode(session.mode),
     status: normalizeStatus(session.status),
+    priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
     node: session.currentNodeTitle || statusNode(normalizeStatus(session.status)),
     createdAt: session.createdAt,
@@ -633,7 +644,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: session.pendingQuestion,
     filesChanged: 0,
-    availableActions: [],
+    availableActions: session.availableActions,
   };
 }
 
@@ -647,6 +658,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     summary: session.requirement,
     mode: normalizeMode(session.mode),
     status,
+    priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
     node: session.currentNodeTitle || statusNode(status),
     createdAt: session.createdAt,
@@ -682,6 +694,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     summary: session.requirement,
     mode: normalizeMode(session.mode),
     status,
+    priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
     node: statusNode(status),
     createdAt: session.createdAt,
@@ -689,7 +702,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
     filesChanged: 0,
-    availableActions: [],
+    availableActions: session.availableActions,
   };
 }
 
@@ -700,7 +713,10 @@ function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
     kind: eventKind(event.type),
     rawType: event.type,
     title: readable.title || stringPayload(event.payload, 'title') || eventTitle(event.type),
-    body: readable.body || stringPayload(event.payload, 'body') || stringPayload(event.payload, 'message'),
+    body:
+      readable.body ||
+      stringPayload(event.payload, 'body') ||
+      stringPayload(event.payload, 'message'),
     createdAt: event.createdAt,
     time: formatEventTime(event.createdAt),
   };
@@ -727,7 +743,10 @@ function readableEventPayload(type: string, payload: Record<string, unknown>) {
   if (type === 'process.exited') {
     return {
       title: '进程退出',
-      body: exitCode === null ? failure || 'Codex 进程已退出。' : `退出码 ${exitCode}${failure ? `，${failure}` : ''}`,
+      body:
+        exitCode === null
+          ? failure || 'Codex 进程已退出。'
+          : `退出码 ${exitCode}${failure ? `，${failure}` : ''}`,
     };
   }
   if (type.startsWith('workflow.')) {
@@ -748,29 +767,44 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   const exitCode = numberPayload(item, 'exit_code');
 
   if (codexType === 'thread.started') {
-    const threadID = stringPayload(payload, 'thread_id') || stringPayload(parseRaw(payload), 'thread_id');
+    const threadID =
+      stringPayload(payload, 'thread_id') || stringPayload(parseRaw(payload), 'thread_id');
     return { title: '线程已创建', body: threadID ? `线程 ${threadID}` : statusText(status) };
   }
-  if (codexType === 'turn.started') return { title: '开始执行', body: statusText(status) || 'Codex 开始处理当前请求。' };
+  if (codexType === 'turn.started')
+    return { title: '开始执行', body: statusText(status) || 'Codex 开始处理当前请求。' };
   if (codexType === 'item.started') {
     if (itemType === 'command_execution') {
       return { title: '执行命令', body: command || 'Codex 正在执行命令。' };
     }
-    return { title: itemEventTitle(itemType, '开始'), body: compactPayload(item) || statusText(status) };
+    return {
+      title: itemEventTitle(itemType, '开始'),
+      body: compactPayload(item) || statusText(status),
+    };
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
       const prefix = exitCode === null ? '命令完成' : `命令完成，退出码 ${exitCode}`;
       return { title: '命令结果', body: [prefix, output].filter(Boolean).join('\n') };
     }
-    return { title: itemEventTitle(itemType, '完成'), body: output || compactPayload(item) || statusText(status) };
+    return {
+      title: itemEventTitle(itemType, '完成'),
+      body: output || compactPayload(item) || statusText(status),
+    };
   }
-  if (codexType === 'turn.completed') return { title: '本轮完成', body: statusText(status) || 'Codex 已完成本轮处理。' };
+  if (codexType === 'turn.completed')
+    return { title: '本轮完成', body: statusText(status) || 'Codex 已完成本轮处理。' };
   if (codexType === 'error') {
-    return { title: 'Codex 错误', body: stringPayload(payload, 'message') || compactPayload(payload) };
+    return {
+      title: 'Codex 错误',
+      body: stringPayload(payload, 'message') || compactPayload(payload),
+    };
   }
 
-  return { title: codexType ? codexType.replaceAll('.', ' ') : 'Codex 事件', body: compactPayload(payload) };
+  return {
+    title: codexType ? codexType.replaceAll('.', ' ') : 'Codex 事件',
+    body: compactPayload(payload),
+  };
 }
 
 function normalizeMode(mode: string): SessionMode {
@@ -780,6 +814,7 @@ function normalizeMode(mode: string): SessionMode {
 function normalizeStatus(status: string): SessionStatus {
   const statuses = new Set<SessionStatus>([
     'created',
+    'queued',
     'starting',
     'running',
     'waiting_user',
@@ -796,6 +831,13 @@ function normalizeStatus(status: string): SessionStatus {
     return status as SessionStatus;
   }
   return 'stopped';
+}
+
+function normalizePriority(priority: string): SessionPriority {
+  if (priority === 'high' || priority === 'low') {
+    return priority;
+  }
+  return 'medium';
 }
 
 function eventKind(type: string): SessionEvent['kind'] {
@@ -817,6 +859,7 @@ function eventTitle(type: string) {
 function statusNode(status: SessionStatus) {
   const labels: Record<SessionStatus, string> = {
     created: '待运行',
+    queued: '排队中',
     starting: '启动中',
     running: '运行中',
     waiting_user: '待回答',
@@ -878,7 +921,9 @@ function numberPayload(payload: Record<string, unknown>, key: string) {
 
 function objectPayload(payload: Record<string, unknown>, key: string): Record<string, unknown> {
   const value = payload[key];
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function parseRaw(payload: Record<string, unknown>) {
@@ -886,7 +931,9 @@ function parseRaw(payload: Record<string, unknown>) {
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
     return {};
   }

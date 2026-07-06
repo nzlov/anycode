@@ -35,6 +35,16 @@
             :disable="creating"
             :options="branchOptions"
           />
+          <q-select
+            v-model="priority"
+            outlined
+            dense
+            label="优先级"
+            emit-value
+            map-options
+            :disable="creating"
+            :options="priorityOptions"
+          />
           <q-btn-toggle
             v-model="mode"
             spread
@@ -87,7 +97,7 @@ import {
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
-import type { CreateSessionInput } from '@/services/sessions';
+import type { CreateSessionInput, SessionPriority } from '@/services/sessions';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -103,6 +113,7 @@ const { projects, projectOptions, loadProjects } = useProjects();
 const projectId = ref(projects.value[0]?.id ?? '');
 const branch = ref(projects.value[0]?.defaultBranch ?? 'main');
 const mode = ref<'workflow' | 'chat'>('chat');
+const priority = ref<SessionPriority>('medium');
 const prompt = ref('');
 const files = ref<File[]>([]);
 const model = ref(firstCodexModelValue());
@@ -115,11 +126,19 @@ const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 const branchOptions = computed(() => {
   return selectedProject.value?.branches.length ? selectedProject.value.branches : ['main'];
 });
-const selectedProject = computed(() => projects.value.find((project) => project.id === projectId.value));
+const selectedProject = computed(() =>
+  projects.value.find((project) => project.id === projectId.value),
+);
 
 const modeOptions = [
   { label: '流程模式', value: 'workflow', icon: 'account_tree' },
   { label: '会话模式', value: 'chat', icon: 'forum' },
+];
+
+const priorityOptions = [
+  { label: '高', value: 'high', icon: 'keyboard_double_arrow_up' },
+  { label: '中', value: 'medium', icon: 'drag_handle' },
+  { label: '低', value: 'low', icon: 'keyboard_double_arrow_down' },
 ];
 
 function emitModel(value: boolean) {
@@ -180,9 +199,12 @@ function selectInitialRunConfig() {
 
 function selectInitialProject() {
   const fallback = projects.value[0]?.id ?? '';
-  const candidates = [props.defaultProjectId, storedProjectId(), projectId.value, fallback].filter(Boolean);
+  const candidates = [props.defaultProjectId, storedProjectId(), projectId.value, fallback].filter(
+    Boolean,
+  );
   const nextProjectId =
-    candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ?? fallback;
+    candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ??
+    fallback;
   if (!nextProjectId) return;
   projectId.value = nextProjectId;
   branch.value = projectBranch(nextProjectId);
@@ -216,6 +238,7 @@ async function createSession() {
       projectId: projectId.value,
       requirement: prompt.value,
       mode: mode.value,
+      priority: priority.value,
       config,
     };
     if (selectedProject.value?.isGit) {
@@ -239,7 +262,9 @@ async function createSession() {
         type: 'negative',
         icon: 'error',
         position: 'top-right',
-        message: cleanupError ? `${prefix}：${errorMessage(error)}；${cleanupError}` : `${prefix}：${errorMessage(error)}`,
+        message: cleanupError
+          ? `${prefix}：${errorMessage(error)}；${cleanupError}`
+          : `${prefix}：${errorMessage(error)}`,
         timeout: 5000,
         actions: [{ icon: 'close', color: 'white', round: true }],
       });

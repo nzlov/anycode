@@ -21,6 +21,8 @@ const (
 	FieldMode = "mode"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldPriority holds the string denoting the priority field in the database.
+	FieldPriority = "priority"
 	// FieldCloseReason holds the string denoting the close_reason field in the database.
 	FieldCloseReason = "close_reason"
 	// FieldBaseBranch holds the string denoting the base_branch field in the database.
@@ -35,6 +37,18 @@ const (
 	FieldReasoningEffort = "reasoning_effort"
 	// FieldPermissionMode holds the string denoting the permission_mode field in the database.
 	FieldPermissionMode = "permission_mode"
+	// FieldQueuedAt holds the string denoting the queued_at field in the database.
+	FieldQueuedAt = "queued_at"
+	// FieldQueueKind holds the string denoting the queue_kind field in the database.
+	FieldQueueKind = "queue_kind"
+	// FieldQueueWorkflowRunID holds the string denoting the queue_workflow_run_id field in the database.
+	FieldQueueWorkflowRunID = "queue_workflow_run_id"
+	// FieldQueueNodeRunID holds the string denoting the queue_node_run_id field in the database.
+	FieldQueueNodeRunID = "queue_node_run_id"
+	// FieldQueuePrompt holds the string denoting the queue_prompt field in the database.
+	FieldQueuePrompt = "queue_prompt"
+	// FieldQueueResumeCodexSessionID holds the string denoting the queue_resume_codex_session_id field in the database.
+	FieldQueueResumeCodexSessionID = "queue_resume_codex_session_id"
 	// FieldLastRunAt holds the string denoting the last_run_at field in the database.
 	FieldLastRunAt = "last_run_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -54,6 +68,7 @@ var Columns = []string{
 	FieldRequirement,
 	FieldMode,
 	FieldStatus,
+	FieldPriority,
 	FieldCloseReason,
 	FieldBaseBranch,
 	FieldWorktreePath,
@@ -61,6 +76,12 @@ var Columns = []string{
 	FieldCodexModel,
 	FieldReasoningEffort,
 	FieldPermissionMode,
+	FieldQueuedAt,
+	FieldQueueKind,
+	FieldQueueWorkflowRunID,
+	FieldQueueNodeRunID,
+	FieldQueuePrompt,
+	FieldQueueResumeCodexSessionID,
 	FieldLastRunAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -86,6 +107,8 @@ var (
 	ModeValidator func(string) error
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultPriority holds the default value on creation for the "priority" field.
+	DefaultPriority string
 	// DefaultBaseBranch holds the default value on creation for the "base_branch" field.
 	DefaultBaseBranch string
 	// DefaultWorktreePath holds the default value on creation for the "worktree_path" field.
@@ -98,6 +121,16 @@ var (
 	DefaultReasoningEffort string
 	// DefaultPermissionMode holds the default value on creation for the "permission_mode" field.
 	DefaultPermissionMode string
+	// DefaultQueueKind holds the default value on creation for the "queue_kind" field.
+	DefaultQueueKind string
+	// DefaultQueueWorkflowRunID holds the default value on creation for the "queue_workflow_run_id" field.
+	DefaultQueueWorkflowRunID string
+	// DefaultQueueNodeRunID holds the default value on creation for the "queue_node_run_id" field.
+	DefaultQueueNodeRunID string
+	// DefaultQueuePrompt holds the default value on creation for the "queue_prompt" field.
+	DefaultQueuePrompt string
+	// DefaultQueueResumeCodexSessionID holds the default value on creation for the "queue_resume_codex_session_id" field.
+	DefaultQueueResumeCodexSessionID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -134,6 +167,11 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
+// ByPriority orders the results by the priority field.
+func ByPriority(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPriority, opts...).ToFunc()
+}
+
 // ByCloseReason orders the results by the close_reason field.
 func ByCloseReason(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCloseReason, opts...).ToFunc()
@@ -167,6 +205,36 @@ func ByReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
 // ByPermissionMode orders the results by the permission_mode field.
 func ByPermissionMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPermissionMode, opts...).ToFunc()
+}
+
+// ByQueuedAt orders the results by the queued_at field.
+func ByQueuedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueuedAt, opts...).ToFunc()
+}
+
+// ByQueueKind orders the results by the queue_kind field.
+func ByQueueKind(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueKind, opts...).ToFunc()
+}
+
+// ByQueueWorkflowRunID orders the results by the queue_workflow_run_id field.
+func ByQueueWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueWorkflowRunID, opts...).ToFunc()
+}
+
+// ByQueueNodeRunID orders the results by the queue_node_run_id field.
+func ByQueueNodeRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueNodeRunID, opts...).ToFunc()
+}
+
+// ByQueuePrompt orders the results by the queue_prompt field.
+func ByQueuePrompt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueuePrompt, opts...).ToFunc()
+}
+
+// ByQueueResumeCodexSessionID orders the results by the queue_resume_codex_session_id field.
+func ByQueueResumeCodexSessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueResumeCodexSessionID, opts...).ToFunc()
 }
 
 // ByLastRunAt orders the results by the last_run_at field.

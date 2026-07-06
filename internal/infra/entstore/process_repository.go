@@ -68,6 +68,16 @@ func (r *ProcessRepository) FindActiveBySession(ctx context.Context, sessionID p
 	return toDomainProcessRun(row), true, nil
 }
 
+func (r *ProcessRepository) CountActive(ctx context.Context) (int, error) {
+	count, err := r.client.ProcessRun.Query().
+		Where(entprocessrun.StatusIn(activeProcessStatuses()...)).
+		Count(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count active process runs: %w", err)
+	}
+	return count, nil
+}
+
 func (r *ProcessRepository) MarkRunning(ctx context.Context, id process.RunID, pid int, codexSessionID string) error {
 	if err := r.client.ProcessRun.UpdateOneID(string(id)).
 		SetStatus(string(process.StatusRunning)).
