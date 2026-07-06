@@ -5999,6 +5999,7 @@ type SessionMutation struct {
 	permission_mode               *string
 	queued_at                     *time.Time
 	queue_kind                    *string
+	queue_priority                *string
 	queue_workflow_run_id         *string
 	queue_node_run_id             *string
 	queue_prompt                  *string
@@ -6647,6 +6648,42 @@ func (m *SessionMutation) ResetQueueKind() {
 	m.queue_kind = nil
 }
 
+// SetQueuePriority sets the "queue_priority" field.
+func (m *SessionMutation) SetQueuePriority(s string) {
+	m.queue_priority = &s
+}
+
+// QueuePriority returns the value of the "queue_priority" field in the mutation.
+func (m *SessionMutation) QueuePriority() (r string, exists bool) {
+	v := m.queue_priority
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueuePriority returns the old "queue_priority" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueuePriority(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueuePriority is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueuePriority requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueuePriority: %w", err)
+	}
+	return oldValue.QueuePriority, nil
+}
+
+// ResetQueuePriority resets all changes to the "queue_priority" field.
+func (m *SessionMutation) ResetQueuePriority() {
+	m.queue_priority = nil
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (m *SessionMutation) SetQueueWorkflowRunID(s string) {
 	m.queue_workflow_run_id = &s
@@ -6995,7 +7032,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 23)
 	if m.project_id != nil {
 		fields = append(fields, session.FieldProjectID)
 	}
@@ -7037,6 +7074,9 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.queue_kind != nil {
 		fields = append(fields, session.FieldQueueKind)
+	}
+	if m.queue_priority != nil {
+		fields = append(fields, session.FieldQueuePriority)
 	}
 	if m.queue_workflow_run_id != nil {
 		fields = append(fields, session.FieldQueueWorkflowRunID)
@@ -7098,6 +7138,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.QueuedAt()
 	case session.FieldQueueKind:
 		return m.QueueKind()
+	case session.FieldQueuePriority:
+		return m.QueuePriority()
 	case session.FieldQueueWorkflowRunID:
 		return m.QueueWorkflowRunID()
 	case session.FieldQueueNodeRunID:
@@ -7151,6 +7193,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldQueuedAt(ctx)
 	case session.FieldQueueKind:
 		return m.OldQueueKind(ctx)
+	case session.FieldQueuePriority:
+		return m.OldQueuePriority(ctx)
 	case session.FieldQueueWorkflowRunID:
 		return m.OldQueueWorkflowRunID(ctx)
 	case session.FieldQueueNodeRunID:
@@ -7273,6 +7317,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueKind(v)
+		return nil
+	case session.FieldQueuePriority:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueuePriority(v)
 		return nil
 	case session.FieldQueueWorkflowRunID:
 		v, ok := value.(string)
@@ -7447,6 +7498,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case session.FieldQueueKind:
 		m.ResetQueueKind()
+		return nil
+	case session.FieldQueuePriority:
+		m.ResetQueuePriority()
 		return nil
 	case session.FieldQueueWorkflowRunID:
 		m.ResetQueueWorkflowRunID()

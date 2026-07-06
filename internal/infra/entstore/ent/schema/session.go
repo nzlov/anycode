@@ -29,6 +29,7 @@ func (Session) Fields() []ent.Field {
 		field.String("permission_mode").Default(""),
 		field.Time("queued_at").Optional().Nillable(),
 		field.String("queue_kind").Default(""),
+		field.String("queue_priority").Default("medium"),
 		field.String("queue_workflow_run_id").Default(""),
 		field.String("queue_node_run_id").Default(""),
 		field.String("queue_prompt").Default(""),
@@ -46,6 +47,6 @@ func (Session) Indexes() []ent.Index {
 		index.Fields("project_id", "updated_at"),
 		index.Fields("project_id", "last_run_at"),
 		index.Fields("status"),
-		index.Fields("status", "priority", "queued_at"),
+		index.Fields("status", "queue_priority", "priority", "queued_at"),
 	}
 }

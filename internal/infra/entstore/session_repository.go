@@ -46,6 +46,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetReasoningEffort(s.Config.ReasoningEffort).
 			SetPermissionMode(s.Config.PermissionMode).
 			SetQueueKind(string(s.Queue.Kind)).
+			SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 			SetQueuePrompt(s.Queue.Prompt).
 			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
@@ -97,6 +98,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 		SetReasoningEffort(s.Config.ReasoningEffort).
 		SetPermissionMode(s.Config.PermissionMode).
 		SetQueueKind(string(s.Queue.Kind)).
+		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 		SetQueuePrompt(s.Queue.Prompt).
 		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
@@ -198,6 +200,7 @@ func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context)
 				string(domainsession.StatusRunning),
 				string(domainsession.StatusWaitingUser),
 				string(domainsession.StatusStopping),
+				string(domainsession.StatusQueued),
 			),
 			entsession.CodexSessionIDNEQ(""),
 		).
@@ -208,7 +211,11 @@ func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context)
 	}
 	sessions := make([]domainsession.Session, 0, len(rows))
 	for _, row := range rows {
-		sessions = append(sessions, toDomainSession(row))
+		session := toDomainSession(row)
+		if session.Status == domainsession.StatusQueued && session.Queue.Kind != domainsession.QueueKindAnswerUser {
+			continue
+		}
+		sessions = append(sessions, session)
 	}
 	return sessions, nil
 }
@@ -433,6 +440,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		QueuedAt: row.QueuedAt,
 		Queue: domainsession.QueueIntent{
 			Kind:                 domainsession.QueueKind(row.QueueKind),
+			Priority:             normalizeQueuePriority(domainsession.QueuePriority(row.QueuePriority)),
 			WorkflowRunID:        domainsession.WorkflowRunID(row.QueueWorkflowRunID),
 			NodeRunID:            queueNodeRunID,
 			Prompt:               row.QueuePrompt,
@@ -451,6 +459,15 @@ func normalizePriority(priority domainsession.Priority) domainsession.Priority {
 		return priority
 	default:
 		return domainsession.PriorityMedium
+	}
+}
+
+func normalizeQueuePriority(priority domainsession.QueuePriority) domainsession.QueuePriority {
+	switch priority {
+	case domainsession.QueuePriorityImmediate, domainsession.QueuePriorityHigh, domainsession.QueuePriorityLow:
+		return priority
+	default:
+		return domainsession.QueuePriorityMedium
 	}
 }
 

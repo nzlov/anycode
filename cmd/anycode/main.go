@@ -80,7 +80,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	questionService := questionapp.New(store.Questions(), questionWaiter)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(store.Processes(), codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents))
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(store.Processes(), codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
 	recoverableCount, err := sessionService.MarkInterruptedSessionsRecoverable(context.Background())
 	if err != nil {
 		return graph.UseCases{}, err

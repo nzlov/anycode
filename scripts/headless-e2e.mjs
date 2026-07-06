@@ -20,6 +20,7 @@ const overrideFile = `/tmp/anycode-codex-override-${stamp}.yml`;
 
 let chrome;
 let page;
+let browserFailures;
 
 try {
   if (manageDocker) {
@@ -37,6 +38,7 @@ try {
   page = await connectPage();
 
   const browserState = trackBrowserFailures(page);
+  browserFailures = browserState;
   await page.send('Page.enable');
   await page.send('DOM.enable');
   await page.send('Runtime.enable');
@@ -215,6 +217,7 @@ git config user.name 'AnyCode E2E'
 printf 'AnyCode git E2E workspace\\n' > README.md
 git add README.md
 git commit -m 'init e2e repo' >/dev/null
+chown -R anycode:anycode ${shellQuote(plainPath)} ${shellQuote(gitPath)}
 `;
   await dockerCompose(['exec', '-T', 'anycode', 'sh', '-lc', script]);
 }
@@ -393,6 +396,13 @@ function trackBrowserFailures(browserPage) {
         throw new Error(JSON.stringify(state, null, 2));
       }
     },
+    snapshot() {
+      return {
+        consoleErrors: [...state.consoleErrors],
+        pageErrors: [...state.pageErrors],
+        failedRequests: [...state.failedRequests],
+      };
+    },
   };
 }
 
@@ -445,7 +455,7 @@ async function waitForText(text, timeoutMs = 25_000) {
     await sleep(250);
   }
   const body = await evaluate('document.body ? document.body.innerText.slice(0, 1600) : ""');
-  throw new Error(`Timed out waiting for text ${text}. Body: ${body}`);
+  throw new Error(`Timed out waiting for text ${text}. Body: ${body}\nBrowser failures: ${JSON.stringify(browserFailures?.snapshot?.() || {}, null, 2)}`);
 }
 
 async function waitForVisibleSelector(selector, timeoutMs = 10_000) {
@@ -862,7 +872,7 @@ async function startSession(id) {
       }
     }
   `, { id });
-  assert(['starting', 'running', 'stopped'].includes(data.startSession.status), `unexpected start status ${data.startSession.status}`);
+  assert(['queued', 'starting', 'running', 'stopped'].includes(data.startSession.status), `unexpected start status ${data.startSession.status}`);
   return data.startSession;
 }
 

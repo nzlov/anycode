@@ -133,8 +133,11 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	status := smokeGraphQL[string](t, handler, `mutation($id: ID!) {
 		startSession(id: $id) { id status codexSessionId }
 	}`, map[string]any{"id": sessionID}, "startSession.status")
-	if status != "running" {
-		t.Fatalf("startSession status = %q, want running", status)
+	if status != "queued" {
+		t.Fatalf("startSession status = %q, want queued", status)
+	}
+	if _, err := sessions.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("drain queued sessions: %v", err)
 	}
 	if codex.startInput.SessionID != processdomain.SessionID(sessionID) || codex.startInput.Workdir == "" {
 		t.Fatalf("codex Start input = %#v", codex.startInput)

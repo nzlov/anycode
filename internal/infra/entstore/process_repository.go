@@ -6,8 +6,10 @@ import (
 
 	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/redaction"
+	domainsession "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	entprocessrun "github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
 
 var _ process.Repository = (*ProcessRepository)(nil)
@@ -69,13 +71,35 @@ func (r *ProcessRepository) FindActiveBySession(ctx context.Context, sessionID p
 }
 
 func (r *ProcessRepository) CountActive(ctx context.Context) (int, error) {
+	sessionIDs, err := r.client.Session.Query().
+		Where(entsession.StatusIn(concurrencySessionStatuses()...)).
+		Select(entsession.FieldID).
+		Strings(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list active sessions for process count: %w", err)
+	}
+	if len(sessionIDs) == 0 {
+		return 0, nil
+	}
 	count, err := r.client.ProcessRun.Query().
-		Where(entprocessrun.StatusIn(activeProcessStatuses()...)).
+		Where(
+			entprocessrun.SessionIDIn(sessionIDs...),
+			entprocessrun.StatusIn(concurrencyProcessStatuses()...),
+		).
 		Count(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("count active process runs: %w", err)
 	}
 	return count, nil
+}
+
+func (r *ProcessRepository) MarkWaitingUser(ctx context.Context, id process.RunID) error {
+	if err := r.client.ProcessRun.UpdateOneID(string(id)).
+		SetStatus(string(process.StatusWaitingUser)).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("mark process waiting user: %w", err)
+	}
+	return nil
 }
 
 func (r *ProcessRepository) MarkRunning(ctx context.Context, id process.RunID, pid int, codexSessionID string) error {
@@ -130,6 +154,20 @@ func activeProcessStatuses() []string {
 		string(process.StatusRunning),
 		string(process.StatusWaitingUser),
 		string(process.StatusStopping),
+	}
+}
+
+func concurrencyProcessStatuses() []string {
+	return []string{
+		string(process.StatusStarting),
+		string(process.StatusRunning),
+	}
+}
+
+func concurrencySessionStatuses() []string {
+	return []string{
+		string(domainsession.StatusStarting),
+		string(domainsession.StatusRunning),
 	}
 }
 

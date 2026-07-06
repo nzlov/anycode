@@ -256,6 +256,7 @@ var (
 		{Name: "permission_mode", Type: field.TypeString, Default: ""},
 		{Name: "queued_at", Type: field.TypeTime, Nullable: true},
 		{Name: "queue_kind", Type: field.TypeString, Default: ""},
+		{Name: "queue_priority", Type: field.TypeString, Default: "medium"},
 		{Name: "queue_workflow_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
@@ -279,12 +280,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[21]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[22]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[19]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[20]},
 			},
 			{
 				Name:    "session_status",
@@ -292,9 +293,9 @@ var (
 				Columns: []*schema.Column{SessionsColumns[4]},
 			},
 			{
-				Name:    "session_status_priority_queued_at",
+				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[5], SessionsColumns[13]},
+				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[15], SessionsColumns[5], SessionsColumns[13]},
 			},
 		},
 	}

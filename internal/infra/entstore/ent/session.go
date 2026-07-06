@@ -45,6 +45,8 @@ type Session struct {
 	QueuedAt *time.Time `json:"queued_at,omitempty"`
 	// QueueKind holds the value of the "queue_kind" field.
 	QueueKind string `json:"queue_kind,omitempty"`
+	// QueuePriority holds the value of the "queue_priority" field.
+	QueuePriority string `json:"queue_priority,omitempty"`
 	// QueueWorkflowRunID holds the value of the "queue_workflow_run_id" field.
 	QueueWorkflowRunID string `json:"queue_workflow_run_id,omitempty"`
 	// QueueNodeRunID holds the value of the "queue_node_run_id" field.
@@ -69,7 +71,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case session.FieldID, session.FieldProjectID, session.FieldRequirement, session.FieldMode, session.FieldStatus, session.FieldPriority, session.FieldCloseReason, session.FieldBaseBranch, session.FieldWorktreePath, session.FieldCodexSessionID, session.FieldCodexModel, session.FieldReasoningEffort, session.FieldPermissionMode, session.FieldQueueKind, session.FieldQueueWorkflowRunID, session.FieldQueueNodeRunID, session.FieldQueuePrompt, session.FieldQueueResumeCodexSessionID:
+		case session.FieldID, session.FieldProjectID, session.FieldRequirement, session.FieldMode, session.FieldStatus, session.FieldPriority, session.FieldCloseReason, session.FieldBaseBranch, session.FieldWorktreePath, session.FieldCodexSessionID, session.FieldCodexModel, session.FieldReasoningEffort, session.FieldPermissionMode, session.FieldQueueKind, session.FieldQueuePriority, session.FieldQueueWorkflowRunID, session.FieldQueueNodeRunID, session.FieldQueuePrompt, session.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
 		case session.FieldQueuedAt, session.FieldLastRunAt, session.FieldCreatedAt, session.FieldUpdatedAt, session.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -179,6 +181,12 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field queue_kind", values[i])
 			} else if value.Valid {
 				_m.QueueKind = value.String
+			}
+		case session.FieldQueuePriority:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_priority", values[i])
+			} else if value.Valid {
+				_m.QueuePriority = value.String
 			}
 		case session.FieldQueueWorkflowRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -311,6 +319,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("queue_kind=")
 	builder.WriteString(_m.QueueKind)
+	builder.WriteString(", ")
+	builder.WriteString("queue_priority=")
+	builder.WriteString(_m.QueuePriority)
 	builder.WriteString(", ")
 	builder.WriteString("queue_workflow_run_id=")
 	builder.WriteString(_m.QueueWorkflowRunID)

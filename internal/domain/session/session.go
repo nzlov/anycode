@@ -51,8 +51,18 @@ const (
 type QueueKind string
 
 const (
-	QueueKindStart  QueueKind = "start"
-	QueueKindResume QueueKind = "resume"
+	QueueKindStart      QueueKind = "start"
+	QueueKindResume     QueueKind = "resume"
+	QueueKindAnswerUser QueueKind = "answer_user"
+)
+
+type QueuePriority string
+
+const (
+	QueuePriorityImmediate QueuePriority = "immediate"
+	QueuePriorityHigh      QueuePriority = "high"
+	QueuePriorityMedium    QueuePriority = "medium"
+	QueuePriorityLow       QueuePriority = "low"
 )
 
 type CloseReason string
@@ -84,6 +94,7 @@ type Session struct {
 
 type QueueIntent struct {
 	Kind                 QueueKind
+	Priority             QueuePriority
 	WorkflowRunID        WorkflowRunID
 	NodeRunID            *NodeRunID
 	Prompt               string

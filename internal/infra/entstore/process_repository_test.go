@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
+	"github.com/nzlov/anycode/internal/domain/session"
 	entprocessevent "github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
 )
 
@@ -26,6 +27,16 @@ func TestProcessRepositoryPersistsRunLifecycleAndEvents(t *testing.T) {
 
 	repo := store.Processes()
 	startedAt := time.Date(2026, 7, 2, 8, 0, 0, 0, time.UTC)
+	if err := store.Sessions().Save(ctx, session.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      session.ModeChat,
+		Status:    session.StatusRunning,
+		CreatedAt: startedAt,
+		UpdatedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
 	nodeRunID := process.NodeRunID("node-run-1")
 	run := process.Run{
 		ID:        process.RunID("process-run-1"),
@@ -61,6 +72,40 @@ func TestProcessRepositoryPersistsRunLifecycleAndEvents(t *testing.T) {
 	}
 	if !ok || active.Status != process.StatusRunning || active.PID == nil || *active.PID != 1234 || active.CodexSessionID != "codex-session-1" {
 		t.Fatalf("running run mismatch: ok=%v run=%#v", ok, active)
+	}
+	activeCount, err := repo.CountActive(ctx)
+	if err != nil {
+		t.Fatalf("count active: %v", err)
+	}
+	if activeCount != 1 {
+		t.Fatalf("active count = %d", activeCount)
+	}
+
+	terminalSessionID := session.ID("session-terminal")
+	if err := store.Sessions().Save(ctx, session.Session{
+		ID:        terminalSessionID,
+		ProjectID: "project-1",
+		Mode:      session.ModeChat,
+		Status:    session.StatusResumeFailed,
+		CreatedAt: startedAt,
+		UpdatedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("save terminal session: %v", err)
+	}
+	if err := repo.CreateRun(ctx, process.Run{
+		ID:        "process-run-terminal",
+		SessionID: process.SessionID(terminalSessionID),
+		Status:    process.StatusRunning,
+		StartedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("create terminal run: %v", err)
+	}
+	activeCount, err = repo.CountActive(ctx)
+	if err != nil {
+		t.Fatalf("count active with terminal run: %v", err)
+	}
+	if activeCount != 1 {
+		t.Fatalf("active count with terminal run = %d", activeCount)
 	}
 
 	eventAt := startedAt.Add(time.Minute)

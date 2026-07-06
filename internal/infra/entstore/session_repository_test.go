@@ -193,13 +193,35 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			UpdatedAt:      now.Add(-39 * time.Minute),
 		},
 		session.Session{
+			ID:             "session-9",
+			ProjectID:      projectID,
+			Requirement:    "Queued answer user",
+			Mode:           session.ModeChat,
+			Status:         session.StatusQueued,
+			CodexSessionID: "codex-9",
+			Queue:          session.QueueIntent{Kind: session.QueueKindAnswerUser},
+			CreatedAt:      now.Add(-38 * time.Minute),
+			UpdatedAt:      now.Add(-38 * time.Minute),
+		},
+		session.Session{
+			ID:             "session-10",
+			ProjectID:      projectID,
+			Requirement:    "Queued normal start",
+			Mode:           session.ModeChat,
+			Status:         session.StatusQueued,
+			CodexSessionID: "codex-10",
+			Queue:          session.QueueIntent{Kind: session.QueueKindStart},
+			CreatedAt:      now.Add(-37 * time.Minute),
+			UpdatedAt:      now.Add(-37 * time.Minute),
+		},
+		session.Session{
 			ID:          "session-6",
 			ProjectID:   projectID,
 			Requirement: "Running without codex session id",
 			Mode:        session.ModeChat,
 			Status:      session.StatusRunning,
-			CreatedAt:   now.Add(-38 * time.Minute),
-			UpdatedAt:   now.Add(-38 * time.Minute),
+			CreatedAt:   now.Add(-36 * time.Minute),
+			UpdatedAt:   now.Add(-36 * time.Minute),
 		},
 		session.Session{
 			ID:             "session-7",
@@ -208,8 +230,8 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			Mode:           session.ModeChat,
 			Status:         session.StatusStopped,
 			CodexSessionID: "codex-7",
-			CreatedAt:      now.Add(-37 * time.Minute),
-			UpdatedAt:      now.Add(-37 * time.Minute),
+			CreatedAt:      now.Add(-35 * time.Minute),
+			UpdatedAt:      now.Add(-35 * time.Minute),
 		},
 	)
 	interrupted, err := repo.ListInterruptedWithCodexSession(ctx)
@@ -220,7 +242,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	for _, item := range interrupted {
 		gotInterruptedIDs = append(gotInterruptedIDs, item.ID)
 	}
-	wantInterruptedIDs := []session.ID{"session-8", "session-5"}
+	wantInterruptedIDs := []session.ID{"session-8", "session-5", "session-9"}
 	if len(gotInterruptedIDs) != len(wantInterruptedIDs) {
 		t.Fatalf("interrupted sessions = %#v, want %#v", gotInterruptedIDs, wantInterruptedIDs)
 	}

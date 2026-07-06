@@ -189,8 +189,8 @@ interface GraphQLSessionDetail {
     reasoningEffort: string;
     permissionMode: string;
   };
-  promptAppends: GraphQLPromptAppend[];
-  availableActions: string[];
+  promptAppends?: GraphQLPromptAppend[];
+  availableActions?: string[];
   canResume: boolean;
   lastRunAt: string | null;
   createdAt: string;
@@ -217,7 +217,7 @@ interface GraphQLSession {
     reasoningEffort: string;
     permissionMode: string;
   };
-  availableActions: string[];
+  availableActions?: string[];
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -225,8 +225,8 @@ interface GraphQLSession {
 
 interface GraphQLSessionEvent {
   id: string;
-  type: string;
-  payload: Record<string, unknown>;
+  type?: string;
+  payload?: Record<string, unknown>;
   createdAt: string;
 }
 
@@ -249,6 +249,7 @@ const sessionCardFields = `
   baseBranch
   currentNodeTitle
   pendingQuestion
+  availableActions
   lastRunAt
   createdAt
   updatedAt
@@ -644,7 +645,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: session.pendingQuestion,
     filesChanged: 0,
-    availableActions: session.availableActions,
+    availableActions: normalizeAvailableActions(session.availableActions),
   };
 }
 
@@ -668,8 +669,8 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     filesChanged: 0,
     config: session.config,
     closeReason: session.closeReason ?? null,
-    promptAppends: session.promptAppends.map(normalizePromptAppend),
-    availableActions: session.availableActions,
+    promptAppends: (session.promptAppends ?? []).map(normalizePromptAppend),
+    availableActions: normalizeAvailableActions(session.availableActions),
     canResume: session.canResume,
   };
 }
@@ -702,21 +703,20 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
     filesChanged: 0,
-    availableActions: session.availableActions,
+    availableActions: normalizeAvailableActions(session.availableActions),
   };
 }
 
 function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
-  const readable = readableEventPayload(event.type, event.payload);
+  const type = event.type ?? '';
+  const payload = event.payload ?? {};
+  const readable = readableEventPayload(type, payload);
   return {
     id: event.id,
-    kind: eventKind(event.type),
-    rawType: event.type,
-    title: readable.title || stringPayload(event.payload, 'title') || eventTitle(event.type),
-    body:
-      readable.body ||
-      stringPayload(event.payload, 'body') ||
-      stringPayload(event.payload, 'message'),
+    kind: eventKind(type),
+    rawType: type,
+    title: readable.title || stringPayload(payload, 'title') || eventTitle(type),
+    body: readable.body || stringPayload(payload, 'body') || stringPayload(payload, 'message'),
     createdAt: event.createdAt,
     time: formatEventTime(event.createdAt),
   };
@@ -838,6 +838,13 @@ function normalizePriority(priority: string): SessionPriority {
     return priority;
   }
   return 'medium';
+}
+
+function normalizeAvailableActions(actions: unknown): string[] {
+  if (!Array.isArray(actions)) {
+    return [];
+  }
+  return actions.filter((action): action is string => typeof action === 'string');
 }
 
 function eventKind(type: string): SessionEvent['kind'] {

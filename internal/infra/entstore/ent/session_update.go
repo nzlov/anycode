@@ -236,6 +236,20 @@ func (_u *SessionUpdate) SetNillableQueueKind(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetQueuePriority sets the "queue_priority" field.
+func (_u *SessionUpdate) SetQueuePriority(v string) *SessionUpdate {
+	_u.mutation.SetQueuePriority(v)
+	return _u
+}
+
+// SetNillableQueuePriority sets the "queue_priority" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueuePriority(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueuePriority(*v)
+	}
+	return _u
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_u *SessionUpdate) SetQueueWorkflowRunID(v string) *SessionUpdate {
 	_u.mutation.SetQueueWorkflowRunID(v)
@@ -458,6 +472,9 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.QueueKind(); ok {
 		_spec.SetField(session.FieldQueueKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueuePriority(); ok {
+		_spec.SetField(session.FieldQueuePriority, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(session.FieldQueueWorkflowRunID, field.TypeString, value)
@@ -714,6 +731,20 @@ func (_u *SessionUpdateOne) SetNillableQueueKind(v *string) *SessionUpdateOne {
 	return _u
 }
 
+// SetQueuePriority sets the "queue_priority" field.
+func (_u *SessionUpdateOne) SetQueuePriority(v string) *SessionUpdateOne {
+	_u.mutation.SetQueuePriority(v)
+	return _u
+}
+
+// SetNillableQueuePriority sets the "queue_priority" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueuePriority(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueuePriority(*v)
+	}
+	return _u
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_u *SessionUpdateOne) SetQueueWorkflowRunID(v string) *SessionUpdateOne {
 	_u.mutation.SetQueueWorkflowRunID(v)
@@ -966,6 +997,9 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.QueueKind(); ok {
 		_spec.SetField(session.FieldQueueKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueuePriority(); ok {
+		_spec.SetField(session.FieldQueuePriority, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(session.FieldQueueWorkflowRunID, field.TypeString, value)
