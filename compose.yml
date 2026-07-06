@@ -21,3 +21,4 @@ services:
     volumes:
       - ./workspaces:/workspaces
       - ./data:/data
+      - ${ANYCODE_CODEX_HOME:-${HOME}/.codex}:/home/anycode/.codex
