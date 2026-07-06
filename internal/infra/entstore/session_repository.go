@@ -271,13 +271,13 @@ func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery,
 	}
 	switch strings.ToLower(strings.TrimSpace(query.Range)) {
 	case "recent3d":
-		q.Where(entsession.LastRunAtGTE(now().Add(-72 * time.Hour)))
+		q.Where(entsession.UpdatedAtGTE(now().Add(-72 * time.Hour)))
 	case "history7d":
 		recentCutoff := now().Add(-72 * time.Hour)
 		historyCutoff := now().Add(-7 * 24 * time.Hour)
 		q.Where(
-			entsession.LastRunAtGTE(historyCutoff),
-			entsession.LastRunAtLT(recentCutoff),
+			entsession.UpdatedAtGTE(historyCutoff),
+			entsession.UpdatedAtLT(recentCutoff),
 		)
 	}
 	filter := strings.TrimSpace(query.Filter)

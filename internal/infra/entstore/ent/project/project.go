@@ -21,6 +21,8 @@ const (
 	FieldIsGit = "is_git"
 	// FieldDefaultWorkflowID holds the string denoting the default_workflow_id field in the database.
 	FieldDefaultWorkflowID = "default_workflow_id"
+	// FieldRemovedAt holds the string denoting the removed_at field in the database.
+	FieldRemovedAt = "removed_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -36,6 +38,7 @@ var Columns = []string{
 	FieldPath,
 	FieldIsGit,
 	FieldDefaultWorkflowID,
+	FieldRemovedAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -91,6 +94,11 @@ func ByIsGit(opts ...sql.OrderTermOption) OrderOption {
 // ByDefaultWorkflowID orders the results by the default_workflow_id field.
 func ByDefaultWorkflowID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDefaultWorkflowID, opts...).ToFunc()
+}
+
+// ByRemovedAt orders the results by the removed_at field.
+func ByRemovedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemovedAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

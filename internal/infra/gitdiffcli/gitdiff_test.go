@@ -176,6 +176,40 @@ func TestRangeDiffUsesCommitRefs(t *testing.T) {
 	}
 }
 
+func TestCommitHistoryUsesBaseRangeNewestFirst(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "main.go", "package main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	writeFile(t, repo, "feature.go", "package main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "feature one")
+	firstCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	writeFile(t, repo, "feature.go", "package main\n\nfunc feature() {}\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "feature two")
+
+	got, err := New("").CommitHistory(ctx, gitdiff.CommitHistoryInput{
+		WorktreePath: repo,
+		BaseRef:      baseCommit,
+		HeadRef:      "HEAD",
+	})
+	if err != nil {
+		t.Fatalf("CommitHistory() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("CommitHistory() len = %d, commits = %#v", len(got), got)
+	}
+	if got[0].Subject != "feature two" || got[1].Subject != "feature one" {
+		t.Fatalf("CommitHistory() order = %#v", got)
+	}
+	if got[1].Hash != firstCommit || got[1].ShortHash == "" || got[1].AuthorName == "" || got[1].CreatedAt == "" {
+		t.Fatalf("CommitHistory() fields = %#v", got[1])
+	}
+}
+
 func TestParseUnifiedDiff(t *testing.T) {
 	hunks := parseUnifiedDiff(`diff --git a/a.go b/a.go
 @@ -1,2 +1,3 @@

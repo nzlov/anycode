@@ -1,6 +1,7 @@
 import type { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
+  { path: '/login', name: 'login', component: () => import('@/pages/LoginPage.vue') },
   {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
@@ -11,6 +12,11 @@ const routes: RouteRecordRaw[] = [
         path: 'sessions/:id',
         name: 'session-detail',
         component: () => import('@/pages/SessionDetailPage.vue'),
+      },
+      {
+        path: 'sessions/:id/commits',
+        name: 'session-commits',
+        component: () => import('@/pages/CommitHistoryPage.vue'),
       },
       { path: 'diff', name: 'diff', component: () => import('@/pages/DiffPage.vue') },
       {

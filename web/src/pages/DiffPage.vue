@@ -4,8 +4,9 @@
       <div class="heading-copy">
         <div class="text-h5 text-weight-bold">当前分支变更</div>
         <div class="text-body2 text-muted">
-          <template v-if="sessionId">会话 {{ sessionId }}</template>
-          <template v-else>缺少 sessionId，无法读取 Diff</template>
+          <template v-if="branchMode">项目 {{ projectId }} · {{ branch }}</template>
+          <template v-else-if="sessionId">会话 {{ sessionId }}</template>
+          <template v-else>缺少 Diff 目标，无法读取 Diff</template>
         </div>
       </div>
       <div class="heading-actions">
@@ -24,7 +25,7 @@
           v-model="viewMode"
           no-caps
           unelevated
-          toggle-color="primary"
+          toggle-color="dark"
           :disable="loading"
           :options="[
             { label: '单个文件', value: 'single', icon: 'description' },
@@ -34,18 +35,8 @@
       </div>
     </div>
 
-    <q-banner v-if="!sessionId" rounded class="state-banner bg-warning text-dark">
-      请从会话详情进入 Diff 页面，或在地址 query 中提供 sessionId。
-    </q-banner>
-
-    <q-banner v-else-if="error" rounded class="state-banner bg-negative text-white">
-      <template #avatar>
-        <q-icon name="error" />
-      </template>
-      {{ error }}
-      <template #action>
-        <q-btn flat color="white" label="重试" no-caps :loading="loading" @click="loadDiff" />
-      </template>
+    <q-banner v-if="!hasDiffTarget" rounded class="state-banner bg-warning text-dark">
+      请从会话详情进入 Diff 页面，或在地址 query 中提供 projectId 与 branch。
     </q-banner>
 
     <q-banner
@@ -56,10 +47,10 @@
       <template #avatar>
         <q-icon name="block" />
       </template>
-      当前会话没有可用 worktree Diff，可能是非 git 项目或会话尚未创建 worktree。
+      当前范围没有可用 Diff，可能是非 git 项目、项目当前未检出该分支，或没有工作区变更。
     </q-banner>
 
-    <div v-if="sessionId && !error && (!diff || diff.available)" class="diff-layout">
+    <div v-if="hasDiffTarget && (!diff || diff.available)" class="diff-layout">
       <q-card flat bordered class="diff-files">
         <q-inner-loading :showing="loading">
           <q-spinner color="primary" size="32px" />
@@ -94,7 +85,20 @@
               <q-icon :name="fileIcon(file.status)" :color="fileColor(file.status)" />
             </q-item-section>
             <q-item-section>
-              <q-item-label class="file-path">{{ file.path }}</q-item-label>
+              <q-item-label class="file-path">
+                <q-btn
+                  v-if="sessionPrefix(file.path)"
+                  flat
+                  dense
+                  no-caps
+                  class="session-prefix-link"
+                  :label="sessionPrefix(file.path)"
+                  @click.stop="openPrefixedSession(file.path)"
+                >
+                  <q-tooltip>打开会话详情</q-tooltip>
+                </q-btn>
+                <span>{{ filePathWithoutPrefix(file.path) }}</span>
+              </q-item-label>
               <q-item-label caption>
                 <span class="text-positive">+{{ file.additions }}</span>
                 <span class="q-mx-xs">/</span>
@@ -146,7 +150,18 @@
                 :name="fileIcon(fileDiff.file.status)"
                 :color="fileColor(fileDiff.file.status)"
               />
-              <span>{{ fileDiff.file.path }}</span>
+              <q-btn
+                v-if="sessionPrefix(fileDiff.file.path)"
+                flat
+                dense
+                no-caps
+                class="session-prefix-link"
+                :label="sessionPrefix(fileDiff.file.path)"
+                @click="openPrefixedSession(fileDiff.file.path)"
+              >
+                <q-tooltip>打开会话详情</q-tooltip>
+              </q-btn>
+              <span>{{ filePathWithoutPrefix(fileDiff.file.path) }}</span>
             </div>
             <div class="row items-center q-gutter-sm">
               <q-badge outline color="positive" :label="`+${fileDiff.file.additions}`" />
@@ -179,10 +194,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { Notify } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
-import { getSessionDiff } from '@/services/diff';
+import { getBranchDiff, getSessionDiff } from '@/services/diff';
 import type { DiffFile, DiffLineKind, DiffMode, FileDiff, SessionDiff } from '@/services/diff';
+import { listSessions } from '@/services/sessions';
 
 const route = useRoute();
 const router = useRouter();
@@ -194,13 +211,17 @@ const pageSizeOptions = [
 ];
 
 const sessionId = computed(() => stringQuery(route.query.sessionId));
+const projectId = computed(() => stringQuery(route.query.projectId));
+const branch = computed(() => stringQuery(route.query.branch));
+const branchMode = computed(() => projectId.value !== '' && branch.value !== '');
+const hasDiffTarget = computed(() => sessionId.value !== '' || branchMode.value);
 const viewMode = ref<DiffMode>(normalizeMode(stringQuery(route.query.mode)));
 const selectedPath = ref(stringQuery(route.query.filePath));
 const page = ref(positiveIntQuery(route.query.page, 1));
 const pageSize = ref(positiveIntQuery(route.query.pageSize, 20));
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
-const error = ref('');
+const sessionPrefixMap = ref<Record<string, string>>({});
 
 const visibleDiffs = computed<FileDiff[]>(() => {
   if (!diff.value?.available) {
@@ -225,12 +246,15 @@ const fileCountLabel = computed(() => {
 });
 
 async function loadDiff() {
-  if (!sessionId.value) return;
+  if (!hasDiffTarget.value) return;
   loading.value = true;
-  error.value = '';
   try {
-    const input: Parameters<typeof getSessionDiff>[0] = {
-      sessionId: sessionId.value,
+    const input: {
+      mode: DiffMode;
+      filePath?: string;
+      page: number;
+      pageSize: number;
+    } = {
       mode: viewMode.value,
       page: page.value,
       pageSize: pageSize.value,
@@ -238,7 +262,9 @@ async function loadDiff() {
     if (viewMode.value === 'single' && selectedPath.value) {
       input.filePath = selectedPath.value;
     }
-    const nextDiff = await getSessionDiff(input);
+    const nextDiff = branchMode.value
+      ? await getBranchDiff({ ...input, projectId: projectId.value, branch: branch.value })
+      : await getSessionDiff({ ...input, sessionId: sessionId.value });
     diff.value = nextDiff;
     page.value = nextDiff.pageInfo.page;
     pageSize.value = nextDiff.pageInfo.pageSize;
@@ -246,11 +272,73 @@ async function loadDiff() {
       selectedPath.value =
         nextDiff.filePath || nextDiff.fileDiff?.file.path || nextDiff.files[0]?.path || '';
     }
+    if (branchMode.value) {
+      await loadSessionPrefixMap();
+    }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '读取 Diff 失败';
+    notifyError(err, '读取 Diff 失败');
   } finally {
     loading.value = false;
   }
+}
+
+function notifyError(err: unknown, fallback: string) {
+  if (wasNotified(err)) return;
+  Notify.create({
+    type: 'negative',
+    icon: 'error',
+    position: 'top-right',
+    message: err instanceof Error ? err.message || fallback : fallback,
+    timeout: 5000,
+    actions: [{ icon: 'close', color: 'white', round: true }],
+  });
+}
+
+function wasNotified(err: unknown) {
+  return Boolean(err && typeof err === 'object' && '__anycodeNotified' in err);
+}
+
+async function loadSessionPrefixMap() {
+  const project = projectId.value;
+  if (!project) return;
+  const map: Record<string, string> = {};
+  let loaded = 0;
+  for (let currentPage = 1; ; currentPage += 1) {
+    const pageResult = await listSessions({
+      projectId: project,
+      page: currentPage,
+      pageSize: 100,
+      sort: 'updated_at desc',
+    });
+    loaded += pageResult.items.length;
+    pageResult.items
+      .filter((session) => session.branch === branch.value)
+      .forEach((session) => {
+        map[session.id.slice(0, 8)] = session.id;
+        map[session.id] = session.id;
+      });
+    if (pageResult.items.length === 0 || loaded >= pageResult.pageInfo.total) {
+      break;
+    }
+  }
+  sessionPrefixMap.value = map;
+}
+
+function sessionPrefix(path: string) {
+  const match = path.match(/^([^:]{1,64}):\s+/);
+  return match?.[1] ?? '';
+}
+
+function filePathWithoutPrefix(path: string) {
+  const prefix = sessionPrefix(path);
+  return prefix ? path.slice(prefix.length + 2) : path;
+}
+
+async function openPrefixedSession(path: string) {
+  const prefix = sessionPrefix(path);
+  const sessionId = sessionPrefixMap.value[prefix];
+  if (!sessionId) return;
+  await router.push({ name: 'session-detail', params: { id: sessionId } });
 }
 
 function selectFile(path: string) {
@@ -296,10 +384,12 @@ function normalizeMode(mode: string): DiffMode {
 }
 
 function syncRouteQuery() {
-  if (!sessionId.value) return;
+  if (!hasDiffTarget.value) return;
   const nextQuery = {
     ...route.query,
-    sessionId: sessionId.value,
+    sessionId: branchMode.value ? undefined : sessionId.value,
+    projectId: branchMode.value ? projectId.value : undefined,
+    branch: branchMode.value ? branch.value : undefined,
     mode: viewMode.value,
     filePath: viewMode.value === 'single' && selectedPath.value ? selectedPath.value : undefined,
     page: String(page.value),
@@ -319,6 +409,13 @@ watch([viewMode, selectedPath, page, pageSize], () => {
 
 watch(
   () => route.query.sessionId,
+  () => {
+    void loadDiff();
+  },
+);
+
+watch(
+  () => [route.query.projectId, route.query.branch],
   () => {
     void loadDiff();
   },
@@ -401,6 +498,12 @@ onMounted(() => {
 .file-title span {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.session-prefix-link {
+  min-height: 24px;
+  padding: 0 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
 }
 
 .diff-line {

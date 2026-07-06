@@ -25,6 +25,8 @@ type Project struct {
 	IsGit bool `json:"is_git,omitempty"`
 	// DefaultWorkflowID holds the value of the "default_workflow_id" field.
 	DefaultWorkflowID *string `json:"default_workflow_id,omitempty"`
+	// RemovedAt holds the value of the "removed_at" field.
+	RemovedAt *time.Time `json:"removed_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -41,7 +43,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case project.FieldID, project.FieldName, project.FieldPath, project.FieldDefaultWorkflowID:
 			values[i] = new(sql.NullString)
-		case project.FieldCreatedAt, project.FieldUpdatedAt:
+		case project.FieldRemovedAt, project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -88,6 +90,13 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.DefaultWorkflowID = new(string)
 				*_m.DefaultWorkflowID = value.String
+			}
+		case project.FieldRemovedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field removed_at", values[i])
+			} else if value.Valid {
+				_m.RemovedAt = new(time.Time)
+				*_m.RemovedAt = value.Time
 			}
 		case project.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -149,6 +158,11 @@ func (_m *Project) String() string {
 	if v := _m.DefaultWorkflowID; v != nil {
 		builder.WriteString("default_workflow_id=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.RemovedAt; v != nil {
+		builder.WriteString("removed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")

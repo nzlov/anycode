@@ -38,6 +38,7 @@ try {
 
   const browserState = trackBrowserFailures(page);
   await page.send('Page.enable');
+  await page.send('DOM.enable');
   await page.send('Runtime.enable');
   await page.send('Log.enable');
   await page.send('Network.enable');
@@ -56,6 +57,7 @@ try {
   await screenshot('01-overview-desktop.png');
 
   await assertDirectoryBrowser();
+  await screenshotDirectoryDialog();
   const plainProject = await ensureProject({
     path: plainPath,
     name: `E2E Plain ${stamp}`,
@@ -71,25 +73,55 @@ try {
   const plainSession = await runPlainSession(plainProject.id);
   const gitSession = await runGitSession(gitProject.id);
 
+  await navigate('/');
+  await waitForText('最新');
+  await waitForText('历史');
+  await waitForText('提交 ');
+  await assertSessionCardDoesNotShowProject('ANYCODE_GIT_E2E_OK', gitProject.name);
+  await assertNoHorizontalOverflow('overview branch lanes');
+  await screenshot('02-overview-branch-lanes.png');
+
+  await assertNewSessionDefaultProject({
+    route: `/#/?projectId=${gitProject.id}`,
+    expectedProjectName: gitProject.name,
+    label: 'project route default project',
+    screenshotName: '11-new-session-dialog.png',
+    withAttachments: true,
+  });
+  await evaluate(`localStorage.setItem('anycode.lastNewSessionProjectId', ${JSON.stringify(plainProject.id)});`);
+  await assertNewSessionDefaultProject({
+    route: '/',
+    expectedProjectName: plainProject.name,
+    label: 'overview last project default',
+  });
+
+  await assertWorkflowConfigInteractions(gitProject.id);
+  const approvalSession = await assertWorkflowCardFlow(gitProject.id);
+  const questionSession = await assertAnswerUserFlow(plainProject.id);
+
   await navigate('/#/sessions');
   await waitForText('会话表格');
   await waitForText('请只输出 OK');
   await waitForText('ANYCODE_GIT_E2E_OK');
+  await assertSessionsTableProjectName('ANYCODE_GIT_E2E_OK', gitProject.name, gitProject.id);
   await assertNoHorizontalOverflow('desktop sessions');
-  await screenshot('02-sessions-desktop.png');
+  await screenshot('03-sessions-desktop.png');
 
   await navigate(`/#/sessions/${plainSession.id}`);
   await waitForText('请只输出 OK');
   await waitForText('会话信息');
+  await assertSessionDetailReadableLayout('plain session detail layout');
   await assertNoHorizontalOverflow('plain session detail');
-  await screenshot('03-plain-session-detail.png');
+  await screenshot('04-plain-session-detail.png');
 
   await navigate(`/#/sessions/${gitSession.id}`);
   await waitForText('当前变更');
   await clickText('当前变更');
   await waitForText('e2e-codex-output.txt');
+  await screenshotFileDiffDialog('e2e-codex-output.txt');
+  await assertSessionDetailReadableLayout('git session detail layout');
   await assertNoHorizontalOverflow('git session detail');
-  await screenshot('04-git-session-detail.png');
+  await screenshot('05-git-session-detail.png');
 
   await appendPrompt(gitSession.id);
 
@@ -97,23 +129,24 @@ try {
   await waitForText('Diff');
   await waitForText('e2e-codex-output.txt');
   await assertNoHorizontalOverflow('git diff');
-  await screenshot('05-git-diff-desktop.png');
+  await screenshot('06-git-diff-desktop.png');
 
   await navigate(`/#/projects/${gitProject.id}/workflow`);
   await waitForText('流程配置');
   await assertNoHorizontalOverflow('workflow');
-  await screenshot('06-workflow-desktop.png');
+  await screenshot('07-workflow-desktop.png');
 
   await setViewport(390, 844);
   await navigate('/');
   await waitForText('AnyCode');
   await assertNoHorizontalOverflow('mobile overview');
-  await screenshot('07-overview-mobile.png');
+  await screenshot('08-overview-mobile.png');
 
   await navigate(`/#/sessions/${gitSession.id}`);
-  await waitForText('当前变更');
+  await waitForText('命令结果');
+  await assertSessionDetailReadableLayout('mobile git session detail layout');
   await assertNoHorizontalOverflow('mobile git session detail');
-  await screenshot('08-git-session-mobile.png');
+  await screenshot('09-git-session-mobile.png');
 
   browserState.assertClean();
   console.log(JSON.stringify({
@@ -124,16 +157,25 @@ try {
     gitProjectId: gitProject.id,
     gitSessionId: gitSession.id,
     gitFinalStatus: gitSession.finalStatus,
+    approvalSessionId: approvalSession.id,
+    approvalStatus: approvalSession.status,
+    questionSessionId: questionSession.id,
+    questionBatchId: questionSession.batchId,
     gitDiffFile: 'e2e-codex-output.txt',
     screenshots: [
       '01-overview-desktop.png',
-      '02-sessions-desktop.png',
-      '03-plain-session-detail.png',
-      '04-git-session-detail.png',
-      '05-git-diff-desktop.png',
-      '06-workflow-desktop.png',
-      '07-overview-mobile.png',
-      '08-git-session-mobile.png',
+      '02-overview-branch-lanes.png',
+      '03-sessions-desktop.png',
+      '04-plain-session-detail.png',
+      '05-git-session-detail.png',
+      '06-git-diff-desktop.png',
+      '07-workflow-desktop.png',
+      '08-overview-mobile.png',
+      '09-git-session-mobile.png',
+      '10-directory-dialog.png',
+      '11-new-session-dialog.png',
+      '12-answer-user-dialog.png',
+      '13-file-diff-dialog.png',
     ].map((name) => `${screenshotDir}/${name}`),
   }, null, 2));
 } catch (error) {
@@ -406,6 +448,21 @@ async function waitForText(text, timeoutMs = 25_000) {
   throw new Error(`Timed out waiting for text ${text}. Body: ${body}`);
 }
 
+async function waitForVisibleSelector(selector, timeoutMs = 10_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const visible = await evaluate(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return false;
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })()`);
+    if (visible) return;
+    await sleep(250);
+  }
+  throw new Error(`Timed out waiting for visible selector ${selector}`);
+}
+
 async function clickText(text) {
   const clicked = await evaluate(`(() => {
     const target = Array.from(document.querySelectorAll('button, [role="tab"], .q-tab, .q-item'))
@@ -416,6 +473,181 @@ async function clickText(text) {
   })()`);
   assert(clicked, `click target not found: ${text}`);
   await sleep(300);
+}
+
+async function clickAria(label) {
+  const clicked = await evaluate(`(() => {
+    const target = Array.from(document.querySelectorAll('[aria-label=${JSON.stringify(label)}]'))
+      .find((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert(clicked, `aria target not found: ${label}`);
+  await sleep(300);
+}
+
+async function closeVisibleDialog() {
+  const closed = await evaluate(`(() => {
+    const dialog = Array.from(document.querySelectorAll('.q-dialog')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    const target = dialog?.querySelector('[aria-label="关闭"], [aria-label="取消"]');
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert(closed, 'visible dialog close button not found');
+  await sleep(300);
+}
+
+async function assertSessionCardDoesNotShowProject(marker, projectName) {
+  const result = await evaluate(`(() => {
+    const card = Array.from(document.querySelectorAll('.lane-session-card'))
+      .find((element) => element.innerText.includes(${JSON.stringify(marker)}));
+    return {
+      found: Boolean(card),
+      cardText: card?.innerText || '',
+    };
+  })()`);
+  assert(result.found, `overview card not found for ${marker}`);
+  assert(!result.cardText.includes(projectName), `card still shows project name ${projectName}: ${result.cardText}`);
+}
+
+async function assertSessionsTableProjectName(marker, projectName, projectId) {
+  const result = await evaluate(`(() => {
+    const row = Array.from(document.querySelectorAll('tbody tr, .q-table__grid-content .q-card, .q-item'))
+      .find((element) => element.innerText && element.innerText.includes(${JSON.stringify(marker)}));
+    return {
+      found: Boolean(row),
+      rowText: row?.innerText || '',
+    };
+  })()`);
+  assert(result.found, `sessions row not found for ${marker}`);
+  assert(result.rowText.includes(projectName), `sessions row missing project name ${projectName}: ${result.rowText}`);
+  assert(!result.rowText.includes(projectId), `sessions row still shows project id ${projectId}: ${result.rowText}`);
+}
+
+async function assertNewSessionDefaultProject({ route, expectedProjectName, label, screenshotName, withAttachments = false }) {
+  await navigate(route);
+  await waitForText('AnyCode');
+  await clickAria('新建卡片');
+  await waitForText('新建卡片');
+  if (withAttachments) {
+    await attachNewSessionFixtureFiles();
+    await waitForText('notes.md');
+    await waitForText('screenshot.png');
+    await waitForText('demo.mp4');
+    await waitForText('schema.sql');
+  }
+  const dialogText = await evaluate(`(() => {
+    const dialog = Array.from(document.querySelectorAll('.q-dialog')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    return dialog?.innerText || '';
+  })()`);
+  assert(dialogText.includes(expectedProjectName), `${label} did not select ${expectedProjectName}: ${dialogText}`);
+  if (screenshotName) await screenshot(screenshotName);
+  await closeVisibleDialog();
+}
+
+async function attachNewSessionFixtureFiles() {
+  const fixtureDir = `/tmp/anycode-e2e-attachments-${stamp}`;
+  await mkdir(fixtureDir, { recursive: true });
+  const files = [
+    `${fixtureDir}/notes.md`,
+    `${fixtureDir}/screenshot.png`,
+    `${fixtureDir}/demo.mp4`,
+    `${fixtureDir}/schema.sql`,
+  ];
+  await writeFile(files[0], '# E2E notes\n\nCheck attachment chip layout.\n');
+  await writeFile(files[1], 'AnyCode screenshot attachment placeholder\n');
+  await writeFile(files[2], 'AnyCode video attachment placeholder\n');
+  await writeFile(files[3], 'create table anycode_e2e_attachment(id text primary key);\n');
+
+  const documentNode = await page.send('DOM.getDocument', { depth: -1, pierce: true });
+  const inputNode = await page.send('DOM.querySelector', {
+    nodeId: documentNode.root.nodeId,
+    selector: '.new-session-dialog input[type="file"]',
+  });
+  assert(inputNode.nodeId, 'new session file input not found');
+  await page.send('DOM.setFileInputFiles', {
+    nodeId: inputNode.nodeId,
+    files,
+  });
+  await sleep(500);
+}
+
+async function screenshotDirectoryDialog() {
+  await clickAria('选择项目目录');
+  await waitForText('选择项目目录');
+  await waitForText('当前路径');
+  await screenshot('10-directory-dialog.png');
+  await closeVisibleDialog();
+}
+
+async function screenshotFileDiffDialog(filePath) {
+  const opened = await evaluate(`(() => {
+    const panel = document.querySelector('.right-panel-card');
+    const row = Array.from(panel?.querySelectorAll('.changes-list .q-item') || [])
+      .find((element) => element.innerText && element.innerText.includes(${JSON.stringify(filePath)}));
+    if (!row) return false;
+    row.click();
+    return true;
+  })()`);
+  assert(opened, `diff file row not found: ${filePath}`);
+  await waitForVisibleSelector('.file-diff-dialog');
+  await screenshot('13-file-diff-dialog.png');
+  await closeVisibleDialog();
+}
+
+async function assertSessionDetailReadableLayout(label) {
+  const result = await evaluate(`(() => {
+    const doc = document.documentElement;
+    const page = document.querySelector('.detail-page');
+    const pageContainer = document.querySelector('.q-page-container');
+    const eventTexts = Array.from(document.querySelectorAll('.event-body__text'))
+      .map((element) => element.innerText.trim())
+      .filter(Boolean);
+    const jsonLike = eventTexts.filter((text) => text.startsWith('{') || text.includes('"processRunId"') || text.includes('"raw"'));
+    const stream = document.querySelector('.stream-card__body') || document.querySelector('.stream-card');
+    const streamStyle = stream ? getComputedStyle(stream) : null;
+    return {
+      eventCount: eventTexts.length,
+      jsonLike,
+      pageScrollHeight: doc.scrollHeight,
+      innerHeight: window.innerHeight,
+      bodyScrolls: doc.scrollHeight > window.innerHeight + 1,
+      pageScrolls: page ? page.scrollHeight > page.clientHeight + 1 : false,
+      pageContainerScrolls: pageContainer ? pageContainer.scrollHeight > pageContainer.clientHeight + 1 : false,
+      streamOverflowY: streamStyle?.overflowY || '',
+      streamCanScroll: stream ? stream.scrollHeight >= stream.clientHeight : false,
+    };
+  })()`);
+  assert(result.eventCount > 0, `${label} has no event text`);
+  assert(result.jsonLike.length === 0, `${label} still shows JSON event payload: ${result.jsonLike.join('\\n')}`);
+  assert(!result.bodyScrolls, `${label} scrolls the whole page: ${result.pageScrollHeight} > ${result.innerHeight}`);
+  assert(!result.pageScrolls, `${label} scrolls the detail page`);
+  assert(!result.pageContainerScrolls, `${label} scrolls the page container`);
+  assert(['auto', 'scroll'].includes(result.streamOverflowY), `${label} event stream is not scrollable`);
+}
+
+async function clickQuestionButtonForCard(marker) {
+  const clicked = await evaluate(`(() => {
+    const card = Array.from(document.querySelectorAll('.lane-session-card'))
+      .find((element) => element.innerText.includes(${JSON.stringify(marker)}));
+    const button = card?.querySelector('[aria-label="回答问题"]');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(clicked, `question button not found for card ${marker}`);
+  await sleep(500);
 }
 
 async function assertNoHorizontalOverflow(label) {
@@ -492,6 +724,7 @@ async function runPlainSession(projectId) {
   await startSession(session.id);
   const finalStatus = await waitForSessionStatus(session.id, 120_000);
   assertTerminalStatus(finalStatus, 'plain session');
+  await assertSessionEventsDoNotContain(session.id, 'bwrap');
 
   const diff = await sessionDiff(session.id, 'all');
   assert(diff.available === false, 'plain session diff should be unavailable');
@@ -513,6 +746,7 @@ async function runGitSession(projectId) {
   await startSession(session.id);
   const finalStatus = await waitForSessionStatus(session.id, 120_000);
   assertTerminalStatus(finalStatus, 'git session');
+  await assertSessionEventsDoNotContain(session.id, 'bwrap');
 
   const diff = await sessionDiff(session.id, 'all');
   assert(diff.available === true, 'git session diff should be available');
@@ -522,6 +756,83 @@ async function runGitSession(projectId) {
   const diffText = outputDiff.hunks.flatMap((hunk) => hunk.lines.map((line) => line.content)).join('\n');
   assert(diffText.includes('ANYCODE_GIT_E2E_OK'), 'git diff missing expected marker');
   return { ...session, finalStatus };
+}
+
+async function assertWorkflowConfigInteractions(projectId) {
+  await navigate(`/#/projects/${projectId}/workflow`);
+  await waitForText('流程配置');
+  await clickAria('新增节点');
+  await waitForText('新节点');
+  await clickText('应用节点');
+  await clickText('保存为默认流程');
+  await waitForWorkflowSaved(projectId);
+  await assertNoHorizontalOverflow('workflow config interactions');
+}
+
+async function assertWorkflowCardFlow(projectId) {
+  const definition = await saveWorkflowDefinition({
+    projectId,
+    name: `E2E approval flow ${stamp}`,
+    graph: {
+      nodes: [{
+        id: 'approve',
+        type: 'approval',
+        title: '人工审批',
+        prompt: '',
+        approval: { beforeRun: true, afterRun: false },
+        retry: { maxAttempts: 0 },
+        merge: null,
+      }],
+      edges: [],
+    },
+  });
+  await setDefaultWorkflow(projectId, definition.id);
+  const session = await createSession({
+    projectId,
+    requirement: `E2E_APPROVAL_FLOW_${stamp}`,
+    mode: 'workflow',
+    baseBranch: 'main',
+    config: { permissionMode: 'workspace-write' },
+  });
+  assert(session.status === 'waiting_approval', `workflow session status = ${session.status}, want waiting_approval`);
+
+  await navigate(`/#/sessions/${session.id}`);
+  await waitForText('E2E_APPROVAL_FLOW');
+  await waitForText('待审批');
+  await waitForText('等待人工审批');
+  await assertNoHorizontalOverflow('workflow waiting approval detail');
+  return session;
+}
+
+async function assertAnswerUserFlow(projectId) {
+  const session = await createSession({
+    projectId,
+    requirement: [
+      `E2E_WAITING_USER_CARD_${stamp}`,
+      '请直接执行 shell 命令：sleep 45，然后结束。',
+    ].join('\n'),
+    mode: 'chat',
+    config: { permissionMode: 'workspace-write' },
+  });
+  await startSession(session.id);
+  await waitForSessionRunning(session.id, 20_000);
+  const mcpPromise = callAnswerUser(session.id);
+  const pending = await waitForPendingQuestion(session.id);
+
+  await navigate(`/#/sessions/${session.id}`);
+  await waitForText('E2E_WAITING_USER_CARD');
+  await waitForText('待回答问题');
+  await waitForText('Choose next step');
+  await screenshot('12-answer-user-inline.png');
+  await submitPendingQuestion(pending);
+  const mcpResponse = await mcpPromise;
+  assert(mcpResponse.status === 200, `answer_user MCP status = ${mcpResponse.status}: ${JSON.stringify(mcpResponse.body)}`);
+  assert(JSON.stringify(mcpResponse.body).includes(pending.batchId), 'answer_user response missing batch id');
+  await navigate(`/#/sessions/${session.id}`);
+  await waitForText('E2E_WAITING_USER_CARD');
+  await waitForSessionStatus(session.id, 10_000);
+  await stopSessionBestEffort(session.id);
+  return { id: session.id, batchId: pending.batchId };
 }
 
 async function createSession(input) {
@@ -555,6 +866,75 @@ async function startSession(id) {
   return data.startSession;
 }
 
+async function stopSessionBestEffort(id) {
+  try {
+    await graphql(`
+      mutation StopSession($id: ID!) {
+        stopSession(id: $id) { id status }
+      }
+    `, { id });
+  } catch {
+    // The session may have already reached a terminal state.
+  }
+}
+
+async function saveWorkflowDefinition(input) {
+  const data = await graphql(`
+    mutation SaveWorkflowDefinition($input: SaveWorkflowDefinitionInput!) {
+      saveWorkflowDefinition(input: $input) {
+        id
+        projectId
+        name
+        graph { nodes { id type title } }
+      }
+    }
+  `, { input });
+  assert(data.saveWorkflowDefinition.id, 'saveWorkflowDefinition missing id');
+  return data.saveWorkflowDefinition;
+}
+
+async function setDefaultWorkflow(projectId, workflowId) {
+  const data = await graphql(`
+    mutation SetDefaultWorkflow($input: SetDefaultWorkflowInput!) {
+      setDefaultWorkflow(input: $input) {
+        id
+        defaultWorkflowId
+      }
+    }
+  `, { input: { projectId, workflowId } });
+  assert(data.setDefaultWorkflow.defaultWorkflowId === workflowId, 'setDefaultWorkflow did not persist workflow id');
+}
+
+async function waitForWorkflowSaved(projectId, timeoutMs = 15_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const data = await graphql(`
+      query Projects {
+        projects {
+          id
+          defaultWorkflowId
+        }
+      }
+    `);
+    const project = data.projects.find((item) => item.id === projectId);
+    const workflowId = project?.defaultWorkflowId || '';
+    if (workflowId) {
+      const definition = await graphql(`
+        query WorkflowDefinition($id: ID!) {
+          workflowDefinition(id: $id) {
+            id
+            graph { nodes { title } }
+          }
+        }
+      `, { id: workflowId });
+      const titles = definition.workflowDefinition?.graph?.nodes?.map((node) => node.title) || [];
+      if (titles.includes('新节点')) return;
+    }
+    await sleep(250);
+  }
+  throw new Error(`Timed out waiting for workflow save for project ${projectId}`);
+}
+
 async function waitForSessionStatus(sessionId, timeoutMs) {
   const terminal = new Set(['stopped', 'failed', 'blocked', 'completed', 'closed', 'resume_failed']);
   const started = Date.now();
@@ -573,6 +953,75 @@ async function waitForSessionStatus(sessionId, timeoutMs) {
     await sleep(1000);
   }
   return status;
+}
+
+async function waitForSessionRunning(sessionId, timeoutMs) {
+  const terminal = new Set(['stopped', 'failed', 'blocked', 'completed', 'closed', 'resume_failed']);
+  const started = Date.now();
+  let status = 'unknown';
+  while (Date.now() - started < timeoutMs) {
+    const data = await graphql(`
+      query SessionStatus($id: ID!) {
+        session(id: $id) {
+          id
+          status
+        }
+      }
+    `, { id: sessionId });
+    status = data.session.status;
+    if (status === 'running' || status === 'starting') return status;
+    if (terminal.has(status)) throw new Error(`session ${sessionId} reached ${status} before answer_user test`);
+    await sleep(500);
+  }
+  throw new Error(`Timed out waiting for session ${sessionId} to run; last status ${status}`);
+}
+
+async function waitForPendingQuestion(sessionId, timeoutMs = 10_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const data = await graphql(`
+      query PendingQuestionBatches($sessionId: ID!) {
+        pendingQuestionBatches(sessionId: $sessionId) {
+          id
+          status
+          questions { id options { id label } }
+        }
+      }
+    `, { sessionId });
+    const batch = data.pendingQuestionBatches.find((item) => item.status === 'pending');
+    const question = batch?.questions?.[0];
+    if (batch?.id && question?.id) {
+      return {
+        batchId: batch.id,
+        questionId: question.id,
+        optionId: question.options?.[0]?.id || '',
+      };
+    }
+    await sleep(250);
+  }
+  throw new Error(`Timed out waiting for pending question for ${sessionId}`);
+}
+
+async function submitPendingQuestion(pending) {
+  assert(pending.batchId && pending.questionId && pending.optionId, `invalid pending question: ${JSON.stringify(pending)}`);
+  const data = await graphql(`
+    mutation SubmitQuestionBatch($input: SubmitQuestionBatchInput!) {
+      submitQuestionBatch(input: $input) {
+        id
+        status
+        questions { id selectedOptionId status }
+      }
+    }
+  `, {
+    input: {
+      batchId: pending.batchId,
+      answers: [{
+        questionId: pending.questionId,
+        selectedOptionId: pending.optionId,
+      }],
+    },
+  });
+  assert(data.submitQuestionBatch.status === 'answered', `submitQuestionBatch status = ${data.submitQuestionBatch.status}`);
 }
 
 function assertTerminalStatus(status, label) {
@@ -612,6 +1061,57 @@ async function sessionDiff(sessionId, mode) {
       }
     }
   `, { input: { sessionId, mode, page: 1, pageSize: 50 } })).sessionDiff;
+}
+
+async function assertSessionEventsDoNotContain(sessionId, text) {
+  const data = await graphql(`
+    query SessionEvents($input: ListSessionEventsInput!) {
+      sessionEvents(input: $input) {
+        items {
+          type
+          payload
+        }
+      }
+    }
+  `, { input: { sessionId, page: 1, pageSize: 100 } });
+  const raw = JSON.stringify(data.sessionEvents.items);
+  assert(!raw.includes(text), `session ${sessionId} events still contain ${text}`);
+}
+
+async function callAnswerUser(sessionId) {
+  const body = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'tools/call',
+    params: {
+      name: 'answer_user',
+      arguments: {
+        questions: [{
+          title: 'Choose next step',
+          body: 'How should Codex continue?',
+          type: 'choice',
+          allowCustom: true,
+          options: [{ id: 'continue', label: 'Continue', description: 'Proceed' }],
+        }],
+      },
+    },
+  };
+  const response = await fetch(`${baseURL}/mcp/sessions/${sessionId}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${accessKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsed = { text };
+  }
+  return { status: response.status, body: parsed };
 }
 
 async function graphql(query, variables = {}) {

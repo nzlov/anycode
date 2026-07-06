@@ -2,7 +2,9 @@
   <q-layout view="lHh Lpr lFf" class="app-layout">
     <q-header bordered class="app-header">
       <q-toolbar>
-        <q-btn flat dense round icon="menu" aria-label="打开导航" @click="toggleLeftDrawer" />
+        <q-btn flat dense round class="lt-md" icon="menu" aria-label="打开导航" @click="toggleLeftDrawer">
+          <q-tooltip>打开导航</q-tooltip>
+        </q-btn>
 
         <q-toolbar-title class="app-title">AnyCode</q-toolbar-title>
 
@@ -17,23 +19,30 @@
           <q-tooltip>选择项目目录</q-tooltip>
         </q-btn>
 
-        <q-btn-dropdown flat dense round icon="palette" aria-label="主题模式">
-          <q-list dense>
-            <q-item
-              v-for="mode in themeModes"
-              :key="mode.value"
-              v-close-popup
-              clickable
-              :active="themeMode === mode.value"
-              @click="themeMode = mode.value"
-            >
-              <q-item-section avatar>
-                <q-icon :name="mode.icon" />
-              </q-item-section>
-              <q-item-section>{{ mode.label }}</q-item-section>
-            </q-item>
-          </q-list>
-        </q-btn-dropdown>
+        <q-btn flat dense round icon="palette" aria-label="主题模式">
+          <q-tooltip>主题模式</q-tooltip>
+          <q-menu>
+            <q-list dense>
+              <q-item
+                v-for="mode in themeModes"
+                :key="mode.value"
+                v-close-popup
+                clickable
+                :active="themeMode === mode.value"
+                @click="themeMode = mode.value"
+              >
+                <q-item-section avatar>
+                  <q-icon :name="mode.icon" />
+                </q-item-section>
+                <q-item-section>{{ mode.label }}</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
+
+        <q-btn flat round dense icon="logout" aria-label="退出" @click="logoutDialogOpen = true">
+          <q-tooltip>退出</q-tooltip>
+        </q-btn>
       </q-toolbar>
     </q-header>
 
@@ -42,7 +51,7 @@
         <q-list padding>
           <q-item-label header class="drawer-header">Codex agent 工作台</q-item-label>
 
-          <q-item clickable :active="$route.name === 'overview'" to="/">
+          <q-item clickable :active="$route.name === 'overview' && !$route.query.projectId" to="/">
             <q-item-section avatar>
               <q-icon name="space_dashboard" />
             </q-item-section>
@@ -52,29 +61,25 @@
             </q-item-section>
           </q-item>
 
-          <q-item clickable :active="$route.name === 'sessions'" to="/sessions">
-            <q-item-section avatar>
-              <q-icon name="table_rows" />
-            </q-item-section>
-            <q-item-section>
-              <q-item-label>会话表格</q-item-label>
-              <q-item-label caption>后端分页入口</q-item-label>
-            </q-item-section>
-          </q-item>
-
           <q-separator spaced />
 
           <q-item-label header class="drawer-header">项目</q-item-label>
-          <q-item v-for="project in projects" :key="project.id" clickable>
+          <q-item
+            v-for="project in projects"
+            :key="project.id"
+            clickable
+            :active="projectActive(project.id)"
+            @click="$router.push({ name: 'overview', query: { projectId: project.id } })"
+          >
             <q-item-section avatar>
-              <q-icon name="folder_open" :color="project.active ? 'positive' : undefined" />
+              <q-icon name="folder_open" :color="projectActive(project.id) ? 'positive' : undefined" />
             </q-item-section>
             <q-item-section>
               <q-item-label>{{ project.name }}</q-item-label>
-              <q-item-label caption>{{ project.path }}</q-item-label>
             </q-item-section>
             <q-item-section side>
-              <q-btn flat round dense icon="more_vert" aria-label="项目设置" @click.stop>
+              <q-btn flat round dense icon="more_vert" aria-label="项目设置" @click.stop.prevent>
+                <q-tooltip>项目设置</q-tooltip>
                 <q-menu>
                   <q-list dense class="project-menu">
                     <q-item clickable :to="`/projects/${project.id}/workflow`">
@@ -83,102 +88,85 @@
                       </q-item-section>
                       <q-item-section>流程配置</q-item-section>
                     </q-item>
-                    <q-item clickable @click="directoryDialogOpen = true">
+                    <q-item clickable class="text-negative" @click="confirmRemoveProject(project.id, project.name)">
                       <q-item-section avatar>
-                        <q-icon name="folder" />
+                        <q-icon name="playlist_remove" />
                       </q-item-section>
-                      <q-item-section>目录选择</q-item-section>
+                      <q-item-section>移除项目</q-item-section>
                     </q-item>
                   </q-list>
                 </q-menu>
               </q-btn>
             </q-item-section>
           </q-item>
-
-          <q-separator spaced />
-
-          <q-item clickable @click="openAccessKeyDialog">
-            <q-item-section avatar>
-              <q-icon :name="accessKeyConfigured ? 'verified_user' : 'key'" />
-            </q-item-section>
-            <q-item-section>
-              <q-item-label>{{ accessKeyConfigured ? '已连接' : '访问密钥' }}</q-item-label>
-              <q-item-label caption>
-                {{ accessKeyConfigured ? '当前请求使用已保存 key' : '配置 GraphQL 访问密钥' }}
-              </q-item-label>
-            </q-item-section>
-            <q-item-section side>
-              <q-icon name="settings" />
-            </q-item-section>
-          </q-item>
         </q-list>
       </q-scroll-area>
     </q-drawer>
 
-    <q-page-container>
-      <router-view :key="$route.fullPath" @create-session="newSessionOpen = true" />
+    <q-page-container :class="{ 'page-container--detail': $route.name === 'session-detail' }">
+      <router-view :key="`${$route.fullPath}:${pageRefreshKey}`" @create-session="newSessionOpen = true" />
     </q-page-container>
 
-    <q-page-sticky position="bottom-right" :offset="[24, 24]">
-      <q-btn fab color="primary" icon="add" aria-label="新建卡片" @click="newSessionOpen = true" />
+    <q-page-sticky v-if="$route.name === 'overview'" position="bottom-right" :offset="[24, 24]">
+      <q-btn fab color="positive" text-color="dark" icon="add" aria-label="新建卡片" @click="newSessionOpen = true">
+        <q-tooltip>新建卡片</q-tooltip>
+      </q-btn>
     </q-page-sticky>
 
-    <new-session-dialog v-model="newSessionOpen" />
+    <new-session-dialog
+      v-model="newSessionOpen"
+      :default-project-id="newSessionDefaultProjectId"
+      @create="handleSessionCreated"
+    />
     <project-directory-dialog v-model="directoryDialogOpen" />
 
-    <q-dialog v-model="accessKeyDialogOpen">
-      <q-card class="access-key-dialog" style="width: 420px; max-width: calc(100vw - 32px)">
+    <q-dialog v-model="removeProjectDialogOpen">
+      <q-card class="confirm-dialog">
         <q-card-section class="row items-center q-pb-sm">
           <div>
-            <div class="text-subtitle1 text-weight-bold">访问密钥</div>
-            <div class="text-caption text-muted">保存后后续 GraphQL 请求会使用新 key</div>
+            <div class="text-subtitle1 text-weight-bold">移除项目</div>
+            <div class="text-caption text-muted">会停止该项目所有运行中的卡片，并从列表隐藏。</div>
           </div>
           <q-space />
-          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
+          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
+            <q-tooltip>关闭</q-tooltip>
+          </q-btn>
         </q-card-section>
 
         <q-separator />
 
         <q-card-section>
-          <q-input
-            v-model="accessKeyInput"
-            outlined
-            dense
-            autofocus
-            label="访问密钥"
-            :type="accessKeyVisible ? 'text' : 'password'"
-            @keyup.enter="saveAccessKey"
-          >
-            <template #prepend>
-              <q-icon name="key" />
-            </template>
-            <template #append>
-              <q-btn
-                flat
-                round
-                dense
-                :icon="accessKeyVisible ? 'visibility_off' : 'visibility'"
-                aria-label="切换密钥可见性"
-                @click="accessKeyVisible = !accessKeyVisible"
-              />
-            </template>
-          </q-input>
-          <q-banner v-if="accessKeySaved" dense rounded class="q-mt-md bg-positive text-white">
-            已保存，后续请求会使用新 key。
-          </q-banner>
+          <div class="text-body2">确认移除项目“{{ removingProjectName }}”？</div>
         </q-card-section>
 
         <q-card-actions align="right">
-          <q-btn v-close-popup flat color="primary" label="取消" no-caps />
+          <q-btn v-close-popup flat round icon="close" color="primary" aria-label="取消">
+            <q-tooltip>取消</q-tooltip>
+          </q-btn>
           <q-btn
             unelevated
-            color="primary"
-            icon="save"
-            label="保存"
+            color="negative"
+            icon="playlist_remove"
+            label="移除"
             no-caps
-            :loading="accessKeySaving"
-            @click="saveAccessKey"
+            :loading="removingProject"
+            @click="removeSelectedProject"
           />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="logoutDialogOpen">
+      <q-card class="confirm-dialog">
+        <q-card-section>
+          <div class="text-subtitle1 text-weight-bold">退出登录</div>
+          <div class="text-body2 text-muted q-mt-xs">退出后需要重新输入访问密钥。</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat round icon="close" color="primary" aria-label="取消">
+            <q-tooltip>取消</q-tooltip>
+          </q-btn>
+          <q-btn unelevated color="negative" icon="logout" label="退出" no-caps @click="logout" />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -186,55 +174,114 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
-import { getGraphQLAccessKey, setGraphQLAccessKey } from '@/services/graphqlClient';
+import { clearGraphQLAccessKey } from '@/services/graphqlClient';
+import { getSession } from '@/services/sessions';
 
 const leftDrawerOpen = ref(false);
 const newSessionOpen = ref(false);
 const directoryDialogOpen = ref(false);
-const accessKeyDialogOpen = ref(false);
-const accessKeyInput = ref('');
-const accessKeyConfigured = ref(false);
-const accessKeySaving = ref(false);
-const accessKeySaved = ref(false);
-const accessKeyVisible = ref(false);
+const removeProjectDialogOpen = ref(false);
+const removingProjectId = ref('');
+const removingProjectName = ref('');
+const removingProject = ref(false);
+const logoutDialogOpen = ref(false);
 const { themeMode, themeModes } = useThemeMode();
-const { projects, loadProjects } = useProjects();
+const { projects, loadProjects, removeProjectById } = useProjects();
+const route = useRoute();
+const router = useRouter();
+const activeProjectId = ref('');
+const pageRefreshKey = ref(0);
+const newSessionDefaultProjectId = computed(() => {
+  const projectId = route.params.projectId;
+  if (typeof projectId === 'string') return projectId;
+  const queryProjectId = route.query.projectId;
+  return typeof queryProjectId === 'string' ? queryProjectId : '';
+});
 
 onMounted(() => {
-  refreshAccessKeyStatus();
   void loadProjects();
+  void refreshActiveProject();
 });
+
+watch(
+  () => route.fullPath,
+  () => {
+    void refreshActiveProject();
+  },
+);
 
 function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value;
 }
 
-function refreshAccessKeyStatus() {
-  accessKeyConfigured.value = getGraphQLAccessKey().trim() !== '';
+function handleSessionCreated() {
+  pageRefreshKey.value += 1;
 }
 
-function openAccessKeyDialog() {
-  accessKeyInput.value = getGraphQLAccessKey();
-  accessKeySaved.value = false;
-  accessKeyVisible.value = false;
-  accessKeyDialogOpen.value = true;
+function projectActive(projectId: string) {
+  return activeProjectId.value === projectId;
 }
 
-async function saveAccessKey() {
-  accessKeySaving.value = true;
-  try {
-    setGraphQLAccessKey(accessKeyInput.value);
-    refreshAccessKeyStatus();
-    await loadProjects();
-    accessKeySaved.value = true;
-  } finally {
-    accessKeySaving.value = false;
+async function refreshActiveProject() {
+  const queryProjectId = route.query.projectId;
+  if (typeof queryProjectId === 'string') {
+    activeProjectId.value = queryProjectId;
+    return;
   }
+  const paramProjectId = route.params.projectId;
+  if (typeof paramProjectId === 'string') {
+    activeProjectId.value = paramProjectId;
+    return;
+  }
+  if (route.name === 'session-detail' || route.name === 'session-commits') {
+    const sessionId = route.params.id;
+    if (typeof sessionId === 'string') {
+      const detail = await getSession(sessionId);
+      activeProjectId.value = detail.projectId;
+      return;
+    }
+  }
+  if (route.name === 'diff') {
+    const diffSessionId = route.query.sessionId;
+    if (typeof diffSessionId === 'string') {
+      const detail = await getSession(diffSessionId);
+      activeProjectId.value = detail.projectId;
+      return;
+    }
+  }
+  activeProjectId.value = '';
+}
+
+function confirmRemoveProject(projectId: string, projectName: string) {
+  removingProjectId.value = projectId;
+  removingProjectName.value = projectName;
+  removeProjectDialogOpen.value = true;
+}
+
+async function removeSelectedProject() {
+  if (!removingProjectId.value) return;
+  removingProject.value = true;
+  try {
+    await removeProjectById(removingProjectId.value);
+    removeProjectDialogOpen.value = false;
+    if (activeProjectId.value === removingProjectId.value) {
+      await router.push({ name: 'overview' });
+    }
+  } finally {
+    removingProject.value = false;
+  }
+}
+
+async function logout() {
+  clearGraphQLAccessKey();
+  logoutDialogOpen.value = false;
+  await router.replace({ name: 'login' });
 }
 </script>

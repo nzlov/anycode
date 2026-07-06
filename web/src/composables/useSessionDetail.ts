@@ -5,6 +5,7 @@ import {
   appendPrompt,
   closeSession as closeSessionRequest,
   getPendingQuestionBatches,
+  getSessionEventPage,
   getSessionDetail,
   subscribePendingQuestionBatches,
   subscribeSessionEvents,
@@ -13,14 +14,20 @@ import {
   submitQuestionBatch,
   type QuestionAnswerInput,
   type QuestionBatch,
+  type PageInfo,
   stopSession as stopSessionRequest,
   type SessionDetailData,
 } from '@/services/sessions';
 
+const eventPageSize = 50;
+const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, nextCursor: '' };
+
 export function useSessionDetail(sessionId: string) {
   const session = ref<SessionDetailData['session'] | null>(null);
   const events = ref<SessionDetailData['events']>([]);
+  const eventsPageInfo = ref<PageInfo>({ ...emptyPageInfo });
   const loading = ref(false);
+  const loadingOlderEvents = ref(false);
   const appending = ref(false);
   const starting = ref(false);
   const resuming = ref(false);
@@ -42,6 +49,7 @@ export function useSessionDetail(sessionId: string) {
       const result = await getSessionDetail(sessionId);
       session.value = result.session;
       events.value = result.events;
+      eventsPageInfo.value = result.eventsPageInfo;
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载会话详情失败';
     } finally {
@@ -130,6 +138,24 @@ export function useSessionDetail(sessionId: string) {
       error.value = err instanceof Error ? err.message : '加载待回答问题失败';
     } finally {
       questionsLoading.value = false;
+    }
+  }
+
+  async function loadOlderEvents() {
+    if (loadingOlderEvents.value || eventsPageInfo.value.page <= 1) return;
+    loadingOlderEvents.value = true;
+    error.value = '';
+    try {
+      const previousPage = eventsPageInfo.value.page - 1;
+      const result = await getSessionEventPage(sessionId, previousPage, eventPageSize);
+      const existing = new Set(events.value.map((event) => event.id));
+      events.value = [...result.items.filter((event) => !existing.has(event.id)), ...events.value];
+      eventsPageInfo.value = result.pageInfo;
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '加载历史事件失败';
+      throw err;
+    } finally {
+      loadingOlderEvents.value = false;
     }
   }
 
@@ -224,8 +250,10 @@ export function useSessionDetail(sessionId: string) {
   return {
     session,
     events,
+    eventsPageInfo,
     pendingQuestionBatches,
     loading,
+    loadingOlderEvents,
     appending,
     starting,
     resuming,
@@ -241,6 +269,7 @@ export function useSessionDetail(sessionId: string) {
     stopSession,
     closeSession,
     loadPendingQuestions,
+    loadOlderEvents,
     submitPendingAnswers,
     startLiveUpdates,
     stopLiveUpdates,

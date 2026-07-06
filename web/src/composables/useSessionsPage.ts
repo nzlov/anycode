@@ -9,6 +9,10 @@ import {
   type SessionPage,
 } from '@/services/sessions';
 
+interface UseSessionsPageInput extends ListSessionsInput {
+  loadAll?: boolean;
+}
+
 const defaultPageInfo: PageInfo = {
   page: 1,
   pageSize: 8,
@@ -16,7 +20,7 @@ const defaultPageInfo: PageInfo = {
   nextCursor: '',
 };
 
-export function useSessionsPage(defaultInput: ListSessionsInput = {}) {
+export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   const rows = ref<SessionPage['items']>([]);
   const pageInfo = ref<PageInfo>({ ...defaultPageInfo });
   const loading = ref(false);
@@ -47,6 +51,28 @@ export function useSessionsPage(defaultInput: ListSessionsInput = {}) {
   async function loadSessions() {
     loading.value = true;
     try {
+      if (defaultInput.loadAll) {
+        const allItems: SessionPage['items'] = [];
+        let currentPage = 1;
+        let total = 0;
+        let lastPageInfo: PageInfo | null = null;
+        let lastPageItemCount = 0;
+        do {
+          const result = await listSessions({
+            ...input.value,
+            page: currentPage,
+            pageSize: 100,
+          });
+          allItems.push(...result.items);
+          total = result.pageInfo.total;
+          lastPageInfo = result.pageInfo;
+          lastPageItemCount = result.items.length;
+          currentPage += 1;
+        } while (allItems.length < total && lastPageItemCount > 0);
+        rows.value = allItems;
+        pageInfo.value = lastPageInfo ?? { ...defaultPageInfo };
+        return;
+      }
       const result = await listSessions(input.value);
       rows.value = result.items;
       pageInfo.value = result.pageInfo;

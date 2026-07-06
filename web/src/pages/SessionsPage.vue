@@ -7,8 +7,9 @@
       </div>
     </div>
 
-    <q-card flat bordered class="table-card">
+    <q-card flat bordered class="table-filter-card">
       <q-card-section class="table-toolbar">
+        <div class="text-subtitle2 text-weight-bold">过滤条件</div>
         <q-input v-model="filter" dense outlined debounce="200" placeholder="搜索需求、项目或分支">
           <template #prepend>
             <q-icon name="search" />
@@ -16,9 +17,12 @@
         </q-input>
         <q-select v-model="status" dense outlined emit-value map-options :options="statusOptions" />
       </q-card-section>
+    </q-card>
 
+    <q-card flat bordered class="table-card q-mt-md">
       <q-table
         flat
+        wrap-cells
         :rows="rows"
         :columns="columns"
         :visible-columns="visibleColumns"
@@ -57,16 +61,22 @@
               dense
               icon="open_in_new"
               color="primary"
+              aria-label="打开卡片"
               :to="`/sessions/${props.row.id}`"
-            />
+            >
+              <q-tooltip>打开卡片详情</q-tooltip>
+            </q-btn>
             <q-btn
               flat
               round
               dense
               icon="difference"
               color="secondary"
+              aria-label="查看 Diff"
               :to="{ path: '/diff', query: { sessionId: props.row.id, mode: 'all' } }"
-            />
+            >
+              <q-tooltip>查看完整 Diff</q-tooltip>
+            </q-btn>
           </q-td>
         </template>
       </q-table>

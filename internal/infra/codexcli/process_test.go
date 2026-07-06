@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -229,12 +231,16 @@ exit 7
 func TestStopKillsActiveProcess(t *testing.T) {
 	dir := t.TempDir()
 	started := filepath.Join(dir, "started")
+	childPIDFile := filepath.Join(dir, "child-pid")
 	bin := fakeCodex(t, `#!/bin/sh
 touch "$CODEX_STARTED_FILE"
+sleep 30 &
+printf '%s\n' "$!" > "$CODEX_CHILD_PID_FILE"
 trap 'exit 0' TERM INT
-while true; do sleep 1; done
+wait
 `)
 	t.Setenv("CODEX_STARTED_FILE", started)
+	t.Setenv("CODEX_CHILD_PID_FILE", childPIDFile)
 
 	client := New(bin)
 	handle, err := client.Start(context.Background(), process.CodexStartInput{})
@@ -247,10 +253,16 @@ while true; do sleep 1; done
 		t.Fatal(err)
 	}
 	waitForFile(t, started)
+	waitForFile(t, childPIDFile)
 
 	if err := client.Stop(context.Background(), handle.ProcessRunID); err != nil {
 		t.Fatal(err)
 	}
+	childPID, err := strconv.Atoi(strings.TrimSpace(readFile(t, childPIDFile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForProcessExit(t, childPID)
 	if err := client.Stop(context.Background(), "missing"); !errors.Is(err, ErrProcessNotFound) {
 		t.Fatalf("missing stop error = %v", err)
 	}
@@ -292,6 +304,21 @@ func waitForFile(t *testing.T, path string) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", path)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func waitForProcessExit(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := syscall.Kill(pid, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("process %d is still alive", pid)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

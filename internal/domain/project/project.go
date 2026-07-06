@@ -14,6 +14,7 @@ type Project struct {
 	Path              ProjectPath
 	IsGit             bool
 	DefaultWorkflowID *WorkflowDefinitionID
+	RemovedAt         *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
@@ -53,7 +54,9 @@ type DirectoryEntry struct {
 type Repository interface {
 	Save(ctx context.Context, project Project) error
 	Find(ctx context.Context, id ID) (Project, error)
+	FindByPath(ctx context.Context, path string) (Project, bool, error)
 	List(ctx context.Context) ([]Project, error)
+	Remove(ctx context.Context, id ID, removedAt time.Time) error
 	UpdateDefaultWorkflow(ctx context.Context, id ID, workflowID WorkflowDefinitionID) error
 }
 

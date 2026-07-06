@@ -7,6 +7,7 @@ import {
 } from 'vue-router';
 
 import routes from './routes';
+import { getGraphQLAccessKey } from '@/services/graphqlClient';
 
 /*
  * If not building with SSR mode, you can
@@ -32,6 +33,17 @@ export default defineRouter((/* { store, ssrContext } */) => {
     // quasar.conf.js -> build -> vueRouterMode
     // quasar.conf.js -> build -> publicPath
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
+  });
+
+  Router.beforeEach((to) => {
+    const hasAccessKey = getGraphQLAccessKey().trim() !== '';
+    if (to.name !== 'login' && !hasAccessKey) {
+      return { name: 'login', query: { redirect: to.fullPath } };
+    }
+    if (to.name === 'login' && hasAccessKey) {
+      return { name: 'overview' };
+    }
+    return true;
   });
 
   return Router;

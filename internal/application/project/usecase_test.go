@@ -56,6 +56,63 @@ func TestCreateProjectRejectsEmptyPath(t *testing.T) {
 	}
 }
 
+func TestCreateProjectRestoresRemovedProjectByPath(t *testing.T) {
+	ctx := context.Background()
+	removedAt := time.Unix(5, 0).UTC()
+	repo := newFakeRepository()
+	repo.projects = []domain.Project{
+		{
+			ID:        "project-1",
+			Name:      "Old",
+			Path:      domain.ProjectPath{Value: "/workspace/anycode"},
+			RemovedAt: &removedAt,
+			CreatedAt: time.Unix(1, 0).UTC(),
+		},
+	}
+	repo.reindex()
+	service := New(repo, nil, &fakeGitInspector{
+		states: map[string]domain.GitState{
+			"/workspace/anycode": {IsRepository: true, CurrentBranch: "main"},
+		},
+	})
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) {
+		t.Fatal("generateID should not be called when restoring")
+		return "", nil
+	}
+
+	got, err := service.CreateProject(ctx, CreateProjectInput{Path: "/workspace/anycode", Name: "AnyCode"})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+	if got.ID != "project-1" || got.Name != "AnyCode" || got.RemovedAt != nil {
+		t.Fatalf("restored project = %#v", got)
+	}
+	if repo.byID["project-1"].RemovedAt != nil {
+		t.Fatalf("saved removedAt = %#v", repo.byID["project-1"].RemovedAt)
+	}
+}
+
+func TestRemoveProjectHidesFromList(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.projects = []domain.Project{{ID: "project-1", Name: "AnyCode", Path: domain.ProjectPath{Value: "/repo"}}}
+	repo.reindex()
+	service := New(repo, nil, &fakeGitInspector{states: map[string]domain.GitState{"/repo": {IsRepository: true}}})
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+
+	if err := service.RemoveProject(ctx, RemoveProjectInput{ProjectID: "project-1"}); err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	got, err := service.ListProjects(ctx)
+	if err != nil {
+		t.Fatalf("ListProjects() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ListProjects() = %#v", got)
+	}
+}
+
 func TestListProjectsAddsGitStateAndKeepsDetectErrors(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -166,7 +223,17 @@ func newFakeRepository() *fakeRepository {
 
 func (r *fakeRepository) Save(_ context.Context, project domain.Project) error {
 	r.saved = append(r.saved, project)
-	r.projects = append(r.projects, project)
+	replaced := false
+	for i := range r.projects {
+		if r.projects[i].ID == project.ID {
+			r.projects[i] = project
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		r.projects = append(r.projects, project)
+	}
 	r.byID[project.ID] = project
 	return nil
 }
@@ -179,8 +246,39 @@ func (r *fakeRepository) Find(_ context.Context, id domain.ID) (domain.Project, 
 	return project, nil
 }
 
+func (r *fakeRepository) FindByPath(_ context.Context, path string) (domain.Project, bool, error) {
+	for _, project := range r.projects {
+		if project.Path.Value == path {
+			return project, true, nil
+		}
+	}
+	return domain.Project{}, false, nil
+}
+
 func (r *fakeRepository) List(_ context.Context) ([]domain.Project, error) {
-	return append([]domain.Project(nil), r.projects...), nil
+	projects := []domain.Project{}
+	for _, project := range r.projects {
+		if project.RemovedAt == nil {
+			projects = append(projects, project)
+		}
+	}
+	return projects, nil
+}
+
+func (r *fakeRepository) Remove(_ context.Context, id domain.ID, removedAt time.Time) error {
+	project, ok := r.byID[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	project.RemovedAt = &removedAt
+	r.byID[id] = project
+	for i := range r.projects {
+		if r.projects[i].ID == id {
+			r.projects[i] = project
+			break
+		}
+	}
+	return nil
 }
 
 func (r *fakeRepository) UpdateDefaultWorkflow(_ context.Context, id domain.ID, workflowID domain.WorkflowDefinitionID) error {

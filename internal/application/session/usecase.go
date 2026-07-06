@@ -26,6 +26,7 @@ type UseCase interface {
 	MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error)
 	StartSession(ctx context.Context, id domain.ID) (DTO, error)
 	StopSession(ctx context.Context, id domain.ID) (DTO, error)
+	StopProjectSessions(ctx context.Context, projectID domain.ProjectID) (int, error)
 	ResumeSession(ctx context.Context, id domain.ID) (DTO, error)
 	CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error)
 	MarkWaitingUser(ctx context.Context, id domain.ID) (DTO, error)
@@ -253,7 +254,60 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 			return 0, fmt.Errorf("mark session %s recoverable: %w", session.ID, err)
 		}
 	}
-	return len(sessions), nil
+	unresumableSessions, err := s.listInterruptedWithoutCodexSession(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, session := range unresumableSessions {
+		previousStatus := session.Status
+		session.Status = domain.StatusResumeFailed
+		session.UpdatedAt = now
+		if err := s.saveSessionWithEvent(ctx, session, "session.resume_failed", map[string]any{
+			"reason":         "service_restarted_without_codex_session_id",
+			"previousStatus": string(previousStatus),
+		}); err != nil {
+			return 0, fmt.Errorf("mark session %s resume failed: %w", session.ID, err)
+		}
+	}
+	return len(sessions) + len(unresumableSessions), nil
+}
+
+func (s *Service) listInterruptedWithoutCodexSession(ctx context.Context) ([]domain.Session, error) {
+	statuses := []domain.Status{
+		domain.StatusStarting,
+		domain.StatusRunning,
+		domain.StatusWaitingUser,
+		domain.StatusStopping,
+	}
+	seen := map[domain.ID]bool{}
+	result := []domain.Session{}
+	for _, status := range statuses {
+		for page := 1; ; page++ {
+			rows, total, err := s.repo.ListCards(ctx, domain.ListQuery{
+				Scope:    string(status),
+				Page:     page,
+				PageSize: maxPageSize,
+				Sort:     "updated_at asc",
+			})
+			if err != nil {
+				return nil, fmt.Errorf("list interrupted sessions without codex session id: %w", err)
+			}
+			for _, row := range rows {
+				if seen[row.ID] || strings.TrimSpace(row.CodexSessionID) != "" {
+					continue
+				}
+				if row.Status != status {
+					continue
+				}
+				seen[row.ID] = true
+				result = append(result, row)
+			}
+			if page*maxPageSize >= total || len(rows) == 0 {
+				break
+			}
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error) {
@@ -290,7 +344,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			return DTO{}, errors.New("session workflow starter is required for workflow mode")
 		}
 		if project.DefaultWorkflowID == nil || strings.TrimSpace(string(*project.DefaultWorkflowID)) == "" {
-			return DTO{}, errors.New("project default workflow is required for workflow mode")
+			return DTO{}, apperror.New(apperror.CodeWorkflowBlocked, apperror.CategoryWorkflowError, "project default workflow is required for workflow mode").WithUserAction("configure_project_workflow")
 		}
 	}
 	id, err := s.generateID()
@@ -580,6 +634,57 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	return toDTO(session), nil
 }
 
+func (s *Service) StopProjectSessions(ctx context.Context, projectID domain.ProjectID) (int, error) {
+	if s == nil {
+		return 0, errors.New("session usecase: nil service")
+	}
+	if projectID == "" {
+		return 0, errors.New("project id is required")
+	}
+	statuses := []domain.Status{
+		domain.StatusStarting,
+		domain.StatusRunning,
+		domain.StatusWaitingUser,
+		domain.StatusStopping,
+		domain.StatusResumeFailed,
+	}
+	stopped := 0
+	for _, status := range statuses {
+		sessions, err := s.listProjectSessionsByStatus(ctx, projectID, status)
+		if err != nil {
+			return stopped, err
+		}
+		for _, session := range sessions {
+			if _, err := s.StopSession(ctx, session.ID); err != nil {
+				return stopped, fmt.Errorf("stop project session %s: %w", session.ID, err)
+			}
+			stopped++
+		}
+	}
+	return stopped, nil
+}
+
+func (s *Service) listProjectSessionsByStatus(ctx context.Context, projectID domain.ProjectID, status domain.Status) ([]domain.Session, error) {
+	result := []domain.Session{}
+	for page := 1; ; page++ {
+		rows, total, err := s.repo.ListCards(ctx, domain.ListQuery{
+			ProjectID: &projectID,
+			Scope:     string(status),
+			Page:      page,
+			PageSize:  maxPageSize,
+			Sort:      "updated_at asc",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list project sessions: %w", err)
+		}
+		result = append(result, rows...)
+		if page*maxPageSize >= total || len(rows) == 0 {
+			break
+		}
+	}
+	return result, nil
+}
+
 func (s *Service) ResumeSession(ctx context.Context, id domain.ID) (DTO, error) {
 	var dto DTO
 	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
@@ -808,7 +913,11 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	}
 	prompt := strings.TrimSpace(options.prompt)
 	if prompt == "" {
-		prompt = session.Requirement
+		var err error
+		prompt, err = s.sessionPromptWithAppends(ctx, session)
+		if err != nil {
+			return processdomain.CodexHandle{}, err
+		}
 	}
 	return s.codex.Start(ctx, processdomain.CodexStartInput{
 		ProcessRunID:    runID,
@@ -821,6 +930,25 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		AttachmentPaths: attachmentPaths,
 		ImagePaths:      imagePaths,
 	})
+}
+
+func (s *Service) sessionPromptWithAppends(ctx context.Context, session domain.Session) (string, error) {
+	prompt := strings.TrimSpace(session.Requirement)
+	appends, err := s.repo.ListPromptAppends(ctx, session.ID)
+	if err != nil {
+		return "", fmt.Errorf("list prompt appends: %w", err)
+	}
+	for _, append := range appends {
+		body := strings.TrimSpace(append.Body)
+		if body == "" {
+			continue
+		}
+		if prompt != "" {
+			prompt += "\n\n"
+		}
+		prompt += "追加描述：\n" + body
+	}
+	return prompt, nil
 }
 
 func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID) ([]string, []string, error) {
@@ -1861,20 +1989,46 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 	if body == "" {
 		return PromptAppendDTO{}, errors.New("prompt append body is required")
 	}
-	id, err := s.generateID()
+	var append domain.PromptAppend
+	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+		session, err := s.repo.Find(ctx, input.SessionID)
+		if err != nil {
+			return fmt.Errorf("find session: %w", err)
+		}
+		id, err := s.generateID()
+		if err != nil {
+			return fmt.Errorf("generate prompt append id: %w", err)
+		}
+		append = domain.PromptAppend{
+			ID:        string(id),
+			SessionID: input.SessionID,
+			Body:      body,
+			CreatedAt: s.now(),
+		}
+		if err := s.repo.AppendPrompt(ctx, append); err != nil {
+			return fmt.Errorf("append prompt: %w", err)
+		}
+		if !canAutoStartAfterAppend(session) {
+			return nil
+		}
+		if _, err := s.startSession(ctx, input.SessionID); err != nil {
+			return fmt.Errorf("start session after prompt append: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return PromptAppendDTO{}, fmt.Errorf("generate prompt append id: %w", err)
-	}
-	append := domain.PromptAppend{
-		ID:        string(id),
-		SessionID: input.SessionID,
-		Body:      body,
-		CreatedAt: s.now(),
-	}
-	if err := s.repo.AppendPrompt(ctx, append); err != nil {
-		return PromptAppendDTO{}, fmt.Errorf("append prompt: %w", err)
+		return PromptAppendDTO{}, err
 	}
 	return toPromptAppendDTO(append), nil
+}
+
+func canAutoStartAfterAppend(session domain.Session) bool {
+	switch session.Status {
+	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted, domain.StatusResumeFailed:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error) {
@@ -1959,7 +2113,20 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		return port.Page[CardDTO]{}, fmt.Errorf("list session cards: %w", err)
 	}
 	items := make([]CardDTO, 0, len(sessions))
+	projectNames := make(map[domain.ProjectID]string)
 	for _, session := range sessions {
+		projectName, ok := projectNames[session.ProjectID]
+		if !ok {
+			project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+			if err != nil {
+				return port.Page[CardDTO]{}, fmt.Errorf("find session project: %w", err)
+			}
+			if project.RemovedAt != nil {
+				continue
+			}
+			projectName = project.Name
+			projectNames[session.ProjectID] = projectName
+		}
 		attachments, err := s.listSessionAttachments(ctx, session.ID)
 		if err != nil {
 			return port.Page[CardDTO]{}, err
@@ -1968,7 +2135,9 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		if err != nil {
 			return port.Page[CardDTO]{}, err
 		}
-		items = append(items, toCardDTO(session, attachments, currentNodeTitle))
+		item := toCardDTO(session, attachments, currentNodeTitle)
+		item.ProjectName = projectName
+		items = append(items, item)
 	}
 	return port.Page[CardDTO]{
 		Items:    items,
@@ -2132,7 +2301,11 @@ func availableActions(session domain.Session) []string {
 	case domain.StatusBlocked:
 		return []string{"close"}
 	case domain.StatusResumeFailed:
-		return []string{"run", "resume", "stop", "close"}
+		actions := []string{"run", "stop", "close"}
+		if canResume(session) {
+			actions = []string{"run", "resume", "stop", "close"}
+		}
+		return actions
 	case domain.StatusClosed:
 		return []string{}
 	default:

@@ -50,6 +50,20 @@ type ComplexityRoot struct {
 		Size        func(childComplexity int) int
 	}
 
+	CommitRecord struct {
+		AuthorEmail func(childComplexity int) int
+		AuthorName  func(childComplexity int) int
+		CreatedAt   func(childComplexity int) int
+		Hash        func(childComplexity int) int
+		ShortHash   func(childComplexity int) int
+		Subject     func(childComplexity int) int
+	}
+
+	CommitRecordPage struct {
+		Items    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+	}
+
 	DiffFile struct {
 		Additions func(childComplexity int) int
 		Deletions func(childComplexity int) int
@@ -124,6 +138,7 @@ type ComplexityRoot struct {
 		CreateSession              func(childComplexity int, input model.CreateSessionInput) int
 		DeleteSessionAttachment    func(childComplexity int, id string) int
 		DeleteStagedAttachment     func(childComplexity int, id string) int
+		RemoveProject              func(childComplexity int, id string) int
 		ResumeSession              func(childComplexity int, id string) int
 		SaveWorkflowDefinition     func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
 		SetDefaultWorkflow         func(childComplexity int, input model.SetDefaultWorkflowInput) int
@@ -160,11 +175,13 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		BranchDiff             func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory        func(childComplexity int, input model.BrowseDirectoryInput) int
 		PendingQuestionBatches func(childComplexity int, sessionID string) int
 		Projects               func(childComplexity int) int
 		QuestionBatch          func(childComplexity int, id string) int
 		Session                func(childComplexity int, id string) int
+		SessionCommitHistory   func(childComplexity int, input model.SessionCommitHistoryInput) int
 		SessionDiff            func(childComplexity int, input model.SessionDiffInput) int
 		SessionEvents          func(childComplexity int, input model.ListSessionEventsInput) int
 		Sessions               func(childComplexity int, input *model.ListSessionsInput) int
@@ -250,6 +267,11 @@ type ComplexityRoot struct {
 	SessionCardPage struct {
 		Items    func(childComplexity int) int
 		PageInfo func(childComplexity int) int
+	}
+
+	SessionCommitHistory struct {
+		Available func(childComplexity int) int
+		Commits   func(childComplexity int) int
 	}
 
 	SessionConfig struct {
@@ -359,6 +381,7 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
+	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
 	StartSession(ctx context.Context, id string) (*model.Session, error)
@@ -381,6 +404,8 @@ type QueryResolver interface {
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionEventPage, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
+	BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error)
+	SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error)
 	WorkflowDefinition(ctx context.Context, id string) (*model.WorkflowDefinition, error)
 	QuestionBatch(ctx context.Context, id string) (*model.QuestionBatch, error)
 	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
@@ -448,6 +473,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Attachment.Size(childComplexity), true
+
+	case "CommitRecord.authorEmail":
+		if e.ComplexityRoot.CommitRecord.AuthorEmail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecord.AuthorEmail(childComplexity), true
+	case "CommitRecord.authorName":
+		if e.ComplexityRoot.CommitRecord.AuthorName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecord.AuthorName(childComplexity), true
+	case "CommitRecord.createdAt":
+		if e.ComplexityRoot.CommitRecord.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecord.CreatedAt(childComplexity), true
+	case "CommitRecord.hash":
+		if e.ComplexityRoot.CommitRecord.Hash == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecord.Hash(childComplexity), true
+	case "CommitRecord.shortHash":
+		if e.ComplexityRoot.CommitRecord.ShortHash == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecord.ShortHash(childComplexity), true
+	case "CommitRecord.subject":
+		if e.ComplexityRoot.CommitRecord.Subject == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecord.Subject(childComplexity), true
+
+	case "CommitRecordPage.items":
+		if e.ComplexityRoot.CommitRecordPage.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecordPage.Items(childComplexity), true
+	case "CommitRecordPage.pageInfo":
+		if e.ComplexityRoot.CommitRecordPage.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CommitRecordPage.PageInfo(childComplexity), true
 
 	case "DiffFile.additions":
 		if e.ComplexityRoot.DiffFile.Additions == nil {
@@ -735,6 +810,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteStagedAttachment(childComplexity, args["id"].(string)), true
+	case "Mutation.removeProject":
+		if e.ComplexityRoot.Mutation.RemoveProject == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_removeProject_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RemoveProject(childComplexity, args["id"].(string)), true
 	case "Mutation.resumeSession":
 		if e.ComplexityRoot.Mutation.ResumeSession == nil {
 			break
@@ -923,6 +1009,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PromptAppend.SessionID(childComplexity), true
 
+	case "Query.branchDiff":
+		if e.ComplexityRoot.Query.BranchDiff == nil {
+			break
+		}
+
+		args, err := ec.field_Query_branchDiff_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.BranchDiff(childComplexity, args["input"].(model.BranchDiffInput)), true
 	case "Query.browseDirectory":
 		if e.ComplexityRoot.Query.BrowseDirectory == nil {
 			break
@@ -974,6 +1071,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Session(childComplexity, args["id"].(string)), true
+	case "Query.sessionCommitHistory":
+		if e.ComplexityRoot.Query.SessionCommitHistory == nil {
+			break
+		}
+
+		args, err := ec.field_Query_sessionCommitHistory_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SessionCommitHistory(childComplexity, args["input"].(model.SessionCommitHistoryInput)), true
 	case "Query.sessionDiff":
 		if e.ComplexityRoot.Query.SessionDiff == nil {
 			break
@@ -1368,6 +1476,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCardPage.PageInfo(childComplexity), true
+
+	case "SessionCommitHistory.available":
+		if e.ComplexityRoot.SessionCommitHistory.Available == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCommitHistory.Available(childComplexity), true
+	case "SessionCommitHistory.commits":
+		if e.ComplexityRoot.SessionCommitHistory.Commits == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCommitHistory.Commits(childComplexity), true
 
 	case "SessionConfig.codexModel":
 		if e.ComplexityRoot.SessionConfig.CodexModel == nil {
@@ -1814,6 +1935,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
 		ec.unmarshalInputAppendPromptInput,
 		ec.unmarshalInputApprovalConfigInput,
+		ec.unmarshalInputBranchDiffInput,
 		ec.unmarshalInputBrowseDirectoryInput,
 		ec.unmarshalInputCloseSessionInput,
 		ec.unmarshalInputCreateProjectInput,
@@ -1824,6 +1946,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputQuestionAnswerInput,
 		ec.unmarshalInputRetryConfigInput,
 		ec.unmarshalInputSaveWorkflowDefinitionInput,
+		ec.unmarshalInputSessionCommitHistoryInput,
 		ec.unmarshalInputSessionConfigInput,
 		ec.unmarshalInputSessionDiffInput,
 		ec.unmarshalInputSessionEventsInput,
@@ -1938,6 +2061,8 @@ type Query {
   session(id: ID!): SessionDetail!
   sessionEvents(input: ListSessionEventsInput!): SessionEventPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
+  branchDiff(input: BranchDiffInput!): SessionDiff!
+  sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
@@ -1945,6 +2070,7 @@ type Query {
 
 type Mutation {
   createProject(input: CreateProjectInput!): Project!
+  removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
   startSession(id: ID!): Session!
@@ -2161,6 +2287,25 @@ type DiffLine {
   content: String!
 }
 
+type SessionCommitHistory {
+  commits: CommitRecordPage!
+  available: Boolean!
+}
+
+type CommitRecordPage {
+  items: [CommitRecord!]!
+  pageInfo: PageInfo!
+}
+
+type CommitRecord {
+  hash: String!
+  shortHash: String!
+  subject: String!
+  authorName: String!
+  authorEmail: String!
+  createdAt: String!
+}
+
 type WorkflowDefinition {
   id: ID!
   projectId: ID!
@@ -2320,6 +2465,21 @@ input SessionDiffInput {
   pageSize: Int
 }
 
+input BranchDiffInput {
+  projectId: ID!
+  branch: String!
+  mode: String
+  filePath: String
+  page: Int
+  pageSize: Int
+}
+
+input SessionCommitHistoryInput {
+  sessionId: ID!
+  page: Int
+  pageSize: Int
+}
+
 input SaveWorkflowDefinitionInput {
   projectId: ID!
   name: String!
@@ -2473,6 +2633,17 @@ func (ec *executionContext) field_Mutation_deleteStagedAttachment_args(ctx conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_removeProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_resumeSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2572,6 +2743,17 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_branchDiff_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNBranchDiffInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐBranchDiffInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_browseDirectory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -2602,6 +2784,17 @@ func (ec *executionContext) field_Query_questionBatch_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_sessionCommitHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSessionCommitHistoryInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCommitHistoryInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -2948,6 +3141,262 @@ func (ec *executionContext) fieldContext_Attachment_previewable(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecord_hash(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecord_hash,
+		func(ctx context.Context) (any, error) {
+			return obj.Hash, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecord_hash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecord",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecord_shortHash(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecord_shortHash,
+		func(ctx context.Context) (any, error) {
+			return obj.ShortHash, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecord_shortHash(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecord",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecord_subject(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecord_subject,
+		func(ctx context.Context) (any, error) {
+			return obj.Subject, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecord_subject(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecord",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecord_authorName(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecord_authorName,
+		func(ctx context.Context) (any, error) {
+			return obj.AuthorName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecord_authorName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecord",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecord_authorEmail(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecord_authorEmail,
+		func(ctx context.Context) (any, error) {
+			return obj.AuthorEmail, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecord_authorEmail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecord",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecord_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecord) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecord_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecord_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecord",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecordPage_items(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecordPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecordPage_items,
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		ec.marshalNCommitRecord2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecordᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecordPage_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecordPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hash":
+				return ec.fieldContext_CommitRecord_hash(ctx, field)
+			case "shortHash":
+				return ec.fieldContext_CommitRecord_shortHash(ctx, field)
+			case "subject":
+				return ec.fieldContext_CommitRecord_subject(ctx, field)
+			case "authorName":
+				return ec.fieldContext_CommitRecord_authorName(ctx, field)
+			case "authorEmail":
+				return ec.fieldContext_CommitRecord_authorEmail(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_CommitRecord_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CommitRecord", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CommitRecordPage_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.CommitRecordPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CommitRecordPage_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CommitRecordPage_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CommitRecordPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "page":
+				return ec.fieldContext_PageInfo_page(ctx, field)
+			case "pageSize":
+				return ec.fieldContext_PageInfo_pageSize(ctx, field)
+			case "total":
+				return ec.fieldContext_PageInfo_total(ctx, field)
+			case "nextCursor":
+				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
 		},
 	}
 	return fc, nil
@@ -4029,6 +4478,47 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_removeProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_removeProject,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RemoveProject(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_removeProject(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_removeProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5609,6 +6099,108 @@ func (ec *executionContext) fieldContext_Query_sessionDiff(ctx context.Context, 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_sessionDiff_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_branchDiff(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_branchDiff,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().BranchDiff(ctx, fc.Args["input"].(model.BranchDiffInput))
+		},
+		nil,
+		ec.marshalNSessionDiff2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiff,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_branchDiff(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "mode":
+				return ec.fieldContext_SessionDiff_mode(ctx, field)
+			case "filePath":
+				return ec.fieldContext_SessionDiff_filePath(ctx, field)
+			case "files":
+				return ec.fieldContext_SessionDiff_files(ctx, field)
+			case "fileDiff":
+				return ec.fieldContext_SessionDiff_fileDiff(ctx, field)
+			case "allDiff":
+				return ec.fieldContext_SessionDiff_allDiff(ctx, field)
+			case "available":
+				return ec.fieldContext_SessionDiff_available(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionDiff", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_branchDiff_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_sessionCommitHistory(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_sessionCommitHistory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SessionCommitHistory(ctx, fc.Args["input"].(model.SessionCommitHistoryInput))
+		},
+		nil,
+		ec.marshalNSessionCommitHistory2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCommitHistory,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_sessionCommitHistory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "commits":
+				return ec.fieldContext_SessionCommitHistory_commits(ctx, field)
+			case "available":
+				return ec.fieldContext_SessionCommitHistory_available(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionCommitHistory", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_sessionCommitHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -7630,6 +8222,70 @@ func (ec *executionContext) fieldContext_SessionCardPage_pageInfo(_ context.Cont
 				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionCommitHistory_commits(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommitHistory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCommitHistory_commits,
+		func(ctx context.Context) (any, error) {
+			return obj.Commits, nil
+		},
+		nil,
+		ec.marshalNCommitRecordPage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecordPage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCommitHistory_commits(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCommitHistory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "items":
+				return ec.fieldContext_CommitRecordPage_items(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_CommitRecordPage_pageInfo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CommitRecordPage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionCommitHistory_available(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommitHistory) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCommitHistory_available,
+		func(ctx context.Context) (any, error) {
+			return obj.Available, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCommitHistory_available(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCommitHistory",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -11399,6 +12055,71 @@ func (ec *executionContext) unmarshalInputApprovalConfigInput(ctx context.Contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputBranchDiffInput(ctx context.Context, obj any) (model.BranchDiffInput, error) {
+	var it model.BranchDiffInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "branch", "mode", "filePath", "page", "pageSize"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "branch":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("branch"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Branch = data
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
+		case "filePath":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filePath"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FilePath = data
+		case "page":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Page = data
+		case "pageSize":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PageSize = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputBrowseDirectoryInput(ctx context.Context, obj any) (model.BrowseDirectoryInput, error) {
 	var it model.BrowseDirectoryInput
 	if obj == nil {
@@ -11841,6 +12562,50 @@ func (ec *executionContext) unmarshalInputSaveWorkflowDefinitionInput(ctx contex
 				return it, err
 			}
 			it.Graph = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputSessionCommitHistoryInput(ctx context.Context, obj any) (model.SessionCommitHistoryInput, error) {
+	var it model.SessionCommitHistoryInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "page", "pageSize"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "page":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Page = data
+		case "pageSize":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PageSize = data
 		}
 	}
 	return it, nil
@@ -12453,6 +13218,114 @@ func (ec *executionContext) _Attachment(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var commitRecordImplementors = []string{"CommitRecord"}
+
+func (ec *executionContext) _CommitRecord(ctx context.Context, sel ast.SelectionSet, obj *model.CommitRecord) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, commitRecordImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CommitRecord")
+		case "hash":
+			out.Values[i] = ec._CommitRecord_hash(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "shortHash":
+			out.Values[i] = ec._CommitRecord_shortHash(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "subject":
+			out.Values[i] = ec._CommitRecord_subject(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "authorName":
+			out.Values[i] = ec._CommitRecord_authorName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "authorEmail":
+			out.Values[i] = ec._CommitRecord_authorEmail(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._CommitRecord_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var commitRecordPageImplementors = []string{"CommitRecordPage"}
+
+func (ec *executionContext) _CommitRecordPage(ctx context.Context, sel ast.SelectionSet, obj *model.CommitRecordPage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, commitRecordPageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CommitRecordPage")
+		case "items":
+			out.Values[i] = ec._CommitRecordPage_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._CommitRecordPage_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var diffFileImplementors = []string{"DiffFile"}
 
 func (ec *executionContext) _DiffFile(ctx context.Context, sel ast.SelectionSet, obj *model.DiffFile) graphql.Marshaler {
@@ -13015,6 +13888,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "removeProject":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_removeProject(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "setDefaultWorkflow":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setDefaultWorkflow(ctx, field)
@@ -13454,6 +14334,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_sessionDiff(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "branchDiff":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_branchDiff(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sessionCommitHistory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sessionCommitHistory(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -14082,6 +15006,50 @@ func (ec *executionContext) _SessionCardPage(ctx context.Context, sel ast.Select
 			}
 		case "pageInfo":
 			out.Values[i] = ec._SessionCardPage_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var sessionCommitHistoryImplementors = []string{"SessionCommitHistory"}
+
+func (ec *executionContext) _SessionCommitHistory(ctx context.Context, sel ast.SelectionSet, obj *model.SessionCommitHistory) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sessionCommitHistoryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SessionCommitHistory")
+		case "commits":
+			out.Values[i] = ec._SessionCommitHistory_commits(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "available":
+			out.Values[i] = ec._SessionCommitHistory_available(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -15190,6 +16158,11 @@ func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.Se
 	return res
 }
 
+func (ec *executionContext) unmarshalNBranchDiffInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐBranchDiffInput(ctx context.Context, v any) (model.BranchDiffInput, error) {
+	res, err := ec.unmarshalInputBranchDiffInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNBrowseDirectoryInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐBrowseDirectoryInput(ctx context.Context, v any) (model.BrowseDirectoryInput, error) {
 	res, err := ec.unmarshalInputBrowseDirectoryInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -15198,6 +16171,42 @@ func (ec *executionContext) unmarshalNBrowseDirectoryInput2githubᚗcomᚋnzlov�
 func (ec *executionContext) unmarshalNCloseSessionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCloseSessionInput(ctx context.Context, v any) (model.CloseSessionInput, error) {
 	res, err := ec.unmarshalInputCloseSessionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCommitRecord2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecordᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CommitRecord) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCommitRecord2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecord(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCommitRecord2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecord(ctx context.Context, sel ast.SelectionSet, v *model.CommitRecord) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CommitRecord(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNCommitRecordPage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecordPage(ctx context.Context, sel ast.SelectionSet, v *model.CommitRecordPage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CommitRecordPage(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNCreateProjectInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCreateProjectInput(ctx context.Context, v any) (model.CreateProjectInput, error) {
@@ -15750,6 +16759,25 @@ func (ec *executionContext) marshalNSessionCardPage2ᚖgithubᚗcomᚋnzlovᚋan
 		return graphql.Null
 	}
 	return ec._SessionCardPage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSessionCommitHistory2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCommitHistory(ctx context.Context, sel ast.SelectionSet, v model.SessionCommitHistory) graphql.Marshaler {
+	return ec._SessionCommitHistory(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSessionCommitHistory2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCommitHistory(ctx context.Context, sel ast.SelectionSet, v *model.SessionCommitHistory) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SessionCommitHistory(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSessionCommitHistoryInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCommitHistoryInput(ctx context.Context, v any) (model.SessionCommitHistoryInput, error) {
+	res, err := ec.unmarshalInputSessionCommitHistoryInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNSessionConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfig(ctx context.Context, sel ast.SelectionSet, v *model.SessionConfig) graphql.Marshaler {

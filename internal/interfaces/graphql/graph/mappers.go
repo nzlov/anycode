@@ -221,6 +221,28 @@ func mapSessionDiff(dto diffapp.SessionDiffDTO) *model.SessionDiff {
 	}
 }
 
+func mapCommitHistory(dto diffapp.CommitHistoryDTO) *model.SessionCommitHistory {
+	return &model.SessionCommitHistory{
+		Commits:   mapCommitRecordPage(dto.Commits),
+		Available: dto.Available,
+	}
+}
+
+func mapCommitRecordPage(page port.Page[gitdiff.CommitRecord]) *model.CommitRecordPage {
+	items := make([]*model.CommitRecord, 0, len(page.Items))
+	for _, item := range page.Items {
+		items = append(items, &model.CommitRecord{
+			Hash:        item.Hash,
+			ShortHash:   item.ShortHash,
+			Subject:     item.Subject,
+			AuthorName:  item.AuthorName,
+			AuthorEmail: item.AuthorEmail,
+			CreatedAt:   item.CreatedAt,
+		})
+	}
+	return &model.CommitRecordPage{Items: items, PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor)}
+}
+
 func mapDiffFilePage(page port.Page[gitdiff.DiffFile]) *model.DiffFilePage {
 	items := make([]*model.DiffFile, 0, len(page.Items))
 	for _, item := range page.Items {
@@ -442,7 +464,7 @@ func mapQuestion(question questiondomain.Question) *model.Question {
 			ID:          string(option.ID),
 			Label:       option.Label,
 			Description: option.Description,
-			Payload:     option.Payload,
+			Payload:     nonNilMap(option.Payload),
 		})
 	}
 	return &model.Question{
@@ -455,9 +477,16 @@ func mapQuestion(question questiondomain.Question) *model.Question {
 		AllowCustom:      question.AllowCustom,
 		SelectedOptionID: stringPtr(question.SelectedOptionID),
 		CustomAnswer:     question.CustomAnswer,
-		Answer:           question.Answer,
+		Answer:           nonNilMap(question.Answer),
 		Status:           question.Status,
 	}
+}
+
+func nonNilMap(value map[string]any) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	return value
 }
 
 func mapPageInfo(page int, pageSize int, total int, nextCursor string) *model.PageInfo {

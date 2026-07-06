@@ -660,6 +660,41 @@ func TestHandleQuestionBatchAnsweredRetriesMerge(t *testing.T) {
 	}
 }
 
+func TestHandleQuestionBatchAnsweredDoesNotMarkNormalAnswerRunning(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingUser,
+	}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events))
+	service.generateID = func() (domain.ID, error) { return "event-running", nil }
+
+	err := service.HandleQuestionBatchAnswered(ctx, questionapp.BatchDTO{
+		ID:        "batch-1",
+		SessionID: "session-1",
+		Status:    questiondomain.BatchAnswered,
+		Questions: []questiondomain.Question{
+			{
+				ID:   "question-1",
+				Type: "choice",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("HandleQuestionBatchAnswered() error = %v", err)
+	}
+	if repo.sessions["session-1"].Status != domain.StatusWaitingUser {
+		t.Fatalf("session status = %q", repo.sessions["session-1"].Status)
+	}
+	got := events.snapshot()
+	if len(got) != 0 {
+		t.Fatalf("events = %#v", got)
+	}
+}
+
 func TestHandleQuestionBatchAnsweredFailsMergeNode(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -1406,7 +1441,9 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 		SessionID: "created",
 		Filename:  "note.txt",
 	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
+	projects := newFakeProjectRepository("project-1")
+	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Name: "Project One"}
+	service := New(repo, projects, WithAttachments(repo, newFakeAttachmentStore()))
 
 	got, err := service.ListSessions(ctx, ListSessionsInput{
 		ProjectID: &projectID,
@@ -1424,6 +1461,9 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 	}
 	if got.Items[0].RequirementSummary != "created card" {
 		t.Fatalf("RequirementSummary = %q", got.Items[0].RequirementSummary)
+	}
+	if got.Items[0].ProjectName != "Project One" {
+		t.Fatalf("ProjectName = %q", got.Items[0].ProjectName)
 	}
 	if len(got.Items[0].Attachments) != 1 || got.Items[0].Attachments[0].Filename != "note.txt" {
 		t.Fatalf("ListSessions() attachments = %#v", got.Items[0].Attachments)
@@ -1482,6 +1522,11 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 func TestAppendPromptValidatesAndPersists(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
 	service := New(repo, newFakeProjectRepository("project-1"))
 	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "append-1", nil }
@@ -1505,6 +1550,53 @@ func TestAppendPromptValidatesAndPersists(t *testing.T) {
 
 	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "   "}); err == nil {
 		t.Fatal("AppendPrompt() expected body error")
+	}
+}
+
+func TestAppendPromptAutoStartsStoppedChatSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Mode:         domain.ModeChat,
+		Status:       domain.StatusStopped,
+		WorktreePath: "/workspace/session-1",
+		Config: domain.Config{
+			CodexModel:      "gpt-test",
+			ReasoningEffort: "medium",
+			PermissionMode:  "workspace-write",
+		},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	ids := []domain.ID{"append-1", "process-run-1", "event-starting", "event-running"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	got, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID: "session-1",
+		Body:      "  continue with tests  ",
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	if got.ID != "append-1" || got.Body != "continue with tests" {
+		t.Fatalf("AppendPrompt() DTO = %#v", got)
+	}
+	if repo.sessions["session-1"].Status != domain.StatusRunning {
+		t.Fatalf("session status = %q", repo.sessions["session-1"].Status)
+	}
+	if len(processes.created) != 1 || processes.created[0].ID != "process-run-1" {
+		t.Fatalf("process runs = %#v", processes.created)
+	}
+	if !strings.Contains(codex.startInput.Prompt, "implement session") || !strings.Contains(codex.startInput.Prompt, "追加描述：\ncontinue with tests") {
+		t.Fatalf("codex prompt = %q", codex.startInput.Prompt)
 	}
 }
 
@@ -2603,6 +2695,11 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			want:    []string{"run", "resume", "stop", "close"},
 		},
 		{
+			name:    "resume failed without codex session id",
+			session: domain.Session{Status: domain.StatusResumeFailed},
+			want:    []string{"run", "stop", "close"},
+		},
+		{
 			name:    "closed",
 			session: domain.Session{Status: domain.StatusClosed},
 			want:    []string{},
@@ -2638,6 +2735,15 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 			UpdatedAt:      time.Unix(2, 0).UTC(),
 		},
 	}
+	repo.listSessions = []domain.Session{
+		{
+			ID:        "session-3",
+			ProjectID: "project-1",
+			Status:    domain.StatusRunning,
+			UpdatedAt: time.Unix(3, 0).UTC(),
+		},
+	}
+	repo.listTotal = 1
 	events := &fakeEventStore{}
 	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
@@ -2651,7 +2757,7 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 	if err != nil {
 		t.Fatalf("MarkInterruptedSessionsRecoverable() error = %v", err)
 	}
-	if count != 2 {
+	if count != 3 {
 		t.Fatalf("recoverable count = %d", count)
 	}
 	for _, id := range []domain.ID{"session-1", "session-2"} {
@@ -2666,8 +2772,11 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 			t.Fatalf("session %s actions = %#v", id, availableActions(got))
 		}
 	}
+	if got := repo.sessions["session-3"]; got.Status != domain.StatusResumeFailed {
+		t.Fatalf("session-3 status = %q", got.Status)
+	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 2 || gotEvents[0].Type != "session.recoverable" || gotEvents[0].Payload["previousStatus"] != "running" {
+	if len(gotEvents) != 3 || gotEvents[0].Type != "session.recoverable" || gotEvents[0].Payload["previousStatus"] != "running" || gotEvents[2].Type != "session.resume_failed" {
 		t.Fatalf("events = %#v", gotEvents)
 	}
 }
@@ -2717,7 +2826,18 @@ func (r *fakeRepository) Find(_ context.Context, id domain.ID) (domain.Session, 
 
 func (r *fakeRepository) ListCards(_ context.Context, query domain.ListQuery) ([]domain.Session, int, error) {
 	r.lastListQuery = query
-	return append([]domain.Session(nil), r.listSessions...), r.listTotal, nil
+	filtered := make([]domain.Session, 0, len(r.listSessions))
+	for _, session := range r.listSessions {
+		if query.Scope != "" && string(session.Status) != query.Scope {
+			continue
+		}
+		filtered = append(filtered, session)
+	}
+	total := r.listTotal
+	if total == 0 {
+		total = len(filtered)
+	}
+	return append([]domain.Session(nil), filtered...), total, nil
 }
 
 func (r *fakeRepository) ListInterruptedWithCodexSession(context.Context) ([]domain.Session, error) {
@@ -3315,8 +3435,16 @@ func (r *fakeProjectRepository) Find(_ context.Context, id projectdomain.ID) (pr
 	return project, nil
 }
 
+func (r *fakeProjectRepository) FindByPath(context.Context, string) (projectdomain.Project, bool, error) {
+	return projectdomain.Project{}, false, errors.New("unexpected project FindByPath call")
+}
+
 func (r *fakeProjectRepository) List(context.Context) ([]projectdomain.Project, error) {
 	return nil, errors.New("unexpected project List call")
+}
+
+func (r *fakeProjectRepository) Remove(context.Context, projectdomain.ID, time.Time) error {
+	return errors.New("unexpected project Remove call")
 }
 
 func (r *fakeProjectRepository) UpdateDefaultWorkflow(context.Context, projectdomain.ID, projectdomain.WorkflowDefinitionID) error {

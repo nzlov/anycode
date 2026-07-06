@@ -39,6 +39,22 @@ func (r *mutationResolver) CreateProject(ctx context.Context, input model.Create
 	return mapProject(dto), nil
 }
 
+// RemoveProject is the resolver for the removeProject field.
+func (r *mutationResolver) RemoveProject(ctx context.Context, id string) (bool, error) {
+	if r.UseCases.Projects == nil {
+		return false, missingUseCase("projects")
+	}
+	if r.UseCases.Sessions != nil {
+		if _, err := r.UseCases.Sessions.StopProjectSessions(ctx, sessiondomain.ProjectID(id)); err != nil {
+			return false, err
+		}
+	}
+	if err := r.UseCases.Projects.RemoveProject(ctx, projectapp.RemoveProjectInput{ProjectID: projectdomain.ID(id)}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // SetDefaultWorkflow is the resolver for the setDefaultWorkflow field.
 func (r *mutationResolver) SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error) {
 	if r.UseCases.Projects == nil {
@@ -327,6 +343,41 @@ func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiff
 		return nil, err
 	}
 	return mapSessionDiff(dto), nil
+}
+
+// BranchDiff is the resolver for the branchDiff field.
+func (r *queryResolver) BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error) {
+	if r.UseCases.Diff == nil {
+		return nil, missingUseCase("diff")
+	}
+	dto, err := r.UseCases.Diff.GetBranchDiff(ctx, diffapp.BranchDiffInput{
+		ProjectID: projectdomain.ID(input.ProjectID),
+		Branch:    input.Branch,
+		Mode:      stringValue(input.Mode, ""),
+		FilePath:  stringValue(input.FilePath, ""),
+		Page:      intValue(input.Page, 0),
+		PageSize:  intValue(input.PageSize, 0),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapSessionDiff(dto), nil
+}
+
+// SessionCommitHistory is the resolver for the sessionCommitHistory field.
+func (r *queryResolver) SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error) {
+	if r.UseCases.Diff == nil {
+		return nil, missingUseCase("diff")
+	}
+	dto, err := r.UseCases.Diff.GetCommitHistory(ctx, diffapp.CommitHistoryInput{
+		SessionID: sessiondomain.ID(input.SessionID),
+		Page:      intValue(input.Page, 0),
+		PageSize:  intValue(input.PageSize, 0),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapCommitHistory(dto), nil
 }
 
 // WorkflowDefinition is the resolver for the workflowDefinition field.

@@ -29,6 +29,15 @@ type Attachment struct {
 	Previewable bool   `json:"previewable"`
 }
 
+type BranchDiffInput struct {
+	ProjectID string  `json:"projectId"`
+	Branch    string  `json:"branch"`
+	Mode      *string `json:"mode,omitempty"`
+	FilePath  *string `json:"filePath,omitempty"`
+	Page      *int    `json:"page,omitempty"`
+	PageSize  *int    `json:"pageSize,omitempty"`
+}
+
 type BrowseDirectoryInput struct {
 	Path string `json:"path"`
 }
@@ -36,6 +45,20 @@ type BrowseDirectoryInput struct {
 type CloseSessionInput struct {
 	SessionID string `json:"sessionId"`
 	Reason    string `json:"reason"`
+}
+
+type CommitRecord struct {
+	Hash        string `json:"hash"`
+	ShortHash   string `json:"shortHash"`
+	Subject     string `json:"subject"`
+	AuthorName  string `json:"authorName"`
+	AuthorEmail string `json:"authorEmail"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type CommitRecordPage struct {
+	Items    []*CommitRecord `json:"items"`
+	PageInfo *PageInfo       `json:"pageInfo"`
 }
 
 type CreateProjectInput struct {
@@ -266,6 +289,17 @@ type SessionCard struct {
 type SessionCardPage struct {
 	Items    []*SessionCard `json:"items"`
 	PageInfo *PageInfo      `json:"pageInfo"`
+}
+
+type SessionCommitHistory struct {
+	Commits   *CommitRecordPage `json:"commits"`
+	Available bool              `json:"available"`
+}
+
+type SessionCommitHistoryInput struct {
+	SessionID string `json:"sessionId"`
+	Page      *int   `json:"page,omitempty"`
+	PageSize  *int   `json:"pageSize,omitempty"`
 }
 
 type SessionConfig struct {

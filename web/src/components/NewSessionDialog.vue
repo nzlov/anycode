@@ -7,7 +7,9 @@
           <div class="text-caption text-muted">配置项目、分支、模式和 Codex 运行参数</div>
         </div>
         <q-space />
-        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" :disable="creating" />
+        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" :disable="creating">
+          <q-tooltip>关闭</q-tooltip>
+        </q-btn>
       </q-card-section>
 
       <q-separator />
@@ -25,6 +27,7 @@
             :options="projectOptions"
           />
           <q-select
+            v-if="selectedProject?.isGit"
             v-model="branch"
             outlined
             dense
@@ -36,147 +39,59 @@
             v-model="mode"
             spread
             no-caps
-            toggle-color="primary"
+            toggle-color="dark"
             :disable="creating"
             :options="modeOptions"
           />
         </div>
 
-        <div class="prompt-shell">
-          <div class="attachment-zone">
-            <div v-if="files.length > 0" class="attachment-list">
-              <q-chip
-                v-for="file in files"
-                :key="`${file.name}-${file.size}`"
-                removable
-                square
-                :clickable="!creating && canPreview(file)"
-                :disable="creating"
-                class="attachment-chip"
-                :icon="fileIcon(file)"
-                @click="openPreview(file)"
-                @remove="removeFile(file)"
-              >
-                <span class="ellipsis">{{ file.name }}</span>
-                <q-icon v-if="canPreview(file)" name="visibility" class="q-ml-sm" />
-              </q-chip>
-            </div>
-            <q-file
-              v-model="files"
-              outlined
-              dense
-              multiple
-              append
-              label="添加附件"
-              class="file-picker"
-              :disable="creating"
-            >
-              <template #prepend>
-                <q-icon name="attach_file" />
-              </template>
-            </q-file>
-          </div>
-
-          <q-input
-            v-model.trim="prompt"
-            autogrow
-            borderless
-            type="textarea"
-            class="prompt-input"
-            placeholder="描述你希望 Codex 完成的任务"
-            :disable="creating"
-          />
-        </div>
-
-        <q-banner v-if="createError" dense rounded class="bg-red-1 text-negative q-mt-sm">
-          {{ createError }}
-        </q-banner>
-      </q-card-section>
-
-      <q-separator />
-
-      <q-card-actions class="new-session-actions">
-        <q-btn
-          flat
-          round
-          icon="admin_panel_settings"
-          color="primary"
-          aria-label="运行权限"
-          :disable="creating"
+        <PromptComposer
+          v-model:prompt="prompt"
+          v-model:files="files"
+          v-model:model="model"
+          v-model:effort="effort"
+          v-model:permission="permission"
+          title="提示词"
+          :disabled="creating"
         >
-          <q-tooltip>运行权限：workspace-write</q-tooltip>
-        </q-btn>
-        <q-select
-          v-model="model"
-          dense
-          borderless
-          emit-value
-          map-options
-          class="compact-select"
-          :disable="creating"
-          :options="modelOptions"
-        />
-        <q-select
-          v-model="effort"
-          dense
-          borderless
-          emit-value
-          map-options
-          class="compact-select"
-          :disable="creating"
-          :options="effortOptions"
-        />
-        <q-space />
-        <q-btn
-          unelevated
-          color="primary"
-          icon="add"
-          label="创建卡片"
-          no-caps
-          :disable="creating"
-          :loading="creating"
-          @click="createSession"
-        />
-      </q-card-actions>
-    </q-card>
-  </q-dialog>
-
-  <q-dialog v-model="previewOpen">
-    <q-card class="attachment-preview-card">
-      <q-card-section class="row items-center q-pb-sm">
-        <div class="text-subtitle2 text-weight-bold ellipsis">{{ previewName }}</div>
-        <q-space />
-        <q-btn flat round dense icon="close" aria-label="关闭预览" @click="closePreview" />
-      </q-card-section>
-      <q-separator />
-      <q-card-section class="attachment-preview-body">
-        <img
-          v-if="previewKind === 'image'"
-          :src="previewUrl"
-          alt=""
-          class="attachment-preview-media"
-        />
-        <video
-          v-else-if="previewKind === 'video'"
-          :src="previewUrl"
-          class="attachment-preview-media"
-          controls
-        />
+          <template #actions>
+            <q-btn
+              unelevated
+              color="positive"
+              text-color="dark"
+              icon="send"
+              label="创建卡片"
+              no-caps
+              :disable="creating"
+              :loading="creating"
+              @click="createSession"
+            />
+          </template>
+        </PromptComposer>
       </q-card-section>
     </q-card>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { Notify } from 'quasar';
 
+import PromptComposer from '@/components/PromptComposer.vue';
+import {
+  firstCodexModelValue,
+  normalizeCodexModel,
+  normalizePermissionMode,
+  normalizeReasoningEffort,
+} from '@/components/promptOptions';
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
 import type { CreateSessionInput } from '@/services/sessions';
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean;
+  defaultProjectId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -187,100 +102,109 @@ const emit = defineEmits<{
 const { projects, projectOptions, loadProjects } = useProjects();
 const projectId = ref(projects.value[0]?.id ?? '');
 const branch = ref(projects.value[0]?.defaultBranch ?? 'main');
-const mode = ref<'workflow' | 'chat'>('workflow');
+const mode = ref<'workflow' | 'chat'>('chat');
 const prompt = ref('');
 const files = ref<File[]>([]);
-const model = ref('cli-default');
-const effort = ref('medium');
+const model = ref(firstCodexModelValue());
+const effort = ref(normalizeReasoningEffort(model.value, ''));
+const permission = ref(normalizePermissionMode('workspace-write'));
 const creating = ref(false);
-const createError = ref('');
-const previewOpen = ref(false);
-const previewName = ref('');
-const previewKind = ref<'image' | 'video' | ''>('');
-const previewUrl = ref('');
+const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
+const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 
 const branchOptions = computed(() => {
-  const selectedProject = projects.value.find((project) => project.id === projectId.value);
-  const defaultBranch = selectedProject?.defaultBranch ?? 'main';
-  return Array.from(new Set([defaultBranch, 'main', 'master', 'dev-foundation']));
+  return selectedProject.value?.branches.length ? selectedProject.value.branches : ['main'];
 });
+const selectedProject = computed(() => projects.value.find((project) => project.id === projectId.value));
 
 const modeOptions = [
   { label: '流程模式', value: 'workflow', icon: 'account_tree' },
   { label: '会话模式', value: 'chat', icon: 'forum' },
 ];
 
-const modelOptions = [
-  { label: 'Codex 默认模型', value: 'cli-default' },
-  { label: 'gpt-5.4', value: 'gpt-5.4' },
-  { label: 'gpt-5.4-mini', value: 'gpt-5.4-mini' },
-];
-
-const effortOptions = [
-  { label: '中等思考', value: 'medium' },
-  { label: '低思考', value: 'low' },
-  { label: '高思考', value: 'high' },
-];
-
 function emitModel(value: boolean) {
   emit('update:modelValue', value);
 }
 
-function fileIcon(file: File) {
-  if (file.type.startsWith('image/')) return 'image';
-  if (file.type.startsWith('video/')) return 'movie';
-  return 'description';
-}
-
-function canPreview(file: File) {
-  return file.type.startsWith('image/') || file.type.startsWith('video/');
-}
-
-function openPreview(file: File) {
-  if (creating.value) return;
-  if (!canPreview(file)) return;
-  revokePreviewUrl();
-  previewName.value = file.name;
-  previewKind.value = file.type.startsWith('image/') ? 'image' : 'video';
-  previewUrl.value = URL.createObjectURL(file);
-  previewOpen.value = true;
-}
-
-function closePreview() {
-  previewOpen.value = false;
-  previewName.value = '';
-  previewKind.value = '';
-  revokePreviewUrl();
-}
-
-function revokePreviewUrl() {
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value);
-    previewUrl.value = '';
+function storedProjectId() {
+  try {
+    return window.localStorage.getItem(lastProjectStorageKey) ?? '';
+  } catch {
+    return '';
   }
 }
 
-function removeFile(file: File) {
-  if (creating.value) return;
-  files.value = files.value.filter((item) => item !== file);
+function rememberProjectId(value: string) {
+  try {
+    window.localStorage.setItem(lastProjectStorageKey, value);
+  } catch {
+    // Ignore storage failures; project selection still works for the current dialog.
+  }
+}
+
+function storedSessionConfig() {
+  try {
+    const raw = window.localStorage.getItem(lastSessionConfigStorageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, string>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberSessionConfig() {
+  try {
+    window.localStorage.setItem(
+      lastSessionConfigStorageKey,
+      JSON.stringify({
+        codexModel: model.value,
+        reasoningEffort: effort.value,
+        permissionMode: permission.value,
+      }),
+    );
+  } catch {
+    // Ignore storage failures; the current session still uses the selected config.
+  }
+}
+
+function selectInitialRunConfig() {
+  const stored = storedSessionConfig();
+  const nextModel = normalizeCodexModel(stored.codexModel ?? model.value);
+  model.value = nextModel;
+  effort.value = normalizeReasoningEffort(nextModel, stored.reasoningEffort ?? effort.value);
+  permission.value = normalizePermissionMode(stored.permissionMode ?? permission.value);
+}
+
+function selectInitialProject() {
+  const fallback = projects.value[0]?.id ?? '';
+  const candidates = [props.defaultProjectId, storedProjectId(), projectId.value, fallback].filter(Boolean);
+  const nextProjectId =
+    candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ?? fallback;
+  if (!nextProjectId) return;
+  projectId.value = nextProjectId;
+  branch.value = projectBranch(nextProjectId);
+}
+
+function projectBranch(value: string) {
+  const selectedProject = projects.value.find((project) => project.id === value);
+  return selectedProject?.defaultBranch ?? selectedProject?.branches[0] ?? 'main';
 }
 
 async function createSession() {
   const config: CreateSessionInput['config'] = {
+    codexModel: model.value,
     reasoningEffort: effort.value,
-    permissionMode: 'workspace-write',
+    permissionMode: permission.value,
   };
-  const codexModel = model.value === 'cli-default' ? '' : model.value;
-  if (codexModel) {
-    Object.assign(config, { codexModel });
-  }
 
   const selectedFiles = [...files.value];
   const stagedAttachmentIds: string[] = [];
   let phase: 'upload' | 'create' = selectedFiles.length > 0 ? 'upload' : 'create';
 
   creating.value = true;
-  createError.value = '';
   try {
     for (const file of selectedFiles) {
       const attachment = await stageAttachment(file);
@@ -292,23 +216,34 @@ async function createSession() {
       projectId: projectId.value,
       requirement: prompt.value,
       mode: mode.value,
-      baseBranch: branch.value,
       config,
     };
+    if (selectedProject.value?.isGit) {
+      input.baseBranch = branch.value;
+    }
     if (stagedAttachmentIds.length > 0) {
       input.stagedAttachmentIds = stagedAttachmentIds;
     }
     await createSessionRequest(input);
+    rememberProjectId(projectId.value);
+    rememberSessionConfig();
     files.value = [];
     prompt.value = '';
     emit('create');
     emit('update:modelValue', false);
   } catch (error) {
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
-    const prefix = phase === 'upload' ? '附件上传失败' : '创建卡片失败';
-    createError.value = cleanupError
-      ? `${prefix}：${errorMessage(error)}；${cleanupError}`
-      : `${prefix}：${errorMessage(error)}`;
+    if (!wasNotified(error) || cleanupError) {
+      const prefix = phase === 'upload' ? '附件上传失败' : '创建卡片失败';
+      Notify.create({
+        type: 'negative',
+        icon: 'error',
+        position: 'top-right',
+        message: cleanupError ? `${prefix}：${errorMessage(error)}；${cleanupError}` : `${prefix}：${errorMessage(error)}`,
+        timeout: 5000,
+        actions: [{ icon: 'close', color: 'white', round: true }],
+      });
+    }
   } finally {
     creating.value = false;
   }
@@ -339,25 +274,43 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function wasNotified(error: unknown) {
+  return Boolean(error && typeof error === 'object' && '__anycodeNotified' in error);
+}
+
 watch(
   projects,
-  (items) => {
-    const currentProject = items.find((project) => project.id === projectId.value);
-    if (!currentProject && items[0]) {
-      projectId.value = items[0].id;
-      branch.value = items[0].defaultBranch;
-      return;
-    }
-    if (currentProject) {
-      branch.value = currentProject.defaultBranch;
-    }
+  () => {
+    selectInitialProject();
   },
   { immediate: true },
 );
 
-onMounted(() => {
-  void loadProjects();
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (!open) return;
+    selectInitialProject();
+    selectInitialRunConfig();
+  },
+);
+
+watch(model, (value) => {
+  const nextModel = normalizeCodexModel(value);
+  if (nextModel !== value) {
+    model.value = nextModel;
+    return;
+  }
+  effort.value = normalizeReasoningEffort(nextModel, effort.value);
 });
 
-onBeforeUnmount(revokePreviewUrl);
+watch(projectId, (value, previous) => {
+  if (!value || value === previous) return;
+  branch.value = projectBranch(value);
+});
+
+onMounted(() => {
+  selectInitialRunConfig();
+  void loadProjects();
+});
 </script>

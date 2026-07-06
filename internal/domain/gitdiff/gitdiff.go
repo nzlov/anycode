@@ -41,6 +41,15 @@ type SessionDiff struct {
 	Hunks []FileDiff
 }
 
+type CommitRecord struct {
+	Hash        string
+	ShortHash   string
+	Subject     string
+	AuthorName  string
+	AuthorEmail string
+	CreatedAt   string
+}
+
 type MergeResult struct {
 	Strategy       string
 	BaseBranch     string
@@ -89,6 +98,12 @@ type RangeDiffInput struct {
 	HeadRef  string
 }
 
+type CommitHistoryInput struct {
+	WorktreePath string
+	BaseRef      string
+	HeadRef      string
+}
+
 type WorktreePort interface {
 	CreateWorktree(ctx context.Context, input CreateWorktreeInput) (Worktree, error)
 	RemoveWorktree(ctx context.Context, path string) error
@@ -103,7 +118,9 @@ type MergePort interface {
 }
 
 type DiffPort interface {
+	CurrentBranch(ctx context.Context, path string) (string, error)
 	ChangedFiles(ctx context.Context, input DiffInput) ([]DiffFile, error)
 	FileDiff(ctx context.Context, input FileDiffInput) (FileDiff, error)
 	RangeDiff(ctx context.Context, input RangeDiffInput) (SessionDiff, error)
+	CommitHistory(ctx context.Context, input CommitHistoryInput) ([]CommitRecord, error)
 }

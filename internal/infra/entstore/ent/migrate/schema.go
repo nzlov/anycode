@@ -172,6 +172,7 @@ var (
 		{Name: "path", Type: field.TypeString},
 		{Name: "is_git", Type: field.TypeBool, Default: false},
 		{Name: "default_workflow_id", Type: field.TypeString, Nullable: true},
+		{Name: "removed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 	}

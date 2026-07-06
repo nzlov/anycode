@@ -7,31 +7,38 @@
           <div class="text-caption text-muted">目录树由后端权限范围决定</div>
         </div>
         <q-space />
-        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" />
+        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
+          <q-tooltip>关闭</q-tooltip>
+        </q-btn>
       </q-card-section>
 
       <q-separator />
 
-      <q-card-section>
+      <q-card-section class="directory-dialog__body">
         <q-input v-model="pathInput" dense outlined label="当前路径" @keyup.enter="goToInputPath">
           <template #prepend>
             <q-icon name="folder" />
           </template>
           <template #append>
-            <q-btn flat round dense icon="keyboard_return" aria-label="打开路径" @click="goToInputPath" />
+            <q-btn flat round dense icon="keyboard_return" aria-label="打开路径" @click="goToInputPath">
+              <q-tooltip>打开路径</q-tooltip>
+            </q-btn>
           </template>
         </q-input>
 
-        <div class="row items-center q-gutter-sm q-mt-sm">
+        <div class="directory-breadcrumb">
           <q-btn
-            flat
+            outline
             dense
-            no-caps
             icon="arrow_upward"
             label="上一级"
+            aria-label="上一级"
             :disable="!parentPath || parentPath === currentPath"
             @click="goToPath(parentPath)"
-          />
+          >
+            <q-tooltip>上一级</q-tooltip>
+          </q-btn>
+          <span class="text-body2 text-muted directory-breadcrumb__path">{{ currentPath }}</span>
           <q-space />
           <q-input v-model="filter" dense borderless placeholder="过滤当前目录" clearable class="directory-filter">
             <template #prepend>
@@ -40,11 +47,7 @@
           </q-input>
         </div>
 
-        <q-banner v-if="error" dense rounded class="bg-red-1 text-negative q-mt-sm">
-          {{ error }}
-        </q-banner>
-
-        <q-list bordered separator class="directory-list q-mt-sm">
+        <q-list bordered separator class="directory-list">
           <q-item
             v-for="entry in filteredEntries"
             :key="entry.path"
@@ -73,7 +76,9 @@
                   icon="check"
                   aria-label="选择目录"
                   @click.stop="selectDirectory(entry.path)"
-                />
+                >
+                  <q-tooltip>选择目录</q-tooltip>
+                </q-btn>
               </div>
             </q-item-section>
           </q-item>
@@ -81,16 +86,25 @@
             <q-item-section class="text-muted">当前目录没有可显示条目</q-item-section>
           </q-item>
         </q-list>
+        <q-card flat bordered class="selected-directory-card">
+          <div>
+            <div class="text-caption text-muted">当前选择</div>
+            <div class="mono selected-directory-card__path">{{ selected || '尚未选择目录' }}</div>
+          </div>
+        </q-card>
         <q-inner-loading :showing="loading" />
       </q-card-section>
 
-      <q-card-actions align="right">
-        <q-btn v-close-popup flat color="primary" label="取消" no-caps />
+      <q-card-actions class="directory-dialog__actions">
+        <q-btn v-close-popup flat round color="primary" icon="close" aria-label="取消">
+          <q-tooltip>取消</q-tooltip>
+        </q-btn>
         <q-btn
           unelevated
-          color="primary"
+          color="positive"
+          text-color="dark"
           icon="folder_open"
-          label="使用目录"
+          label="打开该项目"
           no-caps
           :loading="creating"
           :disable="!selected"
@@ -120,7 +134,7 @@ const filter = ref('');
 const selected = ref('');
 const pathInput = ref('/');
 const creating = ref(false);
-const { currentPath, parentPath, entries, error, loading, loadDirectory } = useDirectoryBrowser();
+const { currentPath, parentPath, entries, loading, loadDirectory } = useDirectoryBrowser();
 const { createProjectFromPath } = useProjects();
 
 const filteredEntries = computed(() => {

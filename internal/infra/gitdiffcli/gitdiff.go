@@ -65,6 +65,10 @@ func New(gitBin string) *Client {
 	return &Client{gitBin: gitBin}
 }
 
+func (c *Client) CurrentBranch(ctx context.Context, path string) (string, error) {
+	return c.currentBranch(ctx, path)
+}
+
 func (c *Client) MergeToBase(ctx context.Context, input gitdiff.MergeInput) (gitdiff.MergeResult, error) {
 	return c.mergeToBase(ctx, "merge", input.WorktreePath, input.BaseBranch)
 }
@@ -297,6 +301,23 @@ func (c *Client) RangeDiff(ctx context.Context, input gitdiff.RangeDiffInput) (g
 	return gitdiff.SessionDiff{Files: files, Hunks: hunks}, nil
 }
 
+func (c *Client) CommitHistory(ctx context.Context, input gitdiff.CommitHistoryInput) ([]gitdiff.CommitRecord, error) {
+	baseRef := strings.TrimSpace(input.BaseRef)
+	headRef := strings.TrimSpace(input.HeadRef)
+	if headRef == "" {
+		headRef = "HEAD"
+	}
+	refRange := headRef
+	if baseRef != "" {
+		refRange = baseRef + ".." + headRef
+	}
+	out, err := c.run(ctx, strings.TrimSpace(input.WorktreePath), "log", "--date=iso-strict", "--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s", refRange)
+	if err != nil {
+		return nil, err
+	}
+	return parseCommitHistory(out), nil
+}
+
 func (c *Client) fileStats(ctx context.Context, input gitdiff.DiffInput, filePath string) (gitdiff.DiffFile, bool, error) {
 	files, err := c.ChangedFiles(ctx, gitdiff.DiffInput{WorktreePath: input.WorktreePath, BaseRef: input.BaseRef, HeadRef: input.HeadRef})
 	if err != nil {
@@ -437,6 +458,29 @@ func parseNameStatus(out string) []gitdiff.DiffFile {
 		})
 	}
 	return files
+}
+
+func parseCommitHistory(out string) []gitdiff.CommitRecord {
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return []gitdiff.CommitRecord{}
+	}
+	commits := []gitdiff.CommitRecord{}
+	for _, line := range strings.Split(trimmed, "\n") {
+		parts := strings.SplitN(line, "\x1f", 6)
+		if len(parts) != 6 {
+			continue
+		}
+		commits = append(commits, gitdiff.CommitRecord{
+			Hash:        parts[0],
+			ShortHash:   parts[1],
+			AuthorName:  parts[2],
+			AuthorEmail: parts[3],
+			CreatedAt:   parts[4],
+			Subject:     parts[5],
+		})
+	}
+	return commits
 }
 
 func parseUnifiedDiff(out string) []gitdiff.DiffHunk {

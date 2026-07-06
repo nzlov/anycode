@@ -5,23 +5,12 @@
         <div class="text-h5 text-weight-bold">{{ session?.title ?? '会话详情' }}</div>
         <div class="text-body2 text-muted">
           <template v-if="session">
-            {{ session.projectId }} · {{ session.branch }} · {{ session.updatedAt }}
+            {{ session.branch }} · {{ statusLabel(session.status) }} · {{ session.updatedAt }}
           </template>
           <template v-else>{{ sessionId }}</template>
         </div>
       </div>
-      <div class="row q-gutter-sm">
-        <q-btn
-          v-if="session?.pendingQuestion"
-          unelevated
-          color="warning"
-          text-color="dark"
-          icon="help"
-          label="回答问题"
-          no-caps
-          :loading="questionsLoading"
-          @click="openAnswerDialog"
-        />
+      <div class="row q-gutter-sm detail-actions">
         <q-btn
           outline
           color="primary"
@@ -45,6 +34,7 @@
           v-if="canRun"
           unelevated
           color="positive"
+          text-color="dark"
           icon="play_arrow"
           :label="runActionLabel"
           no-caps
@@ -79,71 +69,92 @@
     <div class="detail-grid">
       <section class="event-panel">
         <q-card flat bordered class="stream-card">
+          <q-card-section class="stream-card__header">
+            <div class="text-subtitle1 text-weight-bold">会话事件流</div>
+            <div class="text-caption text-muted">思考内容、工具调用、模型输出和状态事件</div>
+          </q-card-section>
+          <q-separator />
+
           <q-inner-loading :showing="loading">
             <q-spinner color="primary" size="32px" />
           </q-inner-loading>
 
-          <q-banner v-if="error" dense class="bg-negative text-white">
-            {{ error }}
-          </q-banner>
-
-          <q-card-section v-if="!loading && !error && events.length === 0" class="text-muted">
-            暂无会话事件
-          </q-card-section>
-
-          <q-card-section v-for="event in events" :key="event.id" class="event-item">
-            <div class="event-icon">
-              <q-icon :name="eventIcon(event.kind)" />
+          <div ref="streamBodyRef" class="stream-card__body" @scroll="onEventScroll">
+            <div v-if="loadingOlderEvents" class="event-loading-more">
+              <q-spinner color="primary" size="18px" />
+              <span>正在加载更早事件</span>
             </div>
-            <div class="event-body">
-              <div class="row items-center q-gutter-sm">
-                <div class="text-weight-medium">{{ event.title }}</div>
-                <span class="text-caption text-muted">{{ event.time }}</span>
+            <q-card-section v-if="!loading && streamEntries.length === 0" class="text-muted">
+              暂无会话事件
+            </q-card-section>
+
+            <q-card-section v-for="event in streamEntries" :key="event.id" class="event-item">
+              <div class="event-icon">
+                <q-icon :name="eventIcon(event.kind)" />
               </div>
-              <div class="text-body2">{{ event.body }}</div>
-            </div>
-          </q-card-section>
+              <div class="event-body">
+                <div class="row items-center q-gutter-sm">
+                  <div class="text-weight-medium">{{ event.title }}</div>
+                  <span class="text-caption text-muted">{{ event.time }}</span>
+                </div>
+                <div class="text-body2 event-body__text">{{ event.body || '已记录事件' }}</div>
+              </div>
+            </q-card-section>
+          </div>
         </q-card>
 
-        <q-card flat bordered class="composer-card prompt-shell detail-composer">
-          <q-input
-            v-model.trim="appendText"
-            autogrow
-            borderless
-            type="textarea"
-            class="prompt-input"
+        <div class="detail-composer">
+          <q-card v-if="isWaitingForAnswer" flat bordered class="detail-answer-card">
+            <q-card-section class="detail-answer-card__header">
+              <div>
+                <div class="text-subtitle2 text-weight-bold">待回答问题</div>
+                <div class="text-caption text-muted">回答后当前会话继续执行，输入框会恢复为追加描述。</div>
+              </div>
+              <q-badge rounded color="warning" text-color="dark" label="待回答" />
+            </q-card-section>
+            <q-separator />
+            <AnswerUserPanel
+              :batches="pendingQuestionBatches"
+              :loading="questionsLoading"
+              :submitting="questionsSubmitting"
+              @submit="submitAnswers"
+            />
+          </q-card>
+          <PromptComposer
+            v-else
+            v-model:prompt="appendText"
+            v-model:files="appendFiles"
+            v-model:model="composerModel"
+            v-model:effort="composerEffort"
+            v-model:permission="composerPermission"
+            compact
+            readonly-config
+            :show-badge="false"
+            title="追加描述"
             placeholder="追加描述，发送给当前会话"
-            :disable="!session || appending || stopping"
-          />
-          <q-card-actions align="right">
+            :disabled="!session || appending || stopping"
+          >
+            <template #actions>
             <q-btn
-              v-if="canStop"
+              v-if="composerAction"
               unelevated
-              color="negative"
-              icon="stop"
-              label="停止"
-              no-caps
-              :loading="stopping"
-              :disable="appending || starting || resuming"
-              @click="stopSession"
-            />
-            <q-btn
-              v-else
-              unelevated
-              color="primary"
-              icon="send"
-              label="发送"
-              no-caps
-              :loading="appending"
-              :disable="!session || stopping || appendText.trim().length === 0"
-              @click="sendAppend"
-            />
-          </q-card-actions>
-        </q-card>
+              class="detail-composer__primary-btn"
+              :color="composerAction.color"
+              :icon="composerAction.icon"
+              :aria-label="composerAction.tooltip"
+              :loading="composerAction.loading"
+              :disable="composerAction.disabled"
+              @click="composerAction.run"
+            >
+              <q-tooltip>{{ composerAction.tooltip }}</q-tooltip>
+            </q-btn>
+            </template>
+          </PromptComposer>
+        </div>
       </section>
 
       <aside class="right-panel">
-        <q-card flat bordered>
+        <q-card flat bordered class="right-panel-card">
           <q-tabs v-model="tab" dense align="justify" narrow-indicator>
             <q-tab name="info" icon="info" label="会话信息" />
             <q-tab name="changes" icon="difference" label="当前变更" />
@@ -211,20 +222,8 @@
                 </q-item>
                 <q-item>
                   <q-item-section>
-                    <q-item-label caption>模型</q-item-label>
-                    <q-item-label>{{ modelLabel }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
                     <q-item-label caption>权限</q-item-label>
                     <q-item-label>{{ session?.config.permissionMode || '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>思考强度</q-item-label>
-                    <q-item-label>{{ session?.config.reasoningEffort || '-' }}</q-item-label>
                   </q-item-section>
                 </q-item>
               </q-list>
@@ -246,25 +245,8 @@
             </q-tab-panel>
 
             <q-tab-panel name="changes">
-              <q-banner v-if="diffError" dense class="state-block bg-negative text-white q-mb-md">
-                <template #avatar>
-                  <q-icon name="error" />
-                </template>
-                {{ diffError }}
-                <template #action>
-                  <q-btn
-                    flat
-                    color="white"
-                    label="重试"
-                    no-caps
-                    :loading="diffLoading"
-                    @click="loadChangeList"
-                  />
-                </template>
-              </q-banner>
-
               <q-banner
-                v-else-if="diff && !diff.available"
+                v-if="diff && !diff.available"
                 dense
                 class="state-block bg-grey-2 text-grey-8 q-mb-md"
               >
@@ -376,30 +358,13 @@
             />
             <span>{{ selectedFilePath || '文件 Diff' }}</span>
           </div>
-          <q-btn flat round dense icon="close" v-close-popup>
+          <q-btn flat round dense icon="close" aria-label="关闭" v-close-popup>
             <q-tooltip>关闭</q-tooltip>
           </q-btn>
         </q-card-section>
         <q-separator />
 
-        <q-banner v-if="fileDiffError" dense class="bg-negative text-white q-ma-md">
-          <template #avatar>
-            <q-icon name="error" />
-          </template>
-          {{ fileDiffError }}
-          <template #action>
-            <q-btn
-              flat
-              color="white"
-              label="重试"
-              no-caps
-              :loading="fileDiffLoading"
-              @click="reloadSelectedFileDiff"
-            />
-          </template>
-        </q-banner>
-
-        <q-card-section v-else-if="fileDiffLoading" class="state-content">
+        <q-card-section v-if="fileDiffLoading" class="state-content">
           <q-spinner color="primary" size="32px" />
           <div class="text-body2 text-muted">正在读取文件 Diff</div>
         </q-card-section>
@@ -433,21 +398,22 @@
       </q-card>
     </q-dialog>
 
-    <AnswerUserDialog
-      v-model="answerDialog"
-      :batches="pendingQuestionBatches"
-      :loading="questionsLoading"
-      :submitting="questionsSubmitting"
-      @submit="submitAnswers"
-    />
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Notify } from 'quasar';
 import { useRoute } from 'vue-router';
 
-import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
+import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
+import PromptComposer from '@/components/PromptComposer.vue';
+import {
+  firstCodexModelValue,
+  normalizeCodexModel,
+  normalizePermissionMode,
+  normalizeReasoningEffort,
+} from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { getSessionDiff } from '@/services/diff';
 import type { DiffFile, DiffLineKind, FileDiff, SessionDiff } from '@/services/diff';
@@ -456,23 +422,26 @@ import type { QuestionAnswerInput, SessionEvent, SessionMode, SessionStatus } fr
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
 const appendText = ref('');
+const streamBodyRef = ref<HTMLElement | null>(null);
+const appendFiles = ref<File[]>([]);
+const composerModel = ref(firstCodexModelValue());
+const composerEffort = ref(normalizeReasoningEffort(composerModel.value, ''));
+const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const tab = ref('info');
 const diff = ref<SessionDiff | null>(null);
 const diffLoading = ref(false);
-const diffError = ref('');
 const fileDiffDialog = ref(false);
 const selectedFilePath = ref('');
 const selectedFileDiff = ref<FileDiff | null>(null);
 const fileDiffLoading = ref(false);
-const fileDiffError = ref('');
 const diffPage = ref(1);
 const diffPageSize = 20;
-const answerDialog = ref(false);
 const {
   session,
   events,
   pendingQuestionBatches,
   loading,
+  loadingOlderEvents,
   appending,
   starting,
   resuming,
@@ -480,7 +449,6 @@ const {
   closing,
   questionsLoading,
   questionsSubmitting,
-  error,
   loadSessionDetail,
   appendDescription,
   startSession,
@@ -488,6 +456,7 @@ const {
   stopSession,
   closeSession,
   loadPendingQuestions,
+  loadOlderEvents,
   submitPendingAnswers,
   startLiveUpdates,
   stopLiveUpdates,
@@ -498,9 +467,110 @@ const canResume = computed(() => session.value?.availableActions.includes('resum
 const canStop = computed(() => session.value?.availableActions.includes('stop') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
 const runActionLabel = computed(() =>
-  session.value?.status === 'resume_failed' ? '重新运行当前节点' : '运行',
+  session.value?.status === 'resume_failed' ? '重新运行当前节点' : '强制运行',
 );
-const modelLabel = computed(() => session.value?.config.codexModel || 'Codex CLI 默认');
+const isWaitingForAnswer = computed(() => session.value?.pendingQuestion || session.value?.status === 'waiting_user');
+interface StreamEntry {
+  id: string;
+  kind: SessionEvent['kind'] | 'user';
+  title: string;
+  body: string;
+  createdAt: string;
+  time: string;
+}
+
+const streamEntries = computed<StreamEntry[]>(() => {
+  const entries: StreamEntry[] = [];
+  if (session.value) {
+    entries.push({
+      id: `session-input-${session.value.id}`,
+      kind: 'user',
+      title: '用户输入',
+      body: session.value.summary,
+      createdAt: session.value.createdAt,
+      time: session.value.createdTime,
+    });
+    for (const item of session.value.promptAppends) {
+      entries.push({
+        id: `prompt-append-${item.id}`,
+        kind: 'user',
+        title: '追加描述',
+        body: item.body,
+        createdAt: item.createdAt,
+        time: item.time,
+      });
+    }
+  }
+  for (const event of events.value) {
+    entries.push(event);
+  }
+  return entries.sort((left, right) => {
+    const diff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
+    return diff === 0 ? left.id.localeCompare(right.id) : diff;
+  });
+});
+const composerAction = computed(() => {
+  const current = session.value;
+  if (!current) return null;
+  if (appendText.value.trim().length > 0) {
+    return {
+      icon: 'send',
+      color: 'primary',
+      tooltip: '发送追加描述',
+      loading: appending.value,
+      disabled: stopping.value,
+      run: sendAppend,
+    };
+  }
+  if (current.status === 'starting' || current.status === 'running') {
+    return {
+      icon: 'stop',
+      color: 'negative',
+      tooltip: '运行中，点击停止',
+      loading: stopping.value,
+      disabled: appending.value || starting.value || resuming.value,
+      run: stopSession,
+    };
+  }
+  if (current.status === 'stopping') {
+    return {
+      icon: 'hourglass_top',
+      color: 'warning',
+      tooltip: '停止中',
+      loading: stopping.value,
+      disabled: true,
+      run: stopSession,
+    };
+  }
+  if (canRun.value) {
+    return {
+      icon: 'play_arrow',
+      color: 'positive',
+      tooltip: '强制运行',
+      loading: starting.value,
+      disabled: appending.value || resuming.value || stopping.value,
+      run: startSession,
+    };
+  }
+  if (canResume.value) {
+    return {
+      icon: 'restart_alt',
+      color: 'primary',
+      tooltip: '恢复会话',
+      loading: resuming.value,
+      disabled: appending.value || starting.value || stopping.value,
+      run: resumeSession,
+    };
+  }
+  return {
+    icon: 'pause_circle',
+    color: 'grey-7',
+    tooltip: '已暂停',
+    loading: false,
+    disabled: true,
+    run: startSession,
+  };
+});
 const workflowProgressIndeterminate = computed(() =>
   ['starting', 'running', 'waiting_user', 'waiting_approval', 'stopping'].includes(
     session.value?.status ?? '',
@@ -542,13 +612,14 @@ const diffPageMax = computed(() => {
   return Math.max(1, Math.ceil(info.total / info.pageSize));
 });
 
-function eventIcon(kind: SessionEvent['kind']) {
-  const icons: Record<SessionEvent['kind'], string> = {
+function eventIcon(kind: StreamEntry['kind']) {
+  const icons: Record<StreamEntry['kind'], string> = {
     thought: 'psychology',
     tool: 'terminal',
     assistant: 'smart_toy',
     status: 'radio_button_checked',
     question: 'help',
+    user: 'person',
   };
   return icons[kind];
 }
@@ -604,7 +675,6 @@ function closeReasonLabel(value: string) {
 async function loadChangeList() {
   if (!sessionId) return;
   diffLoading.value = true;
-  diffError.value = '';
   try {
     diff.value = await getSessionDiff({
       sessionId,
@@ -614,7 +684,7 @@ async function loadChangeList() {
     });
     diffPage.value = diff.value.pageInfo.page;
   } catch (err) {
-    diffError.value = err instanceof Error ? err.message : '读取 Diff 失败';
+    notifyError(err, '读取 Diff 失败');
   } finally {
     diffLoading.value = false;
   }
@@ -627,14 +697,8 @@ async function openFileDiff(path: string) {
   await loadFileDiff(path);
 }
 
-async function reloadSelectedFileDiff() {
-  if (!selectedFilePath.value) return;
-  await loadFileDiff(selectedFilePath.value);
-}
-
 async function loadFileDiff(path: string) {
   fileDiffLoading.value = true;
-  fileDiffError.value = '';
   try {
     const nextDiff = await getSessionDiff({
       sessionId,
@@ -645,10 +709,26 @@ async function loadFileDiff(path: string) {
     });
     selectedFileDiff.value = nextDiff.fileDiff;
   } catch (err) {
-    fileDiffError.value = err instanceof Error ? err.message : '读取文件 Diff 失败';
+    notifyError(err, '读取文件 Diff 失败');
   } finally {
     fileDiffLoading.value = false;
   }
+}
+
+function notifyError(err: unknown, fallback: string) {
+  if (wasNotified(err)) return;
+  Notify.create({
+    type: 'negative',
+    icon: 'error',
+    position: 'top-right',
+    message: err instanceof Error ? err.message || fallback : fallback,
+    timeout: 5000,
+    actions: [{ icon: 'close', color: 'white', round: true }],
+  });
+}
+
+function wasNotified(err: unknown) {
+  return Boolean(err && typeof err === 'object' && '__anycodeNotified' in err);
 }
 
 function fileIcon(status: DiffFile['status']) {
@@ -678,16 +758,11 @@ async function sendAppend() {
   const text = appendText.value;
   await appendDescription(text);
   appendText.value = '';
-}
-
-async function openAnswerDialog() {
-  await loadPendingQuestions();
-  answerDialog.value = true;
+  appendFiles.value = [];
 }
 
 async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
   await submitPendingAnswers(batchId, answers);
-  answerDialog.value = pendingQuestionBatches.value.length > 0;
 }
 
 watch(tab, (value) => {
@@ -702,6 +777,50 @@ watch(diffPage, () => {
   }
 });
 
+watch(
+  () => loading.value,
+  (value, previous) => {
+    if (!value && previous) {
+      void scrollEventsToBottom();
+    }
+  },
+);
+
+watch(
+  () => events.value.length,
+  (_value, previous) => {
+    if (loadingOlderEvents.value) return;
+    const body = streamBodyRef.value;
+    const shouldStickToBottom =
+      !body || previous === 0 || body.scrollHeight - body.scrollTop - body.clientHeight < 96;
+    if (shouldStickToBottom) {
+      void scrollEventsToBottom();
+    }
+  },
+);
+
+watch(
+  isWaitingForAnswer,
+  (value) => {
+    if (value) {
+      void loadPendingQuestions();
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  session,
+  (value) => {
+    if (!value) return;
+    const nextModel = normalizeCodexModel(value.config.codexModel);
+    composerModel.value = nextModel;
+    composerEffort.value = normalizeReasoningEffort(nextModel, value.config.reasoningEffort);
+    composerPermission.value = normalizePermissionMode(value.config.permissionMode);
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   void loadSessionDetail();
   void loadPendingQuestions();
@@ -711,15 +830,222 @@ onMounted(() => {
 onUnmounted(() => {
   stopLiveUpdates();
 });
+
+async function onEventScroll() {
+  const body = streamBodyRef.value;
+  if (!body || body.scrollTop > 64 || loadingOlderEvents.value) return;
+  const previousHeight = body.scrollHeight;
+  await loadOlderEvents();
+  await nextTick();
+  body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+}
+
+async function scrollEventsToBottom() {
+  await nextTick();
+  const body = streamBodyRef.value;
+  if (!body) return;
+  body.scrollTop = body.scrollHeight;
+}
 </script>
 
 <style scoped>
-.detail-composer {
-  grid-template-rows: minmax(120px, auto) auto;
+.detail-page {
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.detail-composer :deep(.q-card__actions) {
-  padding: 8px 12px 12px;
+.detail-page .page-heading {
+  flex: 0 0 auto;
+}
+
+.detail-page .detail-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.event-panel {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.stream-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stream-card__header {
+  flex: 0 0 auto;
+  padding: 14px 16px;
+}
+
+.stream-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+}
+
+.event-loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  color: var(--ac-text-muted);
+  font-size: 12px;
+}
+
+.stream-card__body .q-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-item {
+  min-height: 0;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface-raised);
+}
+
+.event-body {
+  min-width: 0;
+}
+
+.event-body__text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.right-panel,
+.right-panel-card {
+  min-height: 0;
+  height: 100%;
+}
+
+.right-panel-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-panel-card :deep(.q-tabs) {
+  flex: 0 0 auto;
+}
+
+.right-panel-card :deep(.q-tab-panels) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.detail-composer {
+  display: flex;
+  min-height: 208px;
+  flex-direction: column;
+  padding: 0;
+  background: var(--ac-surface-raised);
+}
+
+.detail-answer-card {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  border-color: var(--ac-border);
+  background: var(--ac-surface-raised);
+}
+
+.detail-answer-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--ac-surface-muted);
+}
+
+.detail-composer__header {
+  padding: 10px 14px;
+}
+
+.detail-composer__input {
+  flex: 1 1 auto;
+  padding: 10px 12px 6px;
+}
+
+.detail-composer__hint {
+  margin-bottom: 6px;
+  color: var(--ac-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.detail-composer__input .prompt-input {
+  min-height: 96px;
+}
+
+.detail-composer__input .prompt-input :deep(.q-field__control) {
+  min-height: 96px;
+  background: transparent;
+}
+
+.detail-composer__input .prompt-input :deep(.q-field__native) {
+  min-height: 72px;
+}
+
+.detail-composer__actions {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--ac-surface-muted) 68%, transparent);
+}
+
+.detail-composer__icon-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 30px;
+  min-height: 30px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface-muted);
+  color: var(--q-primary);
+}
+
+.detail-composer__select {
+  max-width: 180px;
+  background: var(--ac-surface-muted);
+  color: var(--ac-text);
+}
+
+.detail-composer__primary-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 11px;
+}
+
+.detail-composer__status {
+  display: inline-flex;
+  flex: 1 1 180px;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  color: var(--ac-text-muted);
+  font-size: 12px;
 }
 
 .state-block {
@@ -897,6 +1223,42 @@ onUnmounted(() => {
 }
 
 @media (max-width: 699px) {
+  .detail-page {
+    height: 100%;
+  }
+
+  .detail-page .page-heading {
+    gap: 10px;
+  }
+
+  .detail-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .detail-actions :deep(.q-btn) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .detail-actions :deep(.q-btn__content) {
+    gap: 0;
+  }
+
+  .detail-actions :deep(.q-btn__content span:not(.q-icon)) {
+    display: none;
+  }
+
+  .detail-page .detail-grid {
+    gap: 12px;
+  }
+
+  .right-panel {
+    display: none;
+  }
+
   .file-diff-dialog {
     width: 100vw;
     max-width: 100vw;

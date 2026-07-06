@@ -90,6 +90,26 @@ func (_u *ProjectUpdate) ClearDefaultWorkflowID() *ProjectUpdate {
 	return _u
 }
 
+// SetRemovedAt sets the "removed_at" field.
+func (_u *ProjectUpdate) SetRemovedAt(v time.Time) *ProjectUpdate {
+	_u.mutation.SetRemovedAt(v)
+	return _u
+}
+
+// SetNillableRemovedAt sets the "removed_at" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableRemovedAt(v *time.Time) *ProjectUpdate {
+	if v != nil {
+		_u.SetRemovedAt(*v)
+	}
+	return _u
+}
+
+// ClearRemovedAt clears the value of the "removed_at" field.
+func (_u *ProjectUpdate) ClearRemovedAt() *ProjectUpdate {
+	_u.mutation.ClearRemovedAt()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *ProjectUpdate) SetUpdatedAt(v time.Time) *ProjectUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -179,6 +199,12 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.DefaultWorkflowIDCleared() {
 		_spec.ClearField(project.FieldDefaultWorkflowID, field.TypeString)
 	}
+	if value, ok := _u.mutation.RemovedAt(); ok {
+		_spec.SetField(project.FieldRemovedAt, field.TypeTime, value)
+	}
+	if _u.mutation.RemovedAtCleared() {
+		_spec.ClearField(project.FieldRemovedAt, field.TypeTime)
+	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)
 	}
@@ -261,6 +287,26 @@ func (_u *ProjectUpdateOne) SetNillableDefaultWorkflowID(v *string) *ProjectUpda
 // ClearDefaultWorkflowID clears the value of the "default_workflow_id" field.
 func (_u *ProjectUpdateOne) ClearDefaultWorkflowID() *ProjectUpdateOne {
 	_u.mutation.ClearDefaultWorkflowID()
+	return _u
+}
+
+// SetRemovedAt sets the "removed_at" field.
+func (_u *ProjectUpdateOne) SetRemovedAt(v time.Time) *ProjectUpdateOne {
+	_u.mutation.SetRemovedAt(v)
+	return _u
+}
+
+// SetNillableRemovedAt sets the "removed_at" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableRemovedAt(v *time.Time) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetRemovedAt(*v)
+	}
+	return _u
+}
+
+// ClearRemovedAt clears the value of the "removed_at" field.
+func (_u *ProjectUpdateOne) ClearRemovedAt() *ProjectUpdateOne {
+	_u.mutation.ClearRemovedAt()
 	return _u
 }
 
@@ -382,6 +428,12 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if _u.mutation.DefaultWorkflowIDCleared() {
 		_spec.ClearField(project.FieldDefaultWorkflowID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RemovedAt(); ok {
+		_spec.SetField(project.FieldRemovedAt, field.TypeTime, value)
+	}
+	if _u.mutation.RemovedAtCleared() {
+		_spec.ClearField(project.FieldRemovedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(project.FieldUpdatedAt, field.TypeTime, value)

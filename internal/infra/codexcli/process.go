@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 )
@@ -43,6 +45,7 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 		return process.CodexHandle{}, err
 	}
 	cmd := exec.CommandContext(context.Background(), c.Bin(), args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if c.mcpAuthToken != "" {
 		cmd.Env = append(os.Environ(), "ANYCODE_MCP_TOKEN="+c.mcpAuthToken)
 	}
@@ -84,7 +87,15 @@ func (c *Client) Stop(_ context.Context, processRunID process.RunID) error {
 		return ErrProcessNotFound
 	}
 	processRegistry.Delete(processRunID)
-	return active.cmd.Process.Kill()
+	pid := active.cmd.Process.Pid
+	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	return nil
 }
 
 func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan process.CodexEvent, error) {

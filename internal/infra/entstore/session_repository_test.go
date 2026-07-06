@@ -98,8 +98,8 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			Status:      session.StatusStopped,
 			BaseBranch:  "main",
 			LastRunAt:   &historyRun,
-			CreatedAt:   now.Add(-9 * time.Minute),
-			UpdatedAt:   now.Add(-3 * time.Minute),
+			CreatedAt:   now.Add(-6 * 24 * time.Hour),
+			UpdatedAt:   historyRun,
 		},
 		session.Session{
 			ID:          session.ID("session-4"),

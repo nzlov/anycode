@@ -60,6 +60,20 @@ func (_c *ProjectCreate) SetNillableDefaultWorkflowID(v *string) *ProjectCreate 
 	return _c
 }
 
+// SetRemovedAt sets the "removed_at" field.
+func (_c *ProjectCreate) SetRemovedAt(v time.Time) *ProjectCreate {
+	_c.mutation.SetRemovedAt(v)
+	return _c
+}
+
+// SetNillableRemovedAt sets the "removed_at" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableRemovedAt(v *time.Time) *ProjectCreate {
+	if v != nil {
+		_c.SetRemovedAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *ProjectCreate) SetCreatedAt(v time.Time) *ProjectCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -220,6 +234,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)
 		_node.DefaultWorkflowID = &value
+	}
+	if value, ok := _c.mutation.RemovedAt(); ok {
+		_spec.SetField(project.FieldRemovedAt, field.TypeTime, value)
+		_node.RemovedAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(project.FieldCreatedAt, field.TypeTime, value)

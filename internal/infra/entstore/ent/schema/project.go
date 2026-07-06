@@ -19,6 +19,7 @@ func (Project) Fields() []ent.Field {
 		field.String("path").NotEmpty(),
 		field.Bool("is_git").Default(false),
 		field.String("default_workflow_id").Optional().Nillable(),
+		field.Time("removed_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),
 	}

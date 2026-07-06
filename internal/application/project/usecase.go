@@ -17,6 +17,7 @@ type UseCase interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (DTO, error)
 	BrowseDirectory(ctx context.Context, input BrowseDirectoryInput) (DirectoryPageDTO, error)
 	SetDefaultWorkflow(ctx context.Context, input SetDefaultWorkflowInput) (DTO, error)
+	RemoveProject(ctx context.Context, input RemoveProjectInput) error
 	ListProjects(ctx context.Context) ([]DTO, error)
 }
 
@@ -34,12 +35,17 @@ type SetDefaultWorkflowInput struct {
 	WorkflowID domain.WorkflowDefinitionID
 }
 
+type RemoveProjectInput struct {
+	ProjectID domain.ID
+}
+
 type DTO struct {
 	ID                domain.ID
 	Name              string
 	Path              string
 	IsGit             bool
 	DefaultWorkflowID *domain.WorkflowDefinitionID
+	RemovedAt         *time.Time
 	GitState          domain.GitState
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -81,15 +87,29 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 	if err != nil {
 		return DTO{}, fmt.Errorf("detect project git state: %w", err)
 	}
-	id, err := s.generateID()
-	if err != nil {
-		return DTO{}, fmt.Errorf("generate project id: %w", err)
-	}
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		name = filepath.Base(filepath.Clean(projectPath))
 	}
 	now := s.now()
+	existing, ok, err := s.repo.FindByPath(ctx, projectPath)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find project by path: %w", err)
+	}
+	if ok {
+		existing.Name = name
+		existing.IsGit = gitState.IsRepository
+		existing.RemovedAt = nil
+		existing.UpdatedAt = now
+		if err := s.repo.Save(ctx, existing); err != nil {
+			return DTO{}, fmt.Errorf("restore project: %w", err)
+		}
+		return toDTO(existing, gitState), nil
+	}
+	id, err := s.generateID()
+	if err != nil {
+		return DTO{}, fmt.Errorf("generate project id: %w", err)
+	}
 	project := domain.Project{
 		ID:        id,
 		Name:      name,
@@ -133,6 +153,19 @@ func (s *Service) SetDefaultWorkflow(ctx context.Context, input SetDefaultWorkfl
 	return toDTO(project, s.gitState(ctx, project.Path.Value)), nil
 }
 
+func (s *Service) RemoveProject(ctx context.Context, input RemoveProjectInput) error {
+	if s == nil {
+		return errors.New("project usecase: nil service")
+	}
+	if input.ProjectID == "" {
+		return errors.New("project id is required")
+	}
+	if err := s.repo.Remove(ctx, input.ProjectID, s.now()); err != nil {
+		return fmt.Errorf("remove project: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) ListProjects(ctx context.Context) ([]DTO, error) {
 	if s == nil {
 		return nil, errors.New("project usecase: nil service")
@@ -169,6 +202,7 @@ func toDTO(project domain.Project, gitState domain.GitState) DTO {
 		Path:              project.Path.Value,
 		IsGit:             project.IsGit,
 		DefaultWorkflowID: project.DefaultWorkflowID,
+		RemovedAt:         project.RemovedAt,
 		GitState:          gitState,
 		CreatedAt:         project.CreatedAt,
 		UpdatedAt:         project.UpdatedAt,

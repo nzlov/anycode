@@ -42,6 +42,30 @@ export interface GetSessionDiffInput {
   pageSize: number;
 }
 
+export interface GetBranchDiffInput {
+  projectId: string;
+  branch: string;
+  mode: DiffMode;
+  filePath?: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface CommitRecord {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  authorName: string;
+  authorEmail: string;
+  createdAt: string;
+}
+
+export interface SessionCommitHistory {
+  commits: CommitRecord[];
+  pageInfo: PageInfo;
+  available: boolean;
+}
+
 interface GraphQLDiffFile {
   path: string;
   status: string;
@@ -76,6 +100,14 @@ interface GraphQLSessionDiff {
   };
   fileDiff: GraphQLFileDiff | null;
   allDiff: GraphQLFileDiff[];
+}
+
+interface GraphQLSessionCommitHistory {
+  available: boolean;
+  commits: {
+    items: CommitRecord[];
+    pageInfo: PageInfo;
+  };
 }
 
 export async function getSessionDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
@@ -170,6 +202,135 @@ export async function getSessionDiff(input: GetSessionDiffInput): Promise<Sessio
   });
 
   return normalizeSessionDiff(data.sessionDiff);
+}
+
+export async function getBranchDiff(input: GetBranchDiffInput): Promise<SessionDiff> {
+  const variablesInput: {
+    projectId: string;
+    branch: string;
+    mode: DiffMode;
+    filePath?: string;
+    page: number;
+    pageSize: number;
+  } = {
+    projectId: input.projectId,
+    branch: input.branch,
+    mode: input.mode,
+    page: input.page,
+    pageSize: input.pageSize,
+  };
+  if (input.filePath) {
+    variablesInput.filePath = input.filePath;
+  }
+
+  const data = await graphqlFetch<
+    { branchDiff: GraphQLSessionDiff },
+    { input: typeof variablesInput }
+  >({
+    query: `
+      query BranchDiff($input: BranchDiffInput!) {
+        branchDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            items {
+              path
+              status
+              additions
+              deletions
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
+            }
+          }
+          fileDiff {
+            file {
+              path
+              status
+              additions
+              deletions
+            }
+            hunks {
+              header
+              oldStart
+              newStart
+              lines {
+                kind
+                content
+              }
+            }
+          }
+          allDiff {
+            file {
+              path
+              status
+              additions
+              deletions
+            }
+            hunks {
+              header
+              oldStart
+              newStart
+              lines {
+                kind
+                content
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      input: variablesInput,
+    },
+  });
+
+  return normalizeSessionDiff(data.branchDiff);
+}
+
+export async function getSessionCommitHistory(input: {
+  sessionId: string;
+  page: number;
+  pageSize: number;
+}): Promise<SessionCommitHistory> {
+  const data = await graphqlFetch<
+    { sessionCommitHistory: GraphQLSessionCommitHistory },
+    { input: { sessionId: string; page: number; pageSize: number } }
+  >({
+    query: `
+      query SessionCommitHistory($input: SessionCommitHistoryInput!) {
+        sessionCommitHistory(input: $input) {
+          available
+          commits {
+            items {
+              hash
+              shortHash
+              subject
+              authorName
+              authorEmail
+              createdAt
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
+            }
+          }
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return {
+    available: data.sessionCommitHistory.available,
+    commits: data.sessionCommitHistory.commits.items,
+    pageInfo: data.sessionCommitHistory.commits.pageInfo,
+  };
 }
 
 function normalizeSessionDiff(diff: GraphQLSessionDiff): SessionDiff {

@@ -13,22 +13,22 @@ export const themeModes: Array<{ label: string; value: ThemeMode; icon: string }
 export const themeTokens = {
   quasar: {
     primary: '#2563eb',
-    secondary: '#0f766e',
+    secondary: '#0f172a',
     accent: '#22c55e',
-    positive: '#16a34a',
-    negative: '#dc2626',
-    warning: '#d97706',
+    positive: '#22c55e',
+    negative: '#b91c1c',
+    warning: '#f59e0b',
     info: '#0284c7',
   },
   surfaces: {
     light: {
       surface: '#ffffff',
-      surfaceMuted: '#f8fafc',
+      surfaceMuted: '#f6f8fb',
       surfaceRaised: '#ffffff',
-      border: '#dbe3ef',
+      border: '#d9e0ea',
       text: '#0f172a',
       textMuted: '#64748b',
-      sidebar: '#0f172a',
+      sidebar: '#111827',
       sidebarBorder: '#1e293b',
     },
     dark: {

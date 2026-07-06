@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 
-import { createProject, listProjects, type ProjectSummary } from '@/services/projects';
+import { createProject, listProjects, removeProject, type ProjectSummary } from '@/services/projects';
 
 const projects = ref<ProjectSummary[]>([]);
 const loading = ref(false);
@@ -36,6 +36,11 @@ export function useProjects() {
     return project;
   }
 
+  async function removeProjectById(id: string) {
+    await removeProject(id);
+    projects.value = projects.value.filter((project) => project.id !== id);
+  }
+
   return {
     projects,
     projectOptions,
@@ -43,6 +48,7 @@ export function useProjects() {
     loaded,
     loadProjects,
     createProjectFromPath,
+    removeProjectById,
   };
 }
 

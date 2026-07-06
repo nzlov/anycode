@@ -10,6 +10,8 @@ type Query {
   session(id: ID!): SessionDetail!
   sessionEvents(input: ListSessionEventsInput!): SessionEventPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
+  branchDiff(input: BranchDiffInput!): SessionDiff!
+  sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
@@ -17,6 +19,7 @@ type Query {
 
 type Mutation {
   createProject(input: CreateProjectInput!): Project!
+  removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
   startSession(id: ID!): Session!
@@ -233,6 +236,25 @@ type DiffLine {
   content: String!
 }
 
+type SessionCommitHistory {
+  commits: CommitRecordPage!
+  available: Boolean!
+}
+
+type CommitRecordPage {
+  items: [CommitRecord!]!
+  pageInfo: PageInfo!
+}
+
+type CommitRecord {
+  hash: String!
+  shortHash: String!
+  subject: String!
+  authorName: String!
+  authorEmail: String!
+  createdAt: String!
+}
+
 type WorkflowDefinition {
   id: ID!
   projectId: ID!
@@ -388,6 +410,21 @@ input SessionDiffInput {
   sessionId: ID!
   mode: String
   filePath: String
+  page: Int
+  pageSize: Int
+}
+
+input BranchDiffInput {
+  projectId: ID!
+  branch: String!
+  mode: String
+  filePath: String
+  page: Int
+  pageSize: Int
+}
+
+input SessionCommitHistoryInput {
+  sessionId: ID!
   page: Int
   pageSize: Int
 }

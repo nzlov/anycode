@@ -1,3 +1,5 @@
+import { Notify } from 'quasar';
+
 export const GRAPHQL_ACCESS_KEY_STORAGE_KEY = 'anycode.accessKey';
 
 interface GraphQLErrorPayload {
@@ -70,6 +72,12 @@ export function setGraphQLAccessKey(accessKey: string) {
   window.localStorage.setItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY, accessKey.trim());
 }
 
+export function clearGraphQLAccessKey() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY);
+  window.localStorage.removeItem('ANYCODE_ACCESS_KEY');
+}
+
 function graphqlHeaders(contentType?: string) {
   const headers = new Headers();
   if (contentType) {
@@ -101,21 +109,71 @@ export async function graphqlFetch<
   TData,
   TVariables extends Record<string, unknown> = Record<string, unknown>,
 >({ query, variables, operationName }: GraphQLRequest<TVariables>) {
-  const response = await fetch(graphqlEndpoint, {
-    method: 'POST',
-    headers: graphqlHeaders('application/json'),
-    body: JSON.stringify({ query, variables, operationName }),
-  });
-  return parseGraphQLResponse<TData>(response);
+  try {
+    const response = await fetch(graphqlEndpoint, {
+      method: 'POST',
+      headers: graphqlHeaders('application/json'),
+      body: JSON.stringify({ query, variables, operationName }),
+    });
+    return await parseGraphQLResponse<TData>(response);
+  } catch (err) {
+    notifyRequestError(err);
+    throw err;
+  }
 }
 
 export async function graphqlMultipartFetch<TData>(body: FormData) {
-  const response = await fetch(graphqlEndpoint, {
-    method: 'POST',
-    headers: graphqlHeaders(),
-    body,
+  try {
+    const response = await fetch(graphqlEndpoint, {
+      method: 'POST',
+      headers: graphqlHeaders(),
+      body,
+    });
+    return await parseGraphQLResponse<TData>(response);
+  } catch (err) {
+    notifyRequestError(err);
+    throw err;
+  }
+}
+
+function notifyRequestError(err: unknown) {
+  if (typeof window === 'undefined') return;
+  if (isNotifiedError(err)) return;
+  const message = err instanceof AnyCodeGraphQLError && err.userAction ? err.userAction : errorMessage(err);
+  Notify.create({
+    type: 'negative',
+    icon: 'error',
+    position: 'top-right',
+    message,
+    timeout: 5000,
+    actions: [{ icon: 'close', color: 'white', round: true }],
   });
-  return parseGraphQLResponse<TData>(response);
+  markNotified(err);
+}
+
+function errorMessage(err: unknown) {
+  if (err instanceof Error) return err.message || '请求失败';
+  if (typeof err === 'string') return err || '请求失败';
+  return '请求失败';
+}
+
+function isNotifiedError(err: unknown) {
+  return Boolean(err && typeof err === 'object' && '__anycodeNotified' in err);
+}
+
+function markNotified(err: unknown) {
+  if (!err || typeof err !== 'object') return;
+  Object.defineProperty(err, '__anycodeNotified', {
+    configurable: true,
+    value: true,
+  });
+}
+
+export async function verifyGraphQLAccessKey(accessKey: string) {
+  const response = await fetch('/api/healthz', {
+    headers: { authorization: `Bearer ${accessKey.trim()}` },
+  });
+  return response.ok;
 }
 
 export function graphqlSubscribe<
@@ -163,7 +221,7 @@ export function graphqlSubscribe<
     if (message.type === 'next' && message.id === subscriptionID) {
       const payload = message.payload as GraphQLResponse<TData>;
       if (payload.errors?.length) {
-        onError?.(new AnyCodeGraphQLError(payload.errors));
+        handleSubscriptionError(new AnyCodeGraphQLError(payload.errors), onError);
         return;
       }
       if (payload.data) {
@@ -172,7 +230,7 @@ export function graphqlSubscribe<
       return;
     }
     if (message.type === 'error' && message.id === subscriptionID) {
-      onError?.(new Error(JSON.stringify(message.payload ?? 'GraphQL subscription error')));
+      handleSubscriptionError(new Error(subscriptionErrorMessage(message.payload)), onError);
       return;
     }
     if (message.type === 'complete' && message.id === subscriptionID) {
@@ -187,7 +245,7 @@ export function graphqlSubscribe<
 
   socket.addEventListener('error', () => {
     if (!completed) {
-      onError?.(new Error('GraphQL subscription connection failed'));
+      handleSubscriptionError(new Error('GraphQL subscription connection failed'), onError);
     }
   });
 
@@ -206,6 +264,20 @@ export function graphqlSubscribe<
       socket.close();
     },
   };
+}
+
+function handleSubscriptionError(error: Error, onError?: (error: Error) => void) {
+  notifyRequestError(error);
+  onError?.(error);
+}
+
+function subscriptionErrorMessage(payload: unknown) {
+  if (typeof payload === 'string') return payload;
+  if (payload && typeof payload === 'object' && 'message' in payload) {
+    const message = (payload as { message?: unknown }).message;
+    if (typeof message === 'string' && message) return message;
+  }
+  return 'GraphQL subscription error';
 }
 
 function graphqlWebSocketURL() {

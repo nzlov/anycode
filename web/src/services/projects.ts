@@ -5,7 +5,9 @@ export interface ProjectSummary {
   name: string;
   path: string;
   active: boolean;
+  isGit: boolean;
   defaultBranch: string;
+  branches: string[];
   defaultWorkflowId: string;
   openSessions: number;
 }
@@ -32,6 +34,7 @@ interface GraphQLProject {
   path: string;
   defaultWorkflowId?: string | null;
   gitState: {
+    isRepository: boolean;
     currentBranch: string;
     branches: {
       name: string;
@@ -55,6 +58,7 @@ const projectFields = `
   path
   defaultWorkflowId
   gitState {
+    isRepository
     currentBranch
     branches {
       name
@@ -125,6 +129,18 @@ export async function createProject(input: { path: string; name: string }) {
   return normalizeProject(data.createProject, false);
 }
 
+export async function removeProject(id: string) {
+  const data = await graphqlFetch<{ removeProject: boolean }, { id: string }>({
+    query: `
+      mutation RemoveProject($id: ID!) {
+        removeProject(id: $id)
+      }
+    `,
+    variables: { id },
+  });
+  return data.removeProject;
+}
+
 function normalizeProjects(projects: GraphQLProject[]) {
   return projects.map((project, index) => normalizeProject(project, index === 0));
 }
@@ -136,13 +152,19 @@ function normalizeProject(project: GraphQLProject, active: boolean): ProjectSumm
     project.gitState.branches.find((branch) => branch.isCurrent)?.name ||
     project.gitState.branches[0]?.name ||
     'main';
+  const branches = Array.from(new Set(project.gitState.branches.map((branch) => branch.name).filter(Boolean)));
+  if (!branches.includes(defaultBranch)) {
+    branches.unshift(defaultBranch);
+  }
 
   return {
     id: project.id,
     name: project.name,
     path: project.path,
     active,
+    isGit: project.gitState.isRepository,
     defaultBranch,
+    branches,
     defaultWorkflowId: project.defaultWorkflowId ?? '',
     openSessions: 0,
   };

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
@@ -183,8 +184,122 @@ func TestGetSessionDiffUsesMergeRecordRangeWhenWorktreeWasCleaned(t *testing.T) 
 	}
 }
 
+func TestGetBranchDiffAggregatesSessionWorktreesForProjectBranch(t *testing.T) {
+	ctx := context.Background()
+	diffPort := &fakeDiffPort{
+		filesByWorktreePath: map[string][]gitdiff.DiffFile{
+			"/worktrees/session-1": {{Path: "a.go", Status: "modified", Additions: 1}},
+			"/worktrees/session-2": {{Path: "b.go", Status: "added", Additions: 2}},
+			"/worktrees/session-3": {{Path: "ignored.go", Status: "added", Additions: 1}},
+		},
+		fileDiffs: map[string]gitdiff.FileDiff{
+			"a.go": {File: gitdiff.DiffFile{Path: "a.go", Status: "modified"}},
+			"b.go": {File: gitdiff.DiffFile{Path: "b.go", Status: "added"}},
+		},
+	}
+	service := New(
+		&fakeSessionRepository{
+			sessions: []sessiondomain.Session{
+				{ID: "session-1", ProjectID: "project-1", BaseBranch: "main", WorktreePath: "/worktrees/session-1"},
+				{ID: "session-2", ProjectID: "project-1", BaseBranch: "main", WorktreePath: "/worktrees/session-2"},
+				{ID: "session-3", ProjectID: "project-1", BaseBranch: "feature", WorktreePath: "/worktrees/session-3"},
+			},
+		},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true, Path: projectdomain.ProjectPath{Value: "/repo"}}},
+		diffPort,
+	)
+
+	got, err := service.GetBranchDiff(ctx, BranchDiffInput{ProjectID: "project-1", Branch: "main", Mode: "all"})
+	if err != nil {
+		t.Fatalf("GetBranchDiff() error = %v", err)
+	}
+	if !got.Available || got.Files.Total != 2 || len(got.AllDiff) != 2 {
+		t.Fatalf("GetBranchDiff() = %#v", got)
+	}
+	if got.Files.Items[0].Path != "session-1: a.go" || got.Files.Items[1].Path != "session-2: b.go" {
+		t.Fatalf("prefixed files = %#v", got.Files.Items)
+	}
+	if !reflect.DeepEqual(diffPort.changedFileCalls, []string{"/worktrees/session-1", "/worktrees/session-2"}) {
+		t.Fatalf("changed file calls = %#v", diffPort.changedFileCalls)
+	}
+}
+
+func TestGetBranchDiffIgnoresOtherBranches(t *testing.T) {
+	ctx := context.Background()
+	diffPort := &fakeDiffPort{
+		filesByWorktreePath: map[string][]gitdiff.DiffFile{
+			"/worktrees/session-1": {{Path: "a.go", Status: "modified"}},
+		},
+	}
+	service := New(
+		&fakeSessionRepository{
+			sessions: []sessiondomain.Session{
+				{ID: "session-1", ProjectID: "project-1", BaseBranch: "feature", WorktreePath: "/worktrees/session-1"},
+			},
+		},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true, Path: projectdomain.ProjectPath{Value: "/repo"}}},
+		diffPort,
+	)
+
+	got, err := service.GetBranchDiff(ctx, BranchDiffInput{ProjectID: "project-1", Branch: "main"})
+	if err != nil {
+		t.Fatalf("GetBranchDiff() error = %v", err)
+	}
+	if !got.Available || got.Files.Total != 0 {
+		t.Fatalf("GetBranchDiff() = %#v", got)
+	}
+	if len(diffPort.changedFileCalls) != 0 {
+		t.Fatalf("ChangedFiles should not be called, got paths %#v", diffPort.changedFileCalls)
+	}
+}
+
+func TestGetCommitHistoryReturnsPagedCommits(t *testing.T) {
+	ctx := context.Background()
+	diffPort := &fakeDiffPort{
+		commits: []gitdiff.CommitRecord{
+			{Hash: "commit-3", Subject: "third"},
+			{Hash: "commit-2", Subject: "second"},
+			{Hash: "commit-1", Subject: "first"},
+		},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", BaseBranch: "main"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
+		diffPort,
+	)
+
+	got, err := service.GetCommitHistory(ctx, CommitHistoryInput{SessionID: "session-1", Page: 2, PageSize: 2})
+	if err != nil {
+		t.Fatalf("GetCommitHistory() error = %v", err)
+	}
+	if !got.Available || got.Commits.Total != 3 || len(got.Commits.Items) != 1 || got.Commits.Items[0].Hash != "commit-1" {
+		t.Fatalf("GetCommitHistory() = %#v", got)
+	}
+	if diffPort.lastCommitWorktreePath != "/repo" || diffPort.lastCommitBaseRef != "main" || diffPort.lastCommitHeadRef != "HEAD" {
+		t.Fatalf("commit input = path %q base %q head %q", diffPort.lastCommitWorktreePath, diffPort.lastCommitBaseRef, diffPort.lastCommitHeadRef)
+	}
+}
+
+func TestGetCommitHistoryReturnsUnavailableForNonGitProject(t *testing.T) {
+	ctx := context.Background()
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: false}},
+		&fakeDiffPort{},
+	)
+
+	got, err := service.GetCommitHistory(ctx, CommitHistoryInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("GetCommitHistory() error = %v", err)
+	}
+	if got.Available || got.Commits.Total != 0 {
+		t.Fatalf("GetCommitHistory() = %#v", got)
+	}
+}
+
 type fakeSessionRepository struct {
 	session        sessiondomain.Session
+	sessions       []sessiondomain.Session
 	mergeRecord    sessiondomain.MergeRecord
 	hasMergeRecord bool
 }
@@ -198,8 +313,31 @@ func (r *fakeSessionRepository) Find(_ context.Context, id sessiondomain.ID) (se
 	return r.session, nil
 }
 
-func (r *fakeSessionRepository) ListCards(context.Context, sessiondomain.ListQuery) ([]sessiondomain.Session, int, error) {
-	return nil, 0, nil
+func (r *fakeSessionRepository) ListCards(_ context.Context, query sessiondomain.ListQuery) ([]sessiondomain.Session, int, error) {
+	page := query.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize < 1 {
+		pageSize = len(r.sessions)
+	}
+	filtered := make([]sessiondomain.Session, 0, len(r.sessions))
+	for _, session := range r.sessions {
+		if query.ProjectID != nil && session.ProjectID != *query.ProjectID {
+			continue
+		}
+		filtered = append(filtered, session)
+	}
+	start := (page - 1) * pageSize
+	if start >= len(filtered) {
+		return []sessiondomain.Session{}, len(filtered), nil
+	}
+	end := start + pageSize
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[start:end], len(filtered), nil
 }
 
 func (r *fakeSessionRepository) ListInterruptedWithCodexSession(context.Context) ([]sessiondomain.Session, error) {
@@ -239,8 +377,16 @@ func (r *fakeProjectRepository) Find(_ context.Context, id projectdomain.ID) (pr
 	return r.project, nil
 }
 
+func (r *fakeProjectRepository) FindByPath(context.Context, string) (projectdomain.Project, bool, error) {
+	return projectdomain.Project{}, false, nil
+}
+
 func (r *fakeProjectRepository) List(context.Context) ([]projectdomain.Project, error) {
 	return nil, nil
+}
+
+func (r *fakeProjectRepository) Remove(context.Context, projectdomain.ID, time.Time) error {
+	return nil
 }
 
 func (r *fakeProjectRepository) UpdateDefaultWorkflow(context.Context, projectdomain.ID, projectdomain.WorkflowDefinitionID) error {
@@ -248,20 +394,38 @@ func (r *fakeProjectRepository) UpdateDefaultWorkflow(context.Context, projectdo
 }
 
 type fakeDiffPort struct {
-	files             []gitdiff.DiffFile
-	fileDiffs         map[string]gitdiff.FileDiff
-	rangeDiff         gitdiff.SessionDiff
-	fileDiffCalls     []string
-	lastWorktreePath  string
-	lastBaseRef       string
-	lastRangeRepoPath string
-	lastRangeBaseRef  string
-	lastRangeHeadRef  string
+	currentBranch          string
+	files                  []gitdiff.DiffFile
+	filesByWorktreePath    map[string][]gitdiff.DiffFile
+	fileDiffs              map[string]gitdiff.FileDiff
+	rangeDiff              gitdiff.SessionDiff
+	commits                []gitdiff.CommitRecord
+	fileDiffCalls          []string
+	changedFileCalls       []string
+	lastWorktreePath       string
+	lastBaseRef            string
+	lastRangeRepoPath      string
+	lastRangeBaseRef       string
+	lastRangeHeadRef       string
+	lastCommitWorktreePath string
+	lastCommitBaseRef      string
+	lastCommitHeadRef      string
+}
+
+func (p *fakeDiffPort) CurrentBranch(context.Context, string) (string, error) {
+	if p.currentBranch == "" {
+		return "main", nil
+	}
+	return p.currentBranch, nil
 }
 
 func (p *fakeDiffPort) ChangedFiles(_ context.Context, input gitdiff.DiffInput) ([]gitdiff.DiffFile, error) {
 	p.lastWorktreePath = input.WorktreePath
 	p.lastBaseRef = input.BaseRef
+	p.changedFileCalls = append(p.changedFileCalls, input.WorktreePath)
+	if p.filesByWorktreePath != nil {
+		return p.filesByWorktreePath[input.WorktreePath], nil
+	}
 	return p.files, nil
 }
 
@@ -278,4 +442,11 @@ func (p *fakeDiffPort) RangeDiff(_ context.Context, input gitdiff.RangeDiffInput
 	p.lastRangeBaseRef = input.BaseRef
 	p.lastRangeHeadRef = input.HeadRef
 	return p.rangeDiff, nil
+}
+
+func (p *fakeDiffPort) CommitHistory(_ context.Context, input gitdiff.CommitHistoryInput) ([]gitdiff.CommitRecord, error) {
+	p.lastCommitWorktreePath = input.WorktreePath
+	p.lastCommitBaseRef = input.BaseRef
+	p.lastCommitHeadRef = input.HeadRef
+	return p.commits, nil
 }

@@ -25,9 +25,12 @@ export interface SessionCard {
   status: SessionStatus;
   branch: string;
   node: string;
+  createdAt: string;
+  createdTime: string;
   updatedAt: string;
   pendingQuestion: boolean;
   filesChanged: number;
+  availableActions: string[];
 }
 
 export interface SessionDetail extends SessionCard {
@@ -56,6 +59,7 @@ export interface SessionEvent {
   rawType: string;
   title: string;
   body: string;
+  createdAt: string;
   time: string;
 }
 
@@ -119,6 +123,7 @@ export interface SessionPage {
 export interface SessionDetailData {
   session: SessionDetail;
   events: SessionEvent[];
+  eventsPageInfo: PageInfo;
 }
 
 export interface SessionEventsSubscriptionInput {
@@ -161,6 +166,7 @@ interface GraphQLSessionCard {
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
+  availableActions: string[];
 }
 
 interface GraphQLSessionDetail {
@@ -278,6 +284,7 @@ const sessionFields = `
     reasoningEffort
     permissionMode
   }
+  availableActions
   lastRunAt
   createdAt
   updatedAt
@@ -336,46 +343,70 @@ export async function listSessions(input: ListSessionsInput = {}): Promise<Sessi
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
-  const [sessionData, eventsData] = await Promise.all([
-    graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
-      query: `
-        query Session($id: ID!) {
-          session(id: $id) {
-            ${sessionDetailFields}
-          }
+  const sessionData = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
+    query: `
+      query Session($id: ID!) {
+        session(id: $id) {
+          ${sessionDetailFields}
         }
-      `,
-      variables: { id: sessionId },
-    }),
-    graphqlFetch<
-      { sessionEvents: { items: GraphQLSessionEvent[]; pageInfo: GraphQLPageInfo } },
-      { input: { sessionId: string; page: number; pageSize: number } }
-    >({
-      query: `
-        query SessionEvents($input: ListSessionEventsInput!) {
-          sessionEvents(input: $input) {
-            items {
-              id
-              type
-              payload
-              createdAt
-            }
-            pageInfo {
-              page
-              pageSize
-              total
-              nextCursor
-            }
-          }
-        }
-      `,
-      variables: { input: { sessionId, page: 1, pageSize: 50 } },
-    }),
-  ]);
+      }
+    `,
+    variables: { id: sessionId },
+  });
+  const probe = await getSessionEventPage(sessionId, 1, 1);
+  const eventPageSize = 50;
+  const lastPage = Math.max(1, Math.ceil(probe.pageInfo.total / eventPageSize));
+  const eventsData = await getSessionEventPage(sessionId, lastPage, eventPageSize);
 
   return {
     session: normalizeSessionDetail(sessionData.session),
-    events: eventsData.sessionEvents.items.map(normalizeSessionEvent),
+    events: eventsData.items,
+    eventsPageInfo: eventsData.pageInfo,
+  };
+}
+
+export async function getSession(sessionId: string): Promise<SessionDetail> {
+  const data = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
+    query: `
+      query SessionProject($id: ID!) {
+        session(id: $id) {
+          ${sessionDetailFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+  });
+  return normalizeSessionDetail(data.session);
+}
+
+export async function getSessionEventPage(sessionId: string, page: number, pageSize: number) {
+  const data = await graphqlFetch<
+    { sessionEvents: { items: GraphQLSessionEvent[]; pageInfo: GraphQLPageInfo } },
+    { input: { sessionId: string; page: number; pageSize: number } }
+  >({
+    query: `
+      query SessionEvents($input: ListSessionEventsInput!) {
+        sessionEvents(input: $input) {
+          items {
+            id
+            type
+            payload
+            createdAt
+          }
+          pageInfo {
+            page
+            pageSize
+            total
+            nextCursor
+          }
+        }
+      }
+    `,
+    variables: { input: { sessionId, page, pageSize } },
+  });
+  return {
+    items: data.sessionEvents.items.map(normalizeSessionEvent),
+    pageInfo: data.sessionEvents.pageInfo,
   };
 }
 
@@ -597,9 +628,12 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     status: normalizeStatus(session.status),
     branch: session.baseBranch || 'main',
     node: session.currentNodeTitle || statusNode(normalizeStatus(session.status)),
+    createdAt: session.createdAt,
+    createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: session.pendingQuestion,
     filesChanged: 0,
+    availableActions: [],
   };
 }
 
@@ -615,6 +649,8 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     status,
     branch: session.baseBranch || 'main',
     node: session.currentNodeTitle || statusNode(status),
+    createdAt: session.createdAt,
+    createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
     filesChanged: 0,
@@ -648,24 +684,93 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     status,
     branch: session.baseBranch || 'main',
     node: statusNode(status),
+    createdAt: session.createdAt,
+    createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
     filesChanged: 0,
+    availableActions: [],
   };
 }
 
 function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
+  const readable = readableEventPayload(event.type, event.payload);
   return {
     id: event.id,
     kind: eventKind(event.type),
     rawType: event.type,
-    title: stringPayload(event.payload, 'title') || eventTitle(event.type),
-    body:
-      stringPayload(event.payload, 'body') ||
-      stringPayload(event.payload, 'message') ||
-      JSON.stringify(event.payload),
+    title: readable.title || stringPayload(event.payload, 'title') || eventTitle(event.type),
+    body: readable.body || stringPayload(event.payload, 'body') || stringPayload(event.payload, 'message'),
+    createdAt: event.createdAt,
     time: formatEventTime(event.createdAt),
   };
+}
+
+function readableEventPayload(type: string, payload: Record<string, unknown>) {
+  if (type === 'process.codex_event') {
+    return readableCodexEvent(payload);
+  }
+
+  const status = stringPayload(payload, 'status');
+  const reason = stringPayload(payload, 'reason');
+  const blockedReason = stringPayload(payload, 'blockedReason');
+  const exitCode = numberPayload(payload, 'exitCode');
+  const failure = stringPayload(payload, 'failureReason');
+
+  if (type === 'session.waiting_user') return { title: '待回答', body: 'Codex 正在等待用户回答。' };
+  if (type === 'session.running') {
+    return { title: '运行中', body: reason ? statusText(reason) : '会话正在运行。' };
+  }
+  if (type === 'session.stopped') return { title: '已停止', body: failure || '会话已停止。' };
+  if (type === 'session.stopping') return { title: '停止中', body: '正在停止 Codex 进程。' };
+  if (type === 'session.started') return { title: '已启动', body: 'Codex 进程已启动。' };
+  if (type === 'process.exited') {
+    return {
+      title: '进程退出',
+      body: exitCode === null ? failure || 'Codex 进程已退出。' : `退出码 ${exitCode}${failure ? `，${failure}` : ''}`,
+    };
+  }
+  if (type.startsWith('workflow.')) {
+    return { title: workflowEventTitle(type), body: blockedReason || statusText(status) };
+  }
+  if (status) return { title: eventTitle(type), body: statusText(status) };
+
+  return { title: '', body: compactPayload(payload) };
+}
+
+function readableCodexEvent(payload: Record<string, unknown>) {
+  const codexType = stringPayload(payload, 'codexType');
+  const status = stringPayload(payload, 'status');
+  const item = objectPayload(payload, 'item');
+  const itemType = stringPayload(item, 'type');
+  const output = stringPayload(item, 'aggregated_output');
+  const command = stringPayload(item, 'command');
+  const exitCode = numberPayload(item, 'exit_code');
+
+  if (codexType === 'thread.started') {
+    const threadID = stringPayload(payload, 'thread_id') || stringPayload(parseRaw(payload), 'thread_id');
+    return { title: '线程已创建', body: threadID ? `线程 ${threadID}` : statusText(status) };
+  }
+  if (codexType === 'turn.started') return { title: '开始执行', body: statusText(status) || 'Codex 开始处理当前请求。' };
+  if (codexType === 'item.started') {
+    if (itemType === 'command_execution') {
+      return { title: '执行命令', body: command || 'Codex 正在执行命令。' };
+    }
+    return { title: itemEventTitle(itemType, '开始'), body: compactPayload(item) || statusText(status) };
+  }
+  if (codexType === 'item.completed') {
+    if (itemType === 'command_execution') {
+      const prefix = exitCode === null ? '命令完成' : `命令完成，退出码 ${exitCode}`;
+      return { title: '命令结果', body: [prefix, output].filter(Boolean).join('\n') };
+    }
+    return { title: itemEventTitle(itemType, '完成'), body: output || compactPayload(item) || statusText(status) };
+  }
+  if (codexType === 'turn.completed') return { title: '本轮完成', body: statusText(status) || 'Codex 已完成本轮处理。' };
+  if (codexType === 'error') {
+    return { title: 'Codex 错误', body: stringPayload(payload, 'message') || compactPayload(payload) };
+  }
+
+  return { title: codexType ? codexType.replaceAll('.', ' ') : 'Codex 事件', body: compactPayload(payload) };
 }
 
 function normalizeMode(mode: string): SessionMode {
@@ -727,9 +832,77 @@ function statusNode(status: SessionStatus) {
   return labels[status];
 }
 
+function workflowEventTitle(type: string) {
+  if (type.includes('waiting_approval')) return '等待审批';
+  if (type.includes('started')) return '流程开始';
+  if (type.includes('completed')) return '流程完成';
+  if (type.includes('blocked')) return '流程阻塞';
+  if (type.includes('failed')) return '流程失败';
+  return '流程事件';
+}
+
+function itemEventTitle(type: string, suffix: string) {
+  if (type === 'message') return `模型输出${suffix}`;
+  if (type === 'reasoning') return `思考${suffix}`;
+  if (type === 'tool_call') return `工具调用${suffix}`;
+  if (type === 'command_execution') return `命令${suffix}`;
+  return `事件${suffix}`;
+}
+
+function statusText(value: string) {
+  const labels: Record<string, string> = {
+    created: '已创建',
+    starting: '启动中',
+    running: '运行中',
+    waiting_user: '等待用户回答',
+    waiting_approval: '等待人工审批',
+    stopping: '停止中',
+    stopped: '已停止',
+    completed: '已完成',
+    failed: '失败',
+    blocked: '阻塞',
+    user_answered: '用户已回答，继续运行。',
+  };
+  return labels[value] ?? value;
+}
+
 function stringPayload(payload: Record<string, unknown>, key: string) {
   const value = payload[key];
   return typeof value === 'string' ? value : '';
+}
+
+function numberPayload(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === 'number' ? value : null;
+}
+
+function objectPayload(payload: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = payload[key];
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function parseRaw(payload: Record<string, unknown>) {
+  const raw = stringPayload(payload, 'raw');
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function compactPayload(payload: Record<string, unknown>) {
+  const parts = Object.entries(payload)
+    .filter(([key]) => !['raw', 'processRunId', 'codexEventId'].includes(key))
+    .map(([key, value]) => {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return `${key}: ${value}`;
+      }
+      return '';
+    })
+    .filter(Boolean);
+  return parts.join(' · ');
 }
 
 function firstLine(value: string) {

@@ -4069,6 +4069,7 @@ type ProjectMutation struct {
 	_path               *string
 	is_git              *bool
 	default_workflow_id *string
+	removed_at          *time.Time
 	created_at          *time.Time
 	updated_at          *time.Time
 	clearedFields       map[string]struct{}
@@ -4338,6 +4339,55 @@ func (m *ProjectMutation) ResetDefaultWorkflowID() {
 	delete(m.clearedFields, project.FieldDefaultWorkflowID)
 }
 
+// SetRemovedAt sets the "removed_at" field.
+func (m *ProjectMutation) SetRemovedAt(t time.Time) {
+	m.removed_at = &t
+}
+
+// RemovedAt returns the value of the "removed_at" field in the mutation.
+func (m *ProjectMutation) RemovedAt() (r time.Time, exists bool) {
+	v := m.removed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemovedAt returns the old "removed_at" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldRemovedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemovedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemovedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemovedAt: %w", err)
+	}
+	return oldValue.RemovedAt, nil
+}
+
+// ClearRemovedAt clears the value of the "removed_at" field.
+func (m *ProjectMutation) ClearRemovedAt() {
+	m.removed_at = nil
+	m.clearedFields[project.FieldRemovedAt] = struct{}{}
+}
+
+// RemovedAtCleared returns if the "removed_at" field was cleared in this mutation.
+func (m *ProjectMutation) RemovedAtCleared() bool {
+	_, ok := m.clearedFields[project.FieldRemovedAt]
+	return ok
+}
+
+// ResetRemovedAt resets all changes to the "removed_at" field.
+func (m *ProjectMutation) ResetRemovedAt() {
+	m.removed_at = nil
+	delete(m.clearedFields, project.FieldRemovedAt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *ProjectMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -4444,7 +4494,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 7)
 	if m.name != nil {
 		fields = append(fields, project.FieldName)
 	}
@@ -4456,6 +4506,9 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.default_workflow_id != nil {
 		fields = append(fields, project.FieldDefaultWorkflowID)
+	}
+	if m.removed_at != nil {
+		fields = append(fields, project.FieldRemovedAt)
 	}
 	if m.created_at != nil {
 		fields = append(fields, project.FieldCreatedAt)
@@ -4479,6 +4532,8 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.IsGit()
 	case project.FieldDefaultWorkflowID:
 		return m.DefaultWorkflowID()
+	case project.FieldRemovedAt:
+		return m.RemovedAt()
 	case project.FieldCreatedAt:
 		return m.CreatedAt()
 	case project.FieldUpdatedAt:
@@ -4500,6 +4555,8 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldIsGit(ctx)
 	case project.FieldDefaultWorkflowID:
 		return m.OldDefaultWorkflowID(ctx)
+	case project.FieldRemovedAt:
+		return m.OldRemovedAt(ctx)
 	case project.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case project.FieldUpdatedAt:
@@ -4540,6 +4597,13 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDefaultWorkflowID(v)
+		return nil
+	case project.FieldRemovedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemovedAt(v)
 		return nil
 	case project.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -4588,6 +4652,9 @@ func (m *ProjectMutation) ClearedFields() []string {
 	if m.FieldCleared(project.FieldDefaultWorkflowID) {
 		fields = append(fields, project.FieldDefaultWorkflowID)
 	}
+	if m.FieldCleared(project.FieldRemovedAt) {
+		fields = append(fields, project.FieldRemovedAt)
+	}
 	return fields
 }
 
@@ -4604,6 +4671,9 @@ func (m *ProjectMutation) ClearField(name string) error {
 	switch name {
 	case project.FieldDefaultWorkflowID:
 		m.ClearDefaultWorkflowID()
+		return nil
+	case project.FieldRemovedAt:
+		m.ClearRemovedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Project nullable field %s", name)
@@ -4624,6 +4694,9 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldDefaultWorkflowID:
 		m.ResetDefaultWorkflowID()
+		return nil
+	case project.FieldRemovedAt:
+		m.ResetRemovedAt()
 		return nil
 	case project.FieldCreatedAt:
 		m.ResetCreatedAt()

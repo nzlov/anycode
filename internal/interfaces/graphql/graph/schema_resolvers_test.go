@@ -110,6 +110,26 @@ func TestMutationCreateProjectForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestMutationRemoveProjectStopsSessionsAndForwardsUseCase(t *testing.T) {
+	projects := &fakeProjectUseCase{}
+	sessions := &fakeSessionUseCase{}
+	resolver := NewResolver(UseCases{Projects: projects, Sessions: sessions}).Mutation()
+
+	got, err := resolver.RemoveProject(context.Background(), "project-1")
+	if err != nil {
+		t.Fatalf("RemoveProject() error = %v", err)
+	}
+	if !got {
+		t.Fatal("RemoveProject() = false")
+	}
+	if sessions.stopProjectID != "project-1" {
+		t.Fatalf("stopProjectID = %q", sessions.stopProjectID)
+	}
+	if projects.removeCalls != 1 || projects.removeInput.ProjectID != "project-1" {
+		t.Fatalf("remove input = %#v calls=%d", projects.removeInput, projects.removeCalls)
+	}
+}
+
 func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 	workflows := &fakeWorkflowUseCase{
 		getResult: workflowapp.DefinitionDTO{
@@ -211,7 +231,11 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 				SessionID: "session-1",
 				Status:    questiondomain.BatchPending,
 				Questions: []questiondomain.Question{
-					{ID: "question-1", Title: "Choose"},
+					{
+						ID:      "question-1",
+						Title:   "Choose",
+						Options: []questiondomain.Option{{ID: "option-1", Label: "Continue"}},
+					},
 				},
 			},
 		},
@@ -227,6 +251,9 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].ID != "batch-1" || len(got[0].Questions) != 1 {
 		t.Fatalf("pending batches = %#v", got)
+	}
+	if got[0].Questions[0].Answer == nil || got[0].Questions[0].Options[0].Payload == nil {
+		t.Fatalf("pending question JSON maps should be non-nil: %#v", got[0].Questions[0])
 	}
 }
 
@@ -420,6 +447,8 @@ type fakeProjectUseCase struct {
 	projectapp.UseCase
 	createInput  projectapp.CreateProjectInput
 	createResult projectapp.DTO
+	removeInput  projectapp.RemoveProjectInput
+	removeCalls  int
 	listResult   []projectapp.DTO
 	listCalls    int
 	browseInput  projectapp.BrowseDirectoryInput
@@ -429,6 +458,12 @@ type fakeProjectUseCase struct {
 func (f *fakeProjectUseCase) CreateProject(_ context.Context, input projectapp.CreateProjectInput) (projectapp.DTO, error) {
 	f.createInput = input
 	return f.createResult, nil
+}
+
+func (f *fakeProjectUseCase) RemoveProject(_ context.Context, input projectapp.RemoveProjectInput) error {
+	f.removeInput = input
+	f.removeCalls++
+	return nil
 }
 
 func (f *fakeProjectUseCase) ListProjects(context.Context) ([]projectapp.DTO, error) {
@@ -489,6 +524,7 @@ type fakeSessionUseCase struct {
 	err           error
 	gotResumeID   sessiondomain.ID
 	resumeResult  sessionapp.DTO
+	stopProjectID sessiondomain.ProjectID
 }
 
 func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batch questionapp.BatchDTO) error {
@@ -500,4 +536,9 @@ func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batc
 func (f *fakeSessionUseCase) ResumeSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
 	f.gotResumeID = id
 	return f.resumeResult, f.err
+}
+
+func (f *fakeSessionUseCase) StopProjectSessions(_ context.Context, projectID sessiondomain.ProjectID) (int, error) {
+	f.stopProjectID = projectID
+	return 1, f.err
 }
