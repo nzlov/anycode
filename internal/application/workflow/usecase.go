@@ -381,10 +381,15 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 	runStatus := domain.RunRunning
 	nodeStatus := domain.NodeRunning
 	requiresCodex := true
+	closeNode := isCloseNode(node)
 	merge := mergeRequest(node)
 	params := map[string]any{"requirement": strings.TrimSpace(input.Requirement)}
 	expr := exprRequest(node, params)
-	if requiresApproval(node) {
+	if closeNode {
+		runStatus = domain.RunCompleted
+		nodeStatus = domain.NodeSucceeded
+		requiresCodex = false
+	} else if requiresApproval(node) {
 		runStatus = domain.RunWaitingApproval
 		nodeStatus = domain.NodeWaitingApproval
 		requiresCodex = false
@@ -411,6 +416,9 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		Context:              contextValue,
 		StartedAt:            &now,
 	}
+	if closeNode {
+		run.StoppedAt = &now
+	}
 	nodeRun := domain.NodeRun{
 		ID:            domain.NodeRunID(nodeRunID),
 		WorkflowRunID: run.ID,
@@ -418,6 +426,9 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		Status:        nodeStatus,
 		Attempt:       1,
 		StartedAt:     &now,
+	}
+	if closeNode {
+		nodeRun.FinishedAt = &now
 	}
 	resultNodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
 	start := sessiondomain.WorkflowStart{
@@ -430,6 +441,7 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		Prompt:           nodePrompt(input.Requirement, node, params),
 		Merge:            merge,
 		Expr:             expr,
+		Close:            closeNode,
 	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromStart(start), func(ctx context.Context, repo domain.Repository) error {
 		return repo.CreateInitialRun(ctx, run, nodeRun)
@@ -801,6 +813,40 @@ func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID do
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
+	if isCloseNode(node) {
+		nextNodeRunID, err := s.generateID()
+		if err != nil {
+			return sessiondomain.WorkflowAdvance{}, fmt.Errorf("generate workflow node run id: %w", err)
+		}
+		run.CurrentNodeID = node.ID
+		run.Status = domain.RunCompleted
+		run.StoppedAt = &now
+		run.Context = contextForNextNode(run.Context)
+		nextNodeRun := domain.NodeRun{
+			ID:            domain.NodeRunID(nextNodeRunID),
+			WorkflowRunID: run.ID,
+			NodeID:        node.ID,
+			Status:        domain.NodeSucceeded,
+			Attempt:       1,
+			StartedAt:     &now,
+			FinishedAt:    &now,
+		}
+		resultNodeRunID := sessiondomain.NodeRunID(nextNodeRun.ID)
+		advance := sessiondomain.WorkflowAdvance{
+			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
+			NodeRunID:        &resultNodeRunID,
+			CurrentNodeID:    node.ID,
+			CurrentNodeTitle: node.Title,
+			Status:           string(run.Status),
+			Close:            true,
+		}
+		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
+			return repo.CompleteNodeAndAdvance(ctx, completedNodeRun, run, &nextNodeRun)
+		}); err != nil {
+			return sessiondomain.WorkflowAdvance{}, err
+		}
+		return advance, nil
+	}
 	nextNodeRunID, err := s.generateID()
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("generate workflow node run id: %w", err)
@@ -953,6 +999,28 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 		run.CurrentNodeID = node.ID
 		run.Context = contextForNextNode(run.Context)
 	}
+	if isCloseNode(node) {
+		run.Status = domain.RunCompleted
+		run.StoppedAt = &now
+		nextNodeRun := domain.NodeRun{
+			ID:            domain.NodeRunID(nextNodeRunID),
+			WorkflowRunID: run.ID,
+			NodeID:        node.ID,
+			Status:        domain.NodeSucceeded,
+			Attempt:       attempt,
+			StartedAt:     &now,
+			FinishedAt:    &now,
+		}
+		resultNodeRunID := sessiondomain.NodeRunID(nextNodeRun.ID)
+		return nextNodeRun, sessiondomain.WorkflowAdvance{
+			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
+			NodeRunID:        &resultNodeRunID,
+			CurrentNodeID:    node.ID,
+			CurrentNodeTitle: node.Title,
+			Status:           string(run.Status),
+			Close:            true,
+		}, nil
+	}
 	run.Status = domain.RunRunning
 	nodeStatus := domain.NodeRunning
 	requiresCodex := true
@@ -1005,6 +1073,7 @@ func workflowEventInputFromStart(start sessiondomain.WorkflowStart) workflowEven
 		RequireJSONRetry: start.RequireJSONRetry,
 		Merge:            start.Merge,
 		Expr:             start.Expr,
+		Close:            start.Close,
 	}
 	return workflowEventInputFromAdvance(advance)
 }
@@ -1027,6 +1096,8 @@ func workflowEventInputFromAdvance(advance sessiondomain.WorkflowAdvance) workfl
 	case advance.Blocked:
 		payload["reason"] = advance.BlockedReason
 		return workflowEventInput{eventType: "workflow.blocked", payload: payload}
+	case advance.Close:
+		return workflowEventInput{eventType: "workflow.closed", payload: payload}
 	case advance.Completed:
 		return workflowEventInput{eventType: "workflow.completed", payload: payload}
 	case advance.Merge != nil:
@@ -1291,6 +1362,11 @@ func exprRequest(node domain.Node, params map[string]any) *sessiondomain.Workflo
 
 func isExprNode(node domain.Node) bool {
 	return strings.TrimSpace(strings.ToLower(node.Type)) == "expr"
+}
+
+func isCloseNode(node domain.Node) bool {
+	nodeType := strings.TrimSpace(strings.ToLower(node.Type))
+	return nodeType == "close"
 }
 
 func isCodexNode(node domain.Node) bool {

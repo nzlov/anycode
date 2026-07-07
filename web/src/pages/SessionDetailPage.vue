@@ -671,6 +671,7 @@ function closeReasonLabel(value: string) {
   const labels: Record<string, string> = {
     user_closed: '用户关闭',
     merged_closed: '合并后关闭',
+    workflow_closed: '流程关闭',
   };
   return labels[value] ?? value;
 }

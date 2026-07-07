@@ -623,6 +623,9 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 	if err != nil {
 		return DTO{}, fmt.Errorf("start workflow: %w", err)
 	}
+	if start.Close {
+		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
+	}
 	if start.Merge != nil {
 		return s.executeWorkflowMerge(ctx, session, domain.WorkflowAdvance{
 			WorkflowRunID:    start.WorkflowRunID,
@@ -2003,6 +2006,8 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 			return DTO{}, err
 		}
 		return toDTO(session), nil
+	case advance.Close:
+		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
 	case advance.Completed:
 		session.Status = domain.StatusCompleted
 		session.UpdatedAt = s.now()
@@ -2929,7 +2934,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	if reason == "" {
 		reason = domain.CloseReasonUserClosed
 	}
-	if reason != domain.CloseReasonUserClosed && reason != domain.CloseReasonMergedClosed {
+	if reason != domain.CloseReasonUserClosed && reason != domain.CloseReasonMergedClosed && reason != domain.CloseReasonWorkflowClosed {
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
 	}
 	if session.Status == domain.StatusClosed {

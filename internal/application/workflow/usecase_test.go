@@ -428,6 +428,59 @@ func TestCompleteNodeAdvancesToNextExecutableNode(t *testing.T) {
 	}
 }
 
+func TestCompleteNodeAdvancesToCloseNode(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{ID: "build", Type: "codex", Title: "Build"},
+				{ID: "close", Type: "close", Title: "Close"},
+			},
+			Edges: []domain.Edge{{From: "build", To: "close"}},
+		},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "build",
+		Context:              domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{
+		ID:            "node-run-1",
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Status:        domain.NodeRunning,
+		Attempt:       1,
+	}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-close", nil }
+
+	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        map[string]any{"results": map[string]any{"status": "done"}},
+	})
+	if err != nil {
+		t.Fatalf("CompleteNode() error = %v", err)
+	}
+	if !got.Close || got.CurrentNodeID != "close" || got.RequiresCodex {
+		t.Fatalf("CompleteNode() = %#v", got)
+	}
+	if repo.runs[0].Status != domain.RunCompleted || repo.runs[0].CurrentNodeID != "close" {
+		t.Fatalf("run = %#v", repo.runs[0])
+	}
+	if len(repo.nodeRuns) != 2 || repo.nodeRuns[1].NodeID != "close" || repo.nodeRuns[1].Status != domain.NodeSucceeded {
+		t.Fatalf("node runs = %#v", repo.nodeRuns)
+	}
+}
+
 func TestCompleteNodeEvaluatesExprAndPassesResultsAsNextParams(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

@@ -71,8 +71,9 @@ const (
 type CloseReason string
 
 const (
-	CloseReasonUserClosed   CloseReason = "user_closed"
-	CloseReasonMergedClosed CloseReason = "merged_closed"
+	CloseReasonUserClosed     CloseReason = "user_closed"
+	CloseReasonMergedClosed   CloseReason = "merged_closed"
+	CloseReasonWorkflowClosed CloseReason = "workflow_closed"
 )
 
 type Session struct {
@@ -250,6 +251,7 @@ type WorkflowStart struct {
 	Prompt           string
 	Merge            *WorkflowMerge
 	Expr             *WorkflowExpr
+	Close            bool
 }
 
 type WorkflowStartFailureInput struct {
@@ -320,6 +322,7 @@ type WorkflowAdvance struct {
 	Prompt           string
 	Merge            *WorkflowMerge
 	Expr             *WorkflowExpr
+	Close            bool
 	Completed        bool
 	Blocked          bool
 	BlockedReason    string

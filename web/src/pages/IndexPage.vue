@@ -84,6 +84,10 @@
 
             <div class="overview-card-meta-grid">
               <div>
+                <span class="overview-card-meta__label">所属项目</span>
+                <span>{{ card.projectName }}</span>
+              </div>
+              <div>
                 <span class="overview-card-meta__label">基础分支</span>
                 <span>{{ card.branch }}</span>
               </div>

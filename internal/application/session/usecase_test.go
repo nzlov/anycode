@@ -388,6 +388,46 @@ func TestCreateWorkflowSessionStartsFirstNodeCodexWithNodeRun(t *testing.T) {
 	}
 }
 
+func TestCreateWorkflowSessionClosesWhenWorkflowStartsAtCloseNode(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                "project-1",
+		Name:              "project-1",
+		Path:              projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		DefaultWorkflowID: &workflowID,
+	}
+	nodeRunID := domain.NodeRunID("node-run-close")
+	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
+		WorkflowRunID:    "workflow-run-1",
+		NodeRunID:        &nodeRunID,
+		CurrentNodeID:    "close",
+		CurrentNodeTitle: "Close",
+		Status:           "completed",
+		Close:            true,
+	}}
+	service := New(repo, projects, WithWorkflows(workflows))
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "ship feature",
+		Mode:        domain.ModeWorkflow,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.Status != domain.StatusClosed {
+		t.Fatalf("CreateSession() = %#v", got)
+	}
+	if saved := repo.sessions["session-1"]; saved.Status != domain.StatusClosed || saved.CloseReason == nil || *saved.CloseReason != domain.CloseReasonWorkflowClosed {
+		t.Fatalf("saved session = %#v", saved)
+	}
+}
+
 func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

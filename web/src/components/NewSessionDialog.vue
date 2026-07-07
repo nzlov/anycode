@@ -4,7 +4,7 @@
       <q-card-section class="row items-center q-pb-sm">
         <div>
           <div class="text-subtitle1 text-weight-bold">新建卡片</div>
-          <div class="text-caption text-muted">配置项目、分支、模式和 Codex 运行参数</div>
+          <div class="text-caption text-muted">配置项目、分支和 Codex 运行参数</div>
         </div>
         <q-space />
         <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" :disable="creating">
@@ -46,11 +46,12 @@
             :options="priorityOptions"
           />
           <q-btn-toggle
+            v-if="canUseWorkflowMode"
             v-model="mode"
             spread
             no-caps
             toggle-color="dark"
-            :disable="creating"
+            :disable="creating || workflowAvailabilityLoading"
             :options="modeOptions"
           />
         </div>
@@ -98,6 +99,7 @@ import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
 import type { CreateSessionInput, SessionPriority } from '@/services/sessions';
+import { getWorkflowDefinition } from '@/services/workflows';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -120,6 +122,9 @@ const model = ref(firstCodexModelValue());
 const effort = ref(normalizeReasoningEffort(model.value, ''));
 const permission = ref(normalizePermissionMode('workspace-write'));
 const creating = ref(false);
+const workflowAvailabilityLoading = ref(false);
+const workflowAvailable = ref(false);
+const workflowAvailabilityToken = ref(0);
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
 const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 
@@ -129,6 +134,7 @@ const branchOptions = computed(() => {
 const selectedProject = computed(() =>
   projects.value.find((project) => project.id === projectId.value),
 );
+const canUseWorkflowMode = computed(() => workflowAvailable.value);
 
 const modeOptions = [
   { label: '流程模式', value: 'workflow', icon: 'account_tree' },
@@ -210,6 +216,35 @@ function selectInitialProject() {
   branch.value = projectBranch(nextProjectId);
 }
 
+async function loadWorkflowAvailability() {
+  const token = workflowAvailabilityToken.value + 1;
+  workflowAvailabilityToken.value = token;
+  const workflowId = selectedProject.value?.defaultWorkflowId ?? '';
+  if (!workflowId) {
+    workflowAvailable.value = false;
+    mode.value = 'chat';
+    return;
+  }
+  workflowAvailabilityLoading.value = true;
+  try {
+    const definition = await getWorkflowDefinition(workflowId);
+    if (workflowAvailabilityToken.value !== token) return;
+    workflowAvailable.value = Boolean(definition?.graph.nodes.length);
+    if (!workflowAvailable.value) {
+      mode.value = 'chat';
+    }
+  } catch {
+    if (workflowAvailabilityToken.value === token) {
+      workflowAvailable.value = false;
+      mode.value = 'chat';
+    }
+  } finally {
+    if (workflowAvailabilityToken.value === token) {
+      workflowAvailabilityLoading.value = false;
+    }
+  }
+}
+
 function projectBranch(value: string) {
   const selectedProject = projects.value.find((project) => project.id === value);
   return selectedProject?.defaultBranch ?? selectedProject?.branches[0] ?? 'main';
@@ -237,7 +272,7 @@ async function createSession() {
     const input: CreateSessionInput = {
       projectId: projectId.value,
       requirement: prompt.value,
-      mode: mode.value,
+      mode: canUseWorkflowMode.value ? mode.value : 'chat',
       priority: priority.value,
       config,
     };
@@ -307,6 +342,7 @@ watch(
   projects,
   () => {
     selectInitialProject();
+    void loadWorkflowAvailability();
   },
   { immediate: true },
 );
@@ -317,6 +353,7 @@ watch(
     if (!open) return;
     selectInitialProject();
     selectInitialRunConfig();
+    void loadWorkflowAvailability();
   },
 );
 
@@ -332,10 +369,11 @@ watch(model, (value) => {
 watch(projectId, (value, previous) => {
   if (!value || value === previous) return;
   branch.value = projectBranch(value);
+  void loadWorkflowAvailability();
 });
 
 onMounted(() => {
   selectInitialRunConfig();
-  void loadProjects();
+  void loadProjects().then(loadWorkflowAvailability);
 });
 </script>

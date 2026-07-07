@@ -9,12 +9,18 @@
       </div>
       <div class="row items-center q-gutter-sm">
         <q-chip v-if="definitionId" dense outline color="primary">v{{ version }}</q-chip>
+        <q-btn flat round color="primary" icon="content_copy" aria-label="复制流程配置" @click="copyWorkflowConfig">
+          <q-tooltip>复制流程配置</q-tooltip>
+        </q-btn>
+        <q-btn flat round color="primary" icon="content_paste" aria-label="从剪贴板导入流程配置" @click="importWorkflowConfig">
+          <q-tooltip>从剪贴板导入流程配置</q-tooltip>
+        </q-btn>
         <q-btn
           unelevated
           color="positive"
           text-color="dark"
           icon="save"
-          label="保存为默认流程"
+          label="保存"
           no-caps
           :loading="saving"
           @click="saveDefinition"
@@ -92,7 +98,7 @@
         <q-card-section>
           <div class="text-subtitle1 text-weight-bold">节点配置</div>
         </q-card-section>
-        <q-card-section class="q-gutter-md">
+        <q-card-section v-if="selectedNode" class="q-gutter-md">
           <q-input v-model="nodeId" dense outlined label="节点 ID" />
           <q-select v-model="nodeType" dense outlined label="类型" :options="nodeTypeOptions" />
           <q-input v-model="nodeTitle" dense outlined label="标题" />
@@ -144,14 +150,13 @@
             :options="mergeStrategyOptions"
           />
           <div class="row q-gutter-sm">
-            <q-btn outline color="primary" icon="check" label="应用节点" no-caps @click="applyNodeEdit" />
             <q-btn
               flat
               round
               color="negative"
               icon="delete"
               aria-label="删除节点"
-              :disable="graph.nodes.length <= 1"
+              :disable="!selectedNode"
               @click="deleteSelectedNode"
             >
               <q-tooltip>删除节点</q-tooltip>
@@ -214,9 +219,11 @@
                 type="textarea"
                 label="expr 表达式"
               />
-              <q-btn outline color="primary" icon="check" label="应用连线" no-caps @click="applyEdgeEdit" />
             </div>
           </template>
+        </q-card-section>
+        <q-card-section v-else>
+          <q-banner rounded class="empty-lane-banner">拖入左侧节点开始配置流程</q-banner>
         </q-card-section>
       </q-card>
     </div>
@@ -282,12 +289,13 @@ const flowEdges = ref<ReturnType<typeof buildFlowEdge>[]>([]);
 const graph = reactive<WorkflowGraph>(defaultGraph());
 const { fitView: fitFlowView, project: projectFlowPoint } = useVueFlow('workflow-config-flow');
 
-const nodeTypeOptions = ['codex', 'expr', 'approval', 'merge'];
+const nodeTypeOptions = ['codex', 'expr', 'approval', 'merge', 'close'];
 const nodePalette = [
   { value: 'codex', label: 'Codex', caption: '运行 Codex 节点' },
   { value: 'expr', label: 'Expr', caption: '用 params 计算 results' },
   { value: 'approval', label: '人工审批', caption: '等待人工确认' },
   { value: 'merge', label: '合并', caption: '合并或 rebase 到基础分支' },
+  { value: 'close', label: '关闭', caption: '结束流程并关闭卡片' },
 ];
 const mergeStrategyOptions = ['merge', 'rebase'];
 const valueTypeOptions = workflowValueTypeOptions;
@@ -305,6 +313,7 @@ const selectedEdge = computed(() => {
   if (selectedEdgeIndex.value == null) return null;
   return graph.edges[selectedEdgeIndex.value] ?? null;
 });
+const selectedNode = computed(() => currentNode());
 const conditionFieldOptions = computed(() => {
   const edge = selectedEdge.value;
   const source = edge ? graph.nodes.find((node) => node.id === edge.from) : null;
@@ -378,7 +387,17 @@ function selectNode(id: string) {
 
 function loadSelectedNode() {
   const node = currentNode();
-  if (!node) return;
+  if (!node) {
+    nodeId.value = '';
+    nodeType.value = 'codex';
+    nodeTitle.value = '';
+    nodePrompt.value = '';
+    outputFields.value = [];
+    retry.value = 0;
+    requiresApproval.value = false;
+    mergeStrategy.value = 'merge';
+    return;
+  }
   nodeId.value = node.id;
   nodeType.value = node.type;
   nodeTitle.value = node.title;
@@ -453,7 +472,7 @@ function createNodeAt(type: string, x: number, y: number) {
 function deleteSelectedNode() {
   const id = selectedNodeId.value;
   const index = graph.nodes.findIndex((node) => node.id === id);
-  if (index < 0 || graph.nodes.length <= 1) return;
+  if (index < 0) return;
   graph.nodes.splice(index, 1);
   graph.edges.splice(
     0,
@@ -468,9 +487,7 @@ function deleteSelectedNode() {
 }
 
 async function saveDefinition() {
-  syncWorkflowPositions();
-  applyNodeEdit();
-  applyEdgeEdit();
+  applyCurrentEdits();
   graph.edges.splice(0, graph.edges.length, ...graph.edges.map(normalizeEdge));
 
   saving.value = true;
@@ -490,12 +507,52 @@ async function saveDefinition() {
       params: { projectId: projectId.value },
       query: { workflowId: definition.id },
     });
-    $q.notify({ type: 'positive', message: '流程已保存为项目默认流程' });
+    $q.notify({ type: 'positive', message: '流程已保存' });
   } catch (err) {
     notifyError(err, '保存流程配置失败');
   } finally {
     saving.value = false;
   }
+}
+
+async function copyWorkflowConfig() {
+  applyCurrentEdits();
+  const payload = {
+    name: workflowName.value.trim() || '默认流程',
+    graph: { nodes: [...graph.nodes], edges: [...graph.edges] },
+  };
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    $q.notify({ type: 'positive', message: '流程配置已复制' });
+  } catch (err) {
+    notifyError(err, '复制流程配置失败');
+  }
+}
+
+async function importWorkflowConfig() {
+  try {
+    const raw = await navigator.clipboard.readText();
+    const parsed = JSON.parse(raw) as unknown;
+    const graphPayload = workflowGraphFromClipboard(parsed);
+    if (!graphPayload) {
+      throw new Error('剪贴板内容不是流程配置');
+    }
+    if (parsed && typeof parsed === 'object' && 'name' in parsed && typeof parsed.name === 'string') {
+      workflowName.value = parsed.name;
+    }
+    definitionId.value = '';
+    version.value = 1;
+    setGraph(graphPayload);
+    $q.notify({ type: 'positive', message: '流程配置已导入，保存后生效' });
+  } catch (err) {
+    notifyError(err, '导入流程配置失败');
+  }
+}
+
+function applyCurrentEdits() {
+  syncWorkflowPositions();
+  applyNodeEdit();
+  applyEdgeEdit();
 }
 
 function handleFlowConnect(connection: Connection) {
@@ -616,6 +673,7 @@ function nodeIcon(type: string) {
   if (type === 'approval') return 'approval';
   if (type === 'merge') return 'merge_type';
   if (type === 'expr') return 'functions';
+  if (type === 'close') return 'cancel';
   return 'terminal';
 }
 
@@ -623,6 +681,7 @@ function defaultNodeTitle(type: string) {
   if (type === 'approval') return '人工审批';
   if (type === 'merge') return '合并';
   if (type === 'expr') return '表达式';
+  if (type === 'close') return '关闭';
   return '新节点';
 }
 
@@ -632,33 +691,15 @@ function defaultNodePrompt(type: string) {
 }
 
 function defaultOutputFields(type: string): WorkflowOutputField[] {
+  if (type === 'close') return [];
   const fields = systemOutputFields(type, type === 'approval', type === 'merge');
   if (fields.length > 0) return fields;
   return [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }];
 }
 
-function defaultPosition(index: number) {
-  return {
-    x: 32 + (index % 2) * 300,
-    y: 32 + Math.floor(index / 2) * 140,
-  };
-}
-
 function defaultGraph(): WorkflowGraph {
   return {
-    nodes: [
-      {
-        id: 'implement',
-        type: 'codex',
-        title: '实现',
-        prompt: '',
-        position: defaultPosition(0),
-        outputFields: [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }],
-        approval: { beforeRun: false, afterRun: false },
-        retry: { maxAttempts: 1 },
-        merge: null,
-      },
-    ],
+    nodes: [],
     edges: [],
   };
 }
@@ -739,6 +780,25 @@ function conditionInputToValue(value: string) {
   if (trimmed === 'false') return false;
   if (trimmed !== '' && !Number.isNaN(Number(trimmed))) return Number(trimmed);
   return trimmed;
+}
+
+function workflowGraphFromClipboard(value: unknown): WorkflowGraph | null {
+  if (isWorkflowGraph(value)) return value;
+  if (value && typeof value === 'object' && 'graph' in value && isWorkflowGraph(value.graph)) {
+    return value.graph;
+  }
+  return null;
+}
+
+function isWorkflowGraph(value: unknown): value is WorkflowGraph {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'nodes' in value &&
+      'edges' in value &&
+      Array.isArray(value.nodes) &&
+      Array.isArray(value.edges),
+  );
 }
 
 function normalizeID(value: string) {
