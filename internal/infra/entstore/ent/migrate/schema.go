@@ -304,6 +304,8 @@ var (
 	SessionAttachmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
+		{Name: "source_type", Type: field.TypeString},
+		{Name: "source_id", Type: field.TypeString},
 		{Name: "kind", Type: field.TypeString, Default: "file"},
 		{Name: "filename", Type: field.TypeString},
 		{Name: "path", Type: field.TypeString},
@@ -326,7 +328,12 @@ var (
 			{
 				Name:    "sessionattachment_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[8]},
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[10]},
+			},
+			{
+				Name:    "sessionattachment_session_id_source_type_source_id",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[2], SessionAttachmentsColumns[3]},
 			},
 		},
 	}

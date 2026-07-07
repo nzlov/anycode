@@ -22,6 +22,7 @@ interface GraphQLRequest<TVariables extends Record<string, unknown>> {
   query: string;
   variables?: TVariables;
   operationName?: string;
+  notify?: boolean;
 }
 
 interface GraphQLSubscriptionOptions<
@@ -108,7 +109,7 @@ async function parseGraphQLResponse<TData>(response: Response) {
 export async function graphqlFetch<
   TData,
   TVariables extends Record<string, unknown> = Record<string, unknown>,
->({ query, variables, operationName }: GraphQLRequest<TVariables>) {
+>({ query, variables, operationName, notify = true }: GraphQLRequest<TVariables>) {
   try {
     const response = await fetch(graphqlEndpoint, {
       method: 'POST',
@@ -117,7 +118,7 @@ export async function graphqlFetch<
     });
     return await parseGraphQLResponse<TData>(response);
   } catch (err) {
-    notifyRequestError(err);
+    if (notify) notifyRequestError(err);
     throw err;
   }
 }

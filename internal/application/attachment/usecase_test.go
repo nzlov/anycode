@@ -134,6 +134,10 @@ func (r *fakeAttachmentRepository) ListSessionAttachments(_ context.Context, ses
 	return attachments, nil
 }
 
+func (r *fakeAttachmentRepository) ListPromptAppendAttachments(context.Context, domain.ID, string) ([]domain.SessionAttachment, error) {
+	return nil, nil
+}
+
 func (r *fakeAttachmentRepository) DeleteSessionAttachment(_ context.Context, id domain.SessionAttachmentID) error {
 	delete(r.sessions, id)
 	return nil

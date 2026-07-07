@@ -305,32 +305,40 @@ func init() {
 	sessionattachmentDescSessionID := sessionattachmentFields[1].Descriptor()
 	// sessionattachment.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
 	sessionattachment.SessionIDValidator = sessionattachmentDescSessionID.Validators[0].(func(string) error)
+	// sessionattachmentDescSourceType is the schema descriptor for source_type field.
+	sessionattachmentDescSourceType := sessionattachmentFields[2].Descriptor()
+	// sessionattachment.SourceTypeValidator is a validator for the "source_type" field. It is called by the builders before save.
+	sessionattachment.SourceTypeValidator = sessionattachmentDescSourceType.Validators[0].(func(string) error)
+	// sessionattachmentDescSourceID is the schema descriptor for source_id field.
+	sessionattachmentDescSourceID := sessionattachmentFields[3].Descriptor()
+	// sessionattachment.SourceIDValidator is a validator for the "source_id" field. It is called by the builders before save.
+	sessionattachment.SourceIDValidator = sessionattachmentDescSourceID.Validators[0].(func(string) error)
 	// sessionattachmentDescKind is the schema descriptor for kind field.
-	sessionattachmentDescKind := sessionattachmentFields[2].Descriptor()
+	sessionattachmentDescKind := sessionattachmentFields[4].Descriptor()
 	// sessionattachment.DefaultKind holds the default value on creation for the kind field.
 	sessionattachment.DefaultKind = sessionattachmentDescKind.Default.(string)
 	// sessionattachmentDescFilename is the schema descriptor for filename field.
-	sessionattachmentDescFilename := sessionattachmentFields[3].Descriptor()
+	sessionattachmentDescFilename := sessionattachmentFields[5].Descriptor()
 	// sessionattachment.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
 	sessionattachment.FilenameValidator = sessionattachmentDescFilename.Validators[0].(func(string) error)
 	// sessionattachmentDescPath is the schema descriptor for path field.
-	sessionattachmentDescPath := sessionattachmentFields[4].Descriptor()
+	sessionattachmentDescPath := sessionattachmentFields[6].Descriptor()
 	// sessionattachment.PathValidator is a validator for the "path" field. It is called by the builders before save.
 	sessionattachment.PathValidator = sessionattachmentDescPath.Validators[0].(func(string) error)
 	// sessionattachmentDescMimeType is the schema descriptor for mime_type field.
-	sessionattachmentDescMimeType := sessionattachmentFields[5].Descriptor()
+	sessionattachmentDescMimeType := sessionattachmentFields[7].Descriptor()
 	// sessionattachment.DefaultMimeType holds the default value on creation for the mime_type field.
 	sessionattachment.DefaultMimeType = sessionattachmentDescMimeType.Default.(string)
 	// sessionattachmentDescSize is the schema descriptor for size field.
-	sessionattachmentDescSize := sessionattachmentFields[6].Descriptor()
+	sessionattachmentDescSize := sessionattachmentFields[8].Descriptor()
 	// sessionattachment.DefaultSize holds the default value on creation for the size field.
 	sessionattachment.DefaultSize = sessionattachmentDescSize.Default.(int64)
 	// sessionattachmentDescPreviewable is the schema descriptor for previewable field.
-	sessionattachmentDescPreviewable := sessionattachmentFields[7].Descriptor()
+	sessionattachmentDescPreviewable := sessionattachmentFields[9].Descriptor()
 	// sessionattachment.DefaultPreviewable holds the default value on creation for the previewable field.
 	sessionattachment.DefaultPreviewable = sessionattachmentDescPreviewable.Default.(bool)
 	// sessionattachmentDescCreatedAt is the schema descriptor for created_at field.
-	sessionattachmentDescCreatedAt := sessionattachmentFields[8].Descriptor()
+	sessionattachmentDescCreatedAt := sessionattachmentFields[10].Descriptor()
 	// sessionattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
 	sessionattachment.DefaultCreatedAt = sessionattachmentDescCreatedAt.Default.(func() time.Time)
 	stagedattachmentFields := schema.StagedAttachment{}.Fields()

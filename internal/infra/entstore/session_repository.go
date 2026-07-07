@@ -260,6 +260,13 @@ func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsessi
 	return nil
 }
 
+func (r *SessionRepository) DeletePromptAppend(ctx context.Context, id string) error {
+	if err := r.client.PromptAppend.DeleteOneID(id).Exec(ctx); err != nil && !ent.IsNotFound(err) {
+		return fmt.Errorf("delete prompt append: %w", err)
+	}
+	return nil
+}
+
 func (r *SessionRepository) ListPromptAppends(ctx context.Context, sessionID domainsession.ID) ([]domainsession.PromptAppend, error) {
 	rows, err := r.client.PromptAppend.Query().
 		Where(entpromptappend.SessionIDEQ(string(sessionID))).

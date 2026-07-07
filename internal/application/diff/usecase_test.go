@@ -362,7 +362,15 @@ func (r *fakeSessionRepository) AppendPrompt(context.Context, sessiondomain.Prom
 	return nil
 }
 
+func (r *fakeSessionRepository) DeletePromptAppend(context.Context, string) error {
+	return nil
+}
+
 func (r *fakeSessionRepository) ListPromptAppends(context.Context, sessiondomain.ID) ([]sessiondomain.PromptAppend, error) {
+	return nil, nil
+}
+
+func (r *fakeSessionRepository) ListPromptAppendAttachments(context.Context, sessiondomain.ID, string) ([]sessiondomain.SessionAttachment, error) {
 	return nil, nil
 }
 

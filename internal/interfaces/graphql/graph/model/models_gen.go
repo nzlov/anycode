@@ -7,8 +7,9 @@ import (
 )
 
 type AppendPromptInput struct {
-	SessionID string `json:"sessionId"`
-	Body      string `json:"body"`
+	SessionID           string   `json:"sessionId"`
+	Body                string   `json:"body"`
+	StagedAttachmentIds []string `json:"stagedAttachmentIds,omitempty"`
 }
 
 type ApprovalConfig struct {
@@ -185,10 +186,11 @@ type Project struct {
 }
 
 type PromptAppend struct {
-	ID        string    `json:"id"`
-	SessionID string    `json:"sessionId"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID          string               `json:"id"`
+	SessionID   string               `json:"sessionId"`
+	Body        string               `json:"body"`
+	Attachments []*SessionAttachment `json:"attachments"`
+	CreatedAt   time.Time            `json:"createdAt"`
 }
 
 type Query struct {

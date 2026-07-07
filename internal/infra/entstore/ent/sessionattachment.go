@@ -19,6 +19,10 @@ type SessionAttachment struct {
 	ID string `json:"id,omitempty"`
 	// SessionID holds the value of the "session_id" field.
 	SessionID string `json:"session_id,omitempty"`
+	// SourceType holds the value of the "source_type" field.
+	SourceType string `json:"source_type,omitempty"`
+	// SourceID holds the value of the "source_id" field.
+	SourceID string `json:"source_id,omitempty"`
 	// Kind holds the value of the "kind" field.
 	Kind string `json:"kind,omitempty"`
 	// Filename holds the value of the "filename" field.
@@ -45,7 +49,7 @@ func (*SessionAttachment) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case sessionattachment.FieldSize:
 			values[i] = new(sql.NullInt64)
-		case sessionattachment.FieldID, sessionattachment.FieldSessionID, sessionattachment.FieldKind, sessionattachment.FieldFilename, sessionattachment.FieldPath, sessionattachment.FieldMimeType:
+		case sessionattachment.FieldID, sessionattachment.FieldSessionID, sessionattachment.FieldSourceType, sessionattachment.FieldSourceID, sessionattachment.FieldKind, sessionattachment.FieldFilename, sessionattachment.FieldPath, sessionattachment.FieldMimeType:
 			values[i] = new(sql.NullString)
 		case sessionattachment.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -75,6 +79,18 @@ func (_m *SessionAttachment) assignValues(columns []string, values []any) error 
 				return fmt.Errorf("unexpected type %T for field session_id", values[i])
 			} else if value.Valid {
 				_m.SessionID = value.String
+			}
+		case sessionattachment.FieldSourceType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_type", values[i])
+			} else if value.Valid {
+				_m.SourceType = value.String
+			}
+		case sessionattachment.FieldSourceID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_id", values[i])
+			} else if value.Valid {
+				_m.SourceID = value.String
 			}
 		case sessionattachment.FieldKind:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -156,6 +172,12 @@ func (_m *SessionAttachment) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)
+	builder.WriteString(", ")
+	builder.WriteString("source_type=")
+	builder.WriteString(_m.SourceType)
+	builder.WriteString(", ")
+	builder.WriteString("source_id=")
+	builder.WriteString(_m.SourceID)
 	builder.WriteString(", ")
 	builder.WriteString("kind=")
 	builder.WriteString(_m.Kind)

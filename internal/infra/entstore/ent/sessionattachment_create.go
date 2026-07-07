@@ -26,6 +26,18 @@ func (_c *SessionAttachmentCreate) SetSessionID(v string) *SessionAttachmentCrea
 	return _c
 }
 
+// SetSourceType sets the "source_type" field.
+func (_c *SessionAttachmentCreate) SetSourceType(v string) *SessionAttachmentCreate {
+	_c.mutation.SetSourceType(v)
+	return _c
+}
+
+// SetSourceID sets the "source_id" field.
+func (_c *SessionAttachmentCreate) SetSourceID(v string) *SessionAttachmentCreate {
+	_c.mutation.SetSourceID(v)
+	return _c
+}
+
 // SetKind sets the "kind" field.
 func (_c *SessionAttachmentCreate) SetKind(v string) *SessionAttachmentCreate {
 	_c.mutation.SetKind(v)
@@ -181,6 +193,22 @@ func (_c *SessionAttachmentCreate) check() error {
 			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.session_id": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.SourceType(); !ok {
+		return &ValidationError{Name: "source_type", err: errors.New(`ent: missing required field "SessionAttachment.source_type"`)}
+	}
+	if v, ok := _c.mutation.SourceType(); ok {
+		if err := sessionattachment.SourceTypeValidator(v); err != nil {
+			return &ValidationError{Name: "source_type", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_type": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceID(); !ok {
+		return &ValidationError{Name: "source_id", err: errors.New(`ent: missing required field "SessionAttachment.source_id"`)}
+	}
+	if v, ok := _c.mutation.SourceID(); ok {
+		if err := sessionattachment.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_id": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Kind(); !ok {
 		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "SessionAttachment.kind"`)}
 	}
@@ -250,6 +278,14 @@ func (_c *SessionAttachmentCreate) createSpec() (*SessionAttachment, *sqlgraph.C
 	if value, ok := _c.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
 		_node.SessionID = value
+	}
+	if value, ok := _c.mutation.SourceType(); ok {
+		_spec.SetField(sessionattachment.FieldSourceType, field.TypeString, value)
+		_node.SourceType = value
+	}
+	if value, ok := _c.mutation.SourceID(); ok {
+		_spec.SetField(sessionattachment.FieldSourceID, field.TypeString, value)
+		_node.SourceID = value
 	}
 	if value, ok := _c.mutation.Kind(); ok {
 		_spec.SetField(sessionattachment.FieldKind, field.TypeString, value)

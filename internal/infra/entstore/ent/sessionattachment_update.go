@@ -41,6 +41,34 @@ func (_u *SessionAttachmentUpdate) SetNillableSessionID(v *string) *SessionAttac
 	return _u
 }
 
+// SetSourceType sets the "source_type" field.
+func (_u *SessionAttachmentUpdate) SetSourceType(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetSourceType(v)
+	return _u
+}
+
+// SetNillableSourceType sets the "source_type" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableSourceType(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetSourceType(*v)
+	}
+	return _u
+}
+
+// SetSourceID sets the "source_id" field.
+func (_u *SessionAttachmentUpdate) SetSourceID(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetSourceID(v)
+	return _u
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableSourceID(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetSourceID(*v)
+	}
+	return _u
+}
+
 // SetKind sets the "kind" field.
 func (_u *SessionAttachmentUpdate) SetKind(v string) *SessionAttachmentUpdate {
 	_u.mutation.SetKind(v)
@@ -171,6 +199,16 @@ func (_u *SessionAttachmentUpdate) check() error {
 			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.session_id": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SourceType(); ok {
+		if err := sessionattachment.SourceTypeValidator(v); err != nil {
+			return &ValidationError{Name: "source_type", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceID(); ok {
+		if err := sessionattachment.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Filename(); ok {
 		if err := sessionattachment.FilenameValidator(v); err != nil {
 			return &ValidationError{Name: "filename", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.filename": %w`, err)}
@@ -198,6 +236,12 @@ func (_u *SessionAttachmentUpdate) sqlSave(ctx context.Context) (_node int, err 
 	}
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceType(); ok {
+		_spec.SetField(sessionattachment.FieldSourceType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceID(); ok {
+		_spec.SetField(sessionattachment.FieldSourceID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Kind(); ok {
 		_spec.SetField(sessionattachment.FieldKind, field.TypeString, value)
@@ -250,6 +294,34 @@ func (_u *SessionAttachmentUpdateOne) SetSessionID(v string) *SessionAttachmentU
 func (_u *SessionAttachmentUpdateOne) SetNillableSessionID(v *string) *SessionAttachmentUpdateOne {
 	if v != nil {
 		_u.SetSessionID(*v)
+	}
+	return _u
+}
+
+// SetSourceType sets the "source_type" field.
+func (_u *SessionAttachmentUpdateOne) SetSourceType(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetSourceType(v)
+	return _u
+}
+
+// SetNillableSourceType sets the "source_type" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableSourceType(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetSourceType(*v)
+	}
+	return _u
+}
+
+// SetSourceID sets the "source_id" field.
+func (_u *SessionAttachmentUpdateOne) SetSourceID(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetSourceID(v)
+	return _u
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableSourceID(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetSourceID(*v)
 	}
 	return _u
 }
@@ -397,6 +469,16 @@ func (_u *SessionAttachmentUpdateOne) check() error {
 			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.session_id": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SourceType(); ok {
+		if err := sessionattachment.SourceTypeValidator(v); err != nil {
+			return &ValidationError{Name: "source_type", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceID(); ok {
+		if err := sessionattachment.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Filename(); ok {
 		if err := sessionattachment.FilenameValidator(v); err != nil {
 			return &ValidationError{Name: "filename", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.filename": %w`, err)}
@@ -441,6 +523,12 @@ func (_u *SessionAttachmentUpdateOne) sqlSave(ctx context.Context) (_node *Sessi
 	}
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceType(); ok {
+		_spec.SetField(sessionattachment.FieldSourceType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceID(); ok {
+		_spec.SetField(sessionattachment.FieldSourceID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Kind(); ok {
 		_spec.SetField(sessionattachment.FieldKind, field.TypeString, value)

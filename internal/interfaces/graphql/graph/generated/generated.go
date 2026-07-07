@@ -169,10 +169,11 @@ type ComplexityRoot struct {
 	}
 
 	PromptAppend struct {
-		Body      func(childComplexity int) int
-		CreatedAt func(childComplexity int) int
-		ID        func(childComplexity int) int
-		SessionID func(childComplexity int) int
+		Attachments func(childComplexity int) int
+		Body        func(childComplexity int) int
+		CreatedAt   func(childComplexity int) int
+		ID          func(childComplexity int) int
+		SessionID   func(childComplexity int) int
 	}
 
 	Query struct {
@@ -1031,6 +1032,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Project.UpdatedAt(childComplexity), true
 
+	case "PromptAppend.attachments":
+		if e.ComplexityRoot.PromptAppend.Attachments == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAppend.Attachments(childComplexity), true
 	case "PromptAppend.body":
 		if e.ComplexityRoot.PromptAppend.Body == nil {
 			break
@@ -2433,6 +2440,7 @@ type PromptAppend {
   id: ID!
   sessionId: ID!
   body: String!
+  attachments: [SessionAttachment!]!
   createdAt: Time!
 }
 
@@ -2669,6 +2677,7 @@ input SetSessionPriorityInput {
 input AppendPromptInput {
   sessionId: ID!
   body: String!
+  stagedAttachmentIds: [ID!]
 }
 
 input ListSessionEventsInput {
@@ -5316,6 +5325,8 @@ func (ec *executionContext) fieldContext_Mutation_appendPrompt(ctx context.Conte
 				return ec.fieldContext_PromptAppend_sessionId(ctx, field)
 			case "body":
 				return ec.fieldContext_PromptAppend_body(ctx, field)
+			case "attachments":
+				return ec.fieldContext_PromptAppend_attachments(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -6113,6 +6124,53 @@ func (ec *executionContext) fieldContext_PromptAppend_body(_ context.Context, fi
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAppend_attachments(ctx context.Context, field graphql.CollectedField, obj *model.PromptAppend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAppend_attachments,
+		func(ctx context.Context) (any, error) {
+			return obj.Attachments, nil
+		},
+		nil,
+		ec.marshalNSessionAttachment2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionAttachmentᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAppend_attachments(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAppend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SessionAttachment_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_SessionAttachment_sessionId(ctx, field)
+			case "kind":
+				return ec.fieldContext_SessionAttachment_kind(ctx, field)
+			case "filename":
+				return ec.fieldContext_SessionAttachment_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_SessionAttachment_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_SessionAttachment_size(ctx, field)
+			case "previewable":
+				return ec.fieldContext_SessionAttachment_previewable(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionAttachment_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionAttachment", field.Name)
 		},
 	}
 	return fc, nil
@@ -9398,6 +9456,8 @@ func (ec *executionContext) fieldContext_SessionDetail_promptAppends(_ context.C
 				return ec.fieldContext_PromptAppend_sessionId(ctx, field)
 			case "body":
 				return ec.fieldContext_PromptAppend_body(ctx, field)
+			case "attachments":
+				return ec.fieldContext_PromptAppend_attachments(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -13060,7 +13120,7 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "body"}
+	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13081,6 +13141,13 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 				return it, err
 			}
 			it.Body = data
+		case "stagedAttachmentIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("stagedAttachmentIds"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.StagedAttachmentIds = data
 		}
 	}
 	return it, nil
@@ -15392,6 +15459,11 @@ func (ec *executionContext) _PromptAppend(ctx context.Context, sel ast.Selection
 			}
 		case "body":
 			out.Values[i] = ec._PromptAppend_body(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "attachments":
+			out.Values[i] = ec._PromptAppend_attachments(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

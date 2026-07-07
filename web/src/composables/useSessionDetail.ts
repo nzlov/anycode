@@ -57,14 +57,15 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function appendDescription(body: string) {
+  async function appendDescription(body: string, stagedAttachmentIds: string[] = []) {
     const text = body.trim();
-    if (!text) return;
+    if (!text && stagedAttachmentIds.length === 0) return;
+    const appendBody = text || '追加附件';
 
     appending.value = true;
     error.value = '';
     try {
-      await appendPrompt(sessionId, text);
+      await appendPrompt(sessionId, appendBody, stagedAttachmentIds);
       await loadSessionDetail();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '追加描述失败';

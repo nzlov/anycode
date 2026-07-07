@@ -16,6 +16,8 @@ func (SessionAttachment) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Immutable(),
 		field.String("session_id").NotEmpty(),
+		field.String("source_type").NotEmpty(),
+		field.String("source_id").NotEmpty(),
 		field.String("kind").Default("file"),
 		field.String("filename").NotEmpty(),
 		field.String("path").NotEmpty(),
@@ -30,5 +32,6 @@ func (SessionAttachment) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("session_id"),
 		index.Fields("session_id", "created_at"),
+		index.Fields("session_id", "source_type", "source_id"),
 	}
 }

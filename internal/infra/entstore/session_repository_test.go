@@ -377,6 +377,8 @@ func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	attachment := session.SessionAttachment{
 		ID:          "attachment-1",
 		SessionID:   "session-1",
+		SourceType:  session.AttachmentSourceRequirement,
+		SourceID:    "session-1",
 		Kind:        "file",
 		Filename:    "note.txt",
 		Path:        "/data/attachments/sessions/session-1/attachment-1/note.txt",

@@ -165,9 +165,14 @@ func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendP
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
+	stagedAttachmentIDs := make([]sessiondomain.StagedAttachmentID, 0, len(input.StagedAttachmentIds))
+	for _, id := range input.StagedAttachmentIds {
+		stagedAttachmentIDs = append(stagedAttachmentIDs, sessiondomain.StagedAttachmentID(id))
+	}
 	dto, err := r.UseCases.Sessions.AppendPrompt(ctx, sessionapp.AppendPromptInput{
-		SessionID: sessiondomain.ID(input.SessionID),
-		Body:      input.Body,
+		SessionID:           sessiondomain.ID(input.SessionID),
+		Body:                input.Body,
+		StagedAttachmentIDs: stagedAttachmentIDs,
 	})
 	if err != nil {
 		return nil, err

@@ -7659,6 +7659,8 @@ type SessionAttachmentMutation struct {
 	typ           string
 	id            *string
 	session_id    *string
+	source_type   *string
+	source_id     *string
 	kind          *string
 	filename      *string
 	_path         *string
@@ -7811,6 +7813,78 @@ func (m *SessionAttachmentMutation) OldSessionID(ctx context.Context) (v string,
 // ResetSessionID resets all changes to the "session_id" field.
 func (m *SessionAttachmentMutation) ResetSessionID() {
 	m.session_id = nil
+}
+
+// SetSourceType sets the "source_type" field.
+func (m *SessionAttachmentMutation) SetSourceType(s string) {
+	m.source_type = &s
+}
+
+// SourceType returns the value of the "source_type" field in the mutation.
+func (m *SessionAttachmentMutation) SourceType() (r string, exists bool) {
+	v := m.source_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceType returns the old "source_type" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldSourceType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceType: %w", err)
+	}
+	return oldValue.SourceType, nil
+}
+
+// ResetSourceType resets all changes to the "source_type" field.
+func (m *SessionAttachmentMutation) ResetSourceType() {
+	m.source_type = nil
+}
+
+// SetSourceID sets the "source_id" field.
+func (m *SessionAttachmentMutation) SetSourceID(s string) {
+	m.source_id = &s
+}
+
+// SourceID returns the value of the "source_id" field in the mutation.
+func (m *SessionAttachmentMutation) SourceID() (r string, exists bool) {
+	v := m.source_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceID returns the old "source_id" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldSourceID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceID: %w", err)
+	}
+	return oldValue.SourceID, nil
+}
+
+// ResetSourceID resets all changes to the "source_id" field.
+func (m *SessionAttachmentMutation) ResetSourceID() {
+	m.source_id = nil
 }
 
 // SetKind sets the "kind" field.
@@ -8119,9 +8193,15 @@ func (m *SessionAttachmentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionAttachmentMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 10)
 	if m.session_id != nil {
 		fields = append(fields, sessionattachment.FieldSessionID)
+	}
+	if m.source_type != nil {
+		fields = append(fields, sessionattachment.FieldSourceType)
+	}
+	if m.source_id != nil {
+		fields = append(fields, sessionattachment.FieldSourceID)
 	}
 	if m.kind != nil {
 		fields = append(fields, sessionattachment.FieldKind)
@@ -8154,6 +8234,10 @@ func (m *SessionAttachmentMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case sessionattachment.FieldSessionID:
 		return m.SessionID()
+	case sessionattachment.FieldSourceType:
+		return m.SourceType()
+	case sessionattachment.FieldSourceID:
+		return m.SourceID()
 	case sessionattachment.FieldKind:
 		return m.Kind()
 	case sessionattachment.FieldFilename:
@@ -8179,6 +8263,10 @@ func (m *SessionAttachmentMutation) OldField(ctx context.Context, name string) (
 	switch name {
 	case sessionattachment.FieldSessionID:
 		return m.OldSessionID(ctx)
+	case sessionattachment.FieldSourceType:
+		return m.OldSourceType(ctx)
+	case sessionattachment.FieldSourceID:
+		return m.OldSourceID(ctx)
 	case sessionattachment.FieldKind:
 		return m.OldKind(ctx)
 	case sessionattachment.FieldFilename:
@@ -8208,6 +8296,20 @@ func (m *SessionAttachmentMutation) SetField(name string, value ent.Value) error
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSessionID(v)
+		return nil
+	case sessionattachment.FieldSourceType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceType(v)
+		return nil
+	case sessionattachment.FieldSourceID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceID(v)
 		return nil
 	case sessionattachment.FieldKind:
 		v, ok := value.(string)
@@ -8324,6 +8426,12 @@ func (m *SessionAttachmentMutation) ResetField(name string) error {
 	switch name {
 	case sessionattachment.FieldSessionID:
 		m.ResetSessionID()
+		return nil
+	case sessionattachment.FieldSourceType:
+		m.ResetSourceType()
+		return nil
+	case sessionattachment.FieldSourceID:
+		m.ResetSourceID()
 		return nil
 	case sessionattachment.FieldKind:
 		m.ResetKind()

@@ -59,7 +59,7 @@
             :show-badge="false"
             title="追加描述"
             placeholder="追加描述，发送给当前会话"
-            :disabled="!session || appending || stopping || isClosed"
+            :disabled="!session || appendUploading || appending || stopping || isClosed"
           >
             <template #actions>
               <q-btn
@@ -213,6 +213,19 @@
                   <q-item v-for="item in session.promptAppends" :key="item.id">
                     <q-item-section>
                       <q-item-label class="append-history__body">{{ item.body }}</q-item-label>
+                      <div v-if="item.attachments.length" class="append-history__attachments">
+                        <q-chip
+                          v-for="attachment in item.attachments"
+                          :key="attachment.id"
+                          dense
+                          square
+                          outline
+                          icon="attach_file"
+                          color="primary"
+                          text-color="primary"
+                          :label="attachment.filename"
+                        />
+                      </div>
                       <q-item-label caption>{{ item.time }}</q-item-label>
                     </q-item-section>
                   </q-item>
@@ -394,7 +407,9 @@ import {
   normalizeReasoningEffort,
 } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
+import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { getSessionDiff } from '@/services/diff';
+import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffFile, DiffLineKind, FileDiff, SessionDiff } from '@/services/diff';
 import type { QuestionAnswerInput, SessionMode, SessionStatus } from '@/services/sessions';
 
@@ -403,6 +418,7 @@ const sessionId = String(route.params.id ?? '');
 const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
+const appendUploading = ref(false);
 const composerModel = ref(firstCodexModelValue());
 const composerEffort = ref(normalizeReasoningEffort(composerModel.value, ''));
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
@@ -464,11 +480,15 @@ const streamEntries = computed<StreamEntry[]>(() => {
       rawType: 'user.input',
     });
     for (const item of session.value.promptAppends) {
+      const attachmentText =
+        item.attachments.length > 0
+          ? `\n\n附件：\n${item.attachments.map((attachment) => `- ${attachment.filename}`).join('\n')}`
+          : '';
       entries.push({
         id: `prompt-append-${item.id}`,
         kind: 'user',
         title: '追加描述',
-        body: item.body,
+        body: `${item.body}${attachmentText}`,
         createdAt: item.createdAt,
         time: item.time,
         rawType: 'user.append',
@@ -488,13 +508,13 @@ const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;
   if (current.status === 'closed') return null;
-  if (appendText.value.trim().length > 0) {
+  if (appendText.value.trim().length > 0 || appendFiles.value.length > 0) {
     return {
       icon: 'send',
       color: 'primary',
       tooltip: '发送追加描述',
-      loading: appending.value,
-      disabled: stopping.value,
+      loading: appendUploading.value || appending.value,
+      disabled: appendUploading.value || stopping.value,
       run: sendAppend,
     };
   }
@@ -731,6 +751,38 @@ function notifyError(err: unknown, fallback: string) {
   });
 }
 
+function notifyAppendError(err: unknown, fallback: string, cleanupError = '') {
+  if (wasNotified(err) && !cleanupError) return;
+  Notify.create({
+    type: 'negative',
+    icon: 'error',
+    position: 'top-right',
+    message: cleanupError
+      ? `${fallback}：${errorMessage(err)}；${cleanupError}`
+      : `${fallback}：${errorMessage(err)}`,
+    timeout: 5000,
+    actions: [{ icon: 'close', color: 'white', round: true }],
+  });
+}
+
+async function cleanupStagedAttachments(ids: string[]) {
+  if (ids.length === 0) return '';
+  const results = await Promise.allSettled(ids.map((id) => deleteStagedAttachment(id, { notify: false })));
+  const failed = results.find(
+    (result) => result.status === 'rejected' && !isStagedAttachmentAlreadyGone(result.reason),
+  );
+  if (!failed || failed.status !== 'rejected') return '';
+  return `已上传附件清理失败：${errorMessage(failed.reason)}`;
+}
+
+function isStagedAttachmentAlreadyGone(err: unknown) {
+  return err instanceof AnyCodeGraphQLError && err.code === 'not_found';
+}
+
+function errorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function wasNotified(err: unknown) {
   return Boolean(err && typeof err === 'object' && '__anycodeNotified' in err);
 }
@@ -759,11 +811,29 @@ function lineClass(kind: DiffLineKind) {
 }
 
 async function sendAppend() {
-  if (isClosed.value) return;
+  if (isClosed.value || appendUploading.value || appending.value) return;
   const text = appendText.value;
-  await appendDescription(text);
-  appendText.value = '';
-  appendFiles.value = [];
+  const selectedFiles = [...appendFiles.value];
+  const stagedAttachmentIds: string[] = [];
+  let phase: 'upload' | 'append' = selectedFiles.length > 0 ? 'upload' : 'append';
+  appendUploading.value = selectedFiles.length > 0;
+  try {
+    for (const file of selectedFiles) {
+      const attachment = await stageAttachment(file);
+      stagedAttachmentIds.push(attachment.id);
+    }
+    appendUploading.value = false;
+    phase = 'append';
+    await appendDescription(text, stagedAttachmentIds);
+    appendText.value = '';
+    appendFiles.value = [];
+  } catch (err) {
+    appendUploading.value = false;
+    const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
+    notifyAppendError(err, phase === 'upload' ? '附件上传失败' : '追加描述失败', cleanupError);
+  } finally {
+    appendUploading.value = false;
+  }
 }
 
 async function closeCurrentSession() {
@@ -1133,6 +1203,23 @@ async function scrollEventsToBottom() {
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: pre-wrap;
+}
+
+.append-history__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+
+.append-history__attachments :deep(.q-chip) {
+  max-width: 100%;
+}
+
+.append-history__attachments :deep(.q-chip__content) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .append-history__empty {

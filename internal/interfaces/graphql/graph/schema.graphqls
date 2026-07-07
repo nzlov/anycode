@@ -196,6 +196,7 @@ type PromptAppend {
   id: ID!
   sessionId: ID!
   body: String!
+  attachments: [SessionAttachment!]!
   createdAt: Time!
 }
 
@@ -432,6 +433,7 @@ input SetSessionPriorityInput {
 input AppendPromptInput {
   sessionId: ID!
   body: String!
+  stagedAttachmentIds: [ID!]
 }
 
 input ListSessionEventsInput {

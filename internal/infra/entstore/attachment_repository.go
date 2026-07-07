@@ -58,6 +58,8 @@ func (r *AttachmentRepository) SaveSessionAttachment(ctx context.Context, attach
 	create := r.client.SessionAttachment.Create().
 		SetID(string(attachment.ID)).
 		SetSessionID(string(attachment.SessionID)).
+		SetSourceType(string(attachment.SourceType)).
+		SetSourceID(attachment.SourceID).
 		SetKind(kind).
 		SetFilename(attachment.Filename).
 		SetPath(attachment.Path).
@@ -96,6 +98,25 @@ func (r *AttachmentRepository) ListSessionAttachments(ctx context.Context, sessi
 	return attachments, nil
 }
 
+func (r *AttachmentRepository) ListPromptAppendAttachments(ctx context.Context, sessionID domainsession.ID, appendID string) ([]domainsession.SessionAttachment, error) {
+	rows, err := r.client.SessionAttachment.Query().
+		Where(
+			entsessionattachment.SessionIDEQ(string(sessionID)),
+			entsessionattachment.SourceTypeEQ(string(domainsession.AttachmentSourcePromptAppend)),
+			entsessionattachment.SourceIDEQ(appendID),
+		).
+		Order(ent.Asc(entsessionattachment.FieldCreatedAt), ent.Asc(entsessionattachment.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list prompt append attachments: %w", err)
+	}
+	attachments := make([]domainsession.SessionAttachment, 0, len(rows))
+	for _, row := range rows {
+		attachments = append(attachments, toDomainSessionAttachment(row))
+	}
+	return attachments, nil
+}
+
 func (r *AttachmentRepository) DeleteSessionAttachment(ctx context.Context, id domainsession.SessionAttachmentID) error {
 	if err := r.client.SessionAttachment.DeleteOneID(string(id)).Exec(ctx); err != nil {
 		return fmt.Errorf("delete session attachment: %w", err)
@@ -120,6 +141,8 @@ func toDomainSessionAttachment(row *ent.SessionAttachment) domainsession.Session
 	return domainsession.SessionAttachment{
 		ID:          domainsession.SessionAttachmentID(row.ID),
 		SessionID:   domainsession.ID(row.SessionID),
+		SourceType:  domainsession.AttachmentSourceType(row.SourceType),
+		SourceID:    row.SourceID,
 		Kind:        row.Kind,
 		Filename:    row.Filename,
 		Path:        row.Path,

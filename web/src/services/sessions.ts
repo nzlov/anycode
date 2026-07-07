@@ -65,8 +65,20 @@ export interface PromptAppend {
   id: string;
   sessionId: string;
   body: string;
+  attachments: SessionAttachment[];
   createdAt: string;
   time: string;
+}
+
+export interface SessionAttachment {
+  id: string;
+  sessionId: string;
+  kind: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  previewable: boolean;
+  createdAt: string;
 }
 
 export interface SessionEvent {
@@ -228,6 +240,18 @@ interface GraphQLPromptAppend {
   id: string;
   sessionId: string;
   body: string;
+  attachments?: GraphQLSessionAttachment[];
+  createdAt: string;
+}
+
+interface GraphQLSessionAttachment {
+  id: string;
+  sessionId: string;
+  kind: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  previewable: boolean;
   createdAt: string;
 }
 
@@ -312,6 +336,16 @@ const sessionDetailFields = `
     id
     sessionId
     body
+    attachments {
+      id
+      sessionId
+      kind
+      filename
+      mimeType
+      size
+      previewable
+      createdAt
+    }
     createdAt
   }
   availableActions
@@ -527,10 +561,14 @@ export function subscribePendingQuestionBatches(
   );
 }
 
-export async function appendPrompt(sessionId: string, body: string) {
+export async function appendPrompt(sessionId: string, body: string, stagedAttachmentIds?: string[]) {
+  const input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } = { sessionId, body };
+  if (stagedAttachmentIds && stagedAttachmentIds.length > 0) {
+    input.stagedAttachmentIds = stagedAttachmentIds;
+  }
   return graphqlFetch<
-    { appendPrompt: { id: string; sessionId: string; body: string; createdAt: string } },
-    { input: { sessionId: string; body: string } }
+    { appendPrompt: GraphQLPromptAppend },
+    { input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } }
   >({
     query: `
       mutation AppendPrompt($input: AppendPromptInput!) {
@@ -538,11 +576,21 @@ export async function appendPrompt(sessionId: string, body: string) {
           id
           sessionId
           body
+          attachments {
+            id
+            sessionId
+            kind
+            filename
+            mimeType
+            size
+            previewable
+            createdAt
+          }
           createdAt
         }
       }
     `,
-    variables: { input: { sessionId, body } },
+    variables: { input },
   });
 }
 
@@ -754,8 +802,22 @@ function normalizePromptAppend(promptAppend: GraphQLPromptAppend): PromptAppend 
     id: promptAppend.id,
     sessionId: promptAppend.sessionId,
     body: promptAppend.body,
+    attachments: (promptAppend.attachments ?? []).map(normalizeAttachment),
     createdAt: promptAppend.createdAt,
     time: formatEventTime(promptAppend.createdAt),
+  };
+}
+
+function normalizeAttachment(attachment: GraphQLSessionAttachment): SessionAttachment {
+  return {
+    id: attachment.id,
+    sessionId: attachment.sessionId,
+    kind: attachment.kind,
+    filename: attachment.filename,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    previewable: attachment.previewable,
+    createdAt: attachment.createdAt,
   };
 }
 

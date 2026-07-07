@@ -57,7 +57,8 @@ type CreateSessionInput struct {
 }
 
 type StartSessionOptions struct {
-	Force bool
+	Force  bool
+	prompt string
 }
 
 type CloseSessionInput struct {
@@ -71,8 +72,9 @@ type SetSessionPriorityInput struct {
 }
 
 type AppendPromptInput struct {
-	SessionID domain.ID
-	Body      string
+	SessionID           domain.ID
+	Body                string
+	StagedAttachmentIDs []domain.StagedAttachmentID
 }
 
 type SubmitWorkflowApprovalInput struct {
@@ -132,10 +134,11 @@ type DetailDTO struct {
 }
 
 type PromptAppendDTO struct {
-	ID        string
-	SessionID domain.ID
-	Body      string
-	CreatedAt time.Time
+	ID          string
+	SessionID   domain.ID
+	Body        string
+	CreatedAt   time.Time
+	Attachments []domain.SessionAttachment
 }
 
 type WorkflowRunDTO struct {
@@ -492,7 +495,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			}
 		}
 	}
-	if err := s.archiveStagedAttachments(ctx, id, stagedAttachments); err != nil {
+	if _, err := s.archiveStagedAttachments(ctx, id, domain.AttachmentSourceRequirement, string(id), stagedAttachments); err != nil {
 		failedAt := s.now()
 		session.Status = domain.StatusFailed
 		session.UpdatedAt = failedAt
@@ -587,14 +590,18 @@ func (s *Service) startSession(ctx context.Context, id domain.ID, startOptions S
 		return s.startQueuedSession(ctx, session, true)
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser:
 		return toDTO(session), nil
-	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
+	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted, domain.StatusResumeFailed:
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
-	if startOptions.Force {
-		return s.startCodex(ctx, session, codexStartOptions{}, true)
+	options := codexStartOptions{}
+	if session.Status == domain.StatusResumeFailed {
+		options.reviewAfterReuseFailure = true
 	}
-	return s.enqueueCodex(ctx, session, codexStartOptions{}, queuePriorityForSession(session))
+	if startOptions.Force {
+		return s.startCodex(ctx, session, options, true)
+	}
+	return s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
 }
 
 func (s *Service) rerunWorkflowCurrentNode(ctx context.Context, session domain.Session) (DTO, error) {
@@ -608,7 +615,11 @@ func (s *Service) rerunWorkflowCurrentNode(ctx context.Context, session domain.S
 	if err != nil {
 		return DTO{}, fmt.Errorf("rerun workflow current node: %w", err)
 	}
-	return s.applyWorkflowAdvance(ctx, session, advance)
+	return s.applyWorkflowAdvance(ctx, session, advance, workflowAdvanceOptions{forceNewCodexSession: true})
+}
+
+type workflowAdvanceOptions struct {
+	forceNewCodexSession bool
 }
 
 func (s *Service) startWorkflowSession(ctx context.Context, session domain.Session, workflowDefinitionID domain.WorkflowDefinitionID) (DTO, error) {
@@ -951,7 +962,10 @@ func (s *Service) resumeSession(ctx context.Context, id domain.ID, startOptions 
 	if strings.TrimSpace(session.CodexSessionID) == "" {
 		return DTO{}, apperror.New(apperror.CodeResumeFailed, apperror.CategoryValidationError, "session cannot resume without codex session id").WithUserAction("rerun_session")
 	}
-	options := codexStartOptions{resumeCodexSessionID: session.CodexSessionID}
+	options := codexStartOptions{
+		resumeCodexSessionID: session.CodexSessionID,
+		prompt:               strings.TrimSpace(startOptions.prompt),
+	}
 	if session.Mode == domain.ModeWorkflow {
 		if s.workflows == nil {
 			return DTO{}, errors.New("session workflow starter is required for workflow mode")
@@ -965,7 +979,9 @@ func (s *Service) resumeSession(ctx context.Context, id domain.ID, startOptions 
 		}
 		options.workflowRunID = advance.WorkflowRunID
 		options.nodeRunID = workflowNodeRunID(advance.NodeRunID)
-		options.prompt = advance.Prompt
+		if options.prompt == "" {
+			options.prompt = advance.Prompt
+		}
 	}
 	if startOptions.Force {
 		return s.startCodex(ctx, session, options, true)
@@ -1055,11 +1071,12 @@ func (s *Service) queueAfterUserWait(ctx context.Context, id domain.ID) (domain.
 }
 
 type codexStartOptions struct {
-	resumeCodexSessionID string
-	workflowRunID        domain.WorkflowRunID
-	nodeRunID            *processdomain.NodeRunID
-	prompt               string
-	workflowJSONRetry    bool
+	resumeCodexSessionID    string
+	workflowRunID           domain.WorkflowRunID
+	nodeRunID               *processdomain.NodeRunID
+	prompt                  string
+	workflowJSONRetry       bool
+	reviewAfterReuseFailure bool
 }
 
 func (s *Service) startCodex(ctx context.Context, session domain.Session, options codexStartOptions, force bool) (DTO, error) {
@@ -1217,9 +1234,9 @@ func (s *Service) queueCodex(ctx context.Context, session domain.Session, option
 func (s *Service) queueCodexSession(ctx context.Context, session domain.Session, options codexStartOptions, priority domain.QueuePriority, kind domain.QueueKind) (domain.Session, error) {
 	now := s.now()
 	prompt := strings.TrimSpace(options.prompt)
-	if prompt == "" && kind == domain.QueueKindStart {
+	if kind == domain.QueueKindStart {
 		var err error
-		prompt, err = s.sessionPromptWithAppends(ctx, session)
+		prompt, err = s.rebuiltSessionPrompt(ctx, session, prompt, options.reviewAfterReuseFailure)
 		if err != nil {
 			return domain.Session{}, err
 		}
@@ -1610,9 +1627,9 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	prompt := strings.TrimSpace(options.prompt)
-	if prompt == "" {
+	if prompt == "" && options.resumeCodexSessionID == "" {
 		var err error
-		prompt, err = s.sessionPromptWithAppends(ctx, session)
+		prompt, err = s.rebuiltSessionPrompt(ctx, session, prompt, options.reviewAfterReuseFailure)
 		if err != nil {
 			return processdomain.CodexHandle{}, err
 		}
@@ -1623,7 +1640,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			SessionID:      processdomain.SessionID(session.ID),
 			CodexSessionID: options.resumeCodexSessionID,
 			Workdir:        session.WorktreePath,
-			Prompt:         promptWithAttachments(prompt, attachmentPaths),
+			Prompt:         prompt,
 		})
 	}
 	return s.codex.Start(ctx, processdomain.CodexStartInput{
@@ -1639,23 +1656,40 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	})
 }
 
-func (s *Service) sessionPromptWithAppends(ctx context.Context, session domain.Session) (string, error) {
-	prompt := strings.TrimSpace(session.Requirement)
+const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
+
+func (s *Service) rebuiltSessionPrompt(ctx context.Context, session domain.Session, nodePrompt string, reviewAfterReuseFailure bool) (string, error) {
+	original := strings.TrimSpace(session.Requirement)
+	nodePrompt = strings.TrimSpace(nodePrompt)
 	appends, err := s.repo.ListPromptAppends(ctx, session.ID)
 	if err != nil {
 		return "", fmt.Errorf("list prompt appends: %w", err)
 	}
-	for _, append := range appends {
-		body := strings.TrimSpace(append.Body)
+	bodies := make([]string, 0, len(appends))
+	for _, promptAppend := range appends {
+		body := strings.TrimSpace(promptAppend.Body)
 		if body == "" {
 			continue
 		}
-		if prompt != "" {
-			prompt += "\n\n"
-		}
-		prompt += "追加描述：\n" + body
+		bodies = append(bodies, body)
 	}
-	return prompt, nil
+	if len(bodies) == 0 && !reviewAfterReuseFailure {
+		if nodePrompt != "" {
+			return nodePrompt, nil
+		}
+		return original, nil
+	}
+	parts := []string{rebuiltPromptNotice}
+	if original != "" {
+		parts = append(parts, "原始需求：\n"+original)
+	}
+	for _, body := range bodies {
+		parts = append(parts, "追加描述：\n"+body)
+	}
+	if nodePrompt != "" {
+		parts = append(parts, "当前流程节点提示词：\n"+nodePrompt)
+	}
+	return strings.Join(parts, "\n\n"), nil
 }
 
 func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID) ([]string, []string, error) {
@@ -1663,6 +1697,11 @@ func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID)
 	if err != nil {
 		return nil, nil, err
 	}
+	paths, imagePaths := attachmentPathsFromAttachments(attachments)
+	return paths, imagePaths, nil
+}
+
+func attachmentPathsFromAttachments(attachments []domain.SessionAttachment) ([]string, []string) {
 	paths := make([]string, 0, len(attachments))
 	imagePaths := make([]string, 0, len(attachments))
 	for _, attachment := range attachments {
@@ -1675,7 +1714,7 @@ func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID)
 			imagePaths = append(imagePaths, path)
 		}
 	}
-	return paths, imagePaths, nil
+	return paths, imagePaths
 }
 
 func promptWithAttachments(prompt string, paths []string) string {
@@ -1815,7 +1854,7 @@ func (s *Service) failWorkflowAfterProcessExit(session domain.Session, handle pr
 		})
 		return
 	}
-	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance)
+	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance, workflowAdvanceOptions{})
 }
 
 func exitResultFromEvent(event processdomain.CodexEvent) (processdomain.ExitResult, bool) {
@@ -2010,10 +2049,10 @@ func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle
 		})
 		return
 	}
-	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance)
+	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance, workflowAdvanceOptions{})
 }
 
-func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) (DTO, error) {
+func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) (DTO, error) {
 	switch {
 	case advance.Blocked:
 		session.Status = domain.StatusBlocked
@@ -2054,12 +2093,13 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		return toDTO(session), nil
 	default:
 		options := codexStartOptions{
-			workflowRunID:     advance.WorkflowRunID,
-			nodeRunID:         workflowNodeRunID(advance.NodeRunID),
-			prompt:            advance.Prompt,
-			workflowJSONRetry: advance.RequireJSONRetry,
+			workflowRunID:           advance.WorkflowRunID,
+			nodeRunID:               workflowNodeRunID(advance.NodeRunID),
+			prompt:                  advance.Prompt,
+			workflowJSONRetry:       advance.RequireJSONRetry,
+			reviewAfterReuseFailure: advanceOptions.forceNewCodexSession,
 		}
-		if session.CodexSessionID != "" {
+		if session.CodexSessionID != "" && !advanceOptions.forceNewCodexSession {
 			options.resumeCodexSessionID = session.CodexSessionID
 		}
 		dto, err := s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
@@ -2092,7 +2132,7 @@ func (s *Service) executeWorkflowExpr(ctx context.Context, session domain.Sessio
 	if err != nil {
 		return DTO{}, err
 	}
-	return s.applyWorkflowAdvance(ctx, session, next)
+	return s.applyWorkflowAdvance(ctx, session, next, workflowAdvanceOptions{})
 }
 
 func runWorkflowExpr(script string, params map[string]any) (map[string]any, error) {
@@ -2213,7 +2253,7 @@ func (s *Service) completeWorkflowMergeNode(ctx context.Context, session domain.
 	if next.Completed {
 		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonMergedClosed})
 	}
-	return s.applyWorkflowAdvance(ctx, session, next)
+	return s.applyWorkflowAdvance(ctx, session, next, workflowAdvanceOptions{})
 }
 
 func (s *Service) recordMergeResult(ctx context.Context, session domain.Session, nodeRunID domain.NodeRunID, result gitdiffdomain.MergeResult) error {
@@ -2513,7 +2553,7 @@ func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.
 		})
 		return DTO{}, err
 	}
-	return s.applyWorkflowAdvance(ctx, session, advance)
+	return s.applyWorkflowAdvance(ctx, session, advance, workflowAdvanceOptions{})
 }
 
 type sessionEventInput struct {
@@ -3241,11 +3281,30 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, errors.New("session id is required")
 	}
 	body := strings.TrimSpace(input.Body)
+	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
+	if err != nil {
+		return PromptAppendDTO{}, err
+	}
 	if body == "" {
-		return PromptAppendDTO{}, errors.New("prompt append body is required")
+		if len(stagedAttachments) == 0 {
+			return PromptAppendDTO{}, errors.New("prompt append body is required")
+		}
+		body = "追加附件"
 	}
 	var append domain.PromptAppend
-	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+	err = s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) (err error) {
+		var archivedAttachments []domain.SessionAttachment
+		appendSaved := false
+		defer func() {
+			if err == nil {
+				return
+			}
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			defer cancel()
+			if rollbackErr := s.rollbackPromptAppendArtifacts(cleanupCtx, append.ID, appendSaved, archivedAttachments); rollbackErr != nil {
+				err = errors.Join(err, rollbackErr)
+			}
+		}()
 		session, err := s.repo.Find(ctx, input.SessionID)
 		if err != nil {
 			return fmt.Errorf("find session: %w", err)
@@ -3257,16 +3316,34 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if err != nil {
 			return fmt.Errorf("generate prompt append id: %w", err)
 		}
+		archivedAttachments, err = s.archiveStagedAttachments(ctx, input.SessionID, domain.AttachmentSourcePromptAppend, string(id), stagedAttachments)
+		if err != nil {
+			return err
+		}
 		append = domain.PromptAppend{
-			ID:        string(id),
-			SessionID: input.SessionID,
-			Body:      body,
-			CreatedAt: s.now(),
+			ID:          string(id),
+			SessionID:   input.SessionID,
+			Body:        body,
+			CreatedAt:   s.now(),
+			Attachments: archivedAttachments,
 		}
 		if err := s.repo.AppendPrompt(ctx, append); err != nil {
 			return fmt.Errorf("append prompt: %w", err)
 		}
+		appendSaved = true
 		if !canAutoStartAfterAppend(session) {
+			return nil
+		}
+		if canReuseCodexSessionAfterAppend(session) {
+			newAttachments, err := s.listPromptAppendAttachments(ctx, input.SessionID, append.ID)
+			if err != nil {
+				return err
+			}
+			newAttachmentPaths, _ := attachmentPathsFromAttachments(newAttachments)
+			prompt := promptWithAttachments(body, newAttachmentPaths)
+			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{prompt: prompt}); err != nil {
+				return fmt.Errorf("resume session after prompt append: %w", err)
+			}
 			return nil
 		}
 		if _, err := s.startSession(ctx, input.SessionID, StartSessionOptions{}); err != nil {
@@ -3287,6 +3364,10 @@ func canAutoStartAfterAppend(session domain.Session) bool {
 	default:
 		return false
 	}
+}
+
+func canReuseCodexSessionAfterAppend(session domain.Session) bool {
+	return session.Status == domain.StatusStopped && strings.TrimSpace(session.CodexSessionID) != ""
 }
 
 func (s *Service) SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error) {
@@ -3323,7 +3404,7 @@ func (s *Service) SubmitWorkflowApproval(ctx context.Context, input SubmitWorkfl
 		"nodeId":        input.NodeID,
 		"approved":      input.Approved,
 	})
-	if _, err := s.applyWorkflowAdvance(ctx, session, result.Advance); err != nil {
+	if _, err := s.applyWorkflowAdvance(ctx, session, result.Advance, workflowAdvanceOptions{}); err != nil {
 		return WorkflowRunDTO{}, err
 	}
 	return toWorkflowRunDTO(result.Run), nil
@@ -3345,6 +3426,7 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 	if err != nil {
 		return DetailDTO{}, err
 	}
+	appends = attachPromptAppendAttachments(appends, attachments)
 	currentNodeTitle, err := s.currentNodeTitle(ctx, session)
 	if err != nil {
 		return DetailDTO{}, err
@@ -3522,21 +3604,58 @@ func (s *Service) findStagedAttachments(ctx context.Context, ids []domain.Staged
 	return attachments, nil
 }
 
-func (s *Service) archiveStagedAttachments(ctx context.Context, sessionID domain.ID, stagedAttachments []domain.StagedAttachment) error {
+func (s *Service) archiveStagedAttachments(ctx context.Context, sessionID domain.ID, sourceType domain.AttachmentSourceType, sourceID string, stagedAttachments []domain.StagedAttachment) ([]domain.SessionAttachment, error) {
+	archived := make([]domain.SessionAttachment, 0, len(stagedAttachments))
 	for _, staged := range stagedAttachments {
 		attachment, err := s.files.Promote(ctx, staged, sessionID)
 		if err != nil {
-			return fmt.Errorf("promote staged attachment %s: %w", staged.ID, err)
+			return archived, fmt.Errorf("promote staged attachment %s: %w", staged.ID, err)
 		}
+		attachment.SourceType = sourceType
+		attachment.SourceID = sourceID
 		if err := s.attachments.SaveSessionAttachment(ctx, attachment); err != nil {
 			_ = s.files.DeleteSession(ctx, attachment.ID)
-			return fmt.Errorf("save session attachment %s: %w", attachment.ID, err)
+			return archived, fmt.Errorf("save session attachment %s: %w", attachment.ID, err)
 		}
+		archived = append(archived, attachment)
 		if err := s.attachments.DeleteStagedAttachment(ctx, staged.ID); err != nil {
-			return fmt.Errorf("delete staged attachment %s: %w", staged.ID, err)
+			return archived, fmt.Errorf("delete staged attachment %s: %w", staged.ID, err)
 		}
 	}
-	return nil
+	return archived, nil
+}
+
+func (s *Service) listPromptAppendAttachments(ctx context.Context, sessionID domain.ID, appendID string) ([]domain.SessionAttachment, error) {
+	if s.attachments == nil {
+		return []domain.SessionAttachment{}, nil
+	}
+	attachments, err := s.attachments.ListPromptAppendAttachments(ctx, sessionID, appendID)
+	if err != nil {
+		return nil, fmt.Errorf("list prompt append attachments: %w", err)
+	}
+	return attachments, nil
+}
+
+func (s *Service) rollbackPromptAppendArtifacts(ctx context.Context, appendID string, appendSaved bool, attachments []domain.SessionAttachment) error {
+	var errs []error
+	if appendSaved && appendID != "" {
+		if err := s.repo.DeletePromptAppend(ctx, appendID); err != nil {
+			errs = append(errs, fmt.Errorf("delete prompt append %s: %w", appendID, err))
+		}
+	}
+	for _, attachment := range attachments {
+		if s.attachments != nil {
+			if err := s.attachments.DeleteSessionAttachment(ctx, attachment.ID); err != nil {
+				errs = append(errs, fmt.Errorf("delete session attachment metadata %s: %w", attachment.ID, err))
+			}
+		}
+		if s.files != nil {
+			if err := s.files.DeleteSession(ctx, attachment.ID); err != nil {
+				errs = append(errs, fmt.Errorf("delete session attachment file %s: %w", attachment.ID, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *Service) listSessionAttachments(ctx context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
@@ -3550,12 +3669,27 @@ func (s *Service) listSessionAttachments(ctx context.Context, sessionID domain.I
 	return attachments, nil
 }
 
+func attachPromptAppendAttachments(appends []domain.PromptAppend, attachments []domain.SessionAttachment) []domain.PromptAppend {
+	byAppend := make(map[string][]domain.SessionAttachment)
+	for _, attachment := range attachments {
+		if attachment.SourceType != domain.AttachmentSourcePromptAppend || attachment.SourceID == "" {
+			continue
+		}
+		byAppend[attachment.SourceID] = append(byAppend[attachment.SourceID], attachment)
+	}
+	for index := range appends {
+		appends[index].Attachments = append([]domain.SessionAttachment(nil), byAppend[appends[index].ID]...)
+	}
+	return appends
+}
+
 func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {
 	return PromptAppendDTO{
-		ID:        append.ID,
-		SessionID: append.SessionID,
-		Body:      append.Body,
-		CreatedAt: append.CreatedAt,
+		ID:          append.ID,
+		SessionID:   append.SessionID,
+		Body:        append.Body,
+		CreatedAt:   append.CreatedAt,
+		Attachments: append.Attachments,
 	}
 }
 

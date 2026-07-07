@@ -38,14 +38,22 @@ export async function stageAttachment(file: File) {
   return data.stageAttachment;
 }
 
-export async function deleteStagedAttachment(id: string) {
-  const data = await graphqlFetch<{ deleteStagedAttachment: boolean }, { id: string }>({
+export async function deleteStagedAttachment(id: string, options: { notify?: boolean } = {}) {
+  const request: {
+    query: string;
+    variables: { id: string };
+    notify?: boolean;
+  } = {
     query: `
       mutation DeleteStagedAttachment($id: ID!) {
         deleteStagedAttachment(id: $id)
       }
     `,
     variables: { id },
-  });
+  };
+  if (options.notify !== undefined) {
+    request.notify = options.notify;
+  }
+  const data = await graphqlFetch<{ deleteStagedAttachment: boolean }, { id: string }>(request);
   return data.deleteStagedAttachment;
 }

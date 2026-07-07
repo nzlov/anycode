@@ -514,8 +514,139 @@ func TestStartWorkflowResumeFailedSessionRerunsCurrentNode(t *testing.T) {
 	if codex.startCalled {
 		t.Fatalf("codex should not start before queue drain: %#v", codex.startInput)
 	}
-	if saved := repo.sessions["session-1"]; saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-2" || saved.Queue.Prompt != "Run current node again" {
+	if saved := repo.sessions["session-1"]; saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-2" {
 		t.Fatalf("queued session = %#v", saved)
+	} else {
+		for _, want := range []string{
+			"无法复用已有 Codex 会话",
+			"原始需求：\nship feature",
+			"当前流程节点提示词：\nRun current node again",
+		} {
+			if !strings.Contains(saved.Queue.Prompt, want) {
+				t.Fatalf("queued prompt missing %q: %q", want, saved.Queue.Prompt)
+			}
+		}
+	}
+}
+
+func TestWorkflowRerunRebuildsPromptWithAppendsAndNodePrompt(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "ship feature",
+		Mode:         domain.ModeWorkflow,
+		Status:       domain.StatusResumeFailed,
+		WorktreePath: "/workspace/project-1",
+	}
+	repo.appends = []domain.PromptAppend{
+		{ID: "append-1", SessionID: "session-1", Body: "preserve manual fix", CreatedAt: time.Unix(10, 0).UTC()},
+	}
+	nodeRunID := domain.NodeRunID("node-run-2")
+	workflows := &fakeWorkflowStarter{rerunAdvance: domain.WorkflowAdvance{
+		WorkflowRunID:    "workflow-run-1",
+		NodeRunID:        &nodeRunID,
+		CurrentNodeID:    "build",
+		CurrentNodeTitle: "Build",
+		Status:           "running",
+		RequiresCodex:    true,
+		Prompt:           "Run current node again",
+	}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows))
+	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
+
+	got, err := service.StartSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if got.Status != domain.StatusQueued || workflows.rerunInput.SessionID != "session-1" {
+		t.Fatalf("StartSession() = %#v rerun input=%#v", got, workflows.rerunInput)
+	}
+	prompt := repo.sessions["session-1"].Queue.Prompt
+	for _, want := range []string{
+		"无法复用已有 Codex 会话",
+		"复查",
+		"原始需求：\nship feature",
+		"追加描述：\npreserve manual fix",
+		"当前流程节点提示词：\nRun current node again",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("queued prompt missing %q: %q", want, prompt)
+		}
+	}
+}
+
+func TestWorkflowRerunResumeFailedWithCodexSessionStartsNewProcess(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "ship feature",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusResumeFailed,
+		CodexSessionID: "codex-session-failed",
+		WorktreePath:   "/workspace/project-1",
+	}
+	repo.appends = []domain.PromptAppend{
+		{ID: "append-1", SessionID: "session-1", Body: "preserve manual fix", CreatedAt: time.Unix(10, 0).UTC()},
+	}
+	nodeRunID := domain.NodeRunID("node-run-2")
+	workflows := &fakeWorkflowStarter{rerunAdvance: domain.WorkflowAdvance{
+		WorkflowRunID:    "workflow-run-1",
+		NodeRunID:        &nodeRunID,
+		CurrentNodeID:    "build",
+		CurrentNodeTitle: "Build",
+		Status:           "running",
+		RequiresCodex:    true,
+		Prompt:           "Run current node again",
+	}}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{
+		startHandle:  processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-new"},
+		resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-failed"},
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithProcesses(processes, codex))
+	ids := []domain.ID{"process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	got, err := service.StartSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if got.Status != domain.StatusQueued || repo.sessions["session-1"].Queue.Kind != domain.QueueKindStart {
+		t.Fatalf("queued session = %#v", repo.sessions["session-1"])
+	}
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 1", started)
+	}
+	if codex.resumeCalled {
+		t.Fatalf("workflow rerun should start new codex process, got resume input %#v", codex.resumeInput)
+	}
+	if !codex.startCalled {
+		t.Fatal("workflow rerun should call codex start")
+	}
+	prompt := codex.startInput.Prompt
+	if strings.Count(prompt, "无法复用已有 Codex 会话") != 1 {
+		t.Fatalf("codex prompt should contain one review notice: %q", prompt)
+	}
+	for _, want := range []string{
+		"原始需求：\nship feature",
+		"追加描述：\npreserve manual fix",
+		"当前流程节点提示词：\nRun current node again",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("codex prompt missing %q: %q", want, prompt)
+		}
 	}
 }
 
@@ -1742,7 +1873,7 @@ func TestCreateSessionArchivesStagedAttachments(t *testing.T) {
 	if !ok {
 		t.Fatal("session attachment metadata was not saved")
 	}
-	if attachment.SessionID != "session-1" || attachment.Filename != "note.txt" {
+	if attachment.SessionID != "session-1" || attachment.Filename != "note.txt" || attachment.SourceType != domain.AttachmentSourceRequirement || attachment.SourceID != "session-1" {
 		t.Fatalf("session attachment = %#v", attachment)
 	}
 	if !files.promoted["staged-1"] {
@@ -2027,6 +2158,249 @@ func TestAppendPromptValidatesAndPersists(t *testing.T) {
 	}
 }
 
+func TestAppendPromptArchivesStagedAttachments(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:        "staged-1",
+		Filename:  "note.txt",
+		Path:      "/attachments/staged/staged-1/note.txt",
+		MimeType:  "text/plain",
+		Size:      5,
+		CreatedAt: time.Unix(9, 0).UTC(),
+	}
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	got, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "continue with attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].ID != "staged-1" {
+		t.Fatalf("AppendPrompt() attachments = %#v", got.Attachments)
+	}
+	if _, ok := repo.stagedAttachments["staged-1"]; ok {
+		t.Fatal("staged attachment metadata was not deleted")
+	}
+	attachment, ok := repo.sessionAttachments["staged-1"]
+	if !ok {
+		t.Fatal("session attachment metadata was not saved")
+	}
+	if attachment.SessionID != "session-1" || attachment.Filename != "note.txt" {
+		t.Fatalf("session attachment = %#v", attachment)
+	}
+	if !files.promoted["staged-1"] {
+		t.Fatal("staged attachment file was not promoted")
+	}
+}
+
+func TestAppendPromptAllowsAttachmentOnlyAppend(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+		Path:     "/attachments/staged/staged-1/note.txt",
+		MimeType: "text/plain",
+		Size:     5,
+	}
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	got, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "   ",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	if got.Body != "追加附件" {
+		t.Fatalf("AppendPrompt() body = %q", got.Body)
+	}
+	attachment, ok := repo.sessionAttachments["staged-1"]
+	if !ok {
+		t.Fatal("session attachment metadata was not saved")
+	}
+	if attachment.SourceType != domain.AttachmentSourcePromptAppend || attachment.SourceID != "append-1" {
+		t.Fatalf("session attachment = %#v", attachment)
+	}
+	if !files.promoted["staged-1"] {
+		t.Fatal("staged attachment file was not promoted")
+	}
+}
+
+func TestAppendPromptRollsBackArchivedAttachmentsWhenAppendSaveFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+		Path:     "/attachments/staged/staged-1/note.txt",
+		MimeType: "text/plain",
+		Size:     5,
+	}
+	repo.appendPromptErr = errors.New("append save failed")
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "continue with attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	}); err == nil {
+		t.Fatal("AppendPrompt() expected append save error")
+	}
+	if _, ok := repo.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment metadata was not rolled back")
+	}
+	if !files.deletedSessions["staged-1"] {
+		t.Fatal("session attachment file was not rolled back")
+	}
+	if len(repo.appends) != 0 {
+		t.Fatalf("appends = %#v, want none", repo.appends)
+	}
+}
+
+func TestAppendPromptRollsBackArchivedAttachmentsWhenStagedDeleteFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+		Path:     "/attachments/staged/staged-1/note.txt",
+		MimeType: "text/plain",
+		Size:     5,
+	}
+	repo.deleteStagedAttachmentErr = errors.New("delete staged failed")
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "continue with attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	}); err == nil {
+		t.Fatal("AppendPrompt() expected staged delete error")
+	}
+	if _, ok := repo.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment metadata was not rolled back")
+	}
+	if !files.deletedSessions["staged-1"] {
+		t.Fatal("session attachment file was not rolled back")
+	}
+}
+
+func TestAppendPromptRollbackIgnoresRequestCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+		Path:     "/attachments/staged/staged-1/note.txt",
+		MimeType: "text/plain",
+		Size:     5,
+	}
+	repo.appendPromptHook = cancel
+	repo.appendPromptErr = errors.New("append save failed")
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "continue with attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	}); err == nil {
+		t.Fatal("AppendPrompt() expected append save error")
+	}
+	if _, ok := repo.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment metadata was not rolled back")
+	}
+	if !files.deletedSessions["staged-1"] {
+		t.Fatal("session attachment file was not rolled back")
+	}
+}
+
+func TestAppendPromptRollsBackArchivedAttachmentsWhenAutoResumeFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusStopped,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/session-1",
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+		Path:     "/attachments/staged/staged-1/note.txt",
+		MimeType: "text/plain",
+		Size:     5,
+	}
+	repo.saveErr = errors.New("queue save failed")
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "continue with attachment",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	}); err == nil {
+		t.Fatal("AppendPrompt() expected auto resume error")
+	}
+	if _, ok := repo.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment metadata was not rolled back")
+	}
+	if !files.deletedSessions["staged-1"] {
+		t.Fatal("session attachment file was not rolled back")
+	}
+	if len(repo.appends) != 0 {
+		t.Fatalf("appends = %#v, want none", repo.appends)
+	}
+	if len(repo.deletedAppends) != 1 || repo.deletedAppends[0] != "append-1" {
+		t.Fatalf("deleted appends = %#v", repo.deletedAppends)
+	}
+}
+
 func TestAppendPromptRejectsClosedSession(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -2064,7 +2438,7 @@ func TestAppendPromptAutoStartsStoppedChatSession(t *testing.T) {
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil), WithProcesses(processes, codex))
 	ids := []domain.ID{"append-1", "process-run-1", "event-starting", "event-running"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
@@ -2090,6 +2464,227 @@ func TestAppendPromptAutoStartsStoppedChatSession(t *testing.T) {
 	}
 	if !strings.Contains(repo.sessions["session-1"].Queue.Prompt, "implement session") || !strings.Contains(repo.sessions["session-1"].Queue.Prompt, "追加描述：\ncontinue with tests") {
 		t.Fatalf("queued prompt = %q", repo.sessions["session-1"].Queue.Prompt)
+	}
+}
+
+func TestAppendPromptResumesStoppedChatSessionWithOnlyNewBody(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "original requirement",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusStopped,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/session-1",
+	}
+	repo.appends = []domain.PromptAppend{
+		{ID: "append-0", SessionID: "session-1", Body: "old context", CreatedAt: time.Unix(10, 0).UTC()},
+	}
+	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+		ID:        "attachment-1",
+		SessionID: "session-1",
+		Filename:  "notes.md",
+		Path:      "/data/attachments/sessions/session-1/notes.md",
+		MimeType:  "text/markdown",
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "new-note.md",
+		Path:     "/attachments/staged/staged-1/new-note.md",
+		MimeType: "text/markdown",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
+	ids := []domain.ID{"append-1", "process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	_, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "  only this new instruction  ",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+
+	saved := repo.sessions["session-1"]
+	if saved.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindResume {
+		t.Fatalf("queued session = %#v", saved)
+	}
+	if saved.Queue.ResumeCodexSessionID != "codex-session-1" {
+		t.Fatalf("resume codex session id = %q", saved.Queue.ResumeCodexSessionID)
+	}
+	newPath := "/attachments/sessions/session-1/staged-1/new-note.md"
+	if saved.Queue.Prompt != "only this new instruction\n\nAttached files available on disk:\n- "+newPath {
+		t.Fatalf("resume prompt = %q", saved.Queue.Prompt)
+	}
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 1", started)
+	}
+	if !codex.resumeCalled || codex.startCalled {
+		t.Fatalf("codex calls start=%v resume=%v", codex.startCalled, codex.resumeCalled)
+	}
+	if !files.promoted["staged-1"] {
+		t.Fatal("staged attachment file was not promoted")
+	}
+	if codex.resumeInput.Prompt != "only this new instruction\n\nAttached files available on disk:\n- "+newPath {
+		t.Fatalf("codex resume prompt = %q", codex.resumeInput.Prompt)
+	}
+	if strings.Contains(codex.resumeInput.Prompt, "/data/attachments/sessions/session-1/notes.md") {
+		t.Fatalf("codex resume prompt should not include old attachment path: %q", codex.resumeInput.Prompt)
+	}
+	if repo.lastPromptAppendAttachmentSessionID != "session-1" || repo.lastPromptAppendAttachmentID != "append-1" {
+		t.Fatalf("prompt append attachment query session=%q append=%q", repo.lastPromptAppendAttachmentSessionID, repo.lastPromptAppendAttachmentID)
+	}
+}
+
+func TestAppendPromptRebuildsPromptWithReviewNoticeWhenNotResuming(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "original requirement",
+		Mode:         domain.ModeChat,
+		Status:       domain.StatusStopped,
+		WorktreePath: "/workspace/session-1",
+	}
+	repo.appends = []domain.PromptAppend{
+		{ID: "append-0", SessionID: "session-1", Body: "old context", CreatedAt: time.Unix(10, 0).UTC()},
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	_, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID: "session-1",
+		Body:      "new instruction",
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+
+	prompt := repo.sessions["session-1"].Queue.Prompt
+	for _, want := range []string{
+		"无法复用已有 Codex 会话",
+		"复查",
+		"原始需求：\noriginal requirement",
+		"追加描述：\nold context",
+		"追加描述：\nnew instruction",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("queued prompt missing %q: %q", want, prompt)
+		}
+	}
+}
+
+func TestAppendPromptRebuiltStartSendsPromptToCodexOnce(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "original requirement",
+		Mode:         domain.ModeChat,
+		Status:       domain.StatusStopped,
+		WorktreePath: "/workspace/session-1",
+	}
+	repo.appends = []domain.PromptAppend{
+		{ID: "append-0", SessionID: "session-1", Body: "old context", CreatedAt: time.Unix(10, 0).UTC()},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-new"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	ids := []domain.ID{"append-1", "process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	_, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID: "session-1",
+		Body:      "new instruction",
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 1", started)
+	}
+
+	prompt := codex.startInput.Prompt
+	if strings.Count(prompt, "无法复用已有 Codex 会话") != 1 {
+		t.Fatalf("codex prompt should contain one review notice: %q", prompt)
+	}
+	if strings.Contains(prompt, "当前流程节点提示词") {
+		t.Fatalf("chat rebuilt prompt should not wrap itself as node prompt: %q", prompt)
+	}
+	for _, want := range []string{
+		"原始需求：\noriginal requirement",
+		"追加描述：\nold context",
+		"追加描述：\nnew instruction",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("codex prompt missing %q: %q", want, prompt)
+		}
+	}
+}
+
+func TestAppendPromptRebuildsResumeFailedChatSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "original requirement",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusResumeFailed,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/session-1",
+	}
+	repo.appends = []domain.PromptAppend{
+		{ID: "append-0", SessionID: "session-1", Body: "old context", CreatedAt: time.Unix(10, 0).UTC()},
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	_, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID: "session-1",
+		Body:      "new instruction",
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+
+	saved := repo.sessions["session-1"]
+	if saved.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindStart || saved.Queue.ResumeCodexSessionID != "" {
+		t.Fatalf("queued session = %#v", saved)
+	}
+	for _, want := range []string{
+		"无法复用已有 Codex 会话",
+		"原始需求：\noriginal requirement",
+		"追加描述：\nold context",
+		"追加描述：\nnew instruction",
+	} {
+		if !strings.Contains(saved.Queue.Prompt, want) {
+			t.Fatalf("queued prompt missing %q: %q", want, saved.Queue.Prompt)
+		}
 	}
 }
 
@@ -4030,23 +4625,29 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 }
 
 type fakeRepository struct {
-	saved               []domain.Session
-	sessions            map[domain.ID]domain.Session
-	createErr           error
-	saveErr             error
-	listSessions        []domain.Session
-	interruptedSessions []domain.Session
-	listQueuedHook      func()
-	listTotal           int
-	lastListQuery       domain.ListQuery
-	lastConfig          domain.Config
-	hasLastConfig       bool
-	lastConfigProjectID domain.ProjectID
-	appends             []domain.PromptAppend
-	mergeRecords        []domain.MergeRecord
-	addMergeRecordErr   error
-	stagedAttachments   map[domain.StagedAttachmentID]domain.StagedAttachment
-	sessionAttachments  map[domain.SessionAttachmentID]domain.SessionAttachment
+	saved                               []domain.Session
+	sessions                            map[domain.ID]domain.Session
+	createErr                           error
+	saveErr                             error
+	listSessions                        []domain.Session
+	interruptedSessions                 []domain.Session
+	listQueuedHook                      func()
+	listTotal                           int
+	lastListQuery                       domain.ListQuery
+	lastConfig                          domain.Config
+	hasLastConfig                       bool
+	lastConfigProjectID                 domain.ProjectID
+	appends                             []domain.PromptAppend
+	deletedAppends                      []string
+	appendPromptHook                    func()
+	appendPromptErr                     error
+	mergeRecords                        []domain.MergeRecord
+	addMergeRecordErr                   error
+	stagedAttachments                   map[domain.StagedAttachmentID]domain.StagedAttachment
+	sessionAttachments                  map[domain.SessionAttachmentID]domain.SessionAttachment
+	deleteStagedAttachmentErr           error
+	lastPromptAppendAttachmentSessionID domain.ID
+	lastPromptAppendAttachmentID        string
 }
 
 func newFakeRepository() *fakeRepository {
@@ -4136,7 +4737,24 @@ func (r *fakeRepository) LastConfigForProject(_ context.Context, projectID domai
 }
 
 func (r *fakeRepository) AppendPrompt(_ context.Context, promptAppend domain.PromptAppend) error {
+	if r.appendPromptHook != nil {
+		r.appendPromptHook()
+	}
+	if r.appendPromptErr != nil {
+		return r.appendPromptErr
+	}
 	r.appends = append(r.appends, promptAppend)
+	return nil
+}
+
+func (r *fakeRepository) DeletePromptAppend(_ context.Context, id string) error {
+	r.deletedAppends = append(r.deletedAppends, id)
+	for index, promptAppend := range r.appends {
+		if promptAppend.ID == id {
+			r.appends = append(r.appends[:index], r.appends[index+1:]...)
+			return nil
+		}
+	}
 	return nil
 }
 
@@ -4176,6 +4794,9 @@ func (r *fakeRepository) FindStagedAttachment(_ context.Context, id domain.Stage
 }
 
 func (r *fakeRepository) DeleteStagedAttachment(_ context.Context, id domain.StagedAttachmentID) error {
+	if r.deleteStagedAttachmentErr != nil {
+		return r.deleteStagedAttachmentErr
+	}
 	delete(r.stagedAttachments, id)
 	return nil
 }
@@ -4197,6 +4818,18 @@ func (r *fakeRepository) ListSessionAttachments(_ context.Context, sessionID dom
 	attachments := make([]domain.SessionAttachment, 0, len(r.sessionAttachments))
 	for _, attachment := range r.sessionAttachments {
 		if attachment.SessionID == sessionID {
+			attachments = append(attachments, attachment)
+		}
+	}
+	return attachments, nil
+}
+
+func (r *fakeRepository) ListPromptAppendAttachments(_ context.Context, sessionID domain.ID, appendID string) ([]domain.SessionAttachment, error) {
+	r.lastPromptAppendAttachmentSessionID = sessionID
+	r.lastPromptAppendAttachmentID = appendID
+	attachments := make([]domain.SessionAttachment, 0, len(r.sessionAttachments))
+	for _, attachment := range r.sessionAttachments {
+		if attachment.SessionID == sessionID && attachment.SourceType == domain.AttachmentSourcePromptAppend && attachment.SourceID == appendID {
 			attachments = append(attachments, attachment)
 		}
 	}
@@ -4247,7 +4880,10 @@ func (s *fakeAttachmentStore) DeleteStaged(context.Context, domain.StagedAttachm
 	return errors.New("unexpected DeleteStaged call")
 }
 
-func (s *fakeAttachmentStore) DeleteSession(_ context.Context, id domain.SessionAttachmentID) error {
+func (s *fakeAttachmentStore) DeleteSession(ctx context.Context, id domain.SessionAttachmentID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.deletedSessions[id] = true
 	return nil
 }

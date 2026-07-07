@@ -18,6 +18,13 @@ type AttachmentID string
 type StagedAttachmentID string
 type SessionAttachmentID string
 
+type AttachmentSourceType string
+
+const (
+	AttachmentSourceRequirement  AttachmentSourceType = "requirement"
+	AttachmentSourcePromptAppend AttachmentSourceType = "prompt_append"
+)
+
 type Mode string
 
 const (
@@ -138,6 +145,8 @@ func (l TodoList) Completed() int {
 type SessionAttachment struct {
 	ID          SessionAttachmentID
 	SessionID   ID
+	SourceType  AttachmentSourceType
+	SourceID    string
 	Kind        string
 	Filename    string
 	Path        string
@@ -173,10 +182,11 @@ type AttachmentStream struct {
 }
 
 type PromptAppend struct {
-	ID        string
-	SessionID ID
-	Body      string
-	CreatedAt time.Time
+	ID          string
+	SessionID   ID
+	Body        string
+	CreatedAt   time.Time
+	Attachments []SessionAttachment
 }
 
 type MergeRecord struct {
@@ -216,6 +226,7 @@ type Repository interface {
 	CountByProject(ctx context.Context, projectID ProjectID) (int, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error
+	DeletePromptAppend(ctx context.Context, id string) error
 	ListPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
 	LatestSuccessfulMergeRecord(ctx context.Context, sessionID ID) (MergeRecord, bool, error)
@@ -228,6 +239,7 @@ type AttachmentRepository interface {
 	SaveSessionAttachment(ctx context.Context, attachment SessionAttachment) error
 	FindSessionAttachment(ctx context.Context, id SessionAttachmentID) (SessionAttachment, error)
 	ListSessionAttachments(ctx context.Context, sessionID ID) ([]SessionAttachment, error)
+	ListPromptAppendAttachments(ctx context.Context, sessionID ID, appendID string) ([]SessionAttachment, error)
 	DeleteSessionAttachment(ctx context.Context, id SessionAttachmentID) error
 }
 

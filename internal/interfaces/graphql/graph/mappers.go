@@ -188,11 +188,16 @@ func mapSessionAttachment(attachment sessiondomain.SessionAttachment) *model.Ses
 }
 
 func mapPromptAppend(dto sessionapp.PromptAppendDTO) *model.PromptAppend {
+	attachments := make([]*model.SessionAttachment, 0, len(dto.Attachments))
+	for _, attachment := range dto.Attachments {
+		attachments = append(attachments, mapSessionAttachment(attachment))
+	}
 	return &model.PromptAppend{
-		ID:        dto.ID,
-		SessionID: string(dto.SessionID),
-		Body:      dto.Body,
-		CreatedAt: dto.CreatedAt,
+		ID:          dto.ID,
+		SessionID:   string(dto.SessionID),
+		Body:        dto.Body,
+		Attachments: attachments,
+		CreatedAt:   dto.CreatedAt,
 	}
 }
 
