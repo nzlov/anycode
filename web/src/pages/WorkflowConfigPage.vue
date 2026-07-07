@@ -126,10 +126,26 @@
             </div>
             <div v-if="outputFields.length > 0" class="q-gutter-sm">
               <div v-for="(field, index) in outputFields" :key="index" class="workflow-output-row">
-                <q-input v-model="field.key" dense outlined label="key" />
-                <q-input v-model="field.description" dense outlined label="说明" />
-                <q-select v-model="field.valueType" dense outlined label="值类型" :options="valueTypeOptions" />
-                <q-btn flat round dense color="negative" icon="close" aria-label="删除输出字段" @click="deleteOutputField(index)">
+                <q-input v-model="field.key" dense outlined label="key" :disable="isSystemOutputField(field)" />
+                <q-input v-model="field.description" dense outlined label="说明" :disable="isSystemOutputField(field)" />
+                <q-select
+                  v-model="field.valueType"
+                  dense
+                  outlined
+                  label="值类型"
+                  :options="valueTypeOptions"
+                  :disable="isSystemOutputField(field)"
+                />
+                <q-btn
+                  flat
+                  round
+                  dense
+                  color="negative"
+                  icon="close"
+                  aria-label="删除输出字段"
+                  :disable="isSystemOutputField(field)"
+                  @click="deleteOutputField(index)"
+                >
                   <q-tooltip>删除输出字段</q-tooltip>
                 </q-btn>
               </div>
@@ -231,7 +247,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -319,6 +335,15 @@ const conditionFieldOptions = computed(() => {
     }));
   return [{ label: 'last.status', value: 'last.status' }, ...fields];
 });
+const systemOutputFieldKeys = computed(() => {
+  const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
+  return new Set(systemOutputFields(nodeType.value, approvalBeforeRun, nodeType.value === 'merge').map((field) => field.key));
+});
+
+watch([nodeType, requiresApproval], () => {
+  const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
+  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalBeforeRun, nodeType.value === 'merge'));
+});
 
 onMounted(async () => {
   loading.value = true;
@@ -385,11 +410,14 @@ function applyNodeEdit() {
   node.type = nodeType.value;
   node.title = nodeTitle.value.trim() || nextId;
   node.prompt = nodePrompt.value.trim();
-  node.outputFields = outputFields.value.map(normalizeOutputField).filter((field) => field.key);
+  const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
+  const merge = nodeType.value === 'merge' ? { strategy: mergeStrategy.value } : null;
+  node.outputFields = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalBeforeRun, Boolean(merge)));
   node.retry.maxAttempts = Math.max(0, Number(retry.value) || 0);
-  node.approval.beforeRun = requiresApproval.value || nodeType.value === 'approval';
+  node.approval.beforeRun = approvalBeforeRun;
   node.approval.afterRun = false;
-  node.merge = nodeType.value === 'merge' ? { strategy: mergeStrategy.value } : null;
+  node.merge = merge;
+  outputFields.value = node.outputFields.map((field) => ({ ...field }));
   if (oldId !== nextId) {
     graph.edges.forEach((edge) => {
       if (edge.from === oldId) edge.from = nextId;
@@ -555,6 +583,7 @@ function addOutputField() {
 }
 
 function deleteOutputField(index: number) {
+  if (isSystemOutputField(outputFields.value[index])) return;
   outputFields.value.splice(index, 1);
 }
 
@@ -622,7 +651,8 @@ function defaultNodePrompt(type: string) {
 }
 
 function defaultOutputFields(type: string): WorkflowOutputField[] {
-  if (type === 'approval' || type === 'merge') return [];
+  const fields = systemOutputFields(type, type === 'approval', type === 'merge');
+  if (fields.length > 0) return fields;
   return [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }];
 }
 
@@ -688,18 +718,21 @@ function defaultGraph(): WorkflowGraph {
 }
 
 function normalizeNode(node: Partial<WorkflowNode> & { id: string }): WorkflowNode {
+  const type = node.type || 'codex';
+  const approvalBeforeRun = Boolean(node.approval?.beforeRun) || type === 'approval';
+  const merge = node.merge ? { strategy: node.merge.strategy === 'rebase' ? 'rebase' : 'merge' } : null;
   return {
     id: normalizeID(node.id),
-    type: node.type || 'codex',
+    type,
     title: node.title || node.id,
     prompt: node.prompt || '',
-    outputFields: (node.outputFields ?? []).map(normalizeOutputField).filter((field) => field.key),
+    outputFields: completeOutputFields(node.outputFields ?? [], systemOutputFields(type, approvalBeforeRun, type === 'merge' || Boolean(merge))),
     approval: {
-      beforeRun: Boolean(node.approval?.beforeRun),
+      beforeRun: approvalBeforeRun,
       afterRun: Boolean(node.approval?.afterRun),
     },
     retry: { maxAttempts: Math.max(0, Number(node.retry?.maxAttempts ?? 0)) },
-    merge: node.merge ? { strategy: node.merge.strategy === 'rebase' ? 'rebase' : 'merge' } : null,
+    merge,
   };
 }
 
@@ -732,6 +765,55 @@ function normalizeOutputField(field: Partial<WorkflowOutputField>): WorkflowOutp
     description: String(field.description ?? '').trim(),
     valueType,
   };
+}
+
+function systemOutputFields(type: string, approvalBeforeRun: boolean, hasMerge: boolean): WorkflowOutputField[] {
+  const fields: WorkflowOutputField[] = [];
+  if (type === 'approval' || approvalBeforeRun) {
+    fields.push({
+      key: 'approval.approved',
+      description: '人工审批是否通过',
+      valueType: 'boolean',
+    });
+  }
+  if (type === 'merge' || hasMerge) {
+    fields.push(
+      {
+        key: 'merge.status',
+        description: '合并执行状态',
+        valueType: 'string',
+      },
+      {
+        key: 'merge.failureCode',
+        description: '合并未完成时的失败代码',
+        valueType: 'string',
+      },
+      {
+        key: 'merge.failureReason',
+        description: '合并未完成时的失败原因',
+        valueType: 'string',
+      },
+    );
+  }
+  return fields;
+}
+
+function completeOutputFields(fields: Partial<WorkflowOutputField>[], required: WorkflowOutputField[]) {
+  const normalized = fields.map(normalizeOutputField).filter((field) => field.key);
+  required.forEach((requiredField) => {
+    const index = normalized.findIndex((field) => field.key === requiredField.key);
+    if (index >= 0) {
+      normalized.splice(index, 1, { ...requiredField });
+      return;
+    }
+    normalized.push({ ...requiredField });
+  });
+  return normalized;
+}
+
+function isSystemOutputField(field: WorkflowOutputField | undefined) {
+  if (!field) return false;
+  return systemOutputFieldKeys.value.has(field.key.trim());
 }
 
 function conditionValueToInput(value: unknown) {
