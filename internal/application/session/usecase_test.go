@@ -99,6 +99,96 @@ func TestCreateSessionFillsMissingConfigFromPreviousProjectSession(t *testing.T)
 	}
 }
 
+func TestCreateSessionUsesProjectScopedShortIDForDefaultGeneratedID(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["existing"] = domain.Session{ID: "existing", ProjectID: "018f61095330c21e109ba56787a2e09f"}
+	projects := newFakeProjectRepository()
+	projects.projects["018f61095330c21e109ba56787a2e09f"] = projectdomain.Project{
+		ID:   "018f61095330c21e109ba56787a2e09f",
+		Name: "workspaces",
+	}
+	service := New(repo, projects)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "0123456789abcdef0123456789abcdef", nil }
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "018f61095330c21e109ba56787a2e09f",
+		Requirement: "implement app session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.ID != "p018f6109-c2" {
+		t.Fatalf("CreateSession() ID = %q, want p018f6109-c2", got.ID)
+	}
+	if _, ok := repo.sessions["p018f6109-c2"]; !ok {
+		t.Fatalf("saved sessions = %#v", repo.sessions)
+	}
+}
+
+func TestCreateSessionRetriesProjectShortIDWhenCandidateExists(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["old-1"] = domain.Session{ID: "old-1", ProjectID: "018f61095330c21e109ba56787a2e09f"}
+	repo.sessions["old-2"] = domain.Session{ID: "old-2", ProjectID: "018f61095330c21e109ba56787a2e09f"}
+	repo.sessions["p018f6109-c3"] = domain.Session{ID: "p018f6109-c3", ProjectID: "other", Requirement: "keep me"}
+	projects := newFakeProjectRepository()
+	projects.projects["018f61095330c21e109ba56787a2e09f"] = projectdomain.Project{
+		ID:   "018f61095330c21e109ba56787a2e09f",
+		Name: "workspaces",
+	}
+	service := New(repo, projects)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "0123456789abcdef0123456789abcdef", nil }
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "018f61095330c21e109ba56787a2e09f",
+		Requirement: "implement app session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.ID != "p018f6109-c4" {
+		t.Fatalf("CreateSession() ID = %q, want p018f6109-c4", got.ID)
+	}
+	if repo.sessions["p018f6109-c3"].Requirement != "keep me" {
+		t.Fatalf("existing session was overwritten: %#v", repo.sessions["p018f6109-c3"])
+	}
+}
+
+func TestCreateSessionUsesDistinctProjectCodesForSimilarProjectIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Name: "project-1"}
+	projects.projects["project-2"] = projectdomain.Project{ID: "project-2", Name: "project-2"}
+	service := New(repo, projects)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "0123456789abcdef0123456789abcdef", nil }
+
+	first, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement first session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(project-1) error = %v", err)
+	}
+	second, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-2",
+		Requirement: "implement second session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(project-2) error = %v", err)
+	}
+	if first.ID == second.ID {
+		t.Fatalf("CreateSession() IDs should differ for similar project IDs, both got %q", first.ID)
+	}
+	if first.ID != "pproject1-c1" || second.ID != "pproject2-c1" {
+		t.Fatalf("CreateSession() IDs = %q/%q, want pproject1-c1/pproject2-c1", first.ID, second.ID)
+	}
+}
+
 func TestCreateSessionValidatesProjectAndRequirement(t *testing.T) {
 	service := New(newFakeRepository(), newFakeProjectRepository("project-1"))
 
@@ -147,6 +237,37 @@ func TestCreateSessionCreatesWorktreeForGitProject(t *testing.T) {
 	}
 	if len(repo.saved) != 2 || repo.saved[len(repo.saved)-1].WorktreePath != got.WorktreePath {
 		t.Fatalf("saved sessions = %#v", repo.saved)
+	}
+}
+
+func TestCreateSessionUsesShortIDForGitWorktreeBranch(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["018f61095330c21e109ba56787a2e09f"] = projectdomain.Project{
+		ID:    "018f61095330c21e109ba56787a2e09f",
+		Name:  "workspaces",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/018f61095330c21e109ba56787a2e09f/p018f6109-c1"}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "0123456789abcdef0123456789abcdef", nil }
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "018f61095330c21e109ba56787a2e09f",
+		Requirement: "implement app session",
+		BaseBranch:  "main",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.ID != "p018f6109-c1" || got.WorktreeBranch != "p018f6109-c1" {
+		t.Fatalf("CreateSession() id/worktree branch = %q/%q", got.ID, got.WorktreeBranch)
+	}
+	if worktrees.createSessionID != "p018f6109-c1" {
+		t.Fatalf("Create() session = %q, want p018f6109-c1", worktrees.createSessionID)
 	}
 }
 
@@ -1523,7 +1644,7 @@ func TestGetSessionDerivesCurrentNodeTitleFromLatestWorkflowEvent(t *testing.T) 
 	}
 }
 
-func TestCreateSessionDoesNotSaveSuccessfulSessionWhenWorktreeCreateFails(t *testing.T) {
+func TestCreateSessionMarksSessionFailedWhenWorktreeCreateFails(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	projects := newFakeProjectRepository()
@@ -1545,8 +1666,9 @@ func TestCreateSessionDoesNotSaveSuccessfulSessionWhenWorktreeCreateFails(t *tes
 	}); err == nil {
 		t.Fatal("CreateSession() expected worktree error")
 	}
-	if len(repo.saved) != 0 || len(repo.sessions) != 0 {
-		t.Fatalf("session should not be saved after worktree failure: saved=%#v sessions=%#v", repo.saved, repo.sessions)
+	got := repo.sessions["session-1"]
+	if got.Status != domain.StatusFailed {
+		t.Fatalf("session status after worktree failure = %q, saved=%#v", got.Status, repo.saved)
 	}
 }
 
@@ -3675,6 +3797,7 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 type fakeRepository struct {
 	saved               []domain.Session
 	sessions            map[domain.ID]domain.Session
+	createErr           error
 	saveErr             error
 	listSessions        []domain.Session
 	interruptedSessions []domain.Session
@@ -3697,6 +3820,18 @@ func newFakeRepository() *fakeRepository {
 		stagedAttachments:  map[domain.StagedAttachmentID]domain.StagedAttachment{},
 		sessionAttachments: map[domain.SessionAttachmentID]domain.SessionAttachment{},
 	}
+}
+
+func (r *fakeRepository) Create(_ context.Context, session domain.Session) error {
+	if r.createErr != nil {
+		return r.createErr
+	}
+	if _, exists := r.sessions[session.ID]; exists {
+		return fmt.Errorf("%w: %s", domain.ErrSessionAlreadyExists, session.ID)
+	}
+	r.saved = append(r.saved, session)
+	r.sessions[session.ID] = session
+	return nil
 }
 
 func (r *fakeRepository) Save(_ context.Context, session domain.Session) error {
@@ -3748,6 +3883,16 @@ func (r *fakeRepository) ListQueued(context.Context) ([]domain.Session, error) {
 
 func (r *fakeRepository) ListInterruptedWithCodexSession(context.Context) ([]domain.Session, error) {
 	return append([]domain.Session(nil), r.interruptedSessions...), nil
+}
+
+func (r *fakeRepository) CountByProject(_ context.Context, projectID domain.ProjectID) (int, error) {
+	count := 0
+	for _, session := range r.sessions {
+		if session.ProjectID == projectID {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func (r *fakeRepository) LastConfigForProject(_ context.Context, projectID domain.ProjectID) (domain.Config, bool, error) {

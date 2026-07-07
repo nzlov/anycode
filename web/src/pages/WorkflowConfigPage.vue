@@ -249,7 +249,7 @@ import {
   type WorkflowOutputField,
 } from '@/services/workflows';
 import { completeOutputFields, systemOutputFields, workflowValueTypeOptions } from '@/services/workflowOutputFields.js';
-import { buildFlowEdge, buildFlowNode, syncWorkflowNodePositions, workflowEdgeId } from '@/services/workflowFlowModel.js';
+import { buildFlowEdge, buildFlowNode, clientPointToFlowPoint, syncWorkflowNodePositions, workflowEdgeId } from '@/services/workflowFlowModel.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -423,8 +423,10 @@ function dragNodeType(event: DragEvent, type: string) {
 }
 
 function dropNodeType(event: DragEvent) {
+  event.preventDefault();
   const type = event.dataTransfer?.getData('application/x-anycode-node-type') || event.dataTransfer?.getData('text/plain') || 'codex';
-  const point = projectFlowPoint({ x: event.clientX, y: event.clientY });
+  const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const point = clientPointToFlowPoint(event, bounds, projectFlowPoint);
   createNodeAt(type, point.x, point.y);
 }
 

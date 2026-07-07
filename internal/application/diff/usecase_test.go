@@ -304,6 +304,8 @@ type fakeSessionRepository struct {
 	hasMergeRecord bool
 }
 
+func (r *fakeSessionRepository) Create(context.Context, sessiondomain.Session) error { return nil }
+
 func (r *fakeSessionRepository) Save(context.Context, sessiondomain.Session) error { return nil }
 
 func (r *fakeSessionRepository) Find(_ context.Context, id sessiondomain.ID) (sessiondomain.Session, error) {
@@ -346,6 +348,10 @@ func (r *fakeSessionRepository) ListQueued(context.Context) ([]sessiondomain.Ses
 
 func (r *fakeSessionRepository) ListInterruptedWithCodexSession(context.Context) ([]sessiondomain.Session, error) {
 	return nil, nil
+}
+
+func (r *fakeSessionRepository) CountByProject(context.Context, sessiondomain.ProjectID) (int, error) {
+	return 0, nil
 }
 
 func (r *fakeSessionRepository) LastConfigForProject(context.Context, sessiondomain.ProjectID) (sessiondomain.Config, bool, error) {

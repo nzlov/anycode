@@ -149,6 +149,8 @@ const (
 	defaultPage     = 1
 	defaultPageSize = 20
 	maxPageSize     = 100
+
+	maxSessionIDAttempts = 100
 )
 
 var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not wired")
@@ -402,7 +404,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			return DTO{}, apperror.New(apperror.CodeWorkflowBlocked, apperror.CategoryWorkflowError, "project default workflow is required for workflow mode").WithUserAction("configure_project_workflow")
 		}
 	}
-	id, err := s.generateID()
+	generatedID, err := s.generateID()
 	if err != nil {
 		return DTO{}, fmt.Errorf("generate session id: %w", err)
 	}
@@ -412,8 +414,6 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	now := s.now()
 	baseBranch := strings.TrimSpace(input.BaseBranch)
-	worktreePath := project.Path.Value
-	createdWorktree := false
 	if project.IsGit {
 		if baseBranch == "" {
 			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "base branch is required for git project").WithDetails(map[string]any{
@@ -423,8 +423,55 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		if s.worktrees == nil {
 			return DTO{}, errors.New("session worktree manager is required for git project")
 		}
-		worktreePath, err = s.worktrees.Create(ctx, project.Path.Value, input.ProjectID, id, baseBranch)
+	}
+
+	var id domain.ID
+	var session domain.Session
+	var worktreePath string
+	createdSession := false
+	for attempt := 0; attempt < maxSessionIDAttempts; attempt++ {
+		id, err = s.sessionIDForProject(ctx, project, generatedID, attempt)
 		if err != nil {
+			return DTO{}, err
+		}
+		worktreePath = project.Path.Value
+		if project.IsGit {
+			worktreePath = s.worktrees.PathForSession(input.ProjectID, id)
+		}
+		session = domain.Session{
+			ID:           id,
+			ProjectID:    input.ProjectID,
+			Requirement:  requirement,
+			Mode:         mode,
+			Status:       domain.StatusCreated,
+			Priority:     normalizePriority(input.Priority),
+			BaseBranch:   baseBranch,
+			WorktreePath: worktreePath,
+			Config:       config,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.repo.Create(ctx, session); err != nil {
+			if isRandomHexID(generatedID) && errors.Is(err, domain.ErrSessionAlreadyExists) {
+				continue
+			}
+			return DTO{}, fmt.Errorf("create session: %w", err)
+		}
+		createdSession = true
+		break
+	}
+	if !createdSession {
+		return DTO{}, fmt.Errorf("create session: exhausted %d session id attempts", maxSessionIDAttempts)
+	}
+
+	createdWorktree := false
+	if project.IsGit {
+		createdPath, err := s.worktrees.Create(ctx, project.Path.Value, input.ProjectID, id, baseBranch)
+		if err != nil {
+			failedAt := s.now()
+			session.Status = domain.StatusFailed
+			session.UpdatedAt = failedAt
+			_ = s.repo.Save(ctx, session)
 			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "create session worktree failed").WithDetails(map[string]any{
 				"projectId":  string(input.ProjectID),
 				"sessionId":  string(id),
@@ -432,27 +479,17 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			}).WithRetryable(true)
 		}
 		createdWorktree = true
-	}
-	session := domain.Session{
-		ID:           id,
-		ProjectID:    input.ProjectID,
-		Requirement:  requirement,
-		Mode:         mode,
-		Status:       domain.StatusCreated,
-		Priority:     normalizePriority(input.Priority),
-		BaseBranch:   baseBranch,
-		WorktreePath: worktreePath,
-		Config:       config,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := s.repo.Save(ctx, session); err != nil {
-		if createdWorktree {
-			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
-				return DTO{}, errors.Join(fmt.Errorf("save session: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+		if createdPath != worktreePath {
+			worktreePath = createdPath
+			session.WorktreePath = createdPath
+			session.UpdatedAt = s.now()
+			if err := s.repo.Save(ctx, session); err != nil {
+				if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
+					return DTO{}, errors.Join(fmt.Errorf("save session worktree path: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+				}
+				return DTO{}, fmt.Errorf("save session worktree path: %w", err)
 			}
 		}
-		return DTO{}, fmt.Errorf("save session: %w", err)
 	}
 	if err := s.archiveStagedAttachments(ctx, id, stagedAttachments); err != nil {
 		failedAt := s.now()
@@ -662,6 +699,47 @@ func trimConfig(config domain.Config) domain.Config {
 		ReasoningEffort: strings.TrimSpace(config.ReasoningEffort),
 		PermissionMode:  strings.TrimSpace(config.PermissionMode),
 	}
+}
+
+func (s *Service) sessionIDForProject(ctx context.Context, project projectdomain.Project, generated domain.ID, attempt int) (domain.ID, error) {
+	if !isRandomHexID(generated) {
+		return generated, nil
+	}
+	count, err := s.repo.CountByProject(ctx, domain.ProjectID(project.ID))
+	if err != nil {
+		return "", fmt.Errorf("count project sessions: %w", err)
+	}
+	return domain.ID(fmt.Sprintf("p%s-c%d", projectIDCode(project.ID), count+attempt+1)), nil
+}
+
+func isRandomHexID(id domain.ID) bool {
+	value := string(id)
+	if len(value) != 32 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func projectIDCode(id projectdomain.ID) string {
+	const maxLen = 8
+	var builder strings.Builder
+	for _, char := range strings.ToLower(string(id)) {
+		if (char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') {
+			builder.WriteRune(char)
+			if builder.Len() >= maxLen {
+				break
+			}
+		}
+	}
+	if builder.Len() == 0 {
+		return "project"
+	}
+	return builder.String()
 }
 
 func normalizePriority(priority domain.Priority) domain.Priority {

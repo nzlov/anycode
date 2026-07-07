@@ -128,17 +128,6 @@
               >
                 <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
               </q-btn>
-              <q-btn
-                flat
-                dense
-                class="lane-icon-btn"
-                color="primary"
-                icon="chevron_right"
-                aria-label="打开卡片"
-                @click.stop="$router.push(`/sessions/${card.id}`)"
-              >
-                <q-tooltip>打开卡片详情</q-tooltip>
-              </q-btn>
             </div>
           </q-card-section>
         </q-card>

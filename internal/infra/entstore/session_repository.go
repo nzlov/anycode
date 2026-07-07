@@ -27,6 +27,16 @@ func NewSessionRepository(client *ent.Client) *SessionRepository {
 	return &SessionRepository{client: client}
 }
 
+func (r *SessionRepository) Create(ctx context.Context, s domainsession.Session) error {
+	if err := r.create(ctx, s); err != nil {
+		if ent.IsConstraintError(err) {
+			return fmt.Errorf("%w: %w", domainsession.ErrSessionAlreadyExists, err)
+		}
+		return err
+	}
+	return nil
+}
+
 func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) error {
 	exists, err := r.client.Session.Query().Where(entsession.IDEQ(string(s.ID))).Exist(ctx)
 	if err != nil {
@@ -84,6 +94,10 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 		return nil
 	}
 
+	return r.create(ctx, s)
+}
+
+func (r *SessionRepository) create(ctx context.Context, s domainsession.Session) error {
 	create := r.client.Session.Create().
 		SetID(string(s.ID)).
 		SetProjectID(string(s.ProjectID)).
@@ -218,6 +232,16 @@ func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context)
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
+}
+
+func (r *SessionRepository) CountByProject(ctx context.Context, projectID domainsession.ProjectID) (int, error) {
+	count, err := r.client.Session.Query().
+		Where(entsession.ProjectIDEQ(string(projectID))).
+		Count(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count project sessions: %w", err)
+	}
+	return count, nil
 }
 
 func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsession.PromptAppend) error {

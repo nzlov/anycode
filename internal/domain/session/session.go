@@ -2,9 +2,12 @@ package session
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
+
+var ErrSessionAlreadyExists = errors.New("session already exists")
 
 type ID string
 type ProjectID string
@@ -179,11 +182,13 @@ type ListQuery struct {
 }
 
 type Repository interface {
+	Create(ctx context.Context, session Session) error
 	Save(ctx context.Context, session Session) error
 	Find(ctx context.Context, id ID) (Session, error)
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
 	ListQueued(ctx context.Context) ([]Session, error)
 	ListInterruptedWithCodexSession(ctx context.Context) ([]Session, error)
+	CountByProject(ctx context.Context, projectID ProjectID) (int, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error
 	ListPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)

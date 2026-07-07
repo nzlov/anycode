@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildFlowEdge, buildFlowNode, syncWorkflowNodePositions } from '../src/services/workflowFlowModel.js';
+import {
+  buildFlowEdge,
+  buildFlowNode,
+  clientPointToFlowPoint,
+  syncWorkflowNodePositions,
+} from '../src/services/workflowFlowModel.js';
 
 test('buildFlowNode maps workflow node position and metadata into Vue Flow node', () => {
   const node = buildFlowNode({
@@ -50,4 +55,19 @@ test('syncWorkflowNodePositions writes Vue Flow positions back to workflow nodes
     { id: 'implement', position: { x: -180, y: 40 } },
     { id: 'verify', position: { x: 640, y: 220 } },
   ]);
+});
+
+test('clientPointToFlowPoint converts mouse coordinates through the canvas bounds', () => {
+  const calls = [];
+  const result = clientPointToFlowPoint(
+    { clientX: 430, clientY: 260 },
+    { left: 120, top: 80 },
+    (point) => {
+      calls.push(point);
+      return { x: point.x / 2, y: point.y / 2 };
+    },
+  );
+
+  assert.deepEqual(calls, [{ x: 310, y: 180 }]);
+  assert.deepEqual(result, { x: 155, y: 90 });
 });

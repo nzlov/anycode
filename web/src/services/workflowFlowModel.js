@@ -36,6 +36,14 @@ export function syncWorkflowNodePositions(workflowNodes, flowNodes) {
   });
 }
 
+export function clientPointToFlowPoint(event, bounds, projectPoint) {
+  const localPoint = {
+    x: Number(event?.clientX ?? 0) - Number(bounds?.left ?? 0),
+    y: Number(event?.clientY ?? 0) - Number(bounds?.top ?? 0),
+  };
+  return projectPoint(localPoint);
+}
+
 export function workflowEdgeId(edge) {
   return `${edge.from}->${edge.to}:${edge.priority}`;
 }
