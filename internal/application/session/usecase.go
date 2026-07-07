@@ -57,8 +57,9 @@ type CreateSessionInput struct {
 }
 
 type StartSessionOptions struct {
-	Force  bool
-	prompt string
+	Force                bool
+	prompt               string
+	resumeCodexSessionID string
 }
 
 type CloseSessionInput struct {
@@ -959,11 +960,16 @@ func (s *Service) resumeSession(ctx context.Context, id domain.ID, startOptions 
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot resume from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
-	if strings.TrimSpace(session.CodexSessionID) == "" {
+	resumeCodexSessionID := strings.TrimSpace(startOptions.resumeCodexSessionID)
+	if resumeCodexSessionID == "" {
+		resumeCodexSessionID = strings.TrimSpace(session.CodexSessionID)
+	}
+	if resumeCodexSessionID == "" {
 		return DTO{}, apperror.New(apperror.CodeResumeFailed, apperror.CategoryValidationError, "session cannot resume without codex session id").WithUserAction("rerun_session")
 	}
+	session.CodexSessionID = resumeCodexSessionID
 	options := codexStartOptions{
-		resumeCodexSessionID: session.CodexSessionID,
+		resumeCodexSessionID: resumeCodexSessionID,
 		prompt:               strings.TrimSpace(startOptions.prompt),
 	}
 	if session.Mode == domain.ModeWorkflow {
@@ -3334,6 +3340,10 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if !canAutoStartAfterAppend(session) {
 			return nil
 		}
+		session, err = s.refreshLatestCodexSessionID(ctx, session)
+		if err != nil {
+			return err
+		}
 		if canReuseCodexSessionAfterAppend(session) {
 			newAttachments, err := s.listPromptAppendAttachments(ctx, input.SessionID, append.ID)
 			if err != nil {
@@ -3341,7 +3351,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			}
 			newAttachmentPaths, _ := attachmentPathsFromAttachments(newAttachments)
 			prompt := promptWithAttachments(body, newAttachmentPaths)
-			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{prompt: prompt}); err != nil {
+			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{prompt: prompt, resumeCodexSessionID: session.CodexSessionID}); err != nil {
 				return fmt.Errorf("resume session after prompt append: %w", err)
 			}
 			return nil
@@ -3355,6 +3365,23 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	return toPromptAppendDTO(append), nil
+}
+
+func (s *Service) refreshLatestCodexSessionID(ctx context.Context, session domain.Session) (domain.Session, error) {
+	if s == nil || s.processes == nil {
+		return session, nil
+	}
+	latest, err := s.processes.LatestCodexSessionID(ctx, processdomain.SessionID(session.ID))
+	if err != nil {
+		return domain.Session{}, fmt.Errorf("refresh latest codex session id: %w", err)
+	}
+	latest = strings.TrimSpace(latest)
+	if latest == "" || latest == strings.TrimSpace(session.CodexSessionID) {
+		return session, nil
+	}
+	session.CodexSessionID = latest
+	session.UpdatedAt = s.now()
+	return session, nil
 }
 
 func canAutoStartAfterAppend(session domain.Session) bool {

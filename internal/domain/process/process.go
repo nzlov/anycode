@@ -67,6 +67,7 @@ type Repository interface {
 	MarkRunning(ctx context.Context, id RunID, pid int, codexSessionID string) error
 	MarkExited(ctx context.Context, id RunID, result ExitResult) error
 	SaveEvent(ctx context.Context, event Event) error
+	LatestCodexSessionID(ctx context.Context, sessionID SessionID) (string, error)
 }
 
 type CodexStartInput struct {

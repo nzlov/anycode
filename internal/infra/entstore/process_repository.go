@@ -3,11 +3,13 @@ package entstore
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/redaction"
 	domainsession "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
+	entprocessevent "github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
 	entprocessrun "github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
@@ -146,6 +148,45 @@ func (r *ProcessRepository) SaveEvent(ctx context.Context, event process.Event) 
 		return fmt.Errorf("save process event: %w", err)
 	}
 	return nil
+}
+
+func (r *ProcessRepository) LatestCodexSessionID(ctx context.Context, sessionID process.SessionID) (string, error) {
+	rows, err := r.client.ProcessEvent.Query().
+		Where(
+			entprocessevent.SessionIDEQ(string(sessionID)),
+			entprocessevent.TypeEQ("thread.started"),
+		).
+		Order(ent.Desc(entprocessevent.FieldCreatedAt), ent.Desc(entprocessevent.FieldID)).
+		All(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list latest codex session events: %w", err)
+	}
+	for _, row := range rows {
+		if id := codexSessionIDFromProcessPayload(row.Payload); id != "" {
+			return id, nil
+		}
+	}
+	return "", nil
+}
+
+func codexSessionIDFromProcessPayload(payload map[string]any) string {
+	for _, key := range codexSessionIDPayloadKeys() {
+		if value, ok := payload[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	if msg, ok := payload["msg"].(map[string]any); ok {
+		for _, key := range codexSessionIDPayloadKeys() {
+			if value, ok := msg[key].(string); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
+}
+
+func codexSessionIDPayloadKeys() []string {
+	return []string{"session_id", "sessionId", "codex_session_id", "codexSessionId", "thread_id", "threadId", "conversation_id", "conversationId"}
 }
 
 func activeProcessStatuses() []string {

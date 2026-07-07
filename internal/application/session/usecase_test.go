@@ -2550,6 +2550,94 @@ func TestAppendPromptResumesStoppedChatSessionWithOnlyNewBody(t *testing.T) {
 	}
 }
 
+func TestAppendPromptRefreshesLatestCodexSessionIDBeforeResume(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "original requirement",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusStopped,
+		CodexSessionID: "codex-session-old",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.latestCodexSessionID = "codex-session-new"
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-new"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	ids := []domain.ID{"append-1", "process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	_, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID: "session-1",
+		Body:      "use latest thread",
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+
+	saved := repo.sessions["session-1"]
+	if saved.CodexSessionID != "codex-session-new" {
+		t.Fatalf("CodexSessionID = %q, want latest", saved.CodexSessionID)
+	}
+	if saved.Queue.Kind != domain.QueueKindResume || saved.Queue.ResumeCodexSessionID != "codex-session-new" {
+		t.Fatalf("queued session = %#v", saved)
+	}
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 1", started)
+	}
+	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-new" {
+		t.Fatalf("resume input = %#v", codex.resumeInput)
+	}
+}
+
+func TestAppendPromptDoesNotResumeOldCodexSessionIDWhenRefreshFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "original requirement",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusStopped,
+		CodexSessionID: "codex-session-old",
+		WorktreePath:   "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.latestCodexSessionIDErr = errors.New("latest lookup failed")
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-old"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID: "session-1",
+		Body:      "use latest thread",
+	}); err == nil {
+		t.Fatal("AppendPrompt() expected latest codex session id error")
+	}
+	if codex.resumeCalled || codex.startCalled {
+		t.Fatalf("codex calls start=%v resume=%v", codex.startCalled, codex.resumeCalled)
+	}
+	if len(repo.appends) != 0 {
+		t.Fatalf("appends = %#v, want rollback", repo.appends)
+	}
+	if len(repo.deletedAppends) != 1 || repo.deletedAppends[0] != "append-1" {
+		t.Fatalf("deleted appends = %#v", repo.deletedAppends)
+	}
+	if repo.sessions["session-1"].CodexSessionID != "codex-session-old" {
+		t.Fatalf("CodexSessionID = %q", repo.sessions["session-1"].CodexSessionID)
+	}
+}
+
 func TestAppendPromptRebuildsPromptWithReviewNoticeWhenNotResuming(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -5054,16 +5142,18 @@ func (s *fakeWorkflowStarter) SubmitApprovalForSession(_ context.Context, input 
 }
 
 type fakeProcessRepository struct {
-	created      []processdomain.Run
-	active       processdomain.Run
-	hasActive    bool
-	activeCount  int
-	runningID    processdomain.RunID
-	runningPID   int
-	runningCodex string
-	exitedID     processdomain.RunID
-	exitedResult processdomain.ExitResult
-	events       []processdomain.Event
+	created                 []processdomain.Run
+	active                  processdomain.Run
+	hasActive               bool
+	activeCount             int
+	runningID               processdomain.RunID
+	runningPID              int
+	runningCodex            string
+	exitedID                processdomain.RunID
+	exitedResult            processdomain.ExitResult
+	events                  []processdomain.Event
+	latestCodexSessionID    string
+	latestCodexSessionIDErr error
 }
 
 func newFakeProcessRepository() *fakeProcessRepository {
@@ -5123,6 +5213,13 @@ func (r *fakeProcessRepository) MarkExited(_ context.Context, id processdomain.R
 func (r *fakeProcessRepository) SaveEvent(_ context.Context, event processdomain.Event) error {
 	r.events = append(r.events, event)
 	return nil
+}
+
+func (r *fakeProcessRepository) LatestCodexSessionID(context.Context, processdomain.SessionID) (string, error) {
+	if r.latestCodexSessionIDErr != nil {
+		return "", r.latestCodexSessionIDErr
+	}
+	return r.latestCodexSessionID, nil
 }
 
 type fakeQuestionCanceller struct {

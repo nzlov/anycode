@@ -134,6 +134,84 @@ func TestProcessRepositoryPersistsRunLifecycleAndEvents(t *testing.T) {
 	if event.Payload["text"] != "hello" {
 		t.Fatalf("process event payload mismatch: %#v", event.Payload)
 	}
+	if err := repo.SaveEvent(ctx, process.Event{
+		ID:           "process-event-thread-old",
+		SessionID:    run.SessionID,
+		ProcessRunID: &run.ID,
+		EventID:      "codex-event-thread-old",
+		Type:         "thread.started",
+		Payload: map[string]any{
+			"thread_id": "codex-thread-old",
+		},
+		CreatedAt: eventAt.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("save old thread event: %v", err)
+	}
+	if err := repo.SaveEvent(ctx, process.Event{
+		ID:           "process-event-thread-new",
+		SessionID:    run.SessionID,
+		ProcessRunID: &run.ID,
+		EventID:      "codex-event-thread-new",
+		Type:         "thread.started",
+		Payload: map[string]any{
+			"thread_id": "codex-thread-new",
+		},
+		CreatedAt: eventAt.Add(2 * time.Second),
+	}); err != nil {
+		t.Fatalf("save new thread event: %v", err)
+	}
+	if err := repo.SaveEvent(ctx, process.Event{
+		ID:        "process-event-thread-other-session",
+		SessionID: "session-other",
+		EventID:   "codex-event-thread-other-session",
+		Type:      "thread.started",
+		Payload: map[string]any{
+			"thread_id": "codex-thread-other-session",
+		},
+		CreatedAt: eventAt.Add(3 * time.Second),
+	}); err != nil {
+		t.Fatalf("save other session thread event: %v", err)
+	}
+	if err := repo.SaveEvent(ctx, process.Event{
+		ID:           "process-event-thread-empty",
+		SessionID:    run.SessionID,
+		ProcessRunID: &run.ID,
+		EventID:      "codex-event-thread-empty",
+		Type:         "thread.started",
+		Payload: map[string]any{
+			"thread_id": "   ",
+		},
+		CreatedAt: eventAt.Add(4 * time.Second),
+	}); err != nil {
+		t.Fatalf("save empty thread event: %v", err)
+	}
+	latestCodexSessionID, err := repo.LatestCodexSessionID(ctx, run.SessionID)
+	if err != nil {
+		t.Fatalf("latest codex session id: %v", err)
+	}
+	if latestCodexSessionID != "codex-thread-new" {
+		t.Fatalf("latest codex session id = %q", latestCodexSessionID)
+	}
+	if err := repo.SaveEvent(ctx, process.Event{
+		ID:           "process-event-thread-msg",
+		SessionID:    run.SessionID,
+		ProcessRunID: &run.ID,
+		EventID:      "codex-event-thread-msg",
+		Type:         "thread.started",
+		Payload: map[string]any{
+			"msg": map[string]any{"thread_id": "codex-thread-msg"},
+		},
+		CreatedAt: eventAt.Add(5 * time.Second),
+	}); err != nil {
+		t.Fatalf("save msg thread event: %v", err)
+	}
+	latestCodexSessionID, err = repo.LatestCodexSessionID(ctx, run.SessionID)
+	if err != nil {
+		t.Fatalf("latest codex session id with msg: %v", err)
+	}
+	if latestCodexSessionID != "codex-thread-msg" {
+		t.Fatalf("latest codex session id with msg = %q", latestCodexSessionID)
+	}
 
 	if err := repo.SaveEvent(ctx, process.Event{
 		ID:        "process-event-secret",
