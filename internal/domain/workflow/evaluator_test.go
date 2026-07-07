@@ -8,6 +8,12 @@ func TestDefaultConditionEvaluator(t *testing.T) {
 		"score":  90,
 		"files":  []any{"main.go", "README.md"},
 		"nested": map[string]any{"ready": true},
+		"results": map[string]any{
+			"status": "passed",
+		},
+		"params": map[string]any{
+			"requirement": "ship",
+		},
 	}}
 	tests := []struct {
 		name      string
@@ -67,6 +73,11 @@ func TestDefaultConditionEvaluator(t *testing.T) {
 			want:      true,
 		},
 		{
+			name:      "expr reads results and params",
+			condition: Condition{Mode: "expr", Expr: `results.status == "passed" && params.requirement == "ship"`},
+			want:      true,
+		},
+		{
 			name:      "unknown op returns error",
 			condition: Condition{Field: "status", Op: "script", Value: "passed"},
 			wantErr:   true,
@@ -101,6 +112,7 @@ func TestValidateCondition(t *testing.T) {
 	}{
 		{name: "empty condition is valid", condition: Condition{}},
 		{name: "simple op is valid", condition: Condition{Field: "last.status", Op: "eq", Value: "succeeded"}},
+		{name: "expr is valid", condition: Condition{Mode: "expr", Expr: `results.status == "passed"`}},
 		{name: "nested all any not is valid", condition: Condition{All: []Condition{
 			{Field: "last.status", Op: "ne", Value: "failed"},
 			{Any: []Condition{
@@ -109,6 +121,8 @@ func TestValidateCondition(t *testing.T) {
 			}},
 		}}},
 		{name: "unsupported op is rejected", condition: Condition{Field: "last.status", Op: "script", Value: "return true"}, wantErr: true},
+		{name: "empty expr is rejected", condition: Condition{Mode: "expr"}, wantErr: true},
+		{name: "mixed expr and field is rejected", condition: Condition{Mode: "expr", Expr: `true`, Field: "last.status", Op: "eq"}, wantErr: true},
 		{name: "missing field is rejected", condition: Condition{Op: "eq", Value: "ok"}, wantErr: true},
 		{name: "mixed branch and op is rejected", condition: Condition{Field: "last.status", Op: "eq", Value: "ok", Any: []Condition{{Field: "x", Op: "exists"}}}, wantErr: true},
 	}

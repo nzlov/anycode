@@ -304,13 +304,14 @@ func buildWorkflowGraph(input *model.WorkflowGraphInput) workflowdomain.Graph {
 			continue
 		}
 		nodes = append(nodes, workflowdomain.Node{
-			ID:       node.ID,
-			Type:     node.Type,
-			Title:    node.Title,
-			Prompt:   stringValue(node.Prompt, ""),
-			Approval: buildApprovalConfig(node.Approval),
-			Retry:    buildRetryConfig(node.Retry),
-			Merge:    buildMergeConfig(node.Merge),
+			ID:           node.ID,
+			Type:         node.Type,
+			Title:        node.Title,
+			Prompt:       stringValue(node.Prompt, ""),
+			OutputFields: buildWorkflowOutputFields(node.OutputFields),
+			Approval:     buildApprovalConfig(node.Approval),
+			Retry:        buildRetryConfig(node.Retry),
+			Merge:        buildMergeConfig(node.Merge),
 		})
 	}
 	edges := make([]workflowdomain.Edge, 0, len(input.Edges))
@@ -349,6 +350,21 @@ func buildMergeConfig(input *model.MergeConfigInput) *workflowdomain.MergeConfig
 	return &workflowdomain.MergeConfig{Strategy: input.Strategy}
 }
 
+func buildWorkflowOutputFields(input []*model.WorkflowOutputFieldInput) []workflowdomain.OutputField {
+	fields := make([]workflowdomain.OutputField, 0, len(input))
+	for _, field := range input {
+		if field == nil {
+			continue
+		}
+		fields = append(fields, workflowdomain.OutputField{
+			Key:         field.Key,
+			Description: stringValue(field.Description, ""),
+			ValueType:   stringValue(field.ValueType, ""),
+		})
+	}
+	return fields
+}
+
 func buildWorkflowCondition(input *model.WorkflowConditionInput) workflowdomain.Condition {
 	if input == nil {
 		return workflowdomain.Condition{}
@@ -362,9 +378,11 @@ func buildWorkflowCondition(input *model.WorkflowConditionInput) workflowdomain.
 		any = append(any, buildWorkflowCondition(child))
 	}
 	return workflowdomain.Condition{
+		Mode:  stringValue(input.Mode, ""),
 		Field: stringValue(input.Field, ""),
 		Op:    stringValue(input.Op, ""),
 		Value: input.Value,
+		Expr:  stringValue(input.Expr, ""),
 		All:   all,
 		Any:   any,
 		Not:   buildWorkflowConditionPtr(input.Not),
@@ -383,13 +401,14 @@ func mapWorkflowGraph(graph workflowdomain.Graph) *model.WorkflowGraph {
 	nodes := make([]*model.WorkflowNode, 0, len(graph.Nodes))
 	for _, node := range graph.Nodes {
 		nodes = append(nodes, &model.WorkflowNode{
-			ID:       node.ID,
-			Type:     node.Type,
-			Title:    node.Title,
-			Prompt:   node.Prompt,
-			Approval: &model.ApprovalConfig{BeforeRun: node.Approval.BeforeRun, AfterRun: node.Approval.AfterRun},
-			Retry:    &model.RetryConfig{MaxAttempts: node.Retry.MaxAttempts},
-			Merge:    mapMergeConfig(node.Merge),
+			ID:           node.ID,
+			Type:         node.Type,
+			Title:        node.Title,
+			Prompt:       node.Prompt,
+			OutputFields: mapWorkflowOutputFields(node.OutputFields),
+			Approval:     &model.ApprovalConfig{BeforeRun: node.Approval.BeforeRun, AfterRun: node.Approval.AfterRun},
+			Retry:        &model.RetryConfig{MaxAttempts: node.Retry.MaxAttempts},
+			Merge:        mapMergeConfig(node.Merge),
 		})
 	}
 	edges := make([]*model.WorkflowEdge, 0, len(graph.Edges))
@@ -530,6 +549,18 @@ func mapMergeConfig(config *workflowdomain.MergeConfig) *model.MergeConfig {
 	return &model.MergeConfig{Strategy: config.Strategy}
 }
 
+func mapWorkflowOutputFields(fields []workflowdomain.OutputField) []*model.WorkflowOutputField {
+	output := make([]*model.WorkflowOutputField, 0, len(fields))
+	for _, field := range fields {
+		output = append(output, &model.WorkflowOutputField{
+			Key:         field.Key,
+			Description: field.Description,
+			ValueType:   field.ValueType,
+		})
+	}
+	return output
+}
+
 func mapWorkflowCondition(condition workflowdomain.Condition) *model.WorkflowCondition {
 	all := make([]*model.WorkflowCondition, 0, len(condition.All))
 	for _, child := range condition.All {
@@ -540,9 +571,11 @@ func mapWorkflowCondition(condition workflowdomain.Condition) *model.WorkflowCon
 		any = append(any, mapWorkflowCondition(child))
 	}
 	return &model.WorkflowCondition{
+		Mode:  condition.Mode,
 		Field: condition.Field,
 		Op:    condition.Op,
 		Value: mapJSONValue(condition.Value),
+		Expr:  condition.Expr,
 		All:   all,
 		Any:   any,
 		Not:   mapWorkflowConditionPtr(condition.Not),

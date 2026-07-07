@@ -29,13 +29,20 @@ type Graph struct {
 }
 
 type Node struct {
-	ID       string
-	Type     string
-	Title    string
-	Prompt   string
-	Approval ApprovalConfig
-	Retry    RetryConfig
-	Merge    *MergeConfig
+	ID           string
+	Type         string
+	Title        string
+	Prompt       string
+	OutputFields []OutputField
+	Approval     ApprovalConfig
+	Retry        RetryConfig
+	Merge        *MergeConfig
+}
+
+type OutputField struct {
+	Key         string
+	Description string
+	ValueType   string
 }
 
 type ApprovalConfig struct {
@@ -59,9 +66,11 @@ type Edge struct {
 }
 
 type Condition struct {
+	Mode  string
 	Field string
 	Op    string
 	Value any
+	Expr  string
 	All   []Condition
 	Any   []Condition
 	Not   *Condition

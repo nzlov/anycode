@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/expr-lang/expr"
 	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
@@ -571,6 +573,16 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 			Merge:            start.Merge,
 		})
 	}
+	if start.Expr != nil {
+		return s.executeWorkflowExpr(ctx, session, domain.WorkflowAdvance{
+			WorkflowRunID:    start.WorkflowRunID,
+			NodeRunID:        start.NodeRunID,
+			CurrentNodeID:    start.CurrentNodeID,
+			CurrentNodeTitle: start.CurrentNodeTitle,
+			Status:           start.Status,
+			Expr:             start.Expr,
+		})
+	}
 	if !start.RequiresCodex {
 		session.Status = domain.StatusWaitingApproval
 		session.UpdatedAt = s.now()
@@ -583,9 +595,10 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 		return toDTO(session), nil
 	}
 	dto, err := s.enqueueCodex(ctx, session, codexStartOptions{
-		workflowRunID: start.WorkflowRunID,
-		nodeRunID:     workflowNodeRunID(start.NodeRunID),
-		prompt:        start.Prompt,
+		workflowRunID:     start.WorkflowRunID,
+		nodeRunID:         workflowNodeRunID(start.NodeRunID),
+		prompt:            start.Prompt,
+		workflowJSONRetry: start.RequireJSONRetry,
 	}, queuePriorityForSession(session))
 	if err != nil {
 		return s.handleWorkflowNodeFailure(ctx, session, start.WorkflowRunID, start.NodeRunID, "codex_start_failed", err.Error())
@@ -907,6 +920,7 @@ type codexStartOptions struct {
 	workflowRunID        domain.WorkflowRunID
 	nodeRunID            *processdomain.NodeRunID
 	prompt               string
+	workflowJSONRetry    bool
 }
 
 func (s *Service) startCodex(ctx context.Context, session domain.Session, options codexStartOptions, force bool) (DTO, error) {
@@ -1426,6 +1440,7 @@ func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 		workflowRunID:        session.Queue.WorkflowRunID,
 		nodeRunID:            nodeRunID,
 		prompt:               session.Queue.Prompt,
+		workflowJSONRetry:    isWorkflowJSONRetryPrompt(session.Queue.Prompt),
 	}
 }
 
@@ -1451,14 +1466,6 @@ func clearQueue(session *domain.Session) {
 }
 
 func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions) (processdomain.CodexHandle, error) {
-	if options.resumeCodexSessionID != "" {
-		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
-			ProcessRunID:   runID,
-			SessionID:      processdomain.SessionID(session.ID),
-			CodexSessionID: options.resumeCodexSessionID,
-			Workdir:        session.WorktreePath,
-		})
-	}
 	attachmentPaths, imagePaths, err := s.codexAttachmentPaths(ctx, session.ID)
 	if err != nil {
 		return processdomain.CodexHandle{}, err
@@ -1470,6 +1477,15 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		if err != nil {
 			return processdomain.CodexHandle{}, err
 		}
+	}
+	if options.resumeCodexSessionID != "" {
+		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
+			ProcessRunID:   runID,
+			SessionID:      processdomain.SessionID(session.ID),
+			CodexSessionID: options.resumeCodexSessionID,
+			Workdir:        session.WorktreePath,
+			Prompt:         promptWithAttachments(prompt, attachmentPaths),
+		})
 	}
 	return s.codex.Start(ctx, processdomain.CodexStartInput{
 		ProcessRunID:    runID,
@@ -1545,9 +1561,13 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			return
 		}
 		exitResult := processdomain.ExitResult{}
+		workflowResults := map[string]any(nil)
 		for event := range events {
 			if result, ok := exitResultFromEvent(event); ok {
 				exitResult = result
+			}
+			if results, ok := workflowResultsFromEvent(event); ok {
+				workflowResults = results
 			}
 			eventID, err := s.generateID()
 			if err != nil {
@@ -1588,7 +1608,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 					s.scheduleQueueDrain()
 					return
 				}
-				s.advanceWorkflowAfterProcessExit(current, handle, options)
+				s.advanceWorkflowAfterProcessExit(current, handle, options, workflowResults)
 				s.scheduleQueueDrain()
 				return
 			}
@@ -1658,6 +1678,110 @@ func exitResultFromEvent(event processdomain.CodexEvent) (processdomain.ExitResu
 	return result, true
 }
 
+func workflowResultsFromEvent(event processdomain.CodexEvent) (map[string]any, bool) {
+	if !isAssistantOutputEvent(event) {
+		return nil, false
+	}
+	for _, text := range eventTextCandidates(event.Payload) {
+		if results, ok := workflowResultsFromText(text); ok {
+			return results, true
+		}
+	}
+	return nil, false
+}
+
+func isAssistantOutputEvent(event processdomain.CodexEvent) bool {
+	eventType := strings.ToLower(strings.TrimSpace(event.Type))
+	if strings.Contains(eventType, "agent_message") || strings.Contains(eventType, "assistant") {
+		return true
+	}
+	if eventType == "item.completed" || eventType == "response.output_item.done" {
+		if item, ok := event.Payload["item"].(map[string]any); ok {
+			role, _ := item["role"].(string)
+			return role == "" || role == "assistant"
+		}
+	}
+	return false
+}
+
+func eventTextCandidates(payload map[string]any) []string {
+	candidates := []string{}
+	if payload == nil {
+		return candidates
+	}
+	if text, ok := payload["text"].(string); ok {
+		candidates = append(candidates, text)
+	}
+	if text, ok := payload["content"].(string); ok {
+		candidates = append(candidates, text)
+	}
+	if text, ok := payload["output"].(string); ok {
+		candidates = append(candidates, text)
+	}
+	if message, ok := payload["message"].(map[string]any); ok {
+		candidates = append(candidates, textCandidatesFromValue(message)...)
+	}
+	if item, ok := payload["item"].(map[string]any); ok {
+		candidates = append(candidates, textCandidatesFromValue(item)...)
+	}
+	return candidates
+}
+
+func textCandidatesFromValue(value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}
+	case []any:
+		candidates := []string{}
+		for _, item := range typed {
+			candidates = append(candidates, textCandidatesFromValue(item)...)
+		}
+		return candidates
+	case map[string]any:
+		candidates := []string{}
+		for _, key := range []string{"text", "content", "output"} {
+			candidates = append(candidates, textCandidatesFromValue(typed[key])...)
+		}
+		return candidates
+	default:
+		return nil
+	}
+}
+
+func workflowResultsFromText(text string) (map[string]any, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil, false
+	}
+	for _, candidate := range jsonObjectCandidates(text) {
+		var value map[string]any
+		if err := json.Unmarshal([]byte(candidate), &value); err != nil {
+			continue
+		}
+		if results, ok := value["results"].(map[string]any); ok {
+			return results, true
+		}
+		return value, true
+	}
+	return nil, false
+}
+
+func jsonObjectCandidates(text string) []string {
+	candidates := []string{}
+	if strings.HasPrefix(text, "```") {
+		lines := strings.Split(text, "\n")
+		if len(lines) >= 3 {
+			candidates = append(candidates, strings.Join(lines[1:len(lines)-1], "\n"))
+		}
+	}
+	start := strings.Index(text, "{")
+	end := strings.LastIndex(text, "}")
+	if start >= 0 && end > start {
+		candidates = append(candidates, text[start:end+1])
+	}
+	return candidates
+}
+
 func processExitPayload(processRunID processdomain.RunID, result processdomain.ExitResult) map[string]any {
 	payload := map[string]any{"processRunId": string(processRunID)}
 	if result.ExitCode != nil {
@@ -1691,20 +1815,35 @@ func codexProcessFailureCode(result processdomain.ExitResult) string {
 	return "codex_process_failed"
 }
 
-func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions) {
+func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, workflowResults map[string]any) {
 	if s.workflows == nil {
 		return
 	}
 	nodeRunID := domain.NodeRunID(*options.nodeRunID)
+	output := map[string]any{
+		"processRunId": string(handle.ProcessRunID),
+		"exit":         "completed",
+	}
+	if options.workflowJSONRetry {
+		output["jsonRetry"] = true
+	}
+	if workflowResults != nil {
+		output["results"] = workflowResults
+	}
 	advance, err := s.workflows.CompleteNode(context.Background(), domain.WorkflowNodeCompleteInput{
 		WorkflowRunID: options.workflowRunID,
 		NodeRunID:     nodeRunID,
-		Output: map[string]any{
-			"processRunId": string(handle.ProcessRunID),
-			"exit":         "completed",
-		},
+		Output:        output,
 	})
 	if err != nil {
+		if appErr, ok := apperror.From(err); ok && appErr.Code == apperror.CodeWorkflowJSONRequired {
+			_ = s.workflows.MarkStartFailed(context.Background(), domain.WorkflowStartFailureInput{
+				WorkflowRunID: options.workflowRunID,
+				NodeRunID:     &nodeRunID,
+				Code:          appErr.Code,
+				Message:       appErr.Error(),
+			})
+		}
 		session.Status = domain.StatusFailed
 		session.UpdatedAt = s.now()
 		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
@@ -1740,6 +1879,8 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		return toDTO(session), nil
 	case advance.Merge != nil:
 		return s.executeWorkflowMerge(ctx, session, advance)
+	case advance.Expr != nil:
+		return s.executeWorkflowExpr(ctx, session, advance)
 	case !advance.RequiresCodex:
 		session.Status = domain.StatusWaitingApproval
 		session.UpdatedAt = s.now()
@@ -1753,16 +1894,78 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		}
 		return toDTO(session), nil
 	default:
-		dto, err := s.enqueueCodex(ctx, session, codexStartOptions{
-			workflowRunID: advance.WorkflowRunID,
-			nodeRunID:     workflowNodeRunID(advance.NodeRunID),
-			prompt:        advance.Prompt,
-		}, queuePriorityForSession(session))
+		options := codexStartOptions{
+			workflowRunID:     advance.WorkflowRunID,
+			nodeRunID:         workflowNodeRunID(advance.NodeRunID),
+			prompt:            advance.Prompt,
+			workflowJSONRetry: advance.RequireJSONRetry,
+		}
+		if session.CodexSessionID != "" {
+			options.resumeCodexSessionID = session.CodexSessionID
+		}
+		dto, err := s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
 		if err != nil {
 			return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, "codex_start_failed", err.Error())
 		}
 		return dto, nil
 	}
+}
+
+func (s *Service) executeWorkflowExpr(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) (DTO, error) {
+	if s.workflows == nil {
+		return DTO{}, errors.New("session workflow starter is required for workflow mode")
+	}
+	if advance.Expr == nil {
+		return DTO{}, errors.New("workflow expr node is missing expression")
+	}
+	if advance.NodeRunID == nil {
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, nil, "workflow_expr_failed", "expr node run id is missing")
+	}
+	results, err := runWorkflowExpr(advance.Expr.Script, advance.Expr.Params)
+	if err != nil {
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, "workflow_expr_failed", err.Error())
+	}
+	next, err := s.workflows.CompleteNode(ctx, domain.WorkflowNodeCompleteInput{
+		WorkflowRunID: advance.WorkflowRunID,
+		NodeRunID:     *advance.NodeRunID,
+		Output:        map[string]any{"results": results},
+	})
+	if err != nil {
+		return DTO{}, err
+	}
+	return s.applyWorkflowAdvance(ctx, session, next)
+}
+
+func runWorkflowExpr(script string, params map[string]any) (map[string]any, error) {
+	script = strings.TrimSpace(script)
+	if script == "" {
+		return nil, errors.New("expr script is required")
+	}
+	env := map[string]any{"params": mapOrEmpty(params)}
+	program, err := expr.Compile(script, expr.Env(env))
+	if err != nil {
+		return nil, fmt.Errorf("compile expr node: %w", err)
+	}
+	output, err := expr.Run(program, env)
+	if err != nil {
+		return nil, fmt.Errorf("run expr node: %w", err)
+	}
+	results, ok := output.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expr node must return object, got %T", output)
+	}
+	return results, nil
+}
+
+func mapOrEmpty(payload map[string]any) map[string]any {
+	if payload == nil {
+		return map[string]any{}
+	}
+	return payload
+}
+
+func isWorkflowJSONRetryPrompt(prompt string) bool {
+	return strings.Contains(prompt, "ANYCODE_WORKFLOW_JSON_RETRY")
 }
 
 func (s *Service) executeWorkflowMerge(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) (DTO, error) {
@@ -2509,19 +2712,23 @@ func processEventPayload(event processdomain.CodexEvent) map[string]any {
 }
 
 func codexSessionIDFromEvent(event processdomain.CodexEvent) string {
-	for _, key := range []string{"session_id", "codex_session_id"} {
+	for _, key := range codexSessionIDKeys() {
 		if value, ok := event.Payload[key].(string); ok && strings.TrimSpace(value) != "" {
 			return strings.TrimSpace(value)
 		}
 	}
 	if msg, ok := event.Payload["msg"].(map[string]any); ok {
-		for _, key := range []string{"session_id", "codex_session_id"} {
+		for _, key := range codexSessionIDKeys() {
 			if value, ok := msg[key].(string); ok && strings.TrimSpace(value) != "" {
 				return strings.TrimSpace(value)
 			}
 		}
 	}
 	return ""
+}
+
+func codexSessionIDKeys() []string {
+	return []string{"session_id", "sessionId", "codex_session_id", "codexSessionId", "thread_id", "threadId", "conversation_id", "conversationId"}
 }
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {

@@ -580,6 +580,60 @@ func TestWorkflowMergeNodeFailureAsksUserBeforeFailingNode(t *testing.T) {
 	}
 }
 
+func TestWorkflowExprNodeCompletesWithResults(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                "project-1",
+		Name:              "project-1",
+		DefaultWorkflowID: &workflowID,
+	}
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      domain.ModeWorkflow,
+		Status:    domain.StatusStopped,
+	}
+	nodeRunID := domain.NodeRunID("node-run-expr")
+	workflows := &fakeWorkflowStarter{
+		start: domain.WorkflowStart{
+			WorkflowRunID:    "workflow-run-1",
+			NodeRunID:        &nodeRunID,
+			CurrentNodeID:    "derive",
+			CurrentNodeTitle: "Derive",
+			Status:           "running",
+			Expr: &domain.WorkflowExpr{
+				Script: `{status: params.ok ? "passed" : "failed", count: params.count + 1}`,
+				Params: map[string]any{"ok": true, "count": 1},
+			},
+		},
+		advance: domain.WorkflowAdvance{
+			WorkflowRunID: "workflow-run-1",
+			Status:        "completed",
+			Completed:     true,
+		},
+	}
+	service := New(repo, projects, WithWorkflows(workflows))
+	service.now = func() time.Time { return time.Unix(70, 0).UTC() }
+
+	got, err := service.StartSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if got.Status != domain.StatusCompleted {
+		t.Fatalf("StartSession() status = %q", got.Status)
+	}
+	results, ok := workflows.completeInput.Output["results"].(map[string]any)
+	if !ok || results["status"] != "passed" || results["count"] != 2 {
+		t.Fatalf("expr results = %#v", workflows.completeInput.Output)
+	}
+	if workflows.completeInput.NodeRunID != "node-run-expr" {
+		t.Fatalf("complete input = %#v", workflows.completeInput)
+	}
+}
+
 func TestHandleQuestionBatchAnsweredRetriesMerge(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -894,8 +948,86 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
 		t.Fatalf("second process run = %#v", processes.created[1])
 	}
+	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != "Verify" {
+		t.Fatalf("codex resume input = %#v", codex.resumeInput)
+	}
 	if workflows.completeInput.NodeRunID != "node-run-1" {
 		t.Fatalf("complete input = %#v", workflows.completeInput)
+	}
+}
+
+func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "ship feature",
+		Mode:         domain.ModeWorkflow,
+		Status:       domain.StatusStopped,
+		WorktreePath: "/workspace/project-1",
+	}
+	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                "project-1",
+		Name:              "project-1",
+		DefaultWorkflowID: &workflowID,
+	}
+	nodeRunID := domain.NodeRunID("node-run-1")
+	workflows := &fakeWorkflowStarter{
+		start: domain.WorkflowStart{
+			WorkflowRunID:    "workflow-run-1",
+			NodeRunID:        &nodeRunID,
+			CurrentNodeID:    "build",
+			CurrentNodeTitle: "Build",
+			Status:           "running",
+			RequiresCodex:    true,
+			RequireJSONRetry: true,
+			Prompt:           "ANYCODE_WORKFLOW_JSON_RETRY",
+		},
+		completeErr: apperror.New(apperror.CodeWorkflowJSONRequired, apperror.CategoryWorkflowError, "workflow node output JSON is required"),
+	}
+	closedEvents := make(chan processdomain.CodexEvent)
+	close(closedEvents)
+	codex := &fakeCodexProcess{
+		startHandle: processdomain.CodexHandle{PID: 123},
+		events:      closedEvents,
+	}
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(newFakeProcessRepository(), codex), WithEvents(&fakeEventStore{}))
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		if nextID == 1 {
+			return "process-run-1", nil
+		}
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSessionWithOptions() error = %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if repo.sessions["session-1"].Status == domain.StatusQueued {
+			if _, err := service.DrainQueuedSessions(ctx); err != nil {
+				t.Fatalf("DrainQueuedSessions() error = %v", err)
+			}
+		}
+		if workflows.failedInput.Code == apperror.CodeWorkflowJSONRequired {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if workflows.failedInput.WorkflowRunID != "workflow-run-1" || workflows.failedInput.NodeRunID == nil || *workflows.failedInput.NodeRunID != "node-run-1" {
+		t.Fatalf("failed input = %#v", workflows.failedInput)
+	}
+	if workflows.failedInput.Code != apperror.CodeWorkflowJSONRequired {
+		t.Fatalf("failed input = %#v", workflows.failedInput)
+	}
+	if repo.sessions["session-1"].Status != domain.StatusFailed {
+		t.Fatalf("session status = %q", repo.sessions["session-1"].Status)
 	}
 }
 
@@ -1002,6 +1134,72 @@ func TestCodexProcessFailureCodeClassifiesParameterRejection(t *testing.T) {
 	got = codexProcessFailureCode(processdomain.ExitResult{FailureReason: "exit status 7"})
 	if got != "codex_process_failed" {
 		t.Fatalf("codexProcessFailureCode() = %q", got)
+	}
+}
+
+func TestWorkflowResultsFromTextExtractsJSONResults(t *testing.T) {
+	got, ok := workflowResultsFromText("summary\n```json\n{\"results\":{\"status\":\"passed\",\"count\":2}}\n```")
+	if !ok || got["status"] != "passed" || got["count"] != float64(2) {
+		t.Fatalf("workflowResultsFromText() = %#v, %v", got, ok)
+	}
+}
+
+func TestWorkflowResultsFromEventExtractsCodexAssistantItem(t *testing.T) {
+	got, ok := workflowResultsFromEvent(processdomain.CodexEvent{
+		Type: "item.completed",
+		Payload: map[string]any{
+			"item": map[string]any{
+				"type": "message",
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "output_text", "text": `{"results":{"status":"passed"}}`},
+				},
+			},
+		},
+	})
+	if !ok || got["status"] != "passed" {
+		t.Fatalf("workflowResultsFromEvent() = %#v, %v", got, ok)
+	}
+}
+
+func TestWorkflowResultsFromEventIgnoresUserPromptJSON(t *testing.T) {
+	_, ok := workflowResultsFromEvent(processdomain.CodexEvent{
+		Type: "item.completed",
+		Payload: map[string]any{
+			"item": map[string]any{
+				"type": "message",
+				"role": "user",
+				"content": []any{
+					map[string]any{"type": "input_text", "text": `Workflow input params JSON: {"requirement":"ship"}`},
+				},
+			},
+		},
+	})
+	if ok {
+		t.Fatal("workflowResultsFromEvent() should ignore user prompt JSON")
+	}
+}
+
+func TestCodexSessionIDFromEventReadsThreadID(t *testing.T) {
+	got := codexSessionIDFromEvent(processdomain.CodexEvent{
+		Type:    "thread.started",
+		Payload: map[string]any{"thread_id": "codex-thread-1"},
+	})
+	if got != "codex-thread-1" {
+		t.Fatalf("codexSessionIDFromEvent() = %q", got)
+	}
+}
+
+func TestRunWorkflowExprRequiresObjectResult(t *testing.T) {
+	got, err := runWorkflowExpr(`{status: params.ok ? "passed" : "failed"}`, map[string]any{"ok": true})
+	if err != nil {
+		t.Fatalf("runWorkflowExpr() error = %v", err)
+	}
+	if got["status"] != "passed" {
+		t.Fatalf("runWorkflowExpr() = %#v", got)
+	}
+	if _, err := runWorkflowExpr(`params.ok`, map[string]any{"ok": true}); err == nil {
+		t.Fatal("runWorkflowExpr() expected object result error")
 	}
 }
 

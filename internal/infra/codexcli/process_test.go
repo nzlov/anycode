@@ -90,6 +90,7 @@ pwd > "$CODEX_PWD_FILE"
 		SessionID:      "session-1",
 		CodexSessionID: "codex-session-1",
 		Workdir:        dir,
+		Prompt:         "next node",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +101,7 @@ pwd > "$CODEX_PWD_FILE"
 	waitForFile(t, argsFile)
 	waitForFile(t, pwdFile)
 
-	if args := strings.TrimSpace(readFile(t, argsFile)); args != "exec resume --json --skip-git-repo-check codex-session-1" {
+	if args := strings.TrimSpace(readFile(t, argsFile)); args != "exec resume --json --skip-git-repo-check codex-session-1 next node" {
 		t.Fatalf("args = %q", args)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {

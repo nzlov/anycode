@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/expr-lang/expr"
 )
 
 type DefaultConditionEvaluator struct{}
@@ -62,6 +64,9 @@ func (DefaultPlanner) ShouldRetry(node Node, attempts int, _ NodeFailure) bool {
 }
 
 func evalCondition(condition Condition, context Context) (bool, error) {
+	if isExprCondition(condition) {
+		return evalExprCondition(condition, context)
+	}
 	if len(condition.All) > 0 {
 		for _, child := range condition.All {
 			ok, err := evalCondition(child, context)
@@ -115,6 +120,15 @@ func evalCondition(condition Condition, context Context) (bool, error) {
 }
 
 func validateCondition(condition Condition) error {
+	if isExprCondition(condition) {
+		if strings.TrimSpace(condition.Expr) == "" {
+			return errors.New("workflow expr condition is required")
+		}
+		if len(condition.All) > 0 || len(condition.Any) > 0 || condition.Not != nil || condition.Field != "" || condition.Op != "" {
+			return errors.New("workflow expr condition cannot mix with all, any, not, or field/op")
+		}
+		return nil
+	}
 	branches := 0
 	if len(condition.All) > 0 {
 		branches++
@@ -162,6 +176,45 @@ func validateCondition(condition Condition) error {
 	default:
 		return fmt.Errorf("unsupported workflow condition op %q", condition.Op)
 	}
+}
+
+func isExprCondition(condition Condition) bool {
+	return strings.TrimSpace(condition.Mode) == "expr" || strings.TrimSpace(condition.Expr) != ""
+}
+
+func evalExprCondition(condition Condition, context Context) (bool, error) {
+	env := exprEnv(context)
+	program, err := expr.Compile(strings.TrimSpace(condition.Expr), expr.Env(env))
+	if err != nil {
+		return false, fmt.Errorf("compile workflow expr condition: %w", err)
+	}
+	output, err := expr.Run(program, env)
+	if err != nil {
+		return false, fmt.Errorf("run workflow expr condition: %w", err)
+	}
+	value, ok := output.(bool)
+	if !ok {
+		return false, fmt.Errorf("workflow expr condition must return bool, got %T", output)
+	}
+	return value, nil
+}
+
+func exprEnv(context Context) map[string]any {
+	values := context.Values
+	return map[string]any{
+		"results": mapValue(values, "results"),
+		"params":  mapValue(values, "params"),
+	}
+}
+
+func mapValue(values map[string]any, key string) map[string]any {
+	if values == nil {
+		return map[string]any{}
+	}
+	if mapped, ok := values[key].(map[string]any); ok && mapped != nil {
+		return mapped
+	}
+	return map[string]any{}
 }
 
 func lookup(values map[string]any, field string) (any, bool) {

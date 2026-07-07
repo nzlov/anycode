@@ -398,18 +398,22 @@ type Subscription struct {
 }
 
 type WorkflowCondition struct {
+	Mode  string               `json:"mode"`
 	Field string               `json:"field"`
 	Op    string               `json:"op"`
 	Value map[string]any       `json:"value,omitempty"`
+	Expr  string               `json:"expr"`
 	All   []*WorkflowCondition `json:"all"`
 	Any   []*WorkflowCondition `json:"any"`
 	Not   *WorkflowCondition   `json:"not,omitempty"`
 }
 
 type WorkflowConditionInput struct {
+	Mode  *string                   `json:"mode,omitempty"`
 	Field *string                   `json:"field,omitempty"`
 	Op    *string                   `json:"op,omitempty"`
 	Value map[string]any            `json:"value,omitempty"`
+	Expr  *string                   `json:"expr,omitempty"`
 	All   []*WorkflowConditionInput `json:"all,omitempty"`
 	Any   []*WorkflowConditionInput `json:"any,omitempty"`
 	Not   *WorkflowConditionInput   `json:"not,omitempty"`
@@ -449,23 +453,37 @@ type WorkflowGraphInput struct {
 }
 
 type WorkflowNode struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"`
-	Title    string          `json:"title"`
-	Prompt   string          `json:"prompt"`
-	Approval *ApprovalConfig `json:"approval"`
-	Retry    *RetryConfig    `json:"retry"`
-	Merge    *MergeConfig    `json:"merge,omitempty"`
+	ID           string                 `json:"id"`
+	Type         string                 `json:"type"`
+	Title        string                 `json:"title"`
+	Prompt       string                 `json:"prompt"`
+	OutputFields []*WorkflowOutputField `json:"outputFields"`
+	Approval     *ApprovalConfig        `json:"approval"`
+	Retry        *RetryConfig           `json:"retry"`
+	Merge        *MergeConfig           `json:"merge,omitempty"`
 }
 
 type WorkflowNodeInput struct {
-	ID       string               `json:"id"`
-	Type     string               `json:"type"`
-	Title    string               `json:"title"`
-	Prompt   *string              `json:"prompt,omitempty"`
-	Approval *ApprovalConfigInput `json:"approval,omitempty"`
-	Retry    *RetryConfigInput    `json:"retry,omitempty"`
-	Merge    *MergeConfigInput    `json:"merge,omitempty"`
+	ID           string                      `json:"id"`
+	Type         string                      `json:"type"`
+	Title        string                      `json:"title"`
+	Prompt       *string                     `json:"prompt,omitempty"`
+	OutputFields []*WorkflowOutputFieldInput `json:"outputFields,omitempty"`
+	Approval     *ApprovalConfigInput        `json:"approval,omitempty"`
+	Retry        *RetryConfigInput           `json:"retry,omitempty"`
+	Merge        *MergeConfigInput           `json:"merge,omitempty"`
+}
+
+type WorkflowOutputField struct {
+	Key         string `json:"key"`
+	Description string `json:"description"`
+	ValueType   string `json:"valueType"`
+}
+
+type WorkflowOutputFieldInput struct {
+	Key         string  `json:"key"`
+	Description *string `json:"description,omitempty"`
+	ValueType   *string `json:"valueType,omitempty"`
 }
 
 type WorkflowRun struct {

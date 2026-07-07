@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -169,6 +170,16 @@ func validateGraph(graph domain.Graph) error {
 			return fmt.Errorf("workflow node %q is duplicated", id)
 		}
 		nodes[id] = struct{}{}
+		for _, field := range node.OutputFields {
+			if strings.TrimSpace(field.Key) == "" {
+				return fmt.Errorf("workflow node %q output field key is required", id)
+			}
+			switch strings.TrimSpace(field.ValueType) {
+			case "", "string", "number", "boolean", "object", "array", "any":
+			default:
+				return fmt.Errorf("workflow node %q output field %q has unsupported value type %q", id, field.Key, field.ValueType)
+			}
+		}
 	}
 	for _, edge := range graph.Edges {
 		if strings.TrimSpace(edge.From) == "" || strings.TrimSpace(edge.To) == "" {
@@ -319,15 +330,20 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 	nodeStatus := domain.NodeRunning
 	requiresCodex := true
 	merge := mergeRequest(node)
+	params := map[string]any{"requirement": strings.TrimSpace(input.Requirement)}
+	expr := exprRequest(node, params)
 	if requiresApproval(node) {
 		runStatus = domain.RunWaitingApproval
 		nodeStatus = domain.NodeWaitingApproval
 		requiresCodex = false
 	} else if merge != nil {
 		requiresCodex = false
+	} else if expr != nil {
+		requiresCodex = false
 	}
 	contextValue := domain.Context{Values: map[string]any{
 		"requirement": strings.TrimSpace(input.Requirement),
+		"params":      params,
 		"node": map[string]any{
 			"id":    node.ID,
 			"title": node.Title,
@@ -359,8 +375,9 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		CurrentNodeTitle: node.Title,
 		Status:           string(runStatus),
 		RequiresCodex:    requiresCodex,
-		Prompt:           nodePrompt(input.Requirement, node),
+		Prompt:           nodePrompt(input.Requirement, node, params),
 		Merge:            merge,
+		Expr:             expr,
 	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromStart(start), func(ctx context.Context, repo domain.Repository) error {
 		return repo.CreateInitialRun(ctx, run, nodeRun)
@@ -520,7 +537,7 @@ func (s *Service) ResumeCurrentNodeForSession(ctx context.Context, input session
 		CurrentNodeTitle: node.Title,
 		Status:           string(run.Status),
 		RequiresCodex:    true,
-		Prompt:           nodePrompt("", node),
+		Prompt:           nodePrompt("", node, paramsFromContext(run.Context)),
 	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInput{
 		eventType: "workflow.resume_current_node",
@@ -661,6 +678,26 @@ func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID do
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
+	currentNode, err := findNode(definition.Graph, run.CurrentNodeID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	if isCodexNode(currentNode) && hasOutgoingEdges(definition.Graph, run.CurrentNodeID) && !hasWorkflowResults(output) {
+		if boolOutputValue(output, "jsonRetry") {
+			return sessiondomain.WorkflowAdvance{}, apperror.New(apperror.CodeWorkflowJSONRequired, apperror.CategoryWorkflowError, "workflow node output JSON is required")
+		}
+		resultNodeRunID := sessiondomain.NodeRunID(nodeRunID)
+		return sessiondomain.WorkflowAdvance{
+			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
+			NodeRunID:        &resultNodeRunID,
+			CurrentNodeID:    currentNode.ID,
+			CurrentNodeTitle: currentNode.Title,
+			Status:           string(domain.RunRunning),
+			RequiresCodex:    true,
+			RequireJSONRetry: true,
+			Prompt:           jsonRetryPrompt(currentNode),
+		}, nil
+	}
 	now := s.now()
 	completedNodeRun := domain.NodeRun{
 		ID:            nodeRunID,
@@ -718,14 +755,18 @@ func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID do
 	}
 	run.CurrentNodeID = node.ID
 	run.Status = domain.RunRunning
+	run.Context = contextForNextNode(run.Context)
 	nodeStatus := domain.NodeRunning
 	requiresCodex := true
 	merge := mergeRequest(node)
+	expr := exprRequest(node, paramsFromContext(run.Context))
 	if requiresApproval(node) {
 		run.Status = domain.RunWaitingApproval
 		nodeStatus = domain.NodeWaitingApproval
 		requiresCodex = false
 	} else if merge != nil {
+		requiresCodex = false
+	} else if expr != nil {
 		requiresCodex = false
 	}
 	nextNodeRun := domain.NodeRun{
@@ -744,8 +785,9 @@ func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID do
 		CurrentNodeTitle: node.Title,
 		Status:           string(run.Status),
 		RequiresCodex:    requiresCodex,
-		Prompt:           nodePrompt("", node),
+		Prompt:           nodePrompt("", node, paramsFromContext(run.Context)),
 		Merge:            merge,
+		Expr:             expr,
 	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
 		return repo.CompleteNodeAndAdvance(ctx, completedNodeRun, run, &nextNodeRun)
@@ -849,13 +891,20 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 	}
 	if updateCurrentNode {
 		run.CurrentNodeID = node.ID
+		run.Context = contextForNextNode(run.Context)
 	}
 	run.Status = domain.RunRunning
 	nodeStatus := domain.NodeRunning
 	requiresCodex := true
+	merge := mergeRequest(node)
+	expr := exprRequest(node, paramsFromContext(run.Context))
 	if requiresApproval(node) {
 		run.Status = domain.RunWaitingApproval
 		nodeStatus = domain.NodeWaitingApproval
+		requiresCodex = false
+	} else if merge != nil {
+		requiresCodex = false
+	} else if expr != nil {
 		requiresCodex = false
 	}
 	nextNodeRun := domain.NodeRun{
@@ -874,7 +923,9 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 		CurrentNodeTitle: node.Title,
 		Status:           string(run.Status),
 		RequiresCodex:    requiresCodex,
-		Prompt:           nodePrompt("", node),
+		Prompt:           nodePrompt("", node, paramsFromContext(run.Context)),
+		Merge:            merge,
+		Expr:             expr,
 	}, nil
 }
 
@@ -891,7 +942,9 @@ func workflowEventInputFromStart(start sessiondomain.WorkflowStart) workflowEven
 		CurrentNodeTitle: start.CurrentNodeTitle,
 		Status:           start.Status,
 		RequiresCodex:    start.RequiresCodex,
+		RequireJSONRetry: start.RequireJSONRetry,
 		Merge:            start.Merge,
+		Expr:             start.Expr,
 	}
 	return workflowEventInputFromAdvance(advance)
 }
@@ -1057,9 +1110,14 @@ func contextAfterNode(contextValue domain.Context, output map[string]any) domain
 	for key, value := range contextValue.Values {
 		values[key] = value
 	}
+	results := payloadOrEmpty(output)
+	if nested, ok := output["results"].(map[string]any); ok {
+		results = payloadOrEmpty(nested)
+	}
+	values["results"] = results
 	values["last"] = map[string]any{
 		"status": "succeeded",
-		"output": payloadOrEmpty(output),
+		"output": results,
 	}
 	return domain.Context{Values: values}
 }
@@ -1069,11 +1127,47 @@ func contextAfterFailedNode(contextValue domain.Context, output map[string]any) 
 	for key, value := range contextValue.Values {
 		values[key] = value
 	}
+	results := payloadOrEmpty(output)
+	values["results"] = results
 	values["last"] = map[string]any{
 		"status": "failed",
-		"output": payloadOrEmpty(output),
+		"output": results,
 	}
 	return domain.Context{Values: values}
+}
+
+func contextForNextNode(contextValue domain.Context) domain.Context {
+	values := map[string]any{}
+	for key, value := range contextValue.Values {
+		values[key] = value
+	}
+	values["params"] = paramsFromResults(values)
+	return domain.Context{Values: values}
+}
+
+func paramsFromResults(values map[string]any) map[string]any {
+	if values == nil {
+		return map[string]any{}
+	}
+	if results, ok := values["results"].(map[string]any); ok && results != nil {
+		return copyMap(results)
+	}
+	return map[string]any{}
+}
+
+func paramsFromContext(contextValue domain.Context) map[string]any {
+	if params, ok := contextValue.Values["params"].(map[string]any); ok && params != nil {
+		return copyMap(params)
+	}
+	return map[string]any{}
+}
+
+func copyMap(input map[string]any) map[string]any {
+	output := make(map[string]any, len(input))
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
 }
 
 func contextAfterResumeFailure(contextValue domain.Context, code string, message string) domain.Context {
@@ -1125,6 +1219,25 @@ func requiresApproval(node domain.Node) bool {
 	return node.Approval.BeforeRun || nodeType == "approval" || nodeType == "manual_approval"
 }
 
+func exprRequest(node domain.Node, params map[string]any) *sessiondomain.WorkflowExpr {
+	if !isExprNode(node) {
+		return nil
+	}
+	return &sessiondomain.WorkflowExpr{
+		Script: strings.TrimSpace(node.Prompt),
+		Params: payloadOrEmpty(params),
+	}
+}
+
+func isExprNode(node domain.Node) bool {
+	return strings.TrimSpace(strings.ToLower(node.Type)) == "expr"
+}
+
+func isCodexNode(node domain.Node) bool {
+	nodeType := strings.TrimSpace(strings.ToLower(node.Type))
+	return nodeType == "" || nodeType == "codex"
+}
+
 func mergeRequest(node domain.Node) *sessiondomain.WorkflowMerge {
 	nodeType := strings.TrimSpace(strings.ToLower(node.Type))
 	if node.Merge == nil && nodeType != "merge" {
@@ -1140,16 +1253,82 @@ func mergeRequest(node domain.Node) *sessiondomain.WorkflowMerge {
 	return &sessiondomain.WorkflowMerge{Strategy: strategy}
 }
 
-func nodePrompt(requirement string, node domain.Node) string {
+func hasOutgoingEdges(graph domain.Graph, nodeID string) bool {
+	for _, edge := range graph.Edges {
+		if edge.From == nodeID {
+			return true
+		}
+	}
+	return false
+}
+
+func hasWorkflowResults(output map[string]any) bool {
+	if output == nil {
+		return false
+	}
+	_, ok := output["results"].(map[string]any)
+	return ok
+}
+
+func boolOutputValue(output map[string]any, key string) bool {
+	value, ok := output[key].(bool)
+	return ok && value
+}
+
+func jsonRetryPrompt(node domain.Node) string {
+	var builder strings.Builder
+	builder.WriteString("ANYCODE_WORKFLOW_JSON_RETRY\n")
+	builder.WriteString("Your previous response did not include the required workflow JSON result.\n")
+	builder.WriteString("Return only one valid JSON object with a top-level `results` object. Do not include Markdown fences or extra text.")
+	if len(node.OutputFields) > 0 {
+		builder.WriteString("\n\nRequired `results` fields:\n")
+		builder.WriteString(outputFieldList(node.OutputFields))
+	}
+	return builder.String()
+}
+
+func nodePrompt(requirement string, node domain.Node, params map[string]any) string {
 	prompt := strings.TrimSpace(node.Prompt)
 	requirement = strings.TrimSpace(requirement)
-	if prompt == "" {
-		return requirement
+	sections := make([]string, 0, 4)
+	if prompt != "" {
+		sections = append(sections, prompt)
 	}
-	if requirement == "" {
-		return prompt
+	if requirement != "" {
+		sections = append(sections, "User requirement:\n"+requirement)
 	}
-	return prompt + "\n\nUser requirement:\n" + requirement
+	sections = append(sections, "Workflow input params JSON:\n"+jsonBlock(payloadOrEmpty(params)))
+	if len(node.OutputFields) > 0 {
+		sections = append(sections, "Workflow output contract:\nReturn a final JSON object with a top-level `results` object. `results` must contain these fields:\n"+outputFieldList(node.OutputFields))
+	}
+	if len(sections) == 0 {
+		return ""
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+func jsonBlock(payload map[string]any) string {
+	data, err := json.MarshalIndent(payloadOrEmpty(payload), "", "  ")
+	if err != nil {
+		return "```json\n{}\n```"
+	}
+	return "```json\n" + string(data) + "\n```"
+}
+
+func outputFieldList(fields []domain.OutputField) string {
+	lines := make([]string, 0, len(fields))
+	for _, field := range fields {
+		valueType := strings.TrimSpace(field.ValueType)
+		if valueType == "" {
+			valueType = "any"
+		}
+		description := strings.TrimSpace(field.Description)
+		if description == "" {
+			description = "-"
+		}
+		lines = append(lines, fmt.Sprintf("- `%s` (%s): %s", field.Key, valueType, description))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func toDefinitionDTO(definition domain.Definition) DefinitionDTO {

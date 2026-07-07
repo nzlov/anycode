@@ -86,6 +86,7 @@ type CodexResumeInput struct {
 	SessionID      SessionID
 	CodexSessionID string
 	Workdir        string
+	Prompt         string
 }
 
 type CodexHandle struct {

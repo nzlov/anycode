@@ -592,6 +592,21 @@ a {
   gap: 10px;
 }
 
+.workflow-output-fields,
+.workflow-edge-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.workflow-output-row {
+  display: grid;
+  grid-template-columns: minmax(84px, 1fr) minmax(120px, 1.4fr) minmax(92px, 112px) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
 .new-session-dialog {
   width: min(920px, 92vw) !important;
   max-width: 92vw !important;

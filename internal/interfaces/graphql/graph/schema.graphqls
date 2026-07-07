@@ -278,9 +278,16 @@ type WorkflowNode {
   type: String!
   title: String!
   prompt: String!
+  outputFields: [WorkflowOutputField!]!
   approval: ApprovalConfig!
   retry: RetryConfig!
   merge: MergeConfig
+}
+
+type WorkflowOutputField {
+  key: String!
+  description: String!
+  valueType: String!
 }
 
 type ApprovalConfig {
@@ -304,9 +311,11 @@ type WorkflowEdge {
 }
 
 type WorkflowCondition {
+  mode: String!
   field: String!
   op: String!
   value: JSON
+  expr: String!
   all: [WorkflowCondition!]!
   any: [WorkflowCondition!]!
   not: WorkflowCondition
@@ -450,9 +459,16 @@ input WorkflowNodeInput {
   type: String!
   title: String!
   prompt: String
+  outputFields: [WorkflowOutputFieldInput!]
   approval: ApprovalConfigInput
   retry: RetryConfigInput
   merge: MergeConfigInput
+}
+
+input WorkflowOutputFieldInput {
+  key: String!
+  description: String
+  valueType: String
 }
 
 input ApprovalConfigInput {
@@ -476,9 +492,11 @@ input WorkflowEdgeInput {
 }
 
 input WorkflowConditionInput {
+  mode: String
   field: String
   op: String
   value: JSON
+  expr: String
   all: [WorkflowConditionInput!]
   any: [WorkflowConditionInput!]
   not: WorkflowConditionInput

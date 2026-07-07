@@ -4,7 +4,7 @@
       <div>
         <div class="text-h5 text-weight-bold">流程配置</div>
         <div class="text-body2 text-muted">
-          {{ projectName }} · 拖动节点调整视图，点击右侧端口后点击目标左侧端口创建连线
+          {{ projectName }} · 从左侧拖入节点类型，点击右侧端口后点击目标左侧端口创建连线
         </div>
       </div>
       <div class="row items-center q-gutter-sm">
@@ -24,26 +24,22 @@
     <div class="workflow-layout">
       <q-card flat bordered class="workflow-list">
         <q-card-section class="row items-center">
-          <div class="text-subtitle1 text-weight-bold">节点</div>
-          <q-space />
-          <q-btn flat round dense icon="add" color="primary" aria-label="新增节点" @click="addNode">
-            <q-tooltip>新增节点</q-tooltip>
-          </q-btn>
+          <div class="text-subtitle1 text-weight-bold">节点类型</div>
         </q-card-section>
         <q-list separator>
           <q-item
-            v-for="node in graph.nodes"
-            :key="node.id"
+            v-for="type in nodePalette"
+            :key="type.value"
             clickable
-            :active="node.id === selectedNodeId"
-            @click="selectNode(node.id)"
+            draggable="true"
+            @dragstart="dragNodeType($event, type.value)"
           >
             <q-item-section avatar>
-              <q-icon :name="nodeIcon(node.type)" color="primary" />
+              <q-icon :name="nodeIcon(type.value)" color="primary" />
             </q-item-section>
             <q-item-section>
-              <q-item-label>{{ node.title || node.id }}</q-item-label>
-              <q-item-label caption>{{ nodeCaption(node.id) }}</q-item-label>
+              <q-item-label>{{ type.label }}</q-item-label>
+              <q-item-label caption>{{ type.caption }}</q-item-label>
             </q-item-section>
           </q-item>
         </q-list>
@@ -62,6 +58,8 @@
           @pointermove="dragMove"
           @pointerup="endDrag"
           @pointerleave="endDrag"
+          @dragover.prevent
+          @drop="dropNodeType"
         >
           <svg class="workflow-edges" aria-hidden="true">
             <defs>
@@ -117,7 +115,27 @@
           <q-input v-model="nodeId" dense outlined label="节点 ID" />
           <q-select v-model="nodeType" dense outlined label="类型" :options="nodeTypeOptions" />
           <q-input v-model="nodeTitle" dense outlined label="标题" />
-          <q-input v-model="nodePrompt" autogrow outlined type="textarea" label="提示词" />
+          <q-input v-model="nodePrompt" autogrow outlined type="textarea" :label="nodeType === 'expr' ? 'expr 脚本' : '提示词'" />
+          <div class="workflow-output-fields">
+            <div class="row items-center">
+              <div class="text-subtitle2 text-weight-bold">输出字段</div>
+              <q-space />
+              <q-btn flat round dense icon="add" color="primary" aria-label="新增输出字段" @click="addOutputField">
+                <q-tooltip>新增输出字段</q-tooltip>
+              </q-btn>
+            </div>
+            <div v-if="outputFields.length > 0" class="q-gutter-sm">
+              <div v-for="(field, index) in outputFields" :key="index" class="workflow-output-row">
+                <q-input v-model="field.key" dense outlined label="key" />
+                <q-input v-model="field.description" dense outlined label="说明" />
+                <q-select v-model="field.valueType" dense outlined label="值类型" :options="valueTypeOptions" />
+                <q-btn flat round dense color="negative" icon="close" aria-label="删除输出字段" @click="deleteOutputField(index)">
+                  <q-tooltip>删除输出字段</q-tooltip>
+                </q-btn>
+              </div>
+            </div>
+            <div v-else class="text-caption text-muted">未声明输出字段</div>
+          </div>
           <q-input v-model.number="retry" dense outlined type="number" label="失败重试次数" min="0" />
           <q-toggle v-model="requiresApproval" label="运行前人工审批" />
           <q-select
@@ -146,13 +164,19 @@
           <div class="workflow-edge-list">
             <div class="text-subtitle2 text-weight-bold">连线</div>
             <q-list v-if="graph.edges.length > 0" dense separator bordered>
-              <q-item v-for="(edge, index) in graph.edges" :key="`${edge.from}-${edge.to}-${index}`">
+              <q-item
+                v-for="(edge, index) in graph.edges"
+                :key="`${edge.from}-${edge.to}-${index}`"
+                clickable
+                :active="selectedEdgeIndex === index"
+                @click="selectEdge(index)"
+              >
                 <q-item-section>
                   <q-item-label>{{ edge.from }} → {{ edge.to }}</q-item-label>
-                  <q-item-label caption>priority {{ edge.priority }}</q-item-label>
+                  <q-item-label caption>{{ edgeCaption(edge) }}</q-item-label>
                 </q-item-section>
                 <q-item-section side>
-                  <q-btn flat round dense color="negative" icon="close" aria-label="删除连线" @click="deleteEdge(index)">
+                  <q-btn flat round dense color="negative" icon="close" aria-label="删除连线" @click.stop="deleteEdge(index)">
                     <q-tooltip>删除连线</q-tooltip>
                   </q-btn>
                 </q-item-section>
@@ -160,6 +184,42 @@
             </q-list>
             <div v-else class="text-caption text-muted">暂无连线</div>
           </div>
+          <template v-if="selectedEdge">
+            <q-separator />
+            <div class="workflow-edge-editor q-gutter-sm">
+              <div class="text-subtitle2 text-weight-bold">连线条件</div>
+              <q-input v-model.number="edgePriority" dense outlined type="number" label="优先级" />
+              <q-btn-toggle
+                v-model="conditionMode"
+                spread
+                unelevated
+                toggle-color="primary"
+                :options="conditionModeOptions"
+              />
+              <template v-if="conditionMode === 'field'">
+                <q-select
+                  v-model="conditionField"
+                  dense
+                  outlined
+                  emit-value
+                  map-options
+                  label="判断字段"
+                  :options="conditionFieldOptions"
+                />
+                <q-select v-model="conditionOp" dense outlined label="判断类型" :options="conditionOpOptions" />
+                <q-input v-model="conditionValue" dense outlined label="判断值" />
+              </template>
+              <q-input
+                v-else-if="conditionMode === 'expr'"
+                v-model="conditionExpr"
+                autogrow
+                outlined
+                type="textarea"
+                label="expr 表达式"
+              />
+              <q-btn outline color="primary" icon="check" label="应用连线" no-caps @click="applyEdgeEdit" />
+            </div>
+          </template>
         </q-card-section>
       </q-card>
     </div>
@@ -183,6 +243,7 @@ import {
   type WorkflowEdge,
   type WorkflowGraph,
   type WorkflowNode,
+  type WorkflowOutputField,
 } from '@/services/workflows';
 
 interface NodePosition {
@@ -205,23 +266,59 @@ const nodeId = ref('');
 const nodeType = ref('codex');
 const nodeTitle = ref('');
 const nodePrompt = ref('');
+const outputFields = ref<WorkflowOutputField[]>([]);
 const retry = ref(0);
 const requiresApproval = ref(false);
 const mergeStrategy = ref('merge');
+const selectedEdgeIndex = ref<number | null>(null);
+const edgePriority = ref(0);
+const conditionMode = ref<'always' | 'field' | 'expr'>('always');
+const conditionField = ref('results.status');
+const conditionOp = ref('eq');
+const conditionValue = ref('');
+const conditionExpr = ref('results.status == "passed"');
 const connectingFrom = ref('');
 const canvasRef = ref<HTMLElement | null>(null);
 const nodePositions = reactive<Record<string, NodePosition>>({});
 const dragState = ref<{ id: string; offsetX: number; offsetY: number } | null>(null);
 const graph = reactive<WorkflowGraph>(defaultGraph());
 
-const nodeTypeOptions = ['codex', 'approval', 'merge'];
+const nodeTypeOptions = ['codex', 'expr', 'approval', 'merge'];
+const nodePalette = [
+  { value: 'codex', label: 'Codex', caption: '运行 Codex 节点' },
+  { value: 'expr', label: 'Expr', caption: '用 params 计算 results' },
+  { value: 'approval', label: '人工审批', caption: '等待人工确认' },
+  { value: 'merge', label: '合并', caption: '合并或 rebase 到基础分支' },
+];
 const mergeStrategyOptions = ['merge', 'rebase'];
+const valueTypeOptions = ['string', 'number', 'boolean', 'object', 'array', 'any'];
+const conditionModeOptions = [
+  { label: '总是', value: 'always' },
+  { label: '字段', value: 'field' },
+  { label: 'expr', value: 'expr' },
+];
+const conditionOpOptions = ['eq', 'ne', 'contains', 'exists', 'gt', 'gte', 'lt', 'lte'];
 const nodeWidth = 232;
 const nodeHeight = 78;
 
 const projectId = computed(() => String(route.params.projectId ?? ''));
 const project = computed(() => projects.value.find((item) => item.id === projectId.value));
 const projectName = computed(() => project.value?.name ?? projectId.value);
+const selectedEdge = computed(() => {
+  if (selectedEdgeIndex.value == null) return null;
+  return graph.edges[selectedEdgeIndex.value] ?? null;
+});
+const conditionFieldOptions = computed(() => {
+  const edge = selectedEdge.value;
+  const source = edge ? graph.nodes.find((node) => node.id === edge.from) : null;
+  const fields = (source?.outputFields ?? [])
+    .filter((field) => field.key.trim())
+    .map((field) => ({
+      label: `results.${field.key} · ${field.description || field.valueType || 'output'}`,
+      value: `results.${field.key}`,
+    }));
+  return [{ label: 'last.status', value: 'last.status' }, ...fields];
+});
 
 onMounted(async () => {
   loading.value = true;
@@ -253,8 +350,10 @@ function setGraph(next: WorkflowGraph) {
   graph.nodes.splice(0, graph.nodes.length, ...next.nodes.map(normalizeNode));
   graph.edges.splice(0, graph.edges.length, ...next.edges.map(normalizeEdge));
   selectedNodeId.value = graph.nodes[0]?.id ?? '';
+  selectedEdgeIndex.value = graph.edges.length > 0 ? 0 : null;
   layoutMissingNodes();
   loadSelectedNode();
+  loadSelectedEdge();
 }
 
 function selectNode(id: string) {
@@ -271,6 +370,7 @@ function loadSelectedNode() {
   nodeType.value = node.type;
   nodeTitle.value = node.title;
   nodePrompt.value = node.prompt;
+  outputFields.value = node.outputFields.map((field) => ({ ...field }));
   retry.value = node.retry.maxAttempts;
   requiresApproval.value = node.approval.beforeRun;
   mergeStrategy.value = node.merge?.strategy ?? 'merge';
@@ -285,6 +385,7 @@ function applyNodeEdit() {
   node.type = nodeType.value;
   node.title = nodeTitle.value.trim() || nextId;
   node.prompt = nodePrompt.value.trim();
+  node.outputFields = outputFields.value.map(normalizeOutputField).filter((field) => field.key);
   node.retry.maxAttempts = Math.max(0, Number(retry.value) || 0);
   node.approval.beforeRun = requiresApproval.value || nodeType.value === 'approval';
   node.approval.afterRun = false;
@@ -300,11 +401,36 @@ function applyNodeEdit() {
   }
 }
 
-function addNode() {
+function dragNodeType(event: DragEvent, type: string) {
+  event.dataTransfer?.setData('application/x-anycode-node-type', type);
+  event.dataTransfer?.setData('text/plain', type);
+}
+
+function dropNodeType(event: DragEvent) {
+  const type = event.dataTransfer?.getData('application/x-anycode-node-type') || event.dataTransfer?.getData('text/plain') || 'codex';
+  const rect = canvasRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  createNodeAt(type, event.clientX - rect.left, event.clientY - rect.top);
+}
+
+function createNodeAt(type: string, x: number, y: number) {
   applyNodeEdit();
-  const id = uniqueNodeID('node');
-  graph.nodes.push(normalizeNode({ id, type: 'codex', title: '新节点', prompt: '', retry: { maxAttempts: 0 } }));
-  nodePositions[id] = defaultPosition(graph.nodes.length - 1);
+  const safeType = nodeTypeOptions.includes(type) ? type : 'codex';
+  const id = uniqueNodeID(safeType === 'codex' ? 'node' : safeType);
+  graph.nodes.push(
+    normalizeNode({
+      id,
+      type: safeType,
+      title: defaultNodeTitle(safeType),
+      prompt: defaultNodePrompt(safeType),
+      outputFields: defaultOutputFields(safeType),
+      retry: { maxAttempts: 0 },
+    }),
+  );
+  nodePositions[id] = {
+    x: clamp(x - nodeWidth / 2, 16, Math.max(16, (canvasRef.value?.clientWidth ?? nodeWidth) - nodeWidth - 16)),
+    y: clamp(y - nodeHeight / 2, 16, Math.max(16, (canvasRef.value?.clientHeight ?? nodeHeight) - nodeHeight - 16)),
+  };
   selectedNodeId.value = id;
   loadSelectedNode();
 }
@@ -321,11 +447,14 @@ function deleteSelectedNode() {
   );
   delete nodePositions[id];
   selectedNodeId.value = graph.nodes[Math.max(0, index - 1)]?.id ?? '';
+  selectedEdgeIndex.value = graph.edges.length > 0 ? Math.min(selectedEdgeIndex.value ?? 0, graph.edges.length - 1) : null;
   loadSelectedNode();
+  loadSelectedEdge();
 }
 
 async function saveDefinition() {
   applyNodeEdit();
+  applyEdgeEdit();
   graph.edges.splice(0, graph.edges.length, ...graph.edges.map(normalizeEdge));
 
   saving.value = true;
@@ -368,12 +497,65 @@ function finishConnect(targetId: string) {
         priority: graph.edges.filter((edge) => edge.from === connectingFrom.value).length,
       }),
     );
+    selectedEdgeIndex.value = graph.edges.length - 1;
+    loadSelectedEdge();
   }
   connectingFrom.value = '';
 }
 
 function deleteEdge(index: number) {
   graph.edges.splice(index, 1);
+  if (selectedEdgeIndex.value === index) {
+    selectedEdgeIndex.value = graph.edges.length > 0 ? Math.min(index, graph.edges.length - 1) : null;
+    loadSelectedEdge();
+  } else if (selectedEdgeIndex.value != null && selectedEdgeIndex.value > index) {
+    selectedEdgeIndex.value -= 1;
+  }
+}
+
+function selectEdge(index: number) {
+  applyNodeEdit();
+  selectedEdgeIndex.value = index;
+  loadSelectedEdge();
+}
+
+function loadSelectedEdge() {
+  const edge = selectedEdge.value;
+  if (!edge) return;
+  edgePriority.value = edge.priority;
+  conditionMode.value = edge.condition.mode === 'expr' ? 'expr' : edge.condition.field || edge.condition.op ? 'field' : 'always';
+  conditionField.value = edge.condition.field || conditionFieldOptions.value[0]?.value || 'last.status';
+  conditionOp.value = edge.condition.op || 'eq';
+  conditionValue.value = conditionValueToInput(edge.condition.value);
+  conditionExpr.value = edge.condition.expr || 'results.status == "passed"';
+}
+
+function applyEdgeEdit() {
+  const edge = selectedEdge.value;
+  if (!edge) return;
+  edge.priority = Number(edgePriority.value) || 0;
+  if (conditionMode.value === 'always') {
+    edge.condition = normalizeCondition(undefined);
+    return;
+  }
+  if (conditionMode.value === 'expr') {
+    edge.condition = normalizeCondition({ mode: 'expr', expr: conditionExpr.value.trim() });
+    return;
+  }
+  edge.condition = normalizeCondition({
+    mode: 'field',
+    field: conditionField.value,
+    op: conditionOp.value,
+    value: conditionInputToValue(conditionValue.value),
+  });
+}
+
+function addOutputField() {
+  outputFields.value.push({ key: '', description: '', valueType: 'string' });
+}
+
+function deleteOutputField(index: number) {
+  outputFields.value.splice(index, 1);
 }
 
 function startDrag(event: PointerEvent, id: string, index: number) {
@@ -410,16 +592,38 @@ function currentNode() {
   return graph.nodes.find((node) => node.id === selectedNodeId.value);
 }
 
-function nodeCaption(id: string) {
-  const out = graph.edges.filter((edge) => edge.from === id).length;
-  const incoming = graph.edges.filter((edge) => edge.to === id).length;
-  return `${incoming} 入 / ${out} 出`;
+function edgeCaption(edge: WorkflowEdge) {
+  if (edge.condition.mode === 'expr') {
+    return `priority ${edge.priority} · expr`;
+  }
+  if (!edge.condition.field && !edge.condition.op) {
+    return `priority ${edge.priority} · always`;
+  }
+  return `priority ${edge.priority} · ${edge.condition.field} ${edge.condition.op}`;
 }
 
 function nodeIcon(type: string) {
   if (type === 'approval') return 'approval';
   if (type === 'merge') return 'merge_type';
+  if (type === 'expr') return 'functions';
   return 'terminal';
+}
+
+function defaultNodeTitle(type: string) {
+  if (type === 'approval') return '人工审批';
+  if (type === 'merge') return '合并';
+  if (type === 'expr') return '表达式';
+  return '新节点';
+}
+
+function defaultNodePrompt(type: string) {
+  if (type === 'expr') return '{ status: params.status }';
+  return '';
+}
+
+function defaultOutputFields(type: string): WorkflowOutputField[] {
+  if (type === 'approval' || type === 'merge') return [];
+  return [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }];
 }
 
 function nodePosition(id: string, index: number) {
@@ -473,6 +677,7 @@ function defaultGraph(): WorkflowGraph {
         type: 'codex',
         title: '实现',
         prompt: '',
+        outputFields: [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }],
         approval: { beforeRun: false, afterRun: false },
         retry: { maxAttempts: 1 },
         merge: null,
@@ -488,6 +693,7 @@ function normalizeNode(node: Partial<WorkflowNode> & { id: string }): WorkflowNo
     type: node.type || 'codex',
     title: node.title || node.id,
     prompt: node.prompt || '',
+    outputFields: (node.outputFields ?? []).map(normalizeOutputField).filter((field) => field.key),
     approval: {
       beforeRun: Boolean(node.approval?.beforeRun),
       afterRun: Boolean(node.approval?.afterRun),
@@ -508,13 +714,48 @@ function normalizeEdge(edge: Partial<WorkflowEdge>): WorkflowEdge {
 
 function normalizeCondition(condition: Partial<WorkflowEdge['condition']> | undefined) {
   return {
+    mode: String(condition?.mode ?? (condition?.expr ? 'expr' : 'field')),
     field: String(condition?.field ?? ''),
     op: String(condition?.op ?? ''),
     value: condition?.value,
+    expr: String(condition?.expr ?? ''),
     all: condition?.all ?? [],
     any: condition?.any ?? [],
     not: condition?.not ?? null,
   };
+}
+
+function normalizeOutputField(field: Partial<WorkflowOutputField>): WorkflowOutputField {
+  const valueType = valueTypeOptions.includes(String(field.valueType)) ? String(field.valueType) : 'string';
+  return {
+    key: String(field.key ?? '').trim(),
+    description: String(field.description ?? '').trim(),
+    valueType,
+  };
+}
+
+function conditionValueToInput(value: unknown) {
+  if (value && typeof value === 'object' && 'value' in value) {
+    const wrapped = value.value;
+    return valueToInputString(wrapped);
+  }
+  if (value == null) return '';
+  return valueToInputString(value);
+}
+
+function valueToInputString(value: unknown) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function conditionInputToValue(value: string) {
+  const trimmed = value.trim();
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  if (trimmed !== '' && !Number.isNaN(Number(trimmed))) return Number(trimmed);
+  return trimmed;
 }
 
 function normalizeID(value: string) {

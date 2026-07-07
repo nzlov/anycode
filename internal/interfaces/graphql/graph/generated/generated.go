@@ -337,7 +337,9 @@ type ComplexityRoot struct {
 	WorkflowCondition struct {
 		All   func(childComplexity int) int
 		Any   func(childComplexity int) int
+		Expr  func(childComplexity int) int
 		Field func(childComplexity int) int
+		Mode  func(childComplexity int) int
 		Not   func(childComplexity int) int
 		Op    func(childComplexity int) int
 		Value func(childComplexity int) int
@@ -365,13 +367,20 @@ type ComplexityRoot struct {
 	}
 
 	WorkflowNode struct {
-		Approval func(childComplexity int) int
-		ID       func(childComplexity int) int
-		Merge    func(childComplexity int) int
-		Prompt   func(childComplexity int) int
-		Retry    func(childComplexity int) int
-		Title    func(childComplexity int) int
-		Type     func(childComplexity int) int
+		Approval     func(childComplexity int) int
+		ID           func(childComplexity int) int
+		Merge        func(childComplexity int) int
+		OutputFields func(childComplexity int) int
+		Prompt       func(childComplexity int) int
+		Retry        func(childComplexity int) int
+		Title        func(childComplexity int) int
+		Type         func(childComplexity int) int
+	}
+
+	WorkflowOutputField struct {
+		Description func(childComplexity int) int
+		Key         func(childComplexity int) int
+		ValueType   func(childComplexity int) int
 	}
 
 	WorkflowRun struct {
@@ -1779,12 +1788,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkflowCondition.Any(childComplexity), true
+	case "WorkflowCondition.expr":
+		if e.ComplexityRoot.WorkflowCondition.Expr == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowCondition.Expr(childComplexity), true
 	case "WorkflowCondition.field":
 		if e.ComplexityRoot.WorkflowCondition.Field == nil {
 			break
 		}
 
 		return e.ComplexityRoot.WorkflowCondition.Field(childComplexity), true
+	case "WorkflowCondition.mode":
+		if e.ComplexityRoot.WorkflowCondition.Mode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowCondition.Mode(childComplexity), true
 	case "WorkflowCondition.not":
 		if e.ComplexityRoot.WorkflowCondition.Not == nil {
 			break
@@ -1897,6 +1918,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkflowNode.Merge(childComplexity), true
+	case "WorkflowNode.outputFields":
+		if e.ComplexityRoot.WorkflowNode.OutputFields == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowNode.OutputFields(childComplexity), true
 	case "WorkflowNode.prompt":
 		if e.ComplexityRoot.WorkflowNode.Prompt == nil {
 			break
@@ -1921,6 +1948,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkflowNode.Type(childComplexity), true
+
+	case "WorkflowOutputField.description":
+		if e.ComplexityRoot.WorkflowOutputField.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowOutputField.Description(childComplexity), true
+	case "WorkflowOutputField.key":
+		if e.ComplexityRoot.WorkflowOutputField.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowOutputField.Key(childComplexity), true
+	case "WorkflowOutputField.valueType":
+		if e.ComplexityRoot.WorkflowOutputField.ValueType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowOutputField.ValueType(childComplexity), true
 
 	case "WorkflowRun.context":
 		if e.ComplexityRoot.WorkflowRun.Context == nil {
@@ -1985,6 +2031,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputWorkflowEdgeInput,
 		ec.unmarshalInputWorkflowGraphInput,
 		ec.unmarshalInputWorkflowNodeInput,
+		ec.unmarshalInputWorkflowOutputFieldInput,
 	)
 	first := true
 
@@ -2357,9 +2404,16 @@ type WorkflowNode {
   type: String!
   title: String!
   prompt: String!
+  outputFields: [WorkflowOutputField!]!
   approval: ApprovalConfig!
   retry: RetryConfig!
   merge: MergeConfig
+}
+
+type WorkflowOutputField {
+  key: String!
+  description: String!
+  valueType: String!
 }
 
 type ApprovalConfig {
@@ -2383,9 +2437,11 @@ type WorkflowEdge {
 }
 
 type WorkflowCondition {
+  mode: String!
   field: String!
   op: String!
   value: JSON
+  expr: String!
   all: [WorkflowCondition!]!
   any: [WorkflowCondition!]!
   not: WorkflowCondition
@@ -2529,9 +2585,16 @@ input WorkflowNodeInput {
   type: String!
   title: String!
   prompt: String
+  outputFields: [WorkflowOutputFieldInput!]
   approval: ApprovalConfigInput
   retry: RetryConfigInput
   merge: MergeConfigInput
+}
+
+input WorkflowOutputFieldInput {
+  key: String!
+  description: String
+  valueType: String
 }
 
 input ApprovalConfigInput {
@@ -2555,9 +2618,11 @@ input WorkflowEdgeInput {
 }
 
 input WorkflowConditionInput {
+  mode: String
   field: String
   op: String
   value: JSON
+  expr: String
   all: [WorkflowConditionInput!]
   any: [WorkflowConditionInput!]
   not: WorkflowConditionInput
@@ -9750,6 +9815,35 @@ func (ec *executionContext) fieldContext_Subscription_pendingQuestionBatches(ctx
 	return fc, nil
 }
 
+func (ec *executionContext) _WorkflowCondition_mode(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowCondition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowCondition_mode,
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowCondition_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowCondition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkflowCondition_field(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowCondition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9837,6 +9931,35 @@ func (ec *executionContext) fieldContext_WorkflowCondition_value(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _WorkflowCondition_expr(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowCondition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowCondition_expr,
+		func(ctx context.Context) (any, error) {
+			return obj.Expr, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowCondition_expr(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowCondition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkflowCondition_all(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowCondition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9861,12 +9984,16 @@ func (ec *executionContext) fieldContext_WorkflowCondition_all(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "mode":
+				return ec.fieldContext_WorkflowCondition_mode(ctx, field)
 			case "field":
 				return ec.fieldContext_WorkflowCondition_field(ctx, field)
 			case "op":
 				return ec.fieldContext_WorkflowCondition_op(ctx, field)
 			case "value":
 				return ec.fieldContext_WorkflowCondition_value(ctx, field)
+			case "expr":
+				return ec.fieldContext_WorkflowCondition_expr(ctx, field)
 			case "all":
 				return ec.fieldContext_WorkflowCondition_all(ctx, field)
 			case "any":
@@ -9904,12 +10031,16 @@ func (ec *executionContext) fieldContext_WorkflowCondition_any(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "mode":
+				return ec.fieldContext_WorkflowCondition_mode(ctx, field)
 			case "field":
 				return ec.fieldContext_WorkflowCondition_field(ctx, field)
 			case "op":
 				return ec.fieldContext_WorkflowCondition_op(ctx, field)
 			case "value":
 				return ec.fieldContext_WorkflowCondition_value(ctx, field)
+			case "expr":
+				return ec.fieldContext_WorkflowCondition_expr(ctx, field)
 			case "all":
 				return ec.fieldContext_WorkflowCondition_all(ctx, field)
 			case "any":
@@ -9947,12 +10078,16 @@ func (ec *executionContext) fieldContext_WorkflowCondition_not(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "mode":
+				return ec.fieldContext_WorkflowCondition_mode(ctx, field)
 			case "field":
 				return ec.fieldContext_WorkflowCondition_field(ctx, field)
 			case "op":
 				return ec.fieldContext_WorkflowCondition_op(ctx, field)
 			case "value":
 				return ec.fieldContext_WorkflowCondition_value(ctx, field)
+			case "expr":
+				return ec.fieldContext_WorkflowCondition_expr(ctx, field)
 			case "all":
 				return ec.fieldContext_WorkflowCondition_all(ctx, field)
 			case "any":
@@ -10257,12 +10392,16 @@ func (ec *executionContext) fieldContext_WorkflowEdge_condition(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "mode":
+				return ec.fieldContext_WorkflowCondition_mode(ctx, field)
 			case "field":
 				return ec.fieldContext_WorkflowCondition_field(ctx, field)
 			case "op":
 				return ec.fieldContext_WorkflowCondition_op(ctx, field)
 			case "value":
 				return ec.fieldContext_WorkflowCondition_value(ctx, field)
+			case "expr":
+				return ec.fieldContext_WorkflowCondition_expr(ctx, field)
 			case "all":
 				return ec.fieldContext_WorkflowCondition_all(ctx, field)
 			case "any":
@@ -10308,6 +10447,8 @@ func (ec *executionContext) fieldContext_WorkflowGraph_nodes(_ context.Context, 
 				return ec.fieldContext_WorkflowNode_title(ctx, field)
 			case "prompt":
 				return ec.fieldContext_WorkflowNode_prompt(ctx, field)
+			case "outputFields":
+				return ec.fieldContext_WorkflowNode_outputFields(ctx, field)
 			case "approval":
 				return ec.fieldContext_WorkflowNode_approval(ctx, field)
 			case "retry":
@@ -10476,6 +10617,43 @@ func (ec *executionContext) fieldContext_WorkflowNode_prompt(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _WorkflowNode_outputFields(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowNode_outputFields,
+		func(ctx context.Context) (any, error) {
+			return obj.OutputFields, nil
+		},
+		nil,
+		ec.marshalNWorkflowOutputField2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowNode_outputFields(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_WorkflowOutputField_key(ctx, field)
+			case "description":
+				return ec.fieldContext_WorkflowOutputField_description(ctx, field)
+			case "valueType":
+				return ec.fieldContext_WorkflowOutputField_valueType(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkflowOutputField", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkflowNode_approval(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowNode) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10572,6 +10750,93 @@ func (ec *executionContext) fieldContext_WorkflowNode_merge(_ context.Context, f
 				return ec.fieldContext_MergeConfig_strategy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MergeConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowOutputField_key(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowOutputField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowOutputField_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowOutputField_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowOutputField",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowOutputField_description(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowOutputField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowOutputField_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowOutputField_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowOutputField",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowOutputField_valueType(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowOutputField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowOutputField_valueType,
+		func(ctx context.Context) (any, error) {
+			return obj.ValueType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowOutputField_valueType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowOutputField",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -13087,13 +13352,20 @@ func (ec *executionContext) unmarshalInputWorkflowConditionInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"field", "op", "value", "all", "any", "not"}
+	fieldsInOrder := [...]string{"mode", "field", "op", "value", "expr", "all", "any", "not"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
 		case "field":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("field"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -13115,6 +13387,13 @@ func (ec *executionContext) unmarshalInputWorkflowConditionInput(ctx context.Con
 				return it, err
 			}
 			it.Value = data
+		case "expr":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("expr"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Expr = data
 		case "all":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("all"))
 			data, err := ec.unmarshalOWorkflowConditionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowConditionInputᚄ(ctx, v)
@@ -13240,7 +13519,7 @@ func (ec *executionContext) unmarshalInputWorkflowNodeInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "type", "title", "prompt", "approval", "retry", "merge"}
+	fieldsInOrder := [...]string{"id", "type", "title", "prompt", "outputFields", "approval", "retry", "merge"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13275,6 +13554,13 @@ func (ec *executionContext) unmarshalInputWorkflowNodeInput(ctx context.Context,
 				return it, err
 			}
 			it.Prompt = data
+		case "outputFields":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("outputFields"))
+			data, err := ec.unmarshalOWorkflowOutputFieldInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OutputFields = data
 		case "approval":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("approval"))
 			data, err := ec.unmarshalOApprovalConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐApprovalConfigInput(ctx, v)
@@ -13296,6 +13582,50 @@ func (ec *executionContext) unmarshalInputWorkflowNodeInput(ctx context.Context,
 				return it, err
 			}
 			it.Merge = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputWorkflowOutputFieldInput(ctx context.Context, obj any) (model.WorkflowOutputFieldInput, error) {
+	var it model.WorkflowOutputFieldInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"key", "description", "valueType"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "key":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("key"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Key = data
+		case "description":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("description"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Description = data
+		case "valueType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("valueType"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ValueType = data
 		}
 	}
 	return it, nil
@@ -15658,6 +15988,11 @@ func (ec *executionContext) _WorkflowCondition(ctx context.Context, sel ast.Sele
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("WorkflowCondition")
+		case "mode":
+			out.Values[i] = ec._WorkflowCondition_mode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "field":
 			out.Values[i] = ec._WorkflowCondition_field(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -15670,6 +16005,11 @@ func (ec *executionContext) _WorkflowCondition(ctx context.Context, sel ast.Sele
 			}
 		case "value":
 			out.Values[i] = ec._WorkflowCondition_value(ctx, field, obj)
+		case "expr":
+			out.Values[i] = ec._WorkflowCondition_expr(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "all":
 			out.Values[i] = ec._WorkflowCondition_all(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -15898,6 +16238,11 @@ func (ec *executionContext) _WorkflowNode(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "outputFields":
+			out.Values[i] = ec._WorkflowNode_outputFields(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "approval":
 			out.Values[i] = ec._WorkflowNode_approval(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -15910,6 +16255,55 @@ func (ec *executionContext) _WorkflowNode(ctx context.Context, sel ast.Selection
 			}
 		case "merge":
 			out.Values[i] = ec._WorkflowNode_merge(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var workflowOutputFieldImplementors = []string{"WorkflowOutputField"}
+
+func (ec *executionContext) _WorkflowOutputField(ctx context.Context, sel ast.SelectionSet, obj *model.WorkflowOutputField) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, workflowOutputFieldImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorkflowOutputField")
+		case "key":
+			out.Values[i] = ec._WorkflowOutputField_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._WorkflowOutputField_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "valueType":
+			out.Values[i] = ec._WorkflowOutputField_valueType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -17331,6 +17725,37 @@ func (ec *executionContext) unmarshalNWorkflowNodeInput2ᚖgithubᚗcomᚋnzlov�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalNWorkflowOutputField2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WorkflowOutputField) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWorkflowOutputField2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputField(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNWorkflowOutputField2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputField(ctx context.Context, sel ast.SelectionSet, v *model.WorkflowOutputField) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WorkflowOutputField(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNWorkflowOutputFieldInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldInput(ctx context.Context, v any) (*model.WorkflowOutputFieldInput, error) {
+	res, err := ec.unmarshalInputWorkflowOutputFieldInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNWorkflowRun2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowRun(ctx context.Context, sel ast.SelectionSet, v model.WorkflowRun) graphql.Marshaler {
 	return ec._WorkflowRun(ctx, sel, &v)
 }
@@ -17734,6 +18159,24 @@ func (ec *executionContext) marshalOWorkflowDefinition2ᚖgithubᚗcomᚋnzlov�
 		return graphql.Null
 	}
 	return ec._WorkflowDefinition(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOWorkflowOutputFieldInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldInputᚄ(ctx context.Context, v any) ([]*model.WorkflowOutputFieldInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.WorkflowOutputFieldInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNWorkflowOutputFieldInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

@@ -54,7 +54,7 @@ func TestStartForSessionCreatesRunningNodeRunForExecutableStartNode(t *testing.T
 	if got.CurrentNodeID != "build" || got.CurrentNodeTitle != "Build" {
 		t.Fatalf("current node = %q/%q", got.CurrentNodeID, got.CurrentNodeTitle)
 	}
-	if got.Prompt != "Validate build\n\nUser requirement:\nship it" {
+	if !strings.Contains(got.Prompt, "Validate build\n\nUser requirement:\nship it") || !strings.Contains(got.Prompt, "Workflow input params JSON") {
 		t.Fatalf("Prompt = %q", got.Prompt)
 	}
 	if len(repo.runs) != 1 || repo.runs[0].Status != domain.RunRunning || repo.runs[0].CurrentNodeID != "build" {
@@ -110,7 +110,7 @@ func TestWorkflowMutationsWriteEventsInUnitOfWorkAndIgnorePublishError(t *testin
 	if _, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
 		WorkflowRunID: start.WorkflowRunID,
 		NodeRunID:     *start.NodeRunID,
-		Output:        map[string]any{"ok": true},
+		Output:        map[string]any{"results": map[string]any{"ok": true}},
 	}); err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
 	}
@@ -309,7 +309,7 @@ func TestCompleteNodeAdvancesToNextExecutableNode(t *testing.T) {
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
 		WorkflowRunID: "workflow-run-1",
 		NodeRunID:     "node-run-1",
-		Output:        map[string]any{"ok": true},
+		Output:        map[string]any{"results": map[string]any{"ok": true}},
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -322,6 +322,186 @@ func TestCompleteNodeAdvancesToNextExecutableNode(t *testing.T) {
 	}
 	if repo.nodeRuns[0].Status != domain.NodeSucceeded || len(repo.nodeRuns) != 2 || repo.nodeRuns[1].NodeID != "verify" {
 		t.Fatalf("node runs = %#v", repo.nodeRuns)
+	}
+}
+
+func TestCompleteNodeEvaluatesExprAndPassesResultsAsNextParams(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{ID: "build", Type: "codex", Title: "Build"},
+				{ID: "verify", Type: "codex", Title: "Verify", Prompt: "Verify result"},
+			},
+			Edges: []domain.Edge{{
+				From:      "build",
+				To:        "verify",
+				Condition: domain.Condition{Mode: "expr", Expr: `results.status == "passed" && params.requirement == "ship"`},
+			}},
+		},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "build",
+		Context:              domain.Context{Values: map[string]any{"params": map[string]any{"requirement": "ship"}}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{
+		ID:            "node-run-1",
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Status:        domain.NodeRunning,
+		Attempt:       1,
+	}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-2", nil }
+
+	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        map[string]any{"results": map[string]any{"status": "passed", "artifact": "ready"}},
+	})
+	if err != nil {
+		t.Fatalf("CompleteNode() error = %v", err)
+	}
+	if !got.RequiresCodex || got.CurrentNodeID != "verify" {
+		t.Fatalf("CompleteNode() = %#v", got)
+	}
+	if !strings.Contains(got.Prompt, `"status": "passed"`) || strings.Contains(got.Prompt, `"requirement": "ship"`) {
+		t.Fatalf("Prompt = %q", got.Prompt)
+	}
+	params, ok := repo.runs[0].Context.Values["params"].(map[string]any)
+	if !ok || params["status"] != "passed" || params["artifact"] != "ready" {
+		t.Fatalf("params = %#v", repo.runs[0].Context.Values["params"])
+	}
+}
+
+func TestCompleteNodeRequestsJSONRetryWhenCodexOutputMissingResults(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{ID: "build", Type: "codex", Title: "Build"},
+				{ID: "verify", Type: "codex", Title: "Verify"},
+			},
+			Edges: []domain.Edge{{From: "build", To: "verify"}},
+		},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "build",
+		Context:              domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	service := New(repo)
+
+	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        map[string]any{"text": "done"},
+	})
+	if err != nil {
+		t.Fatalf("CompleteNode() error = %v", err)
+	}
+	if !got.RequiresCodex || !got.RequireJSONRetry || got.NodeRunID == nil || *got.NodeRunID != "node-run-1" || got.CurrentNodeID != "build" {
+		t.Fatalf("CompleteNode() = %#v", got)
+	}
+	if !strings.Contains(got.Prompt, "ANYCODE_WORKFLOW_JSON_RETRY") {
+		t.Fatalf("Prompt = %q", got.Prompt)
+	}
+	if repo.nodeRuns[0].Status != domain.NodeRunning || repo.runs[0].CurrentNodeID != "build" {
+		t.Fatalf("workflow should stay on current node: run=%#v nodeRuns=%#v", repo.runs[0], repo.nodeRuns)
+	}
+}
+
+func TestCompleteNodeAcceptsEmptyResultsJSON(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{ID: "build", Type: "codex", Title: "Build"},
+				{ID: "verify", Type: "codex", Title: "Verify"},
+			},
+			Edges: []domain.Edge{{From: "build", To: "verify"}},
+		},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "build",
+		Context:              domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-2", nil }
+
+	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        map[string]any{"results": map[string]any{}},
+	})
+	if err != nil {
+		t.Fatalf("CompleteNode() error = %v", err)
+	}
+	if got.RequireJSONRetry || got.NodeRunID == nil || *got.NodeRunID != "node-run-2" || got.CurrentNodeID != "verify" {
+		t.Fatalf("CompleteNode() = %#v", got)
+	}
+}
+
+func TestCompleteNodeFailsAfterJSONRetryStillMissingResults(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{{ID: "build", Type: "codex"}, {ID: "verify", Type: "codex"}},
+			Edges: []domain.Edge{{From: "build", To: "verify"}},
+		},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "build",
+		Context:              domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	service := New(repo)
+
+	_, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        map[string]any{"jsonRetry": true, "text": "still not json"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "workflow node output JSON is required") {
+		t.Fatalf("CompleteNode() error = %v", err)
+	}
+	if repo.nodeRuns[0].Status != domain.NodeRunning || repo.runs[0].Status != domain.RunRunning {
+		t.Fatalf("workflow should not complete node: run=%#v nodeRuns=%#v", repo.runs[0], repo.nodeRuns)
 	}
 }
 
@@ -362,7 +542,7 @@ func TestCompleteNodeAdvancesToMergeNode(t *testing.T) {
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
 		WorkflowRunID: "workflow-run-1",
 		NodeRunID:     "node-run-1",
-		Output:        map[string]any{"ok": true},
+		Output:        map[string]any{"results": map[string]any{"ok": true}},
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -405,7 +585,7 @@ func TestCompleteNodeBlocksWhenNoEdgeMatches(t *testing.T) {
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
 		WorkflowRunID: "workflow-run-1",
 		NodeRunID:     "node-run-1",
-		Output:        map[string]any{"ok": false},
+		Output:        map[string]any{"results": map[string]any{"ok": false}},
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)

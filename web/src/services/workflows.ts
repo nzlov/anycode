@@ -1,12 +1,20 @@
 import { graphqlFetch } from '@/services/graphqlClient';
 
 export interface WorkflowCondition {
+  mode: string;
   field: string;
   op: string;
   value?: unknown;
+  expr: string;
   all: WorkflowCondition[];
   any: WorkflowCondition[];
   not?: WorkflowCondition | null;
+}
+
+export interface WorkflowOutputField {
+  key: string;
+  description: string;
+  valueType: string;
 }
 
 export interface WorkflowNode {
@@ -14,6 +22,7 @@ export interface WorkflowNode {
   type: string;
   title: string;
   prompt: string;
+  outputFields: WorkflowOutputField[];
   approval: {
     beforeRun: boolean;
     afterRun: boolean;
@@ -59,6 +68,11 @@ const workflowDefinitionFields = `
       type
       title
       prompt
+      outputFields {
+        key
+        description
+        valueType
+      }
       approval {
         beforeRun
         afterRun
@@ -84,16 +98,20 @@ const workflowDefinitionFields = `
 function conditionSelection(depth: number): string {
   if (depth <= 0) {
     return `
+      mode
       field
       op
       value
+      expr
     `;
   }
   const child = conditionSelection(depth - 1);
   return `
+    mode
     field
     op
     value
+    expr
     all {
       ${child}
     }

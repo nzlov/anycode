@@ -240,8 +240,10 @@ type WorkflowStart struct {
 	CurrentNodeTitle string
 	Status           string
 	RequiresCodex    bool
+	RequireJSONRetry bool
 	Prompt           string
 	Merge            *WorkflowMerge
+	Expr             *WorkflowExpr
 }
 
 type WorkflowStartFailureInput struct {
@@ -307,8 +309,10 @@ type WorkflowAdvance struct {
 	CurrentNodeTitle string
 	Status           string
 	RequiresCodex    bool
+	RequireJSONRetry bool
 	Prompt           string
 	Merge            *WorkflowMerge
+	Expr             *WorkflowExpr
 	Completed        bool
 	Blocked          bool
 	BlockedReason    string
@@ -316,6 +320,11 @@ type WorkflowAdvance struct {
 
 type WorkflowMerge struct {
 	Strategy string
+}
+
+type WorkflowExpr struct {
+	Script string
+	Params map[string]any
 }
 
 type WorkflowStarter interface {

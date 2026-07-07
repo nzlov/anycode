@@ -197,6 +197,9 @@ func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}
+	if input.Prompt != "" {
+		args = append(args, input.Prompt)
+	}
 	return args
 }
 
