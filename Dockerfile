@@ -1,8 +1,9 @@
 FROM archlinux:latest AS base
-ARG ANYCODE_BUILD_REGION=
-ENV GOPROXY=https://goproxy.cn,direct
-RUN if [ "$ANYCODE_BUILD_REGION" = "china" ]; then \
-  printf '%s\n' 'Server = https://mirrors.ustc.edu.cn/archlinux/$repo/os/$arch' > /etc/pacman.d/mirrorlist; \
+ARG PACMAN_MIRROR=
+ARG GOPROXY=
+ENV GOPROXY=$GOPROXY
+RUN if [ -n "$PACMAN_MIRROR" ]; then \
+    printf 'Server = %s\n' "$PACMAN_MIRROR" > /etc/pacman.d/mirrorlist; \
   fi
 
 FROM base AS web
