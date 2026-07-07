@@ -35,7 +35,7 @@ ENV ANYCODE_GID=$ANYCODE_GID
 ENV NVM_DIR=/usr/local/nvm
 ENV NVM_SYMLINK_CURRENT=true
 ENV PATH=/usr/local/nvm/current/bin:$PATH
-RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less \
+RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less go \
   && pacman -Scc --noconfirm \
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \
