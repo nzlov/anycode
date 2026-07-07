@@ -27,6 +27,7 @@ export interface SessionCard {
   status: SessionStatus;
   priority: SessionPriority;
   branch: string;
+  worktreeBranch: string;
   node: string;
   createdAt: string;
   createdTime: string;
@@ -166,6 +167,7 @@ interface GraphQLSessionCard {
   status: string;
   priority: string;
   baseBranch: string;
+  worktreeBranch: string;
   currentNodeTitle: string;
   pendingQuestion: boolean;
   lastRunAt: string | null;
@@ -183,6 +185,7 @@ interface GraphQLSessionDetail {
   priority: string;
   closeReason?: string | null;
   baseBranch: string;
+  worktreeBranch: string;
   currentNodeTitle: string;
   config: {
     codexModel: string;
@@ -212,6 +215,7 @@ interface GraphQLSession {
   status: string;
   priority: string;
   baseBranch: string;
+  worktreeBranch: string;
   config: {
     codexModel: string;
     reasoningEffort: string;
@@ -247,6 +251,7 @@ const sessionCardFields = `
   status
   priority
   baseBranch
+  worktreeBranch
   currentNodeTitle
   pendingQuestion
   availableActions
@@ -264,6 +269,7 @@ const sessionDetailFields = `
   priority
   closeReason
   baseBranch
+  worktreeBranch
   currentNodeTitle
   config {
     codexModel
@@ -291,6 +297,7 @@ const sessionFields = `
   status
   priority
   baseBranch
+  worktreeBranch
   config {
     codexModel
     reasoningEffort
@@ -536,6 +543,23 @@ export async function closeSession(sessionId: string) {
   });
 }
 
+export async function updateSessionPriority(sessionId: string, priority: SessionPriority) {
+  const data = await graphqlFetch<
+    { setSessionPriority: GraphQLSession },
+    { input: { sessionId: string; priority: SessionPriority } }
+  >({
+    query: `
+      mutation SetSessionPriority($input: SetSessionPriorityInput!) {
+        setSessionPriority(input: $input) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { input: { sessionId, priority } },
+  });
+  return normalizeSession(data.setSessionPriority);
+}
+
 export async function startSession(sessionId: string, force = false) {
   return graphqlFetch<{ startSession: GraphQLSession }, { id: string; force: boolean }>({
     query: `
@@ -639,6 +663,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     status: normalizeStatus(session.status),
     priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
+    worktreeBranch: session.worktreeBranch || '',
     node: session.currentNodeTitle || statusNode(normalizeStatus(session.status)),
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),
@@ -661,6 +686,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     status,
     priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
+    worktreeBranch: session.worktreeBranch || '',
     node: session.currentNodeTitle || statusNode(status),
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),
@@ -697,6 +723,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     status,
     priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
+    worktreeBranch: session.worktreeBranch || '',
     node: statusNode(status),
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),
@@ -754,8 +781,10 @@ function readableEventPayload(type: string, payload: Record<string, unknown>) {
   if (type === 'session.stopped') return { title: '已停止', body: failure || '会话已停止。' };
   if (type === 'session.stopping') return { title: '停止中', body: '正在停止 Codex 进程。' };
   if (type === 'session.started') return { title: '已启动', body: 'Codex 进程已启动。' };
-  if (type === 'session.failed') return { title: '失败', body: failure || reason || '会话执行失败。' };
-  if (type === 'session.resume_failed') return { title: '恢复失败', body: failure || reason || '恢复 Codex 会话失败。' };
+  if (type === 'session.failed')
+    return { title: '失败', body: failure || reason || '会话执行失败。' };
+  if (type === 'session.resume_failed')
+    return { title: '恢复失败', body: failure || reason || '恢复 Codex 会话失败。' };
   if (type === 'session.completed') return { title: '已完成', body: '会话已完成。' };
   if (type === 'process.exited') {
     const body =
@@ -794,8 +823,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
       stringPayload(payload, 'thread_id') || stringPayload(parseRaw(payload), 'thread_id');
     return { title: '线程已创建', body: threadID ? `线程 ${threadID}` : statusText(status) };
   }
-  if (codexType === 'turn.started')
-    return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
+  if (codexType === 'turn.started') return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
   if (codexType === 'item.started') {
     if (itemType === 'command_execution') {
       return { title: '执行命令', body: command || 'Codex 正在执行命令。' };
@@ -810,7 +838,8 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
-      const prefix = exitCode === null || exitCode === 0 ? '命令完成' : `命令完成，退出码 ${exitCode}`;
+      const prefix =
+        exitCode === null || exitCode === 0 ? '命令完成' : `命令完成，退出码 ${exitCode}`;
       return { title: '命令结果', body: [prefix, output].filter(Boolean).join('\n') };
     }
     if (itemType === 'agent_message') {
@@ -821,8 +850,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
       body: output || compactPayload(item) || statusText(status),
     };
   }
-  if (codexType === 'turn.completed')
-    return { title: '本轮完成', body: 'Codex 已完成本轮处理。' };
+  if (codexType === 'turn.completed') return { title: '本轮完成', body: 'Codex 已完成本轮处理。' };
   if (codexType === 'process.exit') {
     const body =
       processExitCode === null

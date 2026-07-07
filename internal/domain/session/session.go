@@ -223,6 +223,7 @@ type AttachmentStore interface {
 type WorktreeManager interface {
 	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, baseBranch string) (string, error)
 	Remove(ctx context.Context, path string) error
+	DeleteBranch(ctx context.Context, projectPath string, branch string) error
 	PathForSession(projectID ProjectID, sessionID ID) string
 }
 

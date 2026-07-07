@@ -139,6 +139,9 @@ func TestCreateSessionCreatesWorktreeForGitProject(t *testing.T) {
 	if got.WorktreePath != "/data/worktrees/project-1/session-1" {
 		t.Fatalf("WorktreePath = %q", got.WorktreePath)
 	}
+	if got.WorktreeBranch != "session-1" {
+		t.Fatalf("WorktreeBranch = %q, want %q", got.WorktreeBranch, "session-1")
+	}
 	if worktrees.createProjectPath != "/workspace/project-1" || worktrees.createProjectID != "project-1" || worktrees.createSessionID != "session-1" || worktrees.createBaseBranch != "main" {
 		t.Fatalf("Create() args = path %q project %q session %q branch %q", worktrees.createProjectPath, worktrees.createProjectID, worktrees.createSessionID, worktrees.createBaseBranch)
 	}
@@ -1654,6 +1657,53 @@ func TestCreateSessionRemovesCreatedWorktreeWhenAttachmentArchiveFails(t *testin
 	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
 		t.Fatalf("removed worktrees = %#v", worktrees.removed)
 	}
+	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1"}) {
+		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
+	}
+}
+
+func TestCreateSessionReturnsWorktreeCleanupErrorWhenRollbackBranchDeleteFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:       "staged-1",
+		Filename: "note.txt",
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	files := newFakeAttachmentStore()
+	files.promoteErr = errors.New("disk failed")
+	worktrees := &fakeWorktreeManager{
+		path:            "/data/worktrees/project-1/session-1",
+		deleteBranchErr: errors.New("delete branch failed"),
+	}
+	service := New(repo, projects, WithAttachments(repo, files), WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+	_, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:           "project-1",
+		Requirement:         "use attachment",
+		BaseBranch:          "main",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	})
+	if err == nil {
+		t.Fatal("CreateSession() expected attachment archive and cleanup error")
+	}
+	if !strings.Contains(err.Error(), "disk failed") || !strings.Contains(err.Error(), "cleanup created worktree") || !strings.Contains(err.Error(), "delete branch failed") {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
+		t.Fatalf("removed worktrees = %#v", worktrees.removed)
+	}
+	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1"}) {
+		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
+	}
 }
 
 func TestListSessionsReturnsCardsPage(t *testing.T) {
@@ -1748,6 +1798,39 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	}
 }
 
+func TestSetSessionPriorityNormalizesAndSaves(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusCreated,
+		Priority:  domain.PriorityLow,
+	}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-priority", nil }
+
+	got, err := service.SetSessionPriority(ctx, SetSessionPriorityInput{
+		SessionID: "session-1",
+		Priority:  "high",
+	})
+	if err != nil {
+		t.Fatalf("SetSessionPriority() error = %v", err)
+	}
+	if got.Priority != domain.PriorityHigh {
+		t.Fatalf("Priority = %q, want %q", got.Priority, domain.PriorityHigh)
+	}
+	if repo.sessions["session-1"].Priority != domain.PriorityHigh {
+		t.Fatalf("saved priority = %q", repo.sessions["session-1"].Priority)
+	}
+	gotEvents := events.snapshot()
+	if len(gotEvents) != 1 || gotEvents[0].Type != "session.priority_changed" || gotEvents[0].Payload["priority"] != string(domain.PriorityHigh) {
+		t.Fatalf("events = %#v", gotEvents)
+	}
+}
+
 func TestAppendPromptValidatesAndPersists(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -1779,6 +1862,25 @@ func TestAppendPromptValidatesAndPersists(t *testing.T) {
 
 	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "   "}); err == nil {
 		t.Fatal("AppendPrompt() expected body error")
+	}
+}
+
+func TestAppendPromptRejectsClosedSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusClosed,
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "continue"}); err == nil {
+		t.Fatal("AppendPrompt() expected closed session error")
+	}
+	if len(repo.appends) != 0 {
+		t.Fatalf("closed session appends = %d, want 0", len(repo.appends))
 	}
 }
 
@@ -1863,12 +1965,14 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 		ID:           "session-1",
 		ProjectID:    "project-1",
 		Status:       domain.StatusCreated,
+		BaseBranch:   "main",
 		WorktreePath: "/data/worktrees/project-1/session-1",
 	}
 	projects := newFakeProjectRepository()
 	projects.projects["project-1"] = projectdomain.Project{
 		ID:    "project-1",
 		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
 		IsGit: true,
 	}
 	worktrees := &fakeWorktreeManager{}
@@ -1885,6 +1989,9 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
 		t.Fatalf("removed worktrees = %#v", worktrees.removed)
 	}
+	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1"}) {
+		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
+	}
 }
 
 func TestCloseSessionDoesNotSaveClosedWhenWorktreeRemoveFails(t *testing.T) {
@@ -1894,6 +2001,7 @@ func TestCloseSessionDoesNotSaveClosedWhenWorktreeRemoveFails(t *testing.T) {
 		ID:           "session-1",
 		ProjectID:    "project-1",
 		Status:       domain.StatusCreated,
+		BaseBranch:   "main",
 		WorktreePath: "/data/worktrees/project-1/session-1",
 	}
 	projects := newFakeProjectRepository()
@@ -1917,6 +2025,56 @@ func TestCloseSessionDoesNotSaveClosedWhenWorktreeRemoveFails(t *testing.T) {
 	}
 	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
 		t.Fatalf("removed worktrees = %#v", worktrees.removed)
+	}
+}
+
+func TestCloseSessionCanRetryAfterBranchDeleteFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Status:       domain.StatusCreated,
+		BaseBranch:   "main",
+		WorktreePath: "/data/worktrees/project-1/session-1",
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{deleteBranchErr: errors.New("delete branch failed")}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected delete branch error")
+	}
+	if repo.sessions["session-1"].Status != domain.StatusClosed {
+		t.Fatalf("session should be closed after worktree removal: %#v", repo.sessions["session-1"])
+	}
+	if repo.sessions["session-1"].WorktreePath != "" {
+		t.Fatalf("closed session worktree path = %q, want empty", repo.sessions["session-1"].WorktreePath)
+	}
+	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "continue"}); err == nil {
+		t.Fatal("AppendPrompt() expected closed session error after cleanup failure")
+	}
+
+	worktrees.deleteBranchErr = nil
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() retry error = %v", err)
+	}
+	if got.Status != domain.StatusClosed {
+		t.Fatalf("CloseSession() retry status = %q", got.Status)
+	}
+	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
+		t.Fatalf("removed worktrees = %#v", worktrees.removed)
+	}
+	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1", "/workspace/project-1:session-1"}) {
+		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
 	}
 }
 
@@ -3722,12 +3880,14 @@ type fakeWorktreeManager struct {
 	path              string
 	createErr         error
 	removeErr         error
+	deleteBranchErr   error
 	createCalled      bool
 	createProjectPath string
 	createProjectID   domain.ProjectID
 	createSessionID   domain.ID
 	createBaseBranch  string
 	removed           []string
+	deletedBranches   []string
 }
 
 func (m *fakeWorktreeManager) Create(_ context.Context, projectPath string, projectID domain.ProjectID, sessionID domain.ID, baseBranch string) (string, error) {
@@ -3746,6 +3906,14 @@ func (m *fakeWorktreeManager) Remove(_ context.Context, path string) error {
 	m.removed = append(m.removed, path)
 	if m.removeErr != nil {
 		return m.removeErr
+	}
+	return nil
+}
+
+func (m *fakeWorktreeManager) DeleteBranch(_ context.Context, projectPath string, branch string) error {
+	m.deletedBranches = append(m.deletedBranches, projectPath+":"+branch)
+	if m.deleteBranchErr != nil {
+		return m.deleteBranchErr
 	}
 	return nil
 }

@@ -127,11 +127,33 @@ func TestCreateAndRemoveWorktree(t *testing.T) {
 	if head != base {
 		t.Fatalf("worktree head = %q, want %q", head, base)
 	}
+	branch, err := client.CurrentBranch(ctx, got)
+	if err != nil {
+		t.Fatalf("CurrentBranch(worktree) error = %v", err)
+	}
+	if branch != "session-1" {
+		t.Fatalf("worktree branch = %q, want %q", branch, "session-1")
+	}
 	if err := client.Remove(ctx, got); err != nil {
 		t.Fatalf("Remove() error = %v", err)
 	}
 	if _, err := os.Stat(got); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("worktree still exists after Remove(): %v", err)
+	}
+	if err := client.Remove(ctx, got); err != nil {
+		t.Fatalf("Remove() second call error = %v", err)
+	}
+	if err := client.DeleteBranch(ctx, repo, "session-1"); err != nil {
+		t.Fatalf("DeleteBranch() error = %v", err)
+	}
+	branches, err := client.Branches(ctx, repo)
+	if err != nil {
+		t.Fatalf("Branches() error = %v", err)
+	}
+	for _, branch := range branches {
+		if branch.Name == "session-1" {
+			t.Fatalf("session branch still exists after DeleteBranch(): %+v", branches)
+		}
 	}
 }
 

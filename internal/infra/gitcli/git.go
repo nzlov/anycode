@@ -132,6 +132,14 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 	return strings.TrimSpace(out), nil
 }
 
+func (c *Client) CurrentBranch(ctx context.Context, path string) (string, error) {
+	out, err := c.run(ctx, path, "branch", "--show-current")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 func (c *Client) PathForSession(projectID session.ProjectID, sessionID session.ID) string {
 	base := c.dataDir
 	if base == "" {
@@ -152,7 +160,8 @@ func (c *Client) Create(ctx context.Context, projectPath string, projectID sessi
 	if ref == "" {
 		ref = "HEAD"
 	}
-	args := []string{"worktree", "add", "--detach", path, ref}
+	branch := strings.TrimSpace(string(sessionID))
+	args := []string{"worktree", "add", "-b", branch, path, ref}
 	if _, err := c.run(ctx, projectPath, args...); err != nil {
 		_ = os.RemoveAll(path)
 		return "", err
@@ -165,11 +174,38 @@ func (c *Client) Remove(ctx context.Context, path string) error {
 	if path == "" {
 		return nil
 	}
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
 	if _, err := c.run(ctx, path, "worktree", "remove", "--force", path); err != nil {
 		if removeErr := os.RemoveAll(path); removeErr != nil {
 			return fmt.Errorf("%w; remove path: %v", err, removeErr)
 		}
 		return err
+	}
+	return nil
+}
+
+func (c *Client) DeleteBranch(ctx context.Context, projectPath string, branch string) error {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return nil
+	}
+	branches, err := c.Branches(ctx, projectPath)
+	if err != nil {
+		return err
+	}
+	for _, item := range branches {
+		if item.Name != branch {
+			continue
+		}
+		if _, err := c.run(ctx, projectPath, "branch", "-D", branch); err != nil {
+			return err
+		}
+		return nil
 	}
 	return nil
 }

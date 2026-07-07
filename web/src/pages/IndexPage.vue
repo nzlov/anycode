@@ -3,374 +3,153 @@
     <div class="page-heading">
       <div>
         <div class="text-h5 text-weight-bold">{{ pageTitle }}</div>
-        <div class="text-body2 text-muted">最近 3 天运行卡片与近 7 天历史记录</div>
+        <div class="text-body2 text-muted">最新卡片与近 7 天历史记录</div>
       </div>
     </div>
 
-    <div v-if="hasPlainCards" class="plain-card-groups q-mt-sm">
-      <div v-if="plainRecentCards.length > 0" class="lane-section">
-        <div class="lane-section__heading">
-          <div class="text-subtitle2 text-weight-bold">最新</div>
-          <div class="text-caption text-muted">最近 3 天或未结束</div>
-        </div>
-        <div class="lane-card-flow">
-          <q-card
-            v-for="card in plainRecentCards"
-            :key="card.id"
-            flat
-            bordered
-            clickable
-            class="session-card lane-session-card"
-            @click="$router.push(`/sessions/${card.id}`)"
-          >
-            <q-card-section class="lane-session-card__body">
-              <div class="lane-card-content">
-                <div class="lane-card-chips">
-                  <q-badge
-                    rounded
-                    class="lane-status-chip"
-                    :class="statusChipClass(card.status)"
-                    :label="statusLabel(card.status)"
-                  />
-                  <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
-                  <q-badge rounded class="lane-mode-chip" :label="priorityLabel(card.priority)" />
-                </div>
-                <div class="lane-card-title">{{ card.title }}</div>
-                <div class="lane-card-meta">当前节点：{{ card.node }}</div>
-                <div class="lane-card-meta">
-                  最近操作 {{ card.updatedAt }} · 待回答 {{ card.pendingQuestion ? 1 : 0 }}
-                </div>
-                <div class="lane-card-actions">
-                  <q-btn
-                    v-if="card.pendingQuestion"
-                    flat
-                    dense
-                    class="lane-icon-btn lane-icon-btn--warning"
-                    icon="help"
-                    aria-label="回答问题"
-                    :loading="questionsLoading && activeQuestionSessionId === card.id"
-                    @click.stop="openAnswerDialog(card.id)"
-                  >
-                    <q-tooltip>回答待处理问题</q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    v-if="cardAction(card)"
-                    flat
-                    dense
-                    class="lane-icon-btn"
-                    :color="cardAction(card)?.color"
-                    :icon="cardAction(card)?.icon"
-                    :aria-label="cardAction(card)?.tooltip"
-                    :loading="cardActionLoading && activeActionSessionId === card.id"
-                    :disable="cardAction(card)?.disabled"
-                    @click.stop="runCardAction(card)"
-                  >
-                    <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    flat
-                    dense
-                    class="lane-icon-btn"
-                    color="primary"
-                    icon="chevron_right"
-                    aria-label="打开卡片"
-                    @click.stop="$router.push(`/sessions/${card.id}`)"
-                  >
-                    <q-tooltip>打开卡片详情</q-tooltip>
-                  </q-btn>
-                </div>
-              </div>
-            </q-card-section>
-          </q-card>
+    <section v-for="section in cardSections" :key="section.id" class="overview-card-section">
+      <div class="overview-card-section__heading">
+        <div>
+          <div class="text-subtitle1 text-weight-bold">{{ section.title }}</div>
+          <div class="text-caption text-muted">{{ section.caption }}</div>
         </div>
       </div>
 
-      <div v-if="plainHistoryCards.length > 0" class="lane-section q-mt-md">
-        <div class="lane-section__heading">
-          <div class="text-subtitle2 text-weight-bold">历史</div>
-          <div class="text-caption text-muted">结束时间倒序</div>
-        </div>
-        <div class="lane-card-flow">
-          <q-card
-            v-for="card in plainHistoryCards"
-            :key="card.id"
-            flat
-            bordered
-            clickable
-            class="session-card lane-session-card"
-            @click="$router.push(`/sessions/${card.id}`)"
-          >
-            <q-card-section class="lane-session-card__body">
-              <div class="lane-card-content">
-                <div class="lane-card-chips">
-                  <q-badge
-                    rounded
-                    class="lane-status-chip"
-                    :class="statusChipClass(card.status)"
-                    :label="statusLabel(card.status)"
-                  />
-                  <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
-                  <q-badge rounded class="lane-mode-chip" :label="priorityLabel(card.priority)" />
-                </div>
-                <div class="lane-card-title">{{ card.title }}</div>
-                <div class="lane-card-meta">当前节点：{{ card.node }}</div>
-                <div class="lane-card-meta">结束 {{ card.updatedAt }}</div>
-                <div class="lane-card-actions">
-                  <q-btn
-                    v-if="card.pendingQuestion"
-                    flat
-                    dense
-                    class="lane-icon-btn lane-icon-btn--warning"
-                    icon="help"
-                    aria-label="回答问题"
-                    :loading="questionsLoading && activeQuestionSessionId === card.id"
-                    @click.stop="openAnswerDialog(card.id)"
-                  >
-                    <q-tooltip>回答待处理问题</q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    v-if="cardAction(card)"
-                    flat
-                    dense
-                    class="lane-icon-btn"
-                    :color="cardAction(card)?.color"
-                    :icon="cardAction(card)?.icon"
-                    :aria-label="cardAction(card)?.tooltip"
-                    :loading="cardActionLoading && activeActionSessionId === card.id"
-                    :disable="cardAction(card)?.disabled"
-                    @click.stop="runCardAction(card)"
-                  >
-                    <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
-                  </q-btn>
-                  <q-btn
-                    flat
-                    dense
-                    class="lane-icon-btn"
-                    color="primary"
-                    icon="chevron_right"
-                    aria-label="打开卡片"
-                    @click.stop="$router.push(`/sessions/${card.id}`)"
-                  >
-                    <q-tooltip>打开卡片详情</q-tooltip>
-                  </q-btn>
-                </div>
-              </div>
-            </q-card-section>
-          </q-card>
-          <router-link v-if="hasMorePlainHistory" class="lane-more-card" :to="{ name: 'sessions' }">
-            <q-icon name="history" />
-            <span>更多历史进入表格</span>
-          </router-link>
-        </div>
-      </div>
-    </div>
-
-    <div class="branch-lanes q-mt-sm">
-      <q-expansion-item
-        v-for="lane in branchLanes"
-        :key="lane.id"
-        default-opened
-        class="branch-lane"
-        header-class="branch-lane__header"
-      >
-        <template #header>
-          <q-item-section>
-            <div class="row items-center q-gutter-sm">
-              <span class="text-subtitle1 text-weight-bold">{{ lane.branch }}</span>
-              <q-chip v-if="!projectScopeId" dense square outline color="blue-grey">{{
-                lane.projectName
-              }}</q-chip>
-              <span class="text-caption text-muted">{{ lane.statusText }}</span>
-            </div>
-          </q-item-section>
-          <q-item-section side>
-            <div class="row items-center q-gutter-md no-wrap">
-              <router-link class="stat-link" :to="lane.commitRoute"
-                >提交 {{ lane.commitCount }}</router-link
-              >
-              <router-link class="stat-link" :to="lane.diffRoute"
-                >未提交 {{ lane.uncommittedCount }}</router-link
-              >
-              <span class="text-caption text-muted"
-                >最新 {{ lane.recent.length }} · 历史 {{ lane.history.length }}</span
-              >
-            </div>
-          </q-item-section>
-        </template>
-
-        <div class="branch-lane__body">
-          <div class="lane-section">
-            <div class="lane-section__heading">
-              <div class="text-subtitle2 text-weight-bold">最新</div>
-              <div class="text-caption text-muted">最近 3 天或未结束</div>
-            </div>
-            <div v-if="lane.recent.length > 0" class="lane-card-flow">
-              <q-card
-                v-for="card in lane.recent"
-                :key="card.id"
-                flat
-                bordered
+      <div v-if="section.cards.length > 0" class="overview-card-grid">
+        <q-card
+          v-for="card in section.cards"
+          :key="card.id"
+          flat
+          bordered
+          clickable
+          tabindex="0"
+          class="overview-session-card cursor-pointer"
+          @click="$router.push(`/sessions/${card.id}`)"
+          @keyup.enter="$router.push(`/sessions/${card.id}`)"
+          @keyup.space.prevent="$router.push(`/sessions/${card.id}`)"
+        >
+          <q-menu context-menu>
+            <q-list dense class="overview-card-menu">
+              <q-item-label header>优先级</q-item-label>
+              <q-item
+                v-for="priority in priorities"
+                :key="priority"
+                v-close-popup
                 clickable
-                class="session-card lane-session-card"
-                @click="$router.push(`/sessions/${card.id}`)"
+                :active="card.priority === priority"
+                :disable="card.status === 'closed'"
+                @click.stop="setCardPriority(card, priority)"
               >
-                <q-card-section class="lane-session-card__body">
-                  <div class="lane-card-content">
-                    <div class="lane-card-chips">
-                      <q-badge
-                        rounded
-                        class="lane-status-chip"
-                        :class="statusChipClass(card.status)"
-                        :label="statusLabel(card.status)"
-                      />
-                      <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
-                      <q-badge
-                        rounded
-                        class="lane-mode-chip"
-                        :label="priorityLabel(card.priority)"
-                      />
-                    </div>
-                    <div class="lane-card-title">{{ card.title }}</div>
-                    <div class="lane-card-meta">当前节点：{{ card.node }}</div>
-                    <div class="lane-card-meta">
-                      最近操作 {{ card.updatedAt }} · 待回答 {{ card.pendingQuestion ? 1 : 0 }}
-                    </div>
-                    <div class="lane-card-actions">
-                      <q-btn
-                        v-if="card.pendingQuestion"
-                        flat
-                        dense
-                        class="lane-icon-btn lane-icon-btn--warning"
-                        icon="help"
-                        aria-label="回答问题"
-                        :loading="questionsLoading && activeQuestionSessionId === card.id"
-                        @click.stop="openAnswerDialog(card.id)"
-                      >
-                        <q-tooltip>回答待处理问题</q-tooltip>
-                      </q-btn>
-                      <q-btn
-                        v-if="cardAction(card)"
-                        flat
-                        dense
-                        class="lane-icon-btn"
-                        :color="cardAction(card)?.color"
-                        :icon="cardAction(card)?.icon"
-                        :aria-label="cardAction(card)?.tooltip"
-                        :loading="cardActionLoading && activeActionSessionId === card.id"
-                        :disable="cardAction(card)?.disabled"
-                        @click.stop="runCardAction(card)"
-                      >
-                        <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
-                      </q-btn>
-                      <q-btn
-                        flat
-                        dense
-                        class="lane-icon-btn"
-                        color="primary"
-                        icon="chevron_right"
-                        aria-label="打开卡片"
-                        @click.stop="$router.push(`/sessions/${card.id}`)"
-                      >
-                        <q-tooltip>打开卡片详情</q-tooltip>
-                      </q-btn>
-                    </div>
-                  </div>
-                </q-card-section>
-              </q-card>
-            </div>
-            <q-banner v-else dense rounded class="empty-lane-banner">暂无最新卡片</q-banner>
-          </div>
-
-          <div class="lane-section q-mt-md">
-            <div class="lane-section__heading">
-              <div class="text-subtitle2 text-weight-bold">历史</div>
-              <div class="text-caption text-muted">结束时间倒序，每泳道最多 10 张</div>
-            </div>
-            <div v-if="lane.history.length > 0" class="lane-card-flow">
-              <q-card
-                v-for="card in lane.history"
-                :key="card.id"
-                flat
-                bordered
+                <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
+                <q-item-section v-if="card.priority === priority" side>
+                  <q-icon name="check" color="primary" />
+                </q-item-section>
+              </q-item>
+              <q-separator />
+              <q-item
+                v-close-popup
                 clickable
-                class="session-card lane-session-card"
-                @click="$router.push(`/sessions/${card.id}`)"
+                class="text-negative"
+                :disable="!card.availableActions.includes('close')"
+                @click.stop="closeCard(card)"
               >
-                <q-card-section class="lane-session-card__body">
-                  <div class="lane-card-content">
-                    <div class="lane-card-chips">
-                      <q-badge
-                        rounded
-                        class="lane-status-chip"
-                        :class="statusChipClass(card.status)"
-                        :label="statusLabel(card.status)"
-                      />
-                      <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
-                      <q-badge
-                        rounded
-                        class="lane-mode-chip"
-                        :label="priorityLabel(card.priority)"
-                      />
-                    </div>
-                    <div class="lane-card-title">{{ card.title }}</div>
-                    <div class="lane-card-meta">当前节点：{{ card.node }}</div>
-                    <div class="lane-card-meta">结束 {{ card.updatedAt }}</div>
-                    <div class="lane-card-actions">
-                      <q-btn
-                        v-if="card.pendingQuestion"
-                        flat
-                        dense
-                        class="lane-icon-btn lane-icon-btn--warning"
-                        icon="help"
-                        aria-label="回答问题"
-                        :loading="questionsLoading && activeQuestionSessionId === card.id"
-                        @click.stop="openAnswerDialog(card.id)"
-                      >
-                        <q-tooltip>回答待处理问题</q-tooltip>
-                      </q-btn>
-                      <q-btn
-                        v-if="cardAction(card)"
-                        flat
-                        dense
-                        class="lane-icon-btn"
-                        :color="cardAction(card)?.color"
-                        :icon="cardAction(card)?.icon"
-                        :aria-label="cardAction(card)?.tooltip"
-                        :loading="cardActionLoading && activeActionSessionId === card.id"
-                        :disable="cardAction(card)?.disabled"
-                        @click.stop="runCardAction(card)"
-                      >
-                        <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
-                      </q-btn>
-                      <q-btn
-                        flat
-                        dense
-                        class="lane-icon-btn"
-                        color="primary"
-                        icon="chevron_right"
-                        aria-label="打开卡片"
-                        @click.stop="$router.push(`/sessions/${card.id}`)"
-                      >
-                        <q-tooltip>打开卡片详情</q-tooltip>
-                      </q-btn>
-                    </div>
-                  </div>
-                </q-card-section>
-              </q-card>
-              <router-link
-                v-if="lane.hasMoreHistory"
-                class="lane-more-card"
-                :to="{ name: 'sessions' }"
-              >
-                <q-icon name="history" />
-                <span>更多历史进入表格</span>
-              </router-link>
+                <q-item-section avatar>
+                  <q-icon name="close" />
+                </q-item-section>
+                <q-item-section>关闭卡片</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+
+          <q-card-section class="overview-session-card__body">
+            <div class="overview-card-chips">
+              <q-badge
+                rounded
+                class="lane-status-chip"
+                :class="statusChipClass(card.status)"
+                :label="statusLabel(card.status)"
+              />
+              <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
+              <q-badge rounded class="lane-mode-chip" :label="priorityLabel(card.priority)" />
+              <q-badge
+                v-if="card.pendingQuestion"
+                rounded
+                color="warning"
+                text-color="dark"
+                label="待回答"
+              />
             </div>
-            <q-banner v-else dense rounded class="empty-lane-banner">暂无历史卡片</q-banner>
-          </div>
-        </div>
-      </q-expansion-item>
-    </div>
+
+            <div class="overview-card-title">{{ card.title }}</div>
+
+            <div class="overview-card-meta-grid">
+              <div>
+                <span class="overview-card-meta__label">基础分支</span>
+                <span>{{ card.branch }}</span>
+              </div>
+              <div>
+                <span class="overview-card-meta__label">工作分支</span>
+                <span>{{ card.worktreeBranch || '-' }}</span>
+              </div>
+              <div>
+                <span class="overview-card-meta__label">当前节点</span>
+                <span>{{ card.node }}</span>
+              </div>
+              <div>
+                <span class="overview-card-meta__label">最近操作</span>
+                <span>{{ card.updatedAt }}</span>
+              </div>
+            </div>
+
+            <div class="overview-card-actions">
+              <q-btn
+                v-if="card.pendingQuestion"
+                flat
+                dense
+                class="lane-icon-btn lane-icon-btn--warning"
+                icon="help"
+                aria-label="回答问题"
+                :loading="questionsLoading && activeQuestionSessionId === card.id"
+                @click.stop="openAnswerDialog(card.id)"
+              >
+                <q-tooltip>回答待处理问题</q-tooltip>
+              </q-btn>
+              <q-btn
+                v-if="cardAction(card)"
+                flat
+                dense
+                class="lane-icon-btn"
+                :color="cardAction(card)?.color"
+                :icon="cardAction(card)?.icon"
+                :aria-label="cardAction(card)?.tooltip"
+                :loading="cardActionLoading && activeActionSessionId === card.id"
+                :disable="cardAction(card)?.disabled"
+                @click.stop="runCardAction(card)"
+              >
+                <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
+              </q-btn>
+              <q-btn
+                flat
+                dense
+                class="lane-icon-btn"
+                color="primary"
+                icon="chevron_right"
+                aria-label="打开卡片"
+                @click.stop="$router.push(`/sessions/${card.id}`)"
+              >
+                <q-tooltip>打开卡片详情</q-tooltip>
+              </q-btn>
+            </div>
+          </q-card-section>
+        </q-card>
+
+        <router-link v-if="section.showMore" class="overview-more-card" :to="sessionsRoute">
+          <q-icon name="history" />
+          <span>更多历史进入表格</span>
+        </router-link>
+      </div>
+      <q-banner v-else dense rounded class="empty-lane-banner">暂无{{ section.title }}</q-banner>
+    </section>
 
     <q-banner v-if="!hasVisibleCards" rounded class="empty-lane-banner q-mt-md">
       暂无卡片
@@ -393,17 +172,19 @@ import { useRoute } from 'vue-router';
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
-import { getBranchDiff, getSessionCommitHistory } from '@/services/diff';
 import {
+  closeSession,
   getPendingQuestionBatches,
   resumeSession,
   startSession,
   stopSession,
   submitQuestionBatch,
+  updateSessionPriority,
   type QuestionAnswerInput,
   type QuestionBatch,
   type SessionCard,
   type SessionMode,
+  type SessionPriority,
   type SessionStatus,
 } from '@/services/sessions';
 
@@ -415,6 +196,7 @@ const projectScopeId = computed(() => {
 
 const {
   rows: recentRows,
+  projectId: recentProjectId,
   loadSessions: loadRecentSessions,
   startLiveUpdates: startRecentLiveUpdates,
   stopLiveUpdates: stopRecentLiveUpdates,
@@ -428,6 +210,7 @@ const {
 });
 const {
   rows: historyRows,
+  projectId: historyProjectId,
   loadSessions: loadHistorySessions,
   startLiveUpdates: startHistoryLiveUpdates,
   stopLiveUpdates: stopHistoryLiveUpdates,
@@ -442,11 +225,40 @@ const {
 const { projects, loadProjects } = useProjects();
 
 const recentCards = computed(() => recentRows.value);
-const historyCards = computed(() => historyRows.value);
+const uniqueHistoryCards = computed(() => {
+  const recentIds = new Set(recentCards.value.map((card) => card.id));
+  return historyRows.value.filter((card) => !recentIds.has(card.id));
+});
+const historyCards = computed(() => uniqueHistoryCards.value.slice(0, 10));
+const hasMoreHistory = computed(() => uniqueHistoryCards.value.length > historyCards.value.length);
 const scopedProject = computed(() =>
   projects.value.find((project) => project.id === projectScopeId.value),
 );
 const pageTitle = computed(() => scopedProject.value?.name ?? '总揽');
+const sessionsRoute = computed(() =>
+  projectScopeId.value
+    ? { name: 'sessions', query: { projectId: projectScopeId.value } }
+    : { name: 'sessions' },
+);
+const cardSections = computed(() => [
+  {
+    id: 'recent',
+    title: '最新',
+    caption: '最近 3 天运行过或仍在处理的卡片',
+    cards: recentCards.value,
+    showMore: false,
+  },
+  {
+    id: 'history',
+    title: '历史',
+    caption: '近 7 天历史记录，按更新时间倒序',
+    cards: historyCards.value,
+    showMore: hasMoreHistory.value,
+  },
+]);
+const hasVisibleCards = computed(
+  () => recentCards.value.length > 0 || historyCards.value.length > 0,
+);
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
@@ -454,103 +266,9 @@ const questionsLoading = ref(false);
 const questionsSubmitting = ref(false);
 const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
-const branchDiffCounts = ref<Record<string, number>>({});
-const commitCounts = ref<Record<string, number>>({});
-const OTHER_BRANCH_NAME = '其他';
-
-interface BranchLane {
-  id: string;
-  projectId: string;
-  projectName: string;
-  branch: string;
-  statusText: string;
-  commitCount: number;
-  uncommittedCount: number;
-  recent: SessionCard[];
-  history: SessionCard[];
-  hasMoreHistory: boolean;
-  commitRoute: { name: string; params: Record<string, string> };
-  diffRoute: { name: string; query: Record<string, string> };
-  firstIndex: number;
-}
-
-const branchLanes = computed(() => {
-  const recentIds = new Set(recentCards.value.map((card) => card.id));
-  const orderedCards = [
-    ...recentCards.value
-      .filter((card) => isGitProject(card.projectId))
-      .map((card) => ({ card, section: 'recent' as const })),
-    ...historyCards.value
-      .filter((card) => !recentIds.has(card.id))
-      .filter((card) => isGitProject(card.projectId))
-      .map((card) => ({ card, section: 'history' as const })),
-  ];
-  const lanes = new Map<string, BranchLane>();
-
-  orderedCards.forEach(({ card, section }, index) => {
-    const branch = card.branch || OTHER_BRANCH_NAME;
-    const laneKey = `${card.projectId}:${branch}`;
-    let lane = lanes.get(laneKey);
-    if (!lane) {
-      lane = {
-        id: laneKey,
-        projectId: card.projectId,
-        projectName: card.projectName,
-        branch,
-        statusText: `最近操作 ${card.updatedAt}`,
-        commitCount: 0,
-        uncommittedCount: 0,
-        recent: [],
-        history: [],
-        hasMoreHistory: false,
-        commitRoute: { name: 'session-commits', params: { id: card.id } },
-        diffRoute: { name: 'diff', query: { projectId: card.projectId, branch, mode: 'all' } },
-        firstIndex: index,
-      };
-      lanes.set(laneKey, lane);
-    }
-
-    const cardCommitCount = commitCounts.value[card.id] ?? 0;
-    if (cardCommitCount > 0 && lane.commitCount === 0) {
-      lane.commitRoute = { name: 'session-commits', params: { id: card.id } };
-    }
-    lane.commitCount += cardCommitCount;
-    lane.uncommittedCount = branchDiffCounts.value[laneKey] ?? 0;
-    if (section === 'recent') {
-      lane.recent.push(card);
-      return;
-    }
-    if (lane.history.length < 10) {
-      lane.history.push(card);
-    } else {
-      lane.hasMoreHistory = true;
-    }
-  });
-
-  return Array.from(lanes.values()).sort((left, right) => left.firstIndex - right.firstIndex);
-});
-
-const projectsById = computed(
-  () => new Map(projects.value.map((project) => [project.id, project])),
-);
-const uniqueHistoryCards = computed(() => {
-  const recentIds = new Set(recentCards.value.map((card) => card.id));
-  return historyCards.value.filter((card) => !recentIds.has(card.id));
-});
-const plainRecentCards = computed(() =>
-  recentCards.value.filter((card) => !isGitProject(card.projectId)),
-);
-const allPlainHistoryCards = computed(() =>
-  uniqueHistoryCards.value.filter((card) => !isGitProject(card.projectId)),
-);
-const plainHistoryCards = computed(() => allPlainHistoryCards.value.slice(0, 10));
-const hasMorePlainHistory = computed(
-  () => allPlainHistoryCards.value.length > plainHistoryCards.value.length,
-);
-const hasPlainCards = computed(
-  () => plainRecentCards.value.length > 0 || plainHistoryCards.value.length > 0,
-);
-const hasVisibleCards = computed(() => branchLanes.value.length > 0 || hasPlainCards.value);
+const activePrioritySessionId = ref('');
+const activeCloseSessionId = ref('');
+const priorities: SessionPriority[] = ['high', 'medium', 'low'];
 
 onMounted(() => {
   void startOverview();
@@ -561,12 +279,11 @@ onUnmounted(() => {
   stopHistoryLiveUpdates();
 });
 
-watch(
-  () => [...recentRows.value, ...historyRows.value].map((card) => card.id).join(','),
-  () => {
-    void loadLaneStats();
-  },
-);
+watch(projectScopeId, (value) => {
+  recentProjectId.value = value;
+  historyProjectId.value = value;
+  void loadOverviewSessions();
+});
 
 async function startOverview() {
   await loadProjects();
@@ -577,80 +294,14 @@ async function startOverview() {
 
 async function loadOverviewSessions() {
   await Promise.all([loadRecentSessions(), loadHistorySessions()]);
-  await loadLaneStats();
-}
-
-async function loadLaneStats() {
-  await Promise.all([loadBranchDiffCounts(), loadCommitCounts()]);
-}
-
-async function loadBranchDiffCounts() {
-  const lanes = Array.from(
-    new Map(
-      [...recentRows.value, ...historyRows.value]
-        .filter((card) => isGitProject(card.projectId))
-        .map((card) => {
-          const branch = card.branch || OTHER_BRANCH_NAME;
-          return [`${card.projectId}:${branch}`, { projectId: card.projectId, branch }] as const;
-        }),
-    ).entries(),
-  );
-  if (lanes.length === 0) {
-    branchDiffCounts.value = {};
-    return;
-  }
-  const next = { ...branchDiffCounts.value };
-  await Promise.all(
-    lanes.map(async ([key, lane]) => {
-      try {
-        const diff = await getBranchDiff({
-          projectId: lane.projectId,
-          branch: lane.branch,
-          mode: 'single',
-          page: 1,
-          pageSize: 1,
-        });
-        next[key] = diff.available ? diff.pageInfo.total : 0;
-      } catch {
-        next[key] = 0;
-      }
-    }),
-  );
-  branchDiffCounts.value = next;
-}
-
-function isGitProject(projectId: string) {
-  return projectsById.value.get(projectId)?.isGit ?? true;
-}
-
-async function loadCommitCounts() {
-  const ids = Array.from(
-    new Set([...recentRows.value, ...historyRows.value].map((card) => card.id)),
-  );
-  if (ids.length === 0) {
-    commitCounts.value = {};
-    return;
-  }
-  const next = { ...commitCounts.value };
-  await Promise.all(
-    ids.map(async (id) => {
-      try {
-        const history = await getSessionCommitHistory({ sessionId: id, page: 1, pageSize: 1 });
-        next[id] = history.available ? history.pageInfo.total : 0;
-      } catch {
-        next[id] = 0;
-      }
-    }),
-  );
-  commitCounts.value = next;
 }
 
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
 }
 
-function priorityLabel(priority: SessionCard['priority']) {
-  const labels: Record<SessionCard['priority'], string> = {
+function priorityLabel(priority: SessionPriority) {
+  const labels: Record<SessionPriority, string> = {
     high: '高优先级',
     medium: '中优先级',
     low: '低优先级',
@@ -682,7 +333,9 @@ function statusLabel(status: SessionStatus) {
 }
 
 function cardAction(card: SessionCard) {
-  if (card.pendingQuestion || card.status === 'waiting_user') return null;
+  if (card.pendingQuestion || card.status === 'waiting_user' || card.status === 'closed') {
+    return null;
+  }
   if (card.status === 'starting' || card.status === 'running') {
     return { icon: 'stop', color: 'negative', tooltip: '运行中，点击停止', disabled: false };
   }
@@ -721,6 +374,29 @@ async function runCardAction(card: SessionCard) {
   }
 }
 
+async function setCardPriority(card: SessionCard, priority: SessionPriority) {
+  if (card.status === 'closed' || card.priority === priority || activePrioritySessionId.value)
+    return;
+  activePrioritySessionId.value = card.id;
+  try {
+    await updateSessionPriority(card.id, priority);
+    await loadOverviewSessions();
+  } finally {
+    activePrioritySessionId.value = '';
+  }
+}
+
+async function closeCard(card: SessionCard) {
+  if (!card.availableActions.includes('close') || activeCloseSessionId.value) return;
+  activeCloseSessionId.value = card.id;
+  try {
+    await closeSession(card.id);
+    await loadOverviewSessions();
+  } finally {
+    activeCloseSessionId.value = '';
+  }
+}
+
 async function openAnswerDialog(sessionId: string) {
   activeQuestionSessionId.value = sessionId;
   questionsLoading.value = true;
@@ -740,7 +416,7 @@ async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
       pendingQuestionBatches.value = await getPendingQuestionBatches(activeQuestionSessionId.value);
     }
     answerDialog.value = pendingQuestionBatches.value.length > 0;
-    await Promise.all([loadRecentSessions(), loadHistorySessions()]);
+    await loadOverviewSessions();
   } finally {
     questionsSubmitting.value = false;
   }

@@ -22,6 +22,7 @@ type Mutation {
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
+  setSessionPriority(input: SetSessionPriorityInput!): Session!
   startSession(id: ID!, force: Boolean): Session!
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
@@ -96,6 +97,7 @@ type Session {
   status: String!
   priority: String!
   baseBranch: String!
+  worktreeBranch: String!
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!
@@ -115,6 +117,7 @@ type SessionCard {
   status: String!
   priority: String!
   baseBranch: String!
+  worktreeBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
   attachments: [SessionAttachment!]!
@@ -138,6 +141,7 @@ type SessionDetail {
   priority: String!
   closeReason: String
   baseBranch: String!
+  worktreeBranch: String!
   currentNodeTitle: String!
   worktreePath: String!
   codexSessionId: String!
@@ -406,6 +410,11 @@ input SessionConfigInput {
 input CloseSessionInput {
   sessionId: ID!
   reason: String!
+}
+
+input SetSessionPriorityInput {
+  sessionId: ID!
+  priority: String!
 }
 
 input AppendPromptInput {

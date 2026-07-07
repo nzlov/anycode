@@ -30,6 +30,7 @@ type UseCase interface {
 	MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error)
 	StartSession(ctx context.Context, id domain.ID) (DTO, error)
 	StartSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error)
+	SetSessionPriority(ctx context.Context, input SetSessionPriorityInput) (DTO, error)
 	StopSession(ctx context.Context, id domain.ID) (DTO, error)
 	StopProjectSessions(ctx context.Context, projectID domain.ProjectID) (int, error)
 	ResumeSession(ctx context.Context, id domain.ID) (DTO, error)
@@ -64,6 +65,11 @@ type CloseSessionInput struct {
 	Reason    domain.CloseReason
 }
 
+type SetSessionPriorityInput struct {
+	SessionID domain.ID
+	Priority  domain.Priority
+}
+
 type AppendPromptInput struct {
 	SessionID domain.ID
 	Body      string
@@ -94,6 +100,7 @@ type DTO struct {
 	Status           domain.Status
 	Priority         domain.Priority
 	BaseBranch       string
+	WorktreeBranch   string
 	WorktreePath     string
 	CodexSessionID   string
 	Config           domain.Config
@@ -441,7 +448,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	if err := s.repo.Save(ctx, session); err != nil {
 		if createdWorktree {
-			_ = s.worktrees.Remove(ctx, worktreePath)
+			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
+				return DTO{}, errors.Join(fmt.Errorf("save session: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+			}
 		}
 		return DTO{}, fmt.Errorf("save session: %w", err)
 	}
@@ -451,7 +460,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		session.UpdatedAt = failedAt
 		_ = s.repo.Save(ctx, session)
 		if createdWorktree {
-			_ = s.worktrees.Remove(ctx, worktreePath)
+			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
+				return DTO{}, errors.Join(err, fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+			}
 		}
 		return DTO{}, err
 	}
@@ -463,13 +474,25 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			session.UpdatedAt = failedAt
 			_ = s.repo.Save(ctx, session)
 			if createdWorktree {
-				_ = s.worktrees.Remove(ctx, worktreePath)
+				if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
+					return DTO{}, errors.Join(startErr, fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+				}
 			}
 			return DTO{}, startErr
 		}
 		return dto, nil
 	}
 	return s.enqueueCodex(ctx, session, codexStartOptions{}, queuePriorityForSession(session))
+}
+
+func (s *Service) cleanupCreatedWorktree(ctx context.Context, projectPath string, worktreePath string, sessionID domain.ID) error {
+	if s == nil || s.worktrees == nil {
+		return nil
+	}
+	return errors.Join(
+		s.worktrees.Remove(ctx, worktreePath),
+		s.worktrees.DeleteBranch(ctx, projectPath, worktreeBranchName(sessionID)),
+	)
 }
 
 func (s *Service) StartSession(ctx context.Context, id domain.ID) (DTO, error) {
@@ -648,6 +671,40 @@ func normalizePriority(priority domain.Priority) domain.Priority {
 	default:
 		return domain.PriorityMedium
 	}
+}
+
+func (s *Service) SetSessionPriority(ctx context.Context, input SetSessionPriorityInput) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+		var err error
+		dto, err = s.setSessionPriority(ctx, input)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) setSessionPriority(ctx context.Context, input SetSessionPriorityInput) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	if input.SessionID == "" {
+		return DTO{}, errors.New("session id is required")
+	}
+	session, err := s.repo.Find(ctx, input.SessionID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find session: %w", err)
+	}
+	if session.Status == domain.StatusClosed {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session priority cannot be changed")
+	}
+	session.Priority = normalizePriority(input.Priority)
+	session.UpdatedAt = s.now()
+	if err := s.saveSessionWithEvent(ctx, session, "session.priority_changed", map[string]any{
+		"priority": string(session.Priority),
+	}); err != nil {
+		return DTO{}, err
+	}
+	return toDTO(session), nil
 }
 
 func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
@@ -2790,7 +2847,17 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
+	reason := input.Reason
+	if reason == "" {
+		reason = domain.CloseReasonUserClosed
+	}
+	if reason != domain.CloseReasonUserClosed && reason != domain.CloseReasonMergedClosed {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
+	}
 	if session.Status == domain.StatusClosed {
+		if err := s.deleteSessionBranch(ctx, session); err != nil {
+			return DTO{}, err
+		}
 		return toDTO(session), nil
 	}
 	requiresStop, err := closeRequiresStop(ctx, s, session)
@@ -2806,13 +2873,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			return DTO{}, fmt.Errorf("find stopped session: %w", err)
 		}
 	}
-	reason := input.Reason
-	if reason == "" {
-		reason = domain.CloseReasonUserClosed
-	}
-	if reason != domain.CloseReasonUserClosed && reason != domain.CloseReasonMergedClosed {
-		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
-	}
+	var cleanupErr error
 	if s.worktrees != nil && strings.TrimSpace(session.WorktreePath) != "" {
 		project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
 		if err != nil {
@@ -2822,6 +2883,12 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
 				return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "remove session worktree failed").WithDetails(map[string]any{
 					"sessionId": string(session.ID),
+				}).WithRetryable(true)
+			}
+			if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
+				cleanupErr = apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "delete session worktree branch failed").WithDetails(map[string]any{
+					"sessionId":      string(session.ID),
+					"worktreeBranch": worktreeBranchName(session.ID),
 				}).WithRetryable(true)
 			}
 			session.WorktreePath = ""
@@ -2841,7 +2908,30 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
 		return DTO{}, err
 	}
+	if cleanupErr != nil {
+		return DTO{}, cleanupErr
+	}
 	return toDTO(session), nil
+}
+
+func (s *Service) deleteSessionBranch(ctx context.Context, session domain.Session) error {
+	if s == nil || s.worktrees == nil || strings.TrimSpace(session.BaseBranch) == "" {
+		return nil
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return fmt.Errorf("find project for session branch cleanup: %w", err)
+	}
+	if !project.IsGit {
+		return nil
+	}
+	if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
+		return apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "delete session worktree branch failed").WithDetails(map[string]any{
+			"sessionId":      string(session.ID),
+			"worktreeBranch": worktreeBranchName(session.ID),
+		}).WithRetryable(true)
+	}
+	return nil
 }
 
 func closeRequiresStop(ctx context.Context, s *Service, session domain.Session) (bool, error) {
@@ -2904,6 +2994,9 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		session, err := s.repo.Find(ctx, input.SessionID)
 		if err != nil {
 			return fmt.Errorf("find session: %w", err)
+		}
+		if session.Status == domain.StatusClosed {
+			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session cannot be appended")
 		}
 		id, err := s.generateID()
 		if err != nil {
@@ -3066,6 +3159,7 @@ func toDTO(session domain.Session) DTO {
 		Status:           session.Status,
 		Priority:         normalizePriority(session.Priority),
 		BaseBranch:       session.BaseBranch,
+		WorktreeBranch:   worktreeBranchForSession(session),
 		WorktreePath:     session.WorktreePath,
 		CodexSessionID:   session.CodexSessionID,
 		Config:           session.Config,
@@ -3074,6 +3168,17 @@ func toDTO(session domain.Session) DTO {
 		CreatedAt:        session.CreatedAt,
 		UpdatedAt:        session.UpdatedAt,
 	}
+}
+
+func worktreeBranchForSession(session domain.Session) string {
+	if strings.TrimSpace(session.BaseBranch) == "" {
+		return ""
+	}
+	return worktreeBranchName(session.ID)
+}
+
+func worktreeBranchName(sessionID domain.ID) string {
+	return strings.TrimSpace(string(sessionID))
 }
 
 func toWorkflowRunDTO(run domain.WorkflowRunSnapshot) WorkflowRunDTO {

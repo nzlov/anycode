@@ -94,6 +94,21 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input model.Create
 	return mapSession(dto), nil
 }
 
+// SetSessionPriority is the resolver for the setSessionPriority field.
+func (r *mutationResolver) SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.SetSessionPriority(ctx, sessionapp.SetSessionPriorityInput{
+		SessionID: sessiondomain.ID(input.SessionID),
+		Priority:  sessiondomain.Priority(input.Priority),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // StartSession is the resolver for the startSession field.
 func (r *mutationResolver) StartSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {

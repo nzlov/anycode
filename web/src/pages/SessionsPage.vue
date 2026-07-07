@@ -87,17 +87,24 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { useRoute } from 'vue-router';
 
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import type { SessionCard, SessionStatus } from '@/services/sessions';
 
 const $q = useQuasar();
+const route = useRoute();
+const projectScopeId = computed(() => {
+  const value = route.query.projectId;
+  return typeof value === 'string' ? value : '';
+});
 const {
   rows,
   pageInfo,
   loading,
   filter,
   scope,
+  projectId,
   page,
   pageSize,
   sort,
@@ -180,7 +187,14 @@ watch([filter, scope], () => {
   void loadSessions();
 });
 
+watch(projectScopeId, (value) => {
+  projectId.value = value;
+  page.value = 1;
+  void loadSessions();
+});
+
 onMounted(() => {
+  projectId.value = projectScopeId.value;
   void loadSessions();
   startLiveUpdates();
 });

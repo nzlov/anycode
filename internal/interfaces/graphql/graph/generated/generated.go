@@ -142,6 +142,7 @@ type ComplexityRoot struct {
 		ResumeSession              func(childComplexity int, id string, force *bool) int
 		SaveWorkflowDefinition     func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
 		SetDefaultWorkflow         func(childComplexity int, input model.SetDefaultWorkflowInput) int
+		SetSessionPriority         func(childComplexity int, input model.SetSessionPriorityInput) int
 		StageAttachment            func(childComplexity int, file graphql.Upload) int
 		StartSession               func(childComplexity int, id string, force *bool) int
 		StopSession                func(childComplexity int, id string) int
@@ -234,6 +235,7 @@ type ComplexityRoot struct {
 		Requirement      func(childComplexity int) int
 		Status           func(childComplexity int) int
 		UpdatedAt        func(childComplexity int) int
+		WorktreeBranch   func(childComplexity int) int
 		WorktreePath     func(childComplexity int) int
 	}
 
@@ -265,6 +267,7 @@ type ComplexityRoot struct {
 		RequirementSummary func(childComplexity int) int
 		Status             func(childComplexity int) int
 		UpdatedAt          func(childComplexity int) int
+		WorktreeBranch     func(childComplexity int) int
 	}
 
 	SessionCardPage struct {
@@ -302,6 +305,7 @@ type ComplexityRoot struct {
 		Requirement      func(childComplexity int) int
 		Status           func(childComplexity int) int
 		UpdatedAt        func(childComplexity int) int
+		WorktreeBranch   func(childComplexity int) int
 		WorktreePath     func(childComplexity int) int
 	}
 
@@ -403,6 +407,7 @@ type MutationResolver interface {
 	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
+	SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error)
 	StartSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	StopSession(ctx context.Context, id string) (*model.Session, error)
 	ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error)
@@ -873,6 +878,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetDefaultWorkflow(childComplexity, args["input"].(model.SetDefaultWorkflowInput)), true
+	case "Mutation.setSessionPriority":
+		if e.ComplexityRoot.Mutation.SetSessionPriority == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_setSessionPriority_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.SetSessionPriority(childComplexity, args["input"].(model.SetSessionPriorityInput)), true
 	case "Mutation.stageAttachment":
 		if e.ComplexityRoot.Mutation.StageAttachment == nil {
 			break
@@ -1348,6 +1364,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Session.UpdatedAt(childComplexity), true
+	case "Session.worktreeBranch":
+		if e.ComplexityRoot.Session.WorktreeBranch == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Session.WorktreeBranch(childComplexity), true
 	case "Session.worktreePath":
 		if e.ComplexityRoot.Session.WorktreePath == nil {
 			break
@@ -1500,6 +1522,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.UpdatedAt(childComplexity), true
+	case "SessionCard.worktreeBranch":
+		if e.ComplexityRoot.SessionCard.WorktreeBranch == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.WorktreeBranch(childComplexity), true
 
 	case "SessionCardPage.items":
 		if e.ComplexityRoot.SessionCardPage.Items == nil {
@@ -1654,6 +1682,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.UpdatedAt(childComplexity), true
+	case "SessionDetail.worktreeBranch":
+		if e.ComplexityRoot.SessionDetail.WorktreeBranch == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.WorktreeBranch(childComplexity), true
 	case "SessionDetail.worktreePath":
 		if e.ComplexityRoot.SessionDetail.WorktreePath == nil {
 			break
@@ -2050,6 +2084,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSessionDiffInput,
 		ec.unmarshalInputSessionEventsInput,
 		ec.unmarshalInputSetDefaultWorkflowInput,
+		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputSubmitQuestionBatchInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputWorkflowConditionInput,
@@ -2174,6 +2209,7 @@ type Mutation {
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
+  setSessionPriority(input: SetSessionPriorityInput!): Session!
   startSession(id: ID!, force: Boolean): Session!
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
@@ -2248,6 +2284,7 @@ type Session {
   status: String!
   priority: String!
   baseBranch: String!
+  worktreeBranch: String!
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!
@@ -2267,6 +2304,7 @@ type SessionCard {
   status: String!
   priority: String!
   baseBranch: String!
+  worktreeBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
   attachments: [SessionAttachment!]!
@@ -2290,6 +2328,7 @@ type SessionDetail {
   priority: String!
   closeReason: String
   baseBranch: String!
+  worktreeBranch: String!
   currentNodeTitle: String!
   worktreePath: String!
   codexSessionId: String!
@@ -2560,6 +2599,11 @@ input CloseSessionInput {
   reason: String!
 }
 
+input SetSessionPriorityInput {
+  sessionId: ID!
+  priority: String!
+}
+
 input AppendPromptInput {
   sessionId: ID!
   body: String!
@@ -2811,6 +2855,17 @@ func (ec *executionContext) field_Mutation_setDefaultWorkflow_args(ctx context.C
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSetDefaultWorkflowInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetDefaultWorkflowInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_setSessionPriority_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetSessionPriorityInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4769,6 +4824,8 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 				return ec.fieldContext_Session_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -4795,6 +4852,79 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_setSessionPriority(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_setSessionPriority,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().SetSessionPriority(ctx, fc.Args["input"].(model.SetSessionPriorityInput))
+		},
+		nil,
+		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_setSessionPriority(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Session_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_Session_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_Session_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Session_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_Session_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_Session_config(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_Session_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_Session_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_setSessionPriority_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -4840,6 +4970,8 @@ func (ec *executionContext) fieldContext_Mutation_startSession(ctx context.Conte
 				return ec.fieldContext_Session_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -4911,6 +5043,8 @@ func (ec *executionContext) fieldContext_Mutation_stopSession(ctx context.Contex
 				return ec.fieldContext_Session_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -4982,6 +5116,8 @@ func (ec *executionContext) fieldContext_Mutation_resumeSession(ctx context.Cont
 				return ec.fieldContext_Session_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -5053,6 +5189,8 @@ func (ec *executionContext) fieldContext_Mutation_closeSession(ctx context.Conte
 				return ec.fieldContext_Session_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -6131,6 +6269,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_closeReason(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_SessionDetail_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_SessionDetail_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionDetail_currentNodeTitle(ctx, field)
 			case "worktreePath":
@@ -7457,6 +7597,35 @@ func (ec *executionContext) fieldContext_Session_baseBranch(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Session_worktreeBranch(ctx context.Context, field graphql.CollectedField, obj *model.Session) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_worktreeBranch,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreeBranch, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_worktreeBranch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Session_worktreePath(ctx context.Context, field graphql.CollectedField, obj *model.Session) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8161,6 +8330,35 @@ func (ec *executionContext) fieldContext_SessionCard_baseBranch(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_worktreeBranch(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_worktreeBranch,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreeBranch, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_worktreeBranch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_currentNodeTitle(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8424,6 +8622,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_SessionCard_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
 			case "pendingQuestion":
@@ -8855,6 +9055,35 @@ func (ec *executionContext) _SessionDetail_baseBranch(ctx context.Context, field
 }
 
 func (ec *executionContext) fieldContext_SessionDetail_baseBranch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_worktreeBranch(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_worktreeBranch,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreeBranch, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_worktreeBranch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionDetail",
 		Field:      field,
@@ -9770,6 +9999,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionStatusChanged(ctx c
 				return ec.fieldContext_Session_priority(ctx, field)
 			case "baseBranch":
 				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -13386,6 +13617,43 @@ func (ec *executionContext) unmarshalInputSetDefaultWorkflowInput(ctx context.Co
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputSetSessionPriorityInput(ctx context.Context, obj any) (model.SetSessionPriorityInput, error) {
+	var it model.SetSessionPriorityInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "priority"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSubmitQuestionBatchInput(ctx context.Context, obj any) (model.SubmitQuestionBatchInput, error) {
 	var it model.SubmitQuestionBatchInput
 	if obj == nil {
@@ -14610,6 +14878,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "setSessionPriority":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_setSessionPriority(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "startSession":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_startSession(ctx, field)
@@ -15464,6 +15739,11 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "worktreeBranch":
+			out.Values[i] = ec._Session_worktreeBranch(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "worktreePath":
 			out.Values[i] = ec._Session_worktreePath(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -15646,6 +15926,11 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			}
 		case "baseBranch":
 			out.Values[i] = ec._SessionCard_baseBranch(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "worktreeBranch":
+			out.Values[i] = ec._SessionCard_worktreeBranch(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -15886,6 +16171,11 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._SessionDetail_closeReason(ctx, field, obj)
 		case "baseBranch":
 			out.Values[i] = ec._SessionDetail_baseBranch(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "worktreeBranch":
+			out.Values[i] = ec._SessionDetail_worktreeBranch(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -17724,6 +18014,11 @@ func (ec *executionContext) unmarshalNSessionEventsInput2githubᚗcomᚋnzlovᚋ
 
 func (ec *executionContext) unmarshalNSetDefaultWorkflowInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetDefaultWorkflowInput(ctx context.Context, v any) (model.SetDefaultWorkflowInput, error) {
 	res, err := ec.unmarshalInputSetDefaultWorkflowInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetSessionPriorityInput(ctx context.Context, v any) (model.SetSessionPriorityInput, error) {
+	res, err := ec.unmarshalInputSetSessionPriorityInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

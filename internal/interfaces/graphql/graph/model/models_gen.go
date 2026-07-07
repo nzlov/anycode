@@ -251,6 +251,7 @@ type Session struct {
 	Status           string         `json:"status"`
 	Priority         string         `json:"priority"`
 	BaseBranch       string         `json:"baseBranch"`
+	WorktreeBranch   string         `json:"worktreeBranch"`
 	WorktreePath     string         `json:"worktreePath"`
 	CodexSessionID   string         `json:"codexSessionId"`
 	Config           *SessionConfig `json:"config"`
@@ -281,6 +282,7 @@ type SessionCard struct {
 	Status             string               `json:"status"`
 	Priority           string               `json:"priority"`
 	BaseBranch         string               `json:"baseBranch"`
+	WorktreeBranch     string               `json:"worktreeBranch"`
 	CurrentNodeTitle   string               `json:"currentNodeTitle"`
 	PendingQuestion    bool                 `json:"pendingQuestion"`
 	Attachments        []*SessionAttachment `json:"attachments"`
@@ -327,6 +329,7 @@ type SessionDetail struct {
 	Priority         string               `json:"priority"`
 	CloseReason      *string              `json:"closeReason,omitempty"`
 	BaseBranch       string               `json:"baseBranch"`
+	WorktreeBranch   string               `json:"worktreeBranch"`
 	CurrentNodeTitle string               `json:"currentNodeTitle"`
 	WorktreePath     string               `json:"worktreePath"`
 	CodexSessionID   string               `json:"codexSessionId"`
@@ -380,6 +383,11 @@ type SessionEventsInput struct {
 type SetDefaultWorkflowInput struct {
 	ProjectID  string `json:"projectId"`
 	WorkflowID string `json:"workflowId"`
+}
+
+type SetSessionPriorityInput struct {
+	SessionID string `json:"sessionId"`
+	Priority  string `json:"priority"`
 }
 
 type SubmitQuestionBatchInput struct {

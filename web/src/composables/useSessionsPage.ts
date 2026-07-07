@@ -27,6 +27,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   const filter = ref(defaultInput.filter ?? '');
   const scope = ref(defaultInput.scope ?? '');
   const range = ref(defaultInput.range ?? '');
+  const projectId = ref(defaultInput.projectId ?? '');
   const page = ref(defaultInput.page ?? 1);
   const pageSize = ref(defaultInput.pageSize ?? 8);
   const sort = ref(defaultInput.sort ?? 'updated_at desc');
@@ -40,7 +41,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
       page: page.value,
       pageSize: pageSize.value,
     };
-    if (defaultInput.projectId) value.projectId = defaultInput.projectId;
+    if (projectId.value) value.projectId = projectId.value;
     if (scope.value) value.scope = scope.value;
     if (range.value) value.range = range.value;
     if (filter.value.trim()) value.filter = filter.value.trim();
@@ -151,6 +152,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     filter,
     scope,
     range,
+    projectId,
     page,
     pageSize,
     sort,

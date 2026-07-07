@@ -17,11 +17,7 @@
             </q-card-section>
 
             <div class="event-list">
-              <SessionEventMessage
-                v-for="event in streamEntries"
-                :key="event.id"
-                :event="event"
-              />
+              <SessionEventMessage v-for="event in streamEntries" :key="event.id" :event="event" />
             </div>
           </div>
         </q-card>
@@ -45,6 +41,12 @@
               @submit="submitAnswers"
             />
           </q-card>
+          <q-banner v-else-if="isClosed" rounded class="detail-closed-banner">
+            <template #avatar>
+              <q-icon name="lock" />
+            </template>
+            卡片已关闭，工作树与分支已清理，不能再追加描述或运行。
+          </q-banner>
           <PromptComposer
             v-else
             v-model:prompt="appendText"
@@ -57,7 +59,7 @@
             :show-badge="false"
             title="追加描述"
             placeholder="追加描述，发送给当前会话"
-            :disabled="!session || appending || stopping"
+            :disabled="!session || appending || stopping || isClosed"
           >
             <template #actions>
               <q-btn
@@ -133,6 +135,12 @@
                 </q-item>
                 <q-item>
                   <q-item-section>
+                    <q-item-label caption>工作分支</q-item-label>
+                    <q-item-label>{{ session?.worktreeBranch || '-' }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item>
+                  <q-item-section>
                     <q-item-label caption>更新时间</q-item-label>
                     <q-item-label>{{ session?.updatedAt ?? '-' }}</q-item-label>
                   </q-item-section>
@@ -184,6 +192,18 @@
                   </q-item-section>
                 </q-item>
               </q-list>
+
+              <q-btn
+                class="full-width q-mt-md"
+                outline
+                color="negative"
+                icon="close"
+                label="关闭卡片"
+                no-caps
+                :loading="closing"
+                :disable="!canClose || isClosed || loading || closing"
+                @click="closeCurrentSession"
+              />
 
               <q-separator spaced />
 
@@ -298,7 +318,6 @@
                   <div class="text-body2 text-muted">正在读取变更文件</div>
                 </q-card-section>
               </q-card>
-
             </q-tab-panel>
           </q-tab-panels>
         </q-card>
@@ -406,6 +425,7 @@ const {
   starting,
   resuming,
   stopping,
+  closing,
   questionsLoading,
   questionsSubmitting,
   loadSessionDetail,
@@ -413,6 +433,7 @@ const {
   startSession,
   resumeSession,
   stopSession,
+  closeSession: closeSessionRequest,
   loadPendingQuestions,
   loadOlderEvents,
   submitPendingAnswers,
@@ -422,8 +443,11 @@ const {
 
 const canRun = computed(() => session.value?.availableActions.includes('run') ?? false);
 const canResume = computed(() => session.value?.availableActions.includes('resume') ?? false);
+const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
+const isClosed = computed(() => session.value?.status === 'closed');
 const isWaitingForAnswer = computed(
-  () => session.value?.pendingQuestion || session.value?.status === 'waiting_user',
+  () =>
+    !isClosed.value && (session.value?.pendingQuestion || session.value?.status === 'waiting_user'),
 );
 type StreamEntry = SessionEventMessageEntry;
 
@@ -463,6 +487,7 @@ const streamEntries = computed<StreamEntry[]>(() => {
 const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;
+  if (current.status === 'closed') return null;
   if (appendText.value.trim().length > 0) {
     return {
       icon: 'send',
@@ -733,10 +758,20 @@ function lineClass(kind: DiffLineKind) {
 }
 
 async function sendAppend() {
+  if (isClosed.value) return;
   const text = appendText.value;
   await appendDescription(text);
   appendText.value = '';
   appendFiles.value = [];
+}
+
+async function closeCurrentSession() {
+  if (!canClose.value || isClosed.value || closing.value) return;
+  try {
+    await closeSessionRequest();
+  } catch (err) {
+    notifyError(err, '关闭卡片失败');
+  }
 }
 
 async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
@@ -876,6 +911,12 @@ async function scrollEventsToBottom() {
   padding: 8px;
   color: var(--ac-text-muted);
   font-size: 12px;
+}
+
+.detail-closed-banner {
+  border: 1px solid var(--ac-border);
+  color: var(--ac-text-muted);
+  background: color-mix(in srgb, var(--ac-surface-muted) 82%, transparent);
 }
 
 .event-list {
@@ -1183,18 +1224,30 @@ async function scrollEventsToBottom() {
 @media (max-width: 699px) {
   .detail-page {
     height: 100%;
+    overflow: auto;
   }
 
   .detail-page .detail-grid {
     gap: 12px;
+    align-items: start;
   }
 
   .stream-card__body {
     padding: 0 10px 10px;
   }
 
+  .event-panel {
+    height: auto;
+    min-height: min(72vh, 680px);
+  }
+
   .right-panel {
-    display: none;
+    height: auto;
+  }
+
+  .right-panel-card {
+    height: auto;
+    min-height: 0;
   }
 
   .file-diff-dialog {
