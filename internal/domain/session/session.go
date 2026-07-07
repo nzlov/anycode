@@ -88,6 +88,7 @@ type Session struct {
 	WorktreePath   string
 	CodexSessionID string
 	Config         Config
+	TodoList       TodoList
 	QueuedAt       *time.Time
 	Queue          QueueIntent
 	LastRunAt      *time.Time
@@ -109,6 +110,29 @@ type Config struct {
 	CodexModel      string
 	ReasoningEffort string
 	PermissionMode  string
+}
+
+type TodoList struct {
+	Items []TodoItem `json:"items"`
+}
+
+type TodoItem struct {
+	Text      string `json:"text"`
+	Completed bool   `json:"completed"`
+}
+
+func (l TodoList) Total() int {
+	return len(l.Items)
+}
+
+func (l TodoList) Completed() int {
+	count := 0
+	for _, item := range l.Items {
+		if item.Completed {
+			count++
+		}
+	}
+	return count
 }
 
 type SessionAttachment struct {

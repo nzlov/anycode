@@ -55,6 +55,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
 			SetPermissionMode(s.Config.PermissionMode).
+			SetTodoList(s.TodoList).
 			SetQueueKind(string(s.Queue.Kind)).
 			SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
@@ -111,6 +112,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
 		SetPermissionMode(s.Config.PermissionMode).
+		SetTodoList(s.TodoList).
 		SetQueueKind(string(s.Queue.Kind)).
 		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
@@ -461,6 +463,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			ReasoningEffort: row.ReasoningEffort,
 			PermissionMode:  row.PermissionMode,
 		},
+		TodoList: row.TodoList,
 		QueuedAt: row.QueuedAt,
 		Queue: domainsession.QueueIntent{
 			Kind:                 domainsession.QueueKind(row.QueueKind),

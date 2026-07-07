@@ -9,7 +9,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
 
 // SessionDelete is the builder for deleting a Session entity.
@@ -40,7 +41,7 @@ func (_d *SessionDelete) ExecX(ctx context.Context) int {
 }
 
 func (_d *SessionDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(session.Table, sqlgraph.NewFieldSpec(session.FieldID, field.TypeString))
+	_spec := sqlgraph.NewDeleteSpec(entsession.Table, sqlgraph.NewFieldSpec(entsession.FieldID, field.TypeString))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -74,7 +75,7 @@ func (_d *SessionDeleteOne) Exec(ctx context.Context) error {
 	case err != nil:
 		return err
 	case n == 0:
-		return &NotFoundError{session.Label}
+		return &NotFoundError{entsession.Label}
 	default:
 		return nil
 	}

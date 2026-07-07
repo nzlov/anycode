@@ -10,7 +10,8 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/domain/session"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
 
 // SessionCreate is the builder for creating a Session entity.
@@ -160,6 +161,20 @@ func (_c *SessionCreate) SetPermissionMode(v string) *SessionCreate {
 func (_c *SessionCreate) SetNillablePermissionMode(v *string) *SessionCreate {
 	if v != nil {
 		_c.SetPermissionMode(*v)
+	}
+	return _c
+}
+
+// SetTodoList sets the "todo_list" field.
+func (_c *SessionCreate) SetTodoList(v session.TodoList) *SessionCreate {
+	_c.mutation.SetTodoList(v)
+	return _c
+}
+
+// SetNillableTodoList sets the "todo_list" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableTodoList(v *session.TodoList) *SessionCreate {
+	if v != nil {
+		_c.SetTodoList(*v)
 	}
 	return _c
 }
@@ -360,67 +375,67 @@ func (_c *SessionCreate) ExecX(ctx context.Context) {
 // defaults sets the default values of the builder before save.
 func (_c *SessionCreate) defaults() {
 	if _, ok := _c.mutation.Requirement(); !ok {
-		v := session.DefaultRequirement
+		v := entsession.DefaultRequirement
 		_c.mutation.SetRequirement(v)
 	}
 	if _, ok := _c.mutation.Priority(); !ok {
-		v := session.DefaultPriority
+		v := entsession.DefaultPriority
 		_c.mutation.SetPriority(v)
 	}
 	if _, ok := _c.mutation.BaseBranch(); !ok {
-		v := session.DefaultBaseBranch
+		v := entsession.DefaultBaseBranch
 		_c.mutation.SetBaseBranch(v)
 	}
 	if _, ok := _c.mutation.WorktreePath(); !ok {
-		v := session.DefaultWorktreePath
+		v := entsession.DefaultWorktreePath
 		_c.mutation.SetWorktreePath(v)
 	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
-		v := session.DefaultCodexSessionID
+		v := entsession.DefaultCodexSessionID
 		_c.mutation.SetCodexSessionID(v)
 	}
 	if _, ok := _c.mutation.CodexModel(); !ok {
-		v := session.DefaultCodexModel
+		v := entsession.DefaultCodexModel
 		_c.mutation.SetCodexModel(v)
 	}
 	if _, ok := _c.mutation.ReasoningEffort(); !ok {
-		v := session.DefaultReasoningEffort
+		v := entsession.DefaultReasoningEffort
 		_c.mutation.SetReasoningEffort(v)
 	}
 	if _, ok := _c.mutation.PermissionMode(); !ok {
-		v := session.DefaultPermissionMode
+		v := entsession.DefaultPermissionMode
 		_c.mutation.SetPermissionMode(v)
 	}
 	if _, ok := _c.mutation.QueueKind(); !ok {
-		v := session.DefaultQueueKind
+		v := entsession.DefaultQueueKind
 		_c.mutation.SetQueueKind(v)
 	}
 	if _, ok := _c.mutation.QueuePriority(); !ok {
-		v := session.DefaultQueuePriority
+		v := entsession.DefaultQueuePriority
 		_c.mutation.SetQueuePriority(v)
 	}
 	if _, ok := _c.mutation.QueueWorkflowRunID(); !ok {
-		v := session.DefaultQueueWorkflowRunID
+		v := entsession.DefaultQueueWorkflowRunID
 		_c.mutation.SetQueueWorkflowRunID(v)
 	}
 	if _, ok := _c.mutation.QueueNodeRunID(); !ok {
-		v := session.DefaultQueueNodeRunID
+		v := entsession.DefaultQueueNodeRunID
 		_c.mutation.SetQueueNodeRunID(v)
 	}
 	if _, ok := _c.mutation.QueuePrompt(); !ok {
-		v := session.DefaultQueuePrompt
+		v := entsession.DefaultQueuePrompt
 		_c.mutation.SetQueuePrompt(v)
 	}
 	if _, ok := _c.mutation.QueueResumeCodexSessionID(); !ok {
-		v := session.DefaultQueueResumeCodexSessionID
+		v := entsession.DefaultQueueResumeCodexSessionID
 		_c.mutation.SetQueueResumeCodexSessionID(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
-		v := session.DefaultCreatedAt()
+		v := entsession.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		v := session.DefaultUpdatedAt()
+		v := entsession.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
 }
@@ -431,7 +446,7 @@ func (_c *SessionCreate) check() error {
 		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "Session.project_id"`)}
 	}
 	if v, ok := _c.mutation.ProjectID(); ok {
-		if err := session.ProjectIDValidator(v); err != nil {
+		if err := entsession.ProjectIDValidator(v); err != nil {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "Session.project_id": %w`, err)}
 		}
 	}
@@ -442,7 +457,7 @@ func (_c *SessionCreate) check() error {
 		return &ValidationError{Name: "mode", err: errors.New(`ent: missing required field "Session.mode"`)}
 	}
 	if v, ok := _c.mutation.Mode(); ok {
-		if err := session.ModeValidator(v); err != nil {
+		if err := entsession.ModeValidator(v); err != nil {
 			return &ValidationError{Name: "mode", err: fmt.Errorf(`ent: validator failed for field "Session.mode": %w`, err)}
 		}
 	}
@@ -450,7 +465,7 @@ func (_c *SessionCreate) check() error {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Session.status"`)}
 	}
 	if v, ok := _c.mutation.Status(); ok {
-		if err := session.StatusValidator(v); err != nil {
+		if err := entsession.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Session.status": %w`, err)}
 		}
 	}
@@ -528,102 +543,106 @@ func (_c *SessionCreate) sqlSave(ctx context.Context) (*Session, error) {
 func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Session{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(session.Table, sqlgraph.NewFieldSpec(session.FieldID, field.TypeString))
+		_spec = sqlgraph.NewCreateSpec(entsession.Table, sqlgraph.NewFieldSpec(entsession.FieldID, field.TypeString))
 	)
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
 	if value, ok := _c.mutation.ProjectID(); ok {
-		_spec.SetField(session.FieldProjectID, field.TypeString, value)
+		_spec.SetField(entsession.FieldProjectID, field.TypeString, value)
 		_node.ProjectID = value
 	}
 	if value, ok := _c.mutation.Requirement(); ok {
-		_spec.SetField(session.FieldRequirement, field.TypeString, value)
+		_spec.SetField(entsession.FieldRequirement, field.TypeString, value)
 		_node.Requirement = value
 	}
 	if value, ok := _c.mutation.Mode(); ok {
-		_spec.SetField(session.FieldMode, field.TypeString, value)
+		_spec.SetField(entsession.FieldMode, field.TypeString, value)
 		_node.Mode = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
-		_spec.SetField(session.FieldStatus, field.TypeString, value)
+		_spec.SetField(entsession.FieldStatus, field.TypeString, value)
 		_node.Status = value
 	}
 	if value, ok := _c.mutation.Priority(); ok {
-		_spec.SetField(session.FieldPriority, field.TypeString, value)
+		_spec.SetField(entsession.FieldPriority, field.TypeString, value)
 		_node.Priority = value
 	}
 	if value, ok := _c.mutation.CloseReason(); ok {
-		_spec.SetField(session.FieldCloseReason, field.TypeString, value)
+		_spec.SetField(entsession.FieldCloseReason, field.TypeString, value)
 		_node.CloseReason = &value
 	}
 	if value, ok := _c.mutation.BaseBranch(); ok {
-		_spec.SetField(session.FieldBaseBranch, field.TypeString, value)
+		_spec.SetField(entsession.FieldBaseBranch, field.TypeString, value)
 		_node.BaseBranch = value
 	}
 	if value, ok := _c.mutation.WorktreePath(); ok {
-		_spec.SetField(session.FieldWorktreePath, field.TypeString, value)
+		_spec.SetField(entsession.FieldWorktreePath, field.TypeString, value)
 		_node.WorktreePath = value
 	}
 	if value, ok := _c.mutation.CodexSessionID(); ok {
-		_spec.SetField(session.FieldCodexSessionID, field.TypeString, value)
+		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
 		_node.CodexSessionID = value
 	}
 	if value, ok := _c.mutation.CodexModel(); ok {
-		_spec.SetField(session.FieldCodexModel, field.TypeString, value)
+		_spec.SetField(entsession.FieldCodexModel, field.TypeString, value)
 		_node.CodexModel = value
 	}
 	if value, ok := _c.mutation.ReasoningEffort(); ok {
-		_spec.SetField(session.FieldReasoningEffort, field.TypeString, value)
+		_spec.SetField(entsession.FieldReasoningEffort, field.TypeString, value)
 		_node.ReasoningEffort = value
 	}
 	if value, ok := _c.mutation.PermissionMode(); ok {
-		_spec.SetField(session.FieldPermissionMode, field.TypeString, value)
+		_spec.SetField(entsession.FieldPermissionMode, field.TypeString, value)
 		_node.PermissionMode = value
 	}
+	if value, ok := _c.mutation.TodoList(); ok {
+		_spec.SetField(entsession.FieldTodoList, field.TypeJSON, value)
+		_node.TodoList = value
+	}
 	if value, ok := _c.mutation.QueuedAt(); ok {
-		_spec.SetField(session.FieldQueuedAt, field.TypeTime, value)
+		_spec.SetField(entsession.FieldQueuedAt, field.TypeTime, value)
 		_node.QueuedAt = &value
 	}
 	if value, ok := _c.mutation.QueueKind(); ok {
-		_spec.SetField(session.FieldQueueKind, field.TypeString, value)
+		_spec.SetField(entsession.FieldQueueKind, field.TypeString, value)
 		_node.QueueKind = value
 	}
 	if value, ok := _c.mutation.QueuePriority(); ok {
-		_spec.SetField(session.FieldQueuePriority, field.TypeString, value)
+		_spec.SetField(entsession.FieldQueuePriority, field.TypeString, value)
 		_node.QueuePriority = value
 	}
 	if value, ok := _c.mutation.QueueWorkflowRunID(); ok {
-		_spec.SetField(session.FieldQueueWorkflowRunID, field.TypeString, value)
+		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
 		_node.QueueWorkflowRunID = value
 	}
 	if value, ok := _c.mutation.QueueNodeRunID(); ok {
-		_spec.SetField(session.FieldQueueNodeRunID, field.TypeString, value)
+		_spec.SetField(entsession.FieldQueueNodeRunID, field.TypeString, value)
 		_node.QueueNodeRunID = value
 	}
 	if value, ok := _c.mutation.QueuePrompt(); ok {
-		_spec.SetField(session.FieldQueuePrompt, field.TypeString, value)
+		_spec.SetField(entsession.FieldQueuePrompt, field.TypeString, value)
 		_node.QueuePrompt = value
 	}
 	if value, ok := _c.mutation.QueueResumeCodexSessionID(); ok {
-		_spec.SetField(session.FieldQueueResumeCodexSessionID, field.TypeString, value)
+		_spec.SetField(entsession.FieldQueueResumeCodexSessionID, field.TypeString, value)
 		_node.QueueResumeCodexSessionID = value
 	}
 	if value, ok := _c.mutation.LastRunAt(); ok {
-		_spec.SetField(session.FieldLastRunAt, field.TypeTime, value)
+		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)
 		_node.LastRunAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
-		_spec.SetField(session.FieldCreatedAt, field.TypeTime, value)
+		_spec.SetField(entsession.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
 	}
 	if value, ok := _c.mutation.UpdatedAt(); ok {
-		_spec.SetField(session.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(entsession.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.ClosedAt(); ok {
-		_spec.SetField(session.FieldClosedAt, field.TypeTime, value)
+		_spec.SetField(entsession.FieldClosedAt, field.TypeTime, value)
 		_node.ClosedAt = &value
 	}
 	return _node, _spec

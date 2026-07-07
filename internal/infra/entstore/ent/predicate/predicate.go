@@ -30,7 +30,7 @@ type PromptAppend func(*sql.Selector)
 // QuestionBatch is the predicate function for questionbatch builders.
 type QuestionBatch func(*sql.Selector)
 
-// Session is the predicate function for session builders.
+// Session is the predicate function for entsession builders.
 type Session func(*sql.Selector)
 
 // SessionAttachment is the predicate function for sessionattachment builders.

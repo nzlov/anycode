@@ -2593,6 +2593,201 @@ func TestStartSessionAppendsCodexProcessEvents(t *testing.T) {
 	}
 }
 
+func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	source := make(chan processdomain.CodexEvent, 1)
+	source <- processdomain.CodexEvent{
+		EventID: "codex-event-plan",
+		Type:    "plan_update",
+		Payload: map[string]any{
+			"plan": []any{
+				map[string]any{"step": "梳理需求", "status": "completed"},
+				map[string]any{"step": "实现卡片展示", "status": "in_progress"},
+			},
+		},
+		Raw: []byte(`{"type":"plan_update"}`),
+	}
+	close(source)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{
+		"process-run-1",
+		"event-starting",
+		"event-running",
+		"process-event-plan",
+		"event-codex",
+		"event-todo-list",
+		"event-process-exited",
+		"event-stopped",
+	}
+	service.generateID = func() (domain.ID, error) {
+		if len(ids) == 0 {
+			t.Fatal("generateID called more than expected")
+		}
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	waitForEventType(t, events, "process.codex_event")
+	waitForEventType(t, events, "session.todo_list_updated")
+
+	got := repo.sessions["session-1"].TodoList
+	if len(got.Items) != 2 || got.Items[0].Text != "梳理需求" || !got.Items[0].Completed || got.Items[1].Completed {
+		t.Fatalf("todo list = %#v", got)
+	}
+}
+
+func TestTodoListFromCodexEventParsesPlanUpdateShapes(t *testing.T) {
+	tests := []struct {
+		name  string
+		event processdomain.CodexEvent
+	}{
+		{
+			name: "params plan",
+			event: processdomain.CodexEvent{
+				Type: "turn/plan/updated",
+				Payload: map[string]any{
+					"params": map[string]any{
+						"plan": []any{
+							map[string]any{"step": "梳理事件流", "status": "completed"},
+							map[string]any{"step": "落库 TODO", "status": "in_progress"},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "tool call arguments",
+			event: processdomain.CodexEvent{
+				Type: "function_call",
+				Payload: map[string]any{
+					"item": map[string]any{
+						"name":      "update_plan",
+						"arguments": `{"plan":[{"step":"解析 arguments","status":"done"},{"step":"刷新卡片","status":"pending"}]}`,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := todoListFromCodexEvent(tt.event)
+			if !ok {
+				t.Fatal("todoListFromCodexEvent() did not find plan")
+			}
+			if got.Total() != 2 || got.Completed() != 1 {
+				t.Fatalf("todo list counts = %d/%d, want 1/2: %#v", got.Completed(), got.Total(), got)
+			}
+		})
+	}
+}
+
+func TestTodoListFromCodexEventIgnoresUnrelatedPlanPayloads(t *testing.T) {
+	tests := []processdomain.CodexEvent{
+		{
+			Type: "assistant_message",
+			Payload: map[string]any{
+				"plan": []any{
+					map[string]any{"step": "不应覆盖", "status": "completed"},
+				},
+			},
+		},
+		{
+			Type: "function_call",
+			Payload: map[string]any{
+				"item": map[string]any{
+					"name":      "write_file",
+					"arguments": `{"plan":[]}`,
+				},
+			},
+		},
+	}
+	for _, event := range tests {
+		if got, ok := todoListFromCodexEvent(event); ok {
+			t.Fatalf("todoListFromCodexEvent() = %#v, true; want false", got)
+		}
+	}
+}
+
+func TestStartSessionClearsTodoListFromEmptyPlanUpdateEvent(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+		TodoList: domain.TodoList{Items: []domain.TodoItem{
+			{Text: "旧任务", Completed: true},
+		}},
+	}
+	processes := newFakeProcessRepository()
+	source := make(chan processdomain.CodexEvent, 1)
+	source <- processdomain.CodexEvent{
+		EventID: "codex-event-empty-plan",
+		Type:    "turn/plan/updated",
+		Payload: map[string]any{
+			"params": map[string]any{
+				"plan": []any{},
+			},
+		},
+		Raw: []byte(`{"type":"turn/plan/updated"}`),
+	}
+	close(source)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{
+		"process-run-1",
+		"event-starting",
+		"event-running",
+		"process-event-empty-plan",
+		"event-codex",
+		"event-todo-list",
+		"event-process-exited",
+		"event-stopped",
+	}
+	service.generateID = func() (domain.ID, error) {
+		if len(ids) == 0 {
+			t.Fatal("generateID called more than expected")
+		}
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	gotEvent := waitForEventType(t, events, "session.todo_list_updated")
+
+	got := repo.sessions["session-1"].TodoList
+	if got.Total() != 0 {
+		t.Fatalf("todo list = %#v, want empty", got)
+	}
+	if gotEvent.Payload["total"] != 0 {
+		t.Fatalf("todo list event payload = %#v", gotEvent.Payload)
+	}
+}
+
 func TestSessionModeMarksParamRejectedExitFailed(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

@@ -11,6 +11,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -20,7 +21,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -5997,6 +5998,7 @@ type SessionMutation struct {
 	codex_model                   *string
 	reasoning_effort              *string
 	permission_mode               *string
+	todo_list                     *session.TodoList
 	queued_at                     *time.Time
 	queue_kind                    *string
 	queue_priority                *string
@@ -6332,19 +6334,19 @@ func (m *SessionMutation) OldCloseReason(ctx context.Context) (v *string, err er
 // ClearCloseReason clears the value of the "close_reason" field.
 func (m *SessionMutation) ClearCloseReason() {
 	m.close_reason = nil
-	m.clearedFields[session.FieldCloseReason] = struct{}{}
+	m.clearedFields[entsession.FieldCloseReason] = struct{}{}
 }
 
 // CloseReasonCleared returns if the "close_reason" field was cleared in this mutation.
 func (m *SessionMutation) CloseReasonCleared() bool {
-	_, ok := m.clearedFields[session.FieldCloseReason]
+	_, ok := m.clearedFields[entsession.FieldCloseReason]
 	return ok
 }
 
 // ResetCloseReason resets all changes to the "close_reason" field.
 func (m *SessionMutation) ResetCloseReason() {
 	m.close_reason = nil
-	delete(m.clearedFields, session.FieldCloseReason)
+	delete(m.clearedFields, entsession.FieldCloseReason)
 }
 
 // SetBaseBranch sets the "base_branch" field.
@@ -6563,6 +6565,55 @@ func (m *SessionMutation) ResetPermissionMode() {
 	m.permission_mode = nil
 }
 
+// SetTodoList sets the "todo_list" field.
+func (m *SessionMutation) SetTodoList(sl session.TodoList) {
+	m.todo_list = &sl
+}
+
+// TodoList returns the value of the "todo_list" field in the mutation.
+func (m *SessionMutation) TodoList() (r session.TodoList, exists bool) {
+	v := m.todo_list
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTodoList returns the old "todo_list" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldTodoList(ctx context.Context) (v session.TodoList, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTodoList is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTodoList requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTodoList: %w", err)
+	}
+	return oldValue.TodoList, nil
+}
+
+// ClearTodoList clears the value of the "todo_list" field.
+func (m *SessionMutation) ClearTodoList() {
+	m.todo_list = nil
+	m.clearedFields[entsession.FieldTodoList] = struct{}{}
+}
+
+// TodoListCleared returns if the "todo_list" field was cleared in this mutation.
+func (m *SessionMutation) TodoListCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldTodoList]
+	return ok
+}
+
+// ResetTodoList resets all changes to the "todo_list" field.
+func (m *SessionMutation) ResetTodoList() {
+	m.todo_list = nil
+	delete(m.clearedFields, entsession.FieldTodoList)
+}
+
 // SetQueuedAt sets the "queued_at" field.
 func (m *SessionMutation) SetQueuedAt(t time.Time) {
 	m.queued_at = &t
@@ -6597,19 +6648,19 @@ func (m *SessionMutation) OldQueuedAt(ctx context.Context) (v *time.Time, err er
 // ClearQueuedAt clears the value of the "queued_at" field.
 func (m *SessionMutation) ClearQueuedAt() {
 	m.queued_at = nil
-	m.clearedFields[session.FieldQueuedAt] = struct{}{}
+	m.clearedFields[entsession.FieldQueuedAt] = struct{}{}
 }
 
 // QueuedAtCleared returns if the "queued_at" field was cleared in this mutation.
 func (m *SessionMutation) QueuedAtCleared() bool {
-	_, ok := m.clearedFields[session.FieldQueuedAt]
+	_, ok := m.clearedFields[entsession.FieldQueuedAt]
 	return ok
 }
 
 // ResetQueuedAt resets all changes to the "queued_at" field.
 func (m *SessionMutation) ResetQueuedAt() {
 	m.queued_at = nil
-	delete(m.clearedFields, session.FieldQueuedAt)
+	delete(m.clearedFields, entsession.FieldQueuedAt)
 }
 
 // SetQueueKind sets the "queue_kind" field.
@@ -6862,19 +6913,19 @@ func (m *SessionMutation) OldLastRunAt(ctx context.Context) (v *time.Time, err e
 // ClearLastRunAt clears the value of the "last_run_at" field.
 func (m *SessionMutation) ClearLastRunAt() {
 	m.last_run_at = nil
-	m.clearedFields[session.FieldLastRunAt] = struct{}{}
+	m.clearedFields[entsession.FieldLastRunAt] = struct{}{}
 }
 
 // LastRunAtCleared returns if the "last_run_at" field was cleared in this mutation.
 func (m *SessionMutation) LastRunAtCleared() bool {
-	_, ok := m.clearedFields[session.FieldLastRunAt]
+	_, ok := m.clearedFields[entsession.FieldLastRunAt]
 	return ok
 }
 
 // ResetLastRunAt resets all changes to the "last_run_at" field.
 func (m *SessionMutation) ResetLastRunAt() {
 	m.last_run_at = nil
-	delete(m.clearedFields, session.FieldLastRunAt)
+	delete(m.clearedFields, entsession.FieldLastRunAt)
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -6983,19 +7034,19 @@ func (m *SessionMutation) OldClosedAt(ctx context.Context) (v *time.Time, err er
 // ClearClosedAt clears the value of the "closed_at" field.
 func (m *SessionMutation) ClearClosedAt() {
 	m.closed_at = nil
-	m.clearedFields[session.FieldClosedAt] = struct{}{}
+	m.clearedFields[entsession.FieldClosedAt] = struct{}{}
 }
 
 // ClosedAtCleared returns if the "closed_at" field was cleared in this mutation.
 func (m *SessionMutation) ClosedAtCleared() bool {
-	_, ok := m.clearedFields[session.FieldClosedAt]
+	_, ok := m.clearedFields[entsession.FieldClosedAt]
 	return ok
 }
 
 // ResetClosedAt resets all changes to the "closed_at" field.
 func (m *SessionMutation) ResetClosedAt() {
 	m.closed_at = nil
-	delete(m.clearedFields, session.FieldClosedAt)
+	delete(m.clearedFields, entsession.FieldClosedAt)
 }
 
 // Where appends a list predicates to the SessionMutation builder.
@@ -7032,75 +7083,78 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.project_id != nil {
-		fields = append(fields, session.FieldProjectID)
+		fields = append(fields, entsession.FieldProjectID)
 	}
 	if m.requirement != nil {
-		fields = append(fields, session.FieldRequirement)
+		fields = append(fields, entsession.FieldRequirement)
 	}
 	if m.mode != nil {
-		fields = append(fields, session.FieldMode)
+		fields = append(fields, entsession.FieldMode)
 	}
 	if m.status != nil {
-		fields = append(fields, session.FieldStatus)
+		fields = append(fields, entsession.FieldStatus)
 	}
 	if m.priority != nil {
-		fields = append(fields, session.FieldPriority)
+		fields = append(fields, entsession.FieldPriority)
 	}
 	if m.close_reason != nil {
-		fields = append(fields, session.FieldCloseReason)
+		fields = append(fields, entsession.FieldCloseReason)
 	}
 	if m.base_branch != nil {
-		fields = append(fields, session.FieldBaseBranch)
+		fields = append(fields, entsession.FieldBaseBranch)
 	}
 	if m.worktree_path != nil {
-		fields = append(fields, session.FieldWorktreePath)
+		fields = append(fields, entsession.FieldWorktreePath)
 	}
 	if m.codex_session_id != nil {
-		fields = append(fields, session.FieldCodexSessionID)
+		fields = append(fields, entsession.FieldCodexSessionID)
 	}
 	if m.codex_model != nil {
-		fields = append(fields, session.FieldCodexModel)
+		fields = append(fields, entsession.FieldCodexModel)
 	}
 	if m.reasoning_effort != nil {
-		fields = append(fields, session.FieldReasoningEffort)
+		fields = append(fields, entsession.FieldReasoningEffort)
 	}
 	if m.permission_mode != nil {
-		fields = append(fields, session.FieldPermissionMode)
+		fields = append(fields, entsession.FieldPermissionMode)
+	}
+	if m.todo_list != nil {
+		fields = append(fields, entsession.FieldTodoList)
 	}
 	if m.queued_at != nil {
-		fields = append(fields, session.FieldQueuedAt)
+		fields = append(fields, entsession.FieldQueuedAt)
 	}
 	if m.queue_kind != nil {
-		fields = append(fields, session.FieldQueueKind)
+		fields = append(fields, entsession.FieldQueueKind)
 	}
 	if m.queue_priority != nil {
-		fields = append(fields, session.FieldQueuePriority)
+		fields = append(fields, entsession.FieldQueuePriority)
 	}
 	if m.queue_workflow_run_id != nil {
-		fields = append(fields, session.FieldQueueWorkflowRunID)
+		fields = append(fields, entsession.FieldQueueWorkflowRunID)
 	}
 	if m.queue_node_run_id != nil {
-		fields = append(fields, session.FieldQueueNodeRunID)
+		fields = append(fields, entsession.FieldQueueNodeRunID)
 	}
 	if m.queue_prompt != nil {
-		fields = append(fields, session.FieldQueuePrompt)
+		fields = append(fields, entsession.FieldQueuePrompt)
 	}
 	if m.queue_resume_codex_session_id != nil {
-		fields = append(fields, session.FieldQueueResumeCodexSessionID)
+		fields = append(fields, entsession.FieldQueueResumeCodexSessionID)
 	}
 	if m.last_run_at != nil {
-		fields = append(fields, session.FieldLastRunAt)
+		fields = append(fields, entsession.FieldLastRunAt)
 	}
 	if m.created_at != nil {
-		fields = append(fields, session.FieldCreatedAt)
+		fields = append(fields, entsession.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
-		fields = append(fields, session.FieldUpdatedAt)
+		fields = append(fields, entsession.FieldUpdatedAt)
 	}
 	if m.closed_at != nil {
-		fields = append(fields, session.FieldClosedAt)
+		fields = append(fields, entsession.FieldClosedAt)
 	}
 	return fields
 }
@@ -7110,51 +7164,53 @@ func (m *SessionMutation) Fields() []string {
 // schema.
 func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case session.FieldProjectID:
+	case entsession.FieldProjectID:
 		return m.ProjectID()
-	case session.FieldRequirement:
+	case entsession.FieldRequirement:
 		return m.Requirement()
-	case session.FieldMode:
+	case entsession.FieldMode:
 		return m.Mode()
-	case session.FieldStatus:
+	case entsession.FieldStatus:
 		return m.Status()
-	case session.FieldPriority:
+	case entsession.FieldPriority:
 		return m.Priority()
-	case session.FieldCloseReason:
+	case entsession.FieldCloseReason:
 		return m.CloseReason()
-	case session.FieldBaseBranch:
+	case entsession.FieldBaseBranch:
 		return m.BaseBranch()
-	case session.FieldWorktreePath:
+	case entsession.FieldWorktreePath:
 		return m.WorktreePath()
-	case session.FieldCodexSessionID:
+	case entsession.FieldCodexSessionID:
 		return m.CodexSessionID()
-	case session.FieldCodexModel:
+	case entsession.FieldCodexModel:
 		return m.CodexModel()
-	case session.FieldReasoningEffort:
+	case entsession.FieldReasoningEffort:
 		return m.ReasoningEffort()
-	case session.FieldPermissionMode:
+	case entsession.FieldPermissionMode:
 		return m.PermissionMode()
-	case session.FieldQueuedAt:
+	case entsession.FieldTodoList:
+		return m.TodoList()
+	case entsession.FieldQueuedAt:
 		return m.QueuedAt()
-	case session.FieldQueueKind:
+	case entsession.FieldQueueKind:
 		return m.QueueKind()
-	case session.FieldQueuePriority:
+	case entsession.FieldQueuePriority:
 		return m.QueuePriority()
-	case session.FieldQueueWorkflowRunID:
+	case entsession.FieldQueueWorkflowRunID:
 		return m.QueueWorkflowRunID()
-	case session.FieldQueueNodeRunID:
+	case entsession.FieldQueueNodeRunID:
 		return m.QueueNodeRunID()
-	case session.FieldQueuePrompt:
+	case entsession.FieldQueuePrompt:
 		return m.QueuePrompt()
-	case session.FieldQueueResumeCodexSessionID:
+	case entsession.FieldQueueResumeCodexSessionID:
 		return m.QueueResumeCodexSessionID()
-	case session.FieldLastRunAt:
+	case entsession.FieldLastRunAt:
 		return m.LastRunAt()
-	case session.FieldCreatedAt:
+	case entsession.FieldCreatedAt:
 		return m.CreatedAt()
-	case session.FieldUpdatedAt:
+	case entsession.FieldUpdatedAt:
 		return m.UpdatedAt()
-	case session.FieldClosedAt:
+	case entsession.FieldClosedAt:
 		return m.ClosedAt()
 	}
 	return nil, false
@@ -7165,51 +7221,53 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case session.FieldProjectID:
+	case entsession.FieldProjectID:
 		return m.OldProjectID(ctx)
-	case session.FieldRequirement:
+	case entsession.FieldRequirement:
 		return m.OldRequirement(ctx)
-	case session.FieldMode:
+	case entsession.FieldMode:
 		return m.OldMode(ctx)
-	case session.FieldStatus:
+	case entsession.FieldStatus:
 		return m.OldStatus(ctx)
-	case session.FieldPriority:
+	case entsession.FieldPriority:
 		return m.OldPriority(ctx)
-	case session.FieldCloseReason:
+	case entsession.FieldCloseReason:
 		return m.OldCloseReason(ctx)
-	case session.FieldBaseBranch:
+	case entsession.FieldBaseBranch:
 		return m.OldBaseBranch(ctx)
-	case session.FieldWorktreePath:
+	case entsession.FieldWorktreePath:
 		return m.OldWorktreePath(ctx)
-	case session.FieldCodexSessionID:
+	case entsession.FieldCodexSessionID:
 		return m.OldCodexSessionID(ctx)
-	case session.FieldCodexModel:
+	case entsession.FieldCodexModel:
 		return m.OldCodexModel(ctx)
-	case session.FieldReasoningEffort:
+	case entsession.FieldReasoningEffort:
 		return m.OldReasoningEffort(ctx)
-	case session.FieldPermissionMode:
+	case entsession.FieldPermissionMode:
 		return m.OldPermissionMode(ctx)
-	case session.FieldQueuedAt:
+	case entsession.FieldTodoList:
+		return m.OldTodoList(ctx)
+	case entsession.FieldQueuedAt:
 		return m.OldQueuedAt(ctx)
-	case session.FieldQueueKind:
+	case entsession.FieldQueueKind:
 		return m.OldQueueKind(ctx)
-	case session.FieldQueuePriority:
+	case entsession.FieldQueuePriority:
 		return m.OldQueuePriority(ctx)
-	case session.FieldQueueWorkflowRunID:
+	case entsession.FieldQueueWorkflowRunID:
 		return m.OldQueueWorkflowRunID(ctx)
-	case session.FieldQueueNodeRunID:
+	case entsession.FieldQueueNodeRunID:
 		return m.OldQueueNodeRunID(ctx)
-	case session.FieldQueuePrompt:
+	case entsession.FieldQueuePrompt:
 		return m.OldQueuePrompt(ctx)
-	case session.FieldQueueResumeCodexSessionID:
+	case entsession.FieldQueueResumeCodexSessionID:
 		return m.OldQueueResumeCodexSessionID(ctx)
-	case session.FieldLastRunAt:
+	case entsession.FieldLastRunAt:
 		return m.OldLastRunAt(ctx)
-	case session.FieldCreatedAt:
+	case entsession.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
-	case session.FieldUpdatedAt:
+	case entsession.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
-	case session.FieldClosedAt:
+	case entsession.FieldClosedAt:
 		return m.OldClosedAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Session field %s", name)
@@ -7220,161 +7278,168 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 // type.
 func (m *SessionMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case session.FieldProjectID:
+	case entsession.FieldProjectID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetProjectID(v)
 		return nil
-	case session.FieldRequirement:
+	case entsession.FieldRequirement:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequirement(v)
 		return nil
-	case session.FieldMode:
+	case entsession.FieldMode:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetMode(v)
 		return nil
-	case session.FieldStatus:
+	case entsession.FieldStatus:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
 		return nil
-	case session.FieldPriority:
+	case entsession.FieldPriority:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPriority(v)
 		return nil
-	case session.FieldCloseReason:
+	case entsession.FieldCloseReason:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCloseReason(v)
 		return nil
-	case session.FieldBaseBranch:
+	case entsession.FieldBaseBranch:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBaseBranch(v)
 		return nil
-	case session.FieldWorktreePath:
+	case entsession.FieldWorktreePath:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetWorktreePath(v)
 		return nil
-	case session.FieldCodexSessionID:
+	case entsession.FieldCodexSessionID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCodexSessionID(v)
 		return nil
-	case session.FieldCodexModel:
+	case entsession.FieldCodexModel:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCodexModel(v)
 		return nil
-	case session.FieldReasoningEffort:
+	case entsession.FieldReasoningEffort:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetReasoningEffort(v)
 		return nil
-	case session.FieldPermissionMode:
+	case entsession.FieldPermissionMode:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPermissionMode(v)
 		return nil
-	case session.FieldQueuedAt:
+	case entsession.FieldTodoList:
+		v, ok := value.(session.TodoList)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTodoList(v)
+		return nil
+	case entsession.FieldQueuedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueuedAt(v)
 		return nil
-	case session.FieldQueueKind:
+	case entsession.FieldQueueKind:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueKind(v)
 		return nil
-	case session.FieldQueuePriority:
+	case entsession.FieldQueuePriority:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueuePriority(v)
 		return nil
-	case session.FieldQueueWorkflowRunID:
+	case entsession.FieldQueueWorkflowRunID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueWorkflowRunID(v)
 		return nil
-	case session.FieldQueueNodeRunID:
+	case entsession.FieldQueueNodeRunID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueNodeRunID(v)
 		return nil
-	case session.FieldQueuePrompt:
+	case entsession.FieldQueuePrompt:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueuePrompt(v)
 		return nil
-	case session.FieldQueueResumeCodexSessionID:
+	case entsession.FieldQueueResumeCodexSessionID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueResumeCodexSessionID(v)
 		return nil
-	case session.FieldLastRunAt:
+	case entsession.FieldLastRunAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetLastRunAt(v)
 		return nil
-	case session.FieldCreatedAt:
+	case entsession.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCreatedAt(v)
 		return nil
-	case session.FieldUpdatedAt:
+	case entsession.FieldUpdatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
 		return nil
-	case session.FieldClosedAt:
+	case entsession.FieldClosedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
@@ -7411,17 +7476,20 @@ func (m *SessionMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *SessionMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(session.FieldCloseReason) {
-		fields = append(fields, session.FieldCloseReason)
+	if m.FieldCleared(entsession.FieldCloseReason) {
+		fields = append(fields, entsession.FieldCloseReason)
 	}
-	if m.FieldCleared(session.FieldQueuedAt) {
-		fields = append(fields, session.FieldQueuedAt)
+	if m.FieldCleared(entsession.FieldTodoList) {
+		fields = append(fields, entsession.FieldTodoList)
 	}
-	if m.FieldCleared(session.FieldLastRunAt) {
-		fields = append(fields, session.FieldLastRunAt)
+	if m.FieldCleared(entsession.FieldQueuedAt) {
+		fields = append(fields, entsession.FieldQueuedAt)
 	}
-	if m.FieldCleared(session.FieldClosedAt) {
-		fields = append(fields, session.FieldClosedAt)
+	if m.FieldCleared(entsession.FieldLastRunAt) {
+		fields = append(fields, entsession.FieldLastRunAt)
+	}
+	if m.FieldCleared(entsession.FieldClosedAt) {
+		fields = append(fields, entsession.FieldClosedAt)
 	}
 	return fields
 }
@@ -7437,16 +7505,19 @@ func (m *SessionMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *SessionMutation) ClearField(name string) error {
 	switch name {
-	case session.FieldCloseReason:
+	case entsession.FieldCloseReason:
 		m.ClearCloseReason()
 		return nil
-	case session.FieldQueuedAt:
+	case entsession.FieldTodoList:
+		m.ClearTodoList()
+		return nil
+	case entsession.FieldQueuedAt:
 		m.ClearQueuedAt()
 		return nil
-	case session.FieldLastRunAt:
+	case entsession.FieldLastRunAt:
 		m.ClearLastRunAt()
 		return nil
-	case session.FieldClosedAt:
+	case entsession.FieldClosedAt:
 		m.ClearClosedAt()
 		return nil
 	}
@@ -7457,73 +7528,76 @@ func (m *SessionMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *SessionMutation) ResetField(name string) error {
 	switch name {
-	case session.FieldProjectID:
+	case entsession.FieldProjectID:
 		m.ResetProjectID()
 		return nil
-	case session.FieldRequirement:
+	case entsession.FieldRequirement:
 		m.ResetRequirement()
 		return nil
-	case session.FieldMode:
+	case entsession.FieldMode:
 		m.ResetMode()
 		return nil
-	case session.FieldStatus:
+	case entsession.FieldStatus:
 		m.ResetStatus()
 		return nil
-	case session.FieldPriority:
+	case entsession.FieldPriority:
 		m.ResetPriority()
 		return nil
-	case session.FieldCloseReason:
+	case entsession.FieldCloseReason:
 		m.ResetCloseReason()
 		return nil
-	case session.FieldBaseBranch:
+	case entsession.FieldBaseBranch:
 		m.ResetBaseBranch()
 		return nil
-	case session.FieldWorktreePath:
+	case entsession.FieldWorktreePath:
 		m.ResetWorktreePath()
 		return nil
-	case session.FieldCodexSessionID:
+	case entsession.FieldCodexSessionID:
 		m.ResetCodexSessionID()
 		return nil
-	case session.FieldCodexModel:
+	case entsession.FieldCodexModel:
 		m.ResetCodexModel()
 		return nil
-	case session.FieldReasoningEffort:
+	case entsession.FieldReasoningEffort:
 		m.ResetReasoningEffort()
 		return nil
-	case session.FieldPermissionMode:
+	case entsession.FieldPermissionMode:
 		m.ResetPermissionMode()
 		return nil
-	case session.FieldQueuedAt:
+	case entsession.FieldTodoList:
+		m.ResetTodoList()
+		return nil
+	case entsession.FieldQueuedAt:
 		m.ResetQueuedAt()
 		return nil
-	case session.FieldQueueKind:
+	case entsession.FieldQueueKind:
 		m.ResetQueueKind()
 		return nil
-	case session.FieldQueuePriority:
+	case entsession.FieldQueuePriority:
 		m.ResetQueuePriority()
 		return nil
-	case session.FieldQueueWorkflowRunID:
+	case entsession.FieldQueueWorkflowRunID:
 		m.ResetQueueWorkflowRunID()
 		return nil
-	case session.FieldQueueNodeRunID:
+	case entsession.FieldQueueNodeRunID:
 		m.ResetQueueNodeRunID()
 		return nil
-	case session.FieldQueuePrompt:
+	case entsession.FieldQueuePrompt:
 		m.ResetQueuePrompt()
 		return nil
-	case session.FieldQueueResumeCodexSessionID:
+	case entsession.FieldQueueResumeCodexSessionID:
 		m.ResetQueueResumeCodexSessionID()
 		return nil
-	case session.FieldLastRunAt:
+	case entsession.FieldLastRunAt:
 		m.ResetLastRunAt()
 		return nil
-	case session.FieldCreatedAt:
+	case entsession.FieldCreatedAt:
 		m.ResetCreatedAt()
 		return nil
-	case session.FieldUpdatedAt:
+	case entsession.FieldUpdatedAt:
 		m.ResetUpdatedAt()
 		return nil
-	case session.FieldClosedAt:
+	case entsession.FieldClosedAt:
 		m.ResetClosedAt()
 		return nil
 	}

@@ -3,13 +3,15 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	"github.com/nzlov/anycode/internal/domain/session"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
 
 // Session is the model entity for the Session schema.
@@ -41,6 +43,8 @@ type Session struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// PermissionMode holds the value of the "permission_mode" field.
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// TodoList holds the value of the "todo_list" field.
+	TodoList session.TodoList `json:"todo_list,omitempty"`
 	// QueuedAt holds the value of the "queued_at" field.
 	QueuedAt *time.Time `json:"queued_at,omitempty"`
 	// QueueKind holds the value of the "queue_kind" field.
@@ -71,9 +75,11 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case session.FieldID, session.FieldProjectID, session.FieldRequirement, session.FieldMode, session.FieldStatus, session.FieldPriority, session.FieldCloseReason, session.FieldBaseBranch, session.FieldWorktreePath, session.FieldCodexSessionID, session.FieldCodexModel, session.FieldReasoningEffort, session.FieldPermissionMode, session.FieldQueueKind, session.FieldQueuePriority, session.FieldQueueWorkflowRunID, session.FieldQueueNodeRunID, session.FieldQueuePrompt, session.FieldQueueResumeCodexSessionID:
+		case entsession.FieldTodoList:
+			values[i] = new([]byte)
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
-		case session.FieldQueuedAt, session.FieldLastRunAt, session.FieldCreatedAt, session.FieldUpdatedAt, session.FieldClosedAt:
+		case entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -90,148 +96,156 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 	}
 	for i := range columns {
 		switch columns[i] {
-		case session.FieldID:
+		case entsession.FieldID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
 				_m.ID = value.String
 			}
-		case session.FieldProjectID:
+		case entsession.FieldProjectID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field project_id", values[i])
 			} else if value.Valid {
 				_m.ProjectID = value.String
 			}
-		case session.FieldRequirement:
+		case entsession.FieldRequirement:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field requirement", values[i])
 			} else if value.Valid {
 				_m.Requirement = value.String
 			}
-		case session.FieldMode:
+		case entsession.FieldMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field mode", values[i])
 			} else if value.Valid {
 				_m.Mode = value.String
 			}
-		case session.FieldStatus:
+		case entsession.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
 			}
-		case session.FieldPriority:
+		case entsession.FieldPriority:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field priority", values[i])
 			} else if value.Valid {
 				_m.Priority = value.String
 			}
-		case session.FieldCloseReason:
+		case entsession.FieldCloseReason:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field close_reason", values[i])
 			} else if value.Valid {
 				_m.CloseReason = new(string)
 				*_m.CloseReason = value.String
 			}
-		case session.FieldBaseBranch:
+		case entsession.FieldBaseBranch:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field base_branch", values[i])
 			} else if value.Valid {
 				_m.BaseBranch = value.String
 			}
-		case session.FieldWorktreePath:
+		case entsession.FieldWorktreePath:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field worktree_path", values[i])
 			} else if value.Valid {
 				_m.WorktreePath = value.String
 			}
-		case session.FieldCodexSessionID:
+		case entsession.FieldCodexSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field codex_session_id", values[i])
 			} else if value.Valid {
 				_m.CodexSessionID = value.String
 			}
-		case session.FieldCodexModel:
+		case entsession.FieldCodexModel:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field codex_model", values[i])
 			} else if value.Valid {
 				_m.CodexModel = value.String
 			}
-		case session.FieldReasoningEffort:
+		case entsession.FieldReasoningEffort:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field reasoning_effort", values[i])
 			} else if value.Valid {
 				_m.ReasoningEffort = value.String
 			}
-		case session.FieldPermissionMode:
+		case entsession.FieldPermissionMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field permission_mode", values[i])
 			} else if value.Valid {
 				_m.PermissionMode = value.String
 			}
-		case session.FieldQueuedAt:
+		case entsession.FieldTodoList:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field todo_list", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.TodoList); err != nil {
+					return fmt.Errorf("unmarshal field todo_list: %w", err)
+				}
+			}
+		case entsession.FieldQueuedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field queued_at", values[i])
 			} else if value.Valid {
 				_m.QueuedAt = new(time.Time)
 				*_m.QueuedAt = value.Time
 			}
-		case session.FieldQueueKind:
+		case entsession.FieldQueueKind:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_kind", values[i])
 			} else if value.Valid {
 				_m.QueueKind = value.String
 			}
-		case session.FieldQueuePriority:
+		case entsession.FieldQueuePriority:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_priority", values[i])
 			} else if value.Valid {
 				_m.QueuePriority = value.String
 			}
-		case session.FieldQueueWorkflowRunID:
+		case entsession.FieldQueueWorkflowRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_workflow_run_id", values[i])
 			} else if value.Valid {
 				_m.QueueWorkflowRunID = value.String
 			}
-		case session.FieldQueueNodeRunID:
+		case entsession.FieldQueueNodeRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_node_run_id", values[i])
 			} else if value.Valid {
 				_m.QueueNodeRunID = value.String
 			}
-		case session.FieldQueuePrompt:
+		case entsession.FieldQueuePrompt:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_prompt", values[i])
 			} else if value.Valid {
 				_m.QueuePrompt = value.String
 			}
-		case session.FieldQueueResumeCodexSessionID:
+		case entsession.FieldQueueResumeCodexSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_resume_codex_session_id", values[i])
 			} else if value.Valid {
 				_m.QueueResumeCodexSessionID = value.String
 			}
-		case session.FieldLastRunAt:
+		case entsession.FieldLastRunAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field last_run_at", values[i])
 			} else if value.Valid {
 				_m.LastRunAt = new(time.Time)
 				*_m.LastRunAt = value.Time
 			}
-		case session.FieldCreatedAt:
+		case entsession.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
 				_m.CreatedAt = value.Time
 			}
-		case session.FieldUpdatedAt:
+		case entsession.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
-		case session.FieldClosedAt:
+		case entsession.FieldClosedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field closed_at", values[i])
 			} else if value.Valid {
@@ -311,6 +325,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("permission_mode=")
 	builder.WriteString(_m.PermissionMode)
+	builder.WriteString(", ")
+	builder.WriteString("todo_list=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TodoList))
 	builder.WriteString(", ")
 	if v := _m.QueuedAt; v != nil {
 		builder.WriteString("queued_at=")

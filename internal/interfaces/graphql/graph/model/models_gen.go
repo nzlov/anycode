@@ -285,6 +285,7 @@ type SessionCard struct {
 	WorktreeBranch     string               `json:"worktreeBranch"`
 	CurrentNodeTitle   string               `json:"currentNodeTitle"`
 	PendingQuestion    bool                 `json:"pendingQuestion"`
+	TodoList           *TodoList            `json:"todoList,omitempty"`
 	Attachments        []*SessionAttachment `json:"attachments"`
 	AvailableActions   []string             `json:"availableActions"`
 	LastRunAt          *time.Time           `json:"lastRunAt,omitempty"`
@@ -403,6 +404,17 @@ type SubmitWorkflowApprovalInput struct {
 }
 
 type Subscription struct {
+}
+
+type TodoItem struct {
+	Text      string `json:"text"`
+	Completed bool   `json:"completed"`
+}
+
+type TodoList struct {
+	Completed int         `json:"completed"`
+	Total     int         `json:"total"`
+	Items     []*TodoItem `json:"items"`
 }
 
 type WorkflowCondition struct {

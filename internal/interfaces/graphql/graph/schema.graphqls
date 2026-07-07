@@ -120,6 +120,7 @@ type SessionCard {
   worktreeBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
+  todoList: TodoList
   attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
@@ -130,6 +131,17 @@ type SessionCard {
 type SessionCardPage {
   items: [SessionCard!]!
   pageInfo: PageInfo!
+}
+
+type TodoList {
+  completed: Int!
+  total: Int!
+  items: [TodoItem!]!
+}
+
+type TodoItem {
+  text: String!
+  completed: Boolean!
 }
 
 type SessionDetail {

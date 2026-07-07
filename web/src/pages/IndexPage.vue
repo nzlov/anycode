@@ -105,33 +105,68 @@
               </div>
             </div>
 
-            <div class="overview-card-actions">
+            <div class="overview-card-footer">
               <q-btn
-                v-if="card.pendingQuestion"
+                v-if="card.todoList"
                 flat
                 dense
-                class="lane-icon-btn lane-icon-btn--warning"
-                icon="help"
-                aria-label="回答问题"
-                :loading="questionsLoading && activeQuestionSessionId === card.id"
-                @click.stop="openAnswerDialog(card.id)"
+                no-caps
+                class="overview-todo-btn"
+                icon="checklist"
+                :label="`${card.todoList.completed}/${card.todoList.total}`"
+                aria-label="查看 TODO List"
+                @click.stop
+                @keyup.enter.stop
+                @keyup.space.stop
               >
-                <q-tooltip>回答待处理问题</q-tooltip>
+                <q-tooltip>TODO List</q-tooltip>
+                <q-menu anchor="top left" self="bottom left" class="overview-todo-menu" @click.stop>
+                  <q-list dense separator>
+                    <q-item v-for="(item, index) in card.todoList.items" :key="`${card.id}-${index}`">
+                      <q-item-section avatar>
+                        <q-icon
+                          :name="item.completed ? 'check_circle' : 'radio_button_unchecked'"
+                          :color="item.completed ? 'positive' : 'grey-6'"
+                        />
+                      </q-item-section>
+                      <q-item-section>
+                        <q-item-label :class="{ 'overview-todo-item--done': item.completed }">
+                          {{ item.text }}
+                        </q-item-label>
+                      </q-item-section>
+                    </q-item>
+                  </q-list>
+                </q-menu>
               </q-btn>
-              <q-btn
-                v-if="cardAction(card)"
-                flat
-                dense
-                class="lane-icon-btn"
-                :color="cardAction(card)?.color"
-                :icon="cardAction(card)?.icon"
-                :aria-label="cardAction(card)?.tooltip"
-                :loading="cardActionLoading && activeActionSessionId === card.id"
-                :disable="cardAction(card)?.disabled"
-                @click.stop="runCardAction(card)"
-              >
-                <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
-              </q-btn>
+
+              <div class="overview-card-actions">
+                <q-btn
+                  v-if="card.pendingQuestion"
+                  flat
+                  dense
+                  class="lane-icon-btn lane-icon-btn--warning"
+                  icon="help"
+                  aria-label="回答问题"
+                  :loading="questionsLoading && activeQuestionSessionId === card.id"
+                  @click.stop="openAnswerDialog(card.id)"
+                >
+                  <q-tooltip>回答待处理问题</q-tooltip>
+                </q-btn>
+                <q-btn
+                  v-if="cardAction(card)"
+                  flat
+                  dense
+                  class="lane-icon-btn"
+                  :color="cardAction(card)?.color"
+                  :icon="cardAction(card)?.icon"
+                  :aria-label="cardAction(card)?.tooltip"
+                  :loading="cardActionLoading && activeActionSessionId === card.id"
+                  :disable="cardAction(card)?.disabled"
+                  @click.stop="runCardAction(card)"
+                >
+                  <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
+                </q-btn>
+              </div>
             </div>
           </q-card-section>
         </q-card>

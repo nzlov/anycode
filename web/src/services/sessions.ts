@@ -33,8 +33,20 @@ export interface SessionCard {
   createdTime: string;
   updatedAt: string;
   pendingQuestion: boolean;
+  todoList?: SessionTodoList | null;
   filesChanged: number;
   availableActions: string[];
+}
+
+export interface SessionTodoList {
+  completed: number;
+  total: number;
+  items: SessionTodoItem[];
+}
+
+export interface SessionTodoItem {
+  text: string;
+  completed: boolean;
 }
 
 export interface SessionDetail extends SessionCard {
@@ -170,10 +182,22 @@ interface GraphQLSessionCard {
   worktreeBranch: string;
   currentNodeTitle: string;
   pendingQuestion: boolean;
+  todoList?: GraphQLSessionTodoList | null;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
   availableActions: string[];
+}
+
+interface GraphQLSessionTodoList {
+  completed: number;
+  total: number;
+  items: GraphQLSessionTodoItem[];
+}
+
+interface GraphQLSessionTodoItem {
+  text: string;
+  completed: boolean;
 }
 
 interface GraphQLSessionDetail {
@@ -254,6 +278,14 @@ const sessionCardFields = `
   worktreeBranch
   currentNodeTitle
   pendingQuestion
+  todoList {
+    completed
+    total
+    items {
+      text
+      completed
+    }
+  }
   availableActions
   lastRunAt
   createdAt
@@ -652,6 +684,20 @@ function normalizeQuestionBatch(batch: GraphQLQuestionBatch): QuestionBatch {
   };
 }
 
+function normalizeTodoList(todoList?: GraphQLSessionTodoList | null): SessionTodoList | null {
+  if (!todoList || todoList.total <= 0 || todoList.items.length === 0) {
+    return null;
+  }
+  return {
+    completed: todoList.completed,
+    total: todoList.total,
+    items: todoList.items.map((item) => ({
+      text: item.text,
+      completed: item.completed,
+    })),
+  };
+}
+
 function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
   return {
     id: session.id,
@@ -669,6 +715,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: session.pendingQuestion,
+    todoList: normalizeTodoList(session.todoList),
     filesChanged: 0,
     availableActions: normalizeAvailableActions(session.availableActions),
   };
@@ -692,6 +739,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
+    todoList: null,
     filesChanged: 0,
     config: session.config,
     closeReason: session.closeReason ?? null,
@@ -729,6 +777,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     pendingQuestion: status === 'waiting_user',
+    todoList: null,
     filesChanged: 0,
     availableActions: normalizeAvailableActions(session.availableActions),
   };

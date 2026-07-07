@@ -254,6 +254,7 @@ var (
 		{Name: "codex_model", Type: field.TypeString, Default: ""},
 		{Name: "reasoning_effort", Type: field.TypeString, Default: ""},
 		{Name: "permission_mode", Type: field.TypeString, Default: ""},
+		{Name: "todo_list", Type: field.TypeJSON, Nullable: true},
 		{Name: "queued_at", Type: field.TypeTime, Nullable: true},
 		{Name: "queue_kind", Type: field.TypeString, Default: ""},
 		{Name: "queue_priority", Type: field.TypeString, Default: "medium"},
@@ -280,12 +281,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[22]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[23]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[20]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[21]},
 			},
 			{
 				Name:    "session_status",
@@ -295,7 +296,7 @@ var (
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[15], SessionsColumns[5], SessionsColumns[13]},
+				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[16], SessionsColumns[5], SessionsColumns[14]},
 			},
 		},
 	}

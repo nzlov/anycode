@@ -106,11 +106,30 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		WorktreeBranch:     dto.WorktreeBranch,
 		CurrentNodeTitle:   dto.CurrentNodeTitle,
 		PendingQuestion:    dto.PendingQuestion,
+		TodoList:           mapTodoList(dto.TodoList),
 		Attachments:        attachments,
 		AvailableActions:   dto.AvailableActions,
 		LastRunAt:          dto.LastRunAt,
 		CreatedAt:          dto.CreatedAt,
 		UpdatedAt:          dto.UpdatedAt,
+	}
+}
+
+func mapTodoList(todoList sessiondomain.TodoList) *model.TodoList {
+	if todoList.Total() == 0 {
+		return nil
+	}
+	items := make([]*model.TodoItem, 0, len(todoList.Items))
+	for _, item := range todoList.Items {
+		items = append(items, &model.TodoItem{
+			Text:      item.Text,
+			Completed: item.Completed,
+		})
+	}
+	return &model.TodoList{
+		Completed: todoList.Completed(),
+		Total:     todoList.Total(),
+		Items:     items,
 	}
 }
 

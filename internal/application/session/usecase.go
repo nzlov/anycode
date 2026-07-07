@@ -116,6 +116,7 @@ type CardDTO struct {
 	RequirementSummary string
 	CurrentNodeTitle   string
 	PendingQuestion    bool
+	TodoList           domain.TodoList
 	Attachments        []domain.SessionAttachment
 	AvailableActions   []string
 }
@@ -1712,7 +1713,25 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				continue
 			}
 			runID := handle.ProcessRunID
-			_ = s.saveProcessEventWithSessionEvent(context.Background(), session, processdomain.Event{
+			eventSession := session
+			saveEventSession := false
+			extraEvents := []sessionEventInput(nil)
+			if todoList, ok := todoListFromCodexEvent(event); ok {
+				if current, err := s.repo.Find(context.Background(), session.ID); err == nil {
+					current.TodoList = todoList
+					current.UpdatedAt = s.now()
+					eventSession = current
+					saveEventSession = true
+					extraEvents = append(extraEvents, sessionEventInput{
+						eventType: "session.todo_list_updated",
+						payload: map[string]any{
+							"completed": todoList.Completed(),
+							"total":     todoList.Total(),
+						},
+					})
+				}
+			}
+			_ = s.saveProcessEventWithSessionEvent(context.Background(), eventSession, processdomain.Event{
 				ID:           string(eventID),
 				SessionID:    processdomain.SessionID(session.ID),
 				ProcessRunID: &runID,
@@ -1720,7 +1739,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				Type:         event.Type,
 				Payload:      processEventPayload(event),
 				CreatedAt:    s.now(),
-			}, "process.codex_event", codexSessionEventPayload(handle.ProcessRunID, event))
+			}, "process.codex_event", codexSessionEventPayload(handle.ProcessRunID, event), saveEventSession, extraEvents...)
 			if codexSessionID := codexSessionIDFromEvent(event); codexSessionID != "" {
 				if current, err := s.repo.Find(context.Background(), session.ID); err == nil && current.CodexSessionID == "" {
 					current.CodexSessionID = codexSessionID
@@ -2636,8 +2655,9 @@ func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdo
 	return nil
 }
 
-func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session domain.Session, processEvent processdomain.Event, eventType string, payload map[string]any) error {
-	event, ok, err := s.newSessionEvent(session, eventType, payload)
+func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session domain.Session, processEvent processdomain.Event, eventType string, payload map[string]any, saveSession bool, extraInputs ...sessionEventInput) error {
+	inputs := append([]sessionEventInput{{eventType: eventType, payload: payload}}, extraInputs...)
+	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
 		return err
 	}
@@ -2646,7 +2666,12 @@ func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session 
 			if err := tx.Processes().SaveEvent(ctx, processEvent); err != nil {
 				return err
 			}
-			if ok {
+			if saveSession {
+				if err := tx.Sessions().Save(ctx, session); err != nil {
+					return fmt.Errorf("save session: %w", err)
+				}
+			}
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -2655,7 +2680,7 @@ func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session 
 		}); err != nil {
 			return err
 		}
-		if ok {
+		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
@@ -2663,7 +2688,12 @@ func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session 
 	if err := s.processes.SaveEvent(ctx, processEvent); err != nil {
 		return err
 	}
-	if ok {
+	if saveSession {
+		if err := s.repo.Save(ctx, session); err != nil {
+			return fmt.Errorf("save session: %w", err)
+		}
+	}
+	for _, event := range events {
 		if err := s.events.Append(ctx, event); err != nil {
 			return err
 		}
@@ -2890,6 +2920,148 @@ func processEventPayload(event processdomain.CodexEvent) map[string]any {
 		payload["raw"] = string(event.Raw)
 	}
 	return payload
+}
+
+func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bool) {
+	if isTodoListPlanEventType(event.Type) {
+		if list, ok := todoListFromPayload(event.Payload); ok {
+			return list, true
+		}
+		if len(event.Raw) == 0 {
+			return domain.TodoList{}, false
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(event.Raw, &raw); err != nil {
+			return domain.TodoList{}, false
+		}
+		return todoListFromPayload(raw)
+	}
+	if list, ok := todoListFromUpdatePlanToolPayload(event.Payload); ok {
+		return list, true
+	}
+	if len(event.Raw) == 0 {
+		return domain.TodoList{}, false
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(event.Raw, &raw); err != nil {
+		return domain.TodoList{}, false
+	}
+	return todoListFromUpdatePlanToolPayload(raw)
+}
+
+func isTodoListPlanEventType(eventType string) bool {
+	switch strings.ToLower(strings.TrimSpace(eventType)) {
+	case "plan_update", "turn/plan/updated", "turn.plan.updated", "plan.updated":
+		return true
+	default:
+		return false
+	}
+}
+
+func todoListFromUpdatePlanToolPayload(payload map[string]any) (domain.TodoList, bool) {
+	if payload == nil {
+		return domain.TodoList{}, false
+	}
+	if isUpdatePlanToolName(payload) {
+		if list, ok := todoListFromToolArguments(payload); ok {
+			return list, true
+		}
+	}
+	for _, key := range []string{"item", "msg", "message", "params"} {
+		if nested, ok := payload[key].(map[string]any); ok {
+			if list, found := todoListFromUpdatePlanToolPayload(nested); found {
+				return list, true
+			}
+		}
+	}
+	return domain.TodoList{}, false
+}
+
+func isUpdatePlanToolName(payload map[string]any) bool {
+	name := firstNonEmptyString(payload, "name", "tool", "tool_name", "toolName", "function_name", "functionName")
+	if function, ok := payload["function"].(map[string]any); ok && name == "" {
+		name = firstNonEmptyString(function, "name")
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	return name == "update_plan" || strings.HasSuffix(name, ".update_plan")
+}
+
+func todoListFromToolArguments(payload map[string]any) (domain.TodoList, bool) {
+	for _, key := range []string{"arguments", "input"} {
+		switch value := payload[key].(type) {
+		case string:
+			var nested map[string]any
+			if err := json.Unmarshal([]byte(value), &nested); err == nil {
+				if list, found := todoListFromPayload(nested); found {
+					return list, true
+				}
+			}
+		case map[string]any:
+			if list, found := todoListFromPayload(value); found {
+				return list, true
+			}
+		}
+	}
+	return todoListFromPayload(payload)
+}
+
+func todoListFromPayload(payload map[string]any) (domain.TodoList, bool) {
+	if payload == nil {
+		return domain.TodoList{}, false
+	}
+	for _, key := range []string{"plan", "todoList", "todo_list", "todos"} {
+		if items, ok := payload[key].([]any); ok {
+			return todoListFromItems(items), true
+		}
+	}
+	for _, key := range []string{"item", "msg", "message", "params"} {
+		if nested, ok := payload[key].(map[string]any); ok {
+			if list, found := todoListFromPayload(nested); found {
+				return list, true
+			}
+		}
+	}
+	return domain.TodoList{}, false
+}
+
+func todoListFromItems(items []any) domain.TodoList {
+	list := domain.TodoList{Items: make([]domain.TodoItem, 0, len(items))}
+	for _, item := range items {
+		typed, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text := firstNonEmptyString(typed, "step", "text", "title", "content")
+		if text == "" {
+			continue
+		}
+		list.Items = append(list.Items, domain.TodoItem{
+			Text:      text,
+			Completed: todoItemCompleted(typed),
+		})
+	}
+	return list
+}
+
+func firstNonEmptyString(input map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := stringFromMap(input, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func todoItemCompleted(item map[string]any) bool {
+	if completed, ok := item["completed"].(bool); ok {
+		return completed
+	}
+	switch strings.ToLower(stringFromMap(item, "status")) {
+	case "complete", "completed", "done", "success", "succeeded":
+		return true
+	default:
+		return false
+	}
 }
 
 func codexSessionIDFromEvent(event processdomain.CodexEvent) string {
@@ -3304,6 +3476,7 @@ func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, c
 		RequirementSummary: session.Requirement,
 		CurrentNodeTitle:   currentNodeTitle,
 		PendingQuestion:    session.Status == domain.StatusWaitingUser,
+		TodoList:           session.TodoList,
 		Attachments:        attachments,
 		AvailableActions:   availableActions(session),
 	}

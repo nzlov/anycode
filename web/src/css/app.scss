@@ -264,9 +264,43 @@ a {
   font-size: 11px;
 }
 
+.overview-card-footer {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.overview-todo-btn {
+  min-width: 72px;
+  height: 28px;
+  min-height: 28px;
+  justify-content: flex-start;
+  padding: 0 8px;
+  border: 1px solid var(--ac-border);
+  border-radius: 7px;
+  color: #334155;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.overview-todo-menu {
+  width: min(360px, calc(100vw - 32px));
+  max-height: 360px;
+}
+
+.overview-todo-item--done {
+  color: var(--ac-text-muted);
+  text-decoration: line-through;
+}
+
 .overview-card-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  margin-left: auto;
   gap: 8px;
 }
 

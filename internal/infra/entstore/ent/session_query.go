@@ -12,14 +12,14 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
 
 // SessionQuery is the builder for querying Session entities.
 type SessionQuery struct {
 	config
 	ctx        *QueryContext
-	order      []session.OrderOption
+	order      []entsession.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Session
 	// intermediate query (i.e. traversal path).
@@ -53,7 +53,7 @@ func (_q *SessionQuery) Unique(unique bool) *SessionQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (_q *SessionQuery) Order(o ...session.OrderOption) *SessionQuery {
+func (_q *SessionQuery) Order(o ...entsession.OrderOption) *SessionQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
@@ -66,7 +66,7 @@ func (_q *SessionQuery) First(ctx context.Context) (*Session, error) {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{session.Label}
+		return nil, &NotFoundError{entsession.Label}
 	}
 	return nodes[0], nil
 }
@@ -88,7 +88,7 @@ func (_q *SessionQuery) FirstID(ctx context.Context) (id string, err error) {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{session.Label}
+		err = &NotFoundError{entsession.Label}
 		return
 	}
 	return ids[0], nil
@@ -115,9 +115,9 @@ func (_q *SessionQuery) Only(ctx context.Context) (*Session, error) {
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{session.Label}
+		return nil, &NotFoundError{entsession.Label}
 	default:
-		return nil, &NotSingularError{session.Label}
+		return nil, &NotSingularError{entsession.Label}
 	}
 }
 
@@ -142,9 +142,9 @@ func (_q *SessionQuery) OnlyID(ctx context.Context) (id string, err error) {
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{session.Label}
+		err = &NotFoundError{entsession.Label}
 	default:
-		err = &NotSingularError{session.Label}
+		err = &NotSingularError{entsession.Label}
 	}
 	return
 }
@@ -183,7 +183,7 @@ func (_q *SessionQuery) IDs(ctx context.Context) (ids []string, err error) {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(session.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(entsession.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -247,7 +247,7 @@ func (_q *SessionQuery) Clone() *SessionQuery {
 	return &SessionQuery{
 		config:     _q.config,
 		ctx:        _q.ctx.Clone(),
-		order:      append([]session.OrderOption{}, _q.order...),
+		order:      append([]entsession.OrderOption{}, _q.order...),
 		inters:     append([]Interceptor{}, _q.inters...),
 		predicates: append([]predicate.Session{}, _q.predicates...),
 		// clone intermediate query.
@@ -267,14 +267,14 @@ func (_q *SessionQuery) Clone() *SessionQuery {
 //	}
 //
 //	client.Session.Query().
-//		GroupBy(session.FieldProjectID).
+//		GroupBy(entsession.FieldProjectID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *SessionQuery) GroupBy(field string, fields ...string) *SessionGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
 	grbuild := &SessionGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = session.Label
+	grbuild.label = entsession.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -289,12 +289,12 @@ func (_q *SessionQuery) GroupBy(field string, fields ...string) *SessionGroupBy 
 //	}
 //
 //	client.Session.Query().
-//		Select(session.FieldProjectID).
+//		Select(entsession.FieldProjectID).
 //		Scan(ctx, &v)
 func (_q *SessionQuery) Select(fields ...string) *SessionSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
 	sbuild := &SessionSelect{SessionQuery: _q}
-	sbuild.label = session.Label
+	sbuild.label = entsession.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
@@ -316,7 +316,7 @@ func (_q *SessionQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !session.ValidColumn(f) {
+		if !entsession.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -365,7 +365,7 @@ func (_q *SessionQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (_q *SessionQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(session.Table, session.Columns, sqlgraph.NewFieldSpec(session.FieldID, field.TypeString))
+	_spec := sqlgraph.NewQuerySpec(entsession.Table, entsession.Columns, sqlgraph.NewFieldSpec(entsession.FieldID, field.TypeString))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -374,9 +374,9 @@ func (_q *SessionQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, session.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, entsession.FieldID)
 		for i := range fields {
-			if fields[i] != session.FieldID {
+			if fields[i] != entsession.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
@@ -406,10 +406,10 @@ func (_q *SessionQuery) querySpec() *sqlgraph.QuerySpec {
 
 func (_q *SessionQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(session.Table)
+	t1 := builder.Table(entsession.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = session.Columns
+		columns = entsession.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {

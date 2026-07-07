@@ -20,7 +20,8 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -93,7 +94,7 @@ func checkColumn(t, c string) error {
 			project.Table:            project.ValidColumn,
 			promptappend.Table:       promptappend.ValidColumn,
 			questionbatch.Table:      questionbatch.ValidColumn,
-			session.Table:            session.ValidColumn,
+			entsession.Table:         entsession.ValidColumn,
 			sessionattachment.Table:  sessionattachment.ValidColumn,
 			stagedattachment.Table:   stagedattachment.ValidColumn,
 			workflowdefinition.Table: workflowdefinition.ValidColumn,

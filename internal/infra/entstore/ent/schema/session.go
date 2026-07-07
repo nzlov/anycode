@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	domainsession "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type Session struct {
@@ -27,6 +28,7 @@ func (Session) Fields() []ent.Field {
 		field.String("codex_model").Default(""),
 		field.String("reasoning_effort").Default(""),
 		field.String("permission_mode").Default(""),
+		field.JSON("todo_list", domainsession.TodoList{}).Optional(),
 		field.Time("queued_at").Optional().Nillable(),
 		field.String("queue_kind").Default(""),
 		field.String("queue_priority").Default("medium"),

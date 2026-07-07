@@ -2,6 +2,7 @@ package entstore
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -41,6 +42,10 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			ReasoningEffort: "high",
 			PermissionMode:  "workspace-write",
 		},
+		TodoList: session.TodoList{Items: []session.TodoItem{
+			{Text: "梳理需求", Completed: true},
+			{Text: "实现卡片展示", Completed: false},
+		}},
 		LastRunAt: &now,
 		CreatedAt: now.Add(-10 * time.Minute),
 		UpdatedAt: now.Add(-25 * time.Minute),
@@ -398,6 +403,72 @@ func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	}
 }
 
+func TestSessionRepositoryMigrateAddsTodoListToExistingSessions(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "anycode.db")
+	db, err := sql.Open(sqliteDriverName, dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := db.ExecContext(ctx, `CREATE TABLE sessions (
+		id text NOT NULL PRIMARY KEY,
+		project_id text NOT NULL,
+		requirement text NOT NULL DEFAULT '',
+		mode text NOT NULL,
+		status text NOT NULL,
+		priority text NOT NULL DEFAULT 'medium',
+		close_reason text NULL,
+		base_branch text NOT NULL DEFAULT '',
+		worktree_path text NOT NULL DEFAULT '',
+		codex_session_id text NOT NULL DEFAULT '',
+		codex_model text NOT NULL DEFAULT '',
+		reasoning_effort text NOT NULL DEFAULT '',
+		permission_mode text NOT NULL DEFAULT '',
+		queued_at datetime NULL,
+		queue_kind text NOT NULL DEFAULT '',
+		queue_priority text NOT NULL DEFAULT 'medium',
+		queue_workflow_run_id text NOT NULL DEFAULT '',
+		queue_node_run_id text NOT NULL DEFAULT '',
+		queue_prompt text NOT NULL DEFAULT '',
+		queue_resume_codex_session_id text NOT NULL DEFAULT '',
+		last_run_at datetime NULL,
+		created_at datetime NOT NULL,
+		updated_at datetime NOT NULL,
+		closed_at datetime NULL
+	)`); err != nil {
+		db.Close()
+		t.Fatalf("create legacy sessions table: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (
+		id, project_id, requirement, mode, status, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-session", "project-1", "legacy row", string(session.ModeChat), string(session.StatusStopped), now, now); err != nil {
+		db.Close()
+		t.Fatalf("insert legacy session: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close setup db: %v", err)
+	}
+
+	store, err := Open(ctx, OpenOptions{DatabaseURL: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	found, err := store.Sessions().Find(ctx, "legacy-session")
+	if err != nil {
+		t.Fatalf("find migrated session: %v", err)
+	}
+	if found.TodoList.Total() != 0 {
+		t.Fatalf("todo list = %#v, want empty", found.TodoList)
+	}
+}
+
 func saveSessions(t *testing.T, ctx context.Context, repo *SessionRepository, sessions ...session.Session) {
 	t.Helper()
 	for _, s := range sessions {
@@ -417,8 +488,14 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.BaseBranch != want.BaseBranch ||
 		got.WorktreePath != want.WorktreePath ||
 		got.CodexSessionID != want.CodexSessionID ||
-		got.Config != want.Config {
+		got.Config != want.Config ||
+		len(got.TodoList.Items) != len(want.TodoList.Items) {
 		t.Fatalf("session mismatch:\ngot:  %#v\nwant: %#v", got, want)
+	}
+	for index := range want.TodoList.Items {
+		if got.TodoList.Items[index] != want.TodoList.Items[index] {
+			t.Fatalf("todo item %d mismatch: got=%#v want=%#v", index, got.TodoList.Items[index], want.TodoList.Items[index])
+		}
 	}
 	if got.LastRunAt == nil || !got.LastRunAt.Equal(*want.LastRunAt) {
 		t.Fatalf("last run mismatch: got=%v want=%v", got.LastRunAt, want.LastRunAt)

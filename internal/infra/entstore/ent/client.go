@@ -22,7 +22,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/session"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
@@ -1379,13 +1379,13 @@ func NewSessionClient(c config) *SessionClient {
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `session.Hooks(f(g(h())))`.
+// A call to `Use(f, g, h)` equals to `entsession.Hooks(f(g(h())))`.
 func (c *SessionClient) Use(hooks ...Hook) {
 	c.hooks.Session = append(c.hooks.Session, hooks...)
 }
 
 // Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `session.Intercept(f(g(h())))`.
+// A call to `Intercept(f, g, h)` equals to `entsession.Intercept(f(g(h())))`.
 func (c *SessionClient) Intercept(interceptors ...Interceptor) {
 	c.inters.Session = append(c.inters.Session, interceptors...)
 }
@@ -1447,7 +1447,7 @@ func (c *SessionClient) DeleteOne(_m *Session) *SessionDeleteOne {
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
 func (c *SessionClient) DeleteOneID(id string) *SessionDeleteOne {
-	builder := c.Delete().Where(session.ID(id))
+	builder := c.Delete().Where(entsession.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
 	return &SessionDeleteOne{builder}
@@ -1464,7 +1464,7 @@ func (c *SessionClient) Query() *SessionQuery {
 
 // Get returns a Session entity by its id.
 func (c *SessionClient) Get(ctx context.Context, id string) (*Session, error) {
-	return c.Query().Where(session.ID(id)).Only(ctx)
+	return c.Query().Where(entsession.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.

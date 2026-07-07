@@ -266,6 +266,7 @@ type ComplexityRoot struct {
 		Requirement        func(childComplexity int) int
 		RequirementSummary func(childComplexity int) int
 		Status             func(childComplexity int) int
+		TodoList           func(childComplexity int) int
 		UpdatedAt          func(childComplexity int) int
 		WorktreeBranch     func(childComplexity int) int
 	}
@@ -336,6 +337,17 @@ type ComplexityRoot struct {
 		PendingQuestionBatches func(childComplexity int, sessionID string) int
 		SessionEvents          func(childComplexity int, input model.SessionEventsInput) int
 		SessionStatusChanged   func(childComplexity int, projectID *string, sessionID *string) int
+	}
+
+	TodoItem struct {
+		Completed func(childComplexity int) int
+		Text      func(childComplexity int) int
+	}
+
+	TodoList struct {
+		Completed func(childComplexity int) int
+		Items     func(childComplexity int) int
+		Total     func(childComplexity int) int
 	}
 
 	WorkflowCondition struct {
@@ -1516,6 +1528,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.Status(childComplexity), true
+	case "SessionCard.todoList":
+		if e.ComplexityRoot.SessionCard.TodoList == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.TodoList(childComplexity), true
 	case "SessionCard.updatedAt":
 		if e.ComplexityRoot.SessionCard.UpdatedAt == nil {
 			break
@@ -1815,6 +1833,38 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionStatusChanged(childComplexity, args["projectId"].(*string), args["sessionId"].(*string)), true
+
+	case "TodoItem.completed":
+		if e.ComplexityRoot.TodoItem.Completed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TodoItem.Completed(childComplexity), true
+	case "TodoItem.text":
+		if e.ComplexityRoot.TodoItem.Text == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TodoItem.Text(childComplexity), true
+
+	case "TodoList.completed":
+		if e.ComplexityRoot.TodoList.Completed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TodoList.Completed(childComplexity), true
+	case "TodoList.items":
+		if e.ComplexityRoot.TodoList.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TodoList.Items(childComplexity), true
+	case "TodoList.total":
+		if e.ComplexityRoot.TodoList.Total == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TodoList.Total(childComplexity), true
 
 	case "WorkflowCondition.all":
 		if e.ComplexityRoot.WorkflowCondition.All == nil {
@@ -2307,6 +2357,7 @@ type SessionCard {
   worktreeBranch: String!
   currentNodeTitle: String!
   pendingQuestion: Boolean!
+  todoList: TodoList
   attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
@@ -2317,6 +2368,17 @@ type SessionCard {
 type SessionCardPage {
   items: [SessionCard!]!
   pageInfo: PageInfo!
+}
+
+type TodoList {
+  completed: Int!
+  total: Int!
+  items: [TodoItem!]!
+}
+
+type TodoItem {
+  text: String!
+  completed: Boolean!
 }
 
 type SessionDetail {
@@ -8417,6 +8479,43 @@ func (ec *executionContext) fieldContext_SessionCard_pendingQuestion(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_todoList(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_todoList,
+		func(ctx context.Context) (any, error) {
+			return obj.TodoList, nil
+		},
+		nil,
+		ec.marshalOTodoList2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTodoList,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_todoList(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "completed":
+				return ec.fieldContext_TodoList_completed(ctx, field)
+			case "total":
+				return ec.fieldContext_TodoList_total(ctx, field)
+			case "items":
+				return ec.fieldContext_TodoList_items(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TodoList", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_attachments(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8628,6 +8727,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
 			case "pendingQuestion":
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
+			case "todoList":
+				return ec.fieldContext_SessionCard_todoList(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
@@ -10080,6 +10181,157 @@ func (ec *executionContext) fieldContext_Subscription_pendingQuestionBatches(ctx
 	if fc.Args, err = ec.field_Subscription_pendingQuestionBatches_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TodoItem_text(ctx context.Context, field graphql.CollectedField, obj *model.TodoItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TodoItem_text,
+		func(ctx context.Context) (any, error) {
+			return obj.Text, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TodoItem_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TodoItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TodoItem_completed(ctx context.Context, field graphql.CollectedField, obj *model.TodoItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TodoItem_completed,
+		func(ctx context.Context) (any, error) {
+			return obj.Completed, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TodoItem_completed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TodoItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TodoList_completed(ctx context.Context, field graphql.CollectedField, obj *model.TodoList) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TodoList_completed,
+		func(ctx context.Context) (any, error) {
+			return obj.Completed, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TodoList_completed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TodoList",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TodoList_total(ctx context.Context, field graphql.CollectedField, obj *model.TodoList) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TodoList_total,
+		func(ctx context.Context) (any, error) {
+			return obj.Total, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TodoList_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TodoList",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TodoList_items(ctx context.Context, field graphql.CollectedField, obj *model.TodoList) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TodoList_items,
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		ec.marshalNTodoItem2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTodoItemᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TodoList_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TodoList",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "text":
+				return ec.fieldContext_TodoItem_text(ctx, field)
+			case "completed":
+				return ec.fieldContext_TodoItem_completed(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TodoItem", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -15944,6 +16196,8 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "todoList":
+			out.Values[i] = ec._SessionCard_todoList(ctx, field, obj)
 		case "attachments":
 			out.Values[i] = ec._SessionCard_attachments(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -16442,6 +16696,99 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
+}
+
+var todoItemImplementors = []string{"TodoItem"}
+
+func (ec *executionContext) _TodoItem(ctx context.Context, sel ast.SelectionSet, obj *model.TodoItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, todoItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TodoItem")
+		case "text":
+			out.Values[i] = ec._TodoItem_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "completed":
+			out.Values[i] = ec._TodoItem_completed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var todoListImplementors = []string{"TodoList"}
+
+func (ec *executionContext) _TodoList(ctx context.Context, sel ast.SelectionSet, obj *model.TodoList) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, todoListImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TodoList")
+		case "completed":
+			out.Values[i] = ec._TodoList_completed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "total":
+			out.Values[i] = ec._TodoList_total(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "items":
+			out.Values[i] = ec._TodoList_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
 }
 
 var workflowConditionImplementors = []string{"WorkflowCondition"}
@@ -18094,6 +18441,32 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
+func (ec *executionContext) marshalNTodoItem2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTodoItemᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TodoItem) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTodoItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTodoItem(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTodoItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTodoItem(ctx context.Context, sel ast.SelectionSet, v *model.TodoItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TodoItem(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx context.Context, v any) (graphql.Upload, error) {
 	res, err := graphql.UnmarshalUpload(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -18671,6 +19044,13 @@ func (ec *executionContext) marshalOTime2ᚖtimeᚐTime(ctx context.Context, sel
 	_ = ctx
 	res := graphql.MarshalTime(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOTodoList2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTodoList(ctx context.Context, sel ast.SelectionSet, v *model.TodoList) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TodoList(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOWorkflowCondition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowCondition(ctx context.Context, sel ast.SelectionSet, v *model.WorkflowCondition) graphql.Marshaler {
