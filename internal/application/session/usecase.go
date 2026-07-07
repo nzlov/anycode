@@ -1964,6 +1964,13 @@ func mapOrEmpty(payload map[string]any) map[string]any {
 	return payload
 }
 
+func firstPayload(payloads []map[string]any) map[string]any {
+	if len(payloads) == 0 {
+		return nil
+	}
+	return payloads[0]
+}
+
 func isWorkflowJSONRetryPrompt(prompt string) bool {
 	return strings.Contains(prompt, "ANYCODE_WORKFLOW_JSON_RETRY")
 }
@@ -2027,7 +2034,14 @@ func (s *Service) executeWorkflowMerge(ctx context.Context, session domain.Sessi
 		if s.questions != nil {
 			return s.askMergeFailure(ctx, session, advance, result, code)
 		}
-		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, code, result.FailureReason)
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, code, result.FailureReason, mergeOutput(result))
+	}
+	return s.completeWorkflowMergeNode(ctx, session, advance, result)
+}
+
+func (s *Service) completeWorkflowMergeNode(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, result gitdiffdomain.MergeResult) (DTO, error) {
+	if advance.NodeRunID == nil {
+		return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, nil, apperror.CodeMergeFailed, "merge node run id is missing")
 	}
 	next, err := s.workflows.CompleteNode(ctx, domain.WorkflowNodeCompleteInput{
 		WorkflowRunID: advance.WorkflowRunID,
@@ -2179,7 +2193,7 @@ func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questio
 		_, err := s.StopSession(ctx, session.ID)
 		return err
 	case "fail_node":
-		_, err := s.handleWorkflowNodeFailure(ctx, session, workflowRunID, &nodeRunID, code, reason)
+		_, err := s.handleWorkflowNodeFailure(ctx, session, workflowRunID, &nodeRunID, code, reason, mergeFailureOutputFromMetadata(metadata))
 		return err
 	default:
 		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported merge failure action").
@@ -2187,13 +2201,37 @@ func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questio
 	}
 }
 
+func mergeFailureOutputFromMetadata(metadata map[string]any) map[string]any {
+	result := gitdiffdomain.MergeResult{
+		Strategy:       stringFromMap(metadata, "strategy"),
+		BaseBranch:     stringFromMap(metadata, "baseBranch"),
+		WorktreeBranch: stringFromMap(metadata, "worktreeBranch"),
+		BaseCommit:     stringFromMap(metadata, "baseCommit"),
+		HeadCommit:     stringFromMap(metadata, "headCommit"),
+		MergeCommit:    stringFromMap(metadata, "mergeCommit"),
+		Status:         stringFromMap(metadata, "status"),
+		FailureCode:    stringFromMap(metadata, "failureCode"),
+		FailureReason:  stringFromMap(metadata, "failureReason"),
+	}
+	if result.Status == "" {
+		result.Status = "failed"
+	}
+	return mergeOutput(result)
+}
+
 func mergeFailureQuestionMetadata(advance domain.WorkflowAdvance, result gitdiffdomain.MergeResult, code string) map[string]any {
 	metadata := map[string]any{
-		"kind":          "merge_failure_action",
-		"workflowRunId": string(advance.WorkflowRunID),
-		"strategy":      result.Strategy,
-		"failureCode":   code,
-		"failureReason": result.FailureReason,
+		"kind":           "merge_failure_action",
+		"workflowRunId":  string(advance.WorkflowRunID),
+		"strategy":       result.Strategy,
+		"baseBranch":     result.BaseBranch,
+		"worktreeBranch": result.WorktreeBranch,
+		"baseCommit":     result.BaseCommit,
+		"headCommit":     result.HeadCommit,
+		"mergeCommit":    result.MergeCommit,
+		"status":         result.Status,
+		"failureCode":    code,
+		"failureReason":  result.FailureReason,
 	}
 	if advance.NodeRunID != nil {
 		metadata["nodeRunId"] = string(*advance.NodeRunID)
@@ -2285,11 +2323,13 @@ func mergeOutput(result gitdiffdomain.MergeResult) map[string]any {
 			"headCommit":     result.HeadCommit,
 			"mergeCommit":    result.MergeCommit,
 			"status":         result.Status,
+			"failureCode":    result.FailureCode,
+			"failureReason":  result.FailureReason,
 		},
 	}
 }
 
-func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.Session, workflowRunID domain.WorkflowRunID, nodeRunID *domain.NodeRunID, code string, message string) (DTO, error) {
+func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.Session, workflowRunID domain.WorkflowRunID, nodeRunID *domain.NodeRunID, code string, message string, output ...map[string]any) (DTO, error) {
 	if s.workflows == nil || nodeRunID == nil {
 		session.Status = domain.StatusFailed
 		session.UpdatedAt = s.now()
@@ -2303,6 +2343,7 @@ func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.
 		NodeRunID:     *nodeRunID,
 		Code:          code,
 		Message:       message,
+		Output:        firstPayload(output),
 	})
 	if err != nil {
 		_ = s.workflows.MarkStartFailed(ctx, domain.WorkflowStartFailureInput{

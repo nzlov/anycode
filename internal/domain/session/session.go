@@ -274,6 +274,7 @@ type WorkflowNodeFailInput struct {
 	NodeRunID     NodeRunID
 	Code          string
 	Message       string
+	Output        map[string]any
 }
 
 type WorkflowNodeCompleteInput struct {

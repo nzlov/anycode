@@ -115,6 +115,7 @@ func (s *Service) GetDefinition(ctx context.Context, id domain.DefinitionID) (De
 	if err != nil {
 		return DefinitionDTO{}, err
 	}
+	definition.Graph = completeSystemOutputFields(definition.Graph)
 	return toDefinitionDTO(definition), nil
 }
 
@@ -136,7 +137,8 @@ func (s *Service) SaveDefinition(ctx context.Context, input SaveDefinitionInput)
 	if name == "" {
 		return DefinitionDTO{}, workflowValidationError("workflow definition name is required")
 	}
-	if err := validateGraph(input.Graph); err != nil {
+	graph := completeSystemOutputFields(input.Graph)
+	if err := validateGraph(graph); err != nil {
 		return DefinitionDTO{}, workflowValidationError(err.Error())
 	}
 	id, err := s.generateID()
@@ -149,7 +151,7 @@ func (s *Service) SaveDefinition(ctx context.Context, input SaveDefinitionInput)
 		ProjectID: input.ProjectID,
 		Name:      name,
 		Version:   1,
-		Graph:     input.Graph,
+		Graph:     graph,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -196,6 +198,56 @@ func validateGraph(graph domain.Graph) error {
 		}
 	}
 	return nil
+}
+
+func completeSystemOutputFields(graph domain.Graph) domain.Graph {
+	nodes := make([]domain.Node, 0, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		node.OutputFields = completeNodeOutputFields(node)
+		nodes = append(nodes, node)
+	}
+	return domain.Graph{Nodes: nodes, Edges: append([]domain.Edge(nil), graph.Edges...)}
+}
+
+func completeNodeOutputFields(node domain.Node) []domain.OutputField {
+	fields := append([]domain.OutputField(nil), node.OutputFields...)
+	if requiresApproval(node) {
+		fields = ensureOutputField(fields, domain.OutputField{
+			Key:         "approval.approved",
+			Description: "Whether the human approval passed.",
+			ValueType:   "boolean",
+		})
+	}
+	if mergeRequest(node) != nil {
+		fields = ensureOutputField(fields, domain.OutputField{
+			Key:         "merge.status",
+			Description: "Merge result status.",
+			ValueType:   "string",
+		})
+		fields = ensureOutputField(fields, domain.OutputField{
+			Key:         "merge.failureCode",
+			Description: "Merge failure code when the merge did not complete.",
+			ValueType:   "string",
+		})
+		fields = ensureOutputField(fields, domain.OutputField{
+			Key:         "merge.failureReason",
+			Description: "Merge failure reason when the merge did not complete.",
+			ValueType:   "string",
+		})
+	}
+	return fields
+}
+
+func ensureOutputField(fields []domain.OutputField, required domain.OutputField) []domain.OutputField {
+	for index, field := range fields {
+		if strings.TrimSpace(field.Key) == required.Key {
+			fields[index].Key = required.Key
+			fields[index].Description = required.Description
+			fields[index].ValueType = required.ValueType
+			return fields
+		}
+	}
+	return append(fields, required)
 }
 
 func (s *Service) ActivateDefinition(ctx context.Context, id domain.DefinitionID) error {
@@ -670,7 +722,7 @@ func (s *Service) FailNode(ctx context.Context, input sessiondomain.WorkflowNode
 	return s.failNode(ctx, run, domain.NodeRunID(input.NodeRunID), domain.NodeFailure{
 		Code:    strings.TrimSpace(input.Code),
 		Message: strings.TrimSpace(input.Message),
-	})
+	}, input.Output)
 }
 
 func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any) (sessiondomain.WorkflowAdvance, error) {
@@ -797,7 +849,7 @@ func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID do
 	return advance, nil
 }
 
-func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, failure domain.NodeFailure) (sessiondomain.WorkflowAdvance, error) {
+func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, failure domain.NodeFailure, output map[string]any) (sessiondomain.WorkflowAdvance, error) {
 	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
@@ -814,12 +866,7 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run is on node run %q, not %q", nodeRun.ID, nodeRunID)
 	}
 	now := s.now()
-	failureOutput := map[string]any{
-		"failure": map[string]any{
-			"code":    failure.Code,
-			"message": failure.Message,
-		},
-	}
+	failureOutput := failureNodeOutput(failure, output)
 	failedNodeRun := domain.NodeRun{
 		ID:            nodeRun.ID,
 		WorkflowRunID: run.ID,
@@ -882,6 +929,19 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 		return sessiondomain.WorkflowAdvance{}, err
 	}
 	return advance, nil
+}
+
+func failureNodeOutput(failure domain.NodeFailure, output map[string]any) map[string]any {
+	failureOutput := map[string]any{
+		"failure": map[string]any{
+			"code":    failure.Code,
+			"message": failure.Message,
+		},
+	}
+	for key, value := range output {
+		failureOutput[key] = value
+	}
+	return failureOutput
 }
 
 func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt int, now time.Time, updateCurrentNode bool) (domain.NodeRun, sessiondomain.WorkflowAdvance, error) {

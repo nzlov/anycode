@@ -507,6 +507,10 @@ func TestWorkflowMergeNodeFailureRecordsAndFailsCurrentNode(t *testing.T) {
 	if workflows.failInput.NodeRunID != "node-run-merge" || workflows.failInput.Code != "dirty_worktree" {
 		t.Fatalf("fail input = %#v", workflows.failInput)
 	}
+	mergeOutput, ok := workflows.failInput.Output["merge"].(map[string]any)
+	if !ok || mergeOutput["status"] != "failed" || mergeOutput["failureCode"] != "dirty_worktree" || mergeOutput["failureReason"] != "worktree has uncommitted changes" {
+		t.Fatalf("merge output = %#v", workflows.failInput.Output)
+	}
 	if len(repo.mergeRecords) != 1 || repo.mergeRecords[0].Status != "failed" || repo.mergeRecords[0].FailureCode != "dirty_worktree" {
 		t.Fatalf("merge records = %#v", repo.mergeRecords)
 	}
@@ -798,6 +802,10 @@ func TestHandleQuestionBatchAnsweredFailsMergeNode(t *testing.T) {
 	}
 	if workflows.failInput.NodeRunID != nodeRunID || workflows.failInput.Code != "dirty_worktree" {
 		t.Fatalf("fail input = %#v", workflows.failInput)
+	}
+	mergeOutput, ok := workflows.failInput.Output["merge"].(map[string]any)
+	if !ok || mergeOutput["status"] != "failed" || mergeOutput["failureCode"] != "dirty_worktree" || mergeOutput["failureReason"] != "worktree has uncommitted changes" {
+		t.Fatalf("merge output = %#v", workflows.failInput.Output)
 	}
 }
 

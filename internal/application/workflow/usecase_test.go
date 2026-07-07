@@ -163,6 +163,109 @@ func TestSaveDefinitionRejectsInvalidCondition(t *testing.T) {
 	}
 }
 
+func TestSaveDefinitionCompletesSystemNodeOutputFields(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	service := New(repo)
+	service.generateID = func() (string, error) { return "workflow-1", nil }
+
+	got, err := service.SaveDefinition(ctx, SaveDefinitionInput{
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{
+					ID:   "approve",
+					Type: "approval",
+					OutputFields: []domain.OutputField{{
+						Key:         "customNote",
+						Description: "审批备注",
+						ValueType:   "string",
+					}, {
+						Key:         "approval.approved",
+						Description: "user supplied",
+						ValueType:   "unsupported",
+					}},
+				},
+				{ID: "merge", Type: "merge"},
+			},
+			Edges: []domain.Edge{{From: "approve", To: "merge"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SaveDefinition() error = %v", err)
+	}
+
+	approve := got.Graph.Nodes[0]
+	if !hasOutputField(approve.OutputFields, "approval.approved", "boolean") || !hasOutputField(approve.OutputFields, "customNote", "string") {
+		t.Fatalf("approval output fields = %#v", approve.OutputFields)
+	}
+	merge := got.Graph.Nodes[1]
+	if !hasOutputField(merge.OutputFields, "merge.status", "string") ||
+		!hasOutputField(merge.OutputFields, "merge.failureCode", "string") ||
+		!hasOutputField(merge.OutputFields, "merge.failureReason", "string") {
+		t.Fatalf("merge output fields = %#v", merge.OutputFields)
+	}
+
+	saved := repo.definitions["workflow-1"]
+	if !hasOutputField(saved.Graph.Nodes[0].OutputFields, "approval.approved", "boolean") ||
+		!hasOutputField(saved.Graph.Nodes[1].OutputFields, "merge.status", "string") ||
+		!hasOutputField(saved.Graph.Nodes[1].OutputFields, "merge.failureCode", "string") ||
+		!hasOutputField(saved.Graph.Nodes[1].OutputFields, "merge.failureReason", "string") {
+		t.Fatalf("saved graph = %#v", saved.Graph)
+	}
+}
+
+func TestGetDefinitionCompletesSystemNodeOutputFields(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{ID: "approve", Type: "approval"},
+				{ID: "legacy-approve", Type: "manual_approval"},
+				{ID: "approval-config", Type: "codex", Approval: domain.ApprovalConfig{BeforeRun: true}},
+				{ID: "merge", Type: "merge"},
+				{ID: "merge-config", Merge: &domain.MergeConfig{Strategy: "rebase"}},
+			},
+			Edges: []domain.Edge{
+				{From: "approve", To: "legacy-approve"},
+				{From: "legacy-approve", To: "approval-config"},
+				{From: "approval-config", To: "merge"},
+				{From: "merge", To: "merge-config"},
+			},
+		},
+	}
+	service := New(repo)
+
+	got, err := service.GetDefinition(ctx, "workflow-1")
+	if err != nil {
+		t.Fatalf("GetDefinition() error = %v", err)
+	}
+	if !hasOutputField(got.Graph.Nodes[0].OutputFields, "approval.approved", "boolean") {
+		t.Fatalf("approval output fields = %#v", got.Graph.Nodes[0].OutputFields)
+	}
+	if !hasOutputField(got.Graph.Nodes[1].OutputFields, "approval.approved", "boolean") {
+		t.Fatalf("manual approval output fields = %#v", got.Graph.Nodes[1].OutputFields)
+	}
+	if !hasOutputField(got.Graph.Nodes[2].OutputFields, "approval.approved", "boolean") {
+		t.Fatalf("approval config output fields = %#v", got.Graph.Nodes[2].OutputFields)
+	}
+	if !hasOutputField(got.Graph.Nodes[3].OutputFields, "merge.status", "string") ||
+		!hasOutputField(got.Graph.Nodes[3].OutputFields, "merge.failureCode", "string") ||
+		!hasOutputField(got.Graph.Nodes[3].OutputFields, "merge.failureReason", "string") {
+		t.Fatalf("merge output fields = %#v", got.Graph.Nodes[3].OutputFields)
+	}
+	if !hasOutputField(got.Graph.Nodes[4].OutputFields, "merge.status", "string") ||
+		!hasOutputField(got.Graph.Nodes[4].OutputFields, "merge.failureCode", "string") ||
+		!hasOutputField(got.Graph.Nodes[4].OutputFields, "merge.failureReason", "string") {
+		t.Fatalf("merge config output fields = %#v", got.Graph.Nodes[4].OutputFields)
+	}
+}
+
 func TestStartForSessionWaitsWhenStartNodeRequiresApproval(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -690,6 +793,74 @@ func TestFailNodeUsesFailureBranchAfterRetriesExhausted(t *testing.T) {
 	}
 }
 
+func TestFailNodeUsesProvidedOutputForFailureBranchContext(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{ID: "merge", Type: "merge", Title: "Merge"},
+				{ID: "repair", Type: "codex", Title: "Repair merge"},
+			},
+			Edges: []domain.Edge{{
+				From:      "merge",
+				To:        "repair",
+				Condition: domain.Condition{Field: "results.merge.status", Op: "eq", Value: "failed"},
+			}},
+		},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "merge",
+		Context:              domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-merge", WorkflowRunID: "workflow-run-1", NodeID: "merge", Status: domain.NodeRunning, Attempt: 1}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-repair", nil }
+
+	got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-merge",
+		Code:          "dirty_worktree",
+		Message:       "worktree has uncommitted changes",
+		Output: map[string]any{
+			"merge": map[string]any{
+				"status":        "failed",
+				"failureCode":   "dirty_worktree",
+				"failureReason": "worktree has uncommitted changes",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("FailNode() error = %v", err)
+	}
+	if !got.RequiresCodex || got.NodeRunID == nil || *got.NodeRunID != "node-run-repair" || got.CurrentNodeID != "repair" {
+		t.Fatalf("FailNode() = %#v", got)
+	}
+	if repo.nodeRuns[0].Status != domain.NodeFailed || len(repo.nodeRuns) != 2 || repo.nodeRuns[1].NodeID != "repair" {
+		t.Fatalf("node runs = %#v", repo.nodeRuns)
+	}
+	results, ok := repo.runs[0].Context.Values["results"].(map[string]any)
+	if !ok {
+		t.Fatalf("results context = %#v", repo.runs[0].Context.Values)
+	}
+	merge, ok := results["merge"].(map[string]any)
+	if !ok || merge["status"] != "failed" || merge["failureCode"] != "dirty_worktree" {
+		t.Fatalf("merge context = %#v", repo.runs[0].Context.Values)
+	}
+	failure, ok := results["failure"].(map[string]any)
+	if !ok || failure["code"] != "dirty_worktree" || failure["message"] != "worktree has uncommitted changes" {
+		t.Fatalf("failure context = %#v", repo.runs[0].Context.Values)
+	}
+}
+
 func TestFailNodeBlocksWhenNoFailureBranchMatches(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -996,6 +1167,15 @@ type fakeRepository struct {
 
 func newFakeRepository() *fakeRepository {
 	return &fakeRepository{definitions: map[domain.DefinitionID]domain.Definition{}}
+}
+
+func hasOutputField(fields []domain.OutputField, key string, valueType string) bool {
+	for _, field := range fields {
+		if field.Key == key && field.ValueType == valueType {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *fakeRepository) SaveDefinition(_ context.Context, definition domain.Definition) error {
