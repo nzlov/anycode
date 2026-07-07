@@ -323,6 +323,11 @@ type SessionConfigInput struct {
 	PermissionMode  *string `json:"permissionMode,omitempty"`
 }
 
+type UpdateSessionConfigInput struct {
+	SessionID string              `json:"sessionId"`
+	Config    *SessionConfigInput `json:"config"`
+}
+
 type SessionDetail struct {
 	ID               string               `json:"id"`
 	ProjectID        string               `json:"projectId"`

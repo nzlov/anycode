@@ -2154,7 +2154,54 @@ func TestAppendPromptValidatesAndPersists(t *testing.T) {
 	}
 
 	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "   "}); err == nil {
-		t.Fatal("AppendPrompt() expected body error")
+		t.Fatal("AppendPrompt() expected content error")
+	}
+}
+
+func TestAppendPromptArchivesStagedAttachmentsWithBody(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusWaitingApproval,
+	}
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
+		ID:          "staged-1",
+		Filename:    "notes.txt",
+		Path:        "/attachments/staged/staged-1/notes.txt",
+		MimeType:    "text/plain",
+		Size:        12,
+		Previewable: false,
+	}
+	files := newFakeAttachmentStore()
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "append-1", nil }
+
+	got, err := service.AppendPrompt(ctx, AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "   ",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	if got.Body != "追加附件" || repo.appends[0].Body != "追加附件" {
+		t.Fatalf("attachment-only append body = DTO %q persisted %q", got.Body, repo.appends[0].Body)
+	}
+	if !files.promoted["staged-1"] {
+		t.Fatalf("staged attachment was not promoted")
+	}
+	if _, ok := repo.stagedAttachments["staged-1"]; ok {
+		t.Fatalf("staged attachment was not deleted")
+	}
+	attachment, ok := repo.sessionAttachments["staged-1"]
+	if !ok {
+		t.Fatalf("session attachment was not saved")
+	}
+	if attachment.SessionID != "session-1" || attachment.Filename != "notes.txt" {
+		t.Fatalf("session attachment = %#v", attachment)
 	}
 }
 
@@ -2417,6 +2464,49 @@ func TestAppendPromptRejectsClosedSession(t *testing.T) {
 	}
 	if len(repo.appends) != 0 {
 		t.Fatalf("closed session appends = %d, want 0", len(repo.appends))
+	}
+}
+
+func TestUpdateSessionConfigPersistsTrimmedConfig(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusStopped,
+		Config: domain.Config{
+			CodexModel:      "gpt-old",
+			ReasoningEffort: "low",
+			PermissionMode:  "read-only",
+		},
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.now = func() time.Time { return time.Unix(25, 0).UTC() }
+
+	got, err := service.UpdateSessionConfig(ctx, UpdateSessionConfigInput{
+		SessionID: "session-1",
+		Config: domain.Config{
+			CodexModel:      " gpt-5.4-mini ",
+			ReasoningEffort: " high ",
+			PermissionMode:  " workspace-write ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateSessionConfig() error = %v", err)
+	}
+	want := domain.Config{
+		CodexModel:      "gpt-5.4-mini",
+		ReasoningEffort: "high",
+		PermissionMode:  "workspace-write",
+	}
+	if !reflect.DeepEqual(got.Config, want) {
+		t.Fatalf("Config = %#v, want %#v", got.Config, want)
+	}
+	if !reflect.DeepEqual(repo.sessions["session-1"].Config, want) {
+		t.Fatalf("saved config = %#v, want %#v", repo.sessions["session-1"].Config, want)
+	}
+	if !repo.sessions["session-1"].UpdatedAt.Equal(time.Unix(25, 0).UTC()) {
+		t.Fatalf("UpdatedAt = %v", repo.sessions["session-1"].UpdatedAt)
 	}
 }
 
@@ -3918,6 +4008,11 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 		Status:         domain.StatusStopped,
 		CodexSessionID: "codex-session-1",
 		WorktreePath:   "/workspace/session-1",
+		Config: domain.Config{
+			CodexModel:      "gpt-5.4",
+			ReasoningEffort: "high",
+			PermissionMode:  "workspace-write",
+		},
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
@@ -3934,6 +4029,9 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	}
 	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.ProcessRunID != "process-run-2" {
 		t.Fatalf("codex resume input = %#v", codex.resumeInput)
+	}
+	if codex.resumeInput.Model != "gpt-5.4" || codex.resumeInput.ReasoningEffort != "high" || codex.resumeInput.PermissionMode != "workspace-write" {
+		t.Fatalf("codex resume config = %#v", codex.resumeInput)
 	}
 }
 

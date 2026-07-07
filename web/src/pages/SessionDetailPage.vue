@@ -23,6 +23,12 @@
         </q-card>
 
         <div class="detail-composer">
+          <q-banner v-if="detailError" rounded class="detail-error-banner">
+            <template #avatar>
+              <q-icon name="error_outline" />
+            </template>
+            {{ detailError }}
+          </q-banner>
           <q-card v-if="isWaitingForAnswer" flat bordered class="detail-answer-card">
             <q-card-section class="detail-answer-card__header">
               <div>
@@ -55,7 +61,6 @@
             v-model:effort="composerEffort"
             v-model:permission="composerPermission"
             compact
-            readonly-config
             :show-badge="false"
             title="追加描述"
             placeholder="追加描述，发送给当前会话"
@@ -411,6 +416,7 @@ import { deleteStagedAttachment, stageAttachment } from '@/services/attachments'
 import { getSessionDiff } from '@/services/diff';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffFile, DiffLineKind, FileDiff, SessionDiff } from '@/services/diff';
+import { mergeShellEvents } from '@/services/sessionEventPresentation';
 import type { QuestionAnswerInput, SessionMode, SessionStatus } from '@/services/sessions';
 
 const route = useRoute();
@@ -422,6 +428,7 @@ const appendUploading = ref(false);
 const composerModel = ref(firstCodexModelValue());
 const composerEffort = ref(normalizeReasoningEffort(composerModel.value, ''));
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
+const composerConfigReady = ref(false);
 const tab = ref('info');
 const diff = ref<SessionDiff | null>(null);
 const diffLoading = ref(false);
@@ -442,14 +449,17 @@ const {
   resuming,
   stopping,
   closing,
+  updatingConfig,
   questionsLoading,
   questionsSubmitting,
+  error: detailError,
   loadSessionDetail,
   appendDescription,
   startSession,
   resumeSession,
   stopSession,
   closeSession: closeSessionRequest,
+  updateConfig,
   loadPendingQuestions,
   loadOlderEvents,
   submitPendingAnswers,
@@ -465,6 +475,15 @@ const isWaitingForAnswer = computed(
   () =>
     !isClosed.value && (session.value?.pendingQuestion || session.value?.status === 'waiting_user'),
 );
+const composerConfigDirty = computed(() => {
+  const current = session.value;
+  if (!current) return false;
+  return (
+    current.config.codexModel !== composerModel.value ||
+    current.config.reasoningEffort !== composerEffort.value ||
+    current.config.permissionMode !== composerPermission.value
+  );
+});
 type StreamEntry = SessionEventMessageEntry;
 
 const streamEntries = computed<StreamEntry[]>(() => {
@@ -502,7 +521,7 @@ const streamEntries = computed<StreamEntry[]>(() => {
     const diff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
     return diff === 0 ? left.id.localeCompare(right.id) : diff;
   });
-  return dedupeStreamEntries(sortedEntries);
+  return mergeShellEvents(dedupeStreamEntries(sortedEntries));
 });
 const composerAction = computed(() => {
   const current = session.value;
@@ -513,8 +532,8 @@ const composerAction = computed(() => {
       icon: 'send',
       color: 'primary',
       tooltip: '发送追加描述',
-      loading: appendUploading.value || appending.value,
-      disabled: appendUploading.value || stopping.value,
+      loading: appendUploading.value || appending.value || updatingConfig.value,
+      disabled: appendUploading.value || stopping.value || updatingConfig.value,
       run: sendAppend,
     };
   }
@@ -542,20 +561,30 @@ const composerAction = computed(() => {
     return {
       icon: 'play_arrow',
       color: 'positive',
-      tooltip: '强制运行',
-      loading: starting.value,
-      disabled: appending.value || resuming.value || stopping.value,
-      run: startSession,
+      tooltip: composerConfigDirty.value ? '应用配置并运行' : '强制运行',
+      loading: starting.value || updatingConfig.value,
+      disabled: appending.value || resuming.value || stopping.value || updatingConfig.value,
+      run: startWithComposerConfig,
     };
   }
   if (canResume.value) {
     return {
       icon: 'restart_alt',
       color: 'primary',
-      tooltip: '恢复会话',
-      loading: resuming.value,
-      disabled: appending.value || starting.value || stopping.value,
-      run: resumeSession,
+      tooltip: composerConfigDirty.value ? '应用配置并恢复' : '恢复会话',
+      loading: resuming.value || updatingConfig.value,
+      disabled: appending.value || starting.value || stopping.value || updatingConfig.value,
+      run: resumeWithComposerConfig,
+    };
+  }
+  if (composerConfigDirty.value) {
+    return {
+      icon: 'save',
+      color: 'primary',
+      tooltip: '应用模型和思考强度',
+      loading: updatingConfig.value,
+      disabled: appending.value || starting.value || resuming.value || stopping.value,
+      run: saveComposerConfig,
     };
   }
   return {
@@ -818,6 +847,7 @@ async function sendAppend() {
   let phase: 'upload' | 'append' = selectedFiles.length > 0 ? 'upload' : 'append';
   appendUploading.value = selectedFiles.length > 0;
   try {
+    await saveComposerConfig();
     for (const file of selectedFiles) {
       const attachment = await stageAttachment(file);
       stagedAttachmentIds.push(attachment.id);
@@ -834,6 +864,27 @@ async function sendAppend() {
   } finally {
     appendUploading.value = false;
   }
+}
+
+async function startWithComposerConfig() {
+  await saveComposerConfig();
+  await startSession();
+}
+
+async function resumeWithComposerConfig() {
+  await saveComposerConfig();
+  await resumeSession();
+}
+
+async function saveComposerConfig() {
+  const current = session.value;
+  if (!current || !composerConfigDirty.value) return;
+  const config = {
+    codexModel: composerModel.value,
+    reasoningEffort: composerEffort.value,
+    permissionMode: composerPermission.value,
+  };
+  await updateConfig(config);
 }
 
 async function closeCurrentSession() {
@@ -897,10 +948,12 @@ watch(
   session,
   (value) => {
     if (!value) return;
+    if (composerConfigReady.value && composerConfigDirty.value) return;
     const nextModel = normalizeCodexModel(value.config.codexModel);
     composerModel.value = nextModel;
     composerEffort.value = normalizeReasoningEffort(nextModel, value.config.reasoningEffort);
     composerPermission.value = normalizePermissionMode(value.config.permissionMode);
+    composerConfigReady.value = true;
   },
   { immediate: true },
 );
@@ -988,6 +1041,12 @@ async function scrollEventsToBottom() {
   border: 1px solid var(--ac-border);
   color: var(--ac-text-muted);
   background: color-mix(in srgb, var(--ac-surface-muted) 82%, transparent);
+}
+
+.detail-error-banner {
+  border: 1px solid color-mix(in srgb, var(--q-negative) 38%, var(--ac-border));
+  color: var(--q-negative);
+  background: color-mix(in srgb, var(--q-negative) 8%, var(--ac-surface));
 }
 
 .event-list {

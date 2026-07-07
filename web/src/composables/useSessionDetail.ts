@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 
+import { deleteStagedAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import {
   appendPrompt,
@@ -16,6 +17,8 @@ import {
   type QuestionBatch,
   type PageInfo,
   stopSession as stopSessionRequest,
+  updateSessionConfig,
+  type SessionConfigInput,
   type SessionDetailData,
 } from '@/services/sessions';
 
@@ -33,6 +36,7 @@ export function useSessionDetail(sessionId: string) {
   const resuming = ref(false);
   const stopping = ref(false);
   const closing = ref(false);
+  const updatingConfig = ref(false);
   const questionsLoading = ref(false);
   const questionsSubmitting = ref(false);
   const pendingQuestionBatches = ref<QuestionBatch[]>([]);
@@ -68,7 +72,9 @@ export function useSessionDetail(sessionId: string) {
       await appendPrompt(sessionId, appendBody, stagedAttachmentIds);
       await loadSessionDetail();
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '追加描述失败';
+      const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
+      const message = err instanceof Error ? err.message : '追加描述失败';
+      error.value = cleanupError ? `${message}；${cleanupError}` : message;
       throw err;
     } finally {
       appending.value = false;
@@ -99,6 +105,22 @@ export function useSessionDetail(sessionId: string) {
       throw err;
     } finally {
       closing.value = false;
+    }
+  }
+
+  async function updateConfig(config: SessionConfigInput) {
+    updatingConfig.value = true;
+    error.value = '';
+    try {
+      const next = await updateSessionConfig(sessionId, config);
+      if (session.value) {
+        session.value = { ...session.value, config: next.config, updatedAt: next.updatedAt };
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '更新会话配置失败';
+      throw err;
+    } finally {
+      updatingConfig.value = false;
     }
   }
 
@@ -260,6 +282,7 @@ export function useSessionDetail(sessionId: string) {
     resuming,
     stopping,
     closing,
+    updatingConfig,
     questionsLoading,
     questionsSubmitting,
     error,
@@ -269,6 +292,7 @@ export function useSessionDetail(sessionId: string) {
     resumeSession,
     stopSession,
     closeSession,
+    updateConfig,
     loadPendingQuestions,
     loadOlderEvents,
     submitPendingAnswers,
@@ -288,4 +312,13 @@ function mergeQuestionBatch(existing: QuestionBatch[], batch: QuestionBatch) {
   const next = existing.filter((item) => item.id !== batch.id);
   next.push(batch);
   return next;
+}
+
+async function cleanupStagedAttachments(ids: string[]) {
+  if (ids.length === 0) return '';
+  const results = await Promise.allSettled(ids.map((id) => deleteStagedAttachment(id)));
+  const failed = results.find((result) => result.status === 'rejected');
+  if (!failed || failed.status !== 'rejected') return '';
+  const reason = failed.reason instanceof Error ? failed.reason.message : String(failed.reason);
+  return `已上传附件清理失败：${reason}`;
 }

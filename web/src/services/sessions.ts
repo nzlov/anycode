@@ -1,4 +1,5 @@
 import { graphqlFetch, graphqlSubscribe } from '@/services/graphqlClient';
+import { codexCommandResultBody } from '@/services/sessionEventPresentation';
 
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
@@ -172,6 +173,12 @@ export interface CreateSessionInput {
     permissionMode?: string;
   };
   stagedAttachmentIds?: string[];
+}
+
+export interface SessionConfigInput {
+  codexModel: string;
+  reasoningEffort: string;
+  permissionMode: string;
 }
 
 interface GraphQLPageInfo {
@@ -562,7 +569,10 @@ export function subscribePendingQuestionBatches(
 }
 
 export async function appendPrompt(sessionId: string, body: string, stagedAttachmentIds?: string[]) {
-  const input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } = { sessionId, body };
+  const input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } = {
+    sessionId,
+    body,
+  };
   if (stagedAttachmentIds && stagedAttachmentIds.length > 0) {
     input.stagedAttachmentIds = stagedAttachmentIds;
   }
@@ -638,6 +648,26 @@ export async function updateSessionPriority(sessionId: string, priority: Session
     variables: { input: { sessionId, priority } },
   });
   return normalizeSession(data.setSessionPriority);
+}
+
+export async function updateSessionConfig(sessionId: string, config: SessionConfigInput) {
+  const data = await graphqlFetch<
+    { updateSessionConfig: GraphQLSession },
+    { input: { sessionId: string; config: SessionConfigInput } }
+  >({
+    query: `
+      mutation UpdateSessionConfig($input: UpdateSessionConfigInput!) {
+        updateSessionConfig(input: $input) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { input: { sessionId, config } },
+  });
+  return {
+    config: data.updateSessionConfig.config,
+    updatedAt: formatSessionTime(data.updateSessionConfig.lastRunAt ?? data.updateSessionConfig.updatedAt),
+  };
 }
 
 export async function startSession(sessionId: string, force = false) {
@@ -925,7 +955,6 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   const output = stringPayload(item, 'aggregated_output');
   const text = stringPayload(item, 'text') || stringPayload(payload, 'text');
   const command = stringPayload(item, 'command');
-  const exitCode = numberPayload(item, 'exit_code');
   const processExitCode = numberPayload(payload, 'exitCode');
   const failure = stringPayload(payload, 'failureReason');
 
@@ -949,9 +978,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
-      const prefix =
-        exitCode === null || exitCode === 0 ? '命令完成' : `命令完成，退出码 ${exitCode}`;
-      return { title: '命令结果', body: [prefix, output].filter(Boolean).join('\n') };
+      return { title: '命令结果', body: codexCommandResultBody(item) };
     }
     if (itemType === 'agent_message') {
       return { title: '模型输出', body: output || text || compactPayload(item) };

@@ -285,6 +285,75 @@ func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestMutationUpdateSessionConfigForwardsUseCase(t *testing.T) {
+	now := time.Unix(32, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		updateConfigResult: sessionapp.DTO{
+			ID:          "session-1",
+			ProjectID:   "project-1",
+			Requirement: "resume work",
+			Mode:        "chat",
+			Status:      "stopped",
+			Config: sessiondomain.Config{
+				CodexModel:      "gpt-5.4-mini",
+				ReasoningEffort: "high",
+				PermissionMode:  "workspace-write",
+			},
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.UpdateSessionConfig(context.Background(), model.UpdateSessionConfigInput{
+		SessionID: "session-1",
+		Config: &model.SessionConfigInput{
+			CodexModel:      strPtr("gpt-5.4-mini"),
+			ReasoningEffort: strPtr("high"),
+			PermissionMode:  strPtr("workspace-write"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateSessionConfig() error = %v", err)
+	}
+	if sessions.gotUpdateConfig.SessionID != "session-1" {
+		t.Fatalf("UpdateSessionConfig() input = %#v", sessions.gotUpdateConfig)
+	}
+	if sessions.gotUpdateConfig.Config.CodexModel != "gpt-5.4-mini" || sessions.gotUpdateConfig.Config.ReasoningEffort != "high" || sessions.gotUpdateConfig.Config.PermissionMode != "workspace-write" {
+		t.Fatalf("UpdateSessionConfig() config = %#v", sessions.gotUpdateConfig.Config)
+	}
+	if got.ID != "session-1" || got.Config.CodexModel != "gpt-5.4-mini" {
+		t.Fatalf("UpdateSessionConfig() = %#v", got)
+	}
+}
+
+func TestMutationAppendPromptForwardsStagedAttachmentIDs(t *testing.T) {
+	sessions := &fakeSessionUseCase{
+		appendResult: sessionapp.PromptAppendDTO{
+			ID:        "append-1",
+			SessionID: "session-1",
+			Body:      "continue",
+			CreatedAt: time.Unix(33, 0).UTC(),
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.AppendPrompt(context.Background(), model.AppendPromptInput{
+		SessionID:           "session-1",
+		Body:                "continue",
+		StagedAttachmentIds: []string{"staged-1", "staged-2"},
+	})
+	if err != nil {
+		t.Fatalf("AppendPrompt() error = %v", err)
+	}
+	if got.ID != "append-1" {
+		t.Fatalf("AppendPrompt() = %#v", got)
+	}
+	if len(sessions.gotAppend.StagedAttachmentIDs) != 2 || sessions.gotAppend.StagedAttachmentIDs[0] != "staged-1" || sessions.gotAppend.StagedAttachmentIDs[1] != "staged-2" {
+		t.Fatalf("AppendPrompt() staged ids = %#v", sessions.gotAppend.StagedAttachmentIDs)
+	}
+}
+
 func TestSubscriptionPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 	source := make(chan questionapp.BatchDTO, 1)
 	source <- questionapp.BatchDTO{
@@ -519,12 +588,16 @@ func (f *fakeQuestionUseCase) PendingQuestionBatches(_ context.Context, sessionI
 
 type fakeSessionUseCase struct {
 	sessionapp.UseCase
-	gotAnswered   questionapp.BatchDTO
-	answeredCalls int
-	err           error
-	gotResumeID   sessiondomain.ID
-	resumeResult  sessionapp.DTO
-	stopProjectID sessiondomain.ProjectID
+	gotAnswered        questionapp.BatchDTO
+	answeredCalls      int
+	err                error
+	gotResumeID        sessiondomain.ID
+	resumeResult       sessionapp.DTO
+	stopProjectID      sessiondomain.ProjectID
+	gotUpdateConfig    sessionapp.UpdateSessionConfigInput
+	updateConfigResult sessionapp.DTO
+	gotAppend          sessionapp.AppendPromptInput
+	appendResult       sessionapp.PromptAppendDTO
 }
 
 func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batch questionapp.BatchDTO) error {
@@ -546,4 +619,18 @@ func (f *fakeSessionUseCase) ResumeSessionWithOptions(_ context.Context, id sess
 func (f *fakeSessionUseCase) StopProjectSessions(_ context.Context, projectID sessiondomain.ProjectID) (int, error) {
 	f.stopProjectID = projectID
 	return 1, f.err
+}
+
+func (f *fakeSessionUseCase) AppendPrompt(_ context.Context, input sessionapp.AppendPromptInput) (sessionapp.PromptAppendDTO, error) {
+	f.gotAppend = input
+	return f.appendResult, f.err
+}
+
+func (f *fakeSessionUseCase) UpdateSessionConfig(_ context.Context, input sessionapp.UpdateSessionConfigInput) (sessionapp.DTO, error) {
+	f.gotUpdateConfig = input
+	return f.updateConfigResult, f.err
+}
+
+func strPtr(value string) *string {
+	return &value
 }

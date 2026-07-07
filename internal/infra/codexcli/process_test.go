@@ -86,11 +86,14 @@ pwd > "$CODEX_PWD_FILE"
 	t.Setenv("CODEX_PWD_FILE", pwdFile)
 
 	handle, err := New(bin).Resume(context.Background(), process.CodexResumeInput{
-		ProcessRunID:   "process-run-2",
-		SessionID:      "session-1",
-		CodexSessionID: "codex-session-1",
-		Workdir:        dir,
-		Prompt:         "next node",
+		ProcessRunID:    "process-run-2",
+		SessionID:       "session-1",
+		CodexSessionID:  "codex-session-1",
+		Workdir:         dir,
+		Prompt:          "next node",
+		Model:           "gpt-test",
+		ReasoningEffort: "high",
+		PermissionMode:  "danger-full-access",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +104,8 @@ pwd > "$CODEX_PWD_FILE"
 	waitForFile(t, argsFile)
 	waitForFile(t, pwdFile)
 
-	if args := strings.TrimSpace(readFile(t, argsFile)); args != "exec resume --json --skip-git-repo-check codex-session-1 next node" {
+	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" --sandbox danger-full-access codex-session-1 next node`
+	if args := strings.TrimSpace(readFile(t, argsFile)); args != wantArgs {
 		t.Fatalf("args = %q", args)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {

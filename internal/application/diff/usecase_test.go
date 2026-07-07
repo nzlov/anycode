@@ -79,7 +79,7 @@ func TestGetSessionDiffReadsSelectedFile(t *testing.T) {
 	if got.Files.Total != 2 || len(got.Files.Items) != 1 || got.Files.NextCursor != "2" {
 		t.Fatalf("GetSessionDiff() files page = %#v", got.Files)
 	}
-	if diffPort.lastBaseRef != "main" || diffPort.lastWorktreePath != "/repo" {
+	if diffPort.lastBaseRef != "main..." || diffPort.lastWorktreePath != "/repo" {
 		t.Fatalf("diff input path/base = %q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef)
 	}
 }
@@ -105,8 +105,8 @@ func TestGetSessionDiffFallsBackToFirstFileWhenSelectedFileIsMissing(t *testing.
 	if got.FilePath != "a.go" || got.FileDiff == nil || got.FileDiff.File.Path != "a.go" {
 		t.Fatalf("GetSessionDiff() fallback = filePath %q diff %#v", got.FilePath, got.FileDiff)
 	}
-	if diffPort.lastBaseRef != "HEAD" {
-		t.Fatalf("empty session base branch used %q, want HEAD", diffPort.lastBaseRef)
+	if diffPort.lastBaseRef != "HEAD..." {
+		t.Fatalf("empty session base branch used %q, want HEAD...", diffPort.lastBaseRef)
 	}
 }
 

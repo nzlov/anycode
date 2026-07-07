@@ -16,7 +16,12 @@
 
     <template v-else-if="!isTool">
       <div class="event-message__content">
-        <div v-if="isConversation" class="event-message__body">
+        <div
+          v-if="event.kind === 'assistant'"
+          class="event-message__body event-message__body--markdown"
+          v-html="assistantHtml"
+        />
+        <div v-else-if="isConversation" class="event-message__body">
           {{ event.body || event.title }}
         </div>
         <div v-else class="event-status__body">
@@ -30,6 +35,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+
+import { renderMarkdown } from '@/services/sessionEventPresentation';
 
 export interface SessionEventMessageEntry {
   id: string;
@@ -45,7 +52,7 @@ const props = defineProps<{
   event: SessionEventMessageEntry;
 }>();
 
-const expanded = ref(false);
+const expanded = ref(props.event.title.startsWith('Shell '));
 const isTool = computed(() => props.event.kind === 'tool');
 const isConversation = computed(() =>
   ['user', 'assistant', 'question', 'thought'].includes(props.event.kind),
@@ -56,10 +63,9 @@ const messageClass = computed(() => ({
   'session-event-message--assistant': props.event.kind === 'assistant',
   'session-event-message--status': props.event.kind === 'status',
 }));
+const assistantHtml = computed(() => renderMarkdown(props.event.body || props.event.title));
 const toolTitle = computed(() => {
-  const firstLine = props.event.body.split('\n').find((line) => line.trim())?.trim() ?? '';
-  if (props.event.title === '执行命令' && firstLine) return `Shell ${firstLine}`;
-  if (props.event.title === '命令结果') return 'Shell result';
+  if (props.event.title.startsWith('Shell ')) return props.event.title;
   return `Shell ${props.event.title}`;
 });
 </script>
@@ -97,6 +103,47 @@ const toolTitle = computed(() => {
   word-break: break-word;
 }
 
+.event-message__body--markdown :deep(p),
+.event-message__body--markdown :deep(ul),
+.event-message__body--markdown :deep(pre) {
+  margin: 0 0 8px;
+}
+
+.event-message__body--markdown {
+  white-space: normal;
+}
+
+.event-message__body--markdown :deep(p:last-child),
+.event-message__body--markdown :deep(ul:last-child),
+.event-message__body--markdown :deep(pre:last-child) {
+  margin-bottom: 0;
+}
+
+.event-message__body--markdown :deep(ul) {
+  padding-left: 20px;
+}
+
+.event-message__body--markdown :deep(code) {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--ac-surface-muted);
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 0.92em;
+}
+
+.event-message__body--markdown :deep(pre) {
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface-muted);
+}
+
+.event-message__body--markdown :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
 .event-status__body {
   color: var(--ac-text-muted);
   font-size: 13px;
@@ -130,9 +177,9 @@ const toolTitle = computed(() => {
 .event-tool__header span {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .event-tool__header time {
@@ -161,7 +208,8 @@ const toolTitle = computed(() => {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   font-size: 12px;
   line-height: 1.6;
-  white-space: pre;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 @media (max-width: 699px) {

@@ -148,6 +148,7 @@ type ComplexityRoot struct {
 		StopSession                func(childComplexity int, id string) int
 		SubmitQuestionBatch        func(childComplexity int, input model.SubmitQuestionBatchInput) int
 		SubmitWorkflowApproval     func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
+		UpdateSessionConfig        func(childComplexity int, input model.UpdateSessionConfigInput) int
 	}
 
 	PageInfo struct {
@@ -421,6 +422,7 @@ type MutationResolver interface {
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
 	SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error)
+	UpdateSessionConfig(ctx context.Context, input model.UpdateSessionConfigInput) (*model.Session, error)
 	StartSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	StopSession(ctx context.Context, id string) (*model.Session, error)
 	ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error)
@@ -902,6 +904,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetSessionPriority(childComplexity, args["input"].(model.SetSessionPriorityInput)), true
+	case "Mutation.updateSessionConfig":
+		if e.ComplexityRoot.Mutation.UpdateSessionConfig == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateSessionConfig_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateSessionConfig(childComplexity, args["input"].(model.UpdateSessionConfigInput)), true
 	case "Mutation.stageAttachment":
 		if e.ComplexityRoot.Mutation.StageAttachment == nil {
 			break
@@ -2267,6 +2280,7 @@ type Mutation {
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
+  updateSessionConfig(input: UpdateSessionConfigInput!): Session!
   startSession(id: ID!, force: Boolean): Session!
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
@@ -2674,6 +2688,11 @@ input SetSessionPriorityInput {
   priority: String!
 }
 
+input UpdateSessionConfigInput {
+  sessionId: ID!
+  config: SessionConfigInput!
+}
+
 input AppendPromptInput {
   sessionId: ID!
   body: String!
@@ -2937,6 +2956,17 @@ func (ec *executionContext) field_Mutation_setSessionPriority_args(ctx context.C
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSetSessionPriorityInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetSessionPriorityInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateSessionConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4996,6 +5026,79 @@ func (ec *executionContext) fieldContext_Mutation_setSessionPriority(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_setSessionPriority_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateSessionConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateSessionConfig,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateSessionConfig(ctx, fc.Args["input"].(model.UpdateSessionConfigInput))
+		},
+		nil,
+		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateSessionConfig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Session_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_Session_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_Session_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Session_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_Session_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_Session_config(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_Session_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_Session_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateSessionConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -13797,6 +13900,43 @@ func (ec *executionContext) unmarshalInputSessionConfigInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateSessionConfigInput(ctx context.Context, obj any) (model.UpdateSessionConfigInput, error) {
+	var it model.UpdateSessionConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "config"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "config":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
+			data, err := ec.unmarshalNSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Config = &data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, obj any) (model.SessionDiffInput, error) {
 	var it model.SessionDiffInput
 	if obj == nil {
@@ -15200,6 +15340,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "setSessionPriority":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setSessionPriority(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateSessionConfig":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateSessionConfig(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -17658,6 +17805,16 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 func (ec *executionContext) unmarshalNAppendPromptInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppendPromptInput(ctx context.Context, v any) (model.AppendPromptInput, error) {
 	res, err := ec.unmarshalInputAppendPromptInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx context.Context, v any) (model.SessionConfigInput, error) {
+	res, err := ec.unmarshalInputSessionConfigInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput(ctx context.Context, v any) (model.UpdateSessionConfigInput, error) {
+	res, err := ec.unmarshalInputUpdateSessionConfigInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

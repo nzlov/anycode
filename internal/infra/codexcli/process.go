@@ -194,6 +194,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
 	args = c.appendMCPArgs(args, input.SessionID)
+	args = appendConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode)
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}

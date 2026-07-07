@@ -71,6 +71,65 @@ func TestChangedFilesAndFileDiff(t *testing.T) {
 	}
 }
 
+func TestChangedFilesThreeDotUsesMergeBaseForLiveWorktree(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	runGit(t, repo, "switch", "-c", "session-1")
+	writeFile(t, repo, "work.txt", "work\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "work")
+	runGit(t, repo, "switch", "main")
+	writeFile(t, repo, "main-only.txt", "main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "main only")
+	runGit(t, repo, "switch", "session-1")
+	writeFile(t, repo, "scratch.txt", "scratch\n")
+
+	files, err := New("").ChangedFiles(ctx, gitdiff.DiffInput{WorktreePath: repo, BaseRef: "main..."})
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if findFile(files, "main-only.txt").Path != "" {
+		t.Fatalf("ChangedFiles() included base branch only file: %#v", files)
+	}
+	if findFile(files, "work.txt").Status != "added" {
+		t.Fatalf("work.txt missing from files: %#v", files)
+	}
+	if findFile(files, "scratch.txt").Status != "added" {
+		t.Fatalf("scratch.txt missing from files: %#v", files)
+	}
+}
+
+func TestChangedFilesThreeDotIncludesTrackedWorktreeChanges(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	writeFile(t, repo, "tracked.txt", "old\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	runGit(t, repo, "switch", "-c", "session-1")
+	runGit(t, repo, "switch", "main")
+	writeFile(t, repo, "main-only.txt", "main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "main only")
+	runGit(t, repo, "switch", "session-1")
+	writeFile(t, repo, "tracked.txt", "new\n")
+
+	files, err := New("").ChangedFiles(ctx, gitdiff.DiffInput{WorktreePath: repo, BaseRef: "main..."})
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if findFile(files, "main-only.txt").Path != "" {
+		t.Fatalf("ChangedFiles() included base branch only file: %#v", files)
+	}
+	if findFile(files, "tracked.txt").Status != "modified" {
+		t.Fatalf("tracked worktree change missing from files: %#v", files)
+	}
+}
+
 func TestMergeToBaseFastForwardsBaseBranch(t *testing.T) {
 	ctx := context.Background()
 	repo := initRepo(t)

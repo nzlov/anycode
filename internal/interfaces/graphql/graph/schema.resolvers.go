@@ -109,6 +109,21 @@ func (r *mutationResolver) SetSessionPriority(ctx context.Context, input model.S
 	return mapSession(dto), nil
 }
 
+// UpdateSessionConfig is the resolver for the updateSessionConfig field.
+func (r *mutationResolver) UpdateSessionConfig(ctx context.Context, input model.UpdateSessionConfigInput) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.UpdateSessionConfig(ctx, sessionapp.UpdateSessionConfigInput{
+		SessionID: sessiondomain.ID(input.SessionID),
+		Config:    buildSessionConfig(input.Config),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // StartSession is the resolver for the startSession field.
 func (r *mutationResolver) StartSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {

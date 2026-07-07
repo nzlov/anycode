@@ -88,7 +88,10 @@ func (c *Client) Abort(ctx context.Context, worktreePath string) error {
 }
 
 func (c *Client) ChangedFiles(ctx context.Context, input gitdiff.DiffInput) ([]gitdiff.DiffFile, error) {
-	refs := diffRefs(input)
+	refs, err := c.diffRefs(ctx, input)
+	if err != nil {
+		return nil, err
+	}
 	nameStatusArgs := append([]string{"diff", "--name-status"}, refs...)
 	nameStatusArgs = append(nameStatusArgs, "--")
 	nameStatus, err := c.run(ctx, input.WorktreePath, nameStatusArgs...)
@@ -252,7 +255,10 @@ func (c *Client) FileDiff(ctx context.Context, input gitdiff.FileDiffInput) (git
 	if strings.TrimSpace(input.FilePath) == "" {
 		return gitdiff.FileDiff{}, errors.New("file path is required")
 	}
-	refs := diffRefs(input.DiffInput)
+	refs, err := c.diffRefs(ctx, input.DiffInput)
+	if err != nil {
+		return gitdiff.FileDiff{}, err
+	}
 	if stats, ok, err := c.fileStats(ctx, input.DiffInput, input.FilePath); err != nil {
 		return gitdiff.FileDiff{}, err
 	} else if ok {
@@ -565,12 +571,36 @@ func normalizedBaseRef(baseRef string) string {
 	return baseRef
 }
 
-func diffRefs(input gitdiff.DiffInput) []string {
-	refs := []string{normalizedBaseRef(input.BaseRef)}
+func (c *Client) diffRefs(ctx context.Context, input gitdiff.DiffInput) ([]string, error) {
+	baseRef, err := c.diffBaseRef(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	refs := []string{baseRef}
 	if headRef := strings.TrimSpace(input.HeadRef); headRef != "" {
 		refs = append(refs, headRef)
 	}
-	return refs
+	return refs, nil
+}
+
+func (c *Client) diffBaseRef(ctx context.Context, input gitdiff.DiffInput) (string, error) {
+	baseRef := normalizedBaseRef(input.BaseRef)
+	if !strings.HasSuffix(baseRef, "...") {
+		return baseRef, nil
+	}
+	baseRef = strings.TrimSpace(strings.TrimSuffix(baseRef, "..."))
+	if baseRef == "" {
+		baseRef = "HEAD"
+	}
+	headRef := strings.TrimSpace(input.HeadRef)
+	if headRef == "" {
+		headRef = "HEAD"
+	}
+	out, err := c.run(ctx, input.WorktreePath, "merge-base", baseRef, headRef)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
 }
 
 func classify(err error, stderr string) string {

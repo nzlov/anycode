@@ -83,11 +83,14 @@ type CodexStartInput struct {
 }
 
 type CodexResumeInput struct {
-	ProcessRunID   RunID
-	SessionID      SessionID
-	CodexSessionID string
-	Workdir        string
-	Prompt         string
+	ProcessRunID    RunID
+	SessionID       SessionID
+	CodexSessionID  string
+	Workdir         string
+	Prompt          string
+	Model           string
+	ReasoningEffort string
+	PermissionMode  string
 }
 
 type CodexHandle struct {

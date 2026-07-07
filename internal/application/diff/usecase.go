@@ -131,13 +131,9 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 		return dto, nil
 	}
 
-	baseRef := strings.TrimSpace(sess.BaseBranch)
-	if baseRef == "" {
-		baseRef = "HEAD"
-	}
 	diffInput := gitdiff.DiffInput{
 		WorktreePath: strings.TrimSpace(sess.WorktreePath),
-		BaseRef:      baseRef,
+		BaseRef:      liveWorktreeBaseRef(sess.BaseBranch),
 	}
 	files, err := s.diff.ChangedFiles(ctx, diffInput)
 	if err != nil {
@@ -319,17 +315,24 @@ func (s *Service) branchSessionDiffSources(ctx context.Context, sess session.Ses
 	if worktreePath == "" {
 		return nil, map[string]branchDiffSource{}, nil
 	}
-	baseRef := strings.TrimSpace(sess.BaseBranch)
-	if baseRef == "" {
-		baseRef = "HEAD"
-	}
-	diffInput := gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: baseRef}
+	diffInput := gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: liveWorktreeBaseRef(sess.BaseBranch)}
 	files, err := s.diff.ChangedFiles(ctx, diffInput)
 	if err != nil {
 		return nil, nil, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list branch session changed files failed").WithRetryable(true)
 	}
 	prefixed, sources := prefixBranchDiff(sess.ID, files, nil, &diffInput)
 	return prefixed, sources, nil
+}
+
+func liveWorktreeBaseRef(baseBranch string) string {
+	baseRef := strings.TrimSpace(baseBranch)
+	if baseRef == "" {
+		baseRef = "HEAD"
+	}
+	if strings.Contains(baseRef, "...") {
+		return baseRef
+	}
+	return baseRef + "..."
 }
 
 func prefixBranchDiff(sessionID session.ID, files []gitdiff.DiffFile, hunks []gitdiff.FileDiff, input *gitdiff.DiffInput) ([]gitdiff.DiffFile, map[string]branchDiffSource) {

@@ -23,6 +23,7 @@ type Mutation {
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
+  updateSessionConfig(input: UpdateSessionConfigInput!): Session!
   startSession(id: ID!, force: Boolean): Session!
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
@@ -428,6 +429,11 @@ input CloseSessionInput {
 input SetSessionPriorityInput {
   sessionId: ID!
   priority: String!
+}
+
+input UpdateSessionConfigInput {
+  sessionId: ID!
+  config: SessionConfigInput!
 }
 
 input AppendPromptInput {

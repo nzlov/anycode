@@ -37,6 +37,7 @@ type UseCase interface {
 	ResumeSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error)
 	DrainQueuedSessions(ctx context.Context) (int, error)
 	CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error)
+	UpdateSessionConfig(ctx context.Context, input UpdateSessionConfigInput) (DTO, error)
 	MarkWaitingUser(ctx context.Context, id domain.ID) (DTO, error)
 	MarkRunningAfterUserWait(ctx context.Context, id domain.ID) (DTO, error)
 	AppendPrompt(ctx context.Context, input AppendPromptInput) (PromptAppendDTO, error)
@@ -70,6 +71,11 @@ type CloseSessionInput struct {
 type SetSessionPriorityInput struct {
 	SessionID domain.ID
 	Priority  domain.Priority
+}
+
+type UpdateSessionConfigInput struct {
+	SessionID domain.ID
+	Config    domain.Config
 }
 
 type AppendPromptInput struct {
@@ -795,6 +801,46 @@ func (s *Service) setSessionPriority(ctx context.Context, input SetSessionPriori
 	session.UpdatedAt = s.now()
 	if err := s.saveSessionWithEvent(ctx, session, "session.priority_changed", map[string]any{
 		"priority": string(session.Priority),
+	}); err != nil {
+		return DTO{}, err
+	}
+	return toDTO(session), nil
+}
+
+func (s *Service) UpdateSessionConfig(ctx context.Context, input UpdateSessionConfigInput) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+		var err error
+		dto, err = s.updateSessionConfig(ctx, input)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) updateSessionConfig(ctx context.Context, input UpdateSessionConfigInput) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	if input.SessionID == "" {
+		return DTO{}, errors.New("session id is required")
+	}
+	config := trimConfig(input.Config)
+	if config.CodexModel == "" || config.ReasoningEffort == "" || config.PermissionMode == "" {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session config is incomplete")
+	}
+	session, err := s.repo.Find(ctx, input.SessionID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find session: %w", err)
+	}
+	if session.Status == domain.StatusClosed {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session config cannot be changed")
+	}
+	session.Config = config
+	session.UpdatedAt = s.now()
+	if err := s.saveSessionWithEvent(ctx, session, "session.config_changed", map[string]any{
+		"codexModel":      session.Config.CodexModel,
+		"reasoningEffort": session.Config.ReasoningEffort,
+		"permissionMode":  session.Config.PermissionMode,
 	}); err != nil {
 		return DTO{}, err
 	}
@@ -1642,11 +1688,14 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	}
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
-			ProcessRunID:   runID,
-			SessionID:      processdomain.SessionID(session.ID),
-			CodexSessionID: options.resumeCodexSessionID,
-			Workdir:        session.WorktreePath,
-			Prompt:         prompt,
+			ProcessRunID:    runID,
+			SessionID:       processdomain.SessionID(session.ID),
+			CodexSessionID:  options.resumeCodexSessionID,
+			Workdir:         session.WorktreePath,
+			Prompt:          prompt,
+			Model:           strings.TrimSpace(session.Config.CodexModel),
+			ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
+			PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
 		})
 	}
 	return s.codex.Start(ctx, processdomain.CodexStartInput{
