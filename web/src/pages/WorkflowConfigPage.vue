@@ -54,7 +54,7 @@
       <q-card flat bordered class="workflow-canvas">
         <q-card-section class="workflow-canvas__header">
           <q-input v-model="workflowName" dense outlined label="流程名称" />
-          <q-chip dense outline color="primary">滚轮缩放 · 拖动画布平移</q-chip>
+          <q-chip dense outline color="primary">滚轮缩放 · 左键框选 · Ctrl 多选</q-chip>
         </q-card-section>
         <div
           class="workflow-canvas-board"
@@ -72,6 +72,9 @@
             :nodes-draggable="true"
             :nodes-connectable="true"
             :elements-selectable="true"
+            :multi-selection-key-code="flowInteraction.multiSelectionKeyCode"
+            :selection-key-code="flowInteraction.selectionKeyCode"
+            :pan-on-drag="flowInteraction.panOnDrag"
             @node-click="handleFlowNodeClick"
             @edge-click="handleFlowEdgeClick"
             @node-drag-stop="handleFlowNodeDragStop"
@@ -256,7 +259,15 @@ import {
   type WorkflowOutputField,
 } from '@/services/workflows';
 import { completeOutputFields, systemOutputFields, workflowValueTypeOptions } from '@/services/workflowOutputFields.js';
-import { buildFlowEdge, buildFlowNode, clientPointToFlowPoint, syncWorkflowNodePositions, workflowEdgeId } from '@/services/workflowFlowModel.js';
+import {
+  applyWorkflowEdgeForm,
+  buildFlowEdge,
+  buildFlowNode,
+  clientPointToFlowPoint,
+  syncWorkflowNodePositions,
+  workflowEdgeId,
+  workflowFlowInteractionProps,
+} from '@/services/workflowFlowModel.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -287,6 +298,7 @@ const conditionExpr = ref('results.status == "passed"');
 const flowNodes = ref<ReturnType<typeof buildFlowNode>[]>([]);
 const flowEdges = ref<ReturnType<typeof buildFlowEdge>[]>([]);
 const graph = reactive<WorkflowGraph>(defaultGraph());
+const flowInteraction = workflowFlowInteractionProps();
 const { fitView: fitFlowView, project: projectFlowPoint } = useVueFlow('workflow-config-flow');
 
 const nodeTypeOptions = ['codex', 'expr', 'approval', 'merge', 'close'];
@@ -380,7 +392,7 @@ async function fitFlowToGraph() {
 }
 
 function selectNode(id: string) {
-  applyNodeEdit();
+  applyCurrentEdits();
   selectedNodeId.value = id;
   loadSelectedNode();
 }
@@ -556,6 +568,7 @@ function applyCurrentEdits() {
 }
 
 function handleFlowConnect(connection: Connection) {
+  applyCurrentEdits();
   if (!connection.source || !connection.target || connection.source === connection.target) return;
   const exists = graph.edges.some((edge) => edge.from === connection.source && edge.to === connection.target);
   if (!exists) {
@@ -584,7 +597,7 @@ function deleteEdge(index: number) {
 }
 
 function selectEdge(index: number) {
-  applyNodeEdit();
+  applyCurrentEdits();
   selectedEdgeIndex.value = index;
   loadSelectedEdge();
 }
@@ -617,22 +630,13 @@ function loadSelectedEdge() {
 function applyEdgeEdit() {
   const edge = selectedEdge.value;
   if (!edge) return;
-  edge.priority = Number(edgePriority.value) || 0;
-  if (conditionMode.value === 'always') {
-    edge.condition = normalizeCondition(undefined);
-    refreshFlowElements();
-    return;
-  }
-  if (conditionMode.value === 'expr') {
-    edge.condition = normalizeCondition({ mode: 'expr', expr: conditionExpr.value.trim() });
-    refreshFlowElements();
-    return;
-  }
-  edge.condition = normalizeCondition({
-    mode: 'field',
+  applyWorkflowEdgeForm(edge, {
+    priority: edgePriority.value,
+    mode: conditionMode.value,
     field: conditionField.value,
     op: conditionOp.value,
     value: conditionInputToValue(conditionValue.value),
+    expr: conditionExpr.value,
   });
   refreshFlowElements();
 }

@@ -44,6 +44,33 @@ export function clientPointToFlowPoint(event, bounds, projectPoint) {
   return projectPoint(localPoint);
 }
 
+export function applyWorkflowEdgeForm(edge, form) {
+  if (!edge) return;
+  edge.priority = Number(form.priority) || 0;
+  if (form.mode === 'always') {
+    edge.condition = normalizeWorkflowCondition(undefined);
+    return;
+  }
+  if (form.mode === 'expr') {
+    edge.condition = normalizeWorkflowCondition({ mode: 'expr', expr: String(form.expr ?? '').trim() });
+    return;
+  }
+  edge.condition = normalizeWorkflowCondition({
+    mode: 'field',
+    field: form.field,
+    op: form.op,
+    value: form.value,
+  });
+}
+
+export function workflowFlowInteractionProps() {
+  return {
+    multiSelectionKeyCode: 'Control',
+    selectionKeyCode: true,
+    panOnDrag: [1, 2],
+  };
+}
+
 export function workflowEdgeId(edge) {
   return `${edge.from}->${edge.to}:${edge.priority}`;
 }
@@ -52,4 +79,17 @@ function edgeCaption(edge) {
   if (edge.condition?.mode === 'expr') return `priority ${edge.priority} · expr`;
   if (!edge.condition?.field && !edge.condition?.op) return `priority ${edge.priority} · always`;
   return `priority ${edge.priority} · ${edge.condition.field} ${edge.condition.op}`;
+}
+
+function normalizeWorkflowCondition(condition) {
+  return {
+    mode: String(condition?.mode ?? (condition?.expr ? 'expr' : 'field')),
+    field: String(condition?.field ?? ''),
+    op: String(condition?.op ?? ''),
+    value: condition?.value,
+    expr: String(condition?.expr ?? ''),
+    all: condition?.all ?? [],
+    any: condition?.any ?? [],
+    not: condition?.not ?? null,
+  };
 }

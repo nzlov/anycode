@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  applyWorkflowEdgeForm,
   buildFlowEdge,
   buildFlowNode,
   clientPointToFlowPoint,
+  workflowFlowInteractionProps,
   syncWorkflowNodePositions,
 } from '../src/services/workflowFlowModel.js';
 
@@ -70,4 +72,42 @@ test('clientPointToFlowPoint converts mouse coordinates through the canvas bound
 
   assert.deepEqual(calls, [{ x: 310, y: 180 }]);
   assert.deepEqual(result, { x: 155, y: 90 });
+});
+
+test('applyWorkflowEdgeForm writes pending edge editor values before selecting another edge', () => {
+  const edge = {
+    from: 'implement',
+    to: 'verify',
+    priority: 0,
+    condition: { mode: 'field', field: '', op: '', value: undefined, expr: '', all: [], any: [], not: null },
+  };
+
+  applyWorkflowEdgeForm(edge, {
+    priority: 2,
+    mode: 'field',
+    field: 'results.status',
+    op: 'eq',
+    value: 'passed',
+    expr: '',
+  });
+
+  assert.equal(edge.priority, 2);
+  assert.deepEqual(edge.condition, {
+    mode: 'field',
+    field: 'results.status',
+    op: 'eq',
+    value: 'passed',
+    expr: '',
+    all: [],
+    any: [],
+    not: null,
+  });
+});
+
+test('workflowFlowInteractionProps disables plain-click multi-select and allows drag selection', () => {
+  assert.deepEqual(workflowFlowInteractionProps(), {
+    multiSelectionKeyCode: 'Control',
+    selectionKeyCode: true,
+    panOnDrag: [1, 2],
+  });
 });
