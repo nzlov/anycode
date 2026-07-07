@@ -169,6 +169,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   codexModelOptions,
   codexModelLabel,
+  defaultReasoningEffortForModel,
   normalizeCodexModel,
   normalizeReasoningEffort,
   permissionModeLabel,
@@ -229,7 +230,7 @@ const modelModel = computed({
   set: (value: string) => {
     const nextModel = normalizeCodexModel(value);
     emit('update:model', nextModel);
-    const nextEffort = normalizeReasoningEffort(nextModel, props.effort);
+    const nextEffort = defaultReasoningEffortForModel(nextModel);
     if (nextEffort !== props.effort) {
       emit('update:effort', nextEffort);
     }

@@ -60,6 +60,10 @@ export function normalizeReasoningEffort(model: string, value: string) {
   return options[0]?.value ?? '';
 }
 
+export function defaultReasoningEffortForModel(model: string) {
+  return reasoningEffortOptionsForModel(model)[0]?.value ?? '';
+}
+
 export function reasoningEffortLabel(model: string, value: string) {
   return reasoningEffortOptionsForModel(model).find((option) => option.value === value)?.label ?? (value || '-');
 }
