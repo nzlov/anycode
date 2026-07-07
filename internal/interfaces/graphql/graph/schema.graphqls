@@ -278,10 +278,16 @@ type WorkflowNode {
   type: String!
   title: String!
   prompt: String!
+  position: WorkflowNodePosition!
   outputFields: [WorkflowOutputField!]!
   approval: ApprovalConfig!
   retry: RetryConfig!
   merge: MergeConfig
+}
+
+type WorkflowNodePosition {
+  x: Float!
+  y: Float!
 }
 
 type WorkflowOutputField {
@@ -459,10 +465,16 @@ input WorkflowNodeInput {
   type: String!
   title: String!
   prompt: String
+  position: WorkflowNodePositionInput!
   outputFields: [WorkflowOutputFieldInput!]
   approval: ApprovalConfigInput
   retry: RetryConfigInput
   merge: MergeConfigInput
+}
+
+input WorkflowNodePositionInput {
+  x: Float!
+  y: Float!
 }
 
 input WorkflowOutputFieldInput {

@@ -84,9 +84,10 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 		"name":      "Smoke approval flow",
 		"graph": map[string]any{
 			"nodes": []map[string]any{{
-				"id":    "approval",
-				"type":  "approval",
-				"title": "Human approval",
+				"id":       "approval",
+				"type":     "approval",
+				"title":    "Human approval",
+				"position": map[string]any{"x": 0, "y": 0},
 			}},
 			"edges": []map[string]any{},
 		},

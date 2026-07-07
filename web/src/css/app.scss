@@ -479,12 +479,32 @@ a {
 }
 
 .workflow-layout {
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
-  align-items: start;
+  grid-template-columns: 240px minmax(0, 1fr) 340px;
+  align-items: stretch;
+  min-height: 640px;
+  height: calc(100vh - 148px);
+}
+
+.workflow-list,
+.workflow-canvas,
+.workflow-editor {
+  min-height: 0;
+}
+
+.workflow-list,
+.workflow-editor {
+  overflow: auto;
+}
+
+.workflow-canvas {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
 }
 
 .workflow-canvas__header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 12px;
 }
@@ -495,36 +515,24 @@ a {
 
 .workflow-canvas-board {
   position: relative;
-  min-height: 520px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   border-top: 1px solid var(--ac-border);
-  background-image:
-    linear-gradient(var(--ac-border) 1px, transparent 1px),
-    linear-gradient(90deg, var(--ac-border) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background: var(--ac-surface);
 }
 
-.workflow-edges {
-  position: absolute;
-  inset: 0;
+.workflow-flow {
   width: 100%;
   height: 100%;
-  pointer-events: none;
 }
 
-.workflow-edge {
-  fill: none;
+.workflow-flow .vue-flow__edge-path {
   stroke: var(--q-primary);
-  stroke-width: 2;
-  marker-end: url('#workflow-arrow');
-}
-
-.workflow-edges marker path {
-  fill: var(--q-primary);
+  stroke-width: 2px;
 }
 
 .workflow-node {
-  position: absolute;
   display: flex;
   min-height: 78px;
   gap: 12px;
@@ -535,7 +543,6 @@ a {
   border-radius: var(--ac-radius);
   color: var(--ac-text);
   background: var(--ac-surface-raised);
-  cursor: grab;
   text-align: left;
   user-select: none;
   transition:
@@ -561,30 +568,11 @@ a {
   min-width: 0;
 }
 
-.workflow-port {
-  position: absolute;
-  top: 50%;
-  display: block;
+.workflow-flow-handle {
   width: 14px;
   height: 14px;
   border: 2px solid var(--q-primary);
-  border-radius: 50%;
   background: var(--ac-surface);
-  cursor: crosshair;
-  transform: translateY(-50%);
-}
-
-.workflow-port--input {
-  left: -7px;
-}
-
-.workflow-port--output {
-  right: -7px;
-}
-
-.workflow-port--connecting,
-.workflow-port:hover {
-  background: var(--q-primary);
 }
 
 .workflow-edge-list {
@@ -601,7 +589,7 @@ a {
 
 .workflow-output-row {
   display: grid;
-  grid-template-columns: minmax(84px, 1fr) minmax(120px, 1.4fr) minmax(92px, 112px) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(84px, 96px) 32px;
   gap: 8px;
   align-items: center;
   min-width: 0;
@@ -908,6 +896,14 @@ a {
 
   .workflow-editor {
     order: 2;
+  }
+
+  .workflow-layout {
+    height: auto;
+  }
+
+  .workflow-canvas-board {
+    min-height: 560px;
   }
 }
 

@@ -371,10 +371,16 @@ type ComplexityRoot struct {
 		ID           func(childComplexity int) int
 		Merge        func(childComplexity int) int
 		OutputFields func(childComplexity int) int
+		Position     func(childComplexity int) int
 		Prompt       func(childComplexity int) int
 		Retry        func(childComplexity int) int
 		Title        func(childComplexity int) int
 		Type         func(childComplexity int) int
+	}
+
+	WorkflowNodePosition struct {
+		X func(childComplexity int) int
+		Y func(childComplexity int) int
 	}
 
 	WorkflowOutputField struct {
@@ -1924,6 +1930,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkflowNode.OutputFields(childComplexity), true
+	case "WorkflowNode.position":
+		if e.ComplexityRoot.WorkflowNode.Position == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowNode.Position(childComplexity), true
 	case "WorkflowNode.prompt":
 		if e.ComplexityRoot.WorkflowNode.Prompt == nil {
 			break
@@ -1948,6 +1960,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkflowNode.Type(childComplexity), true
+
+	case "WorkflowNodePosition.x":
+		if e.ComplexityRoot.WorkflowNodePosition.X == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowNodePosition.X(childComplexity), true
+	case "WorkflowNodePosition.y":
+		if e.ComplexityRoot.WorkflowNodePosition.Y == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkflowNodePosition.Y(childComplexity), true
 
 	case "WorkflowOutputField.description":
 		if e.ComplexityRoot.WorkflowOutputField.Description == nil {
@@ -2031,6 +2056,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputWorkflowEdgeInput,
 		ec.unmarshalInputWorkflowGraphInput,
 		ec.unmarshalInputWorkflowNodeInput,
+		ec.unmarshalInputWorkflowNodePositionInput,
 		ec.unmarshalInputWorkflowOutputFieldInput,
 	)
 	first := true
@@ -2404,10 +2430,16 @@ type WorkflowNode {
   type: String!
   title: String!
   prompt: String!
+  position: WorkflowNodePosition!
   outputFields: [WorkflowOutputField!]!
   approval: ApprovalConfig!
   retry: RetryConfig!
   merge: MergeConfig
+}
+
+type WorkflowNodePosition {
+  x: Float!
+  y: Float!
 }
 
 type WorkflowOutputField {
@@ -2585,10 +2617,16 @@ input WorkflowNodeInput {
   type: String!
   title: String!
   prompt: String
+  position: WorkflowNodePositionInput!
   outputFields: [WorkflowOutputFieldInput!]
   approval: ApprovalConfigInput
   retry: RetryConfigInput
   merge: MergeConfigInput
+}
+
+input WorkflowNodePositionInput {
+  x: Float!
+  y: Float!
 }
 
 input WorkflowOutputFieldInput {
@@ -10447,6 +10485,8 @@ func (ec *executionContext) fieldContext_WorkflowGraph_nodes(_ context.Context, 
 				return ec.fieldContext_WorkflowNode_title(ctx, field)
 			case "prompt":
 				return ec.fieldContext_WorkflowNode_prompt(ctx, field)
+			case "position":
+				return ec.fieldContext_WorkflowNode_position(ctx, field)
 			case "outputFields":
 				return ec.fieldContext_WorkflowNode_outputFields(ctx, field)
 			case "approval":
@@ -10617,6 +10657,41 @@ func (ec *executionContext) fieldContext_WorkflowNode_prompt(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _WorkflowNode_position(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowNode_position,
+		func(ctx context.Context) (any, error) {
+			return obj.Position, nil
+		},
+		nil,
+		ec.marshalNWorkflowNodePosition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowNodePosition,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowNode_position(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "x":
+				return ec.fieldContext_WorkflowNodePosition_x(ctx, field)
+			case "y":
+				return ec.fieldContext_WorkflowNodePosition_y(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkflowNodePosition", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkflowNode_outputFields(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowNode) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10750,6 +10825,64 @@ func (ec *executionContext) fieldContext_WorkflowNode_merge(_ context.Context, f
 				return ec.fieldContext_MergeConfig_strategy(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MergeConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowNodePosition_x(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowNodePosition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowNodePosition_x,
+		func(ctx context.Context) (any, error) {
+			return obj.X, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowNodePosition_x(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowNodePosition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkflowNodePosition_y(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowNodePosition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkflowNodePosition_y,
+		func(ctx context.Context) (any, error) {
+			return obj.Y, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkflowNodePosition_y(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkflowNodePosition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
 		},
 	}
 	return fc, nil
@@ -13519,7 +13652,7 @@ func (ec *executionContext) unmarshalInputWorkflowNodeInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"id", "type", "title", "prompt", "outputFields", "approval", "retry", "merge"}
+	fieldsInOrder := [...]string{"id", "type", "title", "prompt", "position", "outputFields", "approval", "retry", "merge"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13554,6 +13687,13 @@ func (ec *executionContext) unmarshalInputWorkflowNodeInput(ctx context.Context,
 				return it, err
 			}
 			it.Prompt = data
+		case "position":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("position"))
+			data, err := ec.unmarshalNWorkflowNodePositionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowNodePositionInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Position = data
 		case "outputFields":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("outputFields"))
 			data, err := ec.unmarshalOWorkflowOutputFieldInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowOutputFieldInputᚄ(ctx, v)
@@ -13582,6 +13722,43 @@ func (ec *executionContext) unmarshalInputWorkflowNodeInput(ctx context.Context,
 				return it, err
 			}
 			it.Merge = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputWorkflowNodePositionInput(ctx context.Context, obj any) (model.WorkflowNodePositionInput, error) {
+	var it model.WorkflowNodePositionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"x", "y"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "x":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("x"))
+			data, err := ec.unmarshalNFloat2float64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.X = data
+		case "y":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("y"))
+			data, err := ec.unmarshalNFloat2float64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Y = data
 		}
 	}
 	return it, nil
@@ -16238,6 +16415,11 @@ func (ec *executionContext) _WorkflowNode(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "position":
+			out.Values[i] = ec._WorkflowNode_position(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "outputFields":
 			out.Values[i] = ec._WorkflowNode_outputFields(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -16255,6 +16437,50 @@ func (ec *executionContext) _WorkflowNode(ctx context.Context, sel ast.Selection
 			}
 		case "merge":
 			out.Values[i] = ec._WorkflowNode_merge(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var workflowNodePositionImplementors = []string{"WorkflowNodePosition"}
+
+func (ec *executionContext) _WorkflowNodePosition(ctx context.Context, sel ast.SelectionSet, obj *model.WorkflowNodePosition) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, workflowNodePositionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorkflowNodePosition")
+		case "x":
+			out.Values[i] = ec._WorkflowNodePosition_x(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "y":
+			out.Values[i] = ec._WorkflowNodePosition_y(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16991,6 +17217,22 @@ func (ec *executionContext) marshalNFileDiff2ᚖgithubᚗcomᚋnzlovᚋanycode�
 	return ec._FileDiff(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNFloat2float64(ctx context.Context, v any) (float64, error) {
+	res, err := graphql.UnmarshalFloatContext(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.SelectionSet, v float64) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalFloatContext(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return graphql.WrapContextMarshaler(ctx, res)
+}
+
 func (ec *executionContext) marshalNGitBranch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGitBranchᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.GitBranch) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -17722,6 +17964,21 @@ func (ec *executionContext) unmarshalNWorkflowNodeInput2ᚕᚖgithubᚗcomᚋnzl
 
 func (ec *executionContext) unmarshalNWorkflowNodeInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowNodeInput(ctx context.Context, v any) (*model.WorkflowNodeInput, error) {
 	res, err := ec.unmarshalInputWorkflowNodeInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWorkflowNodePosition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowNodePosition(ctx context.Context, sel ast.SelectionSet, v *model.WorkflowNodePosition) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WorkflowNodePosition(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNWorkflowNodePositionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowNodePositionInput(ctx context.Context, v any) (*model.WorkflowNodePositionInput, error) {
+	res, err := ec.unmarshalInputWorkflowNodePositionInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 

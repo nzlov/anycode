@@ -33,10 +33,16 @@ type Node struct {
 	Type         string
 	Title        string
 	Prompt       string
+	Position     Position
 	OutputFields []OutputField
 	Approval     ApprovalConfig
 	Retry        RetryConfig
 	Merge        *MergeConfig
+}
+
+type Position struct {
+	X float64
+	Y float64
 }
 
 type OutputField struct {

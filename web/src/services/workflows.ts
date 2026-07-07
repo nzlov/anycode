@@ -22,6 +22,10 @@ export interface WorkflowNode {
   type: string;
   title: string;
   prompt: string;
+  position: {
+    x: number;
+    y: number;
+  };
   outputFields: WorkflowOutputField[];
   approval: {
     beforeRun: boolean;
@@ -68,6 +72,10 @@ const workflowDefinitionFields = `
       type
       title
       prompt
+      position {
+        x
+        y
+      }
       outputFields {
         key
         description

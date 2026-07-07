@@ -457,6 +457,7 @@ type WorkflowNode struct {
 	Type         string                 `json:"type"`
 	Title        string                 `json:"title"`
 	Prompt       string                 `json:"prompt"`
+	Position     *WorkflowNodePosition  `json:"position"`
 	OutputFields []*WorkflowOutputField `json:"outputFields"`
 	Approval     *ApprovalConfig        `json:"approval"`
 	Retry        *RetryConfig           `json:"retry"`
@@ -468,10 +469,21 @@ type WorkflowNodeInput struct {
 	Type         string                      `json:"type"`
 	Title        string                      `json:"title"`
 	Prompt       *string                     `json:"prompt,omitempty"`
+	Position     *WorkflowNodePositionInput  `json:"position"`
 	OutputFields []*WorkflowOutputFieldInput `json:"outputFields,omitempty"`
 	Approval     *ApprovalConfigInput        `json:"approval,omitempty"`
 	Retry        *RetryConfigInput           `json:"retry,omitempty"`
 	Merge        *MergeConfigInput           `json:"merge,omitempty"`
+}
+
+type WorkflowNodePosition struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type WorkflowNodePositionInput struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 type WorkflowOutputField struct {

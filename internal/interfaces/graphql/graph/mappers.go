@@ -308,6 +308,7 @@ func buildWorkflowGraph(input *model.WorkflowGraphInput) workflowdomain.Graph {
 			Type:         node.Type,
 			Title:        node.Title,
 			Prompt:       stringValue(node.Prompt, ""),
+			Position:     buildWorkflowNodePosition(node.Position),
 			OutputFields: buildWorkflowOutputFields(node.OutputFields),
 			Approval:     buildApprovalConfig(node.Approval),
 			Retry:        buildRetryConfig(node.Retry),
@@ -327,6 +328,13 @@ func buildWorkflowGraph(input *model.WorkflowGraphInput) workflowdomain.Graph {
 		})
 	}
 	return workflowdomain.Graph{Nodes: nodes, Edges: edges}
+}
+
+func buildWorkflowNodePosition(input *model.WorkflowNodePositionInput) workflowdomain.Position {
+	if input == nil {
+		return workflowdomain.Position{}
+	}
+	return workflowdomain.Position{X: input.X, Y: input.Y}
 }
 
 func buildApprovalConfig(input *model.ApprovalConfigInput) workflowdomain.ApprovalConfig {
@@ -405,6 +413,7 @@ func mapWorkflowGraph(graph workflowdomain.Graph) *model.WorkflowGraph {
 			Type:         node.Type,
 			Title:        node.Title,
 			Prompt:       node.Prompt,
+			Position:     &model.WorkflowNodePosition{X: node.Position.X, Y: node.Position.Y},
 			OutputFields: mapWorkflowOutputFields(node.OutputFields),
 			Approval:     &model.ApprovalConfig{BeforeRun: node.Approval.BeforeRun, AfterRun: node.Approval.AfterRun},
 			Retry:        &model.RetryConfig{MaxAttempts: node.Retry.MaxAttempts},
