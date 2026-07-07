@@ -104,7 +104,7 @@ pwd > "$CODEX_PWD_FILE"
 	waitForFile(t, argsFile)
 	waitForFile(t, pwdFile)
 
-	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" --sandbox danger-full-access codex-session-1 next node`
+	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" codex-session-1 next node`
 	if args := strings.TrimSpace(readFile(t, argsFile)); args != wantArgs {
 		t.Fatalf("args = %q", args)
 	}

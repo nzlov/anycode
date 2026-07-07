@@ -194,12 +194,22 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
 	args = c.appendMCPArgs(args, input.SessionID)
-	args = appendConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode)
+	args = appendResumeConfigArgs(args, input.Model, input.ReasoningEffort)
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}
 	if input.Prompt != "" {
 		args = append(args, input.Prompt)
+	}
+	return args
+}
+
+func appendResumeConfigArgs(args []string, model string, reasoningEffort string) []string {
+	if model != "" {
+		args = append(args, "-m", model)
+	}
+	if reasoningEffort != "" {
+		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", reasoningEffort))
 	}
 	return args
 }
