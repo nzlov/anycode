@@ -157,6 +157,34 @@ func TestCreateAndRemoveWorktree(t *testing.T) {
 	}
 }
 
+func TestCreateWorktreeFromEmptyRepositoryCreatesOrphanBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	ctx := context.Background()
+	repo := t.TempDir()
+	dataDir := t.TempDir()
+	runGit(t, repo, "init")
+
+	client := NewWorktrees(dataDir)
+	got, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "main")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	want := filepath.Join(dataDir, "worktrees", "project-1", "session-1")
+	if got != want {
+		t.Fatalf("Create() path = %q, want %q", got, want)
+	}
+	branch, err := client.CurrentBranch(ctx, got)
+	if err != nil {
+		t.Fatalf("CurrentBranch(worktree) error = %v", err)
+	}
+	if branch != "session-1" {
+		t.Fatalf("worktree branch = %q, want %q", branch, "session-1")
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)

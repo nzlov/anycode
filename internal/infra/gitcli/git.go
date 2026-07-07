@@ -162,11 +162,27 @@ func (c *Client) Create(ctx context.Context, projectPath string, projectID sessi
 	}
 	branch := strings.TrimSpace(string(sessionID))
 	args := []string{"worktree", "add", "-b", branch, path, ref}
+	hasCommits, err := c.hasCommits(ctx, projectPath)
+	if err != nil {
+		_ = os.RemoveAll(path)
+		return "", err
+	}
+	if !hasCommits {
+		args = []string{"worktree", "add", "--orphan", "-b", branch, path}
+	}
 	if _, err := c.run(ctx, projectPath, args...); err != nil {
 		_ = os.RemoveAll(path)
 		return "", err
 	}
 	return path, nil
+}
+
+func (c *Client) hasCommits(ctx context.Context, projectPath string) (bool, error) {
+	out, err := c.run(ctx, projectPath, "rev-list", "--max-count=1", "--all")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
 
 func (c *Client) Remove(ctx context.Context, path string) error {
