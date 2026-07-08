@@ -52,7 +52,7 @@ const props = defineProps<{
   event: SessionEventMessageEntry;
 }>();
 
-const expanded = ref(props.event.title.startsWith('Shell '));
+const expanded = ref(false);
 const isTool = computed(() => props.event.kind === 'tool');
 const isConversation = computed(() =>
   ['user', 'assistant', 'question', 'thought'].includes(props.event.kind),

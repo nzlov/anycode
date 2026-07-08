@@ -15,9 +15,11 @@ import (
 const defaultBin = "codex"
 
 type Client struct {
-	bin          string
-	mcpBaseURL   string
-	mcpAuthToken string
+	bin             string
+	mcpBaseURL      string
+	mcpStdioCommand string
+	mcpStdioSocket  string
+	mcpAuthToken    string
 }
 
 type Option func(*Client)
@@ -49,6 +51,14 @@ func (e *ProbeError) Unwrap() error {
 func WithMCP(baseURL string, authToken string) Option {
 	return func(c *Client) {
 		c.mcpBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+		c.mcpAuthToken = authToken
+	}
+}
+
+func WithMCPStdio(command string, socket string, authToken string) Option {
+	return func(c *Client) {
+		c.mcpStdioCommand = strings.TrimSpace(command)
+		c.mcpStdioSocket = strings.TrimSpace(socket)
 		c.mcpAuthToken = authToken
 	}
 }

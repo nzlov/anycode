@@ -32,11 +32,8 @@ test('mergeShellEvents keeps command and result in one tool entry with complete 
   const merged = mergeShellEvents(events);
 
   assert.equal(merged.length, 1);
-  assert.equal(
-    merged[0].title,
-    "Shell [redacted_path] -lc 'git ls-tree -r --name-only HEAD | head -300'",
-  );
-  assert.match(merged[0].body, /命令\n\[redacted_path\] -lc/);
+  assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
+  assert.match(merged[0].body, /命令\ngit ls-tree -r --name-only HEAD \| head -300/);
   assert.match(merged[0].body, /结果\nweb\/src\/pages\/SessionDetailPage\.vue/);
 });
 
@@ -75,12 +72,28 @@ test('mergeShellEvents pairs command and result across non-tool status events', 
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-1:result-1');
-  assert.equal(
-    merged[0].title,
-    "Shell [redacted_path] -lc 'git ls-tree -r --name-only HEAD | head -300'",
-  );
+  assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
   assert.match(merged[0].body, /结果\n命令完成\nweb\/src\/pages\/SessionDetailPage\.vue/);
   assert.equal(merged[1].id, 'status-1');
+});
+
+test('mergeShellEvents normalizes shell wrapper commands with escaped spaces', () => {
+  const events = [
+    {
+      id: 'run-1',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'git diff -- \"docs/plan/a file.md\"'",
+      createdAt: '2026-07-07T01:00:00Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged[0].title, 'Shell git diff -- "docs/plan/a file.md"');
+  assert.equal(merged[0].body, '命令\ngit diff -- "docs/plan/a file.md"');
 });
 
 test('renderMarkdown formats assistant markdown and escapes raw html', () => {

@@ -108,6 +108,22 @@ function numberValue(value) {
   return typeof value === 'number' ? value : null;
 }
 
+function shellCommandDisplay(value) {
+  const command = String(value || '').trim();
+  const shell = /^(?:\[redacted_path\]|(?:\S*\/)?(?:bash|sh|zsh))\s+-lc\s+([\s\S]+)$/.exec(command);
+  if (!shell) return command;
+  return unquoteShellArgument(shell[1].trim());
+}
+
+function unquoteShellArgument(value) {
+  if (value.length < 2) return value;
+  const quote = value[0];
+  if ((quote !== "'" && quote !== '"') || value[value.length - 1] !== quote) return value;
+  const inner = value.slice(1, -1);
+  if (quote === "'") return inner.replace(/'\\''/g, "'");
+  return inner.replace(/\\(["\\$`])/g, '$1');
+}
+
 function isCommandEvent(event) {
   return event?.kind === 'tool' && event.title === '执行命令';
 }
@@ -125,7 +141,7 @@ export function mergeShellEvents(events) {
     const resultIndex = findShellResultIndex(events, index + 1);
     const next = resultIndex === -1 ? null : events[resultIndex];
     if (isCommandEvent(event) && next) {
-      const command = event.body.trim();
+      const command = shellCommandDisplay(event.body);
       const result = next.body.trim();
       merged.push({
         ...event,
@@ -138,7 +154,7 @@ export function mergeShellEvents(events) {
       continue;
     }
     if (isCommandEvent(event)) {
-      const command = event.body.trim();
+      const command = shellCommandDisplay(event.body);
       merged.push({
         ...event,
         title: command ? `Shell ${command}` : 'Shell',

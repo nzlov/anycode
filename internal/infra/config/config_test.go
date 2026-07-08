@@ -25,3 +25,12 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 		t.Fatalf("AgentMaxConcurrent = %d", got.AgentMaxConcurrent)
 	}
 }
+
+func TestLoadFromEnvReadsAgentMaxConcurrent(t *testing.T) {
+	t.Setenv("ANYCODE_AGENT_MAX_CONCURRENT", "3")
+
+	got := LoadFromEnv()
+	if got.AgentMaxConcurrent != 3 {
+		t.Fatalf("AgentMaxConcurrent = %d", got.AgentMaxConcurrent)
+	}
+}

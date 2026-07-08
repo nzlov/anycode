@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,6 +23,13 @@ func TestLocalHTTPBaseURL(t *testing.T) {
 		if got := localHTTPBaseURL(input); got != want {
 			t.Fatalf("localHTTPBaseURL(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestLocalMCPSocketPathUsesTempDir(t *testing.T) {
+	want := filepath.Join(os.TempDir(), fmt.Sprintf("anycode-%d", os.Getuid()), "mcp.sock")
+	if got := localMCPSocketPath(); got != want {
+		t.Fatalf("localMCPSocketPath() = %q, want %q", got, want)
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -179,7 +181,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 		args = append(args, "-C", input.Workdir)
 	}
 	args = c.appendMCPArgs(args, input.SessionID)
-	args = appendConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode)
+	args = c.appendConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode)
 	for _, path := range input.ImagePaths {
 		if path != "" {
 			args = append(args, "-i", path)
@@ -215,7 +217,22 @@ func appendResumeConfigArgs(args []string, model string, reasoningEffort string)
 }
 
 func (c *Client) appendMCPArgs(args []string, sessionID process.SessionID) []string {
-	if c == nil || c.mcpBaseURL == "" || sessionID == "" {
+	if c == nil || sessionID == "" {
+		return args
+	}
+	if c.mcpStdioCommand != "" && c.mcpStdioSocket != "" {
+		mcpArgs := []string{"mcp-stdio", "--session-id", string(sessionID), "--socket", c.mcpStdioSocket}
+		args = append(args,
+			"-c", `mcp_servers.anycode.type="stdio"`,
+			"-c", fmt.Sprintf("mcp_servers.anycode.command=%q", c.mcpStdioCommand),
+			"-c", fmt.Sprintf("mcp_servers.anycode.args=%s", tomlStringArray(mcpArgs)),
+		)
+		if c.mcpAuthToken != "" {
+			args = append(args, "-c", `mcp_servers.anycode.env_vars=["ANYCODE_MCP_TOKEN"]`)
+		}
+		return args
+	}
+	if c.mcpBaseURL == "" {
 		return args
 	}
 	url := c.mcpBaseURL + "/mcp/sessions/" + string(sessionID)
@@ -229,7 +246,15 @@ func (c *Client) appendMCPArgs(args []string, sessionID process.SessionID) []str
 	return args
 }
 
-func appendConfigArgs(args []string, model string, reasoningEffort string, permissionMode string) []string {
+func tomlStringArray(values []string) string {
+	quoted := make([]string, 0, len(values))
+	for _, value := range values {
+		quoted = append(quoted, strconv.Quote(value))
+	}
+	return "[" + strings.Join(quoted, ",") + "]"
+}
+
+func (c *Client) appendConfigArgs(args []string, model string, reasoningEffort string, permissionMode string) []string {
 	if model != "" {
 		args = append(args, "-m", model)
 	}
@@ -237,9 +262,45 @@ func appendConfigArgs(args []string, model string, reasoningEffort string, permi
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", reasoningEffort))
 	}
 	if permissionMode != "" {
+		if c != nil && c.mcpStdioSocket != "" {
+			if profile, ok := mcpPermissionProfile(permissionMode); ok {
+				return appendMCPPermissionProfileArgs(args, profile, c.mcpStdioSocket)
+			}
+		}
 		args = append(args, "--sandbox", permissionMode)
 	}
 	return args
+}
+
+func mcpPermissionProfile(permissionMode string) (string, bool) {
+	switch strings.TrimSpace(permissionMode) {
+	case "read-only":
+		return ":read-only", true
+	case "workspace-write":
+		return ":workspace", true
+	default:
+		return "", false
+	}
+}
+
+func appendMCPPermissionProfileArgs(args []string, extends string, socket string) []string {
+	const profile = "anycode-mcp"
+	return append(args,
+		"-c", `features.network_proxy.enabled=true`,
+		"-c", fmt.Sprintf("default_permissions=%q", profile),
+		"-c", fmt.Sprintf("permissions.%s.extends=%q", profile, extends),
+		"-c", fmt.Sprintf("permissions.%s.network.enabled=true", profile),
+		"-c", fmt.Sprintf("permissions.%s.network.mode=%q", profile, "limited"),
+		"-c", fmt.Sprintf("permissions.%s.network.unix_sockets=%s", profile, tomlStringMap(map[string]string{socket: "allow"})),
+	)
+}
+
+func tomlStringMap(values map[string]string) string {
+	pairs := make([]string, 0, len(values))
+	for key, value := range values {
+		pairs = append(pairs, strconv.Quote(key)+"="+strconv.Quote(value))
+	}
+	return "{" + strings.Join(pairs, ",") + "}"
 }
 
 func parseCodexEvent(raw []byte) process.CodexEvent {

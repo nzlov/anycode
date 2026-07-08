@@ -175,6 +175,84 @@ printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
 	}
 }
 
+func TestStartInjectsStdioMCPServerConfig(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	tokenFile := filepath.Join(dir, "token")
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
+printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
+`)
+	t.Setenv("CODEX_ARGS_FILE", argsFile)
+	t.Setenv("CODEX_TOKEN_FILE", tokenFile)
+
+	_, err := New(bin, WithMCPStdio("/app/anycode", "/data/codex/mcp.sock", "secret")).Start(context.Background(), process.CodexStartInput{
+		ProcessRunID: "process-run-mcp-stdio",
+		SessionID:    "session-1",
+		Workdir:      dir,
+		Prompt:       "use answer_user when needed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, argsFile)
+	waitForFile(t, tokenFile)
+	args := strings.TrimSpace(readFile(t, argsFile))
+	for _, want := range []string{
+		`-c mcp_servers.anycode.type="stdio"`,
+		`-c mcp_servers.anycode.command="/app/anycode"`,
+		`-c mcp_servers.anycode.args=["mcp-stdio","--session-id","session-1","--socket","/data/codex/mcp.sock"]`,
+		`-c mcp_servers.anycode.env_vars=["ANYCODE_MCP_TOKEN"]`,
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args %q missing %q", args, want)
+		}
+	}
+	if strings.Contains(args, "secret") {
+		t.Fatalf("args leaked MCP token: %q", args)
+	}
+	if token := strings.TrimSpace(readFile(t, tokenFile)); token != "secret" {
+		t.Fatalf("ANYCODE_MCP_TOKEN = %q", token)
+	}
+}
+
+func TestStartInjectsUnixSocketPermissionProfileForStdioMCP(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
+`)
+	t.Setenv("CODEX_ARGS_FILE", argsFile)
+
+	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp.sock", "secret")).Start(context.Background(), process.CodexStartInput{
+		ProcessRunID:   "process-run-mcp-profile",
+		SessionID:      "session-1",
+		Workdir:        dir,
+		PermissionMode: "workspace-write",
+		Prompt:         "use answer_user when needed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, argsFile)
+	args := strings.TrimSpace(readFile(t, argsFile))
+	for _, want := range []string{
+		`-c features.network_proxy.enabled=true`,
+		`-c default_permissions="anycode-mcp"`,
+		`-c permissions.anycode-mcp.extends=":workspace"`,
+		`-c permissions.anycode-mcp.network.enabled=true`,
+		`-c permissions.anycode-mcp.network.mode="limited"`,
+		`-c permissions.anycode-mcp.network.unix_sockets={"/tmp/anycode-1000/mcp.sock"="allow"}`,
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args %q missing %q", args, want)
+		}
+	}
+	if strings.Contains(args, "--sandbox workspace-write") {
+		t.Fatalf("args should use default_permissions instead of --sandbox: %q", args)
+	}
+}
+
 func TestEventsParsesNestedMessageTypeAndInvalidJSON(t *testing.T) {
 	bin := fakeCodex(t, `#!/bin/sh
 printf '%s\n' '{"msg":{"type":"agent_message"},"text":"hello"}'
@@ -240,9 +318,10 @@ func TestStopKillsActiveProcess(t *testing.T) {
 	bin := fakeCodex(t, `#!/bin/sh
 touch "$CODEX_STARTED_FILE"
 sleep 30 &
-printf '%s\n' "$!" > "$CODEX_CHILD_PID_FILE"
-trap 'exit 0' TERM INT
-wait
+child="$!"
+printf '%s\n' "$child" > "$CODEX_CHILD_PID_FILE"
+trap 'kill "$child" 2>/dev/null; wait "$child" 2>/dev/null; exit 0' TERM INT
+wait "$child"
 `)
 	t.Setenv("CODEX_STARTED_FILE", started)
 	t.Setenv("CODEX_CHILD_PID_FILE", childPIDFile)
