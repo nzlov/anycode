@@ -98,7 +98,10 @@ func (c *Client) Detect(ctx context.Context, path string) (project.GitState, err
 }
 
 func (c *Client) Branches(ctx context.Context, path string) ([]project.GitBranch, error) {
-	out, err := c.run(ctx, path, "branch", "--format=%(refname:short)%00%(HEAD)")
+	if err := c.fetchRemotes(ctx, path); err != nil {
+		return nil, err
+	}
+	out, err := c.run(ctx, path, "branch", "--all", "--format=%(refname)%00%(refname:short)%00%(HEAD)")
 	if err != nil {
 		return nil, err
 	}
@@ -109,9 +112,14 @@ func (c *Client) Branches(ctx context.Context, path string) ([]project.GitBranch
 		if line == "" {
 			continue
 		}
-		name, marker, ok := strings.Cut(line, "\x00")
-		if !ok {
-			name = line
+		refname, rest, ok := strings.Cut(line, "\x00")
+		name := refname
+		marker := ""
+		if ok {
+			name, marker, _ = strings.Cut(rest, "\x00")
+		}
+		if strings.HasPrefix(refname, "refs/remotes/") && strings.HasSuffix(refname, "/HEAD") {
+			continue
 		}
 		branches = append(branches, project.GitBranch{
 			Name:      strings.TrimSpace(name),
@@ -162,6 +170,10 @@ func (c *Client) Create(ctx context.Context, projectPath string, projectID sessi
 	}
 	branch := strings.TrimSpace(string(sessionID))
 	args := []string{"worktree", "add", "-b", branch, path, ref}
+	if err := c.fetchRemotes(ctx, projectPath); err != nil {
+		_ = os.RemoveAll(path)
+		return "", err
+	}
 	hasCommits, err := c.hasCommits(ctx, projectPath)
 	if err != nil {
 		_ = os.RemoveAll(path)
@@ -175,6 +187,18 @@ func (c *Client) Create(ctx context.Context, projectPath string, projectID sessi
 		return "", err
 	}
 	return path, nil
+}
+
+func (c *Client) fetchRemotes(ctx context.Context, path string) error {
+	out, err := c.run(ctx, path, "remote")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(out) == "" {
+		return nil
+	}
+	_, err = c.run(ctx, path, "fetch", "--prune", "--all")
+	return err
 }
 
 func (c *Client) hasCommits(ctx context.Context, projectPath string) (bool, error) {

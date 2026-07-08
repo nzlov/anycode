@@ -6,8 +6,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
@@ -42,6 +44,42 @@ func TestDetectBranchesAndHeadCommit(t *testing.T) {
 	}
 	if len(commit) != 40 {
 		t.Fatalf("commit = %q", commit)
+	}
+}
+
+func TestBranchesFetchesAndIncludesRemoteBranches(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	ctx := context.Background()
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote.git")
+	repo := filepath.Join(base, "repo")
+	other := filepath.Join(base, "other")
+	runGit(t, base, "init", "--bare", remote)
+	runGit(t, base, "clone", remote, repo)
+	runGit(t, repo, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "init")
+	runGit(t, repo, "branch", "-M", "main")
+	runGit(t, repo, "push", "-u", "origin", "main")
+	runGit(t, repo, "remote", "rename", "origin", "upstream")
+	runGit(t, base, "clone", remote, other)
+	runGit(t, other, "checkout", "-b", "feature/remote-only")
+	runGit(t, other, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "remote-only")
+	runGit(t, other, "push", "origin", "feature/remote-only")
+
+	branches, err := New("").Branches(ctx, repo)
+	if err != nil {
+		t.Fatalf("Branches() error = %v", err)
+	}
+	if !hasBranch(branches, "main") {
+		t.Fatalf("Branches() missing local main: %+v", branches)
+	}
+	if !hasBranch(branches, "upstream/feature/remote-only") {
+		t.Fatalf("Branches() missing fetched remote branch with prefix: %+v", branches)
+	}
+	if hasBranch(branches, "upstream/HEAD") {
+		t.Fatalf("Branches() should not include remote HEAD: %+v", branches)
 	}
 }
 
@@ -157,6 +195,43 @@ func TestCreateAndRemoveWorktree(t *testing.T) {
 	}
 }
 
+func TestCreateWorktreeFetchesRemoteBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	ctx := context.Background()
+	base := t.TempDir()
+	remote := filepath.Join(base, "remote.git")
+	repo := filepath.Join(base, "repo")
+	other := filepath.Join(base, "other")
+	dataDir := filepath.Join(base, "data")
+	runGit(t, base, "init", "--bare", remote)
+	runGit(t, base, "clone", remote, repo)
+	runGit(t, repo, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "init")
+	runGit(t, repo, "branch", "-M", "main")
+	runGit(t, repo, "push", "-u", "origin", "main")
+	runGit(t, repo, "remote", "rename", "origin", "upstream")
+	runGit(t, base, "clone", remote, other)
+	runGit(t, other, "checkout", "-b", "feature/remote-only")
+	runGit(t, other, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "remote-only")
+	runGit(t, other, "push", "origin", "feature/remote-only")
+	wantHead := gitOutput(t, other, "rev-parse", "HEAD")
+
+	client := NewWorktrees(dataDir)
+	got, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "upstream/feature/remote-only")
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	head, err := client.HeadCommit(ctx, got, "")
+	if err != nil {
+		t.Fatalf("HeadCommit(worktree) error = %v", err)
+	}
+	if head != wantHead {
+		t.Fatalf("worktree head = %q, want %q", head, wantHead)
+	}
+}
+
 func TestCreateWorktreeFromEmptyRepositoryCreatesOrphanBranch(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")
@@ -185,10 +260,29 @@ func TestCreateWorktreeFromEmptyRepositoryCreatesOrphanBranch(t *testing.T) {
 	}
 }
 
+func hasBranch(branches []project.GitBranch, name string) bool {
+	for _, branch := range branches {
+		if branch.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
 }

@@ -351,9 +351,11 @@ watch(
   () => props.modelValue,
   (open) => {
     if (!open) return;
-    selectInitialProject();
     selectInitialRunConfig();
-    void loadWorkflowAvailability();
+    void loadProjects().then(() => {
+      selectInitialProject();
+      void loadWorkflowAvailability();
+    });
   },
 );
 
