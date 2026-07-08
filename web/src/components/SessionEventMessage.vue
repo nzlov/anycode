@@ -12,7 +12,7 @@
       <span>{{ toolTitle }}</span>
       <time>{{ event.time }}</time>
     </button>
-    <pre v-if="isTool && expanded && event.body" class="event-tool__body">{{ event.body }}</pre>
+    <SessionTerminalOutput v-if="isTool && expanded && event.body" :body="event.body" />
 
     <template v-else-if="!isTool">
       <div class="event-message__content">
@@ -37,6 +37,7 @@
 import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '@/services/sessionEventPresentation';
+import SessionTerminalOutput from '@/components/SessionTerminalOutput.vue';
 
 export interface SessionEventMessageEntry {
   id: string;
@@ -46,6 +47,7 @@ export interface SessionEventMessageEntry {
   createdAt: string;
   time: string;
   rawType?: string;
+  command?: string;
 }
 
 const props = defineProps<{
@@ -194,22 +196,6 @@ const toolTitle = computed(() => {
 .event-tool__header:focus-visible {
   border-color: color-mix(in srgb, var(--q-primary) 45%, var(--ac-border));
   outline: none;
-}
-
-.event-tool__body {
-  max-height: 320px;
-  margin: 4px 0 0;
-  overflow: auto;
-  padding: 9px 10px;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface);
-  color: var(--ac-text);
-  font-family: 'Fira Code', 'JetBrains Mono', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 @media (max-width: 699px) {

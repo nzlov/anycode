@@ -97,6 +97,17 @@ export function codexCommandResultBody(item) {
   return [prefix, output].filter(Boolean).join('\n');
 }
 
+export function prepareTerminalOutput(value) {
+  const escapeCode = String.fromCharCode(27);
+  const orphanSgr = new RegExp(
+    `(^|\\n|${escapeCode}\\[[0-?]*[ -/]*[@-~])(?:(?:38|48);2;\\d{1,3};\\d{1,3};\\d{1,3}|(?:38|48);5;\\d{1,3})m`,
+    'g',
+  );
+  return String(value || '')
+    .replace(/␛\[/g, `${escapeCode}[`)
+    .replace(orphanSgr, '$1');
+}
+
 function firstString(...values) {
   for (const value of values) {
     if (typeof value === 'string') return value;
@@ -132,33 +143,37 @@ function isResultEvent(event) {
   return event?.kind === 'tool' && event.title === '命令结果';
 }
 
+function resultMatchesCommand(result, command) {
+  if (!result?.command) return true;
+  return shellCommandDisplay(result.command) === command;
+}
+
 export function mergeShellEvents(events) {
   const merged = [];
   const consumed = new Set();
   for (let index = 0; index < events.length; index += 1) {
     if (consumed.has(index)) continue;
     const event = events[index];
-    const resultIndex = findShellResultIndex(events, index + 1);
-    const next = resultIndex === -1 ? null : events[resultIndex];
-    if (isCommandEvent(event) && next) {
-      const command = shellCommandDisplay(event.body);
-      const result = next.body.trim();
+    if (isCommandEvent(event)) {
+      const command = shellCommandDisplay(event.command || event.body);
+      const resultIndex = findShellResultIndex(events, index + 1, command);
+      const next = resultIndex === -1 ? null : events[resultIndex];
       merged.push({
         ...event,
-        id: `${event.id}:${next.id}`,
+        id: next ? `${event.id}:${next.id}` : event.id,
         title: command ? `Shell ${command}` : 'Shell',
-        body: `命令\n${command}${result ? `\n\n结果\n${result}` : ''}`,
-        time: next.time || event.time,
+        body: shellBody(command, next?.body),
+        time: next?.time || event.time,
       });
-      consumed.add(resultIndex);
+      if (next) consumed.add(resultIndex);
       continue;
     }
-    if (isCommandEvent(event)) {
-      const command = shellCommandDisplay(event.body);
+    if (isResultEvent(event) && event.command) {
+      const command = shellCommandDisplay(event.command);
       merged.push({
         ...event,
         title: command ? `Shell ${command}` : 'Shell',
-        body: command ? `命令\n${command}` : '',
+        body: shellBody(command, event.body),
       });
       continue;
     }
@@ -167,10 +182,15 @@ export function mergeShellEvents(events) {
   return merged;
 }
 
-function findShellResultIndex(events, startIndex) {
+function shellBody(command, resultBody) {
+  const result = String(resultBody || '').trim();
+  return `命令\n${command}${result ? `\n\n结果\n${result}` : ''}`;
+}
+
+function findShellResultIndex(events, startIndex, command) {
   for (let index = startIndex; index < events.length; index += 1) {
     const event = events[index];
-    if (isResultEvent(event)) return index;
+    if (isResultEvent(event)) return resultMatchesCommand(event, command) ? index : -1;
     if (event?.kind === 'tool') return -1;
   }
   return -1;

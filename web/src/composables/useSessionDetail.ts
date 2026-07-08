@@ -7,6 +7,7 @@ import {
   closeSession as closeSessionRequest,
   getPendingQuestionBatches,
   getSessionEventPage,
+  getSession,
   getSessionDetail,
   subscribePendingQuestionBatches,
   subscribeSessionEvents,
@@ -21,6 +22,13 @@ import {
   type SessionConfigInput,
   type SessionDetailData,
 } from '@/services/sessions';
+import {
+  appendLiveEvent,
+  eventAfterId,
+  isEventAtOrAfter,
+  prependOlderEvents,
+  shouldRefreshSessionForEvent,
+} from '@/services/sessionEventTimeline';
 
 const eventPageSize = 50;
 const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, nextCursor: '' };
@@ -45,6 +53,8 @@ export function useSessionDetail(sessionId: string) {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let eventSubscription: { unsubscribe: () => void } | null = null;
   let questionSubscription: { unsubscribe: () => void } | null = null;
+  let liveEventsOnly = false;
+  let subscriptionOpenedAt = 0;
 
   async function loadSessionDetail() {
     loading.value = true;
@@ -58,6 +68,14 @@ export function useSessionDetail(sessionId: string) {
       error.value = err instanceof Error ? err.message : '加载会话详情失败';
     } finally {
       loading.value = false;
+    }
+  }
+
+  async function loadSessionSummary() {
+    try {
+      session.value = await getSession(sessionId);
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '加载会话状态失败';
     }
   }
 
@@ -171,8 +189,7 @@ export function useSessionDetail(sessionId: string) {
     try {
       const previousPage = eventsPageInfo.value.page - 1;
       const result = await getSessionEventPage(sessionId, previousPage, eventPageSize);
-      const existing = new Set(events.value.map((event) => event.id));
-      events.value = [...result.items.filter((event) => !existing.has(event.id)), ...events.value];
+      events.value = prependOlderEvents(events.value, result.items);
       eventsPageInfo.value = result.pageInfo;
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载历史事件失败';
@@ -216,16 +233,20 @@ export function useSessionDetail(sessionId: string) {
   function openSubscriptions() {
     eventSubscription?.unsubscribe();
     questionSubscription?.unsubscribe();
-    const afterEventId = events.value.at(-1)?.id;
+    const afterEventId = eventAfterId(events.value);
+    const replayStateCanRefresh = !afterEventId && events.value.length === 0;
+    liveEventsOnly = Boolean(afterEventId);
+    subscriptionOpenedAt = Date.now();
     eventSubscription = subscribeSessionEvents(
       { sessionId, ...(afterEventId ? { afterEventId } : {}) },
       {
         onData: (event) => {
-          if (!events.value.some((item) => item.id === event.id)) {
-            events.value = [...events.value, event];
-          }
-          if (event.rawType.startsWith('session.') || event.rawType.startsWith('workflow.')) {
-            void loadSessionDetail();
+          const nextEvents = appendLiveEvent(events.value, event);
+          const added = nextEvents !== events.value;
+          events.value = nextEvents;
+          const isLiveEvent = liveEventsOnly || isEventAtOrAfter(event, subscriptionOpenedAt);
+          if (added && shouldRefreshSessionForEvent(event, isLiveEvent, replayStateCanRefresh)) {
+            void loadSessionSummary();
           }
         },
         onError: (err) => {
@@ -241,7 +262,7 @@ export function useSessionDetail(sessionId: string) {
       onData: (batch) => {
         pendingQuestionBatches.value = mergeQuestionBatch(pendingQuestionBatches.value, batch);
         if (batch.status !== 'pending') {
-          void loadSessionDetail();
+          void loadSessionSummary();
         }
       },
       onError: (err) => {

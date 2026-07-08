@@ -438,6 +438,7 @@ const selectedFileDiff = ref<FileDiff | null>(null);
 const fileDiffLoading = ref(false);
 const diffPage = ref(1);
 const diffPageSize = 20;
+let mounted = false;
 const {
   session,
   events,
@@ -959,14 +960,21 @@ watch(
 );
 
 onMounted(() => {
-  void loadSessionDetail();
-  void loadPendingQuestions();
-  startLiveUpdates();
+  mounted = true;
+  void initializeSessionDetail();
 });
 
 onUnmounted(() => {
+  mounted = false;
   stopLiveUpdates();
 });
+
+async function initializeSessionDetail() {
+  await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
+  if (mounted) {
+    startLiveUpdates();
+  }
+}
 
 async function onEventScroll() {
   const body = streamBodyRef.value;

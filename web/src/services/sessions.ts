@@ -88,6 +88,7 @@ export interface SessionEvent {
   rawType: string;
   title: string;
   body: string;
+  command?: string;
   createdAt: string;
   time: string;
 }
@@ -435,6 +436,10 @@ export async function listSessions(input: ListSessionsInput = {}): Promise<Sessi
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
+  const probe = await getSessionEventPage(sessionId, 1, 1);
+  const eventPageSize = 50;
+  const lastPage = Math.max(1, Math.ceil(probe.pageInfo.total / eventPageSize));
+  const eventsData = await getSessionEventPage(sessionId, lastPage, eventPageSize);
   const sessionData = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
     query: `
       query Session($id: ID!) {
@@ -445,10 +450,6 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
     `,
     variables: { id: sessionId },
   });
-  const probe = await getSessionEventPage(sessionId, 1, 1);
-  const eventPageSize = 50;
-  const lastPage = Math.max(1, Math.ceil(probe.pageInfo.total / eventPageSize));
-  const eventsData = await getSessionEventPage(sessionId, lastPage, eventPageSize);
 
   return {
     session: normalizeSessionDetail(sessionData.session),
@@ -879,7 +880,7 @@ function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
   const type = event.type ?? '';
   const payload = event.payload ?? {};
   const readable = readableEventPayload(type, payload);
-  return {
+  const normalized: SessionEvent = {
     id: event.id,
     kind: eventKind(type, payload),
     rawType: type,
@@ -888,6 +889,10 @@ function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
     createdAt: event.createdAt,
     time: formatEventTime(event.createdAt),
   };
+  if (readable.command) {
+    normalized.command = readable.command;
+  }
+  return normalized;
 }
 
 function readableEventPayload(type: string, payload: Record<string, unknown>) {
@@ -966,7 +971,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   if (codexType === 'turn.started') return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
   if (codexType === 'item.started') {
     if (itemType === 'command_execution') {
-      return { title: '执行命令', body: command || 'Codex 正在执行命令。' };
+      return { title: '执行命令', body: command || 'Codex 正在执行命令。', command };
     }
     if (itemType === 'agent_message') {
       return { title: '模型输出', body: text || 'Codex 正在生成回复。' };
@@ -978,7 +983,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
-      return { title: '命令结果', body: codexCommandResultBody(item) };
+      return { title: '命令结果', body: codexCommandResultBody(item), command };
     }
     if (itemType === 'agent_message') {
       return { title: '模型输出', body: output || text || compactPayload(item) };
