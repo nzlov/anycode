@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	domain "github.com/nzlov/anycode/internal/domain/project"
@@ -19,6 +20,7 @@ type UseCase interface {
 	SetDefaultWorkflow(ctx context.Context, input SetDefaultWorkflowInput) (DTO, error)
 	RemoveProject(ctx context.Context, input RemoveProjectInput) error
 	ListProjects(ctx context.Context) ([]DTO, error)
+	ProjectGitState(ctx context.Context, input ProjectGitStateInput) (domain.GitState, error)
 }
 
 type CreateProjectInput struct {
@@ -37,6 +39,11 @@ type SetDefaultWorkflowInput struct {
 
 type RemoveProjectInput struct {
 	ProjectID domain.ID
+}
+
+type ProjectGitStateInput struct {
+	ProjectID domain.ID
+	Refresh   bool
 }
 
 type DTO struct {
@@ -61,6 +68,8 @@ type Service struct {
 	repo       domain.Repository
 	browser    domain.DirectoryBrowser
 	inspector  domain.GitInspector
+	gitCacheMu sync.Mutex
+	gitCache   map[domain.ID]domain.GitState
 	now        func() time.Time
 	generateID func() (domain.ID, error)
 }
@@ -70,6 +79,7 @@ func New(repo domain.Repository, browser domain.DirectoryBrowser, inspector doma
 		repo:       repo,
 		browser:    browser,
 		inspector:  inspector,
+		gitCache:   map[domain.ID]domain.GitState{},
 		now:        time.Now,
 		generateID: generateID,
 	}
@@ -104,6 +114,7 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 		if err := s.repo.Save(ctx, existing); err != nil {
 			return DTO{}, fmt.Errorf("restore project: %w", err)
 		}
+		s.cacheGitState(existing.ID, gitState)
 		return toDTO(existing, gitState), nil
 	}
 	id, err := s.generateID()
@@ -121,6 +132,7 @@ func (s *Service) CreateProject(ctx context.Context, input CreateProjectInput) (
 	if err := s.repo.Save(ctx, project); err != nil {
 		return DTO{}, fmt.Errorf("save project: %w", err)
 	}
+	s.cacheGitState(project.ID, gitState)
 	return toDTO(project, gitState), nil
 }
 
@@ -176,9 +188,30 @@ func (s *Service) ListProjects(ctx context.Context) ([]DTO, error) {
 	}
 	dtos := make([]DTO, 0, len(projects))
 	for _, project := range projects {
-		dtos = append(dtos, toDTO(project, s.gitState(ctx, project.Path.Value)))
+		dtos = append(dtos, toDTO(project, domain.GitState{}))
 	}
 	return dtos, nil
+}
+
+func (s *Service) ProjectGitState(ctx context.Context, input ProjectGitStateInput) (domain.GitState, error) {
+	if s == nil {
+		return domain.GitState{}, errors.New("project usecase: nil service")
+	}
+	if input.ProjectID == "" {
+		return domain.GitState{}, errors.New("project id is required")
+	}
+	if !input.Refresh {
+		if state, ok := s.cachedGitState(input.ProjectID); ok {
+			return state, nil
+		}
+	}
+	project, err := s.repo.Find(ctx, input.ProjectID)
+	if err != nil {
+		return domain.GitState{}, fmt.Errorf("find project: %w", err)
+	}
+	state := s.gitState(ctx, project.Path.Value)
+	s.cacheGitState(project.ID, state)
+	return state, nil
 }
 
 func (s *Service) gitState(ctx context.Context, path string) domain.GitState {
@@ -193,6 +226,19 @@ func (s *Service) gitState(ctx context.Context, path string) domain.GitState {
 		state.ErrorMessage = err.Error()
 	}
 	return state
+}
+
+func (s *Service) cachedGitState(projectID domain.ID) (domain.GitState, bool) {
+	s.gitCacheMu.Lock()
+	defer s.gitCacheMu.Unlock()
+	state, ok := s.gitCache[projectID]
+	return state, ok
+}
+
+func (s *Service) cacheGitState(projectID domain.ID, state domain.GitState) {
+	s.gitCacheMu.Lock()
+	defer s.gitCacheMu.Unlock()
+	s.gitCache[projectID] = state
 }
 
 func toDTO(project domain.Project, gitState domain.GitState) DTO {

@@ -82,6 +82,28 @@ func TestQueryBrowseDirectoryForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestQueryProjectGitStateForwardsRefresh(t *testing.T) {
+	projects := &fakeProjectUseCase{
+		gitStateResult: projectdomain.GitState{
+			IsRepository:  true,
+			CurrentBranch: "main",
+			Branches:      []projectdomain.GitBranch{{Name: "main", IsCurrent: true}},
+		},
+	}
+	resolver := NewResolver(UseCases{Projects: projects}).Query()
+
+	got, err := resolver.ProjectGitState(context.Background(), "project-1", true)
+	if err != nil {
+		t.Fatalf("ProjectGitState() error = %v", err)
+	}
+	if projects.gitStateInput.ProjectID != "project-1" || !projects.gitStateInput.Refresh {
+		t.Fatalf("ProjectGitState input = %#v", projects.gitStateInput)
+	}
+	if got.CurrentBranch != "main" || len(got.Branches) != 1 {
+		t.Fatalf("ProjectGitState() = %#v", got)
+	}
+}
+
 func TestMutationCreateProjectForwardsUseCase(t *testing.T) {
 	now := time.Unix(20, 0).UTC()
 	projects := &fakeProjectUseCase{
@@ -694,14 +716,16 @@ type fakeWorkflowUseCase struct {
 
 type fakeProjectUseCase struct {
 	projectapp.UseCase
-	createInput  projectapp.CreateProjectInput
-	createResult projectapp.DTO
-	removeInput  projectapp.RemoveProjectInput
-	removeCalls  int
-	listResult   []projectapp.DTO
-	listCalls    int
-	browseInput  projectapp.BrowseDirectoryInput
-	browseResult projectapp.DirectoryPageDTO
+	createInput    projectapp.CreateProjectInput
+	createResult   projectapp.DTO
+	removeInput    projectapp.RemoveProjectInput
+	removeCalls    int
+	listResult     []projectapp.DTO
+	listCalls      int
+	gitStateInput  projectapp.ProjectGitStateInput
+	gitStateResult projectdomain.GitState
+	browseInput    projectapp.BrowseDirectoryInput
+	browseResult   projectapp.DirectoryPageDTO
 }
 
 func (f *fakeProjectUseCase) CreateProject(_ context.Context, input projectapp.CreateProjectInput) (projectapp.DTO, error) {
@@ -718,6 +742,11 @@ func (f *fakeProjectUseCase) RemoveProject(_ context.Context, input projectapp.R
 func (f *fakeProjectUseCase) ListProjects(context.Context) ([]projectapp.DTO, error) {
 	f.listCalls++
 	return f.listResult, nil
+}
+
+func (f *fakeProjectUseCase) ProjectGitState(_ context.Context, input projectapp.ProjectGitStateInput) (projectdomain.GitState, error) {
+	f.gitStateInput = input
+	return f.gitStateResult, nil
 }
 
 func (f *fakeProjectUseCase) BrowseDirectory(_ context.Context, input projectapp.BrowseDirectoryInput) (projectapp.DirectoryPageDTO, error) {

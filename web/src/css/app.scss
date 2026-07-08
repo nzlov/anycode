@@ -778,7 +778,7 @@ a {
 
 .new-session-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 150px) minmax(180px, 220px);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(180px, 220px);
   gap: 12px;
 }
 
@@ -786,6 +786,18 @@ a {
 .new-session-body,
 .new-session-actions {
   min-width: 0;
+}
+
+.branch-picker {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.branch-picker__select {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .new-session-grid .q-btn-toggle .q-btn {

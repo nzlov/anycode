@@ -6,10 +6,13 @@ export interface ProjectSummary {
   path: string;
   active: boolean;
   isGit: boolean;
-  defaultBranch: string;
-  branches: string[];
   defaultWorkflowId: string;
   openSessions: number;
+}
+
+export interface ProjectBranchState {
+  defaultBranch: string;
+  branches: string[];
 }
 
 export interface DirectoryEntry {
@@ -32,15 +35,17 @@ interface GraphQLProject {
   id: string;
   name: string;
   path: string;
+  isGit: boolean;
   defaultWorkflowId?: string | null;
-  gitState: {
-    isRepository: boolean;
-    currentBranch: string;
-    branches: {
-      name: string;
-      isCurrent: boolean;
-    }[];
-  };
+}
+
+interface GraphQLGitState {
+  isRepository: boolean;
+  currentBranch: string;
+  branches: {
+    name: string;
+    isCurrent: boolean;
+  }[];
 }
 
 interface GraphQLDirectoryEntry {
@@ -56,15 +61,8 @@ const projectFields = `
   id
   name
   path
+  isGit
   defaultWorkflowId
-  gitState {
-    isRepository
-    currentBranch
-    branches {
-      name
-      isCurrent
-    }
-  }
 `;
 
 export async function listProjects() {
@@ -112,6 +110,27 @@ export async function browseDirectory(path = '/') {
   return data.browseDirectory;
 }
 
+export async function getProjectBranches(projectId: string, options: { refresh?: boolean } = {}) {
+  const data = await graphqlFetch<
+    { projectGitState: GraphQLGitState },
+    { projectId: string; refresh: boolean }
+  >({
+    query: `
+      query ProjectGitState($projectId: ID!, $refresh: Boolean!) {
+        projectGitState(projectId: $projectId, refresh: $refresh) {
+          currentBranch
+          branches {
+            name
+            isCurrent
+          }
+        }
+      }
+    `,
+    variables: { projectId, refresh: Boolean(options.refresh) },
+  });
+  return normalizeBranchState(data.projectGitState);
+}
+
 export async function createProject(input: { path: string; name: string }) {
   const data = await graphqlFetch<
     { createProject: GraphQLProject },
@@ -146,26 +165,26 @@ function normalizeProjects(projects: GraphQLProject[]) {
 }
 
 function normalizeProject(project: GraphQLProject, active: boolean): ProjectSummary {
-  const currentBranch = project.gitState.currentBranch;
-  const defaultBranch =
-    currentBranch ||
-    project.gitState.branches.find((branch) => branch.isCurrent)?.name ||
-    project.gitState.branches[0]?.name ||
-    'main';
-  const branches = Array.from(new Set(project.gitState.branches.map((branch) => branch.name).filter(Boolean)));
-  if (!branches.includes(defaultBranch)) {
-    branches.unshift(defaultBranch);
-  }
-
   return {
     id: project.id,
     name: project.name,
     path: project.path,
     active,
-    isGit: project.gitState.isRepository,
-    defaultBranch,
-    branches,
+    isGit: project.isGit,
     defaultWorkflowId: project.defaultWorkflowId ?? '',
     openSessions: 0,
   };
+}
+
+function normalizeBranchState(state: GraphQLGitState): ProjectBranchState {
+  const defaultBranch =
+    state.currentBranch ||
+    state.branches.find((branch) => branch.isCurrent)?.name ||
+    state.branches[0]?.name ||
+    'main';
+  const branches = Array.from(new Set(state.branches.map((branch) => branch.name).filter(Boolean)));
+  if (!branches.includes(defaultBranch)) {
+    branches.unshift(defaultBranch);
+  }
+  return { defaultBranch, branches };
 }
