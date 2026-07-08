@@ -3,7 +3,7 @@ ARG PACMAN_MIRROR=
 ARG GOPROXY=
 ENV GOPROXY=$GOPROXY
 RUN if [ -n "$PACMAN_MIRROR" ]; then \
-    printf 'Server = %s\n' "$PACMAN_MIRROR" > /etc/pacman.d/mirrorlist; \
+  printf 'Server = %s\n' "$PACMAN_MIRROR" > /etc/pacman.d/mirrorlist; \
   fi
 
 FROM base AS web
@@ -35,7 +35,7 @@ ENV ANYCODE_GID=$ANYCODE_GID
 ENV NVM_DIR=/usr/local/nvm
 ENV NVM_SYMLINK_CURRENT=true
 ENV PATH=/usr/local/nvm/current/bin:$PATH
-RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less go \
+RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less go chromium ttf-dejavu \
   && pacman -Scc --noconfirm \
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \
