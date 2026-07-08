@@ -1686,6 +1686,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			return processdomain.CodexHandle{}, err
 		}
 	}
+	prompt = promptWithAnswerUserGuidance(prompt)
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
@@ -1712,6 +1713,18 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 }
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
+const answerUserPromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。"
+
+func promptWithAnswerUserGuidance(prompt string) string {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return answerUserPromptGuidance
+	}
+	if strings.Contains(prompt, answerUserPromptGuidance) {
+		return prompt
+	}
+	return prompt + "\n\n" + answerUserPromptGuidance
+}
 
 func (s *Service) rebuiltSessionPrompt(ctx context.Context, session domain.Session, nodePrompt string, reviewAfterReuseFailure bool) (string, error) {
 	original := strings.TrimSpace(session.Requirement)

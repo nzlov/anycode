@@ -477,6 +477,60 @@ func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T
 	}
 }
 
+func TestWorkflowNodePromptMentionsAnswerUserGuidance(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "ship feature",
+		Mode:         domain.ModeWorkflow,
+		Status:       domain.StatusStopped,
+		WorktreePath: "/workspace/project-1",
+	}
+	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                "project-1",
+		Name:              "project-1",
+		DefaultWorkflowID: &workflowID,
+	}
+	nodeRunID := domain.NodeRunID("node-run-1")
+	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
+		WorkflowRunID:    "workflow-run-1",
+		NodeRunID:        &nodeRunID,
+		CurrentNodeID:    "build",
+		CurrentNodeTitle: "Build",
+		Status:           "running",
+		RequiresCodex:    true,
+		Prompt:           "Run workflow node",
+	}}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-1"}}
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	ids := []domain.ID{"event-queued", "process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+
+	if _, err := service.StartSession(ctx, "session-1"); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSessionWithOptions() error = %v", err)
+	}
+	prompt := codex.startInput.Prompt
+	if !strings.Contains(prompt, "Run workflow node") {
+		t.Fatalf("prompt missing workflow node prompt: %q", prompt)
+	}
+	if !strings.Contains(prompt, "answer_user") {
+		t.Fatalf("workflow prompt missing answer_user guidance: %q", prompt)
+	}
+}
+
 func TestStartWorkflowResumeFailedSessionRerunsCurrentNode(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -1251,7 +1305,7 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
 		t.Fatalf("second process run = %#v", processes.created[1])
 	}
-	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != "Verify" {
+	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != promptWithAnswerUserGuidance("Verify") {
 		t.Fatalf("codex resume input = %#v", codex.resumeInput)
 	}
 	if workflows.completeInput.NodeRunID != "node-run-1" {
@@ -1768,7 +1822,7 @@ func TestCreateWorkflowSessionRetriesWhenCodexStartFailsBeforeMaxAttempts(t *tes
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
 		t.Fatalf("second process run = %#v", processes.created[1])
 	}
-	if len(codex.startInputs) != 2 || codex.startInputs[1].Prompt != "Retry workflow node" {
+	if len(codex.startInputs) != 2 || codex.startInputs[1].Prompt != promptWithAnswerUserGuidance("Retry workflow node") {
 		t.Fatalf("codex start inputs = %#v", codex.startInputs)
 	}
 }
@@ -2629,7 +2683,7 @@ func TestAppendPromptResumesStoppedChatSessionWithOnlyNewBody(t *testing.T) {
 	if !files.promoted["staged-1"] {
 		t.Fatal("staged attachment file was not promoted")
 	}
-	if codex.resumeInput.Prompt != "only this new instruction\n\nAttached files available on disk:\n- "+newPath {
+	if codex.resumeInput.Prompt != promptWithAnswerUserGuidance("only this new instruction\n\nAttached files available on disk:\n- "+newPath) {
 		t.Fatalf("codex resume prompt = %q", codex.resumeInput.Prompt)
 	}
 	if strings.Contains(codex.resumeInput.Prompt, "/data/attachments/sessions/session-1/notes.md") {
@@ -3201,11 +3255,40 @@ func TestStartSessionCreatesProcessRunAndMarksRunning(t *testing.T) {
 	if processes.runningID != "process-run-1" || processes.runningPID != 1234 {
 		t.Fatalf("running process = id %q pid %d", processes.runningID, processes.runningPID)
 	}
-	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != "implement session" {
+	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != promptWithAnswerUserGuidance("implement session") {
 		t.Fatalf("codex start input = %#v", codex.startInput)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusRunning {
 		t.Fatalf("saved session = %#v", repo.sessions["session-1"])
+	}
+}
+
+func TestStartSessionPromptMentionsAnswerUserGuidance(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "Implement the requested change",
+		Mode:         domain.ModeChat,
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/project",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSessionWithOptions() error = %v", err)
+	}
+	prompt := codex.startInput.Prompt
+	if !strings.Contains(prompt, "answer_user") {
+		t.Fatalf("prompt missing answer_user guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "不确定") {
+		t.Fatalf("prompt should tell Codex to ask when uncertain: %q", prompt)
 	}
 }
 
