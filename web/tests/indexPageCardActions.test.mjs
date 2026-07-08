@@ -60,3 +60,13 @@ test('history more link opens the sessions table with closed scope', () => {
   assert.equal(sessionsSource.includes("{ label: '已关闭', value: 'closed' }"), true);
   assert.match(sessionsSource, /route\.query\.scope/);
 });
+
+test('overview card backgrounds highlight running and waiting answer states only', () => {
+  const overviewSource = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+  const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
+
+  assert.match(overviewSource, /overviewCardClass\(card\)/);
+  assert.match(stylesSource, /\.overview-session-card--running\s*{[^}]*background:\s*#dcfce7;/s);
+  assert.match(stylesSource, /\.overview-session-card--waiting_user\s*{[^}]*background:\s*#eeaa00;/s);
+  assert.doesNotMatch(stylesSource, /\.overview-session-card--(?:stopped|closed)\s*{/);
+});

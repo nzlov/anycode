@@ -24,6 +24,7 @@
           clickable
           tabindex="0"
           class="overview-session-card cursor-pointer"
+          :class="overviewCardClass(card)"
           @click="$router.push(`/sessions/${card.id}`)"
           @keyup.enter="$router.push(`/sessions/${card.id}`)"
           @keyup.space.prevent="$router.push(`/sessions/${card.id}`)"
@@ -338,6 +339,10 @@ function priorityLabel(priority: SessionPriority) {
 
 function statusChipClass(status: SessionStatus) {
   return `lane-status-chip--${status}`;
+}
+
+function overviewCardClass(card: SessionCard) {
+  return `overview-session-card--${card.status}`;
 }
 
 function statusLabel(status: SessionStatus) {

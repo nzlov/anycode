@@ -198,6 +198,14 @@ a {
     transform var(--ac-transition);
 }
 
+.overview-session-card--running {
+  background: #dcfce7;
+}
+
+.overview-session-card--waiting_user {
+  background: #eeaa00;
+}
+
 .overview-session-card:hover,
 .overview-session-card:focus-within {
   border-color: var(--q-primary);
