@@ -6,6 +6,7 @@ scalar Int64
 
 type Query {
   projects: [Project!]!
+  projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
   session(id: ID!): SessionDetail!

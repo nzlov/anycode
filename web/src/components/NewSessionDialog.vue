@@ -26,15 +26,30 @@
             :disable="creating"
             :options="projectOptions"
           />
-          <q-select
-            v-if="selectedProject?.isGit"
-            v-model="branch"
-            outlined
-            dense
-            label="基础分支"
-            :disable="creating"
-            :options="branchOptions"
-          />
+          <div v-if="selectedProject?.isGit" class="branch-picker">
+            <q-select
+              v-model="branch"
+              outlined
+              dense
+              label="基础分支"
+              class="branch-picker__select"
+              :disable="creating || branchesLoading"
+              :loading="branchesLoading"
+              :options="branchOptions"
+            />
+            <q-btn
+              flat
+              round
+              dense
+              icon="refresh"
+              aria-label="刷新分支"
+              :disable="creating || branchesLoading"
+              :loading="branchesLoading"
+              @click="refreshProjectBranches(projectId)"
+            >
+              <q-tooltip>刷新分支</q-tooltip>
+            </q-btn>
+          </div>
           <q-select
             v-model="priority"
             outlined
@@ -95,6 +110,7 @@ import {
   normalizePermissionMode,
   normalizeReasoningEffort,
 } from '@/components/promptOptions';
+import { useProjectBranches } from '@/composables/useProjectBranches';
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
@@ -112,8 +128,9 @@ const emit = defineEmits<{
 }>();
 
 const { projects, projectOptions, loadProjects } = useProjects();
+const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
 const projectId = ref(projects.value[0]?.id ?? '');
-const branch = ref(projects.value[0]?.defaultBranch ?? 'main');
+const branch = ref('main');
 const mode = ref<'workflow' | 'chat'>('chat');
 const priority = ref<SessionPriority>('medium');
 const prompt = ref('');
@@ -129,11 +146,12 @@ const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
 const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 
 const branchOptions = computed(() => {
-  return selectedProject.value?.branches.length ? selectedProject.value.branches : ['main'];
+  return projectBranchState(projectId.value).branches;
 });
 const selectedProject = computed(() =>
   projects.value.find((project) => project.id === projectId.value),
 );
+const branchesLoading = computed(() => Boolean(branchLoading.value[projectId.value]));
 const canUseWorkflowMode = computed(() => workflowAvailable.value);
 
 const modeOptions = [
@@ -214,6 +232,7 @@ function selectInitialProject() {
   if (!nextProjectId) return;
   projectId.value = nextProjectId;
   branch.value = projectBranch(nextProjectId);
+  void loadBranchesForProject(nextProjectId);
 }
 
 async function loadWorkflowAvailability() {
@@ -246,8 +265,34 @@ async function loadWorkflowAvailability() {
 }
 
 function projectBranch(value: string) {
-  const selectedProject = projects.value.find((project) => project.id === value);
-  return selectedProject?.defaultBranch ?? selectedProject?.branches[0] ?? 'main';
+  return projectBranchState(value).defaultBranch;
+}
+
+function projectBranchState(value: string) {
+  return branchCache.value[value] ?? { defaultBranch: 'main', branches: ['main'] };
+}
+
+async function loadBranchesForProject(value: string, options: { refresh?: boolean } = {}) {
+  const project = projects.value.find((item) => item.id === value);
+  if (!project?.isGit) return;
+  try {
+    const state = await loadProjectBranches(value, options);
+    if (projectId.value !== value) return;
+    branch.value = state.branches.includes(branch.value) ? branch.value : state.defaultBranch;
+  } catch (error) {
+    Notify.create({
+      type: 'negative',
+      icon: 'error',
+      position: 'top-right',
+      message: `获取分支失败：${errorMessage(error)}`,
+      timeout: 5000,
+      actions: [{ icon: 'close', color: 'white', round: true }],
+    });
+  }
+}
+
+async function refreshProjectBranches(value: string) {
+  await loadBranchesForProject(value, { refresh: true });
 }
 
 async function createSession() {
@@ -371,6 +416,7 @@ watch(model, (value) => {
 watch(projectId, (value, previous) => {
   if (!value || value === previous) return;
   branch.value = projectBranch(value);
+  void loadBranchesForProject(value);
   void loadWorkflowAvailability();
 });
 

@@ -181,6 +181,7 @@ type ComplexityRoot struct {
 		BranchDiff             func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory        func(childComplexity int, input model.BrowseDirectoryInput) int
 		PendingQuestionBatches func(childComplexity int, sessionID string) int
+		ProjectGitState        func(childComplexity int, projectID string, refresh bool) int
 		Projects               func(childComplexity int) int
 		QuestionBatch          func(childComplexity int, id string) int
 		Session                func(childComplexity int, id string) int
@@ -438,6 +439,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Projects(ctx context.Context) ([]*model.Project, error)
+	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
 	Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
@@ -1110,6 +1112,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.PendingQuestionBatches(childComplexity, args["sessionId"].(string)), true
+	case "Query.projectGitState":
+		if e.ComplexityRoot.Query.ProjectGitState == nil {
+			break
+		}
+
+		args, err := ec.field_Query_projectGitState_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ProjectGitState(childComplexity, args["projectId"].(string), args["refresh"].(bool)), true
 	case "Query.projects":
 		if e.ComplexityRoot.Query.Projects == nil {
 			break
@@ -2264,6 +2277,7 @@ scalar Int64
 
 type Query {
   projects: [Project!]!
+  projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
   session(id: ID!): SessionDetail!
@@ -3076,6 +3090,22 @@ func (ec *executionContext) field_Query_pendingQuestionBatches_args(ctx context.
 		return nil, err
 	}
 	args["sessionId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_projectGitState_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "refresh", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["refresh"] = arg1
 	return args, nil
 }
 
@@ -6352,6 +6382,59 @@ func (ec *executionContext) fieldContext_Query_projects(_ context.Context, field
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_projectGitState(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_projectGitState,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ProjectGitState(ctx, fc.Args["projectId"].(string), fc.Args["refresh"].(bool))
+		},
+		nil,
+		ec.marshalNGitState2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGitState,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_projectGitState(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "isRepository":
+				return ec.fieldContext_GitState_isRepository(ctx, field)
+			case "currentBranch":
+				return ec.fieldContext_GitState_currentBranch(ctx, field)
+			case "branches":
+				return ec.fieldContext_GitState_branches(ctx, field)
+			case "errorCode":
+				return ec.fieldContext_GitState_errorCode(ctx, field)
+			case "errorMessage":
+				return ec.fieldContext_GitState_errorMessage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GitState", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_projectGitState_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -15677,6 +15760,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "projectGitState":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_projectGitState(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "browseDirectory":
 			field := field
 
@@ -18107,6 +18212,10 @@ func (ec *executionContext) marshalNGitBranch2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._GitBranch(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNGitState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGitState(ctx context.Context, sel ast.SelectionSet, v model.GitState) graphql.Marshaler {
+	return ec._GitState(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNGitState2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGitState(ctx context.Context, sel ast.SelectionSet, v *model.GitState) graphql.Marshaler {

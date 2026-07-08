@@ -310,6 +310,21 @@ func (r *queryResolver) Projects(ctx context.Context) ([]*model.Project, error) 
 	return projects, nil
 }
 
+// ProjectGitState is the resolver for the projectGitState field.
+func (r *queryResolver) ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error) {
+	if r.UseCases.Projects == nil {
+		return nil, missingUseCase("projects")
+	}
+	state, err := r.UseCases.Projects.ProjectGitState(ctx, projectapp.ProjectGitStateInput{
+		ProjectID: projectdomain.ID(projectID),
+		Refresh:   refresh,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapGitState(state), nil
+}
+
 // BrowseDirectory is the resolver for the browseDirectory field.
 func (r *queryResolver) BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error) {
 	if r.UseCases.Projects == nil {

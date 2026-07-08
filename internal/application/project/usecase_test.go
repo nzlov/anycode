@@ -113,24 +113,17 @@ func TestRemoveProjectHidesFromList(t *testing.T) {
 	}
 }
 
-func TestListProjectsAddsGitStateAndKeepsDetectErrors(t *testing.T) {
+func TestListProjectsDoesNotProbeGitState(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.projects = []domain.Project{
 		{ID: "git", Name: "git", Path: domain.ProjectPath{Value: "/repo"}, IsGit: true},
 		{ID: "plain", Name: "plain", Path: domain.ProjectPath{Value: "/plain"}, IsGit: false},
-		{ID: "broken", Name: "broken", Path: domain.ProjectPath{Value: "/broken"}, IsGit: true},
 	}
 	inspector := &fakeGitInspector{
 		states: map[string]domain.GitState{
 			"/repo":  {IsRepository: true, CurrentBranch: "main"},
 			"/plain": {IsRepository: false, ErrorCode: "not_git_repository"},
-			"/broken": {
-				ErrorCode: "permission_denied",
-			},
-		},
-		errs: map[string]error{
-			"/broken": errors.New("permission denied"),
 		},
 	}
 	service := New(repo, nil, inspector)
@@ -139,17 +132,52 @@ func TestListProjectsAddsGitStateAndKeepsDetectErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProjects() error = %v", err)
 	}
-	if len(got) != 3 {
+	if len(got) != 2 {
 		t.Fatalf("ListProjects() len = %d", len(got))
 	}
-	if !got[0].GitState.IsRepository || got[0].GitState.CurrentBranch != "main" {
-		t.Fatalf("git project state = %#v", got[0].GitState)
+	if inspector.detectCalls != 0 {
+		t.Fatalf("Detect calls = %d, want 0", inspector.detectCalls)
 	}
-	if got[1].GitState.IsRepository || got[1].GitState.ErrorCode != "not_git_repository" {
-		t.Fatalf("non-git project state = %#v", got[1].GitState)
+	if !reflect.DeepEqual(got[0].GitState, domain.GitState{}) || !reflect.DeepEqual(got[1].GitState, domain.GitState{}) {
+		t.Fatalf("ListProjects() should not attach git state: %#v", got)
 	}
-	if got[2].GitState.ErrorCode != "permission_denied" || got[2].GitState.ErrorMessage != "permission denied" {
-		t.Fatalf("broken project state = %#v", got[2].GitState)
+}
+
+func TestProjectGitStateCachesUntilRefresh(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.projects = []domain.Project{
+		{ID: "project-1", Name: "git", Path: domain.ProjectPath{Value: "/repo"}, IsGit: true},
+	}
+	repo.reindex()
+	inspector := &fakeGitInspector{
+		stateSeq: map[string][]domain.GitState{
+			"/repo": {
+				{IsRepository: true, CurrentBranch: "main", Branches: []domain.GitBranch{{Name: "main", IsCurrent: true}}},
+				{IsRepository: true, CurrentBranch: "feature", Branches: []domain.GitBranch{{Name: "feature", IsCurrent: true}}},
+			},
+		},
+	}
+	service := New(repo, nil, inspector)
+
+	first, err := service.ProjectGitState(ctx, ProjectGitStateInput{ProjectID: "project-1"})
+	if err != nil {
+		t.Fatalf("ProjectGitState() first error = %v", err)
+	}
+	second, err := service.ProjectGitState(ctx, ProjectGitStateInput{ProjectID: "project-1"})
+	if err != nil {
+		t.Fatalf("ProjectGitState() second error = %v", err)
+	}
+	refreshed, err := service.ProjectGitState(ctx, ProjectGitStateInput{ProjectID: "project-1", Refresh: true})
+	if err != nil {
+		t.Fatalf("ProjectGitState() refresh error = %v", err)
+	}
+
+	if first.CurrentBranch != "main" || second.CurrentBranch != "main" || refreshed.CurrentBranch != "feature" {
+		t.Fatalf("states = first:%#v second:%#v refreshed:%#v", first, second, refreshed)
+	}
+	if inspector.detectCalls != 2 {
+		t.Fatalf("Detect calls = %d, want 2", inspector.detectCalls)
 	}
 }
 
@@ -319,11 +347,19 @@ func (b *fakeDirectoryBrowser) List(_ context.Context, path string) (domain.Dire
 }
 
 type fakeGitInspector struct {
-	states map[string]domain.GitState
-	errs   map[string]error
+	states      map[string]domain.GitState
+	stateSeq    map[string][]domain.GitState
+	errs        map[string]error
+	detectCalls int
 }
 
 func (g *fakeGitInspector) Detect(_ context.Context, path string) (domain.GitState, error) {
+	g.detectCalls++
+	if len(g.stateSeq[path]) > 0 {
+		state := g.stateSeq[path][0]
+		g.stateSeq[path] = g.stateSeq[path][1:]
+		return state, nil
+	}
 	return g.states[path], g.errs[path]
 }
 
