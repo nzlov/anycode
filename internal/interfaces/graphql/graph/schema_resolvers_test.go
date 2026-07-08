@@ -223,6 +223,31 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	}
 }
 
+func TestQuerySessionEventsForwardsBeforeCursorAndLimit(t *testing.T) {
+	beforeEventID := "event-40"
+	limit := 50
+	events := &fakeEventUseCase{}
+	resolver := NewResolver(UseCases{Events: events}).Query()
+
+	_, err := resolver.SessionEvents(context.Background(), model.ListSessionEventsInput{
+		SessionID:     "session-1",
+		BeforeEventID: &beforeEventID,
+		Limit:         &limit,
+	})
+	if err != nil {
+		t.Fatalf("SessionEvents() error = %v", err)
+	}
+
+	want := eventapp.ListSessionEventsInput{
+		SessionID:     "session-1",
+		BeforeEventID: eventdomain.ID(beforeEventID),
+		Limit:         limit,
+	}
+	if !reflect.DeepEqual(events.gotListSessionEventsInput, want) {
+		t.Fatalf("ListSessionEvents() input = %#v, want %#v", events.gotListSessionEventsInput, want)
+	}
+}
+
 func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 	questions := &fakeQuestionUseCase{
 		pending: []questionapp.BatchDTO{
@@ -502,8 +527,9 @@ func TestErrorPresenterAddsApplicationErrorExtensions(t *testing.T) {
 
 type fakeEventUseCase struct {
 	eventapp.UseCase
-	sessionEvents         <-chan eventapp.DTO
-	gotSessionEventsInput eventapp.SessionEventsInput
+	sessionEvents             <-chan eventapp.DTO
+	gotListSessionEventsInput eventapp.ListSessionEventsInput
+	gotSessionEventsInput     eventapp.SessionEventsInput
 }
 
 type fakeWorkflowUseCase struct {
@@ -545,7 +571,8 @@ func (f *fakeProjectUseCase) BrowseDirectory(_ context.Context, input projectapp
 	return f.browseResult, nil
 }
 
-func (f *fakeEventUseCase) ListSessionEvents(context.Context, eventapp.ListSessionEventsInput) (port.Page[eventapp.DTO], error) {
+func (f *fakeEventUseCase) ListSessionEvents(_ context.Context, input eventapp.ListSessionEventsInput) (port.Page[eventapp.DTO], error) {
+	f.gotListSessionEventsInput = input
 	return port.Page[eventapp.DTO]{}, nil
 }
 

@@ -34,3 +34,27 @@ func TestTextRedactsAbsolutePathAndTokenAssignment(t *testing.T) {
 		t.Fatalf("Text() = %q", got)
 	}
 }
+
+func TestTextPreservesWhitespaceWhileRedacting(t *testing.T) {
+	input := "line one\n  open /home/nzlov/workspaces/github/project\nline three\taccess_key=secret"
+	want := "line one\n  open [redacted_path]\nline three\taccess_key=[redacted]"
+
+	if got := Text(input); got != want {
+		t.Fatalf("Text() = %q, want %q", got, want)
+	}
+}
+
+func TestTextRedactsAuthorizationColonForms(t *testing.T) {
+	cases := map[string]string{
+		"Authorization: Bearer secret\nnext": "Authorization: [redacted]\nnext",
+		"Authorization: Basic secret":        "Authorization: [redacted]",
+		"authorization:secret":               "authorization:[redacted]",
+		"authorization:Bearer secret":        "authorization:[redacted]",
+	}
+
+	for input, want := range cases {
+		if got := Text(input); got != want {
+			t.Fatalf("Text(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

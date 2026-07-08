@@ -1,4 +1,5 @@
 import { graphqlFetch, graphqlSubscribe } from '@/services/graphqlClient';
+import { latestSessionEventPageInput } from '@/services/sessionEventPaging';
 import { codexCommandResultBody } from '@/services/sessionEventPresentation';
 
 export type SessionMode = 'workflow' | 'chat';
@@ -436,20 +437,20 @@ export async function listSessions(input: ListSessionsInput = {}): Promise<Sessi
 }
 
 export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
-  const probe = await getSessionEventPage(sessionId, 1, 1);
   const eventPageSize = 50;
-  const lastPage = Math.max(1, Math.ceil(probe.pageInfo.total / eventPageSize));
-  const eventsData = await getSessionEventPage(sessionId, lastPage, eventPageSize);
-  const sessionData = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
-    query: `
-      query Session($id: ID!) {
-        session(id: $id) {
-          ${sessionDetailFields}
+  const [eventsData, sessionData] = await Promise.all([
+    getSessionEventPage(sessionId, '', eventPageSize),
+    graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
+      query: `
+        query Session($id: ID!) {
+          session(id: $id) {
+            ${sessionDetailFields}
+          }
         }
-      }
-    `,
-    variables: { id: sessionId },
-  });
+      `,
+      variables: { id: sessionId },
+    }),
+  ]);
 
   return {
     session: normalizeSessionDetail(sessionData.session),
@@ -472,10 +473,10 @@ export async function getSession(sessionId: string): Promise<SessionDetail> {
   return normalizeSessionDetail(data.session);
 }
 
-export async function getSessionEventPage(sessionId: string, page: number, pageSize: number) {
+export async function getSessionEventPage(sessionId: string, beforeEventId: string, limit: number) {
   const data = await graphqlFetch<
     { sessionEvents: { items: GraphQLSessionEvent[]; pageInfo: GraphQLPageInfo } },
-    { input: { sessionId: string; page: number; pageSize: number } }
+    { input: { sessionId: string; beforeEventId?: string; limit: number } }
   >({
     query: `
       query SessionEvents($input: ListSessionEventsInput!) {
@@ -495,7 +496,7 @@ export async function getSessionEventPage(sessionId: string, page: number, pageS
         }
       }
     `,
-    variables: { input: { sessionId, page, pageSize } },
+    variables: { input: latestSessionEventPageInput(sessionId, beforeEventId, limit) },
   });
   return {
     items: data.sessionEvents.items.map(normalizeSessionEvent),

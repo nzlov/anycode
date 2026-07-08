@@ -2,6 +2,7 @@ import { ref } from 'vue';
 
 import { deleteStagedAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
+import { olderSessionEventCursor } from '@/services/sessionEventPaging';
 import {
   appendPrompt,
   closeSession as closeSessionRequest,
@@ -183,12 +184,12 @@ export function useSessionDetail(sessionId: string) {
   }
 
   async function loadOlderEvents() {
-    if (loadingOlderEvents.value || eventsPageInfo.value.page <= 1) return;
+    const beforeEventId = olderSessionEventCursor(eventsPageInfo.value);
+    if (loadingOlderEvents.value || beforeEventId === null) return;
     loadingOlderEvents.value = true;
     error.value = '';
     try {
-      const previousPage = eventsPageInfo.value.page - 1;
-      const result = await getSessionEventPage(sessionId, previousPage, eventPageSize);
+      const result = await getSessionEventPage(sessionId, beforeEventId, eventPageSize);
       events.value = prependOlderEvents(events.value, result.items);
       eventsPageInfo.value = result.pageInfo;
     } catch (err) {

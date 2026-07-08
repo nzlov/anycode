@@ -89,6 +89,48 @@ func TestEventStoreAppendAfterAndScopeFilters(t *testing.T) {
 	assertEventIDs(t, got, []event.ID{"event-1", "event-2", "event-4"})
 }
 
+func TestEventStoreBeforeReturnsNewestWindowBeforeCursor(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	events := store.Events()
+	sessionID := event.SessionID("session-1")
+	base := time.Date(2026, 7, 1, 9, 0, 0, 0, time.UTC)
+	appendEvents(t, ctx, events,
+		event.DomainEvent{ID: "event-1", Scope: event.Scope{ProjectID: "project-1", SessionID: &sessionID}, SessionID: &sessionID, Type: "one", CreatedAt: base},
+		event.DomainEvent{ID: "event-2", Scope: event.Scope{ProjectID: "project-1", SessionID: &sessionID}, SessionID: &sessionID, Type: "two", CreatedAt: base},
+		event.DomainEvent{ID: "event-3", Scope: event.Scope{ProjectID: "project-1", SessionID: &sessionID}, SessionID: &sessionID, Type: "three", CreatedAt: base.Add(time.Second)},
+		event.DomainEvent{ID: "event-4", Scope: event.Scope{ProjectID: "project-1", SessionID: &sessionID}, SessionID: &sessionID, Type: "four", CreatedAt: base.Add(2 * time.Second)},
+	)
+
+	got, total, hasMore, err := events.Before(ctx, event.Scope{ProjectID: "project-1", SessionID: &sessionID}, "", 2)
+	if err != nil {
+		t.Fatalf("Before() error = %v", err)
+	}
+	if total != 4 || !hasMore {
+		t.Fatalf("Before() total=%d hasMore=%v", total, hasMore)
+	}
+	assertEventIDs(t, got, []event.ID{"event-3", "event-4"})
+
+	got, total, hasMore, err = events.Before(ctx, event.Scope{ProjectID: "project-1", SessionID: &sessionID}, "event-3", 2)
+	if err != nil {
+		t.Fatalf("Before(event-3) error = %v", err)
+	}
+	if total != 4 || hasMore {
+		t.Fatalf("Before(event-3) total=%d hasMore=%v", total, hasMore)
+	}
+	assertEventIDs(t, got, []event.ID{"event-1", "event-2"})
+}
+
 func TestEventStoreRedactsSensitivePayload(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{

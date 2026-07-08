@@ -3,6 +3,7 @@ package entstore
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/redaction"
@@ -68,6 +69,51 @@ func (s *EventStore) After(ctx context.Context, scope event.Scope, after event.I
 		events = append(events, toDomainEvent(row))
 	}
 	return events, nil
+}
+
+func (s *EventStore) Before(ctx context.Context, scope event.Scope, before event.ID, limit int) ([]event.DomainEvent, int, bool, error) {
+	if limit < 1 {
+		limit = 1
+	}
+	total, err := applyEventScope(s.client.EventRecord.Query(), scope).Count(ctx)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("count events before: %w", err)
+	}
+	query := applyEventScope(s.client.EventRecord.Query(), scope)
+	if before != "" {
+		beforeRecord, err := applyEventScope(s.client.EventRecord.Query(), scope).
+			Where(enteventrecord.IDEQ(string(before))).
+			Only(ctx)
+		if err != nil {
+			return nil, 0, false, fmt.Errorf("find before event: %w", err)
+		}
+		query.Where(
+			enteventrecord.Or(
+				enteventrecord.CreatedAtLT(beforeRecord.CreatedAt),
+				enteventrecord.And(
+					enteventrecord.CreatedAtEQ(beforeRecord.CreatedAt),
+					enteventrecord.IDLT(beforeRecord.ID),
+				),
+			),
+		)
+	}
+	rows, err := query.
+		Order(ent.Desc(enteventrecord.FieldCreatedAt), ent.Desc(enteventrecord.FieldID)).
+		Limit(limit + 1).
+		All(ctx)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("list events before: %w", err)
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	slices.Reverse(rows)
+	events := make([]event.DomainEvent, 0, len(rows))
+	for _, row := range rows {
+		events = append(events, toDomainEvent(row))
+	}
+	return events, total, hasMore, nil
 }
 
 func applyEventScope(query *ent.EventRecordQuery, scope event.Scope) *ent.EventRecordQuery {

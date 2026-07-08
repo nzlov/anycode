@@ -5533,6 +5533,31 @@ func (s *fakeEventStore) After(_ context.Context, _ eventdomain.Scope, _ eventdo
 	return s.snapshot(), nil
 }
 
+func (s *fakeEventStore) Before(_ context.Context, _ eventdomain.Scope, before eventdomain.ID, limit int) ([]eventdomain.DomainEvent, int, bool, error) {
+	events := s.snapshot()
+	end := len(events)
+	if before != "" {
+		end = -1
+		for index, event := range events {
+			if event.ID == before {
+				end = index
+				break
+			}
+		}
+		if end < 0 {
+			return nil, 0, false, errors.New("before event not found")
+		}
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	start := end - limit
+	if start < 0 {
+		start = 0
+	}
+	return events[start:end], len(events), start > 0, nil
+}
+
 func (s *fakeEventStore) snapshot() []eventdomain.DomainEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()

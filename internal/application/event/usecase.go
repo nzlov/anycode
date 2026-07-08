@@ -18,10 +18,9 @@ type UseCase interface {
 }
 
 type ListSessionEventsInput struct {
-	SessionID    session.ID
-	AfterEventID domain.ID
-	Page         int
-	PageSize     int
+	SessionID     session.ID
+	BeforeEventID domain.ID
+	Limit         int
 }
 
 type SessionEventsInput struct {
@@ -39,9 +38,8 @@ type DTO struct {
 }
 
 const (
-	defaultPage     = 1
-	defaultPageSize = 50
-	maxPageSize     = 200
+	defaultLimit = 50
+	maxLimit     = 200
 )
 
 type Service struct {
@@ -65,30 +63,22 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 	if input.SessionID == "" {
 		return port.Page[DTO]{}, errors.New("session id is required")
 	}
-	page, pageSize := normalizePage(input.Page, input.PageSize)
+	limit := normalizeLimit(input.Limit)
 	sessionID := domain.SessionID(input.SessionID)
-	events, err := s.store.After(ctx, domain.Scope{SessionID: &sessionID}, input.AfterEventID)
+	events, total, hasMore, err := s.store.Before(ctx, domain.Scope{SessionID: &sessionID}, input.BeforeEventID, limit)
 	if err != nil {
 		return port.Page[DTO]{}, fmt.Errorf("list session events: %w", err)
 	}
-	start := (page - 1) * pageSize
-	if start > len(events) {
-		start = len(events)
-	}
-	end := start + pageSize
-	if end > len(events) {
-		end = len(events)
-	}
-	items := toDTOs(events[start:end])
+	items := toDTOs(events)
 	nextCursor := ""
-	if end < len(events) && len(items) > 0 {
-		nextCursor = string(items[len(items)-1].ID)
+	if hasMore && len(items) > 0 {
+		nextCursor = string(items[0].ID)
 	}
 	return port.Page[DTO]{
 		Items:      items,
-		Page:       page,
-		PageSize:   pageSize,
-		Total:      len(events),
+		Page:       1,
+		PageSize:   limit,
+		Total:      total,
 		NextCursor: nextCursor,
 	}, nil
 }
@@ -177,17 +167,14 @@ func scopeMatches(filter domain.Scope, scope domain.Scope) bool {
 	return true
 }
 
-func normalizePage(page, pageSize int) (int, int) {
-	if page < 1 {
-		page = defaultPage
+func normalizeLimit(limit int) int {
+	if limit < 1 {
+		limit = defaultLimit
 	}
-	if pageSize < 1 {
-		pageSize = defaultPageSize
+	if limit > maxLimit {
+		limit = maxLimit
 	}
-	if pageSize > maxPageSize {
-		pageSize = maxPageSize
-	}
-	return page, pageSize
+	return limit
 }
 
 func toDTOs(events []domain.DomainEvent) []DTO {

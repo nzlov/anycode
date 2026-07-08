@@ -445,9 +445,8 @@ input AppendPromptInput {
 
 input ListSessionEventsInput {
   sessionId: ID!
-  afterEventId: ID
-  page: Int
-  pageSize: Int
+  beforeEventId: ID
+  limit: Int
 }
 
 input SessionEventsInput {

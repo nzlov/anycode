@@ -45,16 +45,15 @@ func TestListSessionEventsReturnsPageAndDTOs(t *testing.T) {
 
 	got, err := service.ListSessionEvents(ctx, ListSessionEventsInput{
 		SessionID: "session-1",
-		Page:      2,
-		PageSize:  1,
+		Limit:     2,
 	})
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
-	if got.Page != 2 || got.PageSize != 1 || got.Total != 3 || got.NextCursor != "event-2" {
+	if got.Page != 1 || got.PageSize != 2 || got.Total != 3 || got.NextCursor != "event-2" {
 		t.Fatalf("page mismatch: %#v", got)
 	}
-	if len(got.Items) != 1 || got.Items[0].ID != "event-2" {
+	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []domain.ID{"event-2", "event-3"}) {
 		t.Fatalf("items mismatch: %#v", got.Items)
 	}
 	if got.Items[0].CreatedAt != "1970-01-01T00:00:11.000000001Z" {
@@ -65,14 +64,72 @@ func TestListSessionEventsReturnsPageAndDTOs(t *testing.T) {
 	}
 }
 
+func TestListSessionEventsLatestFirstPagesNewestEventsBeforeCursorInAscendingDisplayOrder(t *testing.T) {
+	ctx := context.Background()
+	sessionID := domain.SessionID("session-1")
+	store := &fakeStore{
+		events: []domain.DomainEvent{
+			{ID: "event-1", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID, Type: "one", CreatedAt: time.Unix(1, 0).UTC()},
+			{ID: "event-2", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID, Type: "two", CreatedAt: time.Unix(2, 0).UTC()},
+			{ID: "event-3", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID, Type: "three", CreatedAt: time.Unix(3, 0).UTC()},
+			{ID: "event-4", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID, Type: "four", CreatedAt: time.Unix(4, 0).UTC()},
+			{ID: "event-5", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID, Type: "five", CreatedAt: time.Unix(5, 0).UTC()},
+		},
+	}
+	service := New(store)
+
+	latest, err := service.ListSessionEvents(ctx, ListSessionEventsInput{
+		SessionID: "session-1",
+		Limit:     2,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() latest page error = %v", err)
+	}
+	if latest.Page != 1 || latest.PageSize != 2 || latest.Total != 5 || latest.NextCursor != "event-4" {
+		t.Fatalf("latest page info = %#v", latest)
+	}
+	if gotIDs := dtoIDs(latest.Items); !reflect.DeepEqual(gotIDs, []domain.ID{"event-4", "event-5"}) {
+		t.Fatalf("latest page ids = %#v", gotIDs)
+	}
+
+	older, err := service.ListSessionEvents(ctx, ListSessionEventsInput{
+		SessionID:     "session-1",
+		BeforeEventID: "event-4",
+		Limit:         2,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() older page error = %v", err)
+	}
+	if older.NextCursor != "event-2" {
+		t.Fatalf("older next cursor = %q", older.NextCursor)
+	}
+	if gotIDs := dtoIDs(older.Items); !reflect.DeepEqual(gotIDs, []domain.ID{"event-2", "event-3"}) {
+		t.Fatalf("older page ids = %#v", gotIDs)
+	}
+
+	oldest, err := service.ListSessionEvents(ctx, ListSessionEventsInput{
+		SessionID:     "session-1",
+		BeforeEventID: "event-2",
+		Limit:         2,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() oldest page error = %v", err)
+	}
+	if oldest.NextCursor != "" {
+		t.Fatalf("oldest next cursor = %q", oldest.NextCursor)
+	}
+	if gotIDs := dtoIDs(oldest.Items); !reflect.DeepEqual(gotIDs, []domain.ID{"event-1"}) {
+		t.Fatalf("oldest page ids = %#v", gotIDs)
+	}
+}
+
 func TestListSessionEventsDefaultsAndCapsPageSize(t *testing.T) {
 	store := &fakeStore{}
 	service := New(store)
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: "session-1",
-		Page:      -1,
-		PageSize:  500,
+		Limit:     500,
 	})
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
@@ -80,6 +137,14 @@ func TestListSessionEventsDefaultsAndCapsPageSize(t *testing.T) {
 	if got.Page != 1 || got.PageSize != 200 {
 		t.Fatalf("page defaults = %#v", got)
 	}
+}
+
+func dtoIDs(items []DTO) []domain.ID {
+	ids := make([]domain.ID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	return ids
 }
 
 func TestListSessionEventsPreservesCodexDisplayPayloadShapes(t *testing.T) {
@@ -141,8 +206,7 @@ func TestListSessionEventsPreservesCodexDisplayPayloadShapes(t *testing.T) {
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: "session-1",
-		Page:      1,
-		PageSize:  10,
+		Limit:     10,
 	})
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
@@ -340,10 +404,12 @@ func TestListSessionEventsValidatesInput(t *testing.T) {
 }
 
 type fakeStore struct {
-	events    []domain.DomainEvent
-	err       error
-	lastScope domain.Scope
-	lastAfter domain.ID
+	events     []domain.DomainEvent
+	err        error
+	lastScope  domain.Scope
+	lastAfter  domain.ID
+	lastBefore domain.ID
+	lastLimit  int
 }
 
 func (s *fakeStore) Append(context.Context, domain.DomainEvent) error {
@@ -354,4 +420,31 @@ func (s *fakeStore) After(_ context.Context, scope domain.Scope, after domain.ID
 	s.lastScope = scope
 	s.lastAfter = after
 	return s.events, s.err
+}
+
+func (s *fakeStore) Before(_ context.Context, scope domain.Scope, before domain.ID, limit int) ([]domain.DomainEvent, int, bool, error) {
+	s.lastScope = scope
+	s.lastBefore = before
+	s.lastLimit = limit
+	if s.err != nil {
+		return nil, 0, false, s.err
+	}
+	end := len(s.events)
+	if before != "" {
+		end = -1
+		for index, event := range s.events {
+			if event.ID == before {
+				end = index
+				break
+			}
+		}
+		if end < 0 {
+			return nil, 0, false, errors.New("before event not found")
+		}
+	}
+	start := end - limit
+	if start < 0 {
+		start = 0
+	}
+	return s.events[start:end], len(s.events), start > 0, nil
 }

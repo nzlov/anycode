@@ -34,8 +34,7 @@ test('mergeShellEvents keeps command and result in one tool entry with complete 
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
-  assert.match(merged[0].body, /命令\ngit ls-tree -r --name-only HEAD \| head -300/);
-  assert.match(merged[0].body, /结果\nweb\/src\/pages\/SessionDetailPage\.vue/);
+  assert.equal(merged[0].body, 'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue');
 });
 
 test('mergeShellEvents pairs command and result across non-tool status events', () => {
@@ -74,7 +73,7 @@ test('mergeShellEvents pairs command and result across non-tool status events', 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-1:result-1');
   assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
-  assert.match(merged[0].body, /结果\n命令完成\nweb\/src\/pages\/SessionDetailPage\.vue/);
+  assert.equal(merged[0].body, 'web/src/pages/SessionDetailPage.vue');
   assert.equal(merged[1].id, 'status-1');
 });
 
@@ -94,7 +93,7 @@ test('mergeShellEvents normalizes shell wrapper commands with escaped spaces', (
   const merged = mergeShellEvents(events);
 
   assert.equal(merged[0].title, 'Shell git diff -- "docs/plan/a file.md"');
-  assert.equal(merged[0].body, '命令\ngit diff -- "docs/plan/a file.md"');
+  assert.equal(merged[0].body, '');
 });
 
 test('mergeShellEvents does not pair a command with a mismatched command result', () => {
@@ -125,9 +124,9 @@ test('mergeShellEvents does not pair a command with a mismatched command result'
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].title, 'Shell npm test');
-  assert.equal(merged[0].body, '命令\nnpm test');
+  assert.equal(merged[0].body, '');
   assert.equal(merged[1].title, 'Shell npm run build');
-  assert.match(merged[1].body, /结果\n命令完成\nbuilt/);
+  assert.equal(merged[1].body, 'built');
 });
 
 test('renderMarkdown formats assistant markdown and escapes raw html', () => {
@@ -153,7 +152,18 @@ test('codexCommandResultBody keeps output when aggregated output is absent', () 
     output: 'first line\nsecond line',
   });
 
-  assert.equal(body, '命令完成\nfirst line\nsecond line');
+  assert.equal(body, 'first line\nsecond line');
+});
+
+test('codexCommandResultBody falls back when aggregated output is empty', () => {
+  const body = codexCommandResultBody({
+    type: 'command_execution',
+    exit_code: 0,
+    aggregated_output: '',
+    output: 'fallback output',
+  });
+
+  assert.equal(body, 'fallback output');
 });
 
 test('mergeShellEvents keeps completed command ANSI for terminal rendering', () => {
@@ -162,7 +172,7 @@ test('mergeShellEvents keeps completed command ANSI for terminal rendering', () 
       id: 'completed-1',
       kind: 'tool',
       title: '命令结果',
-      body: "命令完成\n\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone",
+      body: "\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone",
       command: "[redacted_path] -lc 'git diff --stat'",
       createdAt: '2026-07-07T01:00:00Z',
       time: '01:00',
@@ -176,7 +186,7 @@ test('mergeShellEvents keeps completed command ANSI for terminal rendering', () 
   assert.equal(merged[0].title, 'Shell git diff --stat');
   assert.equal(
     merged[0].body,
-    "命令\ngit diff --stat\n\n结果\n命令完成\n\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone",
+    "\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone",
   );
   assert.equal(merged[0].body.includes('\u001b[38;2;31;115;204m'), true);
 });

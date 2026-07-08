@@ -2703,9 +2703,8 @@ input AppendPromptInput {
 
 input ListSessionEventsInput {
   sessionId: ID!
-  afterEventId: ID
-  page: Int
-  pageSize: Int
+  beforeEventId: ID
+  limit: Int
 }
 
 input SessionEventsInput {
@@ -13547,7 +13546,7 @@ func (ec *executionContext) unmarshalInputListSessionEventsInput(ctx context.Con
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "afterEventId", "page", "pageSize"}
+	fieldsInOrder := [...]string{"sessionId", "beforeEventId", "limit"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13561,27 +13560,20 @@ func (ec *executionContext) unmarshalInputListSessionEventsInput(ctx context.Con
 				return it, err
 			}
 			it.SessionID = data
-		case "afterEventId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("afterEventId"))
+		case "beforeEventId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("beforeEventId"))
 			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.AfterEventID = data
-		case "page":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
+			it.BeforeEventID = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.Page = data
-		case "pageSize":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.PageSize = data
+			it.Limit = data
 		}
 	}
 	return it, nil

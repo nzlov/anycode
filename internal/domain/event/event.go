@@ -25,6 +25,7 @@ type DomainEvent struct {
 type Store interface {
 	Append(ctx context.Context, event DomainEvent) error
 	After(ctx context.Context, scope Scope, after ID) ([]DomainEvent, error)
+	Before(ctx context.Context, scope Scope, before ID, limit int) ([]DomainEvent, int, bool, error)
 }
 
 type Publisher interface {

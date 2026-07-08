@@ -91,10 +91,7 @@ export function renderMarkdown(markdown) {
 }
 
 export function codexCommandResultBody(item) {
-  const exitCode = numberValue(item?.exit_code);
-  const output = firstString(item?.aggregated_output, item?.output, item?.text);
-  const prefix = exitCode === null || exitCode === 0 ? '命令完成' : `命令完成，退出码 ${exitCode}`;
-  return [prefix, output].filter(Boolean).join('\n');
+  return commandOutputBody(firstNonEmptyString(item?.aggregated_output, item?.output, item?.text));
 }
 
 export function prepareTerminalOutput(value) {
@@ -108,15 +105,11 @@ export function prepareTerminalOutput(value) {
     .replace(orphanSgr, '$1');
 }
 
-function firstString(...values) {
+function firstNonEmptyString(...values) {
   for (const value of values) {
-    if (typeof value === 'string') return value;
+    if (typeof value === 'string' && value !== '') return value;
   }
   return '';
-}
-
-function numberValue(value) {
-  return typeof value === 'number' ? value : null;
 }
 
 function shellCommandDisplay(value) {
@@ -162,7 +155,7 @@ export function mergeShellEvents(events) {
         ...event,
         id: next ? `${event.id}:${next.id}` : event.id,
         title: command ? `Shell ${command}` : 'Shell',
-        body: shellBody(command, next?.body),
+        body: shellBody(next?.body),
         time: next?.time || event.time,
       });
       if (next) consumed.add(resultIndex);
@@ -173,7 +166,7 @@ export function mergeShellEvents(events) {
       merged.push({
         ...event,
         title: command ? `Shell ${command}` : 'Shell',
-        body: shellBody(command, event.body),
+        body: shellBody(event.body),
       });
       continue;
     }
@@ -182,9 +175,12 @@ export function mergeShellEvents(events) {
   return merged;
 }
 
-function shellBody(command, resultBody) {
-  const result = String(resultBody || '').trim();
-  return `命令\n${command}${result ? `\n\n结果\n${result}` : ''}`;
+function shellBody(resultBody) {
+  return commandOutputBody(resultBody);
+}
+
+function commandOutputBody(value) {
+  return String(value || '').replace(/^命令完成(?:，退出码 \d+)?\n?/, '');
 }
 
 function findShellResultIndex(events, startIndex, command) {

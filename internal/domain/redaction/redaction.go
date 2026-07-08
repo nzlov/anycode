@@ -2,6 +2,7 @@ package redaction
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -9,6 +10,8 @@ const (
 	Redacted     = "[redacted]"
 	RedactedPath = "[redacted_path]"
 )
+
+var textTokenPattern = regexp.MustCompile(`\s+|\S+`)
 
 func Map(input map[string]any) map[string]any {
 	if input == nil {
@@ -29,30 +32,56 @@ func Text(input string) string {
 	if input == "" {
 		return ""
 	}
-	parts := strings.Fields(input)
+	parts := textTokenPattern.FindAllString(input, -1)
 	if len(parts) == 0 {
 		return input
 	}
-	output := make([]string, 0, len(parts))
-	for i := 0; i < len(parts); i++ {
-		part := parts[i]
+	var output strings.Builder
+	redactNext := false
+	redactNextValue := false
+	for _, part := range parts {
+		if redactNext {
+			if strings.TrimSpace(part) == "" {
+				continue
+			}
+			redactNext = false
+			continue
+		}
+		if redactNextValue {
+			if strings.TrimSpace(part) == "" {
+				output.WriteString(part)
+				continue
+			}
+			token := strings.Trim(part, `"'(),;:`)
+			output.WriteString(Redacted)
+			redactNext = isAuthorizationScheme(token)
+			redactNextValue = false
+			continue
+		}
+		if strings.TrimSpace(part) == "" {
+			output.WriteString(part)
+			continue
+		}
 		trimmed := strings.Trim(part, `"'(),;:`)
 		switch {
 		case isSensitiveAssignment(trimmed):
-			output = append(output, redactAssignment(part))
-			if assignmentValueIsBearer(trimmed) && i+1 < len(parts) {
-				i++
-			}
+			output.WriteString(redactAssignment(part))
+			redactNext = assignmentValueIsBearer(trimmed)
+		case isAuthorizationColon(part):
+			redacted, needsValue, skipNext := redactAuthorizationColon(part)
+			output.WriteString(redacted)
+			redactNextValue = needsValue
+			redactNext = skipNext
 		case isAbsolutePath(trimmed):
-			output = append(output, strings.Replace(part, trimmed, RedactedPath, 1))
-		case strings.EqualFold(trimmed, "bearer") && i+1 < len(parts):
-			output = append(output, Redacted)
-			i++
+			output.WriteString(strings.Replace(part, trimmed, RedactedPath, 1))
+		case strings.EqualFold(trimmed, "bearer"):
+			output.WriteString(Redacted)
+			redactNext = true
 		default:
-			output = append(output, part)
+			output.WriteString(part)
 		}
 	}
-	return strings.Join(output, " ")
+	return output.String()
 }
 
 func valueForKey(key string, input any) any {
@@ -133,6 +162,34 @@ func redactAssignment(value string) string {
 func assignmentValueIsBearer(value string) bool {
 	index := strings.Index(value, "=")
 	return index >= 0 && strings.EqualFold(value[index+1:], "bearer")
+}
+
+func isAuthorizationColon(value string) bool {
+	core := strings.Trim(value, `"'(),;`)
+	return strings.EqualFold(core, "authorization:") ||
+		strings.HasPrefix(strings.ToLower(core), "authorization:")
+}
+
+func redactAuthorizationColon(value string) (string, bool, bool) {
+	leftTrimmed := strings.TrimLeft(value, `"'(),;`)
+	prefixLen := len(value) - len(leftTrimmed)
+	rightTrimmed := strings.TrimRight(leftTrimmed, `"'(),;`)
+	suffix := leftTrimmed[len(rightTrimmed):]
+	core := rightTrimmed
+	index := strings.Index(core, ":")
+	if index < 0 {
+		return value, false, false
+	}
+	prefix := value[:prefixLen] + core[:index+1]
+	authValue := core[index+1:]
+	if authValue == "" {
+		return prefix + suffix, true, false
+	}
+	return prefix + Redacted + suffix, false, isAuthorizationScheme(authValue)
+}
+
+func isAuthorizationScheme(value string) bool {
+	return strings.EqualFold(value, "bearer") || strings.EqualFold(value, "basic")
 }
 
 func isAbsolutePath(value string) bool {

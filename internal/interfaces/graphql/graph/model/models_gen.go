@@ -140,10 +140,9 @@ type GitState struct {
 }
 
 type ListSessionEventsInput struct {
-	SessionID    string  `json:"sessionId"`
-	AfterEventID *string `json:"afterEventId,omitempty"`
-	Page         *int    `json:"page,omitempty"`
-	PageSize     *int    `json:"pageSize,omitempty"`
+	SessionID     string  `json:"sessionId"`
+	BeforeEventID *string `json:"beforeEventId,omitempty"`
+	Limit         *int    `json:"limit,omitempty"`
 }
 
 type ListSessionsInput struct {

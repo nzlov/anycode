@@ -352,10 +352,9 @@ func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessi
 		return nil, missingUseCase("events")
 	}
 	dto, err := r.UseCases.Events.ListSessionEvents(ctx, eventapp.ListSessionEventsInput{
-		SessionID:    sessiondomain.ID(input.SessionID),
-		AfterEventID: eventdomain.ID(stringValue(input.AfterEventID, "")),
-		Page:         intValue(input.Page, 0),
-		PageSize:     intValue(input.PageSize, 0),
+		SessionID:     sessiondomain.ID(input.SessionID),
+		BeforeEventID: eventdomain.ID(stringValue(input.BeforeEventID, "")),
+		Limit:         intValue(input.Limit, 0),
 	})
 	if err != nil {
 		return nil, err
