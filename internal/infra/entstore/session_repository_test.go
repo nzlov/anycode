@@ -107,6 +107,27 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			UpdatedAt:   historyRun,
 		},
 		session.Session{
+			ID:          session.ID("session-closed"),
+			ProjectID:   projectID,
+			Requirement: "Closed card",
+			Mode:        session.ModeChat,
+			Status:      session.StatusClosed,
+			BaseBranch:  "main",
+			LastRunAt:   &recentRun,
+			CreatedAt:   now.Add(-9 * time.Minute),
+			UpdatedAt:   now.Add(-3 * time.Minute),
+		},
+		session.Session{
+			ID:          session.ID("session-closed-old"),
+			ProjectID:   projectID,
+			Requirement: "Older closed card",
+			Mode:        session.ModeChat,
+			Status:      session.StatusClosed,
+			BaseBranch:  "main",
+			CreatedAt:   now.Add(-5 * 24 * time.Hour),
+			UpdatedAt:   now.Add(-4 * 24 * time.Hour),
+		},
+		session.Session{
 			ID:          session.ID("session-4"),
 			ProjectID:   oldProjectID,
 			Requirement: "Other project",
@@ -120,28 +141,28 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 
 	cards, total, err := repo.ListCards(ctx, session.ListQuery{
 		ProjectID: &projectID,
-		Range:     "recent3d",
+		Range:     "latest",
 		Page:      1,
 		PageSize:  1,
-		Sort:      "created_at asc",
+		Sort:      "updated_at desc",
 	})
 	if err != nil {
-		t.Fatalf("list recent cards: %v", err)
+		t.Fatalf("list latest cards: %v", err)
 	}
-	if total != 2 || len(cards) != 1 || cards[0].ID != "session-1" {
-		t.Fatalf("recent cards mismatch: total=%d cards=%#v", total, cards)
+	if total != 3 || len(cards) != 1 || cards[0].ID != "session-1" {
+		t.Fatalf("latest cards mismatch: total=%d cards=%#v", total, cards)
 	}
 
 	cards, total, err = repo.ListCards(ctx, session.ListQuery{
 		ProjectID: &projectID,
-		Range:     "history7d",
+		Range:     "history",
 		Page:      1,
 		PageSize:  10,
 	})
 	if err != nil {
 		t.Fatalf("list history cards: %v", err)
 	}
-	if total != 1 || len(cards) != 1 || cards[0].ID != "session-3" {
+	if total != 2 || len(cards) != 2 || cards[0].ID != "session-closed" || cards[1].ID != "session-closed-old" {
 		t.Fatalf("history cards mismatch: total=%d cards=%#v", total, cards)
 	}
 

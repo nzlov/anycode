@@ -3,7 +3,7 @@
     <div class="page-heading">
       <div>
         <div class="text-h5 text-weight-bold">{{ pageTitle }}</div>
-        <div class="text-body2 text-muted">最新卡片与近 7 天历史记录</div>
+        <div class="text-body2 text-muted">最新卡片与历史卡片</div>
       </div>
     </div>
 
@@ -200,6 +200,7 @@ import { useRoute } from 'vue-router';
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
+import { createOverviewCardGroups } from '@/services/overviewCardGroups';
 import {
   closeSession,
   getPendingQuestionBatches,
@@ -223,14 +224,14 @@ const projectScopeId = computed(() => {
 });
 
 const {
-  rows: recentRows,
-  projectId: recentProjectId,
-  loadSessions: loadRecentSessions,
-  startLiveUpdates: startRecentLiveUpdates,
-  stopLiveUpdates: stopRecentLiveUpdates,
+  rows: latestRows,
+  projectId: latestProjectId,
+  loadSessions: loadLatestSessions,
+  startLiveUpdates: startLatestLiveUpdates,
+  stopLiveUpdates: stopLatestLiveUpdates,
 } = useSessionsPage({
   projectId: projectScopeId.value,
-  range: 'recent3d',
+  range: 'latest',
   page: 1,
   pageSize: 100,
   sort: 'updated_at desc',
@@ -244,7 +245,7 @@ const {
   stopLiveUpdates: stopHistoryLiveUpdates,
 } = useSessionsPage({
   projectId: projectScopeId.value,
-  range: 'history7d',
+  range: 'history',
   page: 1,
   pageSize: 100,
   sort: 'updated_at desc',
@@ -252,11 +253,9 @@ const {
 });
 const { projects, loadProjects } = useProjects();
 
-const recentCards = computed(() => recentRows.value);
-const uniqueHistoryCards = computed(() => {
-  const recentIds = new Set(recentCards.value.map((card) => card.id));
-  return historyRows.value.filter((card) => !recentIds.has(card.id));
-});
+const overviewCardGroups = computed(() => createOverviewCardGroups(latestRows.value, historyRows.value));
+const latestCards = computed(() => overviewCardGroups.value.latestCards);
+const uniqueHistoryCards = computed(() => overviewCardGroups.value.historyCards);
 const historyCards = computed(() => uniqueHistoryCards.value.slice(0, 10));
 const hasMoreHistory = computed(() => uniqueHistoryCards.value.length > historyCards.value.length);
 const scopedProject = computed(() =>
@@ -265,27 +264,27 @@ const scopedProject = computed(() =>
 const pageTitle = computed(() => scopedProject.value?.name ?? '总揽');
 const sessionsRoute = computed(() =>
   projectScopeId.value
-    ? { name: 'sessions', query: { projectId: projectScopeId.value } }
-    : { name: 'sessions' },
+    ? { name: 'sessions', query: { projectId: projectScopeId.value, scope: 'closed' } }
+    : { name: 'sessions', query: { scope: 'closed' } },
 );
 const cardSections = computed(() => [
   {
-    id: 'recent',
+    id: 'latest',
     title: '最新',
-    caption: '最近 3 天运行过或仍在处理的卡片',
-    cards: recentCards.value,
+    caption: '未关闭的卡片，按最近操作倒序',
+    cards: latestCards.value,
     showMore: false,
   },
   {
     id: 'history',
     title: '历史',
-    caption: '近 7 天历史记录，按更新时间倒序',
+    caption: '已关闭的卡片，按最近操作倒序',
     cards: historyCards.value,
     showMore: hasMoreHistory.value,
   },
 ]);
 const hasVisibleCards = computed(
-  () => recentCards.value.length > 0 || historyCards.value.length > 0,
+  () => latestCards.value.length > 0 || historyCards.value.length > 0,
 );
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
@@ -303,12 +302,12 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  stopRecentLiveUpdates();
+  stopLatestLiveUpdates();
   stopHistoryLiveUpdates();
 });
 
 watch(projectScopeId, (value) => {
-  recentProjectId.value = value;
+  latestProjectId.value = value;
   historyProjectId.value = value;
   void loadOverviewSessions();
 });
@@ -316,12 +315,12 @@ watch(projectScopeId, (value) => {
 async function startOverview() {
   await loadProjects();
   await loadOverviewSessions();
-  startRecentLiveUpdates();
+  startLatestLiveUpdates();
   startHistoryLiveUpdates();
 }
 
 async function loadOverviewSessions() {
-  await Promise.all([loadRecentSessions(), loadHistorySessions()]);
+  await Promise.all([loadLatestSessions(), loadHistorySessions()]);
 }
 
 function modeLabel(mode: SessionMode) {

@@ -116,7 +116,6 @@ const {
   pageSize: 8,
   sort: 'updated_at desc',
 });
-const status = ref<SessionStatus | 'all'>('all');
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
@@ -126,7 +125,25 @@ const statusOptions = [
   { label: '已停止', value: 'stopped' },
   { label: '阻塞', value: 'blocked' },
   { label: '已完成', value: 'completed' },
+  { label: '已关闭', value: 'closed' },
 ];
+const statusValues = new Set<SessionStatus>([
+  'running',
+  'waiting_user',
+  'waiting_approval',
+  'stopped',
+  'blocked',
+  'completed',
+  'closed',
+]);
+const routeStatus = computed<SessionStatus | 'all'>(() => {
+  const value = route.query.scope;
+  return typeof value === 'string' && statusValues.has(value as SessionStatus)
+    ? (value as SessionStatus)
+    : 'all';
+});
+const status = ref<SessionStatus | 'all'>(routeStatus.value);
+scope.value = status.value === 'all' ? '' : status.value;
 
 const columns = [
   { name: 'title', label: '需求', field: 'title', align: 'left' as const, sortable: true },
@@ -180,6 +197,10 @@ const visibleColumns = computed(() =>
 watch(status, (value) => {
   scope.value = value === 'all' ? '' : value;
   page.value = 1;
+});
+
+watch(routeStatus, (value) => {
+  status.value = value;
 });
 
 watch([filter, scope], () => {

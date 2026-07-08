@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	domainsession "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
@@ -155,7 +154,7 @@ func (r *SessionRepository) Find(ctx context.Context, id domainsession.ID) (doma
 
 func (r *SessionRepository) ListCards(ctx context.Context, query domainsession.ListQuery) ([]domainsession.Session, int, error) {
 	page, pageSize := normalizeSessionPage(query.Page, query.PageSize)
-	base := applySessionListFilters(r.client.Session.Query(), query, time.Now)
+	base := applySessionListFilters(r.client.Session.Query(), query)
 	total, err := base.Clone().Count(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count session cards: %w", err)
@@ -332,7 +331,7 @@ func (r *SessionRepository) LatestSuccessfulMergeRecord(ctx context.Context, ses
 	return toDomainMergeRecord(row), true, nil
 }
 
-func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery, now func() time.Time) *ent.SessionQuery {
+func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery) *ent.SessionQuery {
 	if query.ProjectID != nil {
 		q.Where(entsession.ProjectIDEQ(string(*query.ProjectID)))
 	}
@@ -352,15 +351,10 @@ func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery,
 		q.Where(entsession.StatusEQ(strings.ToLower(strings.TrimSpace(query.Scope))))
 	}
 	switch strings.ToLower(strings.TrimSpace(query.Range)) {
-	case "recent3d":
-		q.Where(entsession.UpdatedAtGTE(now().Add(-72 * time.Hour)))
-	case "history7d":
-		recentCutoff := now().Add(-72 * time.Hour)
-		historyCutoff := now().Add(-7 * 24 * time.Hour)
-		q.Where(
-			entsession.UpdatedAtGTE(historyCutoff),
-			entsession.UpdatedAtLT(recentCutoff),
-		)
+	case "latest":
+		q.Where(entsession.StatusNEQ(string(domainsession.StatusClosed)))
+	case "history":
+		q.Where(entsession.StatusEQ(string(domainsession.StatusClosed)))
 	}
 	filter := strings.TrimSpace(query.Filter)
 	if filter != "" {

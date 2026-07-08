@@ -34,6 +34,7 @@ export interface SessionCard {
   createdAt: string;
   createdTime: string;
   updatedAt: string;
+  updatedTime: string;
   pendingQuestion: boolean;
   todoList?: SessionTodoList | null;
   filesChanged: number;
@@ -794,6 +795,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
+    updatedTime: session.updatedAt,
     pendingQuestion: session.pendingQuestion,
     todoList: normalizeTodoList(session.todoList),
     filesChanged: 0,
@@ -818,6 +820,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
+    updatedTime: session.updatedAt,
     pendingQuestion: status === 'waiting_user',
     todoList: null,
     filesChanged: 0,
@@ -870,6 +873,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
+    updatedTime: session.updatedAt,
     pendingQuestion: status === 'waiting_user',
     todoList: null,
     filesChanged: 0,
