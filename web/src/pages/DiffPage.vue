@@ -137,56 +137,24 @@
           </q-card-section>
         </q-card>
 
-        <q-card
-          v-for="fileDiff in visibleDiffs"
-          :key="fileDiff.file.path"
-          flat
-          bordered
-          class="diff-file-card"
-        >
-          <q-card-section class="diff-file-header">
-            <div class="file-title">
-              <q-icon
-                :name="fileIcon(fileDiff.file.status)"
-                :color="fileColor(fileDiff.file.status)"
-              />
+        <DiffViewer :file-diffs="visibleDiffs" @expand="expandDiff">
+          <template #file-title="{ file }">
+            <template v-if="file">
               <q-btn
-                v-if="sessionPrefix(fileDiff.file.path)"
+                v-if="sessionPrefix(file.path)"
                 flat
                 dense
                 no-caps
                 class="session-prefix-link"
-                :label="sessionPrefix(fileDiff.file.path)"
-                @click="openPrefixedSession(fileDiff.file.path)"
+                :label="sessionPrefix(file.path)"
+                @click="openPrefixedSession(file.path)"
               >
                 <q-tooltip>打开会话详情</q-tooltip>
               </q-btn>
-              <span>{{ filePathWithoutPrefix(fileDiff.file.path) }}</span>
-            </div>
-            <div class="row items-center q-gutter-sm">
-              <q-badge outline color="positive" :label="`+${fileDiff.file.additions}`" />
-              <q-badge outline color="negative" :label="`-${fileDiff.file.deletions}`" />
-              <q-badge
-                outline
-                :color="fileColor(fileDiff.file.status)"
-                :label="fileDiff.file.status"
-              />
-            </div>
-          </q-card-section>
-          <q-separator />
-          <q-card-section class="diff-code">
-            <div
-              v-for="line in fileDiff.lines"
-              :key="`${fileDiff.file.path}:${line.id}`"
-              class="diff-line"
-              :class="lineClass(line.kind)"
-            >
-              <span class="line-number">{{ line.oldLine ?? '' }}</span>
-              <span class="line-number">{{ line.newLine ?? '' }}</span>
-              <pre>{{ line.content }}</pre>
-            </div>
-          </q-card-section>
-        </q-card>
+              <span>{{ filePathWithoutPrefix(file.path) }}</span>
+            </template>
+          </template>
+        </DiffViewer>
       </section>
     </div>
   </q-page>
@@ -197,8 +165,15 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Notify } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
-import { getBranchDiff, getSessionDiff } from '@/services/diff';
-import type { DiffFile, DiffLineKind, DiffMode, FileDiff, SessionDiff } from '@/services/diff';
+import DiffViewer from '@/components/DiffViewer.vue';
+import {
+  getBranchAllDiff,
+  getBranchSingleDiff,
+  getSessionAllDiff,
+  getSessionSingleDiff,
+} from '@/services/diff';
+import { expandDiffContext, initialDiffContext } from '@/services/diffViewerState';
+import type { DiffFile, DiffMode, FileDiff, SessionDiff } from '@/services/diff';
 import { listSessions } from '@/services/sessions';
 
 const route = useRoute();
@@ -222,6 +197,7 @@ const pageSize = ref(positiveIntQuery(route.query.pageSize, 20));
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
 const sessionPrefixMap = ref<Record<string, string>>({});
+const diffContext = ref(initialDiffContext());
 
 const visibleDiffs = computed<FileDiff[]>(() => {
   if (!diff.value?.available) {
@@ -254,17 +230,26 @@ async function loadDiff() {
       filePath?: string;
       page: number;
       pageSize: number;
+      contextBefore: number;
+      contextAfter: number;
     } = {
       mode: viewMode.value,
       page: page.value,
       pageSize: pageSize.value,
+      contextBefore: diffContext.value.before,
+      contextAfter: diffContext.value.after,
     };
     if (viewMode.value === 'single' && selectedPath.value) {
       input.filePath = selectedPath.value;
     }
-    const nextDiff = branchMode.value
-      ? await getBranchDiff({ ...input, projectId: projectId.value, branch: branch.value })
-      : await getSessionDiff({ ...input, sessionId: sessionId.value });
+    const nextDiff =
+      viewMode.value === 'all'
+        ? branchMode.value
+          ? await getBranchAllDiff({ ...input, projectId: projectId.value, branch: branch.value })
+          : await getSessionAllDiff({ ...input, sessionId: sessionId.value })
+        : branchMode.value
+          ? await getBranchSingleDiff({ ...input, projectId: projectId.value, branch: branch.value })
+          : await getSessionSingleDiff({ ...input, sessionId: sessionId.value });
     diff.value = nextDiff;
     page.value = nextDiff.pageInfo.page;
     pageSize.value = nextDiff.pageInfo.pageSize;
@@ -346,6 +331,11 @@ function selectFile(path: string) {
   selectedPath.value = path;
 }
 
+function expandDiff(_filePath: string, direction: 'before' | 'after') {
+  diffContext.value = expandDiffContext(diffContext.value, direction);
+  void loadDiff();
+}
+
 function fileIcon(status: DiffFile['status']) {
   if (status === 'added') return 'add_circle';
   if (status === 'deleted') return 'remove_circle';
@@ -358,15 +348,6 @@ function fileColor(status: DiffFile['status']) {
   if (status === 'deleted') return 'negative';
   if (status === 'renamed') return 'warning';
   return 'primary';
-}
-
-function lineClass(kind: DiffLineKind) {
-  return {
-    'line-add': kind === 'add',
-    'line-delete': kind === 'delete',
-    'line-header': kind === 'header',
-    'line-context': kind === 'context',
-  };
 }
 
 function stringQuery(value: unknown) {
@@ -506,54 +487,10 @@ onMounted(() => {
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
 }
 
-.diff-line {
-  display: grid;
-  grid-template-columns: 56px 56px minmax(max-content, 1fr);
-  min-width: max-content;
-  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.diff-line pre {
-  margin: 0;
-  padding: 4px 16px;
-  white-space: pre;
-}
-
-.line-number {
-  padding: 4px 8px;
-  border-right: 1px solid var(--ac-border);
-  color: var(--ac-text-muted);
-  text-align: right;
-  user-select: none;
-}
-
-.line-add {
-  background: color-mix(in srgb, var(--q-positive) 15%, transparent);
-}
-
-.line-delete {
-  background: color-mix(in srgb, var(--q-negative) 14%, transparent);
-}
-
-.line-header {
-  background: color-mix(in srgb, var(--q-primary) 9%, var(--ac-surface-muted));
-  color: var(--ac-text-muted);
-}
-
-.line-context {
-  background: var(--ac-surface);
-}
-
 @media (max-width: 699px) {
   .heading-actions,
   .page-size-select {
     width: 100%;
-  }
-
-  .diff-line {
-    grid-template-columns: 44px 44px minmax(max-content, 1fr);
   }
 }
 </style>

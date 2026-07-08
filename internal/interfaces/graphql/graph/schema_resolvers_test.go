@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/nzlov/anycode/internal/application/apperror"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	"github.com/nzlov/anycode/internal/application/port"
@@ -20,6 +21,7 @@ import (
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 func TestQueryProjectsForwardsUseCase(t *testing.T) {
@@ -522,6 +524,59 @@ func TestErrorPresenterAddsApplicationErrorExtensions(t *testing.T) {
 	details, ok := got.Extensions["details"].(map[string]any)
 	if !ok || details["sessionId"] != "session-1" || details["worktreePath"] != "[redacted_path]" || details["accessKey"] != "[redacted]" {
 		t.Fatalf("details = %#v", got.Extensions["details"])
+	}
+}
+
+func TestDiffFieldSelectedReadsGraphQLSelection(t *testing.T) {
+	ctx := graphql.WithFieldContext(context.Background(), &graphql.FieldContext{
+		Field: graphql.CollectedField{
+			Field: &ast.Field{Name: "sessionDiff"},
+			Selections: ast.SelectionSet{
+				&ast.Field{Name: "mode"},
+				&ast.Field{Name: "files"},
+			},
+		},
+	})
+
+	if diffFieldSelected(ctx, "fileDiff") {
+		t.Fatal("fileDiff selected = true")
+	}
+	if diffFieldSelected(ctx, "allDiff") {
+		t.Fatal("allDiff selected = true")
+	}
+	if !diffFieldSelected(context.Background(), "fileDiff") {
+		t.Fatal("missing field context should preserve conservative include behavior")
+	}
+}
+
+func TestDiffFieldSelectedReadsNamedFragments(t *testing.T) {
+	ctx := graphql.WithOperationContext(context.Background(), &graphql.OperationContext{
+		Doc: &ast.QueryDocument{
+			Fragments: ast.FragmentDefinitionList{
+				&ast.FragmentDefinition{
+					Name: "DiffFields",
+					SelectionSet: ast.SelectionSet{
+						&ast.Field{Name: "fileDiff"},
+					},
+				},
+			},
+		},
+	})
+	ctx = graphql.WithFieldContext(ctx, &graphql.FieldContext{
+		Field: graphql.CollectedField{
+			Field: &ast.Field{Name: "sessionDiff"},
+			Selections: ast.SelectionSet{
+				&ast.Field{Name: "mode"},
+				&ast.FragmentSpread{Name: "DiffFields"},
+			},
+		},
+	})
+
+	if !diffFieldSelected(ctx, "fileDiff") {
+		t.Fatal("fileDiff selected through named fragment = false")
+	}
+	if diffFieldSelected(ctx, "allDiff") {
+		t.Fatal("allDiff selected through named fragment = true")
 	}
 }
 

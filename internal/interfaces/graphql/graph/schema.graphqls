@@ -251,6 +251,8 @@ type DiffHunk {
   header: String!
   oldStart: Int!
   newStart: Int!
+  canExpandBefore: Boolean!
+  canExpandAfter: Boolean!
   lines: [DiffLine!]!
 }
 
@@ -461,6 +463,8 @@ input SessionDiffInput {
   filePath: String
   page: Int
   pageSize: Int
+  contextBefore: Int
+  contextAfter: Int
 }
 
 input BranchDiffInput {
@@ -470,6 +474,8 @@ input BranchDiffInput {
   filePath: String
   page: Int
   pageSize: Int
+  contextBefore: Int
+  contextAfter: Int
 }
 
 input SessionCommitHistoryInput {

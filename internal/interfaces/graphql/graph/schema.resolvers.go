@@ -22,6 +22,7 @@ import (
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
+	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // CreateProject is the resolver for the createProject field.
@@ -368,11 +369,15 @@ func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiff
 		return nil, missingUseCase("diff")
 	}
 	dto, err := r.UseCases.Diff.GetSessionDiff(ctx, diffapp.SessionDiffInput{
-		SessionID: sessiondomain.ID(input.SessionID),
-		Mode:      stringValue(input.Mode, ""),
-		FilePath:  stringValue(input.FilePath, ""),
-		Page:      intValue(input.Page, 0),
-		PageSize:  intValue(input.PageSize, 0),
+		SessionID:       sessiondomain.ID(input.SessionID),
+		Mode:            stringValue(input.Mode, ""),
+		FilePath:        stringValue(input.FilePath, ""),
+		Page:            intValue(input.Page, 0),
+		PageSize:        intValue(input.PageSize, 0),
+		IncludeFileDiff: diffFieldSelected(ctx, "fileDiff"),
+		IncludeAllDiff:  diffFieldSelected(ctx, "allDiff"),
+		ContextBefore:   intValue(input.ContextBefore, 0),
+		ContextAfter:    intValue(input.ContextAfter, 0),
 	})
 	if err != nil {
 		return nil, err
@@ -386,17 +391,66 @@ func (r *queryResolver) BranchDiff(ctx context.Context, input model.BranchDiffIn
 		return nil, missingUseCase("diff")
 	}
 	dto, err := r.UseCases.Diff.GetBranchDiff(ctx, diffapp.BranchDiffInput{
-		ProjectID: projectdomain.ID(input.ProjectID),
-		Branch:    input.Branch,
-		Mode:      stringValue(input.Mode, ""),
-		FilePath:  stringValue(input.FilePath, ""),
-		Page:      intValue(input.Page, 0),
-		PageSize:  intValue(input.PageSize, 0),
+		ProjectID:       projectdomain.ID(input.ProjectID),
+		Branch:          input.Branch,
+		Mode:            stringValue(input.Mode, ""),
+		FilePath:        stringValue(input.FilePath, ""),
+		Page:            intValue(input.Page, 0),
+		PageSize:        intValue(input.PageSize, 0),
+		IncludeFileDiff: diffFieldSelected(ctx, "fileDiff"),
+		IncludeAllDiff:  diffFieldSelected(ctx, "allDiff"),
+		ContextBefore:   intValue(input.ContextBefore, 0),
+		ContextAfter:    intValue(input.ContextAfter, 0),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return mapSessionDiff(dto), nil
+}
+
+func diffFieldSelected(ctx context.Context, name string) bool {
+	fieldContext := graphql.GetFieldContext(ctx)
+	if fieldContext == nil {
+		return true
+	}
+	var fragments ast.FragmentDefinitionList
+	if graphql.HasOperationContext(ctx) {
+		if operationContext := graphql.GetOperationContext(ctx); operationContext != nil && operationContext.Doc != nil {
+			fragments = operationContext.Doc.Fragments
+		}
+	}
+	return selectionSetHasField(fieldContext.Field.Selections, name, fragments, map[string]bool{})
+}
+
+func selectionSetHasField(selections ast.SelectionSet, name string, fragments ast.FragmentDefinitionList, visited map[string]bool) bool {
+	for _, selection := range selections {
+		switch selected := selection.(type) {
+		case *ast.Field:
+			if selected.Name == name {
+				return true
+			}
+			if selectionSetHasField(selected.SelectionSet, name, fragments, visited) {
+				return true
+			}
+		case *ast.InlineFragment:
+			if selectionSetHasField(selected.SelectionSet, name, fragments, visited) {
+				return true
+			}
+		case *ast.FragmentSpread:
+			if visited[selected.Name] {
+				continue
+			}
+			fragment := fragments.ForName(selected.Name)
+			if fragment == nil {
+				continue
+			}
+			visited[selected.Name] = true
+			if selectionSetHasField(fragment.SelectionSet, name, fragments, visited) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SessionCommitHistory is the resolver for the sessionCommitHistory field.

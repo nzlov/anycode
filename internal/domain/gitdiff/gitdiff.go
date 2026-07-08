@@ -20,10 +20,12 @@ type DiffFile struct {
 }
 
 type DiffHunk struct {
-	Header   string
-	OldStart int
-	NewStart int
-	Lines    []DiffLine
+	Header          string
+	OldStart        int
+	NewStart        int
+	CanExpandBefore bool
+	CanExpandAfter  bool
+	Lines           []DiffLine
 }
 
 type DiffLine struct {
@@ -89,13 +91,17 @@ type DiffInput struct {
 
 type FileDiffInput struct {
 	DiffInput
-	FilePath string
+	FilePath      string
+	ContextBefore int
+	ContextAfter  int
 }
 
 type RangeDiffInput struct {
-	RepoPath string
-	BaseRef  string
-	HeadRef  string
+	RepoPath      string
+	BaseRef       string
+	HeadRef       string
+	ContextBefore int
+	ContextAfter  int
 }
 
 type CommitHistoryInput struct {

@@ -369,26 +369,8 @@
           <div class="text-body2">当前文件没有可展示的 Diff</div>
         </q-card-section>
 
-        <q-card-section v-else class="diff-code">
-          <div class="diff-file-meta">
-            <q-badge outline color="positive" :label="`+${selectedFileDiff.file.additions}`" />
-            <q-badge outline color="negative" :label="`-${selectedFileDiff.file.deletions}`" />
-            <q-badge
-              outline
-              :color="fileColor(selectedFileDiff.file.status)"
-              :label="selectedFileDiff.file.status"
-            />
-          </div>
-          <div
-            v-for="line in selectedFileDiff.lines"
-            :key="`${selectedFileDiff.file.path}:${line.id}`"
-            class="diff-line"
-            :class="lineClass(line.kind)"
-          >
-            <span class="line-number">{{ line.oldLine ?? '' }}</span>
-            <span class="line-number">{{ line.newLine ?? '' }}</span>
-            <pre>{{ line.content }}</pre>
-          </div>
+        <q-card-section v-else class="file-diff-body">
+          <DiffViewer :file-diffs="[selectedFileDiff]" @expand="expandSelectedFileDiff" />
         </q-card-section>
       </q-card>
     </q-dialog>
@@ -401,6 +383,7 @@ import { Notify } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
+import DiffViewer from '@/components/DiffViewer.vue';
 import PromptComposer from '@/components/PromptComposer.vue';
 import SessionEventMessage, {
   type SessionEventMessageEntry,
@@ -413,9 +396,10 @@ import {
 } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
-import { getSessionDiff } from '@/services/diff';
+import { getSessionDiffFiles, getSessionFileDiff } from '@/services/diff';
+import { expandDiffContext, initialDiffContext } from '@/services/diffViewerState';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
-import type { DiffFile, DiffLineKind, FileDiff, SessionDiff } from '@/services/diff';
+import type { DiffFile, FileDiff, SessionDiff } from '@/services/diff';
 import { mergeShellEvents } from '@/services/sessionEventPresentation';
 import type { QuestionAnswerInput, SessionMode, SessionStatus } from '@/services/sessions';
 
@@ -438,6 +422,7 @@ const selectedFileDiff = ref<FileDiff | null>(null);
 const fileDiffLoading = ref(false);
 const diffPage = ref(1);
 const diffPageSize = 20;
+const selectedDiffContext = ref(initialDiffContext());
 let mounted = false;
 const {
   session,
@@ -730,7 +715,7 @@ async function loadChangeList() {
   if (!sessionId) return;
   diffLoading.value = true;
   try {
-    diff.value = await getSessionDiff({
+    diff.value = await getSessionDiffFiles({
       sessionId,
       mode: 'single',
       page: diffPage.value,
@@ -747,6 +732,7 @@ async function loadChangeList() {
 async function openFileDiff(path: string) {
   selectedFilePath.value = path;
   selectedFileDiff.value = null;
+  selectedDiffContext.value = initialDiffContext();
   fileDiffDialog.value = true;
   await loadFileDiff(path);
 }
@@ -754,19 +740,25 @@ async function openFileDiff(path: string) {
 async function loadFileDiff(path: string) {
   fileDiffLoading.value = true;
   try {
-    const nextDiff = await getSessionDiff({
+    selectedFileDiff.value = await getSessionFileDiff({
       sessionId,
       mode: 'single',
       filePath: path,
       page: diffPage.value,
       pageSize: diffPageSize,
+      contextBefore: selectedDiffContext.value.before,
+      contextAfter: selectedDiffContext.value.after,
     });
-    selectedFileDiff.value = nextDiff.fileDiff;
   } catch (err) {
     notifyError(err, '读取文件 Diff 失败');
   } finally {
     fileDiffLoading.value = false;
   }
+}
+
+function expandSelectedFileDiff(path: string, direction: 'before' | 'after') {
+  selectedDiffContext.value = expandDiffContext(selectedDiffContext.value, direction);
+  void loadFileDiff(path);
 }
 
 function notifyError(err: unknown, fallback: string) {
@@ -829,15 +821,6 @@ function fileColor(status: DiffFile['status']) {
   if (status === 'deleted') return 'negative';
   if (status === 'renamed') return 'warning';
   return 'primary';
-}
-
-function lineClass(kind: DiffLineKind) {
-  return {
-    'line-add': kind === 'add',
-    'line-delete': kind === 'delete',
-    'line-header': kind === 'header',
-    'line-context': kind === 'context',
-  };
 }
 
 async function sendAppend() {
@@ -1322,60 +1305,6 @@ async function scrollEventsToBottom() {
   word-break: break-word;
 }
 
-.diff-code {
-  min-height: 0;
-  overflow: auto;
-  padding: 0;
-}
-
-.diff-file-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ac-border);
-}
-
-.diff-line {
-  display: grid;
-  grid-template-columns: 56px 56px minmax(max-content, 1fr);
-  min-width: max-content;
-  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.diff-line pre {
-  margin: 0;
-  padding: 4px 16px;
-  white-space: pre;
-}
-
-.line-number {
-  padding: 4px 8px;
-  border-right: 1px solid var(--ac-border);
-  color: var(--ac-text-muted);
-  text-align: right;
-  user-select: none;
-}
-
-.line-add {
-  background: color-mix(in srgb, var(--q-positive) 15%, transparent);
-}
-
-.line-delete {
-  background: color-mix(in srgb, var(--q-negative) 14%, transparent);
-}
-
-.line-header {
-  background: color-mix(in srgb, var(--q-primary) 9%, var(--ac-surface-muted));
-  color: var(--ac-text-muted);
-}
-
-.line-context {
-  background: var(--ac-surface);
-}
-
 @media (max-width: 699px) {
   .detail-page {
     height: 100%;
@@ -1409,10 +1338,6 @@ async function scrollEventsToBottom() {
     width: 100vw;
     max-width: 100vw;
     max-height: 100vh;
-  }
-
-  .diff-line {
-    grid-template-columns: 44px 44px minmax(max-content, 1fr);
   }
 }
 </style>

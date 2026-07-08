@@ -77,10 +77,12 @@ type ComplexityRoot struct {
 	}
 
 	DiffHunk struct {
-		Header   func(childComplexity int) int
-		Lines    func(childComplexity int) int
-		NewStart func(childComplexity int) int
-		OldStart func(childComplexity int) int
+		CanExpandAfter  func(childComplexity int) int
+		CanExpandBefore func(childComplexity int) int
+		Header          func(childComplexity int) int
+		Lines           func(childComplexity int) int
+		NewStart        func(childComplexity int) int
+		OldStart        func(childComplexity int) int
 	}
 
 	DiffLine struct {
@@ -601,6 +603,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.DiffFilePage.PageInfo(childComplexity), true
 
+	case "DiffHunk.canExpandAfter":
+		if e.ComplexityRoot.DiffHunk.CanExpandAfter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DiffHunk.CanExpandAfter(childComplexity), true
+	case "DiffHunk.canExpandBefore":
+		if e.ComplexityRoot.DiffHunk.CanExpandBefore == nil {
+			break
+		}
+
+		return e.ComplexityRoot.DiffHunk.CanExpandBefore(childComplexity), true
 	case "DiffHunk.header":
 		if e.ComplexityRoot.DiffHunk.Header == nil {
 			break
@@ -2509,6 +2523,8 @@ type DiffHunk {
   header: String!
   oldStart: Int!
   newStart: Int!
+  canExpandBefore: Boolean!
+  canExpandAfter: Boolean!
   lines: [DiffLine!]!
 }
 
@@ -2719,6 +2735,8 @@ input SessionDiffInput {
   filePath: String
   page: Int
   pageSize: Int
+  contextBefore: Int
+  contextAfter: Int
 }
 
 input BranchDiffInput {
@@ -2728,6 +2746,8 @@ input BranchDiffInput {
   filePath: String
   page: Int
   pageSize: Int
+  contextBefore: Int
+  contextAfter: Int
 }
 
 input SessionCommitHistoryInput {
@@ -3986,6 +4006,64 @@ func (ec *executionContext) fieldContext_DiffHunk_newStart(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _DiffHunk_canExpandBefore(ctx context.Context, field graphql.CollectedField, obj *model.DiffHunk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DiffHunk_canExpandBefore,
+		func(ctx context.Context) (any, error) {
+			return obj.CanExpandBefore, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DiffHunk_canExpandBefore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DiffHunk",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _DiffHunk_canExpandAfter(ctx context.Context, field graphql.CollectedField, obj *model.DiffHunk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_DiffHunk_canExpandAfter,
+		func(ctx context.Context) (any, error) {
+			return obj.CanExpandAfter, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_DiffHunk_canExpandAfter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "DiffHunk",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _DiffHunk_lines(ctx context.Context, field graphql.CollectedField, obj *model.DiffHunk) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -4481,6 +4559,10 @@ func (ec *executionContext) fieldContext_FileDiff_hunks(_ context.Context, field
 				return ec.fieldContext_DiffHunk_oldStart(ctx, field)
 			case "newStart":
 				return ec.fieldContext_DiffHunk_newStart(ctx, field)
+			case "canExpandBefore":
+				return ec.fieldContext_DiffHunk_canExpandBefore(ctx, field)
+			case "canExpandAfter":
+				return ec.fieldContext_DiffHunk_canExpandAfter(ctx, field)
 			case "lines":
 				return ec.fieldContext_DiffHunk_lines(ctx, field)
 			}
@@ -13305,7 +13387,7 @@ func (ec *executionContext) unmarshalInputBranchDiffInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "branch", "mode", "filePath", "page", "pageSize"}
+	fieldsInOrder := [...]string{"projectId", "branch", "mode", "filePath", "page", "pageSize", "contextBefore", "contextAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13354,6 +13436,20 @@ func (ec *executionContext) unmarshalInputBranchDiffInput(ctx context.Context, o
 				return it, err
 			}
 			it.PageSize = data
+		case "contextBefore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextBefore"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ContextBefore = data
+		case "contextAfter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextAfter"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ContextAfter = data
 		}
 	}
 	return it, nil
@@ -13905,7 +14001,7 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "mode", "filePath", "page", "pageSize"}
+	fieldsInOrder := [...]string{"sessionId", "mode", "filePath", "page", "pageSize", "contextBefore", "contextAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -13947,6 +14043,20 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 				return it, err
 			}
 			it.PageSize = data
+		case "contextBefore":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextBefore"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ContextBefore = data
+		case "contextAfter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextAfter"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ContextAfter = data
 		}
 	}
 	return it, nil
@@ -14869,6 +14979,16 @@ func (ec *executionContext) _DiffHunk(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "newStart":
 			out.Values[i] = ec._DiffHunk_newStart(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canExpandBefore":
+			out.Values[i] = ec._DiffHunk_canExpandBefore(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "canExpandAfter":
+			out.Values[i] = ec._DiffHunk_canExpandAfter(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

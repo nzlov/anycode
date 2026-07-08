@@ -19,8 +19,19 @@ export interface DiffLine {
   newLine: number | null;
 }
 
+export interface DiffHunk {
+  id: string;
+  header: string;
+  oldStart: number;
+  newStart: number;
+  canExpandBefore: boolean;
+  canExpandAfter: boolean;
+  lines: DiffLine[];
+}
+
 export interface FileDiff {
   file: DiffFile;
+  hunks: DiffHunk[];
   lines: DiffLine[];
 }
 
@@ -40,6 +51,8 @@ export interface GetSessionDiffInput {
   filePath?: string;
   page: number;
   pageSize: number;
+  contextBefore?: number;
+  contextAfter?: number;
 }
 
 export interface GetBranchDiffInput {
@@ -49,6 +62,8 @@ export interface GetBranchDiffInput {
   filePath?: string;
   page: number;
   pageSize: number;
+  contextBefore?: number;
+  contextAfter?: number;
 }
 
 export interface CommitRecord {
@@ -82,6 +97,8 @@ interface GraphQLDiffHunk {
   header: string;
   oldStart: number;
   newStart: number;
+  canExpandBefore: boolean;
+  canExpandAfter: boolean;
   lines: GraphQLDiffLine[];
 }
 
@@ -98,8 +115,8 @@ interface GraphQLSessionDiff {
     items: GraphQLDiffFile[];
     pageInfo: PageInfo;
   };
-  fileDiff: GraphQLFileDiff | null;
-  allDiff: GraphQLFileDiff[];
+  fileDiff?: GraphQLFileDiff | null;
+  allDiff?: GraphQLFileDiff[];
 }
 
 interface GraphQLSessionCommitHistory {
@@ -110,13 +127,15 @@ interface GraphQLSessionCommitHistory {
   };
 }
 
-export async function getSessionDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
+export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
   const variablesInput: {
     sessionId: string;
     mode: DiffMode;
     filePath?: string;
     page: number;
     pageSize: number;
+    contextBefore?: number;
+    contextAfter?: number;
   } = {
     sessionId: input.sessionId,
     mode: input.mode,
@@ -125,6 +144,12 @@ export async function getSessionDiff(input: GetSessionDiffInput): Promise<Sessio
   };
   if (input.filePath) {
     variablesInput.filePath = input.filePath;
+  }
+  if (input.contextBefore) {
+    variablesInput.contextBefore = input.contextBefore;
+  }
+  if (input.contextAfter) {
+    variablesInput.contextAfter = input.contextAfter;
   }
 
   const data = await graphqlFetch<
@@ -136,11 +161,13 @@ export async function getSessionDiff(input: GetSessionDiffInput): Promise<Sessio
         filePath?: string;
         page: number;
         pageSize: number;
+        contextBefore?: number;
+        contextAfter?: number;
       };
     }
   >({
     query: `
-      query SessionDiff($input: SessionDiffInput!) {
+      query SessionSingleDiff($input: SessionDiffInput!) {
         sessionDiff(input: $input) {
           mode
           filePath
@@ -170,23 +197,8 @@ export async function getSessionDiff(input: GetSessionDiffInput): Promise<Sessio
               header
               oldStart
               newStart
-              lines {
-                kind
-                content
-              }
-            }
-          }
-          allDiff {
-            file {
-              path
-              status
-              additions
-              deletions
-            }
-            hunks {
-              header
-              oldStart
-              newStart
+              canExpandBefore
+              canExpandAfter
               lines {
                 kind
                 content
@@ -204,7 +216,200 @@ export async function getSessionDiff(input: GetSessionDiffInput): Promise<Sessio
   return normalizeSessionDiff(data.sessionDiff);
 }
 
-export async function getBranchDiff(input: GetBranchDiffInput): Promise<SessionDiff> {
+export async function getSessionAllDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
+  const variablesInput: {
+    sessionId: string;
+    mode: DiffMode;
+    page: number;
+    pageSize: number;
+    contextBefore?: number;
+    contextAfter?: number;
+  } = {
+    sessionId: input.sessionId,
+    mode: 'all',
+    page: input.page,
+    pageSize: input.pageSize,
+  };
+  if (input.contextBefore) {
+    variablesInput.contextBefore = input.contextBefore;
+  }
+  if (input.contextAfter) {
+    variablesInput.contextAfter = input.contextAfter;
+  }
+
+  const data = await graphqlFetch<
+    { sessionDiff: GraphQLSessionDiff },
+    { input: typeof variablesInput }
+  >({
+    query: `
+      query SessionAllDiff($input: SessionDiffInput!) {
+        sessionDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            items {
+              path
+              status
+              additions
+              deletions
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
+            }
+          }
+          allDiff {
+            file {
+              path
+              status
+              additions
+              deletions
+            }
+            hunks {
+              header
+              oldStart
+              newStart
+              canExpandBefore
+              canExpandAfter
+              lines {
+                kind
+                content
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      input: variablesInput,
+    },
+  });
+
+  return normalizeSessionDiff(data.sessionDiff);
+}
+
+export async function getSessionDiffFiles(input: GetSessionDiffInput): Promise<SessionDiff> {
+  const data = await graphqlFetch<
+    { sessionDiff: GraphQLSessionDiff },
+    { input: { sessionId: string; mode: DiffMode; page: number; pageSize: number } }
+  >({
+    query: `
+      query SessionDiffFiles($input: SessionDiffInput!) {
+        sessionDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            items {
+              path
+              status
+              additions
+              deletions
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      input: {
+        sessionId: input.sessionId,
+        mode: input.mode,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
+    },
+  });
+
+  return normalizeSessionDiff(data.sessionDiff);
+}
+
+export async function getSessionFileDiff(input: GetSessionDiffInput): Promise<FileDiff | null> {
+  const variablesInput: {
+    sessionId: string;
+    mode: DiffMode;
+    filePath?: string;
+    page: number;
+    pageSize: number;
+    contextBefore?: number;
+    contextAfter?: number;
+  } = {
+    sessionId: input.sessionId,
+    mode: 'single',
+    page: input.page,
+    pageSize: input.pageSize,
+  };
+  if (input.filePath) {
+    variablesInput.filePath = input.filePath;
+  }
+  if (input.contextBefore) {
+    variablesInput.contextBefore = input.contextBefore;
+  }
+  if (input.contextAfter) {
+    variablesInput.contextAfter = input.contextAfter;
+  }
+
+  const data = await graphqlFetch<
+    { sessionDiff: GraphQLSessionDiff },
+    { input: typeof variablesInput }
+  >({
+    query: `
+      query SessionFileDiff($input: SessionDiffInput!) {
+        sessionDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            items {
+              path
+              status
+              additions
+              deletions
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
+            }
+          }
+          fileDiff {
+            file {
+              path
+              status
+              additions
+              deletions
+            }
+            hunks {
+              header
+              oldStart
+              newStart
+              canExpandBefore
+              canExpandAfter
+              lines {
+                kind
+                content
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: { input: variablesInput },
+  });
+
+  return normalizeSessionDiff(data.sessionDiff).fileDiff;
+}
+
+export async function getBranchSingleDiff(input: GetBranchDiffInput): Promise<SessionDiff> {
   const variablesInput: {
     projectId: string;
     branch: string;
@@ -212,6 +417,8 @@ export async function getBranchDiff(input: GetBranchDiffInput): Promise<SessionD
     filePath?: string;
     page: number;
     pageSize: number;
+    contextBefore?: number;
+    contextAfter?: number;
   } = {
     projectId: input.projectId,
     branch: input.branch,
@@ -222,13 +429,19 @@ export async function getBranchDiff(input: GetBranchDiffInput): Promise<SessionD
   if (input.filePath) {
     variablesInput.filePath = input.filePath;
   }
+  if (input.contextBefore) {
+    variablesInput.contextBefore = input.contextBefore;
+  }
+  if (input.contextAfter) {
+    variablesInput.contextAfter = input.contextAfter;
+  }
 
   const data = await graphqlFetch<
     { branchDiff: GraphQLSessionDiff },
     { input: typeof variablesInput }
   >({
     query: `
-      query BranchDiff($input: BranchDiffInput!) {
+      query BranchSingleDiff($input: BranchDiffInput!) {
         branchDiff(input: $input) {
           mode
           filePath
@@ -258,10 +471,70 @@ export async function getBranchDiff(input: GetBranchDiffInput): Promise<SessionD
               header
               oldStart
               newStart
+              canExpandBefore
+              canExpandAfter
               lines {
                 kind
                 content
               }
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      input: variablesInput,
+    },
+  });
+
+  return normalizeSessionDiff(data.branchDiff);
+}
+
+export async function getBranchAllDiff(input: GetBranchDiffInput): Promise<SessionDiff> {
+  const variablesInput: {
+    projectId: string;
+    branch: string;
+    mode: DiffMode;
+    page: number;
+    pageSize: number;
+    contextBefore?: number;
+    contextAfter?: number;
+  } = {
+    projectId: input.projectId,
+    branch: input.branch,
+    mode: 'all',
+    page: input.page,
+    pageSize: input.pageSize,
+  };
+  if (input.contextBefore) {
+    variablesInput.contextBefore = input.contextBefore;
+  }
+  if (input.contextAfter) {
+    variablesInput.contextAfter = input.contextAfter;
+  }
+
+  const data = await graphqlFetch<
+    { branchDiff: GraphQLSessionDiff },
+    { input: typeof variablesInput }
+  >({
+    query: `
+      query BranchAllDiff($input: BranchDiffInput!) {
+        branchDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            items {
+              path
+              status
+              additions
+              deletions
+            }
+            pageInfo {
+              page
+              pageSize
+              total
+              nextCursor
             }
           }
           allDiff {
@@ -275,6 +548,8 @@ export async function getBranchDiff(input: GetBranchDiffInput): Promise<SessionD
               header
               oldStart
               newStart
+              canExpandBefore
+              canExpandAfter
               lines {
                 kind
                 content
@@ -341,18 +616,20 @@ function normalizeSessionDiff(diff: GraphQLSessionDiff): SessionDiff {
     files: diff.files.items,
     pageInfo: diff.files.pageInfo,
     fileDiff: diff.fileDiff ? normalizeFileDiff(diff.fileDiff) : null,
-    allDiff: diff.allDiff.map(normalizeFileDiff),
+    allDiff: (diff.allDiff ?? []).map(normalizeFileDiff),
   };
 }
 
 function normalizeFileDiff(diff: GraphQLFileDiff): FileDiff {
+  const hunks = diff.hunks.map(normalizeHunk);
   return {
     file: diff.file,
-    lines: diff.hunks.flatMap((hunk, hunkIndex) => normalizeHunk(hunk, hunkIndex)),
+    hunks,
+    lines: hunks.flatMap((hunk) => hunk.lines),
   };
 }
 
-function normalizeHunk(hunk: GraphQLDiffHunk, hunkIndex: number): DiffLine[] {
+function normalizeHunk(hunk: GraphQLDiffHunk, hunkIndex: number): DiffHunk {
   let oldLine = hunk.oldStart;
   let newLine = hunk.newStart;
   const lines: DiffLine[] = [
@@ -386,7 +663,15 @@ function normalizeHunk(hunk: GraphQLDiffHunk, hunkIndex: number): DiffLine[] {
     }
   });
 
-  return lines;
+  return {
+    id: String(hunkIndex),
+    header: hunk.header,
+    oldStart: hunk.oldStart,
+    newStart: hunk.newStart,
+    canExpandBefore: hunk.canExpandBefore,
+    canExpandAfter: hunk.canExpandAfter,
+    lines,
+  };
 }
 
 function normalizeLineKind(kind: string): DiffLineKind {

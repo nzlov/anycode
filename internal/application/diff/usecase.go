@@ -20,20 +20,28 @@ type UseCase interface {
 }
 
 type SessionDiffInput struct {
-	SessionID session.ID
-	Mode      string
-	FilePath  string
-	Page      int
-	PageSize  int
+	SessionID       session.ID
+	Mode            string
+	FilePath        string
+	Page            int
+	PageSize        int
+	IncludeFileDiff bool
+	IncludeAllDiff  bool
+	ContextBefore   int
+	ContextAfter    int
 }
 
 type BranchDiffInput struct {
-	ProjectID projectdomain.ID
-	Branch    string
-	Mode      string
-	FilePath  string
-	Page      int
-	PageSize  int
+	ProjectID       projectdomain.ID
+	Branch          string
+	Mode            string
+	FilePath        string
+	Page            int
+	PageSize        int
+	IncludeFileDiff bool
+	IncludeAllDiff  bool
+	ContextBefore   int
+	ContextAfter    int
 }
 
 type SessionDiffDTO struct {
@@ -116,15 +124,54 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 		return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "latest merge record unavailable").WithRetryable(true)
 	}
 	if hasMergeRecord && strings.TrimSpace(mergeRecord.BaseCommit) != "" && strings.TrimSpace(mergeHeadRef(mergeRecord)) != "" {
-		rangeDiff, err := s.diff.RangeDiff(ctx, gitdiff.RangeDiffInput{
-			RepoPath: strings.TrimSpace(project.Path.Value),
-			BaseRef:  strings.TrimSpace(mergeRecord.BaseCommit),
-			HeadRef:  strings.TrimSpace(mergeHeadRef(mergeRecord)),
-		})
+		diffInput := mergeRecordDiffInput(project, mergeRecord)
+		files, err := s.diff.ChangedFiles(ctx, diffInput)
 		if err != nil {
-			return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read merge range diff failed").WithRetryable(true)
+			return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list merge range files failed").WithRetryable(true)
 		}
-		return applyDiffResult(dto, rangeDiff.Files, rangeDiff.Hunks), nil
+		dto = applyDiffFiles(dto, files)
+		if len(files) == 0 || (!input.IncludeFileDiff && !input.IncludeAllDiff) {
+			return dto, nil
+		}
+		switch mode {
+		case modeAll:
+			if !input.IncludeAllDiff {
+				return dto, nil
+			}
+			dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
+			for _, file := range dto.Files.Items {
+				fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
+					DiffInput:     diffInput,
+					FilePath:      file.Path,
+					ContextBefore: input.ContextBefore,
+					ContextAfter:  input.ContextAfter,
+				})
+				if err != nil {
+					return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read merge range file diff failed").WithDetails(map[string]any{"filePath": file.Path}).WithRetryable(true)
+				}
+				dto.AllDiff = append(dto.AllDiff, fileDiff)
+			}
+		default:
+			if !input.IncludeFileDiff {
+				return dto, nil
+			}
+			filePath := dto.FilePath
+			if filePath == "" || !hasFile(files, filePath) {
+				filePath = files[0].Path
+			}
+			fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
+				DiffInput:     diffInput,
+				FilePath:      filePath,
+				ContextBefore: input.ContextBefore,
+				ContextAfter:  input.ContextAfter,
+			})
+			if err != nil {
+				return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read merge range file diff failed").WithDetails(map[string]any{"filePath": filePath}).WithRetryable(true)
+			}
+			dto.FilePath = filePath
+			dto.FileDiff = &fileDiff
+		}
+		return dto, nil
 	}
 
 	if strings.TrimSpace(sess.WorktreePath) == "" {
@@ -143,13 +190,21 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 	if len(files) == 0 {
 		return dto, nil
 	}
+	if !input.IncludeFileDiff && !input.IncludeAllDiff {
+		return dto, nil
+	}
 	switch mode {
 	case modeAll:
+		if !input.IncludeAllDiff {
+			return dto, nil
+		}
 		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
 		for _, file := range dto.Files.Items {
 			fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
-				DiffInput: diffInput,
-				FilePath:  file.Path,
+				DiffInput:     diffInput,
+				FilePath:      file.Path,
+				ContextBefore: input.ContextBefore,
+				ContextAfter:  input.ContextAfter,
 			})
 			if err != nil {
 				return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read file diff failed").WithDetails(map[string]any{"filePath": file.Path}).WithRetryable(true)
@@ -157,13 +212,18 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 			dto.AllDiff = append(dto.AllDiff, fileDiff)
 		}
 	default:
+		if !input.IncludeFileDiff {
+			return dto, nil
+		}
 		filePath := dto.FilePath
 		if filePath == "" || !hasFile(files, filePath) {
 			filePath = files[0].Path
 		}
 		fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
-			DiffInput: diffInput,
-			FilePath:  filePath,
+			DiffInput:     diffInput,
+			FilePath:      filePath,
+			ContextBefore: input.ContextBefore,
+			ContextAfter:  input.ContextAfter,
 		})
 		if err != nil {
 			return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read file diff failed").WithDetails(map[string]any{"filePath": filePath}).WithRetryable(true)
@@ -230,22 +290,31 @@ func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (Ses
 	if len(files) == 0 {
 		return dto, nil
 	}
+	if !input.IncludeFileDiff && !input.IncludeAllDiff {
+		return dto, nil
+	}
 	switch mode {
 	case modeAll:
+		if !input.IncludeAllDiff {
+			return dto, nil
+		}
 		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
 		for _, file := range dto.Files.Items {
-			fileDiff, err := s.branchFileDiff(ctx, sources[file.Path])
+			fileDiff, err := s.branchFileDiff(ctx, sources[file.Path], input.ContextBefore, input.ContextAfter)
 			if err != nil {
 				return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read branch file diff failed").WithDetails(map[string]any{"filePath": file.Path}).WithRetryable(true)
 			}
 			dto.AllDiff = append(dto.AllDiff, fileDiff)
 		}
 	default:
+		if !input.IncludeFileDiff {
+			return dto, nil
+		}
 		filePath := dto.FilePath
 		if filePath == "" || !hasFile(files, filePath) {
 			filePath = files[0].Path
 		}
-		fileDiff, err := s.branchFileDiff(ctx, sources[filePath])
+		fileDiff, err := s.branchFileDiff(ctx, sources[filePath], input.ContextBefore, input.ContextAfter)
 		if err != nil {
 			return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read branch file diff failed").WithDetails(map[string]any{"filePath": filePath}).WithRetryable(true)
 		}
@@ -299,16 +368,13 @@ func (s *Service) branchSessionDiffSources(ctx context.Context, sess session.Ses
 		return nil, nil, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "latest merge record unavailable").WithRetryable(true)
 	}
 	if hasMergeRecord && strings.TrimSpace(mergeRecord.BaseCommit) != "" && strings.TrimSpace(mergeHeadRef(mergeRecord)) != "" {
-		rangeDiff, err := s.diff.RangeDiff(ctx, gitdiff.RangeDiffInput{
-			RepoPath: strings.TrimSpace(project.Path.Value),
-			BaseRef:  strings.TrimSpace(mergeRecord.BaseCommit),
-			HeadRef:  strings.TrimSpace(mergeHeadRef(mergeRecord)),
-		})
+		diffInput := mergeRecordDiffInput(project, mergeRecord)
+		files, err := s.diff.ChangedFiles(ctx, diffInput)
 		if err != nil {
-			return nil, nil, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read merge range diff failed").WithRetryable(true)
+			return nil, nil, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list merge range files failed").WithRetryable(true)
 		}
-		files, sources := prefixBranchDiff(sess.ID, rangeDiff.Files, rangeDiff.Hunks, nil)
-		return files, sources, nil
+		prefixed, sources := prefixBranchDiff(sess.ID, files, nil, &diffInput)
+		return prefixed, sources, nil
 	}
 
 	worktreePath := strings.TrimSpace(sess.WorktreePath)
@@ -322,6 +388,14 @@ func (s *Service) branchSessionDiffSources(ctx context.Context, sess session.Ses
 	}
 	prefixed, sources := prefixBranchDiff(sess.ID, files, nil, &diffInput)
 	return prefixed, sources, nil
+}
+
+func mergeRecordDiffInput(project projectdomain.Project, mergeRecord session.MergeRecord) gitdiff.DiffInput {
+	return gitdiff.DiffInput{
+		WorktreePath: strings.TrimSpace(project.Path.Value),
+		BaseRef:      strings.TrimSpace(mergeRecord.BaseCommit),
+		HeadRef:      strings.TrimSpace(mergeHeadRef(mergeRecord)),
+	}
 }
 
 func liveWorktreeBaseRef(baseBranch string) string {
@@ -357,7 +431,7 @@ func prefixBranchDiff(sessionID session.ID, files []gitdiff.DiffFile, hunks []gi
 	return prefixed, sources
 }
 
-func (s *Service) branchFileDiff(ctx context.Context, source branchDiffSource) (gitdiff.FileDiff, error) {
+func (s *Service) branchFileDiff(ctx context.Context, source branchDiffSource, contextBefore int, contextAfter int) (gitdiff.FileDiff, error) {
 	if source.Hunk != nil {
 		return *source.Hunk, nil
 	}
@@ -365,8 +439,10 @@ func (s *Service) branchFileDiff(ctx context.Context, source branchDiffSource) (
 		return gitdiff.FileDiff{}, nil
 	}
 	fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
-		DiffInput: *source.Input,
-		FilePath:  source.FilePath,
+		DiffInput:     *source.Input,
+		FilePath:      source.FilePath,
+		ContextBefore: contextBefore,
+		ContextAfter:  contextAfter,
 	})
 	if err != nil {
 		return gitdiff.FileDiff{}, err
@@ -453,40 +529,6 @@ func (s *Service) GetCommitHistory(ctx context.Context, input CommitHistoryInput
 		NextCursor: nextCursor(page, pageSize, len(commits)),
 	}
 	return dto, nil
-}
-
-func applyDiffResult(dto SessionDiffDTO, files []gitdiff.DiffFile, hunks []gitdiff.FileDiff) SessionDiffDTO {
-	dto = applyDiffFiles(dto, files)
-	if len(files) == 0 {
-		return dto
-	}
-	hunkByPath := map[string]gitdiff.FileDiff{}
-	for _, hunk := range hunks {
-		hunkByPath[hunk.File.Path] = hunk
-	}
-	switch dto.Mode {
-	case modeAll:
-		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
-		for _, file := range dto.Files.Items {
-			if hunk, ok := hunkByPath[file.Path]; ok {
-				dto.AllDiff = append(dto.AllDiff, hunk)
-			} else {
-				dto.AllDiff = append(dto.AllDiff, gitdiff.FileDiff{File: file})
-			}
-		}
-	default:
-		filePath := dto.FilePath
-		if filePath == "" || !hasFile(files, filePath) {
-			filePath = files[0].Path
-		}
-		fileDiff, ok := hunkByPath[filePath]
-		if !ok {
-			fileDiff = gitdiff.FileDiff{File: findFile(files, filePath)}
-		}
-		dto.FilePath = filePath
-		dto.FileDiff = &fileDiff
-	}
-	return dto
 }
 
 func applyDiffFiles(dto SessionDiffDTO, files []gitdiff.DiffFile) SessionDiffDTO {

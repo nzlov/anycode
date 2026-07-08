@@ -16,6 +16,8 @@ import (
 )
 
 const defaultGitBin = "git"
+const defaultDiffContextLines = 10
+const diffContextExpandStep = 20
 
 var hunkHeaderPattern = regexp.MustCompile(`^@@ -([0-9]+)(?:,[0-9]+)? \+([0-9]+)(?:,[0-9]+)? @@`)
 
@@ -269,21 +271,23 @@ func (c *Client) FileDiff(ctx context.Context, input gitdiff.FileDiffInput) (git
 			}
 			return gitdiff.FileDiff{File: stats, Hunks: hunk}, nil
 		}
-		args := append([]string{"diff", "--unified=80"}, refs...)
+		contextBefore, contextAfter := normalizeDiffContext(input.ContextBefore, input.ContextAfter)
+		args := append([]string{"diff", fmt.Sprintf("--unified=%d", probeDiffContext(contextBefore, contextAfter))}, refs...)
 		args = append(args, "--", input.FilePath)
 		out, err := c.run(ctx, input.WorktreePath, args...)
 		if err != nil {
 			return gitdiff.FileDiff{}, err
 		}
-		return gitdiff.FileDiff{File: stats, Hunks: parseUnifiedDiff(out)}, nil
+		return gitdiff.FileDiff{File: stats, Hunks: trimDiffHunks(parseUnifiedDiff(out), contextBefore, contextAfter)}, nil
 	}
-	args := append([]string{"diff", "--unified=80"}, refs...)
+	contextBefore, contextAfter := normalizeDiffContext(input.ContextBefore, input.ContextAfter)
+	args := append([]string{"diff", fmt.Sprintf("--unified=%d", probeDiffContext(contextBefore, contextAfter))}, refs...)
 	args = append(args, "--", input.FilePath)
 	out, err := c.run(ctx, input.WorktreePath, args...)
 	if err != nil {
 		return gitdiff.FileDiff{}, err
 	}
-	return gitdiff.FileDiff{File: gitdiff.DiffFile{Path: input.FilePath}, Hunks: parseUnifiedDiff(out)}, nil
+	return gitdiff.FileDiff{File: gitdiff.DiffFile{Path: input.FilePath}, Hunks: trimDiffHunks(parseUnifiedDiff(out), contextBefore, contextAfter)}, nil
 }
 
 func (c *Client) RangeDiff(ctx context.Context, input gitdiff.RangeDiffInput) (gitdiff.SessionDiff, error) {
@@ -298,7 +302,12 @@ func (c *Client) RangeDiff(ctx context.Context, input gitdiff.RangeDiffInput) (g
 	}
 	hunks := make([]gitdiff.FileDiff, 0, len(files))
 	for _, file := range files {
-		fileDiff, err := c.FileDiff(ctx, gitdiff.FileDiffInput{DiffInput: diffInput, FilePath: file.Path})
+		fileDiff, err := c.FileDiff(ctx, gitdiff.FileDiffInput{
+			DiffInput:     diffInput,
+			FilePath:      file.Path,
+			ContextBefore: input.ContextBefore,
+			ContextAfter:  input.ContextAfter,
+		})
 		if err != nil {
 			return gitdiff.SessionDiff{}, err
 		}
@@ -399,6 +408,23 @@ func countFileLines(path string) int {
 	return strings.Count(strings.TrimSuffix(string(body), "\n"), "\n") + 1
 }
 
+func normalizeDiffContext(before int, after int) (int, int) {
+	if before < 1 {
+		before = defaultDiffContextLines
+	}
+	if after < 1 {
+		after = defaultDiffContextLines
+	}
+	return before, after
+}
+
+func probeDiffContext(before int, after int) int {
+	if before > after {
+		return before + diffContextExpandStep
+	}
+	return after + diffContextExpandStep
+}
+
 func (c *Client) run(ctx context.Context, path string, args ...string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", errors.New("git diff path is required")
@@ -493,6 +519,9 @@ func parseUnifiedDiff(out string) []gitdiff.DiffHunk {
 	hunks := []gitdiff.DiffHunk{}
 	var current *gitdiff.DiffHunk
 	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
 		if strings.HasPrefix(line, "@@") {
 			if current != nil {
 				hunks = append(hunks, *current)
@@ -513,6 +542,100 @@ func parseUnifiedDiff(out string) []gitdiff.DiffHunk {
 		hunks = append(hunks, *current)
 	}
 	return hunks
+}
+
+func trimDiffHunks(hunks []gitdiff.DiffHunk, contextBefore int, contextAfter int) []gitdiff.DiffHunk {
+	trimmed := make([]gitdiff.DiffHunk, 0, len(hunks))
+	for _, hunk := range hunks {
+		changeStart := -1
+		changeEnd := -1
+		for i, line := range hunk.Lines {
+			if line.Kind == "add" || line.Kind == "delete" {
+				if changeStart == -1 {
+					changeStart = i
+					changeEnd = i
+					continue
+				}
+				currentEnd := changeEnd + contextAfter + 1
+				nextStart := i - contextBefore
+				if nextStart < 0 {
+					nextStart = 0
+				}
+				if nextStart <= currentEnd {
+					changeEnd = i
+					continue
+				}
+				trimmed = append(trimmed, trimHunkWindow(hunk, changeStart, changeEnd, contextBefore, contextAfter))
+				changeStart = i
+				changeEnd = i
+			}
+		}
+		if changeStart == -1 {
+			trimmed = append(trimmed, hunk)
+			continue
+		}
+		trimmed = append(trimmed, trimHunkWindow(hunk, changeStart, changeEnd, contextBefore, contextAfter))
+	}
+	return trimmed
+}
+
+func trimHunkWindow(hunk gitdiff.DiffHunk, firstChange int, lastChange int, contextBefore int, contextAfter int) gitdiff.DiffHunk {
+	originalLen := len(hunk.Lines)
+	start := firstChange - contextBefore
+	if start < 0 {
+		start = 0
+	}
+	end := lastChange + contextAfter + 1
+	if end > len(hunk.Lines) {
+		end = len(hunk.Lines)
+	}
+	oldStart, newStart := lineStartsAt(hunk, start)
+	lines := append([]gitdiff.DiffLine(nil), hunk.Lines[start:end]...)
+	hunk.Lines = lines
+	hunk.OldStart = oldStart
+	hunk.NewStart = newStart
+	oldCount, newCount := diffLineCounts(lines)
+	hunk.Header = fmt.Sprintf("@@ -%d,%d +%d,%d @@", oldStart, oldCount, newStart, newCount)
+	hunk.CanExpandBefore = start > 0
+	hunk.CanExpandAfter = end < originalLen
+	return hunk
+}
+
+func lineStartsAt(hunk gitdiff.DiffHunk, target int) (int, int) {
+	oldLine := hunk.OldStart
+	newLine := hunk.NewStart
+	for i, line := range hunk.Lines {
+		if i == target {
+			return oldLine, newLine
+		}
+		switch line.Kind {
+		case "add":
+			newLine++
+		case "delete":
+			oldLine++
+		default:
+			oldLine++
+			newLine++
+		}
+	}
+	return oldLine, newLine
+}
+
+func diffLineCounts(lines []gitdiff.DiffLine) (int, int) {
+	oldCount := 0
+	newCount := 0
+	for _, line := range lines {
+		switch line.Kind {
+		case "add":
+			newCount++
+		case "delete":
+			oldCount++
+		default:
+			oldCount++
+			newCount++
+		}
+	}
+	return oldCount, newCount
 }
 
 func parseHunkStarts(header string) (int, int) {

@@ -31,12 +31,14 @@ type Attachment struct {
 }
 
 type BranchDiffInput struct {
-	ProjectID string  `json:"projectId"`
-	Branch    string  `json:"branch"`
-	Mode      *string `json:"mode,omitempty"`
-	FilePath  *string `json:"filePath,omitempty"`
-	Page      *int    `json:"page,omitempty"`
-	PageSize  *int    `json:"pageSize,omitempty"`
+	ProjectID     string  `json:"projectId"`
+	Branch        string  `json:"branch"`
+	Mode          *string `json:"mode,omitempty"`
+	FilePath      *string `json:"filePath,omitempty"`
+	Page          *int    `json:"page,omitempty"`
+	PageSize      *int    `json:"pageSize,omitempty"`
+	ContextBefore *int    `json:"contextBefore,omitempty"`
+	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
 type BrowseDirectoryInput struct {
@@ -90,10 +92,12 @@ type DiffFilePage struct {
 }
 
 type DiffHunk struct {
-	Header   string      `json:"header"`
-	OldStart int         `json:"oldStart"`
-	NewStart int         `json:"newStart"`
-	Lines    []*DiffLine `json:"lines"`
+	Header          string      `json:"header"`
+	OldStart        int         `json:"oldStart"`
+	NewStart        int         `json:"newStart"`
+	CanExpandBefore bool        `json:"canExpandBefore"`
+	CanExpandAfter  bool        `json:"canExpandAfter"`
+	Lines           []*DiffLine `json:"lines"`
 }
 
 type DiffLine struct {
@@ -355,11 +359,13 @@ type SessionDiff struct {
 }
 
 type SessionDiffInput struct {
-	SessionID string  `json:"sessionId"`
-	Mode      *string `json:"mode,omitempty"`
-	FilePath  *string `json:"filePath,omitempty"`
-	Page      *int    `json:"page,omitempty"`
-	PageSize  *int    `json:"pageSize,omitempty"`
+	SessionID     string  `json:"sessionId"`
+	Mode          *string `json:"mode,omitempty"`
+	FilePath      *string `json:"filePath,omitempty"`
+	Page          *int    `json:"page,omitempty"`
+	PageSize      *int    `json:"pageSize,omitempty"`
+	ContextBefore *int    `json:"contextBefore,omitempty"`
+	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
 type SessionEvent struct {

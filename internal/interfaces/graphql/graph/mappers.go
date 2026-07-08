@@ -297,10 +297,12 @@ func mapFileDiff(diff gitdiff.FileDiff) *model.FileDiff {
 			lines = append(lines, &model.DiffLine{Kind: line.Kind, Content: line.Content})
 		}
 		hunks = append(hunks, &model.DiffHunk{
-			Header:   hunk.Header,
-			OldStart: hunk.OldStart,
-			NewStart: hunk.NewStart,
-			Lines:    lines,
+			Header:          hunk.Header,
+			OldStart:        hunk.OldStart,
+			NewStart:        hunk.NewStart,
+			CanExpandBefore: hunk.CanExpandBefore,
+			CanExpandAfter:  hunk.CanExpandAfter,
+			Lines:           lines,
 		})
 	}
 	return &model.FileDiff{File: mapDiffFile(diff.File), Hunks: hunks}

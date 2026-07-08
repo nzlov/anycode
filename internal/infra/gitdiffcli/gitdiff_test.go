@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -68,6 +69,108 @@ func TestChangedFilesAndFileDiff(t *testing.T) {
 	}
 	if untrackedDiff.File.Status != "added" || len(untrackedDiff.Hunks) != 1 || !hasKind(untrackedDiff.Hunks[0].Lines, "add") {
 		t.Fatalf("FileDiff(untracked) = %#v", untrackedDiff)
+	}
+}
+
+func TestFileDiffDefaultsToTenContextLines(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	lines := make([]string, 0, 41)
+	for i := 1; i <= 41; i++ {
+		lines = append(lines, "line "+strconv.Itoa(i))
+	}
+	writeFile(t, repo, "story.txt", strings.Join(lines, "\n")+"\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+	lines[20] = "line 21 changed"
+	writeFile(t, repo, "story.txt", strings.Join(lines, "\n")+"\n")
+
+	got, err := New("").FileDiff(ctx, gitdiff.FileDiffInput{
+		DiffInput: gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"},
+		FilePath:  "story.txt",
+	})
+	if err != nil {
+		t.Fatalf("FileDiff() error = %v", err)
+	}
+	if len(got.Hunks) != 1 {
+		t.Fatalf("FileDiff() hunks = %#v", got.Hunks)
+	}
+	if got.Hunks[0].OldStart != 11 || got.Hunks[0].NewStart != 11 {
+		t.Fatalf("FileDiff() starts = old %d new %d, want 11/11", got.Hunks[0].OldStart, got.Hunks[0].NewStart)
+	}
+	if len(got.Hunks[0].Lines) != 22 {
+		t.Fatalf("FileDiff() line count = %d, want 22", len(got.Hunks[0].Lines))
+	}
+}
+
+func TestFileDiffSupportsAsymmetricContextExpansion(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	lines := make([]string, 0, 81)
+	for i := 1; i <= 81; i++ {
+		lines = append(lines, "line "+strconv.Itoa(i))
+	}
+	writeFile(t, repo, "story.txt", strings.Join(lines, "\n")+"\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+	lines[40] = "line 41 changed"
+	writeFile(t, repo, "story.txt", strings.Join(lines, "\n")+"\n")
+
+	got, err := New("").FileDiff(ctx, gitdiff.FileDiffInput{
+		DiffInput:     gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"},
+		FilePath:      "story.txt",
+		ContextBefore: 30,
+		ContextAfter:  10,
+	})
+	if err != nil {
+		t.Fatalf("FileDiff() error = %v", err)
+	}
+	if len(got.Hunks) != 1 {
+		t.Fatalf("FileDiff() hunks = %#v", got.Hunks)
+	}
+	hunk := got.Hunks[0]
+	if hunk.OldStart != 11 || hunk.NewStart != 11 {
+		t.Fatalf("FileDiff() starts = old %d new %d, want 11/11", hunk.OldStart, hunk.NewStart)
+	}
+	if len(hunk.Lines) != 42 {
+		t.Fatalf("FileDiff() line count = %d, want 42", len(hunk.Lines))
+	}
+	if !hunk.CanExpandBefore || !hunk.CanExpandAfter {
+		t.Fatalf("FileDiff() expand flags = before %v after %v, want both true", hunk.CanExpandBefore, hunk.CanExpandAfter)
+	}
+}
+
+func TestFileDiffSplitsMergedGitHunkIntoContextWindows(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	lines := make([]string, 0, 120)
+	for i := 1; i <= 120; i++ {
+		lines = append(lines, "line "+strconv.Itoa(i))
+	}
+	writeFile(t, repo, "story.txt", strings.Join(lines, "\n")+"\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+	lines[40] = "line 41 changed"
+	lines[74] = "line 75 changed"
+	writeFile(t, repo, "story.txt", strings.Join(lines, "\n")+"\n")
+
+	got, err := New("").FileDiff(ctx, gitdiff.FileDiffInput{
+		DiffInput: gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"},
+		FilePath:  "story.txt",
+	})
+	if err != nil {
+		t.Fatalf("FileDiff() error = %v", err)
+	}
+	if len(got.Hunks) != 2 {
+		t.Fatalf("FileDiff() hunks = %#v", got.Hunks)
+	}
+	for i, hunk := range got.Hunks {
+		if len(hunk.Lines) != 22 {
+			t.Fatalf("hunk %d line count = %d, want 22", i, len(hunk.Lines))
+		}
+	}
+	if !got.Hunks[0].CanExpandAfter || !got.Hunks[1].CanExpandBefore {
+		t.Fatalf("expand flags = first after %v second before %v", got.Hunks[0].CanExpandAfter, got.Hunks[1].CanExpandBefore)
 	}
 }
 
