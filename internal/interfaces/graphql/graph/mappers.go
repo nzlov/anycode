@@ -610,7 +610,7 @@ func mapWorkflowCondition(condition workflowdomain.Condition) *model.WorkflowCon
 		Mode:  condition.Mode,
 		Field: condition.Field,
 		Op:    condition.Op,
-		Value: mapJSONValue(condition.Value),
+		Value: condition.Value,
 		Expr:  condition.Expr,
 		All:   all,
 		Any:   any,
@@ -623,14 +623,4 @@ func mapWorkflowConditionPtr(condition *workflowdomain.Condition) *model.Workflo
 		return nil
 	}
 	return mapWorkflowCondition(*condition)
-}
-
-func mapJSONValue(value any) map[string]any {
-	if value == nil {
-		return nil
-	}
-	if mapped, ok := value.(map[string]any); ok {
-		return mapped
-	}
-	return map[string]any{"value": value}
 }

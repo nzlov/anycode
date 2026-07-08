@@ -904,17 +904,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SetSessionPriority(childComplexity, args["input"].(model.SetSessionPriorityInput)), true
-	case "Mutation.updateSessionConfig":
-		if e.ComplexityRoot.Mutation.UpdateSessionConfig == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_updateSessionConfig_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.UpdateSessionConfig(childComplexity, args["input"].(model.UpdateSessionConfigInput)), true
 	case "Mutation.stageAttachment":
 		if e.ComplexityRoot.Mutation.StageAttachment == nil {
 			break
@@ -970,6 +959,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SubmitWorkflowApproval(childComplexity, args["input"].(model.SubmitWorkflowApprovalInput)), true
+	case "Mutation.updateSessionConfig":
+		if e.ComplexityRoot.Mutation.UpdateSessionConfig == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateSessionConfig_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateSessionConfig(childComplexity, args["input"].(model.UpdateSessionConfigInput)), true
 
 	case "PageInfo.nextCursor":
 		if e.ComplexityRoot.PageInfo.NextCursor == nil {
@@ -2157,6 +2157,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputSubmitQuestionBatchInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
+		ec.unmarshalInputUpdateSessionConfigInput,
 		ec.unmarshalInputWorkflowConditionInput,
 		ec.unmarshalInputWorkflowEdgeInput,
 		ec.unmarshalInputWorkflowGraphInput,
@@ -2257,6 +2258,7 @@ func newExecutionContext(
 var sources = []*ast.Source{
 	{Name: "../schema.graphqls", Input: `scalar Time
 scalar JSON
+scalar WorkflowConditionValue
 scalar Upload
 scalar Int64
 
@@ -2595,7 +2597,7 @@ type WorkflowCondition {
   mode: String!
   field: String!
   op: String!
-  value: JSON
+  value: WorkflowConditionValue
   expr: String!
   all: [WorkflowCondition!]!
   any: [WorkflowCondition!]!
@@ -2793,7 +2795,7 @@ input WorkflowConditionInput {
   mode: String
   field: String
   op: String
-  value: JSON
+  value: WorkflowConditionValue
   expr: String
   all: [WorkflowConditionInput!]
   any: [WorkflowConditionInput!]
@@ -2963,17 +2965,6 @@ func (ec *executionContext) field_Mutation_setSessionPriority_args(ctx context.C
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_updateSessionConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput)
-	if err != nil {
-		return nil, err
-	}
-	args["input"] = arg0
-	return args, nil
-}
-
 func (ec *executionContext) field_Mutation_stageAttachment_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3027,6 +3018,17 @@ func (ec *executionContext) field_Mutation_submitWorkflowApproval_args(ctx conte
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSubmitWorkflowApprovalInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSubmitWorkflowApprovalInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateSessionConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput)
 	if err != nil {
 		return nil, err
 	}
@@ -10596,7 +10598,7 @@ func (ec *executionContext) _WorkflowCondition_value(ctx context.Context, field 
 			return obj.Value, nil
 		},
 		nil,
-		ec.marshalOJSON2map,
+		ec.marshalOWorkflowConditionValue2interface,
 		true,
 		false,
 	)
@@ -10609,7 +10611,7 @@ func (ec *executionContext) fieldContext_WorkflowCondition_value(_ context.Conte
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
+			return nil, errors.New("field of type WorkflowConditionValue does not have child fields")
 		},
 	}
 	return fc, nil
@@ -13900,43 +13902,6 @@ func (ec *executionContext) unmarshalInputSessionConfigInput(ctx context.Context
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputUpdateSessionConfigInput(ctx context.Context, obj any) (model.UpdateSessionConfigInput, error) {
-	var it model.UpdateSessionConfigInput
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"sessionId", "config"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "sessionId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.SessionID = data
-		case "config":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
-			data, err := ec.unmarshalNSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Config = &data
-		}
-	}
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, obj any) (model.SessionDiffInput, error) {
 	var it model.SessionDiffInput
 	if obj == nil {
@@ -14201,6 +14166,43 @@ func (ec *executionContext) unmarshalInputSubmitWorkflowApprovalInput(ctx contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateSessionConfigInput(ctx context.Context, obj any) (model.UpdateSessionConfigInput, error) {
+	var it model.UpdateSessionConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "config"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "config":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
+			data, err := ec.unmarshalNSessionConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Config = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputWorkflowConditionInput(ctx context.Context, obj any) (model.WorkflowConditionInput, error) {
 	var it model.WorkflowConditionInput
 	if obj == nil {
@@ -14242,7 +14244,7 @@ func (ec *executionContext) unmarshalInputWorkflowConditionInput(ctx context.Con
 			it.Op = data
 		case "value":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
-			data, err := ec.unmarshalOJSON2map(ctx, v)
+			data, err := ec.unmarshalOWorkflowConditionValue2interface(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -17808,16 +17810,6 @@ func (ec *executionContext) unmarshalNAppendPromptInput2githubᚗcomᚋnzlovᚋa
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) unmarshalNSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx context.Context, v any) (model.SessionConfigInput, error) {
-	res, err := ec.unmarshalInputSessionConfigInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput(ctx context.Context, v any) (model.UpdateSessionConfigInput, error) {
-	res, err := ec.unmarshalInputUpdateSessionConfigInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
 func (ec *executionContext) marshalNApprovalConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐApprovalConfig(ctx context.Context, sel ast.SelectionSet, v *model.ApprovalConfig) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -18506,6 +18498,11 @@ func (ec *executionContext) marshalNSessionConfig2ᚖgithubᚗcomᚋnzlovᚋanyc
 	return ec._SessionConfig(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNSessionConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx context.Context, v any) (*model.SessionConfigInput, error) {
+	res, err := ec.unmarshalInputSessionConfigInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNSessionDetail2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDetail(ctx context.Context, sel ast.SelectionSet, v model.SessionDetail) graphql.Marshaler {
 	return ec._SessionDetail(ctx, sel, &v)
 }
@@ -18694,6 +18691,11 @@ func (ec *executionContext) marshalNTodoItem2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._TodoItem(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput(ctx context.Context, v any) (model.UpdateSessionConfigInput, error) {
+	res, err := ec.unmarshalInputUpdateSessionConfigInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload(ctx context.Context, v any) (graphql.Upload, error) {
@@ -19313,6 +19315,24 @@ func (ec *executionContext) unmarshalOWorkflowConditionInput2ᚖgithubᚗcomᚋn
 	}
 	res, err := ec.unmarshalInputWorkflowConditionInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalOWorkflowConditionValue2interface(ctx context.Context, v any) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalAny(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOWorkflowConditionValue2interface(ctx context.Context, sel ast.SelectionSet, v any) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalAny(v)
+	return res
 }
 
 func (ec *executionContext) marshalOWorkflowDefinition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowDefinition(ctx context.Context, sel ast.SelectionSet, v *model.WorkflowDefinition) graphql.Marshaler {

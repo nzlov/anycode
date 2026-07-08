@@ -323,11 +323,6 @@ type SessionConfigInput struct {
 	PermissionMode  *string `json:"permissionMode,omitempty"`
 }
 
-type UpdateSessionConfigInput struct {
-	SessionID string              `json:"sessionId"`
-	Config    *SessionConfigInput `json:"config"`
-}
-
 type SessionDetail struct {
 	ID               string               `json:"id"`
 	ProjectID        string               `json:"projectId"`
@@ -424,11 +419,16 @@ type TodoList struct {
 	Items     []*TodoItem `json:"items"`
 }
 
+type UpdateSessionConfigInput struct {
+	SessionID string              `json:"sessionId"`
+	Config    *SessionConfigInput `json:"config"`
+}
+
 type WorkflowCondition struct {
 	Mode  string               `json:"mode"`
 	Field string               `json:"field"`
 	Op    string               `json:"op"`
-	Value map[string]any       `json:"value,omitempty"`
+	Value any                  `json:"value,omitempty"`
 	Expr  string               `json:"expr"`
 	All   []*WorkflowCondition `json:"all"`
 	Any   []*WorkflowCondition `json:"any"`
@@ -439,7 +439,7 @@ type WorkflowConditionInput struct {
 	Mode  *string                   `json:"mode,omitempty"`
 	Field *string                   `json:"field,omitempty"`
 	Op    *string                   `json:"op,omitempty"`
-	Value map[string]any            `json:"value,omitempty"`
+	Value any                       `json:"value,omitempty"`
 	Expr  *string                   `json:"expr,omitempty"`
 	All   []*WorkflowConditionInput `json:"all,omitempty"`
 	Any   []*WorkflowConditionInput `json:"any,omitempty"`

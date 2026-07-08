@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -274,6 +276,104 @@ func smokeAssertMCPAnswer(t *testing.T, body []byte, batchID string) {
 	}
 }
 
+func TestSaveWorkflowDefinitionAcceptsPrimitiveConditionValue(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(dataDir, "anycode.db")})
+	if err != nil {
+		t.Fatalf("open entstore: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("close entstore: %v", err)
+		}
+	})
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate entstore: %v", err)
+	}
+
+	projects := projectapp.New(store.Projects(), smokeDirectoryBrowser{}, smokeGitInspector{})
+	workflows := workflowapp.New(store.Workflows())
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{
+		Projects:  projects,
+		Workflows: workflows,
+	}))
+
+	projectID := smokeGraphQL[string](t, handler, `mutation($input: CreateProjectInput!) {
+		createProject(input: $input) { id }
+	}`, map[string]any{"input": map[string]any{
+		"path": filepath.Join(dataDir, "repo"),
+		"name": "Smoke Project",
+	}}, "createProject.id")
+
+	tests := []struct {
+		name  string
+		value any
+		want  any
+	}{
+		{name: "true", value: true, want: true},
+		{name: "false", value: false, want: false},
+		{name: "string", value: "passed", want: "passed"},
+		{name: "number", value: 7.5, want: float64(7.5)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflowName := "Primitive condition flow " + tt.name
+			saveResult := smokeGraphQL[map[string]any](t, handler, `mutation($input: SaveWorkflowDefinitionInput!) {
+				saveWorkflowDefinition(input: $input) {
+					id
+					graph {
+						edges {
+							condition {
+								value
+							}
+						}
+					}
+				}
+			}`, map[string]any{"input": map[string]any{
+				"projectId": projectID,
+				"name":      workflowName,
+				"graph": map[string]any{
+					"nodes": []map[string]any{
+						{"id": "build", "type": "codex", "title": "Build", "position": map[string]any{"x": 0, "y": 0}},
+						{"id": "ship", "type": "close", "title": "Ship", "position": map[string]any{"x": 100, "y": 0}},
+					},
+					"edges": []map[string]any{{
+						"from":      "build",
+						"to":        "ship",
+						"priority":  0,
+						"condition": map[string]any{"field": "results.status", "op": "eq", "value": tt.value},
+					}},
+				},
+			}}, "saveWorkflowDefinition")
+
+			savedCondition := smokePath(t, saveResult, "graph.edges.0.condition").(map[string]any)
+			if !reflect.DeepEqual(savedCondition["value"], tt.want) {
+				t.Fatalf("saved condition value = %#v, want %#v", savedCondition["value"], tt.want)
+			}
+
+			workflowID, ok := saveResult["id"].(string)
+			if !ok || workflowID == "" {
+				t.Fatalf("saved workflow id = %#v", saveResult["id"])
+			}
+			readValue := smokeGraphQL[any](t, handler, `query($id: ID!) {
+				workflowDefinition(id: $id) {
+					graph {
+						edges {
+							condition {
+								value
+							}
+						}
+					}
+				}
+			}`, map[string]any{"id": workflowID}, "workflowDefinition.graph.edges.0.condition.value")
+			if !reflect.DeepEqual(readValue, tt.want) {
+				t.Fatalf("read condition value = %#v, want %#v", readValue, tt.want)
+			}
+		})
+	}
+}
+
 func smokeGraphQL[T any](t *testing.T, handler http.Handler, query string, variables map[string]any, path string) T {
 	t.Helper()
 	reqBody, err := json.Marshal(map[string]any{"query": query, "variables": variables})
@@ -317,6 +417,15 @@ func smokePath(t *testing.T, data map[string]any, path string) any {
 			continue
 		}
 		key := path[start:i]
+		if items, ok := current.([]any); ok {
+			index, err := strconv.Atoi(key)
+			if err != nil || index < 0 || index >= len(items) {
+				t.Fatalf("graphql path %q segment %q parent = %#v", path, key, current)
+			}
+			current = items[index]
+			start = i + 1
+			continue
+		}
 		object, ok := current.(map[string]any)
 		if !ok {
 			t.Fatalf("graphql path %q segment %q parent = %#v", path, key, current)

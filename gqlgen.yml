@@ -21,6 +21,9 @@ models:
   JSON:
     model:
       - github.com/99designs/gqlgen/graphql.Map
+  WorkflowConditionValue:
+    model:
+      - github.com/99designs/gqlgen/graphql.Any
   Upload:
     model:
       - github.com/99designs/gqlgen/graphql.Upload

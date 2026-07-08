@@ -1,5 +1,6 @@
 scalar Time
 scalar JSON
+scalar WorkflowConditionValue
 scalar Upload
 scalar Int64
 
@@ -338,7 +339,7 @@ type WorkflowCondition {
   mode: String!
   field: String!
   op: String!
-  value: JSON
+  value: WorkflowConditionValue
   expr: String!
   all: [WorkflowCondition!]!
   any: [WorkflowCondition!]!
@@ -536,7 +537,7 @@ input WorkflowConditionInput {
   mode: String
   field: String
   op: String
-  value: JSON
+  value: WorkflowConditionValue
   expr: String
   all: [WorkflowConditionInput!]
   any: [WorkflowConditionInput!]
