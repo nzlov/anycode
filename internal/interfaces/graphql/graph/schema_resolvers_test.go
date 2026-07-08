@@ -225,6 +225,103 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	}
 }
 
+func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *testing.T) {
+	sessionID := "session-1"
+	projectID := "project-1"
+	otherProjectID := "project-2"
+	eventSessionID := eventdomain.SessionID(sessionID)
+	source := make(chan eventapp.DTO, 3)
+	source <- eventapp.DTO{
+		ID:        "ignored-process",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
+		SessionID: &eventSessionID,
+		Type:      "process.codex_event",
+		CreatedAt: "2026-07-02T01:02:03Z",
+	}
+	source <- eventapp.DTO{
+		ID:        "ignored-project",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: otherProjectID},
+		SessionID: &eventSessionID,
+		Type:      "session.running",
+		CreatedAt: "2026-07-02T01:02:04Z",
+	}
+	source <- eventapp.DTO{
+		ID:        "card-change",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
+		SessionID: &eventSessionID,
+		Type:      "session.priority_changed",
+		CreatedAt: "2026-07-02T01:02:05Z",
+	}
+	close(source)
+
+	events := &fakeEventUseCase{liveSessionEvents: source}
+	sessions := &fakeSessionUseCase{
+		getCardResult: sessionapp.CardDTO{
+			DTO: sessionapp.DTO{
+				ID:        sessiondomain.ID(sessionID),
+				ProjectID: sessiondomain.ProjectID(projectID),
+				Status:    sessiondomain.StatusRunning,
+				Priority:  sessiondomain.PriorityHigh,
+			},
+			ProjectName: "AnyCode",
+		},
+	}
+	resolver := NewResolver(UseCases{Events: events, Sessions: sessions}).Subscription()
+	ch, err := resolver.SessionCardChanged(context.Background(), &projectID)
+	if err != nil {
+		t.Fatalf("SessionCardChanged() error = %v", err)
+	}
+
+	wantInput := eventapp.LiveSessionEventsInput{
+		Scope: eventdomain.Scope{ProjectID: projectID},
+	}
+	if !reflect.DeepEqual(events.gotLiveSessionEventsInput, wantInput) {
+		t.Fatalf("LiveSessionEvents() input = %#v, want %#v", events.gotLiveSessionEventsInput, wantInput)
+	}
+
+	got, ok := <-ch
+	if !ok {
+		t.Fatal("SessionCardChanged() channel closed before card")
+	}
+	if got.ID != sessionID || got.ProjectID != projectID || got.ProjectName != "AnyCode" {
+		t.Fatalf("SessionCardChanged() card = %#v", got)
+	}
+	if sessions.gotGetCardID != sessiondomain.ID(sessionID) {
+		t.Fatalf("GetSessionCard() id = %q, want %q", sessions.gotGetCardID, sessionID)
+	}
+	if _, ok := <-ch; ok {
+		t.Fatal("SessionCardChanged() emitted more than matching card changes")
+	}
+}
+
+func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
+	sessionID := eventdomain.SessionID("session-1")
+	tests := []string{
+		"session.running",
+		"session.stopped",
+		"session.recoverable",
+		"session.failed",
+		"session.blocked",
+		"session.completed",
+		"session.closed",
+		"session.priority_changed",
+		"session.todo_list_updated",
+		"workflow.blocked",
+	}
+	for _, eventType := range tests {
+		t.Run(eventType, func(t *testing.T) {
+			eventDTO := eventapp.DTO{
+				Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+				SessionID: &sessionID,
+				Type:      eventType,
+			}
+			if !sessionCardChangeEvent(eventDTO, nil) {
+				t.Fatalf("sessionCardChangeEvent(%q) = false, want true", eventType)
+			}
+		})
+	}
+}
+
 func TestQuerySessionEventsForwardsBeforeCursorAndLimit(t *testing.T) {
 	beforeEventID := "event-40"
 	limit := 50
@@ -583,8 +680,10 @@ func TestDiffFieldSelectedReadsNamedFragments(t *testing.T) {
 type fakeEventUseCase struct {
 	eventapp.UseCase
 	sessionEvents             <-chan eventapp.DTO
+	liveSessionEvents         <-chan eventapp.DTO
 	gotListSessionEventsInput eventapp.ListSessionEventsInput
 	gotSessionEventsInput     eventapp.SessionEventsInput
+	gotLiveSessionEventsInput eventapp.LiveSessionEventsInput
 }
 
 type fakeWorkflowUseCase struct {
@@ -636,6 +735,11 @@ func (f *fakeEventUseCase) SessionEvents(_ context.Context, input eventapp.Sessi
 	return f.sessionEvents, nil
 }
 
+func (f *fakeEventUseCase) LiveSessionEvents(_ context.Context, input eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
+	f.gotLiveSessionEventsInput = input
+	return f.liveSessionEvents, nil
+}
+
 func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain.DefinitionID) (workflowapp.DefinitionDTO, error) {
 	f.gotGetID = id
 	return f.getResult, nil
@@ -673,6 +777,8 @@ type fakeSessionUseCase struct {
 	gotAnswered        questionapp.BatchDTO
 	answeredCalls      int
 	err                error
+	gotGetCardID       sessiondomain.ID
+	getCardResult      sessionapp.CardDTO
 	gotResumeID        sessiondomain.ID
 	resumeResult       sessionapp.DTO
 	stopProjectID      sessiondomain.ProjectID
@@ -686,6 +792,11 @@ func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batc
 	f.gotAnswered = batch
 	f.answeredCalls++
 	return f.err
+}
+
+func (f *fakeSessionUseCase) GetSessionCard(_ context.Context, id sessiondomain.ID) (sessionapp.CardDTO, error) {
+	f.gotGetCardID = id
+	return f.getCardResult, f.err
 }
 
 func (f *fakeSessionUseCase) ResumeSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {

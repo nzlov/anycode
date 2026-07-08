@@ -172,6 +172,10 @@ export interface SessionEventsSubscriptionInput {
   afterEventId?: string;
 }
 
+export interface SessionCardChangedSubscriptionInput {
+  projectId?: string;
+}
+
 export interface CreateSessionInput {
   projectId: string;
   requirement: string;
@@ -545,6 +549,38 @@ export function subscribeSessionEvents(
   return graphqlSubscribe<
     { sessionEvents: GraphQLSessionEvent },
     { input: SessionEventsSubscriptionInput }
+>(options);
+}
+
+export function subscribeSessionCardChanged(
+  input: SessionCardChangedSubscriptionInput,
+  handlers: {
+    onData: (card: SessionCard) => void;
+    onError?: (error: Error) => void;
+    onClose?: () => void;
+  },
+) {
+  const options = {
+    query: `
+      subscription SessionCardChanged($projectId: ID) {
+        sessionCardChanged(projectId: $projectId) {
+          ${sessionCardFields}
+        }
+      }
+    `,
+    variables: input.projectId ? { projectId: input.projectId } : {},
+    onData: (data: { sessionCardChanged: GraphQLSessionCard }) =>
+      handlers.onData(normalizeSessionCard(data.sessionCardChanged)),
+  };
+  if (handlers.onError) {
+    Object.assign(options, { onError: handlers.onError });
+  }
+  if (handlers.onClose) {
+    Object.assign(options, { onClose: handlers.onClose });
+  }
+  return graphqlSubscribe<
+    { sessionCardChanged: GraphQLSessionCard },
+    { projectId?: string }
   >(options);
 }
 

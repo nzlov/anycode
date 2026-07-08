@@ -44,6 +44,7 @@ type UseCase interface {
 	SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error)
 	HandleQuestionBatchAnswered(ctx context.Context, batch questionapp.BatchDTO) error
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
+	GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error)
 }
 
@@ -3557,6 +3558,31 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 		return DetailDTO{}, err
 	}
 	return toDetailDTO(session, attachments, appends, currentNodeTitle), nil
+}
+
+func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error) {
+	if s == nil {
+		return CardDTO{}, errors.New("session usecase: nil service")
+	}
+	session, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return CardDTO{}, fmt.Errorf("find session: %w", err)
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return CardDTO{}, fmt.Errorf("find session project: %w", err)
+	}
+	attachments, err := s.listSessionAttachments(ctx, id)
+	if err != nil {
+		return CardDTO{}, err
+	}
+	currentNodeTitle, err := s.currentNodeTitle(ctx, session)
+	if err != nil {
+		return CardDTO{}, err
+	}
+	card := toCardDTO(session, attachments, currentNodeTitle)
+	card.ProjectName = project.Name
+	return card, nil
 }
 
 func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error) {

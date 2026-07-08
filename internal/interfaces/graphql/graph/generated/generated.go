@@ -339,6 +339,7 @@ type ComplexityRoot struct {
 
 	Subscription struct {
 		PendingQuestionBatches func(childComplexity int, sessionID string) int
+		SessionCardChanged     func(childComplexity int, projectID *string) int
 		SessionEvents          func(childComplexity int, input model.SessionEventsInput) int
 		SessionStatusChanged   func(childComplexity int, projectID *string, sessionID *string) int
 	}
@@ -453,6 +454,7 @@ type QueryResolver interface {
 }
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context, input model.SessionEventsInput) (<-chan *model.SessionEvent, error)
+	SessionCardChanged(ctx context.Context, projectID *string) (<-chan *model.SessionCard, error)
 	SessionStatusChanged(ctx context.Context, projectID *string, sessionID *string) (<-chan *model.Session, error)
 	PendingQuestionBatches(ctx context.Context, sessionID string) (<-chan *model.QuestionBatch, error)
 }
@@ -1845,6 +1847,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.PendingQuestionBatches(childComplexity, args["sessionId"].(string)), true
+	case "Subscription.sessionCardChanged":
+		if e.ComplexityRoot.Subscription.SessionCardChanged == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_sessionCardChanged_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.SessionCardChanged(childComplexity, args["projectId"].(*string)), true
 	case "Subscription.sessionEvents":
 		if e.ComplexityRoot.Subscription.SessionEvents == nil {
 			break
@@ -2313,6 +2326,7 @@ type Mutation {
 
 type Subscription {
   sessionEvents(input: SessionEventsInput!): SessionEvent!
+  sessionCardChanged(projectId: ID): SessionCard!
   sessionStatusChanged(projectId: ID, sessionId: ID): Session!
   pendingQuestionBatches(sessionId: ID!): QuestionBatch!
 }
@@ -3184,6 +3198,17 @@ func (ec *executionContext) field_Subscription_pendingQuestionBatches_args(ctx c
 		return nil, err
 	}
 	args["sessionId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_sessionCardChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -10307,6 +10332,85 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_sessionCardChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_sessionCardChanged,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().SessionCardChanged(ctx, fc.Args["projectId"].(*string))
+		},
+		nil,
+		ec.marshalNSessionCard2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCard,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_sessionCardChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SessionCard_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_SessionCard_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_SessionCard_projectName(ctx, field)
+			case "requirement":
+				return ec.fieldContext_SessionCard_requirement(ctx, field)
+			case "requirementSummary":
+				return ec.fieldContext_SessionCard_requirementSummary(ctx, field)
+			case "mode":
+				return ec.fieldContext_SessionCard_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_SessionCard_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_SessionCard_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_SessionCard_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
+			case "currentNodeTitle":
+				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
+			case "pendingQuestion":
+				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
+			case "todoList":
+				return ec.fieldContext_SessionCard_todoList(ctx, field)
+			case "attachments":
+				return ec.fieldContext_SessionCard_attachments(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_SessionCard_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_SessionCard_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionCard_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SessionCard_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionCard", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_sessionCardChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Subscription_sessionStatusChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
@@ -17022,6 +17126,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionEvents":
 		return ec._Subscription_sessionEvents(ctx, fields[0])
+	case "sessionCardChanged":
+		return ec._Subscription_sessionCardChanged(ctx, fields[0])
 	case "sessionStatusChanged":
 		return ec._Subscription_sessionStatusChanged(ctx, fields[0])
 	case "pendingQuestionBatches":
@@ -18539,6 +18645,10 @@ func (ec *executionContext) marshalNSessionAttachment2ᚖgithubᚗcomᚋnzlovᚋ
 		return graphql.Null
 	}
 	return ec._SessionAttachment(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSessionCard2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCard(ctx context.Context, sel ast.SelectionSet, v model.SessionCard) graphql.Marshaler {
+	return ec._SessionCard(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNSessionCard2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionCardᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionCard) graphql.Marshaler {

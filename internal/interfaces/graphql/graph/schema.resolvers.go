@@ -22,7 +22,6 @@ import (
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
-	"github.com/vektah/gqlparser/v2/ast"
 )
 
 // CreateProject is the resolver for the createProject field.
@@ -408,51 +407,6 @@ func (r *queryResolver) BranchDiff(ctx context.Context, input model.BranchDiffIn
 	return mapSessionDiff(dto), nil
 }
 
-func diffFieldSelected(ctx context.Context, name string) bool {
-	fieldContext := graphql.GetFieldContext(ctx)
-	if fieldContext == nil {
-		return true
-	}
-	var fragments ast.FragmentDefinitionList
-	if graphql.HasOperationContext(ctx) {
-		if operationContext := graphql.GetOperationContext(ctx); operationContext != nil && operationContext.Doc != nil {
-			fragments = operationContext.Doc.Fragments
-		}
-	}
-	return selectionSetHasField(fieldContext.Field.Selections, name, fragments, map[string]bool{})
-}
-
-func selectionSetHasField(selections ast.SelectionSet, name string, fragments ast.FragmentDefinitionList, visited map[string]bool) bool {
-	for _, selection := range selections {
-		switch selected := selection.(type) {
-		case *ast.Field:
-			if selected.Name == name {
-				return true
-			}
-			if selectionSetHasField(selected.SelectionSet, name, fragments, visited) {
-				return true
-			}
-		case *ast.InlineFragment:
-			if selectionSetHasField(selected.SelectionSet, name, fragments, visited) {
-				return true
-			}
-		case *ast.FragmentSpread:
-			if visited[selected.Name] {
-				continue
-			}
-			fragment := fragments.ForName(selected.Name)
-			if fragment == nil {
-				continue
-			}
-			visited[selected.Name] = true
-			if selectionSetHasField(fragment.SelectionSet, name, fragments, visited) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // SessionCommitHistory is the resolver for the sessionCommitHistory field.
 func (r *queryResolver) SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error) {
 	if r.UseCases.Diff == nil {
@@ -533,6 +487,47 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, input model.Se
 					return
 				}
 				out <- mapEvent(eventDTO)
+			}
+		}
+	}()
+	return out, nil
+}
+
+// SessionCardChanged is the resolver for the sessionCardChanged field.
+func (r *subscriptionResolver) SessionCardChanged(ctx context.Context, projectID *string) (<-chan *model.SessionCard, error) {
+	if r.UseCases.Events == nil {
+		return nil, missingUseCase("events")
+	}
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	scope := eventdomain.Scope{}
+	if projectID != nil {
+		scope.ProjectID = *projectID
+	}
+	source, err := r.UseCases.Events.LiveSessionEvents(ctx, eventapp.LiveSessionEventsInput{Scope: scope})
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.SessionCard)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case eventDTO, ok := <-source:
+				if !ok {
+					return
+				}
+				if !sessionCardChangeEvent(eventDTO, projectID) || eventDTO.SessionID == nil {
+					continue
+				}
+				card, err := r.UseCases.Sessions.GetSessionCard(ctx, sessiondomain.ID(*eventDTO.SessionID))
+				if err != nil {
+					continue
+				}
+				out <- mapSessionCard(card)
 			}
 		}
 	}()

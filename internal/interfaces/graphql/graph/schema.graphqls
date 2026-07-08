@@ -41,6 +41,7 @@ type Mutation {
 
 type Subscription {
   sessionEvents(input: SessionEventsInput!): SessionEvent!
+  sessionCardChanged(projectId: ID): SessionCard!
   sessionStatusChanged(projectId: ID, sessionId: ID): Session!
   pendingQuestionBatches(sessionId: ID!): QuestionBatch!
 }

@@ -1,9 +1,9 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import {
   listSessions,
-  subscribeSessionEvents,
+  subscribeSessionCardChanged,
   type ListSessionsInput,
   type PageInfo,
   type SessionPage,
@@ -47,6 +47,11 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     if (filter.value.trim()) value.filter = filter.value.trim();
     if (sort.value) value.sort = sort.value;
     return value;
+  });
+
+  watch(projectId, () => {
+    if (liveStopped) return;
+    restartLiveSubscription();
   });
 
   async function loadSessions() {
@@ -103,14 +108,10 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
 
   function openSubscription() {
     eventSubscription?.unsubscribe();
-    eventSubscription = subscribeSessionEvents(
-      {},
+    eventSubscription = subscribeSessionCardChanged(
+      projectId.value ? { projectId: projectId.value } : {},
       {
-        onData: (event) => {
-          if (shouldRefreshForEvent(event.rawType)) {
-            scheduleRefresh();
-          }
-        },
+        onData: scheduleRefresh,
         onError: (err) => {
           if (shouldReconnectLiveError(err)) {
             scheduleReconnect();
@@ -119,6 +120,14 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
         onClose: scheduleReconnect,
       },
     );
+  }
+
+  function restartLiveSubscription() {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    openSubscription();
   }
 
   function scheduleRefresh() {
@@ -164,14 +173,4 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
 
 function shouldReconnectLiveError(err: Error) {
   return !(err instanceof AnyCodeGraphQLError && err.code === 'auth_failed');
-}
-
-function shouldRefreshForEvent(type: string) {
-  return (
-    type.startsWith('session.') ||
-    type.startsWith('workflow.') ||
-    type === 'process.exited' ||
-    type === 'process.start_failed' ||
-    type === 'process.resume_failed'
-  );
 }

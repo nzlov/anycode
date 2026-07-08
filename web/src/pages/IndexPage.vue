@@ -208,6 +208,7 @@ import {
   resumeSession,
   startSession,
   stopSession,
+  subscribeSessionCardChanged,
   submitQuestionBatch,
   updateSessionPriority,
   type QuestionAnswerInput,
@@ -228,8 +229,6 @@ const {
   rows: latestRows,
   projectId: latestProjectId,
   loadSessions: loadLatestSessions,
-  startLiveUpdates: startLatestLiveUpdates,
-  stopLiveUpdates: stopLatestLiveUpdates,
 } = useSessionsPage({
   projectId: projectScopeId.value,
   range: 'latest',
@@ -242,8 +241,6 @@ const {
   rows: historyRows,
   projectId: historyProjectId,
   loadSessions: loadHistorySessions,
-  startLiveUpdates: startHistoryLiveUpdates,
-  stopLiveUpdates: stopHistoryLiveUpdates,
 } = useSessionsPage({
   projectId: projectScopeId.value,
   range: 'history',
@@ -297,31 +294,87 @@ const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
 const activeCloseSessionId = ref('');
 const priorities: SessionPriority[] = ['high', 'medium', 'low'];
+let cardSubscription: ReturnType<typeof subscribeSessionCardChanged> | null = null;
+let cardReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let cardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let liveStopped = true;
 
 onMounted(() => {
   void startOverview();
 });
 
 onUnmounted(() => {
-  stopLatestLiveUpdates();
-  stopHistoryLiveUpdates();
+  stopOverviewLiveUpdates();
 });
 
 watch(projectScopeId, (value) => {
   latestProjectId.value = value;
   historyProjectId.value = value;
   void loadOverviewSessions();
+  if (!liveStopped) {
+    startOverviewLiveUpdates();
+  }
 });
 
 async function startOverview() {
   await loadProjects();
   await loadOverviewSessions();
-  startLatestLiveUpdates();
-  startHistoryLiveUpdates();
+  startOverviewLiveUpdates();
 }
 
 async function loadOverviewSessions() {
   await Promise.all([loadLatestSessions(), loadHistorySessions()]);
+}
+
+function startOverviewLiveUpdates() {
+  liveStopped = false;
+  cardSubscription?.unsubscribe();
+  cardSubscription = subscribeSessionCardChanged(
+    projectScopeId.value ? { projectId: projectScopeId.value } : {},
+    {
+      onData: scheduleOverviewRefresh,
+      onError: scheduleOverviewReconnect,
+      onClose: scheduleOverviewReconnect,
+    },
+  );
+}
+
+function stopOverviewLiveUpdates() {
+  liveStopped = true;
+  cardSubscription?.unsubscribe();
+  cardSubscription = null;
+  if (cardReconnectTimer) {
+    clearTimeout(cardReconnectTimer);
+    cardReconnectTimer = null;
+  }
+  if (cardRefreshTimer) {
+    clearTimeout(cardRefreshTimer);
+    cardRefreshTimer = null;
+  }
+}
+
+function scheduleOverviewRefresh() {
+  if (cardRefreshTimer) return;
+  cardRefreshTimer = setTimeout(() => {
+    cardRefreshTimer = null;
+    void loadOverviewSessions();
+  }, 300);
+}
+
+function scheduleOverviewReconnect() {
+  if (liveStopped || cardReconnectTimer) return;
+  cardReconnectTimer = setTimeout(() => {
+    cardReconnectTimer = null;
+    void reconnectOverviewLiveUpdates();
+  }, 1500);
+}
+
+async function reconnectOverviewLiveUpdates() {
+  if (liveStopped) return;
+  await loadOverviewSessions();
+  if (!liveStopped) {
+    startOverviewLiveUpdates();
+  }
 }
 
 function modeLabel(mode: SessionMode) {

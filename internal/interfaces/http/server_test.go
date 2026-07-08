@@ -628,6 +628,10 @@ func (u *fakeEventUseCase) SessionEvents(context.Context, eventapp.SessionEvents
 	return u.ch, nil
 }
 
+func (u *fakeEventUseCase) LiveSessionEvents(context.Context, eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
+	return u.SessionEvents(context.Background(), eventapp.SessionEventsInput{})
+}
+
 type fakeQuestionUseCase struct {
 	created       questionapp.CreateBatchInput
 	waitedBatchID questiondomain.BatchID

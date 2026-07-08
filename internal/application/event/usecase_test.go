@@ -364,6 +364,49 @@ func TestSessionEventsEmptyScopeReceivesAllPublishedEvents(t *testing.T) {
 	}
 }
 
+func TestLiveSessionEventsStreamsOnlyPublishedEvents(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	store := &fakeStore{
+		events: []domain.DomainEvent{
+			{ID: "history-event", Scope: domain.Scope{SessionID: &sessionID, ProjectID: "project-1"}, SessionID: &sessionID, Type: "history"},
+		},
+	}
+	service := New(store)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{
+		Scope: domain.Scope{ProjectID: "project-1"},
+	})
+	if err != nil {
+		t.Fatalf("LiveSessionEvents() error = %v", err)
+	}
+	if store.afterCalls != 0 {
+		t.Fatalf("LiveSessionEvents() called After %d times, want 0", store.afterCalls)
+	}
+	select {
+	case event := <-ch:
+		t.Fatalf("LiveSessionEvents() replayed history event = %#v", event)
+	default:
+	}
+
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "live-event",
+		Scope:     domain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+		SessionID: &sessionID,
+		Type:      "session.running",
+		CreatedAt: time.Unix(4, 0).UTC(),
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() error = %v", err)
+	}
+	if event := <-ch; event.ID != "live-event" || event.Type != "session.running" {
+		t.Fatalf("LiveSessionEvents() event = %#v", event)
+	}
+	if store.afterCalls != 0 {
+		t.Fatalf("LiveSessionEvents() called After after publish %d times, want 0", store.afterCalls)
+	}
+}
+
 func TestSessionEventsReturnsEmptyPayloadForNilDomainPayload(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	store := &fakeStore{
@@ -408,6 +451,7 @@ type fakeStore struct {
 	err        error
 	lastScope  domain.Scope
 	lastAfter  domain.ID
+	afterCalls int
 	lastBefore domain.ID
 	lastLimit  int
 }
@@ -417,6 +461,7 @@ func (s *fakeStore) Append(context.Context, domain.DomainEvent) error {
 }
 
 func (s *fakeStore) After(_ context.Context, scope domain.Scope, after domain.ID) ([]domain.DomainEvent, error) {
+	s.afterCalls++
 	s.lastScope = scope
 	s.lastAfter = after
 	return s.events, s.err

@@ -15,6 +15,7 @@ import (
 type UseCase interface {
 	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (port.Page[DTO], error)
 	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
+	LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error)
 }
 
 type ListSessionEventsInput struct {
@@ -26,6 +27,10 @@ type ListSessionEventsInput struct {
 type SessionEventsInput struct {
 	Scope        domain.Scope
 	AfterEventID domain.ID
+}
+
+type LiveSessionEventsInput struct {
+	Scope domain.Scope
 }
 
 type DTO struct {
@@ -98,6 +103,20 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	for _, event := range events {
 		ch <- toDTO(event)
 	}
+	id := s.subscribe(input.Scope, ch)
+	go func() {
+		<-ctx.Done()
+		s.unsubscribe(id)
+		close(ch)
+	}()
+	return ch, nil
+}
+
+func (s *Service) LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error) {
+	if s == nil {
+		return nil, errors.New("event usecase: nil service")
+	}
+	ch := make(chan DTO, 16)
 	id := s.subscribe(input.Scope, ch)
 	go func() {
 		<-ctx.Done()
