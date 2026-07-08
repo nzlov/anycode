@@ -86,13 +86,21 @@ export interface SessionAttachment {
 
 export interface SessionEvent {
   id: string;
-  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question';
+  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question' | 'file_change';
   rawType: string;
   title: string;
   body: string;
   command?: string;
+  toolCallId?: string;
+  fileChangeId?: string;
+  fileChanges?: FileChange[];
   createdAt: string;
   time: string;
+}
+
+export interface FileChange {
+  kind: string;
+  path: string;
 }
 
 export interface QuestionOption {
@@ -881,7 +889,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
   };
 }
 
-function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
+export function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
   const type = event.type ?? '';
   const payload = event.payload ?? {};
   const readable = readableEventPayload(type, payload);
@@ -896,6 +904,15 @@ function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent {
   };
   if (readable.command) {
     normalized.command = readable.command;
+  }
+  if (readable.toolCallId) {
+    normalized.toolCallId = readable.toolCallId;
+  }
+  if (readable.fileChangeId) {
+    normalized.fileChangeId = readable.fileChangeId;
+  }
+  if (readable.fileChanges) {
+    normalized.fileChanges = readable.fileChanges;
   }
   return normalized;
 }
@@ -965,6 +982,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   const output = stringPayload(item, 'aggregated_output');
   const text = stringPayload(item, 'text') || stringPayload(payload, 'text');
   const command = stringPayload(item, 'command');
+  const toolCallId = codexItemID(item, payload);
   const processExitCode = numberPayload(payload, 'exitCode');
   const failure = stringPayload(payload, 'failureReason');
 
@@ -976,7 +994,16 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   if (codexType === 'turn.started') return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
   if (codexType === 'item.started') {
     if (itemType === 'command_execution') {
-      return { title: '执行命令', body: command || 'Codex 正在执行命令。', command };
+      return { title: '执行命令', body: command || 'Codex 正在执行命令。', command, toolCallId };
+    }
+    if (itemType === 'file_change') {
+      const fileChanges = fileChangesFromItem(item);
+      return {
+        title: fileChangeTitle(fileChanges),
+        body: fileChangeBody(fileChanges),
+        fileChangeId: toolCallId,
+        fileChanges,
+      };
     }
     if (itemType === 'agent_message') {
       return { title: '模型输出', body: text || 'Codex 正在生成回复。' };
@@ -988,7 +1015,16 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
-      return { title: '命令结果', body: codexCommandResultBody(item), command };
+      return { title: '命令结果', body: codexCommandResultBody(item), command, toolCallId };
+    }
+    if (itemType === 'file_change') {
+      const fileChanges = fileChangesFromItem(item);
+      return {
+        title: fileChangeTitle(fileChanges),
+        body: fileChangeBody(fileChanges),
+        fileChangeId: toolCallId,
+        fileChanges,
+      };
     }
     if (itemType === 'agent_message') {
       return { title: '模型输出', body: output || text || compactPayload(item) };
@@ -1070,6 +1106,7 @@ function eventKind(type: string, payload: Record<string, unknown> = {}): Session
     const item = objectPayload(payload, 'item');
     const itemType = stringPayload(item, 'type');
     if (itemType === 'command_execution') return 'tool';
+    if (itemType === 'file_change') return 'file_change';
     if (itemType === 'agent_message') return 'assistant';
     if (codexType === 'error') return 'status';
   }
@@ -1163,6 +1200,64 @@ function objectPayload(payload: Record<string, unknown>, key: string): Record<st
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function codexItemID(item: Record<string, unknown>, payload: Record<string, unknown>) {
+  return (
+    stringPayload(item, 'id') ||
+    stringPayload(item, 'item_id') ||
+    stringPayload(item, 'itemId') ||
+    stringPayload(item, 'call_id') ||
+    stringPayload(item, 'callId') ||
+    stringPayload(payload, 'id') ||
+    stringPayload(payload, 'item_id') ||
+    stringPayload(payload, 'itemId') ||
+    stringPayload(payload, 'call_id') ||
+    stringPayload(payload, 'callId')
+  );
+}
+
+function fileChangesFromItem(item: Record<string, unknown>): FileChange[] {
+  const changes = item.changes;
+  if (!Array.isArray(changes)) return [];
+  return changes
+    .map((change) => {
+      if (!change || typeof change !== 'object' || Array.isArray(change)) return null;
+      const entry = change as Record<string, unknown>;
+      const path = stringPayload(entry, 'path');
+      if (!path) return null;
+      return {
+        kind: stringPayload(entry, 'kind') || 'update',
+        path,
+      };
+    })
+    .filter((change): change is FileChange => change !== null);
+}
+
+function fileChangeTitle(changes: FileChange[]) {
+  if (changes.length === 0) return '修改文件';
+  const [firstChange] = changes;
+  if (changes.length === 1 && firstChange) return `修改文件 ${firstChange.path}`;
+  const visiblePaths = changes.slice(0, 3).map((change) => change.path);
+  const suffix = changes.length > visiblePaths.length ? ` 等 ${changes.length} 个文件` : '';
+  return `修改文件 ${visiblePaths.join(', ')}${suffix}`;
+}
+
+function fileChangeBody(changes: FileChange[]) {
+  return changes.map((change) => `${fileChangeKindText(change.kind)} ${change.path}`).join('\n');
+}
+
+function fileChangeKindText(kind: string) {
+  const labels: Record<string, string> = {
+    add: '新增',
+    create: '新增',
+    delete: '删除',
+    remove: '删除',
+    update: '修改',
+    modify: '修改',
+    rename: '重命名',
+  };
+  return labels[kind] ?? kind;
 }
 
 function parseRaw(payload: Record<string, unknown>) {

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
@@ -71,7 +72,7 @@ test('mergeShellEvents pairs command and result across non-tool status events', 
   const merged = mergeShellEvents(events);
 
   assert.equal(merged.length, 2);
-  assert.equal(merged[0].id, 'run-1:result-1');
+  assert.equal(merged[0].id, 'run-1');
   assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
   assert.equal(merged[0].body, 'web/src/pages/SessionDetailPage.vue');
   assert.equal(merged[1].id, 'status-1');
@@ -127,6 +128,317 @@ test('mergeShellEvents does not pair a command with a mismatched command result'
   assert.equal(merged[0].body, '');
   assert.equal(merged[1].title, 'Shell npm run build');
   assert.equal(merged[1].body, 'built');
+});
+
+test('mergeShellEvents pairs interleaved shell commands with their own results', () => {
+  const events = [
+    {
+      id: 'run-a',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm test'",
+      command: "[redacted_path] -lc 'npm test'",
+      createdAt: '2026-07-07T01:00:00Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'run-b',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm run build'",
+      command: "[redacted_path] -lc 'npm run build'",
+      createdAt: '2026-07-07T01:00:00.100Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'result-a',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\nok',
+      command: "[redacted_path] -lc 'npm test'",
+      createdAt: '2026-07-07T01:00:01Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'result-b',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\nbuilt',
+      command: "[redacted_path] -lc 'npm run build'",
+      createdAt: '2026-07-07T01:00:02Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'run-a');
+  assert.equal(merged[0].title, 'Shell npm test');
+  assert.equal(merged[0].body, 'ok');
+  assert.equal(merged[1].id, 'run-b');
+  assert.equal(merged[1].title, 'Shell npm run build');
+  assert.equal(merged[1].body, 'built');
+});
+
+test('mergeShellEvents pairs same command concurrency by tool call id', () => {
+  const events = [
+    {
+      id: 'run-a',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm test'",
+      command: "[redacted_path] -lc 'npm test'",
+      toolCallId: 'call-a',
+      createdAt: '2026-07-07T01:00:00Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'run-b',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm test'",
+      command: "[redacted_path] -lc 'npm test'",
+      toolCallId: 'call-b',
+      createdAt: '2026-07-07T01:00:00.100Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'result-a',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\nfirst',
+      command: "[redacted_path] -lc 'npm test'",
+      toolCallId: 'call-a',
+      createdAt: '2026-07-07T01:00:01Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'result-b',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\nsecond',
+      command: "[redacted_path] -lc 'npm test'",
+      toolCallId: 'call-b',
+      createdAt: '2026-07-07T01:00:02Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'run-a');
+  assert.equal(merged[0].body, 'first');
+  assert.equal(merged[1].id, 'run-b');
+  assert.equal(merged[1].body, 'second');
+});
+
+test('mergeShellEvents does not fall back to command text when result tool call id is unknown', () => {
+  const events = [
+    {
+      id: 'run-a',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm test'",
+      command: "[redacted_path] -lc 'npm test'",
+      toolCallId: 'call-a',
+      createdAt: '2026-07-07T01:00:00Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'result-unknown-call',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\norphan',
+      command: "[redacted_path] -lc 'npm test'",
+      toolCallId: 'call-b',
+      createdAt: '2026-07-07T01:00:01Z',
+      time: '01:01',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'run-a');
+  assert.equal(merged[0].body, '');
+  assert.equal(merged[1].id, 'result-unknown-call');
+  assert.equal(merged[1].title, 'Shell npm test');
+  assert.equal(merged[1].body, 'orphan');
+});
+
+test('mergeShellEvents pairs an unlabelled result with the nearest previous command', () => {
+  const events = [
+    {
+      id: 'run-a',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm test'",
+      createdAt: '2026-07-07T01:00:00Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'run-b',
+      kind: 'tool',
+      title: '执行命令',
+      body: "[redacted_path] -lc 'npm run build'",
+      createdAt: '2026-07-07T01:00:00.100Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+    {
+      id: 'result-unknown',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\nok',
+      createdAt: '2026-07-07T01:00:01Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'run-a');
+  assert.equal(merged[0].body, '');
+  assert.equal(merged[1].id, 'run-b');
+  assert.equal(merged[1].title, 'Shell npm run build');
+  assert.equal(merged[1].body, 'ok');
+});
+
+test('mergeShellEvents keeps the command entry id stable when a live result arrives', () => {
+  const command = {
+    id: 'run-live',
+    kind: 'tool',
+    title: '执行命令',
+    body: "[redacted_path] -lc 'go test ./...'",
+    command: "[redacted_path] -lc 'go test ./...'",
+    createdAt: '2026-07-07T01:00:00Z',
+    time: '01:00',
+    rawType: 'process.codex_event',
+  };
+  const result = {
+    id: 'result-live',
+    kind: 'tool',
+    title: '命令结果',
+    body: '命令完成\nok',
+    command: "[redacted_path] -lc 'go test ./...'",
+    createdAt: '2026-07-07T01:00:01Z',
+    time: '01:01',
+    rawType: 'process.codex_event',
+  };
+
+  const beforeResult = mergeShellEvents([command]);
+  const afterResult = mergeShellEvents([command, result]);
+
+  assert.equal(beforeResult.length, 1);
+  assert.equal(beforeResult[0].id, 'run-live');
+  assert.equal(beforeResult[0].body, '');
+  assert.equal(afterResult.length, 1);
+  assert.equal(afterResult[0].id, 'run-live');
+  assert.equal(afterResult[0].body, 'ok');
+  assert.equal(afterResult[0].time, '01:01');
+});
+
+test('mergeShellEvents preserves unmatchable unlabelled result title', () => {
+  const events = [
+    {
+      id: 'result-orphan',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成\norphan',
+      createdAt: '2026-07-07T01:00:01Z',
+      time: '01:01',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].id, 'result-orphan');
+  assert.equal(merged[0].title, '命令结果');
+  assert.equal(merged[0].body, 'orphan');
+});
+
+test('mergeShellEvents keeps file change id stable and updates completed changes', () => {
+  const started = {
+    id: 'file-started',
+    kind: 'file_change',
+    title: '修改文件 internal/infra/gitcli/git_test.go',
+    body: '',
+    fileChangeId: 'item_3',
+    fileChanges: [{ kind: 'update', path: 'internal/infra/gitcli/git_test.go' }],
+    createdAt: '2026-07-08T06:26:49Z',
+    time: '06:26',
+    rawType: 'process.codex_event',
+  };
+  const completed = {
+    id: 'file-completed',
+    kind: 'file_change',
+    title: '修改文件 internal/infra/gitcli/git_test.go',
+    body: '',
+    fileChangeId: 'item_3',
+    fileChanges: [{ kind: 'update', path: 'internal/infra/gitcli/git_test.go' }],
+    createdAt: '2026-07-08T06:26:50Z',
+    time: '06:26',
+    rawType: 'process.codex_event',
+  };
+
+  const beforeComplete = mergeShellEvents([started]);
+  const afterComplete = mergeShellEvents([started, completed]);
+
+  assert.equal(beforeComplete.length, 1);
+  assert.equal(beforeComplete[0].id, 'file-started');
+  assert.equal(beforeComplete[0].fileChanges[0].path, 'internal/infra/gitcli/git_test.go');
+  assert.equal(afterComplete.length, 1);
+  assert.equal(afterComplete[0].id, 'file-started');
+  assert.equal(afterComplete[0].time, '06:26');
+  assert.equal(afterComplete[0].fileChanges[0].path, 'internal/infra/gitcli/git_test.go');
+});
+
+test('mergeShellEvents shows file paths in multi-file change title', () => {
+  const events = [
+    {
+      id: 'file-started',
+      kind: 'file_change',
+      title: '修改文件 a.go, b.go',
+      body: '',
+      fileChangeId: 'item_4',
+      fileChanges: [
+        { kind: 'update', path: 'a.go' },
+        { kind: 'update', path: 'b.go' },
+      ],
+      createdAt: '2026-07-08T06:26:49Z',
+      time: '06:26',
+      rawType: 'process.codex_event',
+    },
+  ];
+
+  const merged = mergeShellEvents(events);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].title, '修改文件 a.go, b.go');
+});
+
+test('file change title keeps paths visible for multi-file changes', () => {
+  const source = readFileSync(new URL('../src/services/sessions.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /visiblePaths = changes\.slice\(0, 3\)\.map\(\(change\) => change\.path\)/);
+  assert.doesNotMatch(source, /return `修改 \$\{changes\.length\} 个文件`/);
 });
 
 test('renderMarkdown formats assistant markdown and escapes raw html', () => {

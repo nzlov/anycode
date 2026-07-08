@@ -1,20 +1,22 @@
 <template>
   <article class="session-event-message" :class="messageClass">
-    <button
-      v-if="isTool"
-      type="button"
-      class="event-tool__header"
-      :aria-expanded="expanded"
-      @click="expanded = !expanded"
-    >
-      <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
-      <q-icon name="terminal" size="16px" />
-      <span>{{ toolTitle }}</span>
-      <time>{{ event.time }}</time>
-    </button>
-    <SessionTerminalOutput v-if="isTool && expanded && event.body" :body="event.body" />
+    <SessionFileChangeEvent v-if="isFileChange" :event="event" />
+    <template v-else-if="isTool">
+      <button
+        type="button"
+        class="event-tool__header"
+        :aria-expanded="expanded"
+        @click="expanded = !expanded"
+      >
+        <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
+        <q-icon name="terminal" size="16px" />
+        <span>{{ toolTitle }}</span>
+        <time>{{ event.time }}</time>
+      </button>
+      <SessionTerminalOutput v-if="expanded && event.body" :body="event.body" />
+    </template>
 
-    <template v-else-if="!isTool">
+    <template v-else>
       <div class="event-message__content">
         <div
           v-if="event.kind === 'assistant'"
@@ -37,17 +39,26 @@
 import { computed, ref } from 'vue';
 
 import { renderMarkdown } from '@/services/sessionEventPresentation';
+import SessionFileChangeEvent from '@/components/SessionFileChangeEvent.vue';
 import SessionTerminalOutput from '@/components/SessionTerminalOutput.vue';
+
+export interface SessionFileChangeEntry {
+  kind: string;
+  path: string;
+}
 
 export interface SessionEventMessageEntry {
   id: string;
-  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question' | 'user';
+  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question' | 'user' | 'file_change';
   title: string;
   body: string;
   createdAt: string;
   time: string;
   rawType?: string;
   command?: string;
+  toolCallId?: string;
+  fileChangeId?: string;
+  fileChanges?: SessionFileChangeEntry[];
 }
 
 const props = defineProps<{
@@ -56,6 +67,7 @@ const props = defineProps<{
 
 const expanded = ref(false);
 const isTool = computed(() => props.event.kind === 'tool');
+const isFileChange = computed(() => props.event.kind === 'file_change');
 const isConversation = computed(() =>
   ['user', 'assistant', 'question', 'thought'].includes(props.event.kind),
 );

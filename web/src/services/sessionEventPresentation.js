@@ -136,6 +136,10 @@ function isResultEvent(event) {
   return event?.kind === 'tool' && event.title === '命令结果';
 }
 
+function isFileChangeEvent(event) {
+  return event?.kind === 'file_change';
+}
+
 function resultMatchesCommand(result, command) {
   if (!result?.command) return true;
   return shellCommandDisplay(result.command) === command;
@@ -143,31 +147,50 @@ function resultMatchesCommand(result, command) {
 
 export function mergeShellEvents(events) {
   const merged = [];
-  const consumed = new Set();
+  const openCommands = [];
+  const openFileChanges = new Map();
   for (let index = 0; index < events.length; index += 1) {
-    if (consumed.has(index)) continue;
     const event = events[index];
-    if (isCommandEvent(event)) {
-      const command = shellCommandDisplay(event.command || event.body);
-      const resultIndex = findShellResultIndex(events, index + 1, command);
-      const next = resultIndex === -1 ? null : events[resultIndex];
-      merged.push({
-        ...event,
-        id: next ? `${event.id}:${next.id}` : event.id,
-        title: command ? `Shell ${command}` : 'Shell',
-        body: shellBody(next?.body),
-        time: next?.time || event.time,
-      });
-      if (next) consumed.add(resultIndex);
+    if (isFileChangeEvent(event)) {
+      const fileChangeId = event.fileChangeId || event.id;
+      const openEntry = openFileChanges.get(fileChangeId);
+      if (openEntry) {
+        openEntry.title = event.title || openEntry.title;
+        openEntry.body = event.body || openEntry.body;
+        openEntry.time = event.time || openEntry.time;
+        openEntry.fileChanges = event.fileChanges || openEntry.fileChanges;
+        openFileChanges.delete(fileChangeId);
+        continue;
+      }
+      const entry = { ...event };
+      merged.push(entry);
+      openFileChanges.set(fileChangeId, entry);
       continue;
     }
-    if (isResultEvent(event) && event.command) {
-      const command = shellCommandDisplay(event.command);
-      merged.push({
+    if (isCommandEvent(event)) {
+      const command = shellCommandDisplay(event.command || event.body);
+      const entry = {
         ...event,
         title: command ? `Shell ${command}` : 'Shell',
-        body: shellBody(event.body),
-      });
+        body: '',
+      };
+      merged.push(entry);
+      openCommands.push({ command, entry, toolCallId: event.toolCallId || '' });
+      continue;
+    }
+    if (isResultEvent(event)) {
+      const commandIndex = findOpenCommandIndex(openCommands, event);
+      if (commandIndex !== -1) {
+        const command = openCommands[commandIndex];
+        command.entry.body = shellBody(event.body);
+        command.entry.time = event.time || command.entry.time;
+        openCommands.splice(commandIndex, 1);
+        continue;
+      }
+      const command = shellCommandDisplay(event.command);
+      const entry = { ...event, body: shellBody(event.body) };
+      if (command) entry.title = `Shell ${command}`;
+      merged.push(entry);
       continue;
     }
     merged.push(event);
@@ -183,11 +206,14 @@ function commandOutputBody(value) {
   return String(value || '').replace(/^命令完成(?:，退出码 \d+)?\n?/, '');
 }
 
-function findShellResultIndex(events, startIndex, command) {
-  for (let index = startIndex; index < events.length; index += 1) {
-    const event = events[index];
-    if (isResultEvent(event)) return resultMatchesCommand(event, command) ? index : -1;
-    if (event?.kind === 'tool') return -1;
+function findOpenCommandIndex(openCommands, result) {
+  if (result.toolCallId) {
+    return openCommands.findIndex((command) => command.toolCallId === result.toolCallId);
+  }
+  const resultCommand = result.command ? shellCommandDisplay(result.command) : '';
+  for (let index = openCommands.length - 1; index >= 0; index -= 1) {
+    if (!resultCommand) return index;
+    if (resultMatchesCommand(result, openCommands[index].command)) return index;
   }
   return -1;
 }
