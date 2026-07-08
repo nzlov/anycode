@@ -3508,6 +3508,113 @@ func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
 	}
 }
 
+func TestStartSessionUpdatesTodoListFromStartedAndUpdatedItems(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	source := make(chan processdomain.CodexEvent, 2)
+	source <- processdomain.CodexEvent{
+		EventID: "codex-event-todo-started",
+		Type:    "item.started",
+		Payload: map[string]any{
+			"type": "item.started",
+			"item": map[string]any{
+				"id":   "item_3",
+				"type": "todo_list",
+				"items": []any{
+					map[string]any{"text": "Explore project context for Git/worktree creation", "completed": false},
+					map[string]any{"text": "Clarify intended conflict policy", "completed": false},
+					map[string]any{"text": "Compare approaches and recommend design", "completed": false},
+				},
+			},
+		},
+		Raw: []byte(`{"type":"item.started"}`),
+	}
+	source <- processdomain.CodexEvent{
+		EventID: "codex-event-todo-updated",
+		Type:    "item.updated",
+		Payload: map[string]any{
+			"type": "item.updated",
+			"item": map[string]any{
+				"id":   "item_3",
+				"type": "todo_list",
+				"items": []any{
+					map[string]any{"text": "Explore project context for Git/worktree creation", "completed": true},
+					map[string]any{"text": "Clarify intended conflict policy", "completed": false},
+					map[string]any{"text": "Compare approaches and recommend design", "completed": false},
+					map[string]any{"text": "Implement chosen design", "completed": false},
+				},
+			},
+		},
+		Raw: []byte(`{"type":"item.updated"}`),
+	}
+	close(source)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{
+		"process-run-1",
+		"event-starting",
+		"event-running",
+		"process-event-todo-started",
+		"event-codex-started",
+		"event-todo-list-started",
+		"process-event-todo-updated",
+		"event-codex-updated",
+		"event-todo-list-updated",
+		"event-process-exited",
+		"event-stopped",
+	}
+	service.generateID = func() (domain.ID, error) {
+		if len(ids) == 0 {
+			t.Fatal("generateID called more than expected")
+		}
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	waitForEventType(t, events, "process.exited")
+
+	todoEvents := make([]eventdomain.DomainEvent, 0, 2)
+	for _, event := range events.snapshot() {
+		if event.Type == "session.todo_list_updated" {
+			todoEvents = append(todoEvents, event)
+		}
+	}
+	if len(todoEvents) != 2 {
+		t.Fatalf("todo list event count = %d, want 2: %#v", len(todoEvents), todoEvents)
+	}
+	if todoEvents[0].Payload["completed"] != 0 || todoEvents[0].Payload["total"] != 3 {
+		t.Fatalf("started todo list event payload = %#v, want completed=0 total=3", todoEvents[0].Payload)
+	}
+	if todoEvents[1].Payload["completed"] != 1 || todoEvents[1].Payload["total"] != 4 {
+		t.Fatalf("updated todo list event payload = %#v, want completed=1 total=4", todoEvents[1].Payload)
+	}
+
+	got := repo.sessions["session-1"].TodoList
+	if got.Total() != 4 || got.Completed() != 1 {
+		t.Fatalf("todo list counts = %d/%d, want 1/4: %#v", got.Completed(), got.Total(), got)
+	}
+	if got.Items[0].Text != "Explore project context for Git/worktree creation" || !got.Items[0].Completed {
+		t.Fatalf("first todo item = %#v", got.Items[0])
+	}
+	if got.Items[3].Text != "Implement chosen design" || got.Items[3].Completed {
+		t.Fatalf("updated todo item = %#v", got.Items[3])
+	}
+}
+
 func TestTodoListFromCodexEventParsesPlanUpdateShapes(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -3535,6 +3642,40 @@ func TestTodoListFromCodexEventParsesPlanUpdateShapes(t *testing.T) {
 					"item": map[string]any{
 						"name":      "update_plan",
 						"arguments": `{"plan":[{"step":"解析 arguments","status":"done"},{"step":"刷新卡片","status":"pending"}]}`,
+					},
+				},
+			},
+		},
+		{
+			name: "updated todo list item",
+			event: processdomain.CodexEvent{
+				Type: "item.updated",
+				Payload: map[string]any{
+					"type": "item.updated",
+					"item": map[string]any{
+						"id":   "item_5",
+						"type": "todo_list",
+						"items": []any{
+							map[string]any{"text": "定位事件解析", "status": "completed"},
+							map[string]any{"text": "刷新卡片列表", "status": "pending"},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "started todo list item",
+			event: processdomain.CodexEvent{
+				Type: "item.started",
+				Payload: map[string]any{
+					"type": "item.started",
+					"item": map[string]any{
+						"id":   "item_3",
+						"type": "todo_list",
+						"items": []any{
+							map[string]any{"text": "Explore project context for Git/worktree creation", "completed": false},
+							map[string]any{"text": "Clarify intended conflict policy", "completed": true},
+						},
 					},
 				},
 			},
@@ -3570,6 +3711,17 @@ func TestTodoListFromCodexEventIgnoresUnrelatedPlanPayloads(t *testing.T) {
 				"item": map[string]any{
 					"name":      "write_file",
 					"arguments": `{"plan":[]}`,
+				},
+			},
+		},
+		{
+			Type: "assistant_message",
+			Payload: map[string]any{
+				"item": map[string]any{
+					"type": "todo_list",
+					"items": []any{
+						map[string]any{"text": "不应覆盖", "completed": true},
+					},
 				},
 			},
 		},

@@ -3044,6 +3044,19 @@ func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bo
 		}
 		return todoListFromPayload(raw)
 	}
+	if isTodoListItemEventType(event.Type) {
+		if list, ok := todoListFromTodoListItemPayload(event.Payload); ok {
+			return list, true
+		}
+		if len(event.Raw) == 0 {
+			return domain.TodoList{}, false
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(event.Raw, &raw); err != nil {
+			return domain.TodoList{}, false
+		}
+		return todoListFromTodoListItemPayload(raw)
+	}
 	if list, ok := todoListFromUpdatePlanToolPayload(event.Payload); ok {
 		return list, true
 	}
@@ -3060,6 +3073,15 @@ func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bo
 func isTodoListPlanEventType(eventType string) bool {
 	switch strings.ToLower(strings.TrimSpace(eventType)) {
 	case "plan_update", "turn/plan/updated", "turn.plan.updated", "plan.updated":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTodoListItemEventType(eventType string) bool {
+	switch strings.ToLower(strings.TrimSpace(eventType)) {
+	case "item.started", "item.updated":
 		return true
 	default:
 		return false
@@ -3113,11 +3135,25 @@ func todoListFromToolArguments(payload map[string]any) (domain.TodoList, bool) {
 	return todoListFromPayload(payload)
 }
 
+func todoListFromTodoListItemPayload(payload map[string]any) (domain.TodoList, bool) {
+	if payload == nil {
+		return domain.TodoList{}, false
+	}
+	item := payload
+	if nested, ok := payload["item"].(map[string]any); ok {
+		item = nested
+	}
+	if strings.ToLower(strings.TrimSpace(stringFromMap(item, "type"))) != "todo_list" {
+		return domain.TodoList{}, false
+	}
+	return todoListFromPayload(item)
+}
+
 func todoListFromPayload(payload map[string]any) (domain.TodoList, bool) {
 	if payload == nil {
 		return domain.TodoList{}, false
 	}
-	for _, key := range []string{"plan", "todoList", "todo_list", "todos"} {
+	for _, key := range []string{"plan", "todoList", "todo_list", "todos", "items"} {
 		if items, ok := payload[key].([]any); ok {
 			return todoListFromItems(items), true
 		}
