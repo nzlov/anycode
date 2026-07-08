@@ -3290,6 +3290,12 @@ func TestStartSessionPromptMentionsAnswerUserGuidance(t *testing.T) {
 	if !strings.Contains(prompt, "不确定") {
 		t.Fatalf("prompt should tell Codex to ask when uncertain: %q", prompt)
 	}
+	if !strings.Contains(prompt, "request_user_input") {
+		t.Fatalf("prompt should distinguish request_user_input from answer_user: %q", prompt)
+	}
+	if !strings.Contains(prompt, "不要使用 `request_user_input`") {
+		t.Fatalf("prompt should tell Codex not to use request_user_input for AnyCode questions: %q", prompt)
+	}
 }
 
 func TestStartSessionAppendsLifecycleEvents(t *testing.T) {
