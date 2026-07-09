@@ -39,6 +39,20 @@ func (s *EventStore) Append(ctx context.Context, domainEvent event.DomainEvent) 
 	return nil
 }
 
+func (s *EventStore) List(ctx context.Context, scope event.Scope) ([]event.DomainEvent, error) {
+	rows, err := applyEventScope(s.client.EventRecord.Query(), scope).
+		Order(ent.Asc(enteventrecord.FieldCreatedAt), ent.Asc(enteventrecord.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list events: %w", err)
+	}
+	events := make([]event.DomainEvent, 0, len(rows))
+	for _, row := range rows {
+		events = append(events, toDomainEvent(row))
+	}
+	return events, nil
+}
+
 func (s *EventStore) After(ctx context.Context, scope event.Scope, after event.ID) ([]event.DomainEvent, error) {
 	query := applyEventScope(s.client.EventRecord.Query(), scope)
 	if after != "" {

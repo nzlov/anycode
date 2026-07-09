@@ -36,21 +36,16 @@ type Run struct {
 	FinishedAt     *time.Time
 }
 
-type Event struct {
-	ID           string
-	SessionID    SessionID
-	ProcessRunID *RunID
-	EventID      string
-	Type         string
-	Payload      map[string]any
-	CreatedAt    time.Time
+type CodexEvent struct {
+	EventID   string
+	Type      string
+	Payload   map[string]any
+	CreatedAt time.Time
 }
 
-type CodexEvent struct {
-	EventID string
-	Type    string
-	Payload map[string]any
-	Raw     []byte
+type CodexTranscriptInput struct {
+	CodexSessionID string
+	Workdir        string
 }
 
 type ExitResult struct {
@@ -66,8 +61,6 @@ type Repository interface {
 	MarkWaitingUser(ctx context.Context, id RunID) error
 	MarkRunning(ctx context.Context, id RunID, pid int, codexSessionID string) error
 	MarkExited(ctx context.Context, id RunID, result ExitResult) error
-	SaveEvent(ctx context.Context, event Event) error
-	LatestCodexSessionID(ctx context.Context, sessionID SessionID) (string, error)
 }
 
 type CodexStartInput struct {

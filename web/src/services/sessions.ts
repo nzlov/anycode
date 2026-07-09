@@ -101,6 +101,8 @@ export interface SessionEvent {
 export interface FileChange {
   kind: string;
   path: string;
+  unifiedDiff?: string;
+  movePath?: string;
 }
 
 export interface QuestionOption {
@@ -1023,8 +1025,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
   const failure = stringPayload(payload, 'failureReason');
 
   if (codexType === 'thread.started') {
-    const threadID =
-      stringPayload(payload, 'thread_id') || stringPayload(parseRaw(payload), 'thread_id');
+    const threadID = stringPayload(payload, 'thread_id');
     return { title: '线程已创建', body: threadID ? `线程 ${threadID}` : statusText(status) };
   }
   if (codexType === 'turn.started') return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
@@ -1144,6 +1145,7 @@ function eventKind(type: string, payload: Record<string, unknown> = {}): Session
     if (itemType === 'command_execution') return 'tool';
     if (itemType === 'file_change') return 'file_change';
     if (itemType === 'agent_message') return 'assistant';
+    if (itemType === 'reasoning') return 'thought';
     if (codexType === 'error') return 'status';
   }
   if (type.includes('tool')) return 'tool';
@@ -1262,10 +1264,15 @@ function fileChangesFromItem(item: Record<string, unknown>): FileChange[] {
       const entry = change as Record<string, unknown>;
       const path = stringPayload(entry, 'path');
       if (!path) return null;
-      return {
+      const normalized: FileChange = {
         kind: stringPayload(entry, 'kind') || 'update',
         path,
       };
+      const unifiedDiff = stringPayload(entry, 'unifiedDiff') || stringPayload(entry, 'unified_diff');
+      if (unifiedDiff) normalized.unifiedDiff = unifiedDiff;
+      const movePath = stringPayload(entry, 'movePath') || stringPayload(entry, 'move_path');
+      if (movePath) normalized.movePath = movePath;
+      return normalized;
     })
     .filter((change): change is FileChange => change !== null);
 }
@@ -1296,22 +1303,9 @@ function fileChangeKindText(kind: string) {
   return labels[kind] ?? kind;
 }
 
-function parseRaw(payload: Record<string, unknown>) {
-  const raw = stringPayload(payload, 'raw');
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 function compactPayload(payload: Record<string, unknown>) {
   const parts = Object.entries(payload)
-    .filter(([key]) => !['raw', 'processRunId', 'codexEventId'].includes(key))
+    .filter(([key]) => !['processRunId', 'codexEventId'].includes(key))
     .map(([key, value]) => {
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
         return `${key}: ${value}`;

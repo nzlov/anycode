@@ -19,6 +19,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/redaction"
@@ -117,16 +118,19 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 		return graph.UseCases{}, err
 	}
 	events := store.Events()
-	eventService := eventapp.New(events)
+	eventService := eventapp.New()
+	processes := store.Processes()
+	timelineService := timelineapp.New(events, eventService, store.Sessions(), codex, processes)
 	questionWaiter := questionapp.NewMemoryAnswerWaiter()
 	questionService := questionapp.New(store.Questions(), questionWaiter)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(store.Processes(), codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
 	return graph.UseCases{
 		Projects:    projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
 		Sessions:    sessionService,
 		Events:      eventService,
+		Timeline:    timelineService,
 		Attachments: attachmentapp.New(attachments, files),
 		Diff:        diffapp.New(store.Sessions(), store.Projects(), gitdiffClient),
 		Workflows:   workflowService,

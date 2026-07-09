@@ -45,18 +45,6 @@ func (f NodeRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NodeRunMutation", m)
 }
 
-// The ProcessEventFunc type is an adapter to allow the use of ordinary
-// function as ProcessEvent mutator.
-type ProcessEventFunc func(context.Context, *ent.ProcessEventMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f ProcessEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.ProcessEventMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProcessEventMutation", m)
-}
-
 // The ProcessRunFunc type is an adapter to allow the use of ordinary
 // function as ProcessRun mutator.
 type ProcessRunFunc func(context.Context, *ent.ProcessRunMutation) (ent.Value, error)

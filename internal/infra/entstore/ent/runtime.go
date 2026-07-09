@@ -8,7 +8,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
@@ -111,28 +110,6 @@ func init() {
 	noderunDescOutput := noderunFields[8].Descriptor()
 	// noderun.DefaultOutput holds the default value on creation for the output field.
 	noderun.DefaultOutput = noderunDescOutput.Default.(map[string]interface{})
-	processeventFields := schema.ProcessEvent{}.Fields()
-	_ = processeventFields
-	// processeventDescSessionID is the schema descriptor for session_id field.
-	processeventDescSessionID := processeventFields[1].Descriptor()
-	// processevent.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
-	processevent.SessionIDValidator = processeventDescSessionID.Validators[0].(func(string) error)
-	// processeventDescEventID is the schema descriptor for event_id field.
-	processeventDescEventID := processeventFields[3].Descriptor()
-	// processevent.DefaultEventID holds the default value on creation for the event_id field.
-	processevent.DefaultEventID = processeventDescEventID.Default.(string)
-	// processeventDescType is the schema descriptor for type field.
-	processeventDescType := processeventFields[4].Descriptor()
-	// processevent.TypeValidator is a validator for the "type" field. It is called by the builders before save.
-	processevent.TypeValidator = processeventDescType.Validators[0].(func(string) error)
-	// processeventDescPayload is the schema descriptor for payload field.
-	processeventDescPayload := processeventFields[5].Descriptor()
-	// processevent.DefaultPayload holds the default value on creation for the payload field.
-	processevent.DefaultPayload = processeventDescPayload.Default.(map[string]interface{})
-	// processeventDescCreatedAt is the schema descriptor for created_at field.
-	processeventDescCreatedAt := processeventFields[6].Descriptor()
-	// processevent.DefaultCreatedAt holds the default value on creation for the created_at field.
-	processevent.DefaultCreatedAt = processeventDescCreatedAt.Default.(func() time.Time)
 	processrunFields := schema.ProcessRun{}.Fields()
 	_ = processrunFields
 	// processrunDescSessionID is the schema descriptor for session_id field.

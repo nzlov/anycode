@@ -15,7 +15,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
@@ -89,7 +88,6 @@ func checkColumn(t, c string) error {
 			eventrecord.Table:        eventrecord.ValidColumn,
 			mergerecord.Table:        mergerecord.ValidColumn,
 			noderun.Table:            noderun.ValidColumn,
-			processevent.Table:       processevent.ValidColumn,
 			processrun.Table:         processrun.ValidColumn,
 			project.Table:            project.ValidColumn,
 			promptappend.Table:       promptappend.ValidColumn,

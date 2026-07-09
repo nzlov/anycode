@@ -45,7 +45,7 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	fileStore := filestore.New(dataDir)
 	attachments := attachmentapp.New(store.Attachments(), fileStore)
 	questions := questionapp.New(store.Questions(), questionapp.NewMemoryAnswerWaiter())
-	events := eventapp.New(store.Events())
+	events := eventapp.New()
 	workflows := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(store.Events()), workflowapp.WithEventPublisher(events))
 	codex := &smokeCodexProcess{events: make(chan processdomain.CodexEvent)}
 	sessions := sessionapp.New(

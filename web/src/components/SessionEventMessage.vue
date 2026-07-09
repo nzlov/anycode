@@ -45,6 +45,8 @@ import SessionTerminalOutput from '@/components/SessionTerminalOutput.vue';
 export interface SessionFileChangeEntry {
   kind: string;
   path: string;
+  unifiedDiff?: string;
+  movePath?: string;
 }
 
 export interface SessionEventMessageEntry {

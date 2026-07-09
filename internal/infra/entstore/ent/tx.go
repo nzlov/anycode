@@ -18,8 +18,6 @@ type Tx struct {
 	MergeRecord *MergeRecordClient
 	// NodeRun is the client for interacting with the NodeRun builders.
 	NodeRun *NodeRunClient
-	// ProcessEvent is the client for interacting with the ProcessEvent builders.
-	ProcessEvent *ProcessEventClient
 	// ProcessRun is the client for interacting with the ProcessRun builders.
 	ProcessRun *ProcessRunClient
 	// Project is the client for interacting with the Project builders.
@@ -172,7 +170,6 @@ func (tx *Tx) init() {
 	tx.EventRecord = NewEventRecordClient(tx.config)
 	tx.MergeRecord = NewMergeRecordClient(tx.config)
 	tx.NodeRun = NewNodeRunClient(tx.config)
-	tx.ProcessEvent = NewProcessEventClient(tx.config)
 	tx.ProcessRun = NewProcessRunClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.PromptAppend = NewPromptAppendClient(tx.config)

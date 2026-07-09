@@ -3,15 +3,15 @@ package entstore
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/session"
-	entprocessevent "github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
 )
 
-func TestProcessRepositoryPersistsRunLifecycleAndEvents(t *testing.T) {
+func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
 		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
@@ -108,134 +108,6 @@ func TestProcessRepositoryPersistsRunLifecycleAndEvents(t *testing.T) {
 		t.Fatalf("active count with terminal run = %d", activeCount)
 	}
 
-	eventAt := startedAt.Add(time.Minute)
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:           "process-event-1",
-		SessionID:    run.SessionID,
-		ProcessRunID: &run.ID,
-		EventID:      "codex-event-1",
-		Type:         "message",
-		Payload: map[string]any{
-			"text": "hello",
-		},
-		CreatedAt: eventAt,
-	}); err != nil {
-		t.Fatalf("save event: %v", err)
-	}
-	event, err := store.Client().ProcessEvent.Query().
-		Where(entprocessevent.IDEQ("process-event-1")).
-		Only(ctx)
-	if err != nil {
-		t.Fatalf("find process event: %v", err)
-	}
-	if event.SessionID != string(run.SessionID) || event.ProcessRunID == nil || *event.ProcessRunID != string(run.ID) || event.EventID != "codex-event-1" || event.Type != "message" {
-		t.Fatalf("process event mismatch: %#v", event)
-	}
-	if event.Payload["text"] != "hello" {
-		t.Fatalf("process event payload mismatch: %#v", event.Payload)
-	}
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:           "process-event-thread-old",
-		SessionID:    run.SessionID,
-		ProcessRunID: &run.ID,
-		EventID:      "codex-event-thread-old",
-		Type:         "thread.started",
-		Payload: map[string]any{
-			"thread_id": "codex-thread-old",
-		},
-		CreatedAt: eventAt.Add(time.Second),
-	}); err != nil {
-		t.Fatalf("save old thread event: %v", err)
-	}
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:           "process-event-thread-new",
-		SessionID:    run.SessionID,
-		ProcessRunID: &run.ID,
-		EventID:      "codex-event-thread-new",
-		Type:         "thread.started",
-		Payload: map[string]any{
-			"thread_id": "codex-thread-new",
-		},
-		CreatedAt: eventAt.Add(2 * time.Second),
-	}); err != nil {
-		t.Fatalf("save new thread event: %v", err)
-	}
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:        "process-event-thread-other-session",
-		SessionID: "session-other",
-		EventID:   "codex-event-thread-other-session",
-		Type:      "thread.started",
-		Payload: map[string]any{
-			"thread_id": "codex-thread-other-session",
-		},
-		CreatedAt: eventAt.Add(3 * time.Second),
-	}); err != nil {
-		t.Fatalf("save other session thread event: %v", err)
-	}
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:           "process-event-thread-empty",
-		SessionID:    run.SessionID,
-		ProcessRunID: &run.ID,
-		EventID:      "codex-event-thread-empty",
-		Type:         "thread.started",
-		Payload: map[string]any{
-			"thread_id": "   ",
-		},
-		CreatedAt: eventAt.Add(4 * time.Second),
-	}); err != nil {
-		t.Fatalf("save empty thread event: %v", err)
-	}
-	latestCodexSessionID, err := repo.LatestCodexSessionID(ctx, run.SessionID)
-	if err != nil {
-		t.Fatalf("latest codex session id: %v", err)
-	}
-	if latestCodexSessionID != "codex-thread-new" {
-		t.Fatalf("latest codex session id = %q", latestCodexSessionID)
-	}
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:           "process-event-thread-msg",
-		SessionID:    run.SessionID,
-		ProcessRunID: &run.ID,
-		EventID:      "codex-event-thread-msg",
-		Type:         "thread.started",
-		Payload: map[string]any{
-			"msg": map[string]any{"thread_id": "codex-thread-msg"},
-		},
-		CreatedAt: eventAt.Add(5 * time.Second),
-	}); err != nil {
-		t.Fatalf("save msg thread event: %v", err)
-	}
-	latestCodexSessionID, err = repo.LatestCodexSessionID(ctx, run.SessionID)
-	if err != nil {
-		t.Fatalf("latest codex session id with msg: %v", err)
-	}
-	if latestCodexSessionID != "codex-thread-msg" {
-		t.Fatalf("latest codex session id with msg = %q", latestCodexSessionID)
-	}
-
-	if err := repo.SaveEvent(ctx, process.Event{
-		ID:        "process-event-secret",
-		SessionID: run.SessionID,
-		EventID:   "codex-event-secret",
-		Type:      "message",
-		Payload: map[string]any{
-			"authorization": "Bearer secret",
-			"workdir":       "/home/nzlov/workspaces/github/project",
-		},
-		CreatedAt: eventAt,
-	}); err != nil {
-		t.Fatalf("save secret event: %v", err)
-	}
-	secretEvent, err := store.Client().ProcessEvent.Query().
-		Where(entprocessevent.IDEQ("process-event-secret")).
-		Only(ctx)
-	if err != nil {
-		t.Fatalf("find secret process event: %v", err)
-	}
-	if secretEvent.Payload["authorization"] != "[redacted]" || secretEvent.Payload["workdir"] != "[redacted_path]" {
-		t.Fatalf("secret process event payload mismatch: %#v", secretEvent.Payload)
-	}
-
 	exitCode := 0
 	finishedAt := startedAt.Add(2 * time.Minute)
 	if err := repo.MarkExited(ctx, run.ID, process.ExitResult{
@@ -250,5 +122,52 @@ func TestProcessRepositoryPersistsRunLifecycleAndEvents(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("exited run should not be active: %#v", active)
+	}
+}
+
+func TestProcessRepositoryListsCodexSessionIDsForSession(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	startedAt := time.Date(2026, 7, 2, 8, 0, 0, 0, time.UTC)
+	if err := store.Sessions().Save(ctx, session.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      session.ModeChat,
+		Status:    session.StatusStopped,
+		CreatedAt: startedAt,
+		UpdatedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	repo := store.Processes()
+	runs := []process.Run{
+		{ID: "process-run-1", SessionID: "session-1", Status: process.StatusExited, CodexSessionID: "codex-session-1", StartedAt: startedAt},
+		{ID: "process-run-2", SessionID: "session-1", Status: process.StatusExited, CodexSessionID: "codex-session-2", StartedAt: startedAt.Add(time.Minute)},
+		{ID: "process-run-3", SessionID: "session-1", Status: process.StatusExited, CodexSessionID: "codex-session-1", StartedAt: startedAt.Add(2 * time.Minute)},
+		{ID: "process-run-empty", SessionID: "session-1", Status: process.StatusExited, StartedAt: startedAt.Add(3 * time.Minute)},
+	}
+	for _, run := range runs {
+		if err := repo.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create run %s: %v", run.ID, err)
+		}
+	}
+
+	got, err := repo.CodexSessionIDs(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("CodexSessionIDs() error = %v", err)
+	}
+	if want := []string{"codex-session-1", "codex-session-2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("CodexSessionIDs() = %#v, want %#v", got, want)
 	}
 }

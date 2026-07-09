@@ -110,7 +110,7 @@ func (s *Store) Events() *EventStore {
 	return NewEventStore(s.client)
 }
 
-func (s *Store) Processes() process.Repository {
+func (s *Store) Processes() *ProcessRepository {
 	return NewProcessRepository(s.client)
 }
 

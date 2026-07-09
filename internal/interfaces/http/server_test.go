@@ -20,6 +20,7 @@ import (
 	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -112,8 +113,8 @@ func TestWebSocketInitFuncRequiresAuthorizationPayload(t *testing.T) {
 }
 
 func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *testing.T) {
-	events := &fakeEventUseCase{ch: make(chan eventapp.DTO, 1), subscribed: make(chan struct{})}
-	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Events: events}))
+	timeline := &fakeTimelineUseCase{ch: make(chan timelineapp.DTO, 1), subscribed: make(chan struct{})}
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Timeline: timeline}))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -146,13 +147,13 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	})
 
 	select {
-	case <-events.subscribed:
+	case <-timeline.subscribed:
 	case <-time.After(time.Second):
 		t.Fatal("sessionEvents subscription was not opened")
 	}
 
 	sessionID := eventdomain.SessionID("session-1")
-	events.ch <- eventapp.DTO{
+	timeline.ch <- timelineapp.DTO{
 		ID:        "event-1",
 		Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
 		SessionID: &sessionID,
@@ -616,11 +617,12 @@ type fakeEventUseCase struct {
 	subscribed chan struct{}
 }
 
-func (u *fakeEventUseCase) ListSessionEvents(context.Context, eventapp.ListSessionEventsInput) (port.Page[eventapp.DTO], error) {
-	return port.Page[eventapp.DTO]{}, nil
+type fakeTimelineUseCase struct {
+	ch         chan timelineapp.DTO
+	subscribed chan struct{}
 }
 
-func (u *fakeEventUseCase) SessionEvents(context.Context, eventapp.SessionEventsInput) (<-chan eventapp.DTO, error) {
+func (u *fakeEventUseCase) LiveSessionEvents(context.Context, eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
 	if u.subscribed == nil {
 		u.subscribed = make(chan struct{})
 	}
@@ -628,8 +630,16 @@ func (u *fakeEventUseCase) SessionEvents(context.Context, eventapp.SessionEvents
 	return u.ch, nil
 }
 
-func (u *fakeEventUseCase) LiveSessionEvents(context.Context, eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
-	return u.SessionEvents(context.Background(), eventapp.SessionEventsInput{})
+func (u *fakeTimelineUseCase) ListSessionEvents(context.Context, timelineapp.ListSessionEventsInput) (port.Page[timelineapp.DTO], error) {
+	return port.Page[timelineapp.DTO]{}, nil
+}
+
+func (u *fakeTimelineUseCase) SessionEvents(context.Context, timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {
+	if u.subscribed == nil {
+		u.subscribed = make(chan struct{})
+	}
+	close(u.subscribed)
+	return u.ch, nil
 }
 
 type fakeQuestionUseCase struct {

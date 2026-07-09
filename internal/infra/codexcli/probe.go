@@ -16,6 +16,7 @@ const defaultBin = "codex"
 
 type Client struct {
 	bin             string
+	codexHome       string
 	mcpBaseURL      string
 	mcpStdioCommand string
 	mcpStdioSocket  string
@@ -63,6 +64,12 @@ func WithMCPStdio(command string, socket string, authToken string) Option {
 	}
 }
 
+func WithCodexHome(path string) Option {
+	return func(c *Client) {
+		c.codexHome = strings.TrimSpace(path)
+	}
+}
+
 func New(bin string, options ...Option) *Client {
 	if bin == "" {
 		bin = os.Getenv("CODEX_BIN")
@@ -75,6 +82,19 @@ func New(bin string, options ...Option) *Client {
 		option(client)
 	}
 	return client
+}
+
+func (c *Client) CodexHome() string {
+	if c != nil && c.codexHome != "" {
+		return c.codexHome
+	}
+	if value := strings.TrimSpace(os.Getenv("CODEX_HOME")); value != "" {
+		return value
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		return home + string(os.PathSeparator) + ".codex"
+	}
+	return ".codex"
 }
 
 func (c *Client) Bin() string {

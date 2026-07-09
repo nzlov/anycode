@@ -3,30 +3,14 @@ package event
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
-	"github.com/nzlov/anycode/internal/application/port"
 	domain "github.com/nzlov/anycode/internal/domain/event"
-	"github.com/nzlov/anycode/internal/domain/session"
 )
 
 type UseCase interface {
-	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (port.Page[DTO], error)
-	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
 	LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error)
-}
-
-type ListSessionEventsInput struct {
-	SessionID     session.ID
-	BeforeEventID domain.ID
-	Limit         int
-}
-
-type SessionEventsInput struct {
-	Scope        domain.Scope
-	AfterEventID domain.ID
 }
 
 type LiveSessionEventsInput struct {
@@ -42,88 +26,27 @@ type DTO struct {
 	CreatedAt string
 }
 
-const (
-	defaultLimit = 50
-	maxLimit     = 200
-)
-
 type Service struct {
-	store       domain.Store
 	mu          sync.Mutex
 	nextSubID   int64
 	subscribers map[int64]subscription
 }
 
-func New(store domain.Store) *Service {
-	return &Service{store: store, subscribers: map[int64]subscription{}}
-}
-
-func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (port.Page[DTO], error) {
-	if s == nil {
-		return port.Page[DTO]{}, errors.New("event usecase: nil service")
-	}
-	if s.store == nil {
-		return port.Page[DTO]{}, errors.New("event store is required")
-	}
-	if input.SessionID == "" {
-		return port.Page[DTO]{}, errors.New("session id is required")
-	}
-	limit := normalizeLimit(input.Limit)
-	sessionID := domain.SessionID(input.SessionID)
-	events, total, hasMore, err := s.store.Before(ctx, domain.Scope{SessionID: &sessionID}, input.BeforeEventID, limit)
-	if err != nil {
-		return port.Page[DTO]{}, fmt.Errorf("list session events: %w", err)
-	}
-	items := toDTOs(events)
-	nextCursor := ""
-	if hasMore && len(items) > 0 {
-		nextCursor = string(items[0].ID)
-	}
-	return port.Page[DTO]{
-		Items:      items,
-		Page:       1,
-		PageSize:   limit,
-		Total:      total,
-		NextCursor: nextCursor,
-	}, nil
-}
-
-func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error) {
-	if s == nil {
-		return nil, errors.New("event usecase: nil service")
-	}
-	if s.store == nil {
-		return nil, errors.New("event store is required")
-	}
-	events, err := s.store.After(ctx, input.Scope, input.AfterEventID)
-	if err != nil {
-		return nil, fmt.Errorf("list session events: %w", err)
-	}
-	ch := make(chan DTO, len(events)+16)
-	for _, event := range events {
-		ch <- toDTO(event)
-	}
-	id := s.subscribe(input.Scope, ch)
-	go func() {
-		<-ctx.Done()
-		s.unsubscribe(id)
-		close(ch)
-	}()
-	return ch, nil
+func New() *Service {
+	return &Service{subscribers: map[int64]subscription{}}
 }
 
 func (s *Service) LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error) {
 	if s == nil {
 		return nil, errors.New("event usecase: nil service")
 	}
-	ch := make(chan DTO, 16)
-	id := s.subscribe(input.Scope, ch)
+	out := make(chan DTO, 16)
+	id := s.subscribe(input.Scope, out, ctx.Done())
 	go func() {
 		<-ctx.Done()
 		s.unsubscribe(id)
-		close(ch)
 	}()
-	return ch, nil
+	return out, nil
 }
 
 func (s *Service) PublishAfterCommit(ctx context.Context, event domain.DomainEvent) error {
@@ -136,7 +59,7 @@ func (s *Service) PublishAfterCommit(ctx context.Context, event domain.DomainEve
 		case <-ctx.Done():
 			return ctx.Err()
 		case sub.ch <- dto:
-		default:
+		case <-sub.done:
 		}
 	}
 	return nil
@@ -145,14 +68,15 @@ func (s *Service) PublishAfterCommit(ctx context.Context, event domain.DomainEve
 type subscription struct {
 	scope domain.Scope
 	ch    chan DTO
+	done  <-chan struct{}
 }
 
-func (s *Service) subscribe(scope domain.Scope, ch chan DTO) int64 {
+func (s *Service) subscribe(scope domain.Scope, ch chan DTO, done <-chan struct{}) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextSubID++
 	id := s.nextSubID
-	s.subscribers[id] = subscription{scope: scope, ch: ch}
+	s.subscribers[id] = subscription{scope: scope, ch: ch, done: done}
 	return id
 }
 
@@ -184,24 +108,6 @@ func scopeMatches(filter domain.Scope, scope domain.Scope) bool {
 		}
 	}
 	return true
-}
-
-func normalizeLimit(limit int) int {
-	if limit < 1 {
-		limit = defaultLimit
-	}
-	if limit > maxLimit {
-		limit = maxLimit
-	}
-	return limit
-}
-
-func toDTOs(events []domain.DomainEvent) []DTO {
-	items := make([]DTO, 0, len(events))
-	for _, event := range events {
-		items = append(items, toDTO(event))
-	}
-	return items
 }
 
 func toDTO(event domain.DomainEvent) DTO {

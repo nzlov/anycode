@@ -14,6 +14,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
@@ -363,10 +364,10 @@ func (r *queryResolver) Session(ctx context.Context, id string) (*model.SessionD
 
 // SessionEvents is the resolver for the sessionEvents field.
 func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionEventPage, error) {
-	if r.UseCases.Events == nil {
-		return nil, missingUseCase("events")
+	if r.UseCases.Timeline == nil {
+		return nil, missingUseCase("timeline")
 	}
-	dto, err := r.UseCases.Events.ListSessionEvents(ctx, eventapp.ListSessionEventsInput{
+	dto, err := r.UseCases.Timeline.ListSessionEvents(ctx, timelineapp.ListSessionEventsInput{
 		SessionID:     sessiondomain.ID(input.SessionID),
 		BeforeEventID: eventdomain.ID(stringValue(input.BeforeEventID, "")),
 		Limit:         intValue(input.Limit, 0),
@@ -374,7 +375,7 @@ func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessi
 	if err != nil {
 		return nil, err
 	}
-	return mapEventPage(dto), nil
+	return mapTimelineEventPage(dto), nil
 }
 
 // SessionDiff is the resolver for the sessionDiff field.
@@ -480,10 +481,10 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 
 // SessionEvents is the resolver for the sessionEvents field.
 func (r *subscriptionResolver) SessionEvents(ctx context.Context, input model.SessionEventsInput) (<-chan *model.SessionEvent, error) {
-	if r.UseCases.Events == nil {
-		return nil, missingUseCase("events")
+	if r.UseCases.Timeline == nil {
+		return nil, missingUseCase("timeline")
 	}
-	source, err := r.UseCases.Events.SessionEvents(ctx, eventapp.SessionEventsInput{
+	source, err := r.UseCases.Timeline.SessionEvents(ctx, timelineapp.SessionEventsInput{
 		Scope:        buildEventScope(input),
 		AfterEventID: eventdomain.ID(stringValue(input.AfterEventID, "")),
 	})
@@ -501,7 +502,7 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, input model.Se
 				if !ok {
 					return
 				}
-				out <- mapEvent(eventDTO)
+				out <- mapTimelineEvent(eventDTO)
 			}
 		}
 	}()
@@ -565,7 +566,7 @@ func (r *subscriptionResolver) SessionStatusChanged(ctx context.Context, project
 		id := eventdomain.SessionID(*sessionID)
 		scope.SessionID = &id
 	}
-	source, err := r.UseCases.Events.SessionEvents(ctx, eventapp.SessionEventsInput{Scope: scope})
+	source, err := r.UseCases.Events.LiveSessionEvents(ctx, eventapp.LiveSessionEventsInput{Scope: scope})
 	if err != nil {
 		return nil, err
 	}

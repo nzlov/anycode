@@ -11,6 +11,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 )
@@ -24,6 +25,7 @@ type UseCases struct {
 	Projects    projectapp.UseCase
 	Sessions    sessionapp.UseCase
 	Events      eventapp.UseCase
+	Timeline    timelineapp.UseCase
 	Attachments attachmentapp.UseCase
 	Diff        diffapp.UseCase
 	Workflows   workflowapp.UseCase

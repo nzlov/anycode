@@ -17,7 +17,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/processevent"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
@@ -40,8 +39,6 @@ type Client struct {
 	MergeRecord *MergeRecordClient
 	// NodeRun is the client for interacting with the NodeRun builders.
 	NodeRun *NodeRunClient
-	// ProcessEvent is the client for interacting with the ProcessEvent builders.
-	ProcessEvent *ProcessEventClient
 	// ProcessRun is the client for interacting with the ProcessRun builders.
 	ProcessRun *ProcessRunClient
 	// Project is the client for interacting with the Project builders.
@@ -74,7 +71,6 @@ func (c *Client) init() {
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.NodeRun = NewNodeRunClient(c.config)
-	c.ProcessEvent = NewProcessEventClient(c.config)
 	c.ProcessRun = NewProcessRunClient(c.config)
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
@@ -179,7 +175,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		EventRecord:        NewEventRecordClient(cfg),
 		MergeRecord:        NewMergeRecordClient(cfg),
 		NodeRun:            NewNodeRunClient(cfg),
-		ProcessEvent:       NewProcessEventClient(cfg),
 		ProcessRun:         NewProcessRunClient(cfg),
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
@@ -211,7 +206,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		EventRecord:        NewEventRecordClient(cfg),
 		MergeRecord:        NewMergeRecordClient(cfg),
 		NodeRun:            NewNodeRunClient(cfg),
-		ProcessEvent:       NewProcessEventClient(cfg),
 		ProcessRun:         NewProcessRunClient(cfg),
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
@@ -250,8 +244,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessEvent, c.ProcessRun,
-		c.Project, c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
+		c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
 		c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
 	} {
 		n.Use(hooks...)
@@ -262,8 +256,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessEvent, c.ProcessRun,
-		c.Project, c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
+		c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
 		c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
 	} {
 		n.Intercept(interceptors...)
@@ -279,8 +273,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.MergeRecord.mutate(ctx, m)
 	case *NodeRunMutation:
 		return c.NodeRun.mutate(ctx, m)
-	case *ProcessEventMutation:
-		return c.ProcessEvent.mutate(ctx, m)
 	case *ProcessRunMutation:
 		return c.ProcessRun.mutate(ctx, m)
 	case *ProjectMutation:
@@ -700,139 +692,6 @@ func (c *NodeRunClient) mutate(ctx context.Context, m *NodeRunMutation) (Value, 
 		return (&NodeRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown NodeRun mutation op: %q", m.Op())
-	}
-}
-
-// ProcessEventClient is a client for the ProcessEvent schema.
-type ProcessEventClient struct {
-	config
-}
-
-// NewProcessEventClient returns a client for the ProcessEvent from the given config.
-func NewProcessEventClient(c config) *ProcessEventClient {
-	return &ProcessEventClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `processevent.Hooks(f(g(h())))`.
-func (c *ProcessEventClient) Use(hooks ...Hook) {
-	c.hooks.ProcessEvent = append(c.hooks.ProcessEvent, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `processevent.Intercept(f(g(h())))`.
-func (c *ProcessEventClient) Intercept(interceptors ...Interceptor) {
-	c.inters.ProcessEvent = append(c.inters.ProcessEvent, interceptors...)
-}
-
-// Create returns a builder for creating a ProcessEvent entity.
-func (c *ProcessEventClient) Create() *ProcessEventCreate {
-	mutation := newProcessEventMutation(c.config, OpCreate)
-	return &ProcessEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of ProcessEvent entities.
-func (c *ProcessEventClient) CreateBulk(builders ...*ProcessEventCreate) *ProcessEventCreateBulk {
-	return &ProcessEventCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *ProcessEventClient) MapCreateBulk(slice any, setFunc func(*ProcessEventCreate, int)) *ProcessEventCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &ProcessEventCreateBulk{err: fmt.Errorf("calling to ProcessEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*ProcessEventCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &ProcessEventCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for ProcessEvent.
-func (c *ProcessEventClient) Update() *ProcessEventUpdate {
-	mutation := newProcessEventMutation(c.config, OpUpdate)
-	return &ProcessEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *ProcessEventClient) UpdateOne(_m *ProcessEvent) *ProcessEventUpdateOne {
-	mutation := newProcessEventMutation(c.config, OpUpdateOne, withProcessEvent(_m))
-	return &ProcessEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *ProcessEventClient) UpdateOneID(id string) *ProcessEventUpdateOne {
-	mutation := newProcessEventMutation(c.config, OpUpdateOne, withProcessEventID(id))
-	return &ProcessEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for ProcessEvent.
-func (c *ProcessEventClient) Delete() *ProcessEventDelete {
-	mutation := newProcessEventMutation(c.config, OpDelete)
-	return &ProcessEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *ProcessEventClient) DeleteOne(_m *ProcessEvent) *ProcessEventDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *ProcessEventClient) DeleteOneID(id string) *ProcessEventDeleteOne {
-	builder := c.Delete().Where(processevent.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &ProcessEventDeleteOne{builder}
-}
-
-// Query returns a query builder for ProcessEvent.
-func (c *ProcessEventClient) Query() *ProcessEventQuery {
-	return &ProcessEventQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeProcessEvent},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a ProcessEvent entity by its id.
-func (c *ProcessEventClient) Get(ctx context.Context, id string) (*ProcessEvent, error) {
-	return c.Query().Where(processevent.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *ProcessEventClient) GetX(ctx context.Context, id string) *ProcessEvent {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// Hooks returns the client hooks.
-func (c *ProcessEventClient) Hooks() []Hook {
-	return c.hooks.ProcessEvent
-}
-
-// Interceptors returns the client interceptors.
-func (c *ProcessEventClient) Interceptors() []Interceptor {
-	return c.inters.ProcessEvent
-}
-
-func (c *ProcessEventClient) mutate(ctx context.Context, m *ProcessEventMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&ProcessEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&ProcessEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&ProcessEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&ProcessEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown ProcessEvent mutation op: %q", m.Op())
 	}
 }
 
@@ -2036,13 +1895,13 @@ func (c *WorkflowRunClient) mutate(ctx context.Context, m *WorkflowRunMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		EventRecord, MergeRecord, NodeRun, ProcessEvent, ProcessRun, Project,
-		PromptAppend, QuestionBatch, Session, SessionAttachment, StagedAttachment,
+		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
+		QuestionBatch, Session, SessionAttachment, StagedAttachment,
 		WorkflowDefinition, WorkflowRun []ent.Hook
 	}
 	inters struct {
-		EventRecord, MergeRecord, NodeRun, ProcessEvent, ProcessRun, Project,
-		PromptAppend, QuestionBatch, Session, SessionAttachment, StagedAttachment,
+		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
+		QuestionBatch, Session, SessionAttachment, StagedAttachment,
 		WorkflowDefinition, WorkflowRun []ent.Interceptor
 	}
 )

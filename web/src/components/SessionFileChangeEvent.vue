@@ -14,8 +14,15 @@
     <div v-if="expanded" class="session-file-change__body">
       <div v-if="event.fileChanges?.length" class="session-file-change__list">
         <div v-for="change in event.fileChanges" :key="`${change.kind}:${change.path}`" class="session-file-change__item">
-          <span class="session-file-change__kind">{{ fileChangeKindText(change.kind) }}</span>
-          <code>{{ change.path }}</code>
+          <div class="session-file-change__meta">
+            <span class="session-file-change__kind">{{ fileChangeKindText(change.kind) }}</span>
+            <code>{{ change.path }}</code>
+          </div>
+          <div v-if="change.movePath" class="session-file-change__move">
+            <span>目标</span>
+            <code>{{ change.movePath }}</code>
+          </div>
+          <pre v-if="change.unifiedDiff" class="session-file-change__diff">{{ change.unifiedDiff }}</pre>
         </div>
       </div>
       <pre v-else>{{ event.body || '已记录文件修改' }}</pre>
@@ -101,10 +108,17 @@ function fileChangeKindText(kind: string) {
 
 .session-file-change__list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .session-file-change__item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-file-change__meta,
+.session-file-change__move {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 8px;
@@ -118,6 +132,10 @@ function fileChangeKindText(kind: string) {
   color: var(--ac-text-muted);
 }
 
+.session-file-change__move span {
+  color: var(--ac-text-muted);
+}
+
 .session-file-change__item code,
 .session-file-change__body pre {
   margin: 0;
@@ -126,5 +144,14 @@ function fileChangeKindText(kind: string) {
   word-break: break-word;
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   font-size: 12px;
+}
+
+.session-file-change__diff {
+  max-height: 520px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
 }
 </style>

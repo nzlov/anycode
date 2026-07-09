@@ -170,6 +170,7 @@ const (
 var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not wired")
 
 var errStaleAnswerUserQueue = errors.New("answer_user queue has no active process")
+var errWorkdirBusy = errors.New("session workdir already has an active process")
 
 type Service struct {
 	repo                domain.Repository
@@ -183,6 +184,8 @@ type Service struct {
 	merge               gitdiffdomain.MergePort
 	processes           processdomain.Repository
 	codex               processdomain.CodexProcess
+	workdirMu           sync.Mutex
+	activeWorkdirs      map[string]domain.ID
 	events              eventdomain.Store
 	publisher           eventdomain.Publisher
 	questions           questionCoordinator
@@ -921,7 +924,7 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if err := s.markProcessExitedWithSessionEvents(ctx, active.ID, processdomain.ExitResult{
 		FailureReason: "stopped by user",
 		FinishedAt:    finishedAt,
-	}, nil, session, true, []sessionEventInput{{
+	}, session, true, []sessionEventInput{{
 		eventType: "session.stopped",
 		payload: map[string]any{
 			"processRunId": string(active.ID),
@@ -1168,7 +1171,11 @@ func (s *Service) startCodex(ctx context.Context, session domain.Session, option
 			return s.queueCodex(ctx, session, options, queuePriorityForSession(session), queueKindForStartOptions(options))
 		}
 	}
-	return s.startCodexNow(ctx, session, options)
+	dto, err := s.startCodexWithWorkdirReservation(ctx, session, options)
+	if errors.Is(err, errWorkdirBusy) {
+		return s.queueCodex(ctx, session, options, queuePriorityForSession(session), queueKindForStartOptions(options))
+	}
+	return dto, err
 }
 
 func (s *Service) enqueueCodex(ctx context.Context, session domain.Session, options codexStartOptions, priority domain.QueuePriority) (DTO, error) {
@@ -1180,7 +1187,7 @@ func (s *Service) enqueueCodex(ctx context.Context, session domain.Session, opti
 	return dto, nil
 }
 
-func (s *Service) startCodexNow(ctx context.Context, session domain.Session, options codexStartOptions) (DTO, error) {
+func (s *Service) startCodexNow(ctx context.Context, session domain.Session, options codexStartOptions, workdir string) (DTO, error) {
 	runIDValue, err := s.generateID()
 	if err != nil {
 		return DTO{}, fmt.Errorf("generate process run id: %w", err)
@@ -1202,7 +1209,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		return DTO{}, err
 	}
 
-	handle, err := s.startCodexProcess(ctx, session, runID, options)
+	handle, err := s.startCodexProcess(ctx, session, runID, options, workdir)
 	if err != nil {
 		failedAt := s.now()
 		processEventType := "start_failed"
@@ -1213,24 +1220,12 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 			sessionEventType = "session.resume_failed"
 			status = domain.StatusResumeFailed
 		}
-		var processEvent *processdomain.Event
-		if eventID, genErr := s.generateID(); genErr == nil {
-			processRunID := runID
-			processEvent = &processdomain.Event{
-				ID:           string(eventID),
-				SessionID:    processdomain.SessionID(session.ID),
-				ProcessRunID: &processRunID,
-				Type:         processEventType,
-				Payload:      map[string]any{"reason": err.Error()},
-				CreatedAt:    failedAt,
-			}
-		}
 		session.Status = status
 		session.UpdatedAt = failedAt
 		if saveErr := s.markProcessExitedWithSessionEvents(ctx, runID, processdomain.ExitResult{
 			FailureReason: err.Error(),
 			FinishedAt:    failedAt,
-		}, processEvent, session, true, []sessionEventInput{
+		}, session, true, []sessionEventInput{
 			{
 				eventType: "process." + processEventType,
 				payload: map[string]any{
@@ -1286,8 +1281,71 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 	}); err != nil {
 		return DTO{}, err
 	}
-	s.consumeCodexEvents(handle, session, options)
+	s.consumeCodexEvents(handle, session, options, workdir)
 	return toDTO(session), nil
+}
+
+func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session domain.Session, options codexStartOptions) (DTO, error) {
+	workdir, err := s.codexWorkdir(ctx, session)
+	if err != nil {
+		return DTO{}, err
+	}
+	if !s.reserveWorkdir(workdir, session.ID) {
+		return DTO{}, errWorkdirBusy
+	}
+	dto, err := s.startCodexNow(ctx, session, options, workdir)
+	if err != nil {
+		s.releaseWorkdir(workdir, session.ID)
+	}
+	return dto, err
+}
+
+func (s *Service) codexWorkdir(ctx context.Context, session domain.Session) (string, error) {
+	workdir := strings.TrimSpace(session.WorktreePath)
+	if workdir != "" {
+		return workdir, nil
+	}
+	if s.projects == nil {
+		return "", errors.New("project repository is required")
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return "", fmt.Errorf("find session project: %w", err)
+	}
+	workdir = strings.TrimSpace(project.Path.Value)
+	if workdir == "" {
+		return "", errors.New("session workdir is empty")
+	}
+	return workdir, nil
+}
+
+func (s *Service) reserveWorkdir(workdir string, sessionID domain.ID) bool {
+	workdir = strings.TrimSpace(workdir)
+	if workdir == "" {
+		return false
+	}
+	s.workdirMu.Lock()
+	defer s.workdirMu.Unlock()
+	if s.activeWorkdirs == nil {
+		s.activeWorkdirs = map[string]domain.ID{}
+	}
+	if owner, ok := s.activeWorkdirs[workdir]; ok && owner != sessionID {
+		return false
+	}
+	s.activeWorkdirs[workdir] = sessionID
+	return true
+}
+
+func (s *Service) releaseWorkdir(workdir string, sessionID domain.ID) {
+	workdir = strings.TrimSpace(workdir)
+	if workdir == "" {
+		return
+	}
+	s.workdirMu.Lock()
+	defer s.workdirMu.Unlock()
+	if s.activeWorkdirs[workdir] == sessionID {
+		delete(s.activeWorkdirs, workdir)
+	}
 }
 
 func (s *Service) queueCodex(ctx context.Context, session domain.Session, options codexStartOptions, priority domain.QueuePriority, kind domain.QueueKind) (DTO, error) {
@@ -1425,7 +1483,11 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 			if s.codex == nil {
 				return ErrProcessLifecycleNotWired
 			}
-			if _, err := s.startCodexNow(ctx, current, codexStartOptionsFromQueue(current)); err != nil {
+			if _, err := s.startCodexWithWorkdirReservation(ctx, current, codexStartOptionsFromQueue(current)); err != nil {
+				if errors.Is(err, errWorkdirBusy) {
+					atCapacity = true
+					return nil
+				}
 				if current.Mode == domain.ModeWorkflow && current.Queue.WorkflowRunID != "" && current.Queue.NodeRunID != nil {
 					if _, failErr := s.handleWorkflowNodeFailure(ctx, current, current.Queue.WorkflowRunID, current.Queue.NodeRunID, "codex_start_failed", err.Error()); failErr != nil {
 						return failErr
@@ -1688,7 +1750,7 @@ func clearQueue(session *domain.Session) {
 	session.Queue = domain.QueueIntent{}
 }
 
-func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions) (processdomain.CodexHandle, error) {
+func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string) (processdomain.CodexHandle, error) {
 	attachmentPaths, imagePaths, err := s.codexAttachmentPaths(ctx, session.ID)
 	if err != nil {
 		return processdomain.CodexHandle{}, err
@@ -1707,7 +1769,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			ProcessRunID:    runID,
 			SessionID:       processdomain.SessionID(session.ID),
 			CodexSessionID:  options.resumeCodexSessionID,
-			Workdir:         session.WorktreePath,
+			Workdir:         workdir,
 			Prompt:          prompt,
 			Model:           strings.TrimSpace(session.Config.CodexModel),
 			ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
@@ -1717,7 +1779,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	return s.codex.Start(ctx, processdomain.CodexStartInput{
 		ProcessRunID:    runID,
 		SessionID:       processdomain.SessionID(session.ID),
-		Workdir:         session.WorktreePath,
+		Workdir:         workdir,
 		Prompt:          promptWithAttachments(prompt, attachmentPaths),
 		Model:           strings.TrimSpace(session.Config.CodexModel),
 		ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
@@ -1815,8 +1877,9 @@ func promptWithAttachments(prompt string, paths []string) string {
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions) {
+func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions, workdir string) {
 	go func() {
+		defer s.releaseWorkdir(workdir, session.ID)
 		events, err := s.codex.Events(context.Background(), handle)
 		if err != nil {
 			return
@@ -1830,11 +1893,9 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if results, ok := workflowResultsFromEvent(event); ok {
 				workflowResults = results
 			}
-			eventID, err := s.generateID()
-			if err != nil {
+			if event.Type == "process.exit" {
 				continue
 			}
-			runID := handle.ProcessRunID
 			eventSession := session
 			saveEventSession := false
 			extraEvents := []sessionEventInput(nil)
@@ -1843,6 +1904,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 					current.TodoList = todoList
 					current.UpdatedAt = s.now()
 					eventSession = current
+					session = current
 					saveEventSession = true
 					extraEvents = append(extraEvents, sessionEventInput{
 						eventType: "session.todo_list_updated",
@@ -1853,28 +1915,33 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 					})
 				}
 			}
-			_ = s.saveProcessEventWithSessionEvent(context.Background(), eventSession, processdomain.Event{
-				ID:           string(eventID),
-				SessionID:    processdomain.SessionID(session.ID),
-				ProcessRunID: &runID,
-				EventID:      event.EventID,
-				Type:         event.Type,
-				Payload:      processEventPayload(event),
-				CreatedAt:    s.now(),
-			}, "process.codex_event", codexSessionEventPayload(handle.ProcessRunID, event), saveEventSession, extraEvents...)
 			if codexSessionID := codexSessionIDFromEvent(event); codexSessionID != "" {
-				if current, err := s.repo.Find(context.Background(), session.ID); err == nil && current.CodexSessionID == "" {
+				current := eventSession
+				if !saveEventSession {
+					if latest, err := s.repo.Find(context.Background(), session.ID); err == nil {
+						current = latest
+					}
+				}
+				if current.CodexSessionID != codexSessionID {
 					current.CodexSessionID = codexSessionID
 					current.UpdatedAt = s.now()
-					_ = s.saveProcessRunningSession(context.Background(), handle.ProcessRunID, handle.PID, codexSessionID, current)
+					if err := s.saveProcessRunningSession(context.Background(), handle.ProcessRunID, handle.PID, codexSessionID, current); err == nil {
+						session = current
+						eventSession = current
+					}
 				}
 			}
+			_ = s.publishCodexEventWithSessionUpdates(context.Background(), eventSession, handle.ProcessRunID, event, saveEventSession, extraEvents...)
 		}
 		finishedAt := s.now()
 		exitResult.FinishedAt = finishedAt
-		_ = s.markProcessExitedWithSessionEvents(context.Background(), handle.ProcessRunID, exitResult, nil, session, false, []sessionEventInput{
+		_ = s.markProcessExitedWithSessionEvents(context.Background(), handle.ProcessRunID, exitResult, session, false, []sessionEventInput{
 			{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, exitResult)},
 		})
+		if s.sessionHasDifferentActiveRun(context.Background(), session.ID, handle.ProcessRunID) {
+			s.scheduleQueueDrain()
+			return
+		}
 		if current, err := s.repo.Find(context.Background(), session.ID); err == nil {
 			if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil {
 				switch current.Status {
@@ -1976,11 +2043,24 @@ func isAssistantOutputEvent(event processdomain.CodexEvent) bool {
 	}
 	if eventType == "item.completed" || eventType == "response.output_item.done" {
 		if item, ok := event.Payload["item"].(map[string]any); ok {
-			role, _ := item["role"].(string)
-			return role == "" || role == "assistant"
+			itemType := strings.ToLower(strings.TrimSpace(stringField(item, "type")))
+			role := strings.ToLower(strings.TrimSpace(stringField(item, "role")))
+			switch itemType {
+			case "command_execution", "file_change":
+				return false
+			case "agent_message", "assistant_message", "message":
+				return role == "" || role == "assistant"
+			default:
+				return role == "assistant"
+			}
 		}
 	}
 	return false
+}
+
+func stringField(value map[string]any, key string) string {
+	text, _ := value[key].(string)
+	return text
 }
 
 func eventTextCandidates(payload map[string]any) []string {
@@ -2018,7 +2098,7 @@ func textCandidatesFromValue(value any) []string {
 		return candidates
 	case map[string]any:
 		candidates := []string{}
-		for _, key := range []string{"text", "content", "output"} {
+		for _, key := range []string{"text", "content", "output", "aggregated_output", "aggregatedOutput"} {
 			candidates = append(candidates, textCandidatesFromValue(typed[key])...)
 		}
 		return candidates
@@ -2611,6 +2691,17 @@ func mergeOutput(result gitdiffdomain.MergeResult) map[string]any {
 	}
 }
 
+func (s *Service) sessionHasDifferentActiveRun(ctx context.Context, sessionID domain.ID, runID processdomain.RunID) bool {
+	if s.processes == nil {
+		return false
+	}
+	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
+	if err != nil || !ok {
+		return false
+	}
+	return active.ID != runID
+}
+
 func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.Session, workflowRunID domain.WorkflowRunID, nodeRunID *domain.NodeRunID, code string, message string, output ...map[string]any) (DTO, error) {
 	if s.workflows == nil || nodeRunID == nil {
 		session.Status = domain.StatusFailed
@@ -2644,13 +2735,95 @@ type sessionEventInput struct {
 	payload   map[string]any
 }
 
-func (s *Service) appendCodexEvent(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent) {
-	s.appendSessionEvent(ctx, session, "process.codex_event", codexSessionEventPayload(processRunID, event))
+func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, extraInputs ...sessionEventInput) error {
+	var codexEvent eventdomain.DomainEvent
+	publishCodexEvent := s.publisher != nil
+	if publishCodexEvent {
+		var err error
+		codexEvent, err = s.newCodexSessionEvent(session, processRunID, event)
+		if err != nil {
+			return err
+		}
+	}
+	extraEvents, err := s.newSessionEvents(session, extraInputs)
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if saveSession {
+				if err := tx.Sessions().Save(ctx, session); err != nil {
+					return fmt.Errorf("save session: %w", err)
+				}
+			}
+			for _, event := range extraEvents {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if publishCodexEvent {
+			s.publishSessionEvent(ctx, codexEvent)
+		}
+		for _, event := range extraEvents {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if saveSession {
+		if err := s.repo.Save(ctx, session); err != nil {
+			return fmt.Errorf("save session: %w", err)
+		}
+	}
+	if publishCodexEvent {
+		s.publishSessionEvent(ctx, codexEvent)
+	}
+	for _, event := range extraEvents {
+		if s.events != nil {
+			if err := s.events.Append(ctx, event); err != nil {
+				return err
+			}
+		}
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
 }
 
-func codexSessionEventPayload(processRunID processdomain.RunID, event processdomain.CodexEvent) map[string]any {
+func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.RunID, event processdomain.CodexEvent) (eventdomain.DomainEvent, error) {
+	var id domain.ID
+	var err error
+	if event.EventID != "" {
+		id = domain.ID("codex:" + event.EventID)
+	} else {
+		id, err = s.generateID()
+		if err != nil {
+			return eventdomain.DomainEvent{}, err
+		}
+	}
+	sessionID := eventdomain.SessionID(session.ID)
+	payload := redaction.Map(codexSessionEventPayload(event))
+	createdAt := event.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = s.now()
+	}
+	return eventdomain.DomainEvent{
+		ID: eventdomain.ID(id),
+		Scope: eventdomain.Scope{
+			SessionID: &sessionID,
+			ProjectID: string(session.ProjectID),
+		},
+		SessionID: &sessionID,
+		Type:      "process.codex_event",
+		Payload:   payload,
+		CreatedAt: createdAt,
+	}, nil
+}
+
+func codexSessionEventPayload(event processdomain.CodexEvent) map[string]any {
 	payload := processEventPayload(event)
-	payload["processRunId"] = string(processRunID)
 	payload["codexType"] = event.Type
 	if event.EventID != "" {
 		payload["codexEventId"] = event.EventID
@@ -2778,54 +2951,7 @@ func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdo
 	return nil
 }
 
-func (s *Service) saveProcessEventWithSessionEvent(ctx context.Context, session domain.Session, processEvent processdomain.Event, eventType string, payload map[string]any, saveSession bool, extraInputs ...sessionEventInput) error {
-	inputs := append([]sessionEventInput{{eventType: eventType, payload: payload}}, extraInputs...)
-	events, err := s.newSessionEvents(session, inputs)
-	if err != nil {
-		return err
-	}
-	if s.uow != nil {
-		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := tx.Processes().SaveEvent(ctx, processEvent); err != nil {
-				return err
-			}
-			if saveSession {
-				if err := tx.Sessions().Save(ctx, session); err != nil {
-					return fmt.Errorf("save session: %w", err)
-				}
-			}
-			for _, event := range events {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		for _, event := range events {
-			s.publishSessionEvent(ctx, event)
-		}
-		return nil
-	}
-	if err := s.processes.SaveEvent(ctx, processEvent); err != nil {
-		return err
-	}
-	if saveSession {
-		if err := s.repo.Save(ctx, session); err != nil {
-			return fmt.Errorf("save session: %w", err)
-		}
-	}
-	for _, event := range events {
-		if err := s.events.Append(ctx, event); err != nil {
-			return err
-		}
-		s.publishSessionEvent(ctx, event)
-	}
-	return nil
-}
-
-func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, processEvent *processdomain.Event, session domain.Session, saveSession bool, inputs []sessionEventInput) error {
+func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, inputs []sessionEventInput) error {
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
 		return err
@@ -2834,11 +2960,6 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
 				return fmt.Errorf("mark process exited: %w", err)
-			}
-			if processEvent != nil {
-				if err := tx.Processes().SaveEvent(ctx, *processEvent); err != nil {
-					return err
-				}
 			}
 			if saveSession {
 				if err := tx.Sessions().Save(ctx, session); err != nil {
@@ -2861,11 +2982,6 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 	}
 	if err := s.processes.MarkExited(ctx, runID, result); err != nil {
 		return fmt.Errorf("mark process exited: %w", err)
-	}
-	if processEvent != nil {
-		if err := s.processes.SaveEvent(ctx, *processEvent); err != nil {
-			return err
-		}
 	}
 	if saveSession {
 		if err := s.repo.Save(ctx, session); err != nil {
@@ -3053,54 +3169,21 @@ func (s *Service) publishSessionEvent(ctx context.Context, event eventdomain.Dom
 }
 
 func processEventPayload(event processdomain.CodexEvent) map[string]any {
-	payload := make(map[string]any, len(event.Payload)+1)
+	payload := make(map[string]any, len(event.Payload))
 	for key, value := range event.Payload {
 		payload[key] = value
-	}
-	if len(event.Raw) > 0 {
-		payload["raw"] = string(event.Raw)
 	}
 	return payload
 }
 
 func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bool) {
 	if isTodoListPlanEventType(event.Type) {
-		if list, ok := todoListFromPayload(event.Payload); ok {
-			return list, true
-		}
-		if len(event.Raw) == 0 {
-			return domain.TodoList{}, false
-		}
-		var raw map[string]any
-		if err := json.Unmarshal(event.Raw, &raw); err != nil {
-			return domain.TodoList{}, false
-		}
-		return todoListFromPayload(raw)
+		return todoListFromPayload(event.Payload)
 	}
 	if isTodoListItemEventType(event.Type) {
-		if list, ok := todoListFromTodoListItemPayload(event.Payload); ok {
-			return list, true
-		}
-		if len(event.Raw) == 0 {
-			return domain.TodoList{}, false
-		}
-		var raw map[string]any
-		if err := json.Unmarshal(event.Raw, &raw); err != nil {
-			return domain.TodoList{}, false
-		}
-		return todoListFromTodoListItemPayload(raw)
+		return todoListFromTodoListItemPayload(event.Payload)
 	}
-	if list, ok := todoListFromUpdatePlanToolPayload(event.Payload); ok {
-		return list, true
-	}
-	if len(event.Raw) == 0 {
-		return domain.TodoList{}, false
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(event.Raw, &raw); err != nil {
-		return domain.TodoList{}, false
-	}
-	return todoListFromUpdatePlanToolPayload(raw)
+	return todoListFromUpdatePlanToolPayload(event.Payload)
 }
 
 func isTodoListPlanEventType(eventType string) bool {
@@ -3507,10 +3590,6 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if !canAutoStartAfterAppend(session) {
 			return nil
 		}
-		session, err = s.refreshLatestCodexSessionID(ctx, session)
-		if err != nil {
-			return err
-		}
 		if canReuseCodexSessionAfterAppend(session) {
 			newAttachments, err := s.listPromptAppendAttachments(ctx, input.SessionID, append.ID)
 			if err != nil {
@@ -3532,23 +3611,6 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	return toPromptAppendDTO(append), nil
-}
-
-func (s *Service) refreshLatestCodexSessionID(ctx context.Context, session domain.Session) (domain.Session, error) {
-	if s == nil || s.processes == nil {
-		return session, nil
-	}
-	latest, err := s.processes.LatestCodexSessionID(ctx, processdomain.SessionID(session.ID))
-	if err != nil {
-		return domain.Session{}, fmt.Errorf("refresh latest codex session id: %w", err)
-	}
-	latest = strings.TrimSpace(latest)
-	if latest == "" || latest == strings.TrimSpace(session.CodexSessionID) {
-		return session, nil
-	}
-	session.CodexSessionID = latest
-	session.UpdatedAt = s.now()
-	return session, nil
 }
 
 func canAutoStartAfterAppend(session domain.Session) bool {

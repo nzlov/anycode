@@ -14,6 +14,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
@@ -193,8 +194,8 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	projectID := "project-1"
 	afterEventID := "event-0"
 	eventSessionID := eventdomain.SessionID(sessionID)
-	source := make(chan eventapp.DTO, 1)
-	source <- eventapp.DTO{
+	source := make(chan timelineapp.DTO, 1)
+	source <- timelineapp.DTO{
 		ID:        "event-1",
 		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
 		SessionID: &eventSessionID,
@@ -204,8 +205,8 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	}
 	close(source)
 
-	events := &fakeEventUseCase{sessionEvents: source}
-	resolver := NewResolver(UseCases{Events: events}).Subscription()
+	timeline := &fakeTimelineUseCase{sessionEvents: source}
+	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
 	ch, err := resolver.SessionEvents(context.Background(), model.SessionEventsInput{
 		SessionID:    &sessionID,
 		ProjectID:    &projectID,
@@ -215,15 +216,15 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
 
-	wantInput := eventapp.SessionEventsInput{
+	wantInput := timelineapp.SessionEventsInput{
 		Scope: eventdomain.Scope{
 			SessionID: &eventSessionID,
 			ProjectID: projectID,
 		},
 		AfterEventID: eventdomain.ID(afterEventID),
 	}
-	if !reflect.DeepEqual(events.gotSessionEventsInput, wantInput) {
-		t.Fatalf("SessionEvents() input = %#v, want %#v", events.gotSessionEventsInput, wantInput)
+	if !reflect.DeepEqual(timeline.gotSessionEventsInput, wantInput) {
+		t.Fatalf("SessionEvents() input = %#v, want %#v", timeline.gotSessionEventsInput, wantInput)
 	}
 
 	got, ok := <-ch
@@ -347,8 +348,8 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 func TestQuerySessionEventsForwardsBeforeCursorAndLimit(t *testing.T) {
 	beforeEventID := "event-40"
 	limit := 50
-	events := &fakeEventUseCase{}
-	resolver := NewResolver(UseCases{Events: events}).Query()
+	timeline := &fakeTimelineUseCase{}
+	resolver := NewResolver(UseCases{Timeline: timeline}).Query()
 
 	_, err := resolver.SessionEvents(context.Background(), model.ListSessionEventsInput{
 		SessionID:     "session-1",
@@ -359,13 +360,13 @@ func TestQuerySessionEventsForwardsBeforeCursorAndLimit(t *testing.T) {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
 
-	want := eventapp.ListSessionEventsInput{
+	want := timelineapp.ListSessionEventsInput{
 		SessionID:     "session-1",
 		BeforeEventID: eventdomain.ID(beforeEventID),
 		Limit:         limit,
 	}
-	if !reflect.DeepEqual(events.gotListSessionEventsInput, want) {
-		t.Fatalf("ListSessionEvents() input = %#v, want %#v", events.gotListSessionEventsInput, want)
+	if !reflect.DeepEqual(timeline.gotListSessionEventsInput, want) {
+		t.Fatalf("ListSessionEvents() input = %#v, want %#v", timeline.gotListSessionEventsInput, want)
 	}
 }
 
@@ -701,11 +702,15 @@ func TestDiffFieldSelectedReadsNamedFragments(t *testing.T) {
 
 type fakeEventUseCase struct {
 	eventapp.UseCase
-	sessionEvents             <-chan eventapp.DTO
 	liveSessionEvents         <-chan eventapp.DTO
-	gotListSessionEventsInput eventapp.ListSessionEventsInput
-	gotSessionEventsInput     eventapp.SessionEventsInput
 	gotLiveSessionEventsInput eventapp.LiveSessionEventsInput
+}
+
+type fakeTimelineUseCase struct {
+	timelineapp.UseCase
+	sessionEvents             <-chan timelineapp.DTO
+	gotListSessionEventsInput timelineapp.ListSessionEventsInput
+	gotSessionEventsInput     timelineapp.SessionEventsInput
 }
 
 type fakeWorkflowUseCase struct {
@@ -754,19 +759,19 @@ func (f *fakeProjectUseCase) BrowseDirectory(_ context.Context, input projectapp
 	return f.browseResult, nil
 }
 
-func (f *fakeEventUseCase) ListSessionEvents(_ context.Context, input eventapp.ListSessionEventsInput) (port.Page[eventapp.DTO], error) {
-	f.gotListSessionEventsInput = input
-	return port.Page[eventapp.DTO]{}, nil
-}
-
-func (f *fakeEventUseCase) SessionEvents(_ context.Context, input eventapp.SessionEventsInput) (<-chan eventapp.DTO, error) {
-	f.gotSessionEventsInput = input
-	return f.sessionEvents, nil
-}
-
 func (f *fakeEventUseCase) LiveSessionEvents(_ context.Context, input eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
 	f.gotLiveSessionEventsInput = input
 	return f.liveSessionEvents, nil
+}
+
+func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (port.Page[timelineapp.DTO], error) {
+	f.gotListSessionEventsInput = input
+	return port.Page[timelineapp.DTO]{}, nil
+}
+
+func (f *fakeTimelineUseCase) SessionEvents(_ context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {
+	f.gotSessionEventsInput = input
+	return f.sessionEvents, nil
 }
 
 func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain.DefinitionID) (workflowapp.DefinitionDTO, error) {

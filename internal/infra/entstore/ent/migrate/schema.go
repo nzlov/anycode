@@ -100,39 +100,6 @@ var (
 			},
 		},
 	}
-	// ProcessEventsColumns holds the columns for the "process_events" table.
-	ProcessEventsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeString},
-		{Name: "session_id", Type: field.TypeString},
-		{Name: "process_run_id", Type: field.TypeString, Nullable: true},
-		{Name: "event_id", Type: field.TypeString, Default: ""},
-		{Name: "type", Type: field.TypeString},
-		{Name: "payload", Type: field.TypeJSON},
-		{Name: "created_at", Type: field.TypeTime},
-	}
-	// ProcessEventsTable holds the schema information for the "process_events" table.
-	ProcessEventsTable = &schema.Table{
-		Name:       "process_events",
-		Columns:    ProcessEventsColumns,
-		PrimaryKey: []*schema.Column{ProcessEventsColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "processevent_session_id_created_at_id",
-				Unique:  false,
-				Columns: []*schema.Column{ProcessEventsColumns[1], ProcessEventsColumns[6], ProcessEventsColumns[0]},
-			},
-			{
-				Name:    "processevent_process_run_id_created_at_id",
-				Unique:  false,
-				Columns: []*schema.Column{ProcessEventsColumns[2], ProcessEventsColumns[6], ProcessEventsColumns[0]},
-			},
-			{
-				Name:    "processevent_event_id",
-				Unique:  false,
-				Columns: []*schema.Column{ProcessEventsColumns[3]},
-			},
-		},
-	}
 	// ProcessRunsColumns holds the columns for the "process_runs" table.
 	ProcessRunsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -426,7 +393,6 @@ var (
 		EventRecordsTable,
 		MergeRecordsTable,
 		NodeRunsTable,
-		ProcessEventsTable,
 		ProcessRunsTable,
 		ProjectsTable,
 		PromptAppendsTable,

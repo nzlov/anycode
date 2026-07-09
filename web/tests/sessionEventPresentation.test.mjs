@@ -392,7 +392,13 @@ test('mergeShellEvents keeps file change id stable and updates completed changes
     title: '修改文件 internal/infra/gitcli/git_test.go',
     body: '',
     fileChangeId: 'item_3',
-    fileChanges: [{ kind: 'update', path: 'internal/infra/gitcli/git_test.go' }],
+    fileChanges: [
+      {
+        kind: 'update',
+        path: 'internal/infra/gitcli/git_test.go',
+        unifiedDiff: '@@ -1 +1 @@\n-old\n+new',
+      },
+    ],
     createdAt: '2026-07-08T06:26:50Z',
     time: '06:26',
     rawType: 'process.codex_event',
@@ -408,6 +414,7 @@ test('mergeShellEvents keeps file change id stable and updates completed changes
   assert.equal(afterComplete[0].id, 'file-started');
   assert.equal(afterComplete[0].time, '06:26');
   assert.equal(afterComplete[0].fileChanges[0].path, 'internal/infra/gitcli/git_test.go');
+  assert.equal(afterComplete[0].fileChanges[0].unifiedDiff, '@@ -1 +1 @@\n-old\n+new');
 });
 
 test('mergeShellEvents shows file paths in multi-file change title', () => {
@@ -439,6 +446,13 @@ test('file change title keeps paths visible for multi-file changes', () => {
 
   assert.match(source, /visiblePaths = changes\.slice\(0, 3\)\.map\(\(change\) => change\.path\)/);
   assert.doesNotMatch(source, /return `修改 \$\{changes\.length\} 个文件`/);
+});
+
+test('reasoning codex items render as thought events', () => {
+  const source = readFileSync(new URL('../src/services/sessions.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /if \(itemType === 'reasoning'\) return 'thought';/);
+  assert.match(source, /if \(type === 'reasoning'\) return `思考\$\{suffix\}`;/);
 });
 
 test('renderMarkdown formats assistant markdown and escapes raw html', () => {

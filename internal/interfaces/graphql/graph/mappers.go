@@ -3,11 +3,11 @@ package graph
 import (
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
-	eventapp "github.com/nzlov/anycode/internal/application/event"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
@@ -211,15 +211,15 @@ func mapAttachment(dto attachmentapp.AttachmentDTO) *model.Attachment {
 	}
 }
 
-func mapEventPage(page port.Page[eventapp.DTO]) *model.SessionEventPage {
+func mapTimelineEventPage(page port.Page[timelineapp.DTO]) *model.SessionEventPage {
 	items := make([]*model.SessionEvent, 0, len(page.Items))
 	for _, item := range page.Items {
-		items = append(items, mapEvent(item))
+		items = append(items, mapTimelineEvent(item))
 	}
 	return &model.SessionEventPage{Items: items, PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor)}
 }
 
-func mapEvent(dto eventapp.DTO) *model.SessionEvent {
+func mapTimelineEvent(dto timelineapp.DTO) *model.SessionEvent {
 	return &model.SessionEvent{
 		ID:        string(dto.ID),
 		Scope:     mapEventScope(dto.Scope),

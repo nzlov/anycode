@@ -15,9 +15,6 @@ type MergeRecord func(*sql.Selector)
 // NodeRun is the predicate function for noderun builders.
 type NodeRun func(*sql.Selector)
 
-// ProcessEvent is the predicate function for processevent builders.
-type ProcessEvent func(*sql.Selector)
-
 // ProcessRun is the predicate function for processrun builders.
 type ProcessRun func(*sql.Selector)
 
