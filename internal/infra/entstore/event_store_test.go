@@ -131,7 +131,7 @@ func TestEventStoreBeforeReturnsNewestWindowBeforeCursor(t *testing.T) {
 	assertEventIDs(t, got, []event.ID{"event-1", "event-2"})
 }
 
-func TestEventStoreRedactsSensitivePayload(t *testing.T) {
+func TestEventStorePreservesPayload(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
 		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
@@ -162,8 +162,8 @@ func TestEventStoreRedactsSensitivePayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("After() error = %v", err)
 	}
-	if got[0].Payload["accessKey"] != "[redacted]" || got[0].Payload["worktreePath"] != "[redacted_path]" {
-		t.Fatalf("payload was not redacted: %#v", got[0].Payload)
+	if got[0].Payload["accessKey"] != "secret" || got[0].Payload["worktreePath"] != "/home/nzlov/workspaces/github/project" {
+		t.Fatalf("payload changed: %#v", got[0].Payload)
 	}
 }
 

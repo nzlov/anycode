@@ -3813,7 +3813,9 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 		Type:      "assistant_message",
 		CreatedAt: time.Unix(39, 0).UTC(),
 		Payload: map[string]any{
-			"message": map[string]any{"role": "assistant", "content": "hello"},
+			"authorization": "Bearer secret",
+			"message":       map[string]any{"role": "assistant", "content": "hello"},
+			"workdir":       "/home/nzlov/workspaces/github/project",
 		},
 	}
 	close(source)
@@ -3851,6 +3853,9 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 	}
 	if _, ok := got.Payload["processRunId"]; ok {
 		t.Fatalf("codex event should not include processRunId: %#v", got.Payload)
+	}
+	if got.Payload["authorization"] != "Bearer secret" || got.Payload["workdir"] != "/home/nzlov/workspaces/github/project" {
+		t.Fatalf("codex event payload was changed: %#v", got.Payload)
 	}
 	message, ok := got.Payload["message"].(map[string]any)
 	if !ok || message["role"] != "assistant" || message["content"] != "hello" {

@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/nzlov/anycode/internal/domain/event"
-	"github.com/nzlov/anycode/internal/domain/redaction"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	enteventrecord "github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 )
@@ -24,7 +23,7 @@ func (s *EventStore) Append(ctx context.Context, domainEvent event.DomainEvent) 
 		SetID(string(domainEvent.ID)).
 		SetProjectID(domainEvent.Scope.ProjectID).
 		SetType(domainEvent.Type).
-		SetPayload(redaction.Map(payloadOrEmpty(domainEvent.Payload)))
+		SetPayload(payloadOrEmpty(domainEvent.Payload))
 	if domainEvent.SessionID != nil {
 		create.SetSessionID(string(*domainEvent.SessionID))
 	} else if domainEvent.Scope.SessionID != nil {

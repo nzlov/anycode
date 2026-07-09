@@ -13,17 +13,27 @@ import (
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
-func TestListSessionEventsMergesStoredEventsAndCodexTranscript(t *testing.T) {
+func TestListSessionEventsUsesStoredSessionEventsAndCodexTranscript(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
 	store := &fakeStore{
-		events: []eventdomain.DomainEvent{{
-			ID:        "event-running",
-			Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
-			SessionID: &sessionID,
-			Type:      "session.running",
-			Payload:   map[string]any{"processRunId": "process-run-1"},
-			CreatedAt: time.Unix(10, 0).UTC(),
-		}},
+		events: []eventdomain.DomainEvent{
+			{
+				ID:        "stored-codex-event",
+				Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+				SessionID: &sessionID,
+				Type:      "process.codex_event",
+				Payload:   map[string]any{"codexType": "item.completed"},
+				CreatedAt: time.Unix(5, 0).UTC(),
+			},
+			{
+				ID:        "event-running",
+				Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+				SessionID: &sessionID,
+				Type:      "session.running",
+				Payload:   map[string]any{"processRunId": "process-run-1"},
+				CreatedAt: time.Unix(10, 0).UTC(),
+			},
+		},
 	}
 	sessions := &fakeSessionRepository{
 		sessions: map[sessiondomain.ID]sessiondomain.Session{
@@ -114,7 +124,7 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	}
 }
 
-func TestListSessionEventsRedactsHistoricalCodexPayload(t *testing.T) {
+func TestListSessionEventsPreservesHistoricalCodexPayload(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
 	store := &fakeStore{}
 	sessions := &fakeSessionRepository{
@@ -148,8 +158,8 @@ func TestListSessionEventsRedactsHistoricalCodexPayload(t *testing.T) {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
 	payload := got.Items[0].Payload
-	if payload["workdir"] != "[redacted_path]" || payload["authorization"] != "[redacted]" {
-		t.Fatalf("payload was not redacted: %#v", payload)
+	if payload["workdir"] != "/home/nzlov/workspaces/github/project" || payload["authorization"] != "Bearer secret" {
+		t.Fatalf("payload was changed: %#v", payload)
 	}
 }
 

@@ -114,7 +114,7 @@ function firstNonEmptyString(...values) {
 
 function shellCommandDisplay(value) {
   const command = String(value || '').trim();
-  const shell = /^(?:\[redacted_path\]|(?:\S*\/)?(?:bash|sh|zsh))\s+-lc\s+([\s\S]+)$/.exec(command);
+  const shell = /^(?:(?:\S*\/)?(?:bash|sh|zsh))\s+-lc\s+([\s\S]+)$/.exec(command);
   if (!shell) return command;
   return unquoteShellArgument(shell[1].trim());
 }

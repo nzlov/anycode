@@ -3,8 +3,6 @@ package apperror
 import (
 	"errors"
 	"fmt"
-
-	"github.com/nzlov/anycode/internal/domain/redaction"
 )
 
 type Category string
@@ -106,14 +104,14 @@ func (e *Error) PublicMessage() string {
 	if message == "" {
 		message = e.Error()
 	}
-	return redaction.Text(message)
+	return message
 }
 
 func (e *Error) PublicDetails() map[string]any {
 	if e == nil || len(e.Details) == 0 {
 		return nil
 	}
-	return redaction.Map(e.Details)
+	return e.Details
 }
 
 func From(err error) (*Error, bool) {

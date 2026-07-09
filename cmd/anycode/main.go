@@ -22,7 +22,6 @@ import (
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
-	"github.com/nzlov/anycode/internal/domain/redaction"
 	"github.com/nzlov/anycode/internal/infra/codexcli"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/infra/entstore"
@@ -38,7 +37,7 @@ import (
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp-stdio" {
 		if err := runMCPStdio(os.Args[2:]); err != nil {
-			log.Fatalf("mcp stdio: %s", redaction.Text(err.Error()))
+			log.Fatalf("mcp stdio: %s", err.Error())
 		}
 		return
 	}
@@ -52,31 +51,31 @@ func main() {
 		DataDir:     cfg.DataDir,
 	})
 	if err != nil {
-		log.Fatalf("open entstore: %s", redaction.Text(err.Error()))
+		log.Fatalf("open entstore: %s", err.Error())
 	}
 	defer store.Close()
 
 	if err := store.Migrate(ctx); err != nil {
-		log.Fatalf("migrate entstore: %s", redaction.Text(err.Error()))
+		log.Fatalf("migrate entstore: %s", err.Error())
 	}
 
 	executable, err := os.Executable()
 	if err != nil {
-		log.Fatalf("resolve executable: %s", redaction.Text(err.Error()))
+		log.Fatalf("resolve executable: %s", err.Error())
 	}
 	mcpSocket := localMCPSocketPath()
 	useCases, err := newGraphQLUseCases(store, cfg.DataDir, cfg.CodexBin, cfg.HTTPAddr, cfg.AccessKey, cfg.AgentMaxConcurrent, executable, mcpSocket)
 	if err != nil {
-		log.Fatalf("wire graphql usecases: %s", redaction.Text(err.Error()))
+		log.Fatalf("wire graphql usecases: %s", err.Error())
 	}
 	stopMCP, err := startMCPUnixServer(cfg, useCases, mcpSocket)
 	if err != nil {
-		log.Fatalf("start mcp unix server: %s", redaction.Text(err.Error()))
+		log.Fatalf("start mcp unix server: %s", err.Error())
 	}
 	defer stopMCP()
 
 	if err := recoverAndDrainSessions(ctx, useCases.Sessions); err != nil {
-		log.Fatalf("recover sessions: %s", redaction.Text(err.Error()))
+		log.Fatalf("recover sessions: %s", err.Error())
 	}
 
 	server := &http.Server{
@@ -87,7 +86,7 @@ func main() {
 
 	log.Printf("anycode listening on %s", cfg.HTTPAddr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("anycode stopped: %s", redaction.Text(err.Error()))
+		log.Fatalf("anycode stopped: %s", err.Error())
 	}
 }
 
@@ -174,7 +173,7 @@ func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath s
 	server := &http.Server{Handler: mux}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("mcp unix server stopped: %s", redaction.Text(err.Error()))
+			log.Printf("mcp unix server stopped: %s", err.Error())
 		}
 	}()
 	return func() {

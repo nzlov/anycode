@@ -366,7 +366,7 @@ func TestAttachmentPreviewWritesStructuredApplicationError(t *testing.T) {
 	}
 }
 
-func TestApplicationErrorResponseRedactsSensitiveFields(t *testing.T) {
+func TestApplicationErrorResponsePreservesFields(t *testing.T) {
 	err := apperror.Wrap(errors.New("open /home/nzlov/workspaces/github/project token=secret"), apperror.CodeInternal, apperror.CategoryInfraError, "").
 		WithDetails(map[string]any{
 			"worktreePath": "/home/nzlov/workspaces/github/project",
@@ -383,10 +383,10 @@ func TestApplicationErrorResponseRedactsSensitiveFields(t *testing.T) {
 	if decodeErr := json.Unmarshal(rec.Body.Bytes(), &body); decodeErr != nil {
 		t.Fatalf("decode response: %v", decodeErr)
 	}
-	if body.Message != "open [redacted_path] token=[redacted]" {
+	if body.Message != "open /home/nzlov/workspaces/github/project token=secret" {
 		t.Fatalf("message = %q", body.Message)
 	}
-	if body.Details["worktreePath"] != "[redacted_path]" || body.Details["accessKey"] != "[redacted]" {
+	if body.Details["worktreePath"] != "/home/nzlov/workspaces/github/project" || body.Details["accessKey"] != "secret" {
 		t.Fatalf("details = %#v", body.Details)
 	}
 }
@@ -511,7 +511,7 @@ func TestMCPAnswerUserWritesStructuredApplicationError(t *testing.T) {
 	}
 }
 
-func TestMCPApplicationErrorRedactsSensitiveFields(t *testing.T) {
+func TestMCPApplicationErrorPreservesFields(t *testing.T) {
 	err := apperror.Wrap(errors.New("read /home/nzlov/workspaces/github/project authorization=Bearer secret"), apperror.CodeInternal, apperror.CategoryInfraError, "").
 		WithDetails(map[string]any{
 			"repoPath":      "/home/nzlov/workspaces/github/project",
@@ -532,10 +532,10 @@ func TestMCPApplicationErrorRedactsSensitiveFields(t *testing.T) {
 	if decodeErr := json.Unmarshal(rec.Body.Bytes(), &response); decodeErr != nil {
 		t.Fatalf("decode mcp response: %v", decodeErr)
 	}
-	if response.Error.Message != "read [redacted_path] authorization=[redacted]" {
+	if response.Error.Message != "read /home/nzlov/workspaces/github/project authorization=Bearer secret" {
 		t.Fatalf("mcp message = %q", response.Error.Message)
 	}
-	if response.Error.Data.Details["repoPath"] != "[redacted_path]" || response.Error.Data.Details["authorization"] != "[redacted]" {
+	if response.Error.Data.Details["repoPath"] != "/home/nzlov/workspaces/github/project" || response.Error.Data.Details["authorization"] != "Bearer secret" {
 		t.Fatalf("mcp details = %#v", response.Error.Data.Details)
 	}
 }

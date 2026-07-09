@@ -21,7 +21,6 @@ import (
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
-	"github.com/nzlov/anycode/internal/domain/redaction"
 	domain "github.com/nzlov/anycode/internal/domain/session"
 )
 
@@ -2804,7 +2803,7 @@ func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.R
 		}
 	}
 	sessionID := eventdomain.SessionID(session.ID)
-	payload := redaction.Map(codexSessionEventPayload(event))
+	payload := codexSessionEventPayload(event)
 	createdAt := event.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = s.now()
@@ -3147,7 +3146,7 @@ func (s *Service) newSessionEvent(session domain.Session, eventType string, payl
 		return eventdomain.DomainEvent{}, false, err
 	}
 	sessionID := eventdomain.SessionID(session.ID)
-	eventPayload := redaction.Map(payload)
+	eventPayload := copyPayload(payload)
 	eventPayload["status"] = string(session.Status)
 	return eventdomain.DomainEvent{
 		ID: eventdomain.ID(id),
@@ -3169,8 +3168,12 @@ func (s *Service) publishSessionEvent(ctx context.Context, event eventdomain.Dom
 }
 
 func processEventPayload(event processdomain.CodexEvent) map[string]any {
-	payload := make(map[string]any, len(event.Payload))
-	for key, value := range event.Payload {
+	return copyPayload(event.Payload)
+}
+
+func copyPayload(input map[string]any) map[string]any {
+	payload := make(map[string]any, len(input))
+	for key, value := range input {
 		payload[key] = value
 	}
 	return payload

@@ -11,7 +11,6 @@ import (
 	"github.com/nzlov/anycode/internal/application/port"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
-	"github.com/nzlov/anycode/internal/domain/redaction"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
@@ -190,10 +189,11 @@ func (s *Service) eventsAfter(ctx context.Context, scope eventdomain.Scope, afte
 }
 
 func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID, scope eventdomain.Scope) ([]eventdomain.DomainEvent, error) {
-	events, err := s.store.List(ctx, scope)
+	stored, err := s.store.List(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
+	events := nonCodexSessionEvents(stored)
 	transcript, err := s.codexTranscriptEvents(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -201,6 +201,17 @@ func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondom
 	events = append(events, transcript...)
 	sortEvents(events)
 	return events, nil
+}
+
+func nonCodexSessionEvents(events []eventdomain.DomainEvent) []eventdomain.DomainEvent {
+	filtered := make([]eventdomain.DomainEvent, 0, len(events))
+	for _, event := range events {
+		if event.Type == "process.codex_event" {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
 }
 
 func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondomain.ID) ([]eventdomain.DomainEvent, error) {
@@ -287,7 +298,7 @@ func codexSessionEventPayload(event processdomain.CodexEvent) map[string]any {
 	if event.EventID != "" {
 		payload["codexEventId"] = event.EventID
 	}
-	return redaction.Map(payload)
+	return payload
 }
 
 func pageEventsBefore(events []eventdomain.DomainEvent, before eventdomain.ID, limit int) ([]eventdomain.DomainEvent, int, bool) {

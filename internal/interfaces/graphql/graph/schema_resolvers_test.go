@@ -632,7 +632,7 @@ func TestErrorPresenterAddsApplicationErrorExtensions(t *testing.T) {
 
 	got := ErrorPresenter(context.Background(), err)
 
-	if got.Message != "git diff failed at [redacted_path] token=[redacted]" {
+	if got.Message != "git diff failed at /home/nzlov/workspaces/github/anycode token=secret" {
 		t.Fatalf("message = %q", got.Message)
 	}
 	if got.Extensions["code"] != apperror.CodeDiffUnavailable || got.Extensions["category"] != string(apperror.CategoryInfraError) {
@@ -642,7 +642,7 @@ func TestErrorPresenterAddsApplicationErrorExtensions(t *testing.T) {
 		t.Fatalf("extensions = %#v", got.Extensions)
 	}
 	details, ok := got.Extensions["details"].(map[string]any)
-	if !ok || details["sessionId"] != "session-1" || details["worktreePath"] != "[redacted_path]" || details["accessKey"] != "[redacted]" {
+	if !ok || details["sessionId"] != "session-1" || details["worktreePath"] != "/home/nzlov/workspaces/github/anycode" || details["accessKey"] != "secret" {
 		t.Fatalf("details = %#v", got.Extensions["details"])
 	}
 }
