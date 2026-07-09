@@ -30,6 +30,7 @@ RUN go build -o /out/anycode ./cmd/anycode
 FROM base
 ARG ANYCODE_UID=1000
 ARG ANYCODE_GID=1000
+ARG NPM_MIRROR=
 ENV ANYCODE_UID=$ANYCODE_UID
 ENV ANYCODE_GID=$ANYCODE_GID
 ENV NVM_DIR=/usr/local/nvm
@@ -40,6 +41,9 @@ RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \
   && nvm alias default node \
+  && if [ -n "$NPM_MIRROR" ]; then \
+  npm config set registry "$NPM_MIRROR" ;\
+  fi \
   && npm install -g @openai/codex@latest \
   && npm cache clean --force \
   && groupadd --gid "$ANYCODE_GID" anycode \

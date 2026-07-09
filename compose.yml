@@ -4,6 +4,7 @@ services:
       context: .
       args:
         PACMAN_MIRROR: ${PACMAN_MIRROR:-}
+        NPM_MIRROR: ${NPM_MIRROR:-}
         GOPROXY: ${GOPROXY:-}
     environment:
       ANYCODE_ACCESS_KEY: ${ANYCODE_ACCESS_KEY:?set ANYCODE_ACCESS_KEY}
