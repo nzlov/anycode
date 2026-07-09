@@ -147,6 +147,34 @@ func (_u *SessionUpdate) SetNillableWorktreePath(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetWorktreeBaseCommit sets the "worktree_base_commit" field.
+func (_u *SessionUpdate) SetWorktreeBaseCommit(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeBaseCommit(v)
+	return _u
+}
+
+// SetNillableWorktreeBaseCommit sets the "worktree_base_commit" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeBaseCommit(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeBaseCommit(*v)
+	}
+	return _u
+}
+
+// SetWorktreeHeadCommit sets the "worktree_head_commit" field.
+func (_u *SessionUpdate) SetWorktreeHeadCommit(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeHeadCommit(v)
+	return _u
+}
+
+// SetNillableWorktreeHeadCommit sets the "worktree_head_commit" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeHeadCommit(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeHeadCommit(*v)
+	}
+	return _u
+}
+
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_u *SessionUpdate) SetCodexSessionID(v string) *SessionUpdate {
 	_u.mutation.SetCodexSessionID(v)
@@ -473,6 +501,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.WorktreePath(); ok {
 		_spec.SetField(entsession.FieldWorktreePath, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.WorktreeBaseCommit(); ok {
+		_spec.SetField(entsession.FieldWorktreeBaseCommit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeHeadCommit(); ok {
+		_spec.SetField(entsession.FieldWorktreeHeadCommit, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
 	}
@@ -664,6 +698,34 @@ func (_u *SessionUpdateOne) SetWorktreePath(v string) *SessionUpdateOne {
 func (_u *SessionUpdateOne) SetNillableWorktreePath(v *string) *SessionUpdateOne {
 	if v != nil {
 		_u.SetWorktreePath(*v)
+	}
+	return _u
+}
+
+// SetWorktreeBaseCommit sets the "worktree_base_commit" field.
+func (_u *SessionUpdateOne) SetWorktreeBaseCommit(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeBaseCommit(v)
+	return _u
+}
+
+// SetNillableWorktreeBaseCommit sets the "worktree_base_commit" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeBaseCommit(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeBaseCommit(*v)
+	}
+	return _u
+}
+
+// SetWorktreeHeadCommit sets the "worktree_head_commit" field.
+func (_u *SessionUpdateOne) SetWorktreeHeadCommit(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeHeadCommit(v)
+	return _u
+}
+
+// SetNillableWorktreeHeadCommit sets the "worktree_head_commit" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeHeadCommit(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeHeadCommit(*v)
 	}
 	return _u
 }
@@ -1023,6 +1085,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.WorktreePath(); ok {
 		_spec.SetField(entsession.FieldWorktreePath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeBaseCommit(); ok {
+		_spec.SetField(entsession.FieldWorktreeBaseCommit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeHeadCommit(); ok {
+		_spec.SetField(entsession.FieldWorktreeHeadCommit, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)

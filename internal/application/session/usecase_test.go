@@ -240,6 +240,40 @@ func TestCreateSessionCreatesWorktreeForGitProject(t *testing.T) {
 	}
 }
 
+func TestCreateSessionStoresWorktreeBaseCommit(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base"}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement app session",
+		BaseBranch:  "main",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.WorktreeBaseCommit != "base" {
+		t.Fatalf("WorktreeBaseCommit = %q", got.WorktreeBaseCommit)
+	}
+	if worktrees.headCommitPath != "/data/worktrees/project-1/session-1" || worktrees.headCommitRef != "" {
+		t.Fatalf("HeadCommit() = path %q ref %q", worktrees.headCommitPath, worktrees.headCommitRef)
+	}
+	if repo.sessions["session-1"].WorktreeBaseCommit != "base" {
+		t.Fatalf("saved WorktreeBaseCommit = %q", repo.sessions["session-1"].WorktreeBaseCommit)
+	}
+}
+
 func TestCreateSessionUsesShortIDForGitWorktreeBranch(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -2951,11 +2985,12 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
-		ID:           "session-1",
-		ProjectID:    "project-1",
-		Status:       domain.StatusCreated,
-		BaseBranch:   "main",
-		WorktreePath: "/data/worktrees/project-1/session-1",
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusCreated,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBaseCommit: "base",
 	}
 	projects := newFakeProjectRepository()
 	projects.projects["project-1"] = projectdomain.Project{
@@ -2964,7 +2999,7 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
 		IsGit: true,
 	}
-	worktrees := &fakeWorktreeManager{}
+	worktrees := &fakeWorktreeManager{headCommit: "head"}
 	service := New(repo, projects, WithWorktrees(worktrees))
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
 
@@ -2980,6 +3015,227 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 	}
 	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1"}) {
 		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
+	}
+	if worktrees.snapshotPath != "/data/worktrees/project-1/session-1" {
+		t.Fatalf("SnapshotCommit() path = %q", worktrees.snapshotPath)
+	}
+	if worktrees.snapshotBranch != "session-1" {
+		t.Fatalf("SnapshotCommit() branch = %q", worktrees.snapshotBranch)
+	}
+	if got.WorktreeBaseCommit != "base" || got.WorktreeHeadCommit != "head" {
+		t.Fatalf("closed session commits = base %q head %q", got.WorktreeBaseCommit, got.WorktreeHeadCommit)
+	}
+}
+
+func TestCloseSessionDoesNotRemoveWorktreeWhenSnapshotSaveFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusCreated,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBaseCommit: "base",
+	}
+	repo.saveHook = func(_ domain.Session) error {
+		return errors.New("snapshot save failed")
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{headCommit: "head"}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected snapshot save error")
+	}
+	if len(worktrees.removed) != 0 {
+		t.Fatalf("Remove() should not be called, got %#v", worktrees.removed)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.WorktreeHeadCommit != "" || saved.Status == domain.StatusClosed {
+		t.Fatalf("session should remain unchanged after snapshot save failure: %#v", saved)
+	}
+}
+
+func TestCloseSessionKeepsStoredSnapshotWhenFinalSaveFailsAfterWorktreeCleanup(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusCreated,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBaseCommit: "base",
+	}
+	saveCalls := 0
+	repo.saveHook = func(session domain.Session) error {
+		saveCalls++
+		if saveCalls == 2 {
+			if session.WorktreePath != "" {
+				t.Fatalf("second save WorktreePath = %q, want empty", session.WorktreePath)
+			}
+			if session.Status == domain.StatusClosed {
+				t.Fatalf("second save should clear worktree before closed status: %#v", session)
+			}
+			return errors.New("clear worktree path failed")
+		}
+		return nil
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{headCommit: "head"}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected clear path save error")
+	}
+	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
+		t.Fatalf("removed worktrees = %#v", worktrees.removed)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.WorktreeBaseCommit != "base" || saved.WorktreeHeadCommit != "head" {
+		t.Fatalf("snapshot should remain stored after clear path save failure: %#v", saved)
+	}
+	if saved.WorktreePath != "/data/worktrees/project-1/session-1" {
+		t.Fatalf("worktree path should remain stale until retry clears it: %#v", saved)
+	}
+	if saved.Status == domain.StatusClosed {
+		t.Fatalf("session should not be marked closed when clear path save fails: %#v", saved)
+	}
+	if len(repo.saved) != 1 {
+		t.Fatalf("Save() calls = %#v", repo.saved)
+	}
+	if repo.saved[0].WorktreePath != "/data/worktrees/project-1/session-1" {
+		t.Fatalf("saved worktree path = %q", repo.saved[0].WorktreePath)
+	}
+}
+
+func TestCloseSessionCanRetryAfterWorktreeRemovedAndSnapshotStored(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusCreated,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBaseCommit: "base",
+	}
+	saveCalls := 0
+	repo.saveHook = func(session domain.Session) error {
+		saveCalls++
+		if saveCalls == 2 {
+			return errors.New("clear worktree path failed")
+		}
+		return nil
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := newFakeWorktreeManager()
+	worktrees.headCommit = "head"
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected first clear path save error")
+	}
+	savedAfterFirst := repo.sessions["session-1"]
+	if savedAfterFirst.WorktreePath != "/data/worktrees/project-1/session-1" {
+		t.Fatalf("saved worktree path after first failure = %q", savedAfterFirst.WorktreePath)
+	}
+	if savedAfterFirst.WorktreeBaseCommit != "base" || savedAfterFirst.WorktreeHeadCommit != "head" {
+		t.Fatalf("saved snapshot after first failure = %#v", savedAfterFirst)
+	}
+
+	repo.saveHook = nil
+	worktrees.resetCallState()
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() retry error = %v", err)
+	}
+	if got.Status != domain.StatusClosed {
+		t.Fatalf("CloseSession() retry status = %q", got.Status)
+	}
+	if got.WorktreePath != "" {
+		t.Fatalf("CloseSession() retry WorktreePath = %q, want empty", got.WorktreePath)
+	}
+	if worktrees.headCommitPath != "" || worktrees.mergeBasePath != "" {
+		t.Fatalf("retry should not read commits from missing worktree: head=%q mergeBase=%q", worktrees.headCommitPath, worktrees.mergeBasePath)
+	}
+	if len(worktrees.removed) != 0 {
+		t.Fatalf("retry should not remove missing worktree again: %#v", worktrees.removed)
+	}
+	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1"}) {
+		t.Fatalf("deleted branches on retry = %#v", worktrees.deletedBranches)
+	}
+	savedAfterRetry := repo.sessions["session-1"]
+	if savedAfterRetry.Status != domain.StatusClosed {
+		t.Fatalf("saved status after retry = %q", savedAfterRetry.Status)
+	}
+	if savedAfterRetry.WorktreePath != "" {
+		t.Fatalf("saved WorktreePath after retry = %q", savedAfterRetry.WorktreePath)
+	}
+}
+
+func TestCloseSessionFailsWhenMissingWorktreeSnapshotIncomplete(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusCreated,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBaseCommit: "base",
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := newFakeWorktreeManager()
+	worktrees.setMissing("/data/worktrees/project-1/session-1", true)
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected missing worktree snapshot error")
+	} else {
+		appErr, ok := apperror.From(err)
+		if !ok || appErr.Code != apperror.CodeCloseFailed {
+			t.Fatalf("CloseSession() error = %#v", err)
+		}
+	}
+	if worktrees.headCommitPath != "" || worktrees.mergeBasePath != "" {
+		t.Fatalf("missing worktree should fail before rereading commits: head=%q mergeBase=%q", worktrees.headCommitPath, worktrees.mergeBasePath)
+	}
+	if len(worktrees.removed) != 0 {
+		t.Fatalf("missing worktree should not remove again: %#v", worktrees.removed)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.WorktreePath != "/data/worktrees/project-1/session-1" || saved.Status == domain.StatusClosed {
+		t.Fatalf("session should remain open with original path after incomplete snapshot failure: %#v", saved)
 	}
 }
 
@@ -2999,7 +3255,7 @@ func TestCloseSessionDoesNotSaveClosedWhenWorktreeRemoveFails(t *testing.T) {
 		Name:  "project-1",
 		IsGit: true,
 	}
-	worktrees := &fakeWorktreeManager{removeErr: errors.New("remove failed")}
+	worktrees := &fakeWorktreeManager{headCommit: "head", mergeBase: "base", removeErr: errors.New("remove failed")}
 	service := New(repo, projects, WithWorktrees(worktrees))
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
 
@@ -3009,8 +3265,11 @@ func TestCloseSessionDoesNotSaveClosedWhenWorktreeRemoveFails(t *testing.T) {
 	if repo.sessions["session-1"].Status == domain.StatusClosed {
 		t.Fatalf("session should not be closed after worktree remove failure: %#v", repo.sessions["session-1"])
 	}
-	if len(repo.saved) != 0 {
+	if len(repo.saved) != 1 {
 		t.Fatalf("Save() calls = %#v", repo.saved)
+	}
+	if saved := repo.sessions["session-1"]; saved.WorktreeBaseCommit != "base" || saved.WorktreeHeadCommit != "head" {
+		t.Fatalf("snapshot should be stored before remove failure: %#v", saved)
 	}
 	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
 		t.Fatalf("removed worktrees = %#v", worktrees.removed)
@@ -3064,6 +3323,45 @@ func TestCloseSessionCanRetryAfterBranchDeleteFails(t *testing.T) {
 	}
 	if !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1", "/workspace/project-1:session-1"}) {
 		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
+	}
+}
+
+func TestCloseSessionUsesMergeBaseWhenStoredBaseCommitIsMissing(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Status:       domain.StatusCreated,
+		BaseBranch:   "main",
+		WorktreePath: "/data/worktrees/project-1/session-1",
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{headCommit: "head", mergeBase: "base"}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.WorktreeBaseCommit != "base" || got.WorktreeHeadCommit != "head" {
+		t.Fatalf("CloseSession() commits = base %q head %q", got.WorktreeBaseCommit, got.WorktreeHeadCommit)
+	}
+	if worktrees.mergeBasePath != "/data/worktrees/project-1/session-1" || worktrees.mergeBaseRef != "main" {
+		t.Fatalf("MergeBase() path/ref = %q/%q", worktrees.mergeBasePath, worktrees.mergeBaseRef)
+	}
+	if worktrees.snapshotPath != "/data/worktrees/project-1/session-1" {
+		t.Fatalf("SnapshotCommit() path = %q", worktrees.snapshotPath)
+	}
+	if worktrees.snapshotBranch != "session-1" {
+		t.Fatalf("SnapshotCommit() branch = %q", worktrees.snapshotBranch)
 	}
 }
 
@@ -5056,6 +5354,7 @@ type fakeRepository struct {
 	sessions                            map[domain.ID]domain.Session
 	createErr                           error
 	saveErr                             error
+	saveHook                            func(domain.Session) error
 	listSessions                        []domain.Session
 	interruptedSessions                 []domain.Session
 	listQueuedHook                      func()
@@ -5100,6 +5399,11 @@ func (r *fakeRepository) Create(_ context.Context, session domain.Session) error
 func (r *fakeRepository) Save(_ context.Context, session domain.Session) error {
 	if r.saveErr != nil {
 		return r.saveErr
+	}
+	if r.saveHook != nil {
+		if err := r.saveHook(session); err != nil {
+			return err
+		}
 	}
 	r.saved = append(r.saved, session)
 	r.sessions[session.ID] = session
@@ -5321,16 +5625,34 @@ func (s *fakeAttachmentStore) Open(context.Context, string) (domain.AttachmentSt
 
 type fakeWorktreeManager struct {
 	path              string
+	headCommit        string
+	snapshotCommit    string
+	mergeBase         string
 	createErr         error
+	headCommitErr     error
+	snapshotErr       error
+	mergeBaseErr      error
 	removeErr         error
 	deleteBranchErr   error
+	statErr           error
 	createCalled      bool
 	createProjectPath string
 	createProjectID   domain.ProjectID
 	createSessionID   domain.ID
 	createBaseBranch  string
+	headCommitPath    string
+	headCommitRef     string
+	snapshotPath      string
+	snapshotBranch    string
+	mergeBasePath     string
+	mergeBaseRef      string
 	removed           []string
 	deletedBranches   []string
+	missingPaths      map[string]bool
+}
+
+func newFakeWorktreeManager() *fakeWorktreeManager {
+	return &fakeWorktreeManager{missingPaths: map[string]bool{}}
 }
 
 func (m *fakeWorktreeManager) Create(_ context.Context, projectPath string, projectID domain.ProjectID, sessionID domain.ID, baseBranch string) (string, error) {
@@ -5345,11 +5667,49 @@ func (m *fakeWorktreeManager) Create(_ context.Context, projectPath string, proj
 	return m.path, nil
 }
 
+func (m *fakeWorktreeManager) HeadCommit(_ context.Context, path string, ref string) (string, error) {
+	m.headCommitPath = path
+	m.headCommitRef = ref
+	if m.headCommitErr != nil {
+		return "", m.headCommitErr
+	}
+	return m.headCommit, nil
+}
+
+func (m *fakeWorktreeManager) SnapshotCommit(_ context.Context, path string, branch string) (string, error) {
+	m.snapshotPath = path
+	m.snapshotBranch = branch
+	if m.snapshotErr != nil {
+		return "", m.snapshotErr
+	}
+	if m.snapshotCommit != "" {
+		return m.snapshotCommit, nil
+	}
+	return m.headCommit, nil
+}
+
+func (m *fakeWorktreeManager) MergeBase(_ context.Context, worktreePath string, baseRef string) (string, error) {
+	m.mergeBasePath = worktreePath
+	m.mergeBaseRef = baseRef
+	if m.mergeBaseErr != nil {
+		return "", m.mergeBaseErr
+	}
+	return m.mergeBase, nil
+}
+
+func (m *fakeWorktreeManager) Exists(_ context.Context, path string) (bool, error) {
+	if m.statErr != nil {
+		return false, m.statErr
+	}
+	return !m.missingPaths[path], nil
+}
+
 func (m *fakeWorktreeManager) Remove(_ context.Context, path string) error {
 	m.removed = append(m.removed, path)
 	if m.removeErr != nil {
 		return m.removeErr
 	}
+	m.setMissing(path, true)
 	return nil
 }
 
@@ -5363,6 +5723,24 @@ func (m *fakeWorktreeManager) DeleteBranch(_ context.Context, projectPath string
 
 func (m *fakeWorktreeManager) PathForSession(projectID domain.ProjectID, sessionID domain.ID) string {
 	return m.path
+}
+
+func (m *fakeWorktreeManager) setMissing(path string, missing bool) {
+	if m.missingPaths == nil {
+		m.missingPaths = map[string]bool{}
+	}
+	m.missingPaths[path] = missing
+}
+
+func (m *fakeWorktreeManager) resetCallState() {
+	m.headCommitPath = ""
+	m.headCommitRef = ""
+	m.snapshotPath = ""
+	m.snapshotBranch = ""
+	m.mergeBasePath = ""
+	m.mergeBaseRef = ""
+	m.removed = nil
+	m.deletedBranches = nil
 }
 
 type fakeMergePort struct {

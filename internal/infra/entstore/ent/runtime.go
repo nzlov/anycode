@@ -249,52 +249,60 @@ func init() {
 	entsessionDescWorktreePath := entsessionFields[8].Descriptor()
 	// entsession.DefaultWorktreePath holds the default value on creation for the worktree_path field.
 	entsession.DefaultWorktreePath = entsessionDescWorktreePath.Default.(string)
+	// entsessionDescWorktreeBaseCommit is the schema descriptor for worktree_base_commit field.
+	entsessionDescWorktreeBaseCommit := entsessionFields[9].Descriptor()
+	// entsession.DefaultWorktreeBaseCommit holds the default value on creation for the worktree_base_commit field.
+	entsession.DefaultWorktreeBaseCommit = entsessionDescWorktreeBaseCommit.Default.(string)
+	// entsessionDescWorktreeHeadCommit is the schema descriptor for worktree_head_commit field.
+	entsessionDescWorktreeHeadCommit := entsessionFields[10].Descriptor()
+	// entsession.DefaultWorktreeHeadCommit holds the default value on creation for the worktree_head_commit field.
+	entsession.DefaultWorktreeHeadCommit = entsessionDescWorktreeHeadCommit.Default.(string)
 	// entsessionDescCodexSessionID is the schema descriptor for codex_session_id field.
-	entsessionDescCodexSessionID := entsessionFields[9].Descriptor()
+	entsessionDescCodexSessionID := entsessionFields[11].Descriptor()
 	// entsession.DefaultCodexSessionID holds the default value on creation for the codex_session_id field.
 	entsession.DefaultCodexSessionID = entsessionDescCodexSessionID.Default.(string)
 	// entsessionDescCodexModel is the schema descriptor for codex_model field.
-	entsessionDescCodexModel := entsessionFields[10].Descriptor()
+	entsessionDescCodexModel := entsessionFields[12].Descriptor()
 	// entsession.DefaultCodexModel holds the default value on creation for the codex_model field.
 	entsession.DefaultCodexModel = entsessionDescCodexModel.Default.(string)
 	// entsessionDescReasoningEffort is the schema descriptor for reasoning_effort field.
-	entsessionDescReasoningEffort := entsessionFields[11].Descriptor()
+	entsessionDescReasoningEffort := entsessionFields[13].Descriptor()
 	// entsession.DefaultReasoningEffort holds the default value on creation for the reasoning_effort field.
 	entsession.DefaultReasoningEffort = entsessionDescReasoningEffort.Default.(string)
 	// entsessionDescPermissionMode is the schema descriptor for permission_mode field.
-	entsessionDescPermissionMode := entsessionFields[12].Descriptor()
+	entsessionDescPermissionMode := entsessionFields[14].Descriptor()
 	// entsession.DefaultPermissionMode holds the default value on creation for the permission_mode field.
 	entsession.DefaultPermissionMode = entsessionDescPermissionMode.Default.(string)
 	// entsessionDescQueueKind is the schema descriptor for queue_kind field.
-	entsessionDescQueueKind := entsessionFields[15].Descriptor()
+	entsessionDescQueueKind := entsessionFields[17].Descriptor()
 	// entsession.DefaultQueueKind holds the default value on creation for the queue_kind field.
 	entsession.DefaultQueueKind = entsessionDescQueueKind.Default.(string)
 	// entsessionDescQueuePriority is the schema descriptor for queue_priority field.
-	entsessionDescQueuePriority := entsessionFields[16].Descriptor()
+	entsessionDescQueuePriority := entsessionFields[18].Descriptor()
 	// entsession.DefaultQueuePriority holds the default value on creation for the queue_priority field.
 	entsession.DefaultQueuePriority = entsessionDescQueuePriority.Default.(string)
 	// entsessionDescQueueWorkflowRunID is the schema descriptor for queue_workflow_run_id field.
-	entsessionDescQueueWorkflowRunID := entsessionFields[17].Descriptor()
+	entsessionDescQueueWorkflowRunID := entsessionFields[19].Descriptor()
 	// entsession.DefaultQueueWorkflowRunID holds the default value on creation for the queue_workflow_run_id field.
 	entsession.DefaultQueueWorkflowRunID = entsessionDescQueueWorkflowRunID.Default.(string)
 	// entsessionDescQueueNodeRunID is the schema descriptor for queue_node_run_id field.
-	entsessionDescQueueNodeRunID := entsessionFields[18].Descriptor()
+	entsessionDescQueueNodeRunID := entsessionFields[20].Descriptor()
 	// entsession.DefaultQueueNodeRunID holds the default value on creation for the queue_node_run_id field.
 	entsession.DefaultQueueNodeRunID = entsessionDescQueueNodeRunID.Default.(string)
 	// entsessionDescQueuePrompt is the schema descriptor for queue_prompt field.
-	entsessionDescQueuePrompt := entsessionFields[19].Descriptor()
+	entsessionDescQueuePrompt := entsessionFields[21].Descriptor()
 	// entsession.DefaultQueuePrompt holds the default value on creation for the queue_prompt field.
 	entsession.DefaultQueuePrompt = entsessionDescQueuePrompt.Default.(string)
 	// entsessionDescQueueResumeCodexSessionID is the schema descriptor for queue_resume_codex_session_id field.
-	entsessionDescQueueResumeCodexSessionID := entsessionFields[20].Descriptor()
+	entsessionDescQueueResumeCodexSessionID := entsessionFields[22].Descriptor()
 	// entsession.DefaultQueueResumeCodexSessionID holds the default value on creation for the queue_resume_codex_session_id field.
 	entsession.DefaultQueueResumeCodexSessionID = entsessionDescQueueResumeCodexSessionID.Default.(string)
 	// entsessionDescCreatedAt is the schema descriptor for created_at field.
-	entsessionDescCreatedAt := entsessionFields[22].Descriptor()
+	entsessionDescCreatedAt := entsessionFields[24].Descriptor()
 	// entsession.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entsession.DefaultCreatedAt = entsessionDescCreatedAt.Default.(func() time.Time)
 	// entsessionDescUpdatedAt is the schema descriptor for updated_at field.
-	entsessionDescUpdatedAt := entsessionFields[23].Descriptor()
+	entsessionDescUpdatedAt := entsessionFields[25].Descriptor()
 	// entsession.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

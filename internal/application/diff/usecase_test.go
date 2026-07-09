@@ -85,6 +85,75 @@ func TestGetSessionDiffReadsSelectedFile(t *testing.T) {
 	}
 }
 
+func TestGetSessionDiffUsesStoredWorktreeCommitRangeAfterClose(t *testing.T) {
+	ctx := context.Background()
+	diffPort := &fakeDiffPort{
+		files: []gitdiff.DiffFile{{Path: "a.go", Status: "modified", Additions: 1}},
+		fileDiffs: map[string]gitdiff.FileDiff{
+			"a.go": {File: gitdiff.DiffFile{Path: "a.go", Status: "modified"}},
+		},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{
+			ID:                 "session-1",
+			ProjectID:          "project-1",
+			Status:             sessiondomain.StatusClosed,
+			WorktreePath:       "",
+			WorktreeBaseCommit: "base",
+			WorktreeHeadCommit: "head",
+		}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/repo"}, IsGit: true}},
+		diffPort,
+	)
+
+	got, err := service.GetSessionDiff(ctx, SessionDiffInput{
+		SessionID:       "session-1",
+		IncludeFileDiff: true,
+	})
+	if err != nil {
+		t.Fatalf("GetSessionDiff() error = %v", err)
+	}
+	if !got.Available || got.FileDiff == nil || got.FileDiff.File.Path != "a.go" {
+		t.Fatalf("GetSessionDiff() = %#v", got)
+	}
+	if diffPort.lastWorktreePath != "/repo" || diffPort.lastBaseRef != "base" || diffPort.lastHeadRef != "head" {
+		t.Fatalf("diff input path/base/head = %q/%q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef, diffPort.lastHeadRef)
+	}
+}
+
+func TestGetSessionDiffPrefersLiveWorktreeOverStoredCommitRange(t *testing.T) {
+	ctx := context.Background()
+	diffPort := &fakeDiffPort{
+		filesByWorktreePath: map[string][]gitdiff.DiffFile{
+			"/live-worktree": {{Path: "live.go", Status: "modified", Additions: 1}},
+			"/repo":          {{Path: "stored.go", Status: "modified", Additions: 1}},
+		},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{
+			ID:                 "session-1",
+			ProjectID:          "project-1",
+			BaseBranch:         "main",
+			WorktreePath:       "/live-worktree",
+			WorktreeBaseCommit: "stored-base",
+			WorktreeHeadCommit: "stored-head",
+		}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/repo"}, IsGit: true}},
+		diffPort,
+	)
+
+	got, err := service.GetSessionDiff(ctx, SessionDiffInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("GetSessionDiff() error = %v", err)
+	}
+	if !got.Available || got.Files.Total != 1 || got.Files.Items[0].Path != "live.go" {
+		t.Fatalf("GetSessionDiff() = %#v", got)
+	}
+	if diffPort.lastWorktreePath != "/live-worktree" || diffPort.lastBaseRef != "main..." || diffPort.lastHeadRef != "" {
+		t.Fatalf("diff input path/base/head = %q/%q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef, diffPort.lastHeadRef)
+	}
+}
+
 func TestGetSessionDiffPassesContextExpansion(t *testing.T) {
 	ctx := context.Background()
 	diffPort := &fakeDiffPort{

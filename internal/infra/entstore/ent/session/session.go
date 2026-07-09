@@ -29,6 +29,10 @@ const (
 	FieldBaseBranch = "base_branch"
 	// FieldWorktreePath holds the string denoting the worktree_path field in the database.
 	FieldWorktreePath = "worktree_path"
+	// FieldWorktreeBaseCommit holds the string denoting the worktree_base_commit field in the database.
+	FieldWorktreeBaseCommit = "worktree_base_commit"
+	// FieldWorktreeHeadCommit holds the string denoting the worktree_head_commit field in the database.
+	FieldWorktreeHeadCommit = "worktree_head_commit"
 	// FieldCodexSessionID holds the string denoting the codex_session_id field in the database.
 	FieldCodexSessionID = "codex_session_id"
 	// FieldCodexModel holds the string denoting the codex_model field in the database.
@@ -76,6 +80,8 @@ var Columns = []string{
 	FieldCloseReason,
 	FieldBaseBranch,
 	FieldWorktreePath,
+	FieldWorktreeBaseCommit,
+	FieldWorktreeHeadCommit,
 	FieldCodexSessionID,
 	FieldCodexModel,
 	FieldReasoningEffort,
@@ -119,6 +125,10 @@ var (
 	DefaultBaseBranch string
 	// DefaultWorktreePath holds the default value on creation for the "worktree_path" field.
 	DefaultWorktreePath string
+	// DefaultWorktreeBaseCommit holds the default value on creation for the "worktree_base_commit" field.
+	DefaultWorktreeBaseCommit string
+	// DefaultWorktreeHeadCommit holds the default value on creation for the "worktree_head_commit" field.
+	DefaultWorktreeHeadCommit string
 	// DefaultCodexSessionID holds the default value on creation for the "codex_session_id" field.
 	DefaultCodexSessionID string
 	// DefaultCodexModel holds the default value on creation for the "codex_model" field.
@@ -193,6 +203,16 @@ func ByBaseBranch(opts ...sql.OrderTermOption) OrderOption {
 // ByWorktreePath orders the results by the worktree_path field.
 func ByWorktreePath(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorktreePath, opts...).ToFunc()
+}
+
+// ByWorktreeBaseCommit orders the results by the worktree_base_commit field.
+func ByWorktreeBaseCommit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeBaseCommit, opts...).ToFunc()
+}
+
+// ByWorktreeHeadCommit orders the results by the worktree_head_commit field.
+func ByWorktreeHeadCommit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeHeadCommit, opts...).ToFunc()
 }
 
 // ByCodexSessionID orders the results by the codex_session_id field.

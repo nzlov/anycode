@@ -104,6 +104,16 @@ func WorktreePath(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreePath, v))
 }
 
+// WorktreeBaseCommit applies equality check predicate on the "worktree_base_commit" field. It's identical to WorktreeBaseCommitEQ.
+func WorktreeBaseCommit(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeHeadCommit applies equality check predicate on the "worktree_head_commit" field. It's identical to WorktreeHeadCommitEQ.
+func WorktreeHeadCommit(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeHeadCommit, v))
+}
+
 // CodexSessionID applies equality check predicate on the "codex_session_id" field. It's identical to CodexSessionIDEQ.
 func CodexSessionID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldCodexSessionID, v))
@@ -707,6 +717,136 @@ func WorktreePathEqualFold(v string) predicate.Session {
 // WorktreePathContainsFold applies the ContainsFold predicate on the "worktree_path" field.
 func WorktreePathContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldWorktreePath, v))
+}
+
+// WorktreeBaseCommitEQ applies the EQ predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitNEQ applies the NEQ predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitIn applies the In predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeBaseCommit, vs...))
+}
+
+// WorktreeBaseCommitNotIn applies the NotIn predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeBaseCommit, vs...))
+}
+
+// WorktreeBaseCommitGT applies the GT predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitGTE applies the GTE predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitLT applies the LT predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitLTE applies the LTE predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitContains applies the Contains predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitHasPrefix applies the HasPrefix predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitHasSuffix applies the HasSuffix predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitEqualFold applies the EqualFold predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeBaseCommitContainsFold applies the ContainsFold predicate on the "worktree_base_commit" field.
+func WorktreeBaseCommitContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeHeadCommitEQ applies the EQ predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitNEQ applies the NEQ predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitIn applies the In predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeHeadCommit, vs...))
+}
+
+// WorktreeHeadCommitNotIn applies the NotIn predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeHeadCommit, vs...))
+}
+
+// WorktreeHeadCommitGT applies the GT predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitGTE applies the GTE predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitLT applies the LT predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitLTE applies the LTE predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitContains applies the Contains predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitHasPrefix applies the HasPrefix predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitHasSuffix applies the HasSuffix predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitEqualFold applies the EqualFold predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitContainsFold applies the ContainsFold predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeHeadCommit, v))
 }
 
 // CodexSessionIDEQ applies the EQ predicate on the "codex_session_id" field.

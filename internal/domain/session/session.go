@@ -84,24 +84,26 @@ const (
 )
 
 type Session struct {
-	ID             ID
-	ProjectID      ProjectID
-	Requirement    string
-	Mode           Mode
-	Status         Status
-	Priority       Priority
-	CloseReason    *CloseReason
-	BaseBranch     string
-	WorktreePath   string
-	CodexSessionID string
-	Config         Config
-	TodoList       TodoList
-	QueuedAt       *time.Time
-	Queue          QueueIntent
-	LastRunAt      *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	ClosedAt       *time.Time
+	ID                 ID
+	ProjectID          ProjectID
+	Requirement        string
+	Mode               Mode
+	Status             Status
+	Priority           Priority
+	CloseReason        *CloseReason
+	BaseBranch         string
+	WorktreePath       string
+	WorktreeBaseCommit string
+	WorktreeHeadCommit string
+	CodexSessionID     string
+	Config             Config
+	TodoList           TodoList
+	QueuedAt           *time.Time
+	Queue              QueueIntent
+	LastRunAt          *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	ClosedAt           *time.Time
 }
 
 type QueueIntent struct {
@@ -264,6 +266,10 @@ type AttachmentStore interface {
 
 type WorktreeManager interface {
 	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, baseBranch string) (string, error)
+	Exists(ctx context.Context, path string) (bool, error)
+	HeadCommit(ctx context.Context, path string, ref string) (string, error)
+	SnapshotCommit(ctx context.Context, path string, branch string) (string, error)
+	MergeBase(ctx context.Context, worktreePath string, baseRef string) (string, error)
 	Remove(ctx context.Context, path string) error
 	DeleteBranch(ctx context.Context, projectPath string, branch string) error
 	PathForSession(projectID ProjectID, sessionID ID) string

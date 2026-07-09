@@ -103,21 +103,23 @@ type ListSessionsInput struct {
 }
 
 type DTO struct {
-	ID               domain.ID
-	ProjectID        domain.ProjectID
-	Requirement      string
-	Mode             domain.Mode
-	Status           domain.Status
-	Priority         domain.Priority
-	BaseBranch       string
-	WorktreeBranch   string
-	WorktreePath     string
-	CodexSessionID   string
-	Config           domain.Config
-	AvailableActions []string
-	LastRunAt        *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                 domain.ID
+	ProjectID          domain.ProjectID
+	Requirement        string
+	Mode               domain.Mode
+	Status             domain.Status
+	Priority           domain.Priority
+	BaseBranch         string
+	WorktreeBranch     string
+	WorktreePath       string
+	WorktreeBaseCommit string
+	WorktreeHeadCommit string
+	CodexSessionID     string
+	Config             domain.Config
+	AvailableActions   []string
+	LastRunAt          *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type CardDTO struct {
@@ -491,15 +493,27 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			}).WithRetryable(true)
 		}
 		createdWorktree = true
-		if createdPath != worktreePath {
-			worktreePath = createdPath
-			session.WorktreePath = createdPath
+		pathChanged := createdPath != worktreePath
+		worktreePath = createdPath
+		baseCommit, err := s.worktrees.HeadCommit(ctx, createdPath, "")
+		if err != nil {
+			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
+				return DTO{}, errors.Join(fmt.Errorf("read session worktree base commit: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+			}
+			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "read session worktree base commit failed").WithDetails(map[string]any{
+				"projectId": string(input.ProjectID),
+				"sessionId": string(id),
+			}).WithRetryable(true)
+		}
+		session.WorktreePath = createdPath
+		session.WorktreeBaseCommit = baseCommit
+		if pathChanged || strings.TrimSpace(baseCommit) != "" {
 			session.UpdatedAt = s.now()
 			if err := s.repo.Save(ctx, session); err != nil {
 				if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
-					return DTO{}, errors.Join(fmt.Errorf("save session worktree path: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+					return DTO{}, errors.Join(fmt.Errorf("save session worktree snapshot: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
 				}
-				return DTO{}, fmt.Errorf("save session worktree path: %w", err)
+				return DTO{}, fmt.Errorf("save session worktree snapshot: %w", err)
 			}
 		}
 	}
@@ -2903,6 +2917,24 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	return nil
 }
 
+func (s *Service) saveSession(ctx context.Context, session domain.Session) error {
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := s.repo.Save(ctx, session); err != nil {
+		return fmt.Errorf("save session: %w", err)
+	}
+	return nil
+}
+
 func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session domain.Session, finishedAt time.Time, eventType string, payload map[string]any) error {
 	events, err := s.newSessionEvents(session, []sessionEventInput{{eventType: eventType, payload: payload}})
 	if err != nil {
@@ -3280,10 +3312,47 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			return DTO{}, fmt.Errorf("find project for session worktree cleanup: %w", err)
 		}
 		if project.IsGit {
-			if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
-				return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "remove session worktree failed").WithDetails(map[string]any{
+			exists, err := s.worktrees.Exists(ctx, session.WorktreePath)
+			if err != nil {
+				return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "check session worktree existence failed").WithDetails(map[string]any{
 					"sessionId": string(session.ID),
 				}).WithRetryable(true)
+			}
+			if !exists {
+				if strings.TrimSpace(session.WorktreeBaseCommit) == "" || strings.TrimSpace(session.WorktreeHeadCommit) == "" {
+					return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree is missing before diff snapshot was fully stored").WithDetails(map[string]any{
+						"sessionId": string(session.ID),
+					})
+				}
+			} else {
+				if strings.TrimSpace(session.WorktreeBaseCommit) == "" {
+					baseCommit, err := s.worktrees.MergeBase(ctx, session.WorktreePath, session.BaseBranch)
+					if err != nil {
+						return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "read session worktree merge base failed").WithDetails(map[string]any{
+							"sessionId": string(session.ID),
+						}).WithRetryable(true)
+					}
+					session.WorktreeBaseCommit = baseCommit
+				}
+				headCommit, err := s.worktrees.SnapshotCommit(ctx, session.WorktreePath, worktreeBranchName(session.ID))
+				if err != nil {
+					return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "snapshot session worktree failed").WithDetails(map[string]any{
+						"sessionId": string(session.ID),
+					}).WithRetryable(true)
+				}
+				session.WorktreeHeadCommit = headCommit
+				if err := s.saveSession(ctx, session); err != nil {
+					return DTO{}, err
+				}
+				if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
+					return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "remove session worktree failed").WithDetails(map[string]any{
+						"sessionId": string(session.ID),
+					}).WithRetryable(true)
+				}
+			}
+			session.WorktreePath = ""
+			if err := s.saveSession(ctx, session); err != nil {
+				return DTO{}, err
 			}
 			if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
 				cleanupErr = apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "delete session worktree branch failed").WithDetails(map[string]any{
@@ -3291,7 +3360,6 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 					"worktreeBranch": worktreeBranchName(session.ID),
 				}).WithRetryable(true)
 			}
-			session.WorktreePath = ""
 		}
 	}
 	now := s.now()
@@ -3640,21 +3708,23 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 
 func toDTO(session domain.Session) DTO {
 	return DTO{
-		ID:               session.ID,
-		ProjectID:        session.ProjectID,
-		Requirement:      session.Requirement,
-		Mode:             session.Mode,
-		Status:           session.Status,
-		Priority:         normalizePriority(session.Priority),
-		BaseBranch:       session.BaseBranch,
-		WorktreeBranch:   worktreeBranchForSession(session),
-		WorktreePath:     session.WorktreePath,
-		CodexSessionID:   session.CodexSessionID,
-		Config:           session.Config,
-		AvailableActions: availableActions(session),
-		LastRunAt:        session.LastRunAt,
-		CreatedAt:        session.CreatedAt,
-		UpdatedAt:        session.UpdatedAt,
+		ID:                 session.ID,
+		ProjectID:          session.ProjectID,
+		Requirement:        session.Requirement,
+		Mode:               session.Mode,
+		Status:             session.Status,
+		Priority:           normalizePriority(session.Priority),
+		BaseBranch:         session.BaseBranch,
+		WorktreeBranch:     worktreeBranchForSession(session),
+		WorktreePath:       session.WorktreePath,
+		WorktreeBaseCommit: session.WorktreeBaseCommit,
+		WorktreeHeadCommit: session.WorktreeHeadCommit,
+		CodexSessionID:     session.CodexSessionID,
+		Config:             session.Config,
+		AvailableActions:   availableActions(session),
+		LastRunAt:          session.LastRunAt,
+		CreatedAt:          session.CreatedAt,
+		UpdatedAt:          session.UpdatedAt,
 	}
 }
 

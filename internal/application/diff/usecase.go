@@ -175,6 +175,56 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 	}
 
 	if strings.TrimSpace(sess.WorktreePath) == "" {
+		if strings.TrimSpace(sess.WorktreeBaseCommit) != "" && strings.TrimSpace(sess.WorktreeHeadCommit) != "" {
+			diffInput := storedWorktreeDiffInput(project, sess)
+			files, err := s.diff.ChangedFiles(ctx, diffInput)
+			if err != nil {
+				return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list stored worktree range files failed").WithRetryable(true)
+			}
+			dto = applyDiffFiles(dto, files)
+			if len(files) == 0 || (!input.IncludeFileDiff && !input.IncludeAllDiff) {
+				return dto, nil
+			}
+			switch mode {
+			case modeAll:
+				if !input.IncludeAllDiff {
+					return dto, nil
+				}
+				dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
+				for _, file := range dto.Files.Items {
+					fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
+						DiffInput:     diffInput,
+						FilePath:      file.Path,
+						ContextBefore: input.ContextBefore,
+						ContextAfter:  input.ContextAfter,
+					})
+					if err != nil {
+						return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read stored worktree range file diff failed").WithDetails(map[string]any{"filePath": file.Path}).WithRetryable(true)
+					}
+					dto.AllDiff = append(dto.AllDiff, fileDiff)
+				}
+			default:
+				if !input.IncludeFileDiff {
+					return dto, nil
+				}
+				filePath := dto.FilePath
+				if filePath == "" || !hasFile(files, filePath) {
+					filePath = files[0].Path
+				}
+				fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
+					DiffInput:     diffInput,
+					FilePath:      filePath,
+					ContextBefore: input.ContextBefore,
+					ContextAfter:  input.ContextAfter,
+				})
+				if err != nil {
+					return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read stored worktree range file diff failed").WithDetails(map[string]any{"filePath": filePath}).WithRetryable(true)
+				}
+				dto.FilePath = filePath
+				dto.FileDiff = &fileDiff
+			}
+			return dto, nil
+		}
 		return dto, nil
 	}
 
@@ -395,6 +445,14 @@ func mergeRecordDiffInput(project projectdomain.Project, mergeRecord session.Mer
 		WorktreePath: strings.TrimSpace(project.Path.Value),
 		BaseRef:      strings.TrimSpace(mergeRecord.BaseCommit),
 		HeadRef:      strings.TrimSpace(mergeHeadRef(mergeRecord)),
+	}
+}
+
+func storedWorktreeDiffInput(project projectdomain.Project, sess session.Session) gitdiff.DiffInput {
+	return gitdiff.DiffInput{
+		WorktreePath: strings.TrimSpace(project.Path.Value),
+		BaseRef:      strings.TrimSpace(sess.WorktreeBaseCommit),
+		HeadRef:      strings.TrimSpace(sess.WorktreeHeadCommit),
 	}
 }
 

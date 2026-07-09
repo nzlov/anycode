@@ -5994,6 +5994,8 @@ type SessionMutation struct {
 	close_reason                  *string
 	base_branch                   *string
 	worktree_path                 *string
+	worktree_base_commit          *string
+	worktree_head_commit          *string
 	codex_session_id              *string
 	codex_model                   *string
 	reasoning_effort              *string
@@ -6419,6 +6421,78 @@ func (m *SessionMutation) OldWorktreePath(ctx context.Context) (v string, err er
 // ResetWorktreePath resets all changes to the "worktree_path" field.
 func (m *SessionMutation) ResetWorktreePath() {
 	m.worktree_path = nil
+}
+
+// SetWorktreeBaseCommit sets the "worktree_base_commit" field.
+func (m *SessionMutation) SetWorktreeBaseCommit(s string) {
+	m.worktree_base_commit = &s
+}
+
+// WorktreeBaseCommit returns the value of the "worktree_base_commit" field in the mutation.
+func (m *SessionMutation) WorktreeBaseCommit() (r string, exists bool) {
+	v := m.worktree_base_commit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeBaseCommit returns the old "worktree_base_commit" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeBaseCommit(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeBaseCommit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeBaseCommit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeBaseCommit: %w", err)
+	}
+	return oldValue.WorktreeBaseCommit, nil
+}
+
+// ResetWorktreeBaseCommit resets all changes to the "worktree_base_commit" field.
+func (m *SessionMutation) ResetWorktreeBaseCommit() {
+	m.worktree_base_commit = nil
+}
+
+// SetWorktreeHeadCommit sets the "worktree_head_commit" field.
+func (m *SessionMutation) SetWorktreeHeadCommit(s string) {
+	m.worktree_head_commit = &s
+}
+
+// WorktreeHeadCommit returns the value of the "worktree_head_commit" field in the mutation.
+func (m *SessionMutation) WorktreeHeadCommit() (r string, exists bool) {
+	v := m.worktree_head_commit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeHeadCommit returns the old "worktree_head_commit" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeHeadCommit(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeHeadCommit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeHeadCommit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeHeadCommit: %w", err)
+	}
+	return oldValue.WorktreeHeadCommit, nil
+}
+
+// ResetWorktreeHeadCommit resets all changes to the "worktree_head_commit" field.
+func (m *SessionMutation) ResetWorktreeHeadCommit() {
+	m.worktree_head_commit = nil
 }
 
 // SetCodexSessionID sets the "codex_session_id" field.
@@ -7083,7 +7157,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 26)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -7107,6 +7181,12 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.worktree_path != nil {
 		fields = append(fields, entsession.FieldWorktreePath)
+	}
+	if m.worktree_base_commit != nil {
+		fields = append(fields, entsession.FieldWorktreeBaseCommit)
+	}
+	if m.worktree_head_commit != nil {
+		fields = append(fields, entsession.FieldWorktreeHeadCommit)
 	}
 	if m.codex_session_id != nil {
 		fields = append(fields, entsession.FieldCodexSessionID)
@@ -7180,6 +7260,10 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.BaseBranch()
 	case entsession.FieldWorktreePath:
 		return m.WorktreePath()
+	case entsession.FieldWorktreeBaseCommit:
+		return m.WorktreeBaseCommit()
+	case entsession.FieldWorktreeHeadCommit:
+		return m.WorktreeHeadCommit()
 	case entsession.FieldCodexSessionID:
 		return m.CodexSessionID()
 	case entsession.FieldCodexModel:
@@ -7237,6 +7321,10 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldBaseBranch(ctx)
 	case entsession.FieldWorktreePath:
 		return m.OldWorktreePath(ctx)
+	case entsession.FieldWorktreeBaseCommit:
+		return m.OldWorktreeBaseCommit(ctx)
+	case entsession.FieldWorktreeHeadCommit:
+		return m.OldWorktreeHeadCommit(ctx)
 	case entsession.FieldCodexSessionID:
 		return m.OldCodexSessionID(ctx)
 	case entsession.FieldCodexModel:
@@ -7333,6 +7421,20 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetWorktreePath(v)
+		return nil
+	case entsession.FieldWorktreeBaseCommit:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeBaseCommit(v)
+		return nil
+	case entsession.FieldWorktreeHeadCommit:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeHeadCommit(v)
 		return nil
 	case entsession.FieldCodexSessionID:
 		v, ok := value.(string)
@@ -7551,6 +7653,12 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldWorktreePath:
 		m.ResetWorktreePath()
+		return nil
+	case entsession.FieldWorktreeBaseCommit:
+		m.ResetWorktreeBaseCommit()
+		return nil
+	case entsession.FieldWorktreeHeadCommit:
+		m.ResetWorktreeHeadCommit()
 		return nil
 	case entsession.FieldCodexSessionID:
 		m.ResetCodexSessionID()

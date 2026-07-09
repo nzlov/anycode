@@ -50,6 +50,8 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetPriority(string(normalizePriority(s.Priority))).
 			SetBaseBranch(s.BaseBranch).
 			SetWorktreePath(s.WorktreePath).
+			SetWorktreeBaseCommit(s.WorktreeBaseCommit).
+			SetWorktreeHeadCommit(s.WorktreeHeadCommit).
 			SetCodexSessionID(s.CodexSessionID).
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
@@ -107,6 +109,8 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetPriority(string(normalizePriority(s.Priority))).
 		SetBaseBranch(s.BaseBranch).
 		SetWorktreePath(s.WorktreePath).
+		SetWorktreeBaseCommit(s.WorktreeBaseCommit).
+		SetWorktreeHeadCommit(s.WorktreeHeadCommit).
 		SetCodexSessionID(s.CodexSessionID).
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
@@ -449,16 +453,18 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		queueNodeRunID = &v
 	}
 	return domainsession.Session{
-		ID:             domainsession.ID(row.ID),
-		ProjectID:      domainsession.ProjectID(row.ProjectID),
-		Requirement:    row.Requirement,
-		Mode:           domainsession.Mode(row.Mode),
-		Status:         domainsession.Status(row.Status),
-		Priority:       normalizePriority(domainsession.Priority(row.Priority)),
-		CloseReason:    closeReason,
-		BaseBranch:     row.BaseBranch,
-		WorktreePath:   row.WorktreePath,
-		CodexSessionID: row.CodexSessionID,
+		ID:                 domainsession.ID(row.ID),
+		ProjectID:          domainsession.ProjectID(row.ProjectID),
+		Requirement:        row.Requirement,
+		Mode:               domainsession.Mode(row.Mode),
+		Status:             domainsession.Status(row.Status),
+		Priority:           normalizePriority(domainsession.Priority(row.Priority)),
+		CloseReason:        closeReason,
+		BaseBranch:         row.BaseBranch,
+		WorktreePath:       row.WorktreePath,
+		WorktreeBaseCommit: row.WorktreeBaseCommit,
+		WorktreeHeadCommit: row.WorktreeHeadCommit,
+		CodexSessionID:     row.CodexSessionID,
 		Config: domainsession.Config{
 			CodexModel:      row.CodexModel,
 			ReasoningEffort: row.ReasoningEffort,

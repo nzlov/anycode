@@ -24,6 +24,8 @@ func (Session) Fields() []ent.Field {
 		field.String("close_reason").Optional().Nillable(),
 		field.String("base_branch").Default(""),
 		field.String("worktree_path").Default(""),
+		field.String("worktree_base_commit").Default(""),
+		field.String("worktree_head_commit").Default(""),
 		field.String("codex_session_id").Default(""),
 		field.String("codex_model").Default(""),
 		field.String("reasoning_effort").Default(""),
