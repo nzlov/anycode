@@ -1073,7 +1073,7 @@ func stringValue(payload map[string]any, keys ...string) string {
 }
 
 func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
-	args := []string{"exec", "--skip-git-repo-check"}
+	args := []string{"exec", "--json", "--skip-git-repo-check"}
 	if input.Workdir != "" {
 		args = append(args, "-C", input.Workdir)
 	}
@@ -1091,7 +1091,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 }
 
 func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
-	args := []string{"exec", "resume", "--skip-git-repo-check"}
+	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
 	args = c.appendMCPArgs(args, input.SessionID)
 	args = appendResumeConfigArgs(args, input.Model, input.ReasoningEffort)
 	if input.CodexSessionID != "" {
