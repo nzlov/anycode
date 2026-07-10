@@ -1,5 +1,5 @@
 <template>
-  <div ref="terminalElement" class="session-terminal-output" />
+  <div ref="terminalElement" class="session-terminal-output" @pointerup="blurTerminal" />
 </template>
 
 <script setup lang="ts">
@@ -28,6 +28,10 @@ function renderTerminal() {
   terminal.write(prepareTerminalOutput(props.body));
 }
 
+function blurTerminal() {
+  terminal?.blur();
+}
+
 onMounted(() => {
   if (!terminalElement.value) return;
   terminal = new Terminal({
@@ -35,6 +39,7 @@ onMounted(() => {
     rows: terminalRows(props.body),
     convertEol: true,
     cursorBlink: false,
+    cursorInactiveStyle: 'none',
     disableStdin: true,
     fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
     fontSize: 12,
@@ -64,6 +69,7 @@ onMounted(() => {
   });
   terminal.open(terminalElement.value);
   renderTerminal();
+  terminal.blur();
 });
 
 watch(() => props.body, renderTerminal, { flush: 'post' });
@@ -83,6 +89,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);
   background: var(--ac-surface);
+  cursor: text;
+  user-select: text;
 }
 
 .session-terminal-output :deep(.xterm) {

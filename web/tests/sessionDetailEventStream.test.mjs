@@ -239,7 +239,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
 });
 
-test('exec events render raw input and output in separate terminals', () => {
+test('exec events render selectable command code separately from terminal output', () => {
   const componentSource = readFileSync(
     new URL('../src/components/SessionToolEvent.vue', import.meta.url),
     'utf8',
@@ -249,14 +249,19 @@ test('exec events render raw input and output in separate terminals', () => {
     'utf8',
   );
 
-  assert.match(componentSource, /<SessionTerminalOutput :body="event\.execInput \?\? ''"/);
-  assert.match(componentSource, /<SessionTerminalOutput :body="event\.execOutput \?\? ''"/);
+  assert.match(componentSource, /<pre[^>]*class="tool-event__command"[^>]*>/);
+  assert.match(componentSource, /<code>\{\{ event\.execInput \}\}<\/code>/);
+  assert.doesNotMatch(componentSource, /<SessionTerminalOutput :body="event\.execInput/);
+  assert.match(componentSource, /<SessionTerminalOutput :body="event\.execOutput"/);
   assert.match(
     componentSource,
     /<SessionTerminalOutput v-else-if="event\.body" :body="event\.body"/,
   );
   assert.match(terminalSource, /renderTerminal,\s*\{ flush: 'post' \}/);
   assert.doesNotMatch(terminalSource, /nextTick\(renderTerminal\)/);
+  assert.match(terminalSource, /cursorInactiveStyle: 'none'/);
+  assert.match(terminalSource, /@pointerup="blurTerminal"/);
+  assert.match(terminalSource, /user-select:\s*text/);
 });
 
 test('older event loading crosses pages that add no visible height', () => {

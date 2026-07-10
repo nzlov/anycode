@@ -13,13 +13,13 @@
     </button>
     <template v-if="expanded">
       <div v-if="isExec" class="tool-event__exec">
-        <section class="tool-event__terminal">
+        <section v-if="event.execInput" class="tool-event__section">
           <div class="tool-event__terminal-label">输入</div>
-          <SessionTerminalOutput :body="event.execInput ?? ''" />
+          <pre class="tool-event__command"><code>{{ event.execInput }}</code></pre>
         </section>
-        <section class="tool-event__terminal">
+        <section v-if="event.execOutput" class="tool-event__section">
           <div class="tool-event__terminal-label">输出</div>
-          <SessionTerminalOutput :body="event.execOutput ?? ''" />
+          <SessionTerminalOutput :body="event.execOutput" />
         </section>
       </div>
       <SessionTerminalOutput v-else-if="event.body" :body="event.body" />
@@ -53,7 +53,7 @@ const displayTitle = computed(() => {
   margin-top: 6px;
 }
 
-.tool-event__terminal {
+.tool-event__section {
   min-width: 0;
 }
 
@@ -61,6 +61,23 @@ const displayTitle = computed(() => {
   color: var(--ac-text-muted);
   font-size: 12px;
   font-weight: 600;
+}
+
+.tool-event__command {
+  margin: 4px 0 0;
+  overflow-x: auto;
+  padding: 9px 10px;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
+  color: var(--ac-text);
+  cursor: text;
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+  user-select: text;
+  white-space: pre;
 }
 
 .tool-event__header {
