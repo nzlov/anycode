@@ -31,7 +31,7 @@
           </div>
         </q-card>
 
-        <div class="detail-composer">
+        <div v-if="!isClosed" class="detail-composer">
           <q-banner v-if="detailError" rounded class="detail-error-banner">
             <template #avatar>
               <q-icon name="error_outline" />
@@ -56,12 +56,6 @@
               @submit="submitAnswers"
             />
           </q-card>
-          <q-banner v-else-if="isClosed" rounded class="detail-closed-banner">
-            <template #avatar>
-              <q-icon name="lock" />
-            </template>
-            卡片已关闭，工作树与分支已清理，不能再追加描述或运行。
-          </q-banner>
           <CodexPromptComposer
             v-else
             v-model:prompt="appendText"
@@ -1027,12 +1021,6 @@ async function scrollEventsToBottom() {
   padding: 8px;
   color: var(--ac-text-muted);
   font-size: 12px;
-}
-
-.detail-closed-banner {
-  border: 1px solid var(--ac-border);
-  color: var(--ac-text-muted);
-  background: color-mix(in srgb, var(--ac-surface-muted) 82%, transparent);
 }
 
 .detail-error-banner {
