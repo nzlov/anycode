@@ -76,55 +76,95 @@ func (r *QuestionRepository) ListPendingBySession(ctx context.Context, sessionID
 	return batches, nil
 }
 
-func (r *QuestionRepository) SubmitAnswers(ctx context.Context, id question.BatchID, answers []question.Answer) error {
-	tx, err := r.client.Tx(ctx)
+func (r *QuestionRepository) SubmitAnswers(ctx context.Context, id question.BatchID, answers []question.Answer) (question.Batch, bool, error) {
+	row, err := r.client.QuestionBatch.Get(ctx, string(id))
 	if err != nil {
-		return fmt.Errorf("begin submit question answers: %w", err)
-	}
-	row, err := tx.QuestionBatch.Get(ctx, string(id))
-	if err != nil {
-		return rollbackQuestionTx(tx, fmt.Errorf("find question batch for submit: %w", err))
+		return question.Batch{}, false, fmt.Errorf("find question batch for submit: %w", err)
 	}
 	batch, err := toDomainQuestionBatch(row)
 	if err != nil {
-		return rollbackQuestionTx(tx, err)
+		return question.Batch{}, false, err
+	}
+	if batch.Status != question.BatchPending {
+		return batch, false, nil
 	}
 	applyAnswersToQuestions(&batch, answers)
 	questions, err := questionsToJSON(batch.Questions)
 	if err != nil {
-		return rollbackQuestionTx(tx, fmt.Errorf("encode answered questions: %w", err))
+		return question.Batch{}, false, fmt.Errorf("encode answered questions: %w", err)
 	}
 	answerJSON, err := answersToJSON(answers)
 	if err != nil {
-		return rollbackQuestionTx(tx, fmt.Errorf("encode question answers: %w", err))
+		return question.Batch{}, false, fmt.Errorf("encode question answers: %w", err)
 	}
 	answeredAt := time.Now()
-	if err := tx.QuestionBatch.UpdateOneID(string(id)).
+	updated, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.StatusEQ(string(question.BatchPending)),
+		).
 		SetStatus(string(question.BatchAnswered)).
 		SetQuestions(questions).
 		SetAnswers(answerJSON).
 		SetAnsweredAt(answeredAt).
-		Exec(ctx); err != nil {
-		return rollbackQuestionTx(tx, fmt.Errorf("submit question answers: %w", err))
+		Save(ctx)
+	if err != nil {
+		return question.Batch{}, false, fmt.Errorf("submit question answers: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit question answers: %w", err)
+	if updated == 0 {
+		current, err := r.FindBatch(ctx, id)
+		if err != nil {
+			return question.Batch{}, false, err
+		}
+		return current, false, nil
 	}
-	return nil
+	batch.Status = question.BatchAnswered
+	batch.AnsweredAt = &answeredAt
+	return batch, true, nil
 }
 
-func (r *QuestionRepository) CancelPendingBySession(ctx context.Context, sessionID question.SessionID, reason string) error {
-	if _, err := r.client.QuestionBatch.Update().
+func (r *QuestionRepository) CancelPendingBySession(ctx context.Context, sessionID question.SessionID, reason string) ([]question.Batch, error) {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin cancel question batches: %w", err)
+	}
+	rows, err := tx.QuestionBatch.Query().
 		Where(
 			entquestionbatch.SessionIDEQ(string(sessionID)),
 			entquestionbatch.StatusEQ(string(question.BatchPending)),
 		).
-		SetStatus(string(question.BatchCancelled)).
-		SetCancelReason(reason).
-		Save(ctx); err != nil {
-		return fmt.Errorf("cancel pending question batches: %w", err)
+		Order(ent.Asc(entquestionbatch.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, rollbackQuestionTx(tx, fmt.Errorf("list pending question batches for cancel: %w", err))
 	}
-	return nil
+	cancelled := make([]question.Batch, 0, len(rows))
+	for _, row := range rows {
+		updated, err := tx.QuestionBatch.Update().
+			Where(
+				entquestionbatch.IDEQ(row.ID),
+				entquestionbatch.StatusEQ(string(question.BatchPending)),
+			).
+			SetStatus(string(question.BatchCancelled)).
+			SetCancelReason(reason).
+			Save(ctx)
+		if err != nil {
+			return nil, rollbackQuestionTx(tx, fmt.Errorf("cancel question batch %s: %w", row.ID, err))
+		}
+		if updated == 0 {
+			continue
+		}
+		batch, err := toDomainQuestionBatch(row)
+		if err != nil {
+			return nil, rollbackQuestionTx(tx, err)
+		}
+		batch.Status = question.BatchCancelled
+		cancelled = append(cancelled, batch)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit cancelled question batches: %w", err)
+	}
+	return cancelled, nil
 }
 
 func rollbackQuestionTx(tx *ent.Tx, err error) error {

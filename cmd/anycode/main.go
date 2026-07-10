@@ -119,7 +119,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	events := store.Events()
 	eventService := eventapp.New()
 	processes := store.Processes()
-	timelineService := timelineapp.New(events, eventService, store.Sessions(), codex, processes)
+	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes)
 	questionWaiter := questionapp.NewMemoryAnswerWaiter()
 	questionService := questionapp.New(store.Questions(), questionWaiter)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))

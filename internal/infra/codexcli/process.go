@@ -600,18 +600,42 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 	case "session_meta":
 		threadID := stringValue(payload, "session_id", "id")
 		events = []process.CodexEvent{{
-			EventID: eventID(record.Timestamp, "thread.started", threadID),
-			Type:    "thread.started",
-			Payload: map[string]any{
-				"thread_id":  threadID,
-				"session_id": threadID,
-			},
+			EventID:   eventID(record.Timestamp, "thread.started", threadID),
+			Type:      "thread.started",
+			Payload:   payload,
 			CreatedAt: createdAt,
 		}}
 	case "response_item":
 		events = codexEventsFromResponseItem(record.Timestamp, payload, createdAt)
 	case "event_msg":
 		events = codexEventsFromEventMessage(record.Timestamp, payload, createdAt, sessionCWD)
+	case "compacted":
+		events = []process.CodexEvent{{
+			Type:      "context.compacted",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "turn_context":
+		events = []process.CodexEvent{{
+			Type:      "turn.context",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "world_state":
+		events = []process.CodexEvent{{
+			Type:      "world.state",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	default:
+		if record.Type == "" {
+			return nil
+		}
+		events = []process.CodexEvent{{
+			Type:      record.Type,
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
 	}
 	for index := range events {
 		if events[index].EventID == "" {
@@ -644,103 +668,210 @@ func parseSessionTimestamp(value string) time.Time {
 }
 
 func codexEventsFromResponseItem(timestamp string, payload map[string]any, createdAt time.Time) []process.CodexEvent {
-	switch stringValue(payload, "type") {
+	itemType := stringValue(payload, "type")
+	switch itemType {
 	case "function_call":
 		callID := stringValue(payload, "call_id")
+		command := commandFromFunctionArguments(payload)
+		itemType := "tool_call"
+		if command != "" {
+			itemType = "command_execution"
+		}
+		normalized := normalizedItem(itemType, "in_progress")
+		normalized["qualifiedName"] = qualifiedToolName(payload)
+		normalized["input"] = stringOrJSON(payload["arguments"])
+		normalized["command"] = command
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.started", callID),
-			Type:    "item.started",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":      callID,
-					"type":    "command_execution",
-					"command": commandFromFunctionArguments(payload),
-					"status":  "in_progress",
-				},
-			},
+			EventID:   eventID(timestamp, "item.started", callID),
+			Type:      "item.started",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	case "function_call_output":
 		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("tool_result", "completed")
+		normalized["output"] = textFromValue(payload["output"])
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.completed", callID),
-			Type:    "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":                callID,
-					"type":              "command_execution",
-					"aggregated_output": stringValue(payload, "output"),
-					"status":            "completed",
-				},
-			},
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "custom_tool_call":
+		callID := stringValue(payload, "call_id")
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.started", callID),
+			Type:      "item.started",
+			Payload:   itemEventPayload(payload, normalizedItem("custom_tool_call", "in_progress")),
+			CreatedAt: createdAt,
+		}}
+	case "custom_tool_call_output":
+		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("custom_tool_call", "completed")
+		normalized["output"] = textFromValue(payload["output"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "tool_search_call":
+		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("tool_search", "in_progress")
+		normalized["qualifiedName"] = "tool_search"
+		normalized["input"] = stringOrJSON(payload["arguments"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.started", callID),
+			Type:      "item.started",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "tool_search_output":
+		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("tool_search", "completed")
+		normalized["qualifiedName"] = "tool_search"
+		normalized["output"] = jsonText(payload["tools"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	case "message":
-		if stringValue(payload, "role") == "assistant" {
-			id := stringValue(payload, "id")
-			return []process.CodexEvent{{
-				EventID: eventID(timestamp, "item.completed", id),
-				Type:    "item.completed",
-				Payload: map[string]any{
-					"item": map[string]any{
-						"id":                id,
-						"type":              "agent_message",
-						"aggregated_output": messageText(payload),
-						"status":            "completed",
-					},
-				},
-				CreatedAt: createdAt,
-			}}
+		itemType := ""
+		switch stringValue(payload, "role") {
+		case "user":
+			itemType = "user_message"
+		case "assistant":
+			itemType = "agent_message"
 		}
-	case "reasoning":
+		if itemType == "" {
+			return nil
+		}
+		id := stringValue(payload, "id")
+		normalized := normalizedItem(itemType, "completed")
+		normalized["output"] = messageText(payload)
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.completed", stringValue(payload, "id")),
-			Type:    "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":                stringValue(payload, "id"),
-					"type":              "reasoning",
-					"aggregated_output": reasoningText(payload),
-					"status":            "completed",
-				},
-			},
+			EventID:   eventID(timestamp, "item.completed", id),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "reasoning":
+		normalized := normalizedItem("reasoning", "completed")
+		normalized["output"] = reasoningText(payload)
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", stringValue(payload, "id")),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	}
-	return nil
+	if itemType == "" {
+		return nil
+	}
+	return []process.CodexEvent{{
+		Type:      itemType,
+		Payload:   payload,
+		CreatedAt: createdAt,
+	}}
+}
+
+func normalizedItem(itemType string, status string) map[string]any {
+	return map[string]any{"type": itemType, "status": status}
+}
+
+func itemEventPayload(item map[string]any, normalized map[string]any) map[string]any {
+	return map[string]any{"item": item, "normalizedItem": normalized}
+}
+
+func stringOrJSON(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return jsonText(value)
 }
 
 func codexEventsFromEventMessage(timestamp string, payload map[string]any, createdAt time.Time, sessionCWD string) []process.CodexEvent {
-	switch stringValue(payload, "type") {
+	eventType := stringValue(payload, "type")
+	switch eventType {
 	case "patch_apply_end":
 		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("file_change", stringValue(payload, "status"))
+		normalized["changes"] = fileChangesFromPatch(payload, sessionCWD)
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.completed", callID),
-			Type:    "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":      callID,
-					"type":    "file_change",
-					"changes": fileChangesFromPatch(payload, sessionCWD),
-					"status":  stringValue(payload, "status"),
-				},
-			},
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
-	case "agent_message":
+	case "user_message", "agent_message":
+		return nil
+	case "task_started":
 		return []process.CodexEvent{{
-			Type: "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"type":              "agent_message",
-					"aggregated_output": stringValue(payload, "message"),
-					"status":            "completed",
-				},
-			},
+			EventID:   eventID(timestamp, "task.started", stringValue(payload, "turn_id")),
+			Type:      "task.started",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "task_complete":
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "task.completed", stringValue(payload, "turn_id")),
+			Type:      "task.completed",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "token_count":
+		return []process.CodexEvent{{
+			Type:      "token_count",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "turn_aborted":
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "turn.aborted", stringValue(payload, "turn_id")),
+			Type:      "turn.aborted",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "context_compacted":
+		return []process.CodexEvent{{
+			Type:      "context.compacted",
+			Payload:   payload,
 			CreatedAt: createdAt,
 		}}
 	}
-	return nil
+	if eventType == "" {
+		return nil
+	}
+	return []process.CodexEvent{{
+		Type:      eventType,
+		Payload:   payload,
+		CreatedAt: createdAt,
+	}}
+}
+
+func qualifiedToolName(payload map[string]any) string {
+	name := stringValue(payload, "name")
+	namespace := stringValue(payload, "namespace")
+	if namespace == "" {
+		return name
+	}
+	if name == "" {
+		return namespace
+	}
+	return namespace + "." + name
+}
+
+func jsonText(value any) string {
+	if value == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func commandFromFunctionArguments(payload map[string]any) string {
@@ -849,7 +980,7 @@ func normalizePatchPath(path string, sessionCWD string) string {
 			return filepath.ToSlash(rel)
 		}
 	}
-	return filepath.Base(path)
+	return filepath.ToSlash(path)
 }
 
 func eventID(timestamp string, typ string, key string) string {

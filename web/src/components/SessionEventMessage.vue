@@ -1,33 +1,26 @@
 <template>
   <article class="session-event-message" :class="messageClass">
     <SessionFileChangeEvent v-if="isFileChange" :event="event" />
-    <template v-else-if="isTool">
-      <button
-        type="button"
-        class="event-tool__header"
-        :aria-expanded="expanded"
-        @click="expanded = !expanded"
-      >
-        <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
-        <q-icon name="terminal" size="16px" />
-        <span>{{ toolTitle }}</span>
-        <time>{{ event.time }}</time>
-      </button>
-      <SessionTerminalOutput v-if="expanded && event.body" :body="event.body" />
-    </template>
+    <SessionToolEvent v-else-if="isTool" :event="event" />
+    <SessionUsageEvent v-else-if="event.kind === 'usage'" :event="event" />
+    <SessionStatusEvent v-else-if="event.kind === 'status'" :event="event" />
 
     <template v-else>
       <div class="event-message__content">
-        <div
-          v-if="event.kind === 'assistant'"
-          class="event-message__body event-message__body--markdown"
-          v-html="assistantHtml"
-        />
-        <div v-else-if="isConversation" class="event-message__body">
-          {{ event.body || event.title }}
-        </div>
-        <div v-else class="event-status__body">
-          {{ event.body || event.title || '已记录事件' }}
+        <div class="event-message__main">
+          <div
+            v-if="event.kind === 'assistant'"
+            class="event-message__body event-message__body--markdown"
+            v-html="assistantHtml"
+          />
+          <div v-else-if="isConversation" class="event-message__body">
+            {{ event.body || event.title }}
+          </div>
+          <SessionEventImages
+            :event-id="event.id"
+            :images="event.images ?? []"
+            label="用户输入图片"
+          />
         </div>
         <time v-if="event.time" class="event-message__time">{{ event.time }}</time>
       </div>
@@ -36,38 +29,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 import { renderMarkdown } from '@/services/sessionEventPresentation';
+import SessionEventImages from '@/components/SessionEventImages.vue';
 import SessionFileChangeEvent from '@/components/SessionFileChangeEvent.vue';
-import SessionTerminalOutput from '@/components/SessionTerminalOutput.vue';
-
-export interface SessionFileChangeEntry {
-  kind: string;
-  path: string;
-  unifiedDiff?: string;
-  movePath?: string;
-}
-
-export interface SessionEventMessageEntry {
-  id: string;
-  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question' | 'user' | 'file_change';
-  title: string;
-  body: string;
-  createdAt: string;
-  time: string;
-  rawType?: string;
-  command?: string;
-  toolCallId?: string;
-  fileChangeId?: string;
-  fileChanges?: SessionFileChangeEntry[];
-}
+import SessionStatusEvent from '@/components/SessionStatusEvent.vue';
+import SessionToolEvent from '@/components/SessionToolEvent.vue';
+import SessionUsageEvent from '@/components/SessionUsageEvent.vue';
+import type { SessionEvent } from '@/services/sessions';
 
 const props = defineProps<{
-  event: SessionEventMessageEntry;
+  event: SessionEvent;
 }>();
 
-const expanded = ref(false);
 const isTool = computed(() => props.event.kind === 'tool');
 const isFileChange = computed(() => props.event.kind === 'file_change');
 const isConversation = computed(() =>
@@ -80,10 +55,6 @@ const messageClass = computed(() => ({
   'session-event-message--status': props.event.kind === 'status',
 }));
 const assistantHtml = computed(() => renderMarkdown(props.event.body || props.event.title));
-const toolTitle = computed(() => {
-  if (props.event.title.startsWith('Shell ')) return props.event.title;
-  return `Shell ${props.event.title}`;
-});
 </script>
 
 <style scoped>
@@ -108,8 +79,7 @@ const toolTitle = computed(() => {
   gap: 12px;
 }
 
-.event-message__body,
-.event-status__body {
+.event-message__body {
   max-width: 100%;
   color: var(--ac-text);
   font-size: 14px;
@@ -117,6 +87,10 @@ const toolTitle = computed(() => {
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.event-message__main {
+  min-width: 0;
 }
 
 .event-message__body--markdown :deep(p),
@@ -160,69 +134,15 @@ const toolTitle = computed(() => {
   background: transparent;
 }
 
-.event-status__body {
-  color: var(--ac-text-muted);
-  font-size: 13px;
-}
-
 .event-message__time {
   color: var(--ac-text-muted);
   font-size: 12px;
   line-height: 1.4;
 }
 
-.event-tool__header {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface-muted);
-  color: var(--ac-text);
-  cursor: pointer;
-  font-family: 'Fira Code', 'JetBrains Mono', monospace;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
-  text-align: left;
-}
-
-.event-tool__header span {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  word-break: break-word;
-}
-
-.event-tool__header time {
-  flex: 0 0 auto;
-  color: var(--ac-text-muted);
-  font-family: Roboto, Arial, sans-serif;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.event-tool__header:hover,
-.event-tool__header:focus-visible {
-  border-color: color-mix(in srgb, var(--q-primary) 45%, var(--ac-border));
-  outline: none;
-}
-
 @media (max-width: 699px) {
   .event-message__content {
     gap: 8px;
-  }
-
-  .event-tool__header {
-    align-items: flex-start;
-  }
-
-  .event-tool__header span {
-    white-space: normal;
   }
 }
 </style>

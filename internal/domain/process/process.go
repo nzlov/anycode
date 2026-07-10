@@ -43,6 +43,13 @@ type CodexEvent struct {
 	CreatedAt time.Time
 }
 
+func CanonicalCodexEventID(codexSessionID string, eventID string) string {
+	if codexSessionID == "" || eventID == "" {
+		return ""
+	}
+	return "codex:" + codexSessionID + ":" + eventID
+}
+
 type CodexTranscriptInput struct {
 	CodexSessionID string
 	Workdir        string

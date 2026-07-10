@@ -2794,8 +2794,12 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.RunID, event processdomain.CodexEvent) (eventdomain.DomainEvent, error) {
 	var id domain.ID
 	var err error
-	if event.EventID != "" {
-		id = domain.ID("codex:" + event.EventID)
+	codexSessionID := strings.TrimSpace(session.CodexSessionID)
+	if codexSessionID == "" {
+		codexSessionID = strings.TrimSpace(codexSessionIDFromEvent(event))
+	}
+	if canonicalID := processdomain.CanonicalCodexEventID(codexSessionID, event.EventID); canonicalID != "" {
+		id = domain.ID(canonicalID)
 	} else {
 		id, err = s.generateID()
 		if err != nil {
@@ -2803,7 +2807,7 @@ func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.R
 		}
 	}
 	sessionID := eventdomain.SessionID(session.ID)
-	payload := codexSessionEventPayload(event)
+	payload := codexSessionEventPayload(codexSessionID, event)
 	createdAt := event.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = s.now()
@@ -2821,9 +2825,10 @@ func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.R
 	}, nil
 }
 
-func codexSessionEventPayload(event processdomain.CodexEvent) map[string]any {
+func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEvent) map[string]any {
 	payload := processEventPayload(event)
 	payload["codexType"] = event.Type
+	payload["codexSessionId"] = codexSessionID
 	if event.EventID != "" {
 		payload["codexEventId"] = event.EventID
 	}

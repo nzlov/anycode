@@ -1,7 +1,3 @@
-export function eventAfterId(events) {
-  return events.at(-1)?.id ?? '';
-}
-
 export function appendLiveEvent(events, event) {
   if (events.some((item) => item.id === event.id)) return events;
   return [...events, event];
@@ -14,13 +10,36 @@ export function prependOlderEvents(events, olderEvents) {
   return [...older, ...events];
 }
 
-export function shouldRefreshSessionForEvent(event, liveOnly, replayStateCanRefresh = false) {
-  if (!liveOnly && !replayStateCanRefresh) return false;
-  const type = event?.rawType ?? '';
-  return type.startsWith('session.') || type.startsWith('workflow.');
+export function mergeSnapshotEvents(snapshotEvents, currentEvents, bufferedEvents) {
+  const merged = new Map();
+  for (const event of [...snapshotEvents, ...currentEvents, ...bufferedEvents]) {
+    merged.set(event.id, event);
+  }
+  return [...merged.values()];
 }
 
-export function isEventAtOrAfter(event, timestamp) {
-  const createdAt = Date.parse(event?.createdAt ?? '');
-  return Number.isFinite(createdAt) && createdAt >= timestamp;
+export function shouldReconnectAfterClose(acknowledged, accessKeyValid) {
+  return acknowledged || accessKeyValid !== false;
+}
+
+export function createLatestRequestTracker() {
+  let generation = 0;
+  return {
+    next() {
+      generation += 1;
+      return generation;
+    },
+    isCurrent(requestGeneration) {
+      return requestGeneration === generation;
+    },
+    invalidate() {
+      generation += 1;
+    },
+  };
+}
+
+export function sortSessionEvents(events) {
+  return [...events].sort(
+    (left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt),
+  );
 }

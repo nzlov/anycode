@@ -382,10 +382,15 @@ type SessionEventPage struct {
 	PageInfo *PageInfo       `json:"pageInfo"`
 }
 
-type SessionEventsInput struct {
-	SessionID    *string `json:"sessionId,omitempty"`
-	ProjectID    *string `json:"projectId,omitempty"`
-	AfterEventID *string `json:"afterEventId,omitempty"`
+type SessionEventStreamItem struct {
+	Ready bool          `json:"ready"`
+	Event *SessionEvent `json:"event,omitempty"`
+}
+
+type SessionStateStreamItem struct {
+	Ready         bool           `json:"ready"`
+	Session       *SessionDetail `json:"session,omitempty"`
+	QuestionBatch *QuestionBatch `json:"questionBatch,omitempty"`
 }
 
 type SetDefaultWorkflowInput struct {

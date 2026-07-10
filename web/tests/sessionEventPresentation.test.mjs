@@ -4,12 +4,42 @@ import { test } from 'node:test';
 
 import {
   codexCommandResultBody,
-  mergeShellEvents,
+  codexMessageImages,
+  compactEventPayload,
+  mergeSessionEvents,
   prepareTerminalOutput,
   renderMarkdown,
 } from '../src/services/sessionEventPresentation.js';
 
-test('mergeShellEvents keeps command and result in one tool entry with complete command text', () => {
+test('codexMessageImages preserves response_item user images', () => {
+  assert.deepEqual(
+    codexMessageImages({
+      content: [
+        { type: 'input_text', text: 'inspect this' },
+        { type: 'input_image', image_url: 'data:image/png;base64,AAAA', detail: 'high' },
+      ],
+    }),
+    [{ src: 'data:image/png;base64,AAAA', detail: 'high' }],
+  );
+  assert.deepEqual(
+    codexMessageImages({
+      output: [
+        { type: 'input_text', text: 'captured' },
+        { type: 'input_image', image_url: 'data:image/jpeg;base64,BBBB', detail: 'low' },
+      ],
+    }),
+    [{ src: 'data:image/jpeg;base64,BBBB', detail: 'low' }],
+  );
+});
+
+test('compactEventPayload preserves nested values from unknown transcript records', () => {
+  assert.equal(
+    compactEventPayload({ value: 'top-level', details: { nested: true }, codexEventId: 'ignored' }),
+    'value: top-level · details: {"nested":true}',
+  );
+});
+
+test('mergeSessionEvents keeps command and result in one tool entry with complete command text', () => {
   const events = [
     {
       id: 'run-1',
@@ -31,14 +61,75 @@ test('mergeShellEvents keeps command and result in one tool entry with complete 
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
-  assert.equal(merged[0].body, 'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue');
+  assert.equal(
+    merged[0].body,
+    'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue',
+  );
 });
 
-test('mergeShellEvents pairs command and result across non-tool status events', () => {
+test('mergeSessionEvents combines generic tool input and output by tool call id', () => {
+  const merged = mergeSessionEvents([
+    {
+      id: 'tool-start',
+      kind: 'tool',
+      title: 'mcp__playwright.browser_resize',
+      body: '{"width":1440,"height":1000}',
+      toolCallId: 'call-1',
+      toolPhase: 'started',
+      createdAt: '2026-07-09T08:32:15Z',
+      time: '08:32',
+    },
+    {
+      id: 'tool-result',
+      kind: 'tool',
+      title: '工具结果',
+      body: 'browser unavailable',
+      toolCallId: 'call-1',
+      toolPhase: 'completed',
+      createdAt: '2026-07-09T08:32:19Z',
+      time: '08:32',
+    },
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].title, 'mcp__playwright.browser_resize');
+  assert.equal(merged[0].body, '输入\n{"width":1440,"height":1000}\n\n输出\nbrowser unavailable');
+});
+
+test('mergeSessionEvents keeps structured tool result images', () => {
+  const merged = mergeSessionEvents([
+    {
+      id: 'tool-start',
+      kind: 'tool',
+      title: 'image tool',
+      body: 'capture screenshot',
+      toolCallId: 'call-image',
+      toolPhase: 'started',
+      createdAt: '2026-07-10T01:00:00Z',
+      time: '01:00',
+    },
+    {
+      id: 'tool-result',
+      kind: 'tool',
+      title: 'image tool',
+      body: 'captured',
+      images: [{ src: 'data:image/png;base64,AAAA', detail: 'high' }],
+      toolCallId: 'call-image',
+      toolPhase: 'completed',
+      createdAt: '2026-07-10T01:00:01Z',
+      time: '01:00',
+    },
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0].images, [{ src: 'data:image/png;base64,AAAA', detail: 'high' }]);
+});
+
+test('mergeSessionEvents pairs command and result across non-tool status events', () => {
   const events = [
     {
       id: 'run-1',
@@ -69,7 +160,7 @@ test('mergeShellEvents pairs command and result across non-tool status events', 
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-1');
@@ -78,26 +169,26 @@ test('mergeShellEvents pairs command and result across non-tool status events', 
   assert.equal(merged[1].id, 'status-1');
 });
 
-test('mergeShellEvents normalizes shell wrapper commands with escaped spaces', () => {
+test('mergeSessionEvents normalizes shell wrapper commands with escaped spaces', () => {
   const events = [
     {
       id: 'run-1',
       kind: 'tool',
       title: '执行命令',
-      body: "/bin/bash -lc 'git diff -- \"docs/plan/a file.md\"'",
+      body: '/bin/bash -lc \'git diff -- "docs/plan/a file.md"\'',
       createdAt: '2026-07-07T01:00:00Z',
       time: '01:00',
       rawType: 'process.codex_event',
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged[0].title, 'Shell git diff -- "docs/plan/a file.md"');
   assert.equal(merged[0].body, '');
 });
 
-test('mergeShellEvents does not pair a command with a mismatched command result', () => {
+test('mergeSessionEvents does not pair a command with a mismatched command result', () => {
   const events = [
     {
       id: 'run-a',
@@ -121,7 +212,7 @@ test('mergeShellEvents does not pair a command with a mismatched command result'
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].title, 'Shell npm test');
@@ -130,7 +221,7 @@ test('mergeShellEvents does not pair a command with a mismatched command result'
   assert.equal(merged[1].body, 'built');
 });
 
-test('mergeShellEvents pairs interleaved shell commands with their own results', () => {
+test('mergeSessionEvents pairs interleaved shell commands with their own results', () => {
   const events = [
     {
       id: 'run-a',
@@ -174,7 +265,7 @@ test('mergeShellEvents pairs interleaved shell commands with their own results',
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-a');
@@ -185,7 +276,7 @@ test('mergeShellEvents pairs interleaved shell commands with their own results',
   assert.equal(merged[1].body, 'built');
 });
 
-test('mergeShellEvents pairs same command concurrency by tool call id', () => {
+test('mergeSessionEvents pairs same command concurrency by tool call id', () => {
   const events = [
     {
       id: 'run-a',
@@ -233,7 +324,7 @@ test('mergeShellEvents pairs same command concurrency by tool call id', () => {
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-a');
@@ -242,7 +333,7 @@ test('mergeShellEvents pairs same command concurrency by tool call id', () => {
   assert.equal(merged[1].body, 'second');
 });
 
-test('mergeShellEvents does not fall back to command text when result tool call id is unknown', () => {
+test('mergeSessionEvents does not fall back to command text when result tool call id is unknown', () => {
   const events = [
     {
       id: 'run-a',
@@ -268,7 +359,7 @@ test('mergeShellEvents does not fall back to command text when result tool call 
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-a');
@@ -278,7 +369,7 @@ test('mergeShellEvents does not fall back to command text when result tool call 
   assert.equal(merged[1].body, 'orphan');
 });
 
-test('mergeShellEvents pairs an unlabelled result with the nearest previous command', () => {
+test('mergeSessionEvents pairs an unlabelled result with the nearest previous command', () => {
   const events = [
     {
       id: 'run-a',
@@ -309,7 +400,7 @@ test('mergeShellEvents pairs an unlabelled result with the nearest previous comm
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 2);
   assert.equal(merged[0].id, 'run-a');
@@ -319,7 +410,7 @@ test('mergeShellEvents pairs an unlabelled result with the nearest previous comm
   assert.equal(merged[1].body, 'ok');
 });
 
-test('mergeShellEvents keeps the command entry id stable when a live result arrives', () => {
+test('mergeSessionEvents keeps the command entry id stable when a live result arrives', () => {
   const command = {
     id: 'run-live',
     kind: 'tool',
@@ -341,8 +432,8 @@ test('mergeShellEvents keeps the command entry id stable when a live result arri
     rawType: 'process.codex_event',
   };
 
-  const beforeResult = mergeShellEvents([command]);
-  const afterResult = mergeShellEvents([command, result]);
+  const beforeResult = mergeSessionEvents([command]);
+  const afterResult = mergeSessionEvents([command, result]);
 
   assert.equal(beforeResult.length, 1);
   assert.equal(beforeResult[0].id, 'run-live');
@@ -353,7 +444,7 @@ test('mergeShellEvents keeps the command entry id stable when a live result arri
   assert.equal(afterResult[0].time, '01:01');
 });
 
-test('mergeShellEvents preserves unmatchable unlabelled result title', () => {
+test('mergeSessionEvents preserves unmatchable unlabelled result title', () => {
   const events = [
     {
       id: 'result-orphan',
@@ -366,7 +457,7 @@ test('mergeShellEvents preserves unmatchable unlabelled result title', () => {
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].id, 'result-orphan');
@@ -374,7 +465,7 @@ test('mergeShellEvents preserves unmatchable unlabelled result title', () => {
   assert.equal(merged[0].body, 'orphan');
 });
 
-test('mergeShellEvents keeps file change id stable and updates completed changes', () => {
+test('mergeSessionEvents keeps file change id stable and updates completed changes', () => {
   const started = {
     id: 'file-started',
     kind: 'file_change',
@@ -404,8 +495,8 @@ test('mergeShellEvents keeps file change id stable and updates completed changes
     rawType: 'process.codex_event',
   };
 
-  const beforeComplete = mergeShellEvents([started]);
-  const afterComplete = mergeShellEvents([started, completed]);
+  const beforeComplete = mergeSessionEvents([started]);
+  const afterComplete = mergeSessionEvents([started, completed]);
 
   assert.equal(beforeComplete.length, 1);
   assert.equal(beforeComplete[0].id, 'file-started');
@@ -417,7 +508,7 @@ test('mergeShellEvents keeps file change id stable and updates completed changes
   assert.equal(afterComplete[0].fileChanges[0].unifiedDiff, '@@ -1 +1 @@\n-old\n+new');
 });
 
-test('mergeShellEvents shows file paths in multi-file change title', () => {
+test('mergeSessionEvents shows file paths in multi-file change title', () => {
   const events = [
     {
       id: 'file-started',
@@ -435,7 +526,7 @@ test('mergeShellEvents shows file paths in multi-file change title', () => {
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].title, '修改文件 a.go, b.go');
@@ -492,13 +583,13 @@ test('codexCommandResultBody falls back when aggregated output is empty', () => 
   assert.equal(body, 'fallback output');
 });
 
-test('mergeShellEvents keeps completed command ANSI for terminal rendering', () => {
+test('mergeSessionEvents keeps completed command ANSI for terminal rendering', () => {
   const events = [
     {
       id: 'completed-1',
       kind: 'tool',
       title: '命令结果',
-      body: "\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone",
+      body: '\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone',
       command: "/bin/bash -lc 'git diff --stat'",
       createdAt: '2026-07-07T01:00:00Z',
       time: '01:00',
@@ -506,13 +597,13 @@ test('mergeShellEvents keeps completed command ANSI for terminal rendering', () 
     },
   ];
 
-  const merged = mergeShellEvents(events);
+  const merged = mergeSessionEvents(events);
 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].title, 'Shell git diff --stat');
   assert.equal(
     merged[0].body,
-    "\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone",
+    '\u001b[38;2;25;118;210m \u001b[39m\u001b[38;2;31;115;204m█\u001b[39m38;2;34;113;201m█\nDone',
   );
   assert.equal(merged[0].body.includes('\u001b[38;2;31;115;204m'), true);
 });

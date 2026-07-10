@@ -1,11 +1,22 @@
 import type { SessionEvent } from '@/services/sessions';
 
-export function eventAfterId(events: SessionEvent[]): string;
 export function appendLiveEvent(events: SessionEvent[], event: SessionEvent): SessionEvent[];
-export function prependOlderEvents(events: SessionEvent[], olderEvents: SessionEvent[]): SessionEvent[];
-export function shouldRefreshSessionForEvent(
-  event: SessionEvent,
-  liveOnly: boolean,
-  replayStateCanRefresh?: boolean,
+export function prependOlderEvents(
+  events: SessionEvent[],
+  olderEvents: SessionEvent[],
+): SessionEvent[];
+export function mergeSnapshotEvents(
+  snapshotEvents: SessionEvent[],
+  currentEvents: SessionEvent[],
+  bufferedEvents: SessionEvent[],
+): SessionEvent[];
+export function shouldReconnectAfterClose(
+  acknowledged: boolean,
+  accessKeyValid: boolean | undefined,
 ): boolean;
-export function isEventAtOrAfter(event: Pick<SessionEvent, 'createdAt'>, timestamp: number): boolean;
+export function createLatestRequestTracker(): {
+  next(): number;
+  isCurrent(requestGeneration: number): boolean;
+  invalidate(): void;
+};
+export function sortSessionEvents(events: SessionEvent[]): SessionEvent[];

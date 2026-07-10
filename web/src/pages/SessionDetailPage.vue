@@ -385,9 +385,7 @@ import { useRoute } from 'vue-router';
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import PromptComposer from '@/components/PromptComposer.vue';
-import SessionEventMessage, {
-  type SessionEventMessageEntry,
-} from '@/components/SessionEventMessage.vue';
+import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import {
   firstCodexModelValue,
   normalizeCodexModel,
@@ -400,8 +398,14 @@ import { getSessionDiffFiles, getSessionFileDiff } from '@/services/diff';
 import { expandDiffContext, initialDiffContext } from '@/services/diffViewerState';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffFile, FileDiff, SessionDiff } from '@/services/diff';
-import { mergeShellEvents } from '@/services/sessionEventPresentation';
-import type { QuestionAnswerInput, SessionMode, SessionStatus } from '@/services/sessions';
+import { mergeSessionEvents } from '@/services/sessionEventPresentation';
+import { sortSessionEvents } from '@/services/sessionEventTimeline';
+import type {
+  QuestionAnswerInput,
+  SessionEvent,
+  SessionMode,
+  SessionStatus,
+} from '@/services/sessions';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -470,44 +474,12 @@ const composerConfigDirty = computed(() => {
     current.config.permissionMode !== composerPermission.value
   );
 });
-type StreamEntry = SessionEventMessageEntry;
+type StreamEntry = SessionEvent;
 
 const streamEntries = computed<StreamEntry[]>(() => {
-  const entries: StreamEntry[] = [];
-  if (session.value) {
-    entries.push({
-      id: `session-input-${session.value.id}`,
-      kind: 'user',
-      title: '用户输入',
-      body: session.value.summary,
-      createdAt: session.value.createdAt,
-      time: session.value.createdTime,
-      rawType: 'user.input',
-    });
-    for (const item of session.value.promptAppends) {
-      const attachmentText =
-        item.attachments.length > 0
-          ? `\n\n附件：\n${item.attachments.map((attachment) => `- ${attachment.filename}`).join('\n')}`
-          : '';
-      entries.push({
-        id: `prompt-append-${item.id}`,
-        kind: 'user',
-        title: '追加描述',
-        body: `${item.body}${attachmentText}`,
-        createdAt: item.createdAt,
-        time: item.time,
-        rawType: 'user.append',
-      });
-    }
-  }
-  for (const event of events.value) {
-    entries.push(event);
-  }
-  const sortedEntries = entries.sort((left, right) => {
-    const diff = Date.parse(left.createdAt) - Date.parse(right.createdAt);
-    return diff === 0 ? left.id.localeCompare(right.id) : diff;
-  });
-  return mergeShellEvents(dedupeStreamEntries(sortedEntries));
+  const entries: StreamEntry[] = [...events.value];
+  const sortedEntries = sortSessionEvents(entries);
+  return mergeSessionEvents(sortedEntries);
 });
 const composerAction = computed(() => {
   const current = session.value;
@@ -622,34 +594,6 @@ const diffPageMax = computed(() => {
   if (!info || info.total < 1) return 1;
   return Math.max(1, Math.ceil(info.total / info.pageSize));
 });
-
-function dedupeStreamEntries(entries: StreamEntry[]) {
-  const hasCodexProcessExit = entries.some(
-    (event) => event.rawType === 'process.codex_event' && event.title === '进程退出',
-  );
-  const result: StreamEntry[] = [];
-  for (const event of entries) {
-    if (hasCodexProcessExit && event.rawType === 'process.exited') {
-      continue;
-    }
-    if (event.title === '进程退出' && !event.body) {
-      continue;
-    }
-    const previous = result[result.length - 1];
-    if (
-      previous &&
-      event.kind === 'status' &&
-      previous.kind === 'status' &&
-      event.title === previous.title &&
-      event.body === previous.body &&
-      Math.abs(Date.parse(event.createdAt) - Date.parse(previous.createdAt)) < 1500
-    ) {
-      continue;
-    }
-    result.push(event);
-  }
-  return result;
-}
 
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
@@ -789,7 +733,9 @@ function notifyAppendError(err: unknown, fallback: string, cleanupError = '') {
 
 async function cleanupStagedAttachments(ids: string[]) {
   if (ids.length === 0) return '';
-  const results = await Promise.allSettled(ids.map((id) => deleteStagedAttachment(id, { notify: false })));
+  const results = await Promise.allSettled(
+    ids.map((id) => deleteStagedAttachment(id, { notify: false })),
+  );
   const failed = results.find(
     (result) => result.status === 'rejected' && !isStagedAttachmentAlreadyGone(result.reason),
   );
@@ -919,16 +865,6 @@ watch(
 );
 
 watch(
-  isWaitingForAnswer,
-  (value) => {
-    if (value) {
-      void loadPendingQuestions();
-    }
-  },
-  { immediate: true },
-);
-
-watch(
   session,
   (value) => {
     if (!value) return;
@@ -953,10 +889,10 @@ onUnmounted(() => {
 });
 
 async function initializeSessionDetail() {
+  await startLiveUpdates();
+  if (!mounted) return;
   await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
-  if (mounted) {
-    startLiveUpdates();
-  }
+  if (!mounted) stopLiveUpdates();
 }
 
 async function onEventScroll() {

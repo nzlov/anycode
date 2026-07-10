@@ -192,7 +192,6 @@ func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	sessionID := "session-1"
 	projectID := "project-1"
-	afterEventID := "event-0"
 	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan timelineapp.DTO, 1)
 	source <- timelineapp.DTO{
@@ -207,21 +206,13 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 
 	timeline := &fakeTimelineUseCase{sessionEvents: source}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
-	ch, err := resolver.SessionEvents(context.Background(), model.SessionEventsInput{
-		SessionID:    &sessionID,
-		ProjectID:    &projectID,
-		AfterEventID: &afterEventID,
-	})
+	ch, err := resolver.SessionEvents(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
 
 	wantInput := timelineapp.SessionEventsInput{
-		Scope: eventdomain.Scope{
-			SessionID: &eventSessionID,
-			ProjectID: projectID,
-		},
-		AfterEventID: eventdomain.ID(afterEventID),
+		Scope: eventdomain.Scope{SessionID: &eventSessionID},
 	}
 	if !reflect.DeepEqual(timeline.gotSessionEventsInput, wantInput) {
 		t.Fatalf("SessionEvents() input = %#v, want %#v", timeline.gotSessionEventsInput, wantInput)
@@ -229,19 +220,27 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 
 	got, ok := <-ch
 	if !ok {
-		t.Fatal("SessionEvents() channel closed before event")
+		t.Fatal("SessionEvents() channel closed before ready item")
 	}
-	if got.ID != "event-1" || got.Type != "process.output" || got.CreatedAt != "2026-07-02T01:02:03Z" {
+	if !got.Ready || got.Event != nil {
+		t.Fatalf("SessionEvents() ready item = %#v", got)
+	}
+	got, ok = <-ch
+	if !ok || got.Event == nil {
+		t.Fatal("SessionEvents() channel closed before event item")
+	}
+	event := got.Event
+	if got.Ready || event.ID != "event-1" || event.Type != "process.output" || event.CreatedAt != "2026-07-02T01:02:03Z" {
 		t.Fatalf("SessionEvents() event = %#v", got)
 	}
-	if got.Scope == nil || got.Scope.SessionID == nil || *got.Scope.SessionID != sessionID || got.Scope.ProjectID != projectID {
-		t.Fatalf("SessionEvents() scope = %#v", got.Scope)
+	if event.Scope == nil || event.Scope.SessionID == nil || *event.Scope.SessionID != sessionID || event.Scope.ProjectID != projectID {
+		t.Fatalf("SessionEvents() scope = %#v", event.Scope)
 	}
-	if got.SessionID == nil || *got.SessionID != sessionID {
-		t.Fatalf("SessionEvents() sessionID = %#v", got.SessionID)
+	if event.SessionID == nil || *event.SessionID != sessionID {
+		t.Fatalf("SessionEvents() sessionID = %#v", event.SessionID)
 	}
-	if got.Payload["text"] != "hello" {
-		t.Fatalf("SessionEvents() payload = %#v", got.Payload)
+	if event.Payload["text"] != "hello" {
+		t.Fatalf("SessionEvents() payload = %#v", event.Payload)
 	}
 	if _, ok := <-ch; ok {
 		t.Fatal("SessionEvents() channel stayed open after source closed")
@@ -317,6 +316,72 @@ func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *tes
 	}
 }
 
+func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
+	sessionID := "session-1"
+	eventSessionID := eventdomain.SessionID(sessionID)
+	source := make(chan timelineapp.DTO, 1)
+	timeline := &fakeTimelineUseCase{sessionEvents: source}
+	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := resolver.SessionEvents(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("SessionEvents() error = %v", err)
+	}
+	if ready := <-ch; !ready.Ready {
+		t.Fatalf("ready item = %#v", ready)
+	}
+	source <- timelineapp.DTO{
+		ID:        "event-1",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID},
+		SessionID: &eventSessionID,
+		Type:      "process.codex_event",
+		CreatedAt: "2026-07-02T01:02:03Z",
+	}
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("SessionEvents() delivered a blocked event after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SessionEvents() did not close after cancellation")
+	}
+}
+
+func TestSubscriptionSessionCardChangedStopsBlockedSendAfterCancel(t *testing.T) {
+	sessionID := "session-1"
+	eventSessionID := eventdomain.SessionID(sessionID)
+	source := make(chan eventapp.DTO, 1)
+	events := &fakeEventUseCase{liveSessionEvents: source}
+	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{DTO: sessionapp.DTO{
+		ID:        sessiondomain.ID(sessionID),
+		ProjectID: "project-1",
+	}}}
+	resolver := NewResolver(UseCases{Events: events, Sessions: sessions}).Subscription()
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := resolver.SessionCardChanged(ctx, nil)
+	if err != nil {
+		t.Fatalf("SessionCardChanged() error = %v", err)
+	}
+	source <- eventapp.DTO{
+		ID:        "card-change",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: "project-1"},
+		SessionID: &eventSessionID,
+		Type:      "session.running",
+	}
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("SessionCardChanged() delivered a blocked card after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SessionCardChanged() did not close after cancellation")
+	}
+}
+
 func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
 	tests := []string{
@@ -327,6 +392,7 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 		"session.blocked",
 		"session.completed",
 		"session.closed",
+		"session.config_changed",
 		"session.priority_changed",
 		"session.todo_list_updated",
 		"workflow.blocked",
@@ -501,33 +567,95 @@ func TestMutationAppendPromptForwardsStagedAttachmentIDs(t *testing.T) {
 	}
 }
 
-func TestSubscriptionPendingQuestionBatchesForwardsUseCase(t *testing.T) {
-	source := make(chan questionapp.BatchDTO, 1)
-	source <- questionapp.BatchDTO{
+func TestSubscriptionSessionStateUpdatesRegistersBothSourcesBeforeReady(t *testing.T) {
+	sessionID := "session-1"
+	eventSessionID := eventdomain.SessionID(sessionID)
+	eventSource := make(chan eventapp.DTO, 1)
+	questionSource := make(chan questionapp.BatchDTO, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events := &fakeEventUseCase{liveSessionEvents: eventSource}
+	questions := &fakeQuestionUseCase{updateSource: questionSource}
+	sessions := &fakeSessionUseCase{getResult: sessionapp.DetailDTO{DTO: sessionapp.DTO{
+		ID:        sessiondomain.ID(sessionID),
+		ProjectID: "project-1",
+		Status:    sessiondomain.StatusRunning,
+	}}}
+	resolver := NewResolver(UseCases{Events: events, Questions: questions, Sessions: sessions}).Subscription()
+
+	ch, err := resolver.SessionStateUpdates(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("SessionStateUpdates() error = %v", err)
+	}
+	wantScope := eventdomain.Scope{SessionID: &eventSessionID}
+	if !reflect.DeepEqual(events.gotLiveSessionEventsInput.Scope, wantScope) {
+		t.Fatalf("event subscription scope = %#v, want %#v", events.gotLiveSessionEventsInput.Scope, wantScope)
+	}
+	if questions.gotUpdateSessionID != questiondomain.SessionID(sessionID) {
+		t.Fatalf("question subscription session id = %q", questions.gotUpdateSessionID)
+	}
+	ready := <-ch
+	if !ready.Ready || ready.Session != nil || ready.QuestionBatch != nil {
+		t.Fatalf("ready item = %#v", ready)
+	}
+
+	eventSource <- eventapp.DTO{
+		ID:        "state-1",
+		Scope:     wantScope,
+		SessionID: &eventSessionID,
+		Type:      "session.running",
+	}
+	stateUpdate := <-ch
+	if stateUpdate.Ready || stateUpdate.Session == nil || stateUpdate.Session.ID != sessionID || stateUpdate.QuestionBatch != nil {
+		t.Fatalf("session state item = %#v", stateUpdate)
+	}
+
+	questionSource <- questionapp.BatchDTO{
 		ID:        "batch-1",
-		SessionID: "session-1",
+		SessionID: questiondomain.SessionID(sessionID),
 		Status:    questiondomain.BatchPending,
 	}
-	close(source)
-	questions := &fakeQuestionUseCase{pendingSource: source}
-	resolver := NewResolver(UseCases{Questions: questions}).Subscription()
+	questionUpdate := <-ch
+	if questionUpdate.Ready || questionUpdate.Session == nil || questionUpdate.QuestionBatch == nil {
+		t.Fatalf("question state item = %#v", questionUpdate)
+	}
+	if questionUpdate.QuestionBatch.ID != "batch-1" || questionUpdate.Session.ID != sessionID {
+		t.Fatalf("question state item = %#v", questionUpdate)
+	}
+}
 
-	ch, err := resolver.PendingQuestionBatches(context.Background(), "session-1")
+func TestSubscriptionSessionStateUpdatesStopsBlockedSendAfterCancel(t *testing.T) {
+	sessionID := "session-1"
+	eventSessionID := eventdomain.SessionID(sessionID)
+	eventSource := make(chan eventapp.DTO, 1)
+	questionSource := make(chan questionapp.BatchDTO)
+	events := &fakeEventUseCase{liveSessionEvents: eventSource}
+	questions := &fakeQuestionUseCase{updateSource: questionSource}
+	sessions := &fakeSessionUseCase{getResult: sessionapp.DetailDTO{DTO: sessionapp.DTO{ID: sessiondomain.ID(sessionID)}}}
+	resolver := NewResolver(UseCases{Events: events, Questions: questions, Sessions: sessions}).Subscription()
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := resolver.SessionStateUpdates(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("PendingQuestionBatches() error = %v", err)
+		t.Fatalf("SessionStateUpdates() error = %v", err)
 	}
-	if questions.gotSubscriptionSessionID != "session-1" {
-		t.Fatalf("subscription session id = %q", questions.gotSubscriptionSessionID)
+	if ready := <-ch; !ready.Ready {
+		t.Fatalf("ready item = %#v", ready)
 	}
-	got, ok := <-ch
-	if !ok {
-		t.Fatal("PendingQuestionBatches() channel closed before batch")
+	eventSource <- eventapp.DTO{
+		ID:        "state-1",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID},
+		SessionID: &eventSessionID,
+		Type:      "session.running",
 	}
-	if got.ID != "batch-1" || got.Status != string(questiondomain.BatchPending) {
-		t.Fatalf("pending batch = %#v", got)
-	}
-	if _, ok := <-ch; ok {
-		t.Fatal("PendingQuestionBatches() channel stayed open after source closed")
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("SessionStateUpdates() delivered a blocked item after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("SessionStateUpdates() did not close after cancellation")
 	}
 }
 
@@ -782,12 +910,12 @@ func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain
 type fakeQuestionUseCase struct {
 	questionapp.UseCase
 	pending                  []questionapp.BatchDTO
-	pendingSource            <-chan questionapp.BatchDTO
+	updateSource             <-chan questionapp.BatchDTO
 	submitResult             questionapp.BatchDTO
 	gotSubmit                questionapp.SubmitBatchInput
 	submitCalls              int
 	gotPendingSessionID      questiondomain.SessionID
-	gotSubscriptionSessionID questiondomain.SessionID
+	gotUpdateSessionID       questiondomain.SessionID
 }
 
 func (f *fakeQuestionUseCase) SubmitBatch(_ context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {
@@ -801,9 +929,9 @@ func (f *fakeQuestionUseCase) ListPendingBySession(_ context.Context, sessionID 
 	return f.pending, nil
 }
 
-func (f *fakeQuestionUseCase) PendingQuestionBatches(_ context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.BatchDTO, error) {
-	f.gotSubscriptionSessionID = sessionID
-	return f.pendingSource, nil
+func (f *fakeQuestionUseCase) QuestionBatchUpdates(_ context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.BatchDTO, error) {
+	f.gotUpdateSessionID = sessionID
+	return f.updateSource, nil
 }
 
 type fakeSessionUseCase struct {
@@ -813,6 +941,8 @@ type fakeSessionUseCase struct {
 	err                error
 	gotGetCardID       sessiondomain.ID
 	getCardResult      sessionapp.CardDTO
+	gotGetID           sessiondomain.ID
+	getResult          sessionapp.DetailDTO
 	gotResumeID        sessiondomain.ID
 	resumeResult       sessionapp.DTO
 	stopProjectID      sessiondomain.ProjectID
@@ -820,6 +950,11 @@ type fakeSessionUseCase struct {
 	updateConfigResult sessionapp.DTO
 	gotAppend          sessionapp.AppendPromptInput
 	appendResult       sessionapp.PromptAppendDTO
+}
+
+func (f *fakeSessionUseCase) GetSession(_ context.Context, id sessiondomain.ID) (sessionapp.DetailDTO, error) {
+	f.gotGetID = id
+	return f.getResult, f.err
 }
 
 func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batch questionapp.BatchDTO) error {

@@ -68,8 +68,8 @@ type Repository interface {
 	CreateBatch(ctx context.Context, batch Batch) error
 	FindBatch(ctx context.Context, id BatchID) (Batch, error)
 	ListPendingBySession(ctx context.Context, sessionID SessionID) ([]Batch, error)
-	SubmitAnswers(ctx context.Context, id BatchID, answers []Answer) error
-	CancelPendingBySession(ctx context.Context, sessionID SessionID, reason string) error
+	SubmitAnswers(ctx context.Context, id BatchID, answers []Answer) (Batch, bool, error)
+	CancelPendingBySession(ctx context.Context, sessionID SessionID, reason string) ([]Batch, error)
 }
 
 type AnswerWaiter interface {

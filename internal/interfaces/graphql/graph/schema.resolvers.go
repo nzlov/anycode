@@ -480,20 +480,25 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
-func (r *subscriptionResolver) SessionEvents(ctx context.Context, input model.SessionEventsInput) (<-chan *model.SessionEvent, error) {
+func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionEventStreamItem, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
+	eventSessionID := eventdomain.SessionID(sessionID)
 	source, err := r.UseCases.Timeline.SessionEvents(ctx, timelineapp.SessionEventsInput{
-		Scope:        buildEventScope(input),
-		AfterEventID: eventdomain.ID(stringValue(input.AfterEventID, "")),
+		Scope: eventdomain.Scope{SessionID: &eventSessionID},
 	})
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionEvent)
+	out := make(chan *model.SessionEventStreamItem)
 	go func() {
 		defer close(out)
+		select {
+		case <-ctx.Done():
+			return
+		case out <- &model.SessionEventStreamItem{Ready: true}:
+		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -502,7 +507,80 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, input model.Se
 				if !ok {
 					return
 				}
-				out <- mapTimelineEvent(eventDTO)
+				select {
+				case <-ctx.Done():
+					return
+				case out <- &model.SessionEventStreamItem{Event: mapTimelineEvent(eventDTO)}:
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
+// SessionStateUpdates is the resolver for the sessionStateUpdates field.
+func (r *subscriptionResolver) SessionStateUpdates(ctx context.Context, sessionID string) (<-chan *model.SessionStateStreamItem, error) {
+	if r.UseCases.Events == nil {
+		return nil, missingUseCase("events")
+	}
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	if r.UseCases.Questions == nil {
+		return nil, missingUseCase("questions")
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	eventSessionID := eventdomain.SessionID(sessionID)
+	events, err := r.UseCases.Events.LiveSessionEvents(streamCtx, eventapp.LiveSessionEventsInput{
+		Scope: eventdomain.Scope{SessionID: &eventSessionID},
+	})
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	questions, err := r.UseCases.Questions.QuestionBatchUpdates(streamCtx, questiondomain.SessionID(sessionID))
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	out := make(chan *model.SessionStateStreamItem)
+	go func() {
+		defer close(out)
+		defer cancel()
+		if !sendSessionStateItem(streamCtx, out, &model.SessionStateStreamItem{Ready: true}) {
+			return
+		}
+		for events != nil || questions != nil {
+			select {
+			case <-streamCtx.Done():
+				return
+			case eventDTO, ok := <-events:
+				if !ok {
+					events = nil
+					continue
+				}
+				if !sessionCardChangeEvent(eventDTO, nil) {
+					continue
+				}
+				detail, err := r.UseCases.Sessions.GetSession(streamCtx, sessiondomain.ID(sessionID))
+				if err != nil {
+					continue
+				}
+				if !sendSessionStateItem(streamCtx, out, &model.SessionStateStreamItem{Session: mapSessionDetail(detail)}) {
+					return
+				}
+			case batch, ok := <-questions:
+				if !ok {
+					questions = nil
+					continue
+				}
+				item := &model.SessionStateStreamItem{QuestionBatch: mapQuestionBatch(batch)}
+				if detail, err := r.UseCases.Sessions.GetSession(streamCtx, sessiondomain.ID(sessionID)); err == nil {
+					item.Session = mapSessionDetail(detail)
+				}
+				if !sendSessionStateItem(streamCtx, out, item) {
+					return
+				}
 			}
 		}
 	}()
@@ -543,79 +621,11 @@ func (r *subscriptionResolver) SessionCardChanged(ctx context.Context, projectID
 				if err != nil {
 					continue
 				}
-				out <- mapSessionCard(card)
-			}
-		}
-	}()
-	return out, nil
-}
-
-// SessionStatusChanged is the resolver for the sessionStatusChanged field.
-func (r *subscriptionResolver) SessionStatusChanged(ctx context.Context, projectID *string, sessionID *string) (<-chan *model.Session, error) {
-	if r.UseCases.Events == nil {
-		return nil, missingUseCase("events")
-	}
-	if r.UseCases.Sessions == nil {
-		return nil, missingUseCase("sessions")
-	}
-	scope := eventdomain.Scope{}
-	if projectID != nil {
-		scope.ProjectID = *projectID
-	}
-	if sessionID != nil {
-		id := eventdomain.SessionID(*sessionID)
-		scope.SessionID = &id
-	}
-	source, err := r.UseCases.Events.LiveSessionEvents(ctx, eventapp.LiveSessionEventsInput{Scope: scope})
-	if err != nil {
-		return nil, err
-	}
-	out := make(chan *model.Session)
-	go func() {
-		defer close(out)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case eventDTO, ok := <-source:
-				if !ok {
+				select {
+				case out <- mapSessionCard(card):
+				case <-ctx.Done():
 					return
 				}
-				if eventDTO.SessionID == nil {
-					continue
-				}
-				detail, err := r.UseCases.Sessions.GetSession(ctx, sessiondomain.ID(*eventDTO.SessionID))
-				if err != nil {
-					continue
-				}
-				out <- mapSession(detail.DTO)
-			}
-		}
-	}()
-	return out, nil
-}
-
-// PendingQuestionBatches is the resolver for the pendingQuestionBatches field.
-func (r *subscriptionResolver) PendingQuestionBatches(ctx context.Context, sessionID string) (<-chan *model.QuestionBatch, error) {
-	if r.UseCases.Questions == nil {
-		return nil, missingUseCase("questions")
-	}
-	source, err := r.UseCases.Questions.PendingQuestionBatches(ctx, questiondomain.SessionID(sessionID))
-	if err != nil {
-		return nil, err
-	}
-	out := make(chan *model.QuestionBatch)
-	go func() {
-		defer close(out)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case batch, ok := <-source:
-				if !ok {
-					return
-				}
-				out <- mapQuestionBatch(batch)
 			}
 		}
 	}()

@@ -1,5 +1,10 @@
 import { Notify } from 'quasar';
 
+import {
+  createGraphQLSubscriptionTransport,
+  type GraphQLTransportOperation,
+} from '@/services/graphqlSubscriptionTransport';
+
 export const GRAPHQL_ACCESS_KEY_STORAGE_KEY = 'anycode.accessKey';
 
 interface GraphQLErrorPayload {
@@ -31,10 +36,17 @@ interface GraphQLSubscriptionOptions<
 > extends GraphQLRequest<TVariables> {
   onData: (data: TData) => void;
   onError?: (error: Error) => void;
-  onClose?: () => void;
+  onClose?: (close: GraphQLSubscriptionClose) => void;
+}
+
+export interface GraphQLSubscriptionClose {
+  event: CloseEvent | null;
+  acknowledged: boolean;
+  completedByServer: boolean;
 }
 
 const graphqlEndpoint = import.meta.env.VITE_GRAPHQL_ENDPOINT ?? '/graphql';
+let subscriptionTransport: ReturnType<typeof createGraphQLSubscriptionTransport> | null = null;
 
 export class AnyCodeGraphQLError extends Error {
   code: string;
@@ -68,15 +80,18 @@ export function setGraphQLAccessKey(accessKey: string) {
   if (typeof window === 'undefined') return;
   if (accessKey.trim() === '') {
     window.localStorage.removeItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY);
+    subscriptionTransport?.reset();
     return;
   }
   window.localStorage.setItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY, accessKey.trim());
+  subscriptionTransport?.reset();
 }
 
 export function clearGraphQLAccessKey() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(GRAPHQL_ACCESS_KEY_STORAGE_KEY);
   window.localStorage.removeItem('ANYCODE_ACCESS_KEY');
+  subscriptionTransport?.reset();
 }
 
 function graphqlHeaders(contentType?: string) {
@@ -140,7 +155,8 @@ export async function graphqlMultipartFetch<TData>(body: FormData) {
 function notifyRequestError(err: unknown) {
   if (typeof window === 'undefined') return;
   if (isNotifiedError(err)) return;
-  const message = err instanceof AnyCodeGraphQLError && err.userAction ? err.userAction : errorMessage(err);
+  const message =
+    err instanceof AnyCodeGraphQLError && err.userAction ? err.userAction : errorMessage(err);
   Notify.create({
     type: 'negative',
     icon: 'error',
@@ -191,94 +207,27 @@ export function graphqlSubscribe<
   if (typeof window === 'undefined') {
     throw new Error('GraphQL subscriptions require a browser runtime');
   }
-  const socket = new WebSocket(graphqlWebSocketURL(), 'graphql-transport-ws');
-  const subscriptionID = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  let completed = false;
-  let acknowledged = false;
-
-  socket.addEventListener('open', () => {
-    socket.send(
-      JSON.stringify({
-        type: 'connection_init',
-        payload: connectionInitPayload(),
-      }),
-    );
-  });
-
-  socket.addEventListener('message', (event) => {
-    const message = parseSocketMessage(event.data);
-    if (!message) return;
-    if (message.type === 'connection_ack') {
-      acknowledged = true;
-      socket.send(
-        JSON.stringify({
-          id: subscriptionID,
-          type: 'subscribe',
-          payload: { query, variables, operationName },
-        }),
-      );
-      return;
-    }
-    if (message.type === 'next' && message.id === subscriptionID) {
-      const payload = message.payload as GraphQLResponse<TData>;
+  const operation: GraphQLTransportOperation = {
+    query,
+    onNext: (rawPayload) => {
+      const payload = rawPayload as GraphQLResponse<TData>;
       if (payload.errors?.length) {
         handleSubscriptionError(new AnyCodeGraphQLError(payload.errors), onError);
         return;
       }
-      if (payload.data) {
-        onData(payload.data);
-      }
-      return;
-    }
-    if (message.type === 'error' && message.id === subscriptionID) {
-      handleSubscriptionError(new Error(subscriptionErrorMessage(message.payload)), onError);
-      return;
-    }
-    if (message.type === 'complete' && message.id === subscriptionID) {
-      completed = true;
-      socket.close();
-      return;
-    }
-    if (message.type === 'ping') {
-      socket.send(JSON.stringify({ type: 'pong' }));
-    }
-  });
-
-  socket.addEventListener('error', () => {
-    if (!completed) {
-      handleSubscriptionError(new Error('GraphQL subscription connection failed'), onError);
-    }
-  });
-
-  socket.addEventListener('close', () => {
-    if (!completed && acknowledged) {
-      onClose?.();
-    }
-  });
-
-  return {
-    unsubscribe() {
-      completed = true;
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ id: subscriptionID, type: 'complete' }));
-      }
-      socket.close();
+      if (payload.data) onData(payload.data);
     },
+    onError: (error) => handleSubscriptionError(error, onError),
   };
+  if (variables !== undefined) operation.variables = variables;
+  if (operationName !== undefined) operation.operationName = operationName;
+  if (onClose !== undefined) operation.onClose = onClose;
+  return getSubscriptionTransport().subscribe(operation);
 }
 
 function handleSubscriptionError(error: Error, onError?: (error: Error) => void) {
   notifyRequestError(error);
   onError?.(error);
-}
-
-function subscriptionErrorMessage(payload: unknown) {
-  if (typeof payload === 'string') return payload;
-  if (payload && typeof payload === 'object' && 'message' in payload) {
-    const message = (payload as { message?: unknown }).message;
-    if (typeof message === 'string' && message) return message;
-  }
-  return 'GraphQL subscription error';
 }
 
 function graphqlWebSocketURL() {
@@ -297,20 +246,10 @@ function connectionInitPayload() {
   return { Authorization: `Bearer ${accessKey}` };
 }
 
-function parseSocketMessage(data: unknown): { id?: string; type: string; payload?: unknown } | null {
-  if (typeof data !== 'string') return null;
-  try {
-    const parsed = JSON.parse(data) as { id?: string; type?: string; payload?: unknown };
-    if (!parsed.type) return null;
-    const message: { id?: string; type: string; payload?: unknown } = { type: parsed.type };
-    if (parsed.id) {
-      message.id = parsed.id;
-    }
-    if (parsed.payload !== undefined) {
-      message.payload = parsed.payload;
-    }
-    return message;
-  } catch {
-    return null;
-  }
+function getSubscriptionTransport() {
+  subscriptionTransport ??= createGraphQLSubscriptionTransport({
+    createSocket: () => new WebSocket(graphqlWebSocketURL(), 'graphql-transport-ws'),
+    connectionInitPayload,
+  });
+  return subscriptionTransport;
 }

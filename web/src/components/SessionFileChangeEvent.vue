@@ -13,7 +13,11 @@
     </button>
     <div v-if="expanded" class="session-file-change__body">
       <div v-if="event.fileChanges?.length" class="session-file-change__list">
-        <div v-for="change in event.fileChanges" :key="`${change.kind}:${change.path}`" class="session-file-change__item">
+        <div
+          v-for="change in event.fileChanges"
+          :key="`${change.kind}:${change.path}`"
+          class="session-file-change__item"
+        >
           <div class="session-file-change__meta">
             <span class="session-file-change__kind">{{ fileChangeKindText(change.kind) }}</span>
             <code>{{ change.path }}</code>
@@ -22,7 +26,9 @@
             <span>目标</span>
             <code>{{ change.movePath }}</code>
           </div>
-          <pre v-if="change.unifiedDiff" class="session-file-change__diff">{{ change.unifiedDiff }}</pre>
+          <pre v-if="change.unifiedDiff" class="session-file-change__diff">{{
+            change.unifiedDiff
+          }}</pre>
         </div>
       </div>
       <pre v-else>{{ event.body || '已记录文件修改' }}</pre>
@@ -33,10 +39,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
-import type { SessionEventMessageEntry } from '@/components/SessionEventMessage.vue';
+import type { SessionEvent } from '@/services/sessions';
 
 defineProps<{
-  event: SessionEventMessageEntry;
+  event: SessionEvent;
 }>();
 
 const expanded = ref(false);

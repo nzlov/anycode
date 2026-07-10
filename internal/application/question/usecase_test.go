@@ -150,6 +150,53 @@ func TestSubmitBatchRejectsDifferentAnswerWhenAlreadyAnswered(t *testing.T) {
 	}
 }
 
+func TestSubmitBatchDoesNotReviveBatchCancelledDuringPersist(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository(batchFixture())
+	submitLoaded := make(chan struct{})
+	continueSubmit := make(chan struct{})
+	repo.beforeSubmit = func() {
+		close(submitLoaded)
+		<-continueSubmit
+	}
+	service := New(repo, nil)
+	source, err := service.QuestionBatchUpdates(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("QuestionBatchUpdates() error = %v", err)
+	}
+	optionID := domain.OptionID("yes")
+	submitErr := make(chan error, 1)
+	go func() {
+		_, err := service.SubmitBatch(ctx, SubmitBatchInput{
+			BatchID: "batch-1",
+			Answers: []domain.Answer{
+				{QuestionID: "q1", SelectedOptionID: &optionID},
+				{QuestionID: "q2", CustomAnswer: "ship it"},
+			},
+		})
+		submitErr <- err
+	}()
+	<-submitLoaded
+	if err := service.CancelPendingBySession(ctx, "session-1", "session stopped"); err != nil {
+		t.Fatalf("CancelPendingBySession() error = %v", err)
+	}
+	if got := <-source; got.Status != domain.BatchCancelled {
+		t.Fatalf("cancelled update = %#v", got)
+	}
+	close(continueSubmit)
+	if err := <-submitErr; err == nil {
+		t.Fatal("SubmitBatch() succeeded after cancellation won the transition")
+	}
+	select {
+	case got := <-source:
+		t.Fatalf("unexpected update after cancellation = %#v", got)
+	case <-time.After(20 * time.Millisecond):
+	}
+	if got := repo.batches["batch-1"].Status; got != domain.BatchCancelled {
+		t.Fatalf("stored batch status = %q, want cancelled", got)
+	}
+}
+
 func TestCreateBatchAndGetBatch(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -217,7 +264,7 @@ func TestListPendingBySession(t *testing.T) {
 	}
 }
 
-func TestPendingQuestionBatchesSendsExistingAndCreatedBatches(t *testing.T) {
+func TestQuestionBatchUpdatesOnlySendsLiveChanges(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	existing := batchFixture()
@@ -225,12 +272,14 @@ func TestPendingQuestionBatchesSendsExistingAndCreatedBatches(t *testing.T) {
 	service := New(repo, nil)
 	service.generateID = func() (string, error) { return "batch-created", nil }
 
-	source, err := service.PendingQuestionBatches(ctx, "session-1")
+	source, err := service.QuestionBatchUpdates(ctx, "session-1")
 	if err != nil {
-		t.Fatalf("PendingQuestionBatches() error = %v", err)
+		t.Fatalf("QuestionBatchUpdates() error = %v", err)
 	}
-	if got := <-source; got.ID != existing.ID {
-		t.Fatalf("first pending batch = %#v", got)
+	select {
+	case got := <-source:
+		t.Fatalf("unexpected snapshot batch = %#v", got)
+	case <-time.After(20 * time.Millisecond):
 	}
 	created, err := service.CreateBatch(context.Background(), CreateBatchInput{
 		SessionID: "session-1",
@@ -248,6 +297,45 @@ func TestPendingQuestionBatchesSendsExistingAndCreatedBatches(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for pending question batch")
+	}
+}
+
+func TestQuestionBatchUpdatesDoesNotDropBurstBeforeConsumerReads(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	service := New(newFakeRepository(), nil)
+	source, err := service.QuestionBatchUpdates(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("QuestionBatchUpdates() error = %v", err)
+	}
+
+	pending := toDTO(batchFixture())
+	answered := pending
+	answered.Status = domain.BatchAnswered
+	service.publish(pending)
+	service.publish(answered)
+
+	for index, want := range []domain.BatchStatus{domain.BatchPending, domain.BatchAnswered} {
+		select {
+		case got := <-source:
+			if got.ID != pending.ID || got.Status != want {
+				t.Fatalf("update %d = %#v, want status %q", index, got, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for update %d", index)
+		}
+	}
+}
+
+func TestPendingSubscriberIgnoresUpdatesAfterClose(t *testing.T) {
+	subscriber := newPendingSubscriber()
+	subscriber.close()
+
+	if subscriber.send(BatchDTO{ID: "batch-late"}) {
+		t.Fatal("send after close returned true")
+	}
+	if _, ok := <-subscriber.updates; ok {
+		t.Fatal("subscriber channel remained open after close")
 	}
 }
 
@@ -361,8 +449,10 @@ func batchFixture() domain.Batch {
 }
 
 type fakeRepository struct {
-	batches     map[domain.BatchID]domain.Batch
-	submitCalls int
+	batches           map[domain.BatchID]domain.Batch
+	submitCalls       int
+	beforeSubmit      func()
+	beforeListPending func()
 }
 
 func newFakeRepository(batches ...domain.Batch) *fakeRepository {
@@ -387,6 +477,9 @@ func (r *fakeRepository) FindBatch(_ context.Context, id domain.BatchID) (domain
 }
 
 func (r *fakeRepository) ListPendingBySession(_ context.Context, sessionID domain.SessionID) ([]domain.Batch, error) {
+	if r.beforeListPending != nil {
+		r.beforeListPending()
+	}
 	batches := make([]domain.Batch, 0)
 	for _, batch := range r.batches {
 		if batch.SessionID == sessionID && batch.Status == domain.BatchPending {
@@ -396,32 +489,41 @@ func (r *fakeRepository) ListPendingBySession(_ context.Context, sessionID domai
 	return batches, nil
 }
 
-func (r *fakeRepository) SubmitAnswers(_ context.Context, id domain.BatchID, answers []domain.Answer) error {
+func (r *fakeRepository) SubmitAnswers(_ context.Context, id domain.BatchID, answers []domain.Answer) (domain.Batch, bool, error) {
 	r.submitCalls++
-	batch, ok := r.batches[id]
+	_, ok := r.batches[id]
 	if !ok {
-		return errors.New("not found")
+		return domain.Batch{}, false, errors.New("not found")
+	}
+	if r.beforeSubmit != nil {
+		r.beforeSubmit()
+	}
+	batch := r.batches[id]
+	if batch.Status != domain.BatchPending {
+		return batch, false, nil
 	}
 	answered, err := (domain.DefaultPolicy{}).ApplyAnswers(batch, answers)
 	if err != nil {
-		return err
+		return domain.Batch{}, false, err
 	}
 	r.batches[id] = answered
-	return nil
+	return answered, true, nil
 }
 
-func (r *fakeRepository) CancelPendingBySession(_ context.Context, sessionID domain.SessionID, reason string) error {
+func (r *fakeRepository) CancelPendingBySession(_ context.Context, sessionID domain.SessionID, reason string) ([]domain.Batch, error) {
+	cancelledBatches := []domain.Batch{}
 	for id, batch := range r.batches {
 		if batch.SessionID != sessionID || batch.Status != domain.BatchPending {
 			continue
 		}
 		cancelled, err := (domain.DefaultPolicy{}).Cancel(batch, reason)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		r.batches[id] = cancelled
+		cancelledBatches = append(cancelledBatches, cancelled)
 	}
-	return nil
+	return cancelledBatches, nil
 }
 
 type recordingWaiter struct {

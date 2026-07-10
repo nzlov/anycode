@@ -97,7 +97,7 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - 同一 session 同一时间最多允许一个运行中的 Codex 进程；重复启动必须返回当前状态，不能创建第二个进程。
 - 流程模式由 workflow runner 编排；会话模式直接运行 Codex 会话，不创建 `WorkflowRun`。
 - Codex 启动参数必须来自会话配置：模型、思考强度、权限、文件附件和工作目录。
-- Codex JSONL 事件解析在 `codexcli` adapter 中完成；未知事件保留 raw payload。
+- Codex JSONL 事件解析在 `codexcli` adapter 中完成；未知事件保留原始 type，并直接使用原始 payload，不增加 `raw` 包装。
 - `answer_user` MCP handler 创建问题批次后阻塞等待 UI 提交答案。
 - UI 提交完整批次的选项/自定义答案后，MCP handler 返回结构化答案给 Codex。
 - 停止会话时必须标记 stopping、终止进程、释放阻塞中的 `answer_user` 等待、记录 exit 状态，并发布 WebSocket 状态事件。
@@ -192,7 +192,7 @@ AnyCode 是一个 Web 版 Codex agent 工具：
 - 应用数据目录通过 `ANYCODE_DATA_DIR` 配置；本地直接运行默认 `./data`，Docker Compose 默认 `/data`。
 - 数据目录下按职责存放 `attachments/`、`logs/`、`worktrees/`；`codex/` 仅在需要隔离 Codex 配置、临时 MCP 配置或运行期辅助文件时使用。
 - HTTP/GraphQL 使用 `Authorization: Bearer <ANYCODE_ACCESS_KEY>`；WebSocket 使用 `connection_init` payload；MCP endpoint 使用后端注入的内部凭据。
-- 日志、事件 payload 和错误响应必须脱敏访问密钥、Turso token、Codex 凭据和敏感宿主路径片段。
+- 日志、事件 payload 和错误响应保留原始内容，不设置统一脱敏层；鉴权凭据由调用边界控制，不作为业务 payload 主动写入。
 - 后端错误必须结构化返回 `code/category/message/details/retryable/userAction`；前端根据错误码和附加内容处理，不解析日志字符串。
 - 事件、问题批次、追加描述、合并记录默认长期保留，用于之后查看和重造无法恢复的 Codex 会话。
 

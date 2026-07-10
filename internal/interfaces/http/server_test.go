@@ -134,15 +134,18 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 		"id":   "sub-1",
 		"type": "subscribe",
 		"payload": map[string]any{
-			"query": `subscription($input: SessionEventsInput!) {
-				sessionEvents(input: $input) {
-					id
-					sessionId
-					type
-					payload
+			"query": `subscription($sessionId: ID!) {
+				sessionEvents(sessionId: $sessionId) {
+					ready
+					event {
+						id
+						sessionId
+						type
+						payload
+					}
 				}
 			}`,
-			"variables": map[string]any{"input": map[string]any{"sessionId": "session-1"}},
+			"variables": map[string]any{"sessionId": "session-1"},
 		},
 	})
 
@@ -150,6 +153,19 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	case <-timeline.subscribed:
 	case <-time.After(time.Second):
 		t.Fatal("sessionEvents subscription was not opened")
+	}
+	readyMessage := readSocketMessage(t, conn)
+	readyPayload, ok := readyMessage["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("ready payload = %#v", readyMessage["payload"])
+	}
+	readyData, ok := readyPayload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("ready data = %#v", readyPayload["data"])
+	}
+	readyItem, ok := readyData["sessionEvents"].(map[string]any)
+	if !ok || readyItem["ready"] != true || readyItem["event"] != nil {
+		t.Fatalf("sessionEvents ready item = %#v", readyData["sessionEvents"])
 	}
 
 	sessionID := eventdomain.SessionID("session-1")
@@ -174,19 +190,31 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	if !ok {
 		t.Fatalf("payload data = %#v", payload["data"])
 	}
-	event, ok := data["sessionEvents"].(map[string]any)
+	streamItem, ok := data["sessionEvents"].(map[string]any)
 	if !ok {
 		t.Fatalf("sessionEvents payload = %#v", data["sessionEvents"])
+	}
+	event, ok := streamItem["event"].(map[string]any)
+	if !ok || streamItem["ready"] != false {
+		t.Fatalf("sessionEvents stream item = %#v", streamItem)
 	}
 	if event["id"] != "event-1" || event["type"] != "session.running" || event["sessionId"] != "session-1" {
 		t.Fatalf("session event = %#v", event)
 	}
 }
 
-func TestGraphQLWebSocketPendingQuestionBatchesSubscriptionReceivesBatch(t *testing.T) {
+func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing.T) {
 	pending := make(chan questionapp.BatchDTO, 1)
 	questions := &fakeQuestionUseCase{pendingCh: pending}
-	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Questions: questions}))
+	sessions := &fakeGraphQLSessionUseCase{getSessionResult: sessionapp.DetailDTO{DTO: sessionapp.DTO{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    sessiondomain.StatusWaitingUser,
+	}}}
+	events := &fakeEventUseCase{ch: make(chan eventapp.DTO)}
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{
+		Events: events, Questions: questions, Sessions: sessions,
+	}))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -203,21 +231,25 @@ func TestGraphQLWebSocketPendingQuestionBatchesSubscriptionReceivesBatch(t *test
 	})
 	assertSocketMessageType(t, conn, "connection_ack")
 	writeSocketJSON(t, conn, map[string]any{
-		"id":   "questions-1",
+		"id":   "state-1",
 		"type": "subscribe",
 		"payload": map[string]any{
 			"query": `subscription($sessionId: ID!) {
-				pendingQuestionBatches(sessionId: $sessionId) {
-					id
-					sessionId
-					status
-					questions {
+				sessionStateUpdates(sessionId: $sessionId) {
+					ready
+					session { id status }
+					questionBatch {
 						id
-						title
-						allowCustom
-						options {
+						sessionId
+						status
+						questions {
 							id
-							label
+							title
+							allowCustom
+							options {
+								id
+								label
+							}
 						}
 					}
 				}
@@ -225,6 +257,13 @@ func TestGraphQLWebSocketPendingQuestionBatchesSubscriptionReceivesBatch(t *test
 			"variables": map[string]any{"sessionId": "session-1"},
 		},
 	})
+	readyMessage := readSocketMessage(t, conn)
+	readyPayload := readyMessage["payload"].(map[string]any)
+	readyData := readyPayload["data"].(map[string]any)
+	readyItem := readyData["sessionStateUpdates"].(map[string]any)
+	if readyItem["ready"] != true {
+		t.Fatalf("session state ready item = %#v", readyItem)
+	}
 
 	pending <- questionapp.BatchDTO{
 		ID:        "batch-1",
@@ -245,8 +284,8 @@ func TestGraphQLWebSocketPendingQuestionBatchesSubscriptionReceivesBatch(t *test
 	}
 
 	message := readSocketMessage(t, conn)
-	if message["type"] != "next" || message["id"] != "questions-1" {
-		t.Fatalf("websocket message = %#v, want next for questions-1", message)
+	if message["type"] != "next" || message["id"] != "state-1" {
+		t.Fatalf("websocket message = %#v, want next for state-1", message)
 	}
 	payload, ok := message["payload"].(map[string]any)
 	if !ok {
@@ -256,9 +295,13 @@ func TestGraphQLWebSocketPendingQuestionBatchesSubscriptionReceivesBatch(t *test
 	if !ok {
 		t.Fatalf("payload data = %#v", payload["data"])
 	}
-	batch, ok := data["pendingQuestionBatches"].(map[string]any)
+	stateItem, ok := data["sessionStateUpdates"].(map[string]any)
 	if !ok {
-		t.Fatalf("pendingQuestionBatches payload = %#v", data["pendingQuestionBatches"])
+		t.Fatalf("sessionStateUpdates payload = %#v", data["sessionStateUpdates"])
+	}
+	batch, ok := stateItem["questionBatch"].(map[string]any)
+	if !ok || stateItem["ready"] != false {
+		t.Fatalf("session state item = %#v", stateItem)
 	}
 	if batch["id"] != "batch-1" || batch["sessionId"] != "session-1" || batch["status"] != "pending" {
 		t.Fatalf("question batch = %#v", batch)
@@ -622,6 +665,15 @@ type fakeTimelineUseCase struct {
 	subscribed chan struct{}
 }
 
+type fakeGraphQLSessionUseCase struct {
+	sessionapp.UseCase
+	getSessionResult sessionapp.DetailDTO
+}
+
+func (u *fakeGraphQLSessionUseCase) GetSession(context.Context, sessiondomain.ID) (sessionapp.DetailDTO, error) {
+	return u.getSessionResult, nil
+}
+
 func (u *fakeEventUseCase) LiveSessionEvents(context.Context, eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
 	if u.subscribed == nil {
 		u.subscribed = make(chan struct{})
@@ -692,7 +744,7 @@ func (u *fakeQuestionUseCase) ListPendingBySession(context.Context, questiondoma
 	return nil, nil
 }
 
-func (u *fakeQuestionUseCase) PendingQuestionBatches(context.Context, questiondomain.SessionID) (<-chan questionapp.BatchDTO, error) {
+func (u *fakeQuestionUseCase) QuestionBatchUpdates(context.Context, questiondomain.SessionID) (<-chan questionapp.BatchDTO, error) {
 	if u.pendingCh != nil {
 		return u.pendingCh, nil
 	}

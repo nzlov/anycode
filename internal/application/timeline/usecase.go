@@ -26,8 +26,7 @@ type ListSessionEventsInput struct {
 }
 
 type SessionEventsInput struct {
-	Scope        eventdomain.Scope
-	AfterEventID eventdomain.ID
+	Scope eventdomain.Scope
 }
 
 type SessionRepository interface {
@@ -61,30 +60,25 @@ const (
 )
 
 type Service struct {
-	store      eventdomain.Store
 	live       LiveEventSource
 	sessions   SessionRepository
 	transcript CodexTranscriptSource
 	index      CodexSessionIndex
 }
 
-func New(store eventdomain.Store, live LiveEventSource, sessions SessionRepository, transcript CodexTranscriptSource, index CodexSessionIndex) *Service {
-	return &Service{store: store, live: live, sessions: sessions, transcript: transcript, index: index}
+func New(live LiveEventSource, sessions SessionRepository, transcript CodexTranscriptSource, index CodexSessionIndex) *Service {
+	return &Service{live: live, sessions: sessions, transcript: transcript, index: index}
 }
 
 func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (port.Page[DTO], error) {
 	if s == nil {
 		return port.Page[DTO]{}, errors.New("timeline usecase: nil service")
 	}
-	if s.store == nil {
-		return port.Page[DTO]{}, errors.New("event store is required")
-	}
 	if input.SessionID == "" {
 		return port.Page[DTO]{}, errors.New("session id is required")
 	}
 	limit := normalizeLimit(input.Limit)
-	sessionID := eventdomain.SessionID(input.SessionID)
-	events, err := s.sessionHistoryEvents(ctx, input.SessionID, eventdomain.Scope{SessionID: &sessionID})
+	events, err := s.sessionHistoryEvents(ctx, input.SessionID)
 	if err != nil {
 		return port.Page[DTO]{}, fmt.Errorf("list session events: %w", err)
 	}
@@ -107,9 +101,6 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	if s == nil {
 		return nil, errors.New("timeline usecase: nil service")
 	}
-	if s.store == nil {
-		return nil, errors.New("event store is required")
-	}
 	if s.live == nil {
 		return nil, errors.New("live event source is required")
 	}
@@ -121,29 +112,18 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 		close(out)
 		return nil, err
 	}
-	events, err := s.eventsAfter(ctx, input.Scope, input.AfterEventID)
-	if err != nil {
-		cancelLive()
-		close(out)
-		return nil, fmt.Errorf("list session events: %w", err)
-	}
 	go func() {
 		defer close(out)
 		defer cancelLive()
 		seen := map[eventdomain.ID]struct{}{}
-		for _, event := range events {
-			seen[event.ID] = struct{}{}
-			select {
-			case out <- toDTO(event):
-			case <-ctx.Done():
-				return
-			}
-		}
 		for {
 			select {
 			case eventDTO, ok := <-live:
 				if !ok {
 					return
+				}
+				if eventDTO.Type != "process.codex_event" {
+					continue
 				}
 				if _, ok := seen[eventdomain.ID(eventDTO.ID)]; ok {
 					continue
@@ -162,56 +142,18 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	return out, nil
 }
 
-func (s *Service) eventsAfter(ctx context.Context, scope eventdomain.Scope, after eventdomain.ID) ([]eventdomain.DomainEvent, error) {
-	if scope.SessionID == nil || s.transcript == nil || s.sessions == nil {
-		return s.store.After(ctx, scope, after)
-	}
-	events, err := s.sessionHistoryEvents(ctx, sessiondomain.ID(*scope.SessionID), scope)
+func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID) ([]eventdomain.DomainEvent, error) {
+	events, err := s.codexTranscriptEvents(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	index := -1
-	if after != "" {
-		for i, event := range events {
-			if event.ID == after {
-				index = i
-				break
-			}
-		}
-		if index < 0 {
-			return nil, fmt.Errorf("find after event: %s", after)
-		}
-	}
-	if index+1 >= len(events) {
-		return nil, nil
-	}
-	return events[index+1:], nil
-}
-
-func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID, scope eventdomain.Scope) ([]eventdomain.DomainEvent, error) {
-	stored, err := s.store.List(ctx, scope)
-	if err != nil {
-		return nil, err
-	}
-	events := nonCodexSessionEvents(stored)
-	transcript, err := s.codexTranscriptEvents(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	events = append(events, transcript...)
-	sortEvents(events)
 	return events, nil
 }
 
-func nonCodexSessionEvents(events []eventdomain.DomainEvent) []eventdomain.DomainEvent {
-	filtered := make([]eventdomain.DomainEvent, 0, len(events))
-	for _, event := range events {
-		if event.Type == "process.codex_event" {
-			continue
-		}
-		filtered = append(filtered, event)
-	}
-	return filtered
+type orderedTranscriptEvent struct {
+	event        eventdomain.DomainEvent
+	sessionIndex int
+	eventIndex   int
 }
 
 func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondomain.ID) ([]eventdomain.DomainEvent, error) {
@@ -230,8 +172,8 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondo
 		return nil, nil
 	}
 	sessionIDForEvent := eventdomain.SessionID(current.ID)
-	result := []eventdomain.DomainEvent(nil)
-	for _, codexSessionID := range codexSessionIDs {
+	ordered := []orderedTranscriptEvent(nil)
+	for sessionIndex, codexSessionID := range codexSessionIDs {
 		events, err := s.transcript.SessionEvents(ctx, processdomain.CodexTranscriptInput{
 			CodexSessionID: codexSessionID,
 		})
@@ -242,23 +184,42 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondo
 			if event.Type == "" {
 				continue
 			}
-			id := event.EventID
-			if id == "" {
-				id = fmt.Sprintf("%s:line-%d", codexSessionID, index)
+			eventID := event.EventID
+			if eventID == "" {
+				eventID = fmt.Sprintf("line-%d", index)
 			}
 			createdAt := event.CreatedAt
 			if createdAt.IsZero() {
 				createdAt = current.UpdatedAt
 			}
-			result = append(result, eventdomain.DomainEvent{
-				ID:        eventdomain.ID("codex:" + id),
-				Scope:     eventdomain.Scope{ProjectID: string(current.ProjectID), SessionID: &sessionIDForEvent},
-				SessionID: &sessionIDForEvent,
-				Type:      "process.codex_event",
-				Payload:   codexSessionEventPayload(event),
-				CreatedAt: createdAt,
+			ordered = append(ordered, orderedTranscriptEvent{
+				event: eventdomain.DomainEvent{
+					ID:        eventdomain.ID(processdomain.CanonicalCodexEventID(codexSessionID, eventID)),
+					Scope:     eventdomain.Scope{ProjectID: string(current.ProjectID), SessionID: &sessionIDForEvent},
+					SessionID: &sessionIDForEvent,
+					Type:      "process.codex_event",
+					Payload:   codexSessionEventPayload(codexSessionID, event),
+					CreatedAt: createdAt,
+				},
+				sessionIndex: sessionIndex,
+				eventIndex:   index,
 			})
 		}
+	}
+	sort.SliceStable(ordered, func(i, j int) bool {
+		left := ordered[i]
+		right := ordered[j]
+		if !left.event.CreatedAt.Equal(right.event.CreatedAt) {
+			return left.event.CreatedAt.Before(right.event.CreatedAt)
+		}
+		if left.sessionIndex != right.sessionIndex {
+			return left.sessionIndex < right.sessionIndex
+		}
+		return left.eventIndex < right.eventIndex
+	})
+	result := make([]eventdomain.DomainEvent, 0, len(ordered))
+	for _, item := range ordered {
+		result = append(result, item.event)
 	}
 	return result, nil
 }
@@ -289,12 +250,13 @@ func (s *Service) codexSessionIDs(ctx context.Context, current sessiondomain.Ses
 	return ids, nil
 }
 
-func codexSessionEventPayload(event processdomain.CodexEvent) map[string]any {
-	payload := make(map[string]any, len(event.Payload)+2)
+func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEvent) map[string]any {
+	payload := make(map[string]any, len(event.Payload)+3)
 	for key, value := range event.Payload {
 		payload[key] = value
 	}
 	payload["codexType"] = event.Type
+	payload["codexSessionId"] = codexSessionID
 	if event.EventID != "" {
 		payload["codexEventId"] = event.EventID
 	}
@@ -320,17 +282,6 @@ func pageEventsBefore(events []eventdomain.DomainEvent, before eventdomain.ID, l
 		start = 0
 	}
 	return events[start:end], len(events), start > 0
-}
-
-func sortEvents(events []eventdomain.DomainEvent) {
-	sort.SliceStable(events, func(i, j int) bool {
-		left := events[i]
-		right := events[j]
-		if !left.CreatedAt.Equal(right.CreatedAt) {
-			return left.CreatedAt.Before(right.CreatedAt)
-		}
-		return left.ID < right.ID
-	})
 }
 
 func normalizeLimit(limit int) int {
