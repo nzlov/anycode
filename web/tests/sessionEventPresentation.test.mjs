@@ -39,7 +39,7 @@ test('compactEventPayload preserves nested values from unknown transcript record
   );
 });
 
-test('mergeSessionEvents keeps command and result in one tool entry with complete command text', () => {
+test('mergeSessionEvents keeps command code and result in one tool entry', () => {
   const events = [
     {
       id: 'run-1',
@@ -69,7 +69,7 @@ test('mergeSessionEvents keeps command and result in one tool entry with complet
     merged[0].body,
     'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue',
   );
-  assert.equal(merged[0].execInput, "/bin/bash -lc 'git ls-tree -r --name-only HEAD | head -300'");
+  assert.equal(merged[0].execInput, 'git ls-tree -r --name-only HEAD | head -300');
   assert.equal(
     merged[0].execOutput,
     'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue',
@@ -171,7 +171,7 @@ test('mergeSessionEvents pairs command and result across non-tool status events'
   assert.equal(merged[0].id, 'run-1');
   assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
   assert.equal(merged[0].body, 'web/src/pages/SessionDetailPage.vue');
-  assert.equal(merged[0].execOutput, '命令完成\nweb/src/pages/SessionDetailPage.vue');
+  assert.equal(merged[0].execOutput, 'web/src/pages/SessionDetailPage.vue');
   assert.equal(merged[1].id, 'status-1');
 });
 
@@ -192,6 +192,25 @@ test('mergeSessionEvents normalizes shell wrapper commands with escaped spaces',
 
   assert.equal(merged[0].title, 'Shell git diff -- "docs/plan/a file.md"');
   assert.equal(merged[0].body, '');
+  assert.equal(merged[0].execInput, 'git diff -- "docs/plan/a file.md"');
+});
+
+test('mergeSessionEvents removes command completion text from standalone exec output', () => {
+  const merged = mergeSessionEvents([
+    {
+      id: 'result-1',
+      kind: 'tool',
+      title: '命令结果',
+      body: '命令完成，退出码 0\nbuild complete',
+      command: "/bin/bash -lc 'npm run build'",
+      createdAt: '2026-07-07T01:00:01Z',
+      time: '01:00',
+      rawType: 'process.codex_event',
+    },
+  ]);
+
+  assert.equal(merged[0].execInput, 'npm run build');
+  assert.equal(merged[0].execOutput, 'build complete');
 });
 
 test('mergeSessionEvents does not pair a command with a mismatched command result', () => {

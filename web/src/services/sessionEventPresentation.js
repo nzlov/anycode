@@ -216,7 +216,7 @@ export function mergeSessionEvents(events) {
         body: isCommand ? '' : event.body,
       };
       if (isCommand) {
-        entry.execInput = event.command || event.body;
+        entry.execInput = command;
         entry.execOutput = '';
       }
       merged.push(entry);
@@ -234,7 +234,7 @@ export function mergeSessionEvents(events) {
       if (toolIndex !== -1) {
         const tool = openTools[toolIndex];
         tool.entry.body = tool.isCommand ? shellBody(event.body) : toolBody(tool.input, event.body);
-        if (tool.isCommand) tool.entry.execOutput = event.body;
+        if (tool.isCommand) tool.entry.execOutput = commandOutputBody(event.body);
         tool.entry.time = event.time || tool.entry.time;
         tool.entry.images = event.images || tool.entry.images;
         openTools.splice(toolIndex, 1);
@@ -243,8 +243,8 @@ export function mergeSessionEvents(events) {
       const command = shellCommandDisplay(event.command);
       const entry = { ...event, body: shellBody(event.body) };
       if (isResultEvent(event) || command) {
-        entry.execInput = event.command || '';
-        entry.execOutput = event.body;
+        entry.execInput = command;
+        entry.execOutput = commandOutputBody(event.body);
       }
       if (command) entry.title = `Shell ${command}`;
       merged.push(entry);
