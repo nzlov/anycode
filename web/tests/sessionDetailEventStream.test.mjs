@@ -107,6 +107,17 @@ test('session detail removes the old pending-question watcher', () => {
   assert.equal(pageSource.includes('watch(\n  isWaitingForAnswer'), false);
 });
 
+test('closed session detail removes the prompt area instead of showing a hint', () => {
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(pageSource, /<div v-if="!isClosed" class="detail-composer">/);
+  assert.doesNotMatch(pageSource, /detail-closed-banner/);
+  assert.doesNotMatch(pageSource, /卡片已关闭，工作树与分支已清理/);
+});
+
 test('subscription schema exposes only session-scoped transcript and unified state streams', () => {
   const schemaSource = readFileSync(
     new URL('../../internal/interfaces/graphql/graph/schema.graphqls', import.meta.url),
