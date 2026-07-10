@@ -69,6 +69,11 @@ test('mergeSessionEvents keeps command and result in one tool entry with complet
     merged[0].body,
     'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue',
   );
+  assert.equal(merged[0].execInput, "/bin/bash -lc 'git ls-tree -r --name-only HEAD | head -300'");
+  assert.equal(
+    merged[0].execOutput,
+    'web/src/pages/SessionDetailPage.vue\nweb/src/components/SessionEventMessage.vue',
+  );
 });
 
 test('mergeSessionEvents combines generic tool input and output by tool call id', () => {
@@ -166,6 +171,7 @@ test('mergeSessionEvents pairs command and result across non-tool status events'
   assert.equal(merged[0].id, 'run-1');
   assert.equal(merged[0].title, 'Shell git ls-tree -r --name-only HEAD | head -300');
   assert.equal(merged[0].body, 'web/src/pages/SessionDetailPage.vue');
+  assert.equal(merged[0].execOutput, '命令完成\nweb/src/pages/SessionDetailPage.vue');
   assert.equal(merged[1].id, 'status-1');
 });
 
@@ -588,6 +594,16 @@ test('codexCommandResultBody falls back when aggregated output is empty', () => 
   });
 
   assert.equal(body, 'fallback output');
+});
+
+test('codexCommandResultBody preserves command output verbatim', () => {
+  const body = codexCommandResultBody({
+    type: 'command_execution',
+    exit_code: 0,
+    aggregated_output: '命令完成，退出码 0\n\n raw output \n',
+  });
+
+  assert.equal(body, '命令完成，退出码 0\n\n raw output \n');
 });
 
 test('mergeSessionEvents keeps completed command ANSI for terminal rendering', () => {

@@ -75,7 +75,10 @@ export function useSessionDetail(sessionId: string) {
     if (!liveStopped) bufferingLiveEvents = true;
     error.value = '';
     try {
-      const [sessionResult, eventResult] = await Promise.allSettled([getSession(sessionId), getSessionEventPage(sessionId, '', eventPageSize)]);
+      const [sessionResult, eventResult] = await Promise.allSettled([
+        getSession(sessionId),
+        getSessionEventPage(sessionId, '', eventPageSize),
+      ]);
       if (sessionRequests.isCurrent(sessionRequest)) {
         if (sessionResult.status === 'fulfilled') {
           session.value = sessionResult.value;
@@ -97,9 +100,7 @@ export function useSessionDetail(sessionId: string) {
           eventsPageInfo.value = eventResult.value.pageInfo;
         } else {
           error.value =
-            eventResult.reason instanceof Error
-              ? eventResult.reason.message
-              : '加载会话事件失败';
+            eventResult.reason instanceof Error ? eventResult.reason.message : '加载会话事件失败';
         }
       }
     } finally {
@@ -238,15 +239,16 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function loadOlderEvents() {
+  async function loadOlderEvents(): Promise<string | null> {
     const beforeEventId = olderSessionEventCursor(eventsPageInfo.value);
-    if (loadingOlderEvents.value || beforeEventId === null) return;
+    if (loadingOlderEvents.value || beforeEventId === null) return null;
     loadingOlderEvents.value = true;
     error.value = '';
     try {
       const result = await getSessionEventPage(sessionId, beforeEventId, eventPageSize);
       events.value = prependOlderEvents(events.value, result.items);
       eventsPageInfo.value = result.pageInfo;
+      return result.pageInfo.nextCursor || null;
     } catch (err) {
       error.value = err instanceof Error ? err.message : '加载历史事件失败';
       throw err;
@@ -417,13 +419,7 @@ export function useSessionDetail(sessionId: string) {
       accessKeyValid = await validateAccessKeyForReconnect();
     }
     if (generation !== subscriptionGeneration || liveStopped) return;
-    if (
-      shouldReconnectAfterClose(
-        close.acknowledged,
-        accessKeyValid,
-        close.completedByServer,
-      )
-    ) {
+    if (shouldReconnectAfterClose(close.acknowledged, accessKeyValid, close.completedByServer)) {
       scheduleReconnect();
       return;
     }

@@ -633,6 +633,8 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 		}}
 	}
 	payload := payloadOrEmpty(record.Payload)
+	_, hadEncryptedContent := payload["encrypted_content"]
+	delete(payload, "encrypted_content")
 	createdAt := parseSessionTimestamp(record.Timestamp)
 	var events []process.CodexEvent
 	switch record.Type {
@@ -645,6 +647,9 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 			CreatedAt: createdAt,
 		}}
 	case "response_item":
+		if hadEncryptedContent && stringValue(payload, "type") == "reasoning" && reasoningText(payload) == "" {
+			return nil
+		}
 		events = codexEventsFromResponseItem(record.Timestamp, payload, createdAt)
 	case "event_msg":
 		events = codexEventsFromEventMessage(record.Timestamp, payload, createdAt, sessionCWD)

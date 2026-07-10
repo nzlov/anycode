@@ -725,6 +725,28 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 	}
 }
 
+func TestParseSessionLogLineFiltersEncryptedReasoning(t *testing.T) {
+	encryptedOnly := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"reasoning","id":"reasoning-1","summary":[],"encrypted_content":"secret"}}`), "/workspace/project", "rollout.jsonl", 1)
+	if len(encryptedOnly) != 0 {
+		t.Fatalf("encrypted-only reasoning events = %#v, want none", encryptedOnly)
+	}
+
+	readable := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"reasoning","id":"reasoning-2","summary":[{"type":"summary_text","text":"visible summary"}],"encrypted_content":"secret"}}`), "/workspace/project", "rollout.jsonl", 2)
+	if len(readable) != 1 {
+		t.Fatalf("readable reasoning events = %#v, want one", readable)
+	}
+	item, ok := readable[0].Payload["item"].(map[string]any)
+	if !ok {
+		t.Fatalf("readable reasoning item = %#v", readable[0].Payload["item"])
+	}
+	if _, ok := item["encrypted_content"]; ok {
+		t.Fatalf("readable reasoning item leaked encrypted_content: %#v", item)
+	}
+	if got := stringValue(eventNormalizedItem(t, readable[0]), "output"); got != "visible summary" {
+		t.Fatalf("readable reasoning output = %q", got)
+	}
+}
+
 func TestParseSessionLogLinePreservesKnownPayloads(t *testing.T) {
 	tests := []struct {
 		name      string

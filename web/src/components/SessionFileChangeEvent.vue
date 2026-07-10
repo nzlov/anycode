@@ -12,9 +12,10 @@
       <time>{{ event.time }}</time>
     </button>
     <div v-if="expanded" class="session-file-change__body">
-      <div v-if="event.fileChanges?.length" class="session-file-change__list">
+      <DiffViewer v-if="diffFileChanges.length" :file-diffs="diffFileChanges" />
+      <div v-if="plainFileChanges.length" class="session-file-change__list">
         <div
-          v-for="change in event.fileChanges"
+          v-for="change in plainFileChanges"
           :key="`${change.kind}:${change.path}`"
           class="session-file-change__item"
         >
@@ -26,26 +27,48 @@
             <span>目标</span>
             <code>{{ change.movePath }}</code>
           </div>
-          <pre v-if="change.unifiedDiff" class="session-file-change__diff">{{
-            change.unifiedDiff
-          }}</pre>
         </div>
       </div>
-      <pre v-else>{{ event.body || '已记录文件修改' }}</pre>
+      <pre v-if="diffFileChanges.length === 0 && plainFileChanges.length === 0">{{
+        event.body || '已记录文件修改'
+      }}</pre>
     </div>
   </article>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-import type { SessionEvent } from '@/services/sessions';
+import DiffViewer from '@/components/DiffViewer.vue';
+import { fileDiffFromUnifiedDiff } from '@/services/sessionFileChangeDiff';
+import type { FileChange, SessionEvent } from '@/services/sessions';
 
-defineProps<{
+const props = defineProps<{
   event: SessionEvent;
 }>();
 
 const expanded = ref(false);
+const fileChangePresentations = computed(() =>
+  (props.event.fileChanges ?? []).map((change) => ({
+    change,
+    diff: change.unifiedDiff
+      ? fileDiffFromUnifiedDiff(change.path, diffStatus(change.kind), change.unifiedDiff)
+      : null,
+  })),
+);
+const diffFileChanges = computed(() =>
+  fileChangePresentations.value.flatMap(({ diff }) => (diff ? [diff] : [])),
+);
+const plainFileChanges = computed(() =>
+  fileChangePresentations.value.flatMap(({ change, diff }) => (diff ? [] : [change])),
+);
+
+function diffStatus(kind: FileChange['kind']) {
+  if (kind === 'add' || kind === 'create') return 'added';
+  if (kind === 'delete' || kind === 'remove') return 'deleted';
+  if (kind === 'rename') return 'renamed';
+  return 'modified';
+}
 
 function fileChangeKindText(kind: string) {
   const labels: Record<string, string> = {
@@ -152,12 +175,7 @@ function fileChangeKindText(kind: string) {
   font-size: 12px;
 }
 
-.session-file-change__diff {
-  max-height: 520px;
-  overflow: auto;
-  padding: 8px;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface);
+.session-file-change__body :deep(.diff-file-header) {
+  padding: 8px 10px;
 }
 </style>

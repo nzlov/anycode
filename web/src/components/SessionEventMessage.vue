@@ -2,7 +2,6 @@
   <article class="session-event-message" :class="messageClass">
     <SessionFileChangeEvent v-if="isFileChange" :event="event" />
     <SessionToolEvent v-else-if="isTool" :event="event" />
-    <SessionUsageEvent v-else-if="event.kind === 'usage'" :event="event" />
     <SessionStatusEvent v-else-if="event.kind === 'status'" :event="event" />
 
     <template v-else>
@@ -36,7 +35,6 @@ import SessionEventImages from '@/components/SessionEventImages.vue';
 import SessionFileChangeEvent from '@/components/SessionFileChangeEvent.vue';
 import SessionStatusEvent from '@/components/SessionStatusEvent.vue';
 import SessionToolEvent from '@/components/SessionToolEvent.vue';
-import SessionUsageEvent from '@/components/SessionUsageEvent.vue';
 import type { SessionEvent } from '@/services/sessions';
 
 const props = defineProps<{

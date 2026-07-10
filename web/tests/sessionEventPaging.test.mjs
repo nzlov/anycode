@@ -28,11 +28,18 @@ test('olderSessionEventCursor uses the backend cursor', () => {
 });
 
 test('useSessionDetail loads older events with cursor input instead of page number', () => {
-  const source = readFileSync(new URL('../src/composables/useSessionDetail.ts', import.meta.url), 'utf8');
-  const match = /async function loadOlderEvents\(\) \{(?<body>[\s\S]*?)\n  \}/.exec(source);
+  const source = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+  const match =
+    /async function loadOlderEvents\(\)(?:: Promise<[^>]+>)? \{(?<body>[\s\S]*?)\n\s{2}\}/.exec(
+      source,
+    );
 
   assert.ok(match?.groups?.body);
   assert.match(match.groups.body, /olderSessionEventCursor\(eventsPageInfo\.value\)/);
   assert.match(match.groups.body, /getSessionEventPage\(sessionId, beforeEventId, eventPageSize\)/);
   assert.doesNotMatch(match.groups.body, /page\s*[,+)]/);
+  assert.match(match.groups.body, /return result\.pageInfo\.nextCursor/);
 });

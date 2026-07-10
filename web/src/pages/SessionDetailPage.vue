@@ -214,6 +214,23 @@
                     <q-item-label>{{ session?.config.permissionMode || '-' }}</q-item-label>
                   </q-item-section>
                 </q-item>
+                <q-item v-if="latestTokenUsage">
+                  <q-item-section>
+                    <q-item-label caption>Token 用量</q-item-label>
+                    <q-item-label class="token-usage-summary">
+                      <span>输入 {{ formatTokenCount(latestTokenUsage.inputTokens) }}</span>
+                      <span>缓存 {{ formatTokenCount(latestTokenUsage.cachedInputTokens) }}</span>
+                      <span>输出 {{ formatTokenCount(latestTokenUsage.outputTokens) }}</span>
+                      <span
+                        >推理 {{ formatTokenCount(latestTokenUsage.reasoningOutputTokens) }}</span
+                      >
+                      <span>累计 {{ formatTokenCount(latestTokenUsage.totalTokens) }}</span>
+                      <span v-if="latestTokenUsage.contextWindow">
+                        上下文 {{ formatTokenCount(latestTokenUsage.contextWindow) }}
+                      </span>
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
               </q-list>
 
               <q-btn
@@ -403,9 +420,7 @@ import AppPagination from '@/components/AppPagination.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
-import {
-  normalizePermissionMode,
-} from '@/components/promptOptions';
+import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { getSessionDiffFiles, getSessionFileDiff } from '@/services/diff';
@@ -450,9 +465,11 @@ const diffPage = ref(1);
 const diffPageSize = 20;
 const selectedDiffContext = ref(initialDiffContext());
 let mounted = false;
+let preservingOlderEventScroll = false;
 const {
   session,
   events,
+  eventsPageInfo,
   pendingQuestionBatches,
   loading,
   loadingOlderEvents,
@@ -499,9 +516,17 @@ const composerConfigDirty = computed(() => {
 type StreamEntry = SessionEvent;
 
 const streamEntries = computed<StreamEntry[]>(() => {
-  const entries: StreamEntry[] = [...events.value];
+  const entries: StreamEntry[] = events.value.filter((event) => event.kind !== 'usage');
   const sortedEntries = sortSessionEvents(entries);
   return mergeSessionEvents(sortedEntries);
+});
+const latestTokenUsage = computed(() => {
+  const sortedEvents = sortSessionEvents(events.value);
+  for (let index = sortedEvents.length - 1; index >= 0; index -= 1) {
+    const event = sortedEvents[index];
+    if (event?.kind === 'usage' && event.usage) return event.usage;
+  }
+  return null;
 });
 const composerAction = computed(() => {
   const current = session.value;
@@ -675,6 +700,10 @@ function closeReasonLabel(value: string) {
     workflow_closed: '流程关闭',
   };
   return labels[value] ?? value;
+}
+
+function formatTokenCount(value: number) {
+  return value.toLocaleString();
 }
 
 async function loadChangeList() {
@@ -864,26 +893,20 @@ watch(diffPage, () => {
   }
 });
 
-watch(
-  () => loading.value,
-  (value, previous) => {
-    if (!value && previous) {
-      void scrollEventsToBottom();
-    }
-  },
-);
+function isEventStreamAtBottom(body: HTMLElement) {
+  return body.scrollHeight - body.scrollTop - body.clientHeight <= 1;
+}
 
 watch(
   () => events.value.length,
-  (_value, previous) => {
-    if (loadingOlderEvents.value) return;
+  () => {
+    if (loadingOlderEvents.value || preservingOlderEventScroll) return;
     const body = streamBodyRef.value;
-    const shouldStickToBottom =
-      !body || previous === 0 || body.scrollHeight - body.scrollTop - body.clientHeight < 96;
-    if (shouldStickToBottom) {
+    if (body && isEventStreamAtBottom(body)) {
       void scrollEventsToBottom();
     }
   },
+  { flush: 'pre' },
 );
 
 watch(
@@ -913,16 +936,29 @@ async function initializeSessionDetail() {
   await startLiveUpdates();
   if (!mounted) return;
   await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
-  if (!mounted) stopLiveUpdates();
+  if (!mounted) return;
+  await scrollEventsToBottom();
 }
 
 async function onEventScroll() {
   const body = streamBodyRef.value;
-  if (!body || body.scrollTop > 64 || loadingOlderEvents.value) return;
+  if (!body || body.scrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
+    return;
   const previousHeight = body.scrollHeight;
-  await loadOlderEvents();
-  await nextTick();
-  body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+  preservingOlderEventScroll = true;
+  try {
+    while (mounted && body.scrollHeight <= previousHeight) {
+      const requestedCursor = eventsPageInfo.value.nextCursor;
+      if (!requestedCursor) break;
+      await loadOlderEvents();
+      await nextTick();
+      if (!eventsPageInfo.value.nextCursor || eventsPageInfo.value.nextCursor === requestedCursor)
+        break;
+    }
+    body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+  } finally {
+    preservingOlderEventScroll = false;
+  }
 }
 
 async function scrollEventsToBottom() {
@@ -1009,6 +1045,14 @@ async function scrollEventsToBottom() {
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.token-usage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--ac-text);
+  font-size: 12px;
 }
 
 .right-panel,

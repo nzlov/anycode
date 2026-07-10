@@ -398,7 +398,7 @@ func TestSnapshotCommitSkipsUserHooks(t *testing.T) {
 	}
 }
 
-func TestSnapshotCommitRejectsUnexpectedBranch(t *testing.T) {
+func TestSnapshotCommitCapturesRenamedWorktreeBranch(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")
 	}
@@ -425,14 +425,24 @@ func TestSnapshotCommitRejectsUnexpectedBranch(t *testing.T) {
 		t.Fatalf("write change: %v", err)
 	}
 
-	if _, err := client.SnapshotCommit(ctx, worktreePath, "session-1"); err == nil {
-		t.Fatal("SnapshotCommit() expected unexpected branch error")
-	} else if gitErrorCode(err) != "unexpected_worktree_branch" {
-		t.Fatalf("SnapshotCommit() error = %#v", err)
+	snapshot, err := client.SnapshotCommit(ctx, worktreePath, "session-1")
+	if err != nil {
+		t.Fatalf("SnapshotCommit() error = %v", err)
 	}
-	if got := gitOutput(t, worktreePath, "log", "--oneline", "--max-count=1"); !strings.Contains(got, "base") {
-		t.Fatalf("SnapshotCommit() should not create a commit on unexpected branch, head = %q", got)
+	if got := gitOutput(t, repo, "show", snapshot+":README.md"); got != "changed" {
+		t.Fatalf("snapshot README = %q", got)
 	}
+	if got := gitOutput(t, repo, "rev-parse", snapshotRefName("session-1")); got != snapshot {
+		t.Fatalf("snapshot ref = %q, want %q", got, snapshot)
+	}
+	if err := client.Remove(ctx, worktreePath); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if err := client.DeleteBranch(ctx, repo, "session-1"); err != nil {
+		t.Fatalf("DeleteBranch() error = %v", err)
+	}
+	runGit(t, repo, "gc", "--prune=now")
+	runGit(t, repo, "cat-file", "-e", snapshot+"^{commit}")
 }
 
 func TestSnapshotCommitFromEmptyRepositorySurvivesCleanup(t *testing.T) {

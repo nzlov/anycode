@@ -153,18 +153,6 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 
 func (c *Client) SnapshotCommit(ctx context.Context, path string, branch string) (string, error) {
 	branch = strings.TrimSpace(branch)
-	currentBranch, err := c.CurrentBranch(ctx, path)
-	if err != nil {
-		return "", err
-	}
-	if branch == "" || currentBranch != branch {
-		return "", &Error{
-			Code:   "unexpected_worktree_branch",
-			Path:   path,
-			Args:   []string{"branch", "--show-current"},
-			Stderr: fmt.Sprintf("current branch %q does not match expected branch %q", currentBranch, branch),
-		}
-	}
 	if _, err := c.run(ctx, path, "add", "-A", "--"); err != nil {
 		return "", err
 	}

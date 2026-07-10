@@ -18,7 +18,7 @@ test('session detail event stream uses transcript events instead of database pro
   assert.equal(streamBlock.includes('prompt-append-'), false);
 });
 
-test('session event presentation covers transcript user tool status and usage events', () => {
+test('session event presentation moves usage out of the event list into session info', () => {
   const serviceSource = readFileSync(
     new URL('../src/services/sessions.ts', import.meta.url),
     'utf8',
@@ -40,9 +40,18 @@ test('session event presentation covers transcript user tool status and usage ev
   assert.match(serviceSource, /codexType === 'token_count'/);
   assert.match(componentSource, /SessionToolEvent/);
   assert.match(componentSource, /SessionStatusEvent/);
-  assert.match(componentSource, /SessionUsageEvent/);
+  assert.doesNotMatch(componentSource, /SessionUsageEvent/);
   assert.match(componentSource, /event\.images/);
   assert.match(toolComponentSource, /SessionEventImages/);
+
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+  assert.match(pageSource, /event\.kind !== 'usage'/);
+  assert.match(pageSource, /const latestTokenUsage = computed/);
+  assert.match(pageSource, /Token 用量/);
+  assert.match(pageSource, /latestTokenUsage\.totalTokens/);
 });
 
 test('session detail buffers live events while loading the transcript snapshot', () => {
@@ -191,12 +200,74 @@ test('session detail does not reconnect or report auth failure after normal serv
   assert.match(composableSource, /if \(close\.completedByServer\) return;/);
 });
 
+test('subscription refresh does not force a scrolled transcript back to the bottom', () => {
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(
+    pageSource,
+    /watch\(\s*\(\) => loading\.value,[\s\S]*?scrollEventsToBottom\(\)/,
+  );
+  assert.match(
+    pageSource,
+    /await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);\s*if \(!mounted\) return;\s*await scrollEventsToBottom\(\)/,
+  );
+  assert.match(pageSource, /function isEventStreamAtBottom\(body: HTMLElement\)[\s\S]*?<= 1/);
+  assert.match(pageSource, /\{ flush: 'pre' \}/);
+  assert.doesNotMatch(pageSource, /< 96/);
+  assert.match(pageSource, /let preservingOlderEventScroll = false/);
+  assert.match(
+    pageSource,
+    /if \(loadingOlderEvents\.value \|\| preservingOlderEventScroll\) return/,
+  );
+  assert.match(
+    pageSource,
+    /preservingOlderEventScroll = true;[\s\S]*?finally \{\s*preservingOlderEventScroll = false;/,
+  );
+});
+
+test('exec events render raw input and output in separate terminals', () => {
+  const componentSource = readFileSync(
+    new URL('../src/components/SessionToolEvent.vue', import.meta.url),
+    'utf8',
+  );
+  const terminalSource = readFileSync(
+    new URL('../src/components/SessionTerminalOutput.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(componentSource, /<SessionTerminalOutput :body="event\.execInput \?\? ''"/);
+  assert.match(componentSource, /<SessionTerminalOutput :body="event\.execOutput \?\? ''"/);
+  assert.match(
+    componentSource,
+    /<SessionTerminalOutput v-else-if="event\.body" :body="event\.body"/,
+  );
+  assert.match(terminalSource, /renderTerminal,\s*\{ flush: 'post' \}/);
+  assert.doesNotMatch(terminalSource, /nextTick\(renderTerminal\)/);
+});
+
+test('older event loading crosses pages that add no visible height', () => {
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(pageSource, /while \(mounted && body\.scrollHeight <= previousHeight\)/);
+  assert.match(pageSource, /const requestedCursor = eventsPageInfo\.value\.nextCursor/);
+  assert.match(pageSource, /eventsPageInfo\.value\.nextCursor === requestedCursor/);
+});
+
 test('card subscriptions validate pre-ack closes before reconnecting', () => {
   const sessionsPageSource = readFileSync(
     new URL('../src/composables/useSessionsPage.ts', import.meta.url),
     'utf8',
   );
-  const overviewSource = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
 
   assert.match(sessionsPageSource, /onClose: \(close\) =>[\s\S]*handleSubscriptionClose\(close\)/);
   assert.match(
@@ -247,7 +318,7 @@ test('session state remains independent from transcript snapshot failures', () =
   assert.doesNotMatch(composableSource, /getSessionDetail/);
   assert.match(
     composableSource,
-    /Promise\.allSettled\(\[getSession\(sessionId\), getSessionEventPage\(sessionId, '', eventPageSize\)\]\)/,
+    /Promise\.allSettled\(\[\s*getSession\(sessionId\),\s*getSessionEventPage\(sessionId, '', eventPageSize\),?\s*\]\)/,
   );
   assert.match(composableSource, /sessionResult\.status === 'fulfilled'/);
   assert.match(composableSource, /eventResult\.status === 'fulfilled'/);

@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { prepareTerminalOutput } from '@/services/sessionEventPresentation';
 
@@ -66,12 +66,7 @@ onMounted(() => {
   renderTerminal();
 });
 
-watch(
-  () => props.body,
-  () => {
-    void nextTick(renderTerminal);
-  },
-);
+watch(() => props.body, renderTerminal, { flush: 'post' });
 
 onBeforeUnmount(() => {
   terminal?.dispose();

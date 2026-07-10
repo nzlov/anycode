@@ -99,6 +99,8 @@ export interface SessionEvent {
   title: string;
   body: string;
   command?: string;
+  execInput?: string;
+  execOutput?: string;
   toolCallId?: string;
   toolPhase?: 'started' | 'completed';
   fileChangeId?: string;
