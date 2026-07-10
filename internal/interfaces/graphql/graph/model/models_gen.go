@@ -50,6 +50,19 @@ type CloseSessionInput struct {
 	Reason    string `json:"reason"`
 }
 
+type CodexModelOption struct {
+	Label                  string                        `json:"label"`
+	Value                  string                        `json:"value"`
+	DefaultReasoningEffort string                        `json:"defaultReasoningEffort"`
+	ReasoningEfforts       []*CodexReasoningEffortOption `json:"reasoningEfforts"`
+}
+
+type CodexReasoningEffortOption struct {
+	Label       string `json:"label"`
+	Value       string `json:"value"`
+	Description string `json:"description"`
+}
+
 type CommitRecord struct {
 	Hash        string `json:"hash"`
 	ShortHash   string `json:"shortHash"`

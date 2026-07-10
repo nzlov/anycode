@@ -17,6 +17,7 @@ import (
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -24,6 +25,36 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+func TestQueryCodexModelOptionsReturnsStartupCatalog(t *testing.T) {
+	resolver := NewResolver(UseCases{
+		CodexModels: []processdomain.CodexModel{
+			{
+				Slug:                  "gpt-5.6-sol",
+				DisplayName:           "GPT-5.6-Sol",
+				DefaultReasoningLevel: "low",
+				SupportedReasoningLevels: []processdomain.CodexReasoningLevel{
+					{Effort: "low", Description: "Fast responses"},
+					{Effort: "ultra", Description: "Delegated maximum"},
+				},
+			},
+		},
+	}).Query()
+
+	got, err := resolver.CodexModelOptions(context.Background())
+	if err != nil {
+		t.Fatalf("CodexModelOptions() error = %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("CodexModelOptions() = %#v", got)
+	}
+	if got[0].Value != "gpt-5.6-sol" || got[0].Label != "GPT-5.6-Sol" || got[0].DefaultReasoningEffort != "low" {
+		t.Fatalf("CodexModelOptions()[0] = %#v", got[0])
+	}
+	if len(got[0].ReasoningEfforts) != 2 || got[0].ReasoningEfforts[1].Value != "ultra" {
+		t.Fatalf("ReasoningEfforts = %#v", got[0].ReasoningEfforts)
+	}
+}
 
 func TestQueryProjectsForwardsUseCase(t *testing.T) {
 	now := time.Unix(10, 0).UTC()

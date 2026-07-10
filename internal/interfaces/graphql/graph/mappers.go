@@ -11,12 +11,34 @@ import (
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
+
+func mapCodexModelOptions(items []processdomain.CodexModel) []*model.CodexModelOption {
+	options := make([]*model.CodexModelOption, 0, len(items))
+	for _, item := range items {
+		efforts := make([]*model.CodexReasoningEffortOption, 0, len(item.SupportedReasoningLevels))
+		for _, effort := range item.SupportedReasoningLevels {
+			efforts = append(efforts, &model.CodexReasoningEffortOption{
+				Label:       effort.Effort,
+				Value:       effort.Effort,
+				Description: effort.Description,
+			})
+		}
+		options = append(options, &model.CodexModelOption{
+			Label:                  item.DisplayName,
+			Value:                  item.Slug,
+			DefaultReasoningEffort: item.DefaultReasoningLevel,
+			ReasoningEfforts:       efforts,
+		})
+	}
+	return options
+}
 
 func mapProject(dto projectapp.DTO) *model.Project {
 	return &model.Project{

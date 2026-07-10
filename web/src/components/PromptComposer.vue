@@ -102,7 +102,7 @@
         map-options
         class="compact-select"
         :disable="disabled"
-        :options="codexModelOptions"
+        :options="modelOptions"
       >
         <template #prepend>
           <q-icon name="smart_toy" />
@@ -167,7 +167,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 import {
-  codexModelOptions,
+  type CodexModelOption,
   codexModelLabel,
   defaultReasoningEffortForModel,
   normalizeCodexModel,
@@ -191,6 +191,7 @@ const props = withDefaults(
     compact?: boolean;
     showBadge?: boolean;
     readonlyConfig?: boolean;
+    modelOptions?: CodexModelOption[];
   }>(),
   {
     title: '',
@@ -199,6 +200,7 @@ const props = withDefaults(
     compact: false,
     showBadge: true,
     readonlyConfig: false,
+    modelOptions: () => [],
   },
 );
 
@@ -228,9 +230,9 @@ const filesModel = computed({
 const modelModel = computed({
   get: () => props.model,
   set: (value: string) => {
-    const nextModel = normalizeCodexModel(value);
+    const nextModel = normalizeCodexModel(props.modelOptions, value);
     emit('update:model', nextModel);
-    const nextEffort = defaultReasoningEffortForModel(nextModel);
+    const nextEffort = defaultReasoningEffortForModel(props.modelOptions, nextModel);
     if (nextEffort !== props.effort) {
       emit('update:effort', nextEffort);
     }
@@ -238,7 +240,7 @@ const modelModel = computed({
 });
 const effortModel = computed({
   get: () => props.effort,
-  set: (value: string) => emit('update:effort', normalizeReasoningEffort(props.model, value)),
+  set: (value: string) => emit('update:effort', normalizeReasoningEffort(props.modelOptions, props.model, value)),
 });
 const permissionModel = computed({
   get: () => props.permission,
@@ -248,20 +250,20 @@ const permissionIcon = computed(
   () => permissionModeOptions.find((option) => option.value === props.permission)?.icon ?? 'edit_note',
 );
 const permissionLabel = computed(() => permissionModeLabel(props.permission));
-const modelLabel = computed(() => codexModelLabel(props.model));
-const effortLabel = computed(() => reasoningEffortLabel(props.model, props.effort));
-const reasoningEffortOptions = computed(() => reasoningEffortOptionsForModel(props.model));
+const modelLabel = computed(() => codexModelLabel(props.modelOptions, props.model));
+const effortLabel = computed(() => reasoningEffortLabel(props.modelOptions, props.model, props.effort));
+const reasoningEffortOptions = computed(() => reasoningEffortOptionsForModel(props.modelOptions, props.model));
 const showAttachmentZone = computed(() => props.files.length > 0 || draggingFiles.value);
 
 watch(
-  () => props.model,
-  (value) => {
-    const nextModel = normalizeCodexModel(value);
+  () => [props.model, props.modelOptions] as const,
+  ([value]) => {
+    const nextModel = normalizeCodexModel(props.modelOptions, value);
     if (nextModel !== value) {
       emit('update:model', nextModel);
       return;
     }
-    const nextEffort = normalizeReasoningEffort(nextModel, props.effort);
+    const nextEffort = normalizeReasoningEffort(props.modelOptions, nextModel, props.effort);
     if (nextEffort !== props.effort) {
       emit('update:effort', nextEffort);
     }
@@ -270,9 +272,9 @@ watch(
 );
 
 watch(
-  () => props.effort,
-  (value) => {
-    const nextEffort = normalizeReasoningEffort(props.model, value);
+  () => [props.effort, props.modelOptions] as const,
+  ([value]) => {
+    const nextEffort = normalizeReasoningEffort(props.modelOptions, props.model, value);
     if (nextEffort !== value) {
       emit('update:effort', nextEffort);
     }

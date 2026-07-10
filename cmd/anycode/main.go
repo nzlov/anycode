@@ -114,7 +114,8 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	if mcpCommand != "" && mcpSocket != "" {
 		codex = codexcli.New(codexBin, codexcli.WithMCPStdio(mcpCommand, mcpSocket, accessKey))
 	}
-	if err := ensureCodexReady(context.Background(), codex); err != nil {
+	capabilities, err := ensureCodexReady(context.Background(), codex)
+	if err != nil {
 		return graph.UseCases{}, err
 	}
 	events := store.Events()
@@ -135,6 +136,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 		Diff:        diffapp.New(store.Sessions(), store.Projects(), gitdiffClient),
 		Workflows:   workflowService,
 		Questions:   questionService,
+		CodexModels: capabilities.Models,
 	}, nil
 }
 
@@ -188,25 +190,28 @@ type codexProber interface {
 	Probe(ctx context.Context) (processdomain.CodexCapabilities, error)
 }
 
-func ensureCodexReady(ctx context.Context, prober codexProber) error {
+func ensureCodexReady(ctx context.Context, prober codexProber) (processdomain.CodexCapabilities, error) {
 	if prober == nil {
-		return errors.New("nil codex prober")
+		return processdomain.CodexCapabilities{}, errors.New("nil codex prober")
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	capabilities, err := prober.Probe(probeCtx)
 	if err != nil {
-		return fmt.Errorf("probe codex cli: %w", err)
+		return processdomain.CodexCapabilities{}, fmt.Errorf("probe codex cli: %w", err)
 	}
 	if !capabilities.SupportsExec {
-		return errors.New("codex cli does not support exec")
+		return processdomain.CodexCapabilities{}, errors.New("codex cli does not support exec")
 	}
 	if !capabilities.SupportsResume {
-		return errors.New("codex cli does not support exec resume")
+		return processdomain.CodexCapabilities{}, errors.New("codex cli does not support exec resume")
 	}
-	log.Printf("codex cli ready: version=%s exec=%t resume=%t", capabilities.Version, capabilities.SupportsExec, capabilities.SupportsResume)
-	return nil
+	if len(capabilities.Models) == 0 {
+		return processdomain.CodexCapabilities{}, errors.New("codex cli did not return model options")
+	}
+	log.Printf("codex cli ready: version=%s exec=%t resume=%t models=%d", capabilities.Version, capabilities.SupportsExec, capabilities.SupportsResume, len(capabilities.Models))
+	return capabilities, nil
 }
 
 func localHTTPBaseURL(addr string) string {

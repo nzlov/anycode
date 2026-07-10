@@ -71,7 +71,7 @@
           />
         </div>
 
-        <PromptComposer
+        <CodexPromptComposer
           v-model:prompt="prompt"
           v-model:files="files"
           v-model:model="model"
@@ -93,7 +93,7 @@
               @click="createSession"
             />
           </template>
-        </PromptComposer>
+        </CodexPromptComposer>
       </q-card-section>
     </q-card>
   </q-dialog>
@@ -103,12 +103,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { Notify } from 'quasar';
 
-import PromptComposer from '@/components/PromptComposer.vue';
+import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import {
-  firstCodexModelValue,
-  normalizeCodexModel,
   normalizePermissionMode,
-  normalizeReasoningEffort,
 } from '@/components/promptOptions';
 import { useProjectBranches } from '@/composables/useProjectBranches';
 import { useProjects } from '@/composables/useProjects';
@@ -135,8 +132,8 @@ const mode = ref<'workflow' | 'chat'>('chat');
 const priority = ref<SessionPriority>('medium');
 const prompt = ref('');
 const files = ref<File[]>([]);
-const model = ref(firstCodexModelValue());
-const effort = ref(normalizeReasoningEffort(model.value, ''));
+const model = ref('');
+const effort = ref('');
 const permission = ref(normalizePermissionMode('workspace-write'));
 const creating = ref(false);
 const workflowAvailabilityLoading = ref(false);
@@ -215,9 +212,8 @@ function rememberSessionConfig() {
 
 function selectInitialRunConfig() {
   const stored = storedSessionConfig();
-  const nextModel = normalizeCodexModel(stored.codexModel ?? model.value);
-  model.value = nextModel;
-  effort.value = normalizeReasoningEffort(nextModel, stored.reasoningEffort ?? effort.value);
+  model.value = stored.codexModel ?? model.value;
+  effort.value = stored.reasoningEffort ?? effort.value;
   permission.value = normalizePermissionMode(stored.permissionMode ?? permission.value);
 }
 
@@ -403,15 +399,6 @@ watch(
     });
   },
 );
-
-watch(model, (value) => {
-  const nextModel = normalizeCodexModel(value);
-  if (nextModel !== value) {
-    model.value = nextModel;
-    return;
-  }
-  effort.value = normalizeReasoningEffort(nextModel, effort.value);
-});
 
 watch(projectId, (value, previous) => {
   if (!value || value === previous) return;

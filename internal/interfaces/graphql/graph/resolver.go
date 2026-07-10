@@ -14,6 +14,7 @@ import (
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 )
 
 // This file will not be regenerated automatically.
@@ -30,6 +31,7 @@ type UseCases struct {
 	Diff        diffapp.UseCase
 	Workflows   workflowapp.UseCase
 	Questions   questionapp.UseCase
+	CodexModels []processdomain.CodexModel
 }
 
 type Resolver struct {

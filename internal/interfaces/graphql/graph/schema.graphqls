@@ -5,6 +5,7 @@ scalar Upload
 scalar Int64
 
 type Query {
+  codexModelOptions: [CodexModelOption!]!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
@@ -76,6 +77,19 @@ type GitState {
 type GitBranch {
   name: String!
   isCurrent: Boolean!
+}
+
+type CodexModelOption {
+  label: String!
+  value: String!
+  defaultReasoningEffort: String!
+  reasoningEfforts: [CodexReasoningEffortOption!]!
+}
+
+type CodexReasoningEffortOption {
+  label: String!
+  value: String!
+  description: String!
 }
 
 type DirectoryPage {

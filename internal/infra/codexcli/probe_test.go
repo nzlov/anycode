@@ -15,6 +15,7 @@ case "$*" in
   "--version") echo "codex 1.2.3"; exit 0 ;;
   "exec --help") echo "exec help"; exit 0 ;;
   "exec resume --help") echo "resume help"; exit 0 ;;
+  "debug models") echo '{"models":[{"slug":"gpt-5.6-sol","display_name":"GPT-5.6-Sol","default_reasoning_level":"low","supported_reasoning_levels":[{"effort":"low","description":"Fast"},{"effort":"high","description":"Deep"}],"visibility":"list","priority":1}]}'; exit 0 ;;
 esac
 echo "unexpected $*" >&2
 exit 2
@@ -29,6 +30,40 @@ exit 2
 	}
 	if !got.SupportsExec || !got.SupportsResume {
 		t.Fatalf("capabilities = %+v", got)
+	}
+}
+
+func TestProbeReadsModelCatalog(t *testing.T) {
+	bin := fakeCodex(t, `#!/bin/sh
+case "$*" in
+  "--version") echo "codex 1.2.3"; exit 0 ;;
+  "exec --help") echo "exec help"; exit 0 ;;
+  "exec resume --help") echo "resume help"; exit 0 ;;
+  "debug models") cat <<'JSON'
+{"models":[
+  {"slug":"hidden-model","display_name":"Hidden","default_reasoning_level":"low","supported_reasoning_levels":[{"effort":"low","description":"Fast"}],"visibility":"hidden","priority":0},
+  {"slug":"gpt-5.6-sol","display_name":"GPT-5.6-Sol","default_reasoning_level":"low","supported_reasoning_levels":[{"effort":"low","description":"Fast responses"},{"effort":"ultra","description":"Delegated maximum"}],"visibility":"list","priority":1}
+]}
+JSON
+    exit 0 ;;
+esac
+echo "unexpected $*" >&2
+exit 2
+`)
+
+	got, err := New(bin).Probe(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Models) != 1 {
+		t.Fatalf("Models = %+v", got.Models)
+	}
+	model := got.Models[0]
+	if model.Slug != "gpt-5.6-sol" || model.DisplayName != "GPT-5.6-Sol" || model.DefaultReasoningLevel != "low" {
+		t.Fatalf("model = %+v", model)
+	}
+	if len(model.SupportedReasoningLevels) != 2 || model.SupportedReasoningLevels[1].Effort != "ultra" {
+		t.Fatalf("reasoning levels = %+v", model.SupportedReasoningLevels)
 	}
 }
 

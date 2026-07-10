@@ -96,6 +96,19 @@ type CodexCapabilities struct {
 	Version        string
 	SupportsExec   bool
 	SupportsResume bool
+	Models         []CodexModel
+}
+
+type CodexModel struct {
+	Slug                     string
+	DisplayName              string
+	DefaultReasoningLevel    string
+	SupportedReasoningLevels []CodexReasoningLevel
+}
+
+type CodexReasoningLevel struct {
+	Effort      string
+	Description string
 }
 
 type CodexProcess interface {
