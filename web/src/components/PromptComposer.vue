@@ -67,69 +67,40 @@
         </template>
         <q-tooltip>添加附件</q-tooltip>
       </q-file>
-      <div v-if="readonlyConfig" class="prompt-config-chip">
-        <q-icon :name="permissionIcon" />
-        <span>{{ permissionLabel }}</span>
-        <q-tooltip>运行权限</q-tooltip>
-      </div>
-      <q-select
+      <PromptConfigControls
+        v-if="!compact || !$q.screen.lt.md"
+        :model="model"
+        :effort="effort"
+        :permission="permission"
+        :disabled="disabled"
+        :readonly-config="readonlyConfig"
+        @update:model="emit('update:model', $event)"
+        @update:effort="emit('update:effort', $event)"
+        @update:permission="emit('update:permission', $event)"
+      />
+      <q-btn
         v-else
-        v-model="permissionModel"
-        dense
-        borderless
-        emit-value
-        map-options
-        class="compact-select"
+        flat
+        round
+        class="app-icon-btn prompt-config-trigger"
+        icon="tune"
+        aria-label="运行参数"
         :disable="disabled"
-        :options="permissionModeOptions"
       >
-        <template #prepend>
-          <q-icon :name="permissionIcon" />
-        </template>
-        <q-tooltip>运行权限</q-tooltip>
-      </q-select>
-      <div v-if="readonlyConfig" class="prompt-config-chip">
-        <q-icon name="smart_toy" />
-        <span>{{ modelLabel }}</span>
-        <q-tooltip>Codex 模型</q-tooltip>
-      </div>
-      <q-select
-        v-else
-        v-model="modelModel"
-        dense
-        borderless
-        emit-value
-        map-options
-        class="compact-select"
-        :disable="disabled"
-        :options="codexModelOptions"
-      >
-        <template #prepend>
-          <q-icon name="smart_toy" />
-        </template>
-        <q-tooltip>Codex 模型</q-tooltip>
-      </q-select>
-      <div v-if="readonlyConfig" class="prompt-config-chip">
-        <q-icon name="psychology" />
-        <span>{{ effortLabel }}</span>
-        <q-tooltip>思考强度</q-tooltip>
-      </div>
-      <q-select
-        v-else
-        v-model="effortModel"
-        dense
-        borderless
-        emit-value
-        map-options
-        class="compact-select"
-        :disable="disabled"
-        :options="reasoningEffortOptions"
-      >
-        <template #prepend>
-          <q-icon name="psychology" />
-        </template>
-        <q-tooltip>思考强度</q-tooltip>
-      </q-select>
+        <q-menu class="prompt-config-menu" anchor="top right" self="bottom right">
+          <PromptConfigControls
+            class="prompt-config-controls--stacked"
+            :model="model"
+            :effort="effort"
+            :permission="permission"
+            :disabled="disabled"
+            :readonly-config="readonlyConfig"
+            @update:model="emit('update:model', $event)"
+            @update:effort="emit('update:effort', $event)"
+            @update:permission="emit('update:permission', $event)"
+          />
+        </q-menu>
+      </q-btn>
       <q-space />
       <slot name="actions" />
     </div>
@@ -139,7 +110,15 @@
         <q-card-section class="row items-center q-pb-sm">
           <div class="text-subtitle2 text-weight-bold ellipsis">{{ previewName }}</div>
           <q-space />
-          <q-btn flat round dense icon="close" aria-label="关闭预览" @click="closePreview">
+          <q-btn
+            flat
+            round
+            dense
+            class="app-icon-btn"
+            icon="close"
+            aria-label="关闭预览"
+            @click="closePreview"
+          >
             <q-tooltip>关闭预览</q-tooltip>
           </q-btn>
         </q-card-section>
@@ -164,19 +143,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { useQuasar } from 'quasar';
 
-import {
-  codexModelOptions,
-  codexModelLabel,
-  defaultReasoningEffortForModel,
-  normalizeCodexModel,
-  normalizeReasoningEffort,
-  permissionModeLabel,
-  permissionModeOptions,
-  reasoningEffortLabel,
-  reasoningEffortOptionsForModel,
-} from '@/components/promptOptions';
+import PromptConfigControls from '@/components/PromptConfigControls.vue';
 
 const props = withDefaults(
   defineProps<{
@@ -210,6 +180,7 @@ const emit = defineEmits<{
   'update:permission': [value: string];
 }>();
 
+const $q = useQuasar();
 const previewOpen = ref(false);
 const previewName = ref('');
 const previewKind = ref<'image' | 'video' | ''>('');
@@ -223,62 +194,10 @@ const promptModel = computed({
 });
 const filesModel = computed({
   get: () => props.files,
-  set: (value: File[] | File | null) => emit('update:files', Array.isArray(value) ? value : value ? [value] : []),
+  set: (value: File[] | File | null) =>
+    emit('update:files', Array.isArray(value) ? value : value ? [value] : []),
 });
-const modelModel = computed({
-  get: () => props.model,
-  set: (value: string) => {
-    const nextModel = normalizeCodexModel(value);
-    emit('update:model', nextModel);
-    const nextEffort = defaultReasoningEffortForModel(nextModel);
-    if (nextEffort !== props.effort) {
-      emit('update:effort', nextEffort);
-    }
-  },
-});
-const effortModel = computed({
-  get: () => props.effort,
-  set: (value: string) => emit('update:effort', normalizeReasoningEffort(props.model, value)),
-});
-const permissionModel = computed({
-  get: () => props.permission,
-  set: (value: string) => emit('update:permission', value),
-});
-const permissionIcon = computed(
-  () => permissionModeOptions.find((option) => option.value === props.permission)?.icon ?? 'edit_note',
-);
-const permissionLabel = computed(() => permissionModeLabel(props.permission));
-const modelLabel = computed(() => codexModelLabel(props.model));
-const effortLabel = computed(() => reasoningEffortLabel(props.model, props.effort));
-const reasoningEffortOptions = computed(() => reasoningEffortOptionsForModel(props.model));
 const showAttachmentZone = computed(() => props.files.length > 0 || draggingFiles.value);
-
-watch(
-  () => props.model,
-  (value) => {
-    const nextModel = normalizeCodexModel(value);
-    if (nextModel !== value) {
-      emit('update:model', nextModel);
-      return;
-    }
-    const nextEffort = normalizeReasoningEffort(nextModel, props.effort);
-    if (nextEffort !== props.effort) {
-      emit('update:effort', nextEffort);
-    }
-  },
-  { immediate: true },
-);
-
-watch(
-  () => props.effort,
-  (value) => {
-    const nextEffort = normalizeReasoningEffort(props.model, value);
-    if (nextEffort !== value) {
-      emit('update:effort', nextEffort);
-    }
-  },
-  { immediate: true },
-);
 
 function fileIcon(file: File) {
   if (file.type.startsWith('image/')) return 'image';

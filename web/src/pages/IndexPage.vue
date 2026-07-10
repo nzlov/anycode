@@ -30,7 +30,7 @@
           @keyup.space.prevent="$router.push(`/sessions/${card.id}`)"
         >
           <q-menu context-menu>
-            <q-list dense class="overview-card-menu">
+            <q-list dense class="overview-card-menu app-touch-list">
               <q-item-label header>优先级</q-item-label>
               <q-item
                 v-for="priority in priorities"
@@ -112,7 +112,7 @@
                 flat
                 dense
                 no-caps
-                class="overview-todo-btn"
+                class="overview-todo-btn app-command-btn"
                 icon="checklist"
                 :label="`${card.todoList.completed}/${card.todoList.total}`"
                 aria-label="查看 TODO List"
@@ -122,8 +122,11 @@
               >
                 <q-tooltip>TODO List</q-tooltip>
                 <q-menu anchor="top left" self="bottom left" class="overview-todo-menu" @click.stop>
-                  <q-list dense separator>
-                    <q-item v-for="(item, index) in card.todoList.items" :key="`${card.id}-${index}`">
+                  <q-list dense separator class="app-touch-list">
+                    <q-item
+                      v-for="(item, index) in card.todoList.items"
+                      :key="`${card.id}-${index}`"
+                    >
                       <q-item-section avatar>
                         <q-icon
                           :name="item.completed ? 'check_circle' : 'radio_button_unchecked'"
@@ -145,7 +148,7 @@
                   v-if="card.pendingQuestion"
                   flat
                   dense
-                  class="lane-icon-btn lane-icon-btn--warning"
+                  class="lane-icon-btn app-icon-btn lane-icon-btn--warning"
                   icon="help"
                   aria-label="回答问题"
                   :loading="questionsLoading && activeQuestionSessionId === card.id"
@@ -157,7 +160,7 @@
                   v-if="cardAction(card)"
                   flat
                   dense
-                  class="lane-icon-btn"
+                  class="lane-icon-btn app-icon-btn"
                   :color="cardAction(card)?.color"
                   :icon="cardAction(card)?.icon"
                   :aria-label="cardAction(card)?.tooltip"
@@ -251,7 +254,9 @@ const {
 });
 const { projects, loadProjects } = useProjects();
 
-const overviewCardGroups = computed(() => createOverviewCardGroups(latestRows.value, historyRows.value));
+const overviewCardGroups = computed(() =>
+  createOverviewCardGroups(latestRows.value, historyRows.value),
+);
 const latestCards = computed(() => overviewCardGroups.value.latestCards);
 const uniqueHistoryCards = computed(() => overviewCardGroups.value.historyCards);
 const historyCards = computed(() => uniqueHistoryCards.value.slice(0, 10));

@@ -1,7 +1,16 @@
 <template>
   <q-page class="page-shell detail-page">
+    <q-tabs v-model="detailView" class="detail-mobile-tabs lt-md" dense align="justify">
+      <q-tab name="session" icon="forum" label="会话" />
+      <q-tab name="info" icon="info" label="信息" />
+      <q-tab name="changes" icon="difference" label="变更" />
+    </q-tabs>
+
     <div class="detail-grid">
-      <section class="event-panel">
+      <section
+        class="event-panel"
+        :class="{ 'event-panel--mobile-hidden': detailView !== 'session' }"
+      >
         <q-card flat bordered class="stream-card">
           <q-inner-loading :showing="loading">
             <q-spinner color="primary" size="32px" />
@@ -70,7 +79,7 @@
               <q-btn
                 v-if="composerAction"
                 unelevated
-                class="detail-composer__primary-btn"
+                class="detail-composer__primary-btn app-icon-btn"
                 :color="composerAction.color"
                 :icon="composerAction.icon"
                 :aria-label="composerAction.tooltip"
@@ -85,14 +94,23 @@
         </div>
       </section>
 
-      <aside class="right-panel">
+      <aside
+        class="right-panel"
+        :class="{ 'right-panel--mobile-hidden': detailView === 'session' }"
+      >
         <q-card flat bordered class="right-panel-card">
-          <q-tabs v-model="tab" dense align="justify" narrow-indicator>
+          <q-tabs
+            v-model="rightPanelTab"
+            class="detail-desktop-tabs gt-sm"
+            dense
+            align="justify"
+            narrow-indicator
+          >
             <q-tab name="info" icon="info" label="会话信息" />
             <q-tab name="changes" icon="difference" label="当前变更" />
           </q-tabs>
-          <q-separator />
-          <q-tab-panels v-model="tab" animated>
+          <q-separator class="gt-sm" />
+          <q-tab-panels v-model="rightPanelTab" animated>
             <q-tab-panel name="info">
               <div v-if="session?.mode === 'workflow'" class="workflow-progress">
                 <div class="workflow-progress__header">
@@ -199,7 +217,7 @@
               </q-list>
 
               <q-btn
-                class="full-width q-mt-md"
+                class="full-width q-mt-md app-command-btn"
                 outline
                 color="negative"
                 icon="close"
@@ -241,7 +259,7 @@
 
             <q-tab-panel name="changes">
               <q-btn
-                class="full-width q-mb-md"
+                class="full-width q-mb-md app-command-btn"
                 outline
                 color="primary"
                 icon="open_in_new"
@@ -268,7 +286,9 @@
                     flat
                     round
                     dense
+                    class="app-icon-btn"
                     icon="refresh"
+                    aria-label="刷新 Diff"
                     :loading="diffLoading"
                     @click="loadChangeList"
                   >
@@ -318,16 +338,12 @@
                 </q-item>
               </q-list>
 
-              <q-pagination
+              <AppPagination
                 v-if="diff?.available && diffPageMax > 1"
                 v-model="diffPage"
-                dense
-                boundary-numbers
-                direction-links
                 class="justify-center q-mt-md"
                 :max="diffPageMax"
-                :max-pages="5"
-                :disable="diffLoading"
+                :disabled="diffLoading"
               />
 
               <q-card v-else-if="diffLoading" flat bordered class="state-card">
@@ -353,7 +369,7 @@
             />
             <span>{{ selectedFilePath || '文件 Diff' }}</span>
           </div>
-          <q-btn flat round dense icon="close" aria-label="关闭" v-close-popup>
+          <q-btn v-close-popup flat round dense class="app-icon-btn" icon="close" aria-label="关闭">
             <q-tooltip>关闭</q-tooltip>
           </q-btn>
         </q-card-section>
@@ -383,6 +399,7 @@ import { Notify } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
+import AppPagination from '@/components/AppPagination.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import PromptComposer from '@/components/PromptComposer.vue';
 import SessionEventMessage, {
@@ -413,7 +430,15 @@ const composerModel = ref(firstCodexModelValue());
 const composerEffort = ref(normalizeReasoningEffort(composerModel.value, ''));
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerConfigReady = ref(false);
-const tab = ref('info');
+const detailView = ref<'session' | 'info' | 'changes'>('session');
+// GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.
+// Remove this mapping when desktop adopts the same three-view navigation.
+const rightPanelTab = computed<'info' | 'changes'>({
+  get: () => (detailView.value === 'changes' ? 'changes' : 'info'),
+  set: (value) => {
+    detailView.value = value;
+  },
+});
 const diff = ref<SessionDiff | null>(null);
 const diffLoading = ref(false);
 const fileDiffDialog = ref(false);
@@ -789,7 +814,9 @@ function notifyAppendError(err: unknown, fallback: string, cleanupError = '') {
 
 async function cleanupStagedAttachments(ids: string[]) {
   if (ids.length === 0) return '';
-  const results = await Promise.allSettled(ids.map((id) => deleteStagedAttachment(id, { notify: false })));
+  const results = await Promise.allSettled(
+    ids.map((id) => deleteStagedAttachment(id, { notify: false })),
+  );
   const failed = results.find(
     (result) => result.status === 'rejected' && !isStagedAttachmentAlreadyGone(result.reason),
   );
@@ -884,14 +911,14 @@ async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
   await submitPendingAnswers(batchId, answers);
 }
 
-watch(tab, (value) => {
+watch(rightPanelTab, (value) => {
   if (value === 'changes' && !diff.value && !diffLoading.value) {
     void loadChangeList();
   }
 });
 
 watch(diffPage, () => {
-  if (tab.value === 'changes') {
+  if (rightPanelTab.value === 'changes') {
     void loadChangeList();
   }
 });
@@ -985,6 +1012,14 @@ async function scrollEventsToBottom() {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+.detail-mobile-tabs {
+  min-height: 56px;
+  flex: 0 0 auto;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
 }
 
 .detail-page .detail-grid {
@@ -1150,10 +1185,6 @@ async function scrollEventsToBottom() {
 }
 
 .detail-composer__primary-btn {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
-  min-height: 42px;
   border-radius: 11px;
 }
 
@@ -1305,15 +1336,21 @@ async function scrollEventsToBottom() {
   word-break: break-word;
 }
 
-@media (max-width: 699px) {
+@media (max-width: 1023.98px) {
   .detail-page {
     height: 100%;
-    overflow: auto;
+    overflow: hidden;
+  }
+
+  .detail-mobile-tabs {
+    margin-bottom: 12px;
   }
 
   .detail-page .detail-grid {
-    gap: 12px;
-    align-items: start;
+    height: auto;
+    min-height: 0;
+    gap: 0;
+    align-items: stretch;
   }
 
   .stream-card__body {
@@ -1321,19 +1358,23 @@ async function scrollEventsToBottom() {
   }
 
   .event-panel {
-    height: auto;
-    min-height: min(72vh, 680px);
-  }
-
-  .right-panel {
-    height: auto;
-  }
-
-  .right-panel-card {
-    height: auto;
+    height: 100%;
     min-height: 0;
   }
 
+  .event-panel--mobile-hidden,
+  .right-panel--mobile-hidden {
+    display: none;
+  }
+
+  .right-panel,
+  .right-panel-card {
+    height: 100%;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 699px) {
   .file-diff-dialog {
     width: 100vw;
     max-width: 100vw;

@@ -64,8 +64,27 @@ export function defaultReasoningEffortForModel(model: string) {
   return reasoningEffortOptionsForModel(model)[0]?.value ?? '';
 }
 
+export type PromptConfigUpdate =
+  { field: 'model'; value: string } | { field: 'effort'; value: string };
+
+export function promptConfigUpdatesForModelChange(
+  value: string,
+  currentEffort: string,
+): PromptConfigUpdate[] {
+  const model = normalizeCodexModel(value);
+  const effort = defaultReasoningEffortForModel(model);
+  const updates: PromptConfigUpdate[] = [{ field: 'model', value: model }];
+  if (effort !== currentEffort) {
+    updates.push({ field: 'effort', value: effort });
+  }
+  return updates;
+}
+
 export function reasoningEffortLabel(model: string, value: string) {
-  return reasoningEffortOptionsForModel(model).find((option) => option.value === value)?.label ?? (value || '-');
+  return (
+    reasoningEffortOptionsForModel(model).find((option) => option.value === value)?.label ??
+    (value || '-')
+  );
 }
 
 export const permissionModeOptions = [

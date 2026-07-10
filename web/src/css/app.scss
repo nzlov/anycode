@@ -60,6 +60,28 @@ a {
   font-weight: 700;
 }
 
+.app-icon-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.app-command-btn {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.app-touch-list .q-item {
+  min-height: 44px;
+}
+
+.app-pagination .q-btn {
+  min-width: 44px !important;
+  min-height: 44px !important;
+}
+
 .app-drawer {
   background: var(--ac-sidebar);
   color: var(--ac-on-sidebar);
@@ -91,6 +113,10 @@ a {
 
 .page-shell {
   padding: 24px;
+}
+
+.page-shell.workbench-page {
+  padding-bottom: 88px;
 }
 
 .page-container--detail {
@@ -274,7 +300,7 @@ a {
 
 .overview-card-footer {
   display: flex;
-  min-height: 30px;
+  min-height: 44px;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -282,8 +308,8 @@ a {
 
 .overview-todo-btn {
   min-width: 72px;
-  height: 28px;
-  min-height: 28px;
+  height: 44px;
+  min-height: 44px;
   justify-content: flex-start;
   padding: 0 8px;
   border: 1px solid var(--ac-border);
@@ -467,10 +493,6 @@ a {
 }
 
 .lane-icon-btn {
-  width: 30px;
-  min-width: 30px;
-  height: 28px;
-  min-height: 28px;
   border: 1px solid var(--ac-border);
   border-radius: 7px;
   background: #ffffff;
@@ -761,6 +783,9 @@ a {
 }
 
 .new-session-dialog {
+  display: flex;
+  max-height: min(880px, calc(100dvh - 48px));
+  flex-direction: column;
   width: min(920px, 92vw) !important;
   max-width: 92vw !important;
   min-height: auto;
@@ -773,7 +798,15 @@ a {
 
 .new-session-body {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   gap: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.new-session-dialog__header {
+  flex: 0 0 auto;
 }
 
 .new-session-grid {
@@ -802,8 +835,17 @@ a {
 
 .new-session-grid .q-btn-toggle .q-btn {
   min-width: 0;
+  min-height: 44px;
   padding-right: 8px;
   padding-left: 8px;
+}
+
+.new-session-grid .q-field__control,
+.new-session-grid .q-field__marginal,
+.prompt-config-controls .q-field__control,
+.prompt-config-controls .q-field__marginal {
+  min-height: 44px;
+  height: 44px;
 }
 
 .prompt-shell {
@@ -888,15 +930,20 @@ a {
 }
 
 .toolbar-file-picker {
-  width: 42px;
-  max-width: 42px;
+  width: 44px;
+  max-width: 44px;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);
   background: var(--ac-surface-muted);
 }
 
+.toolbar-file-picker.q-field--dense .q-field__control,
+.toolbar-file-picker.q-field--dense .q-field__marginal {
+  min-height: 44px;
+  height: 44px;
+}
+
 .toolbar-file-picker .q-field__control {
-  min-height: 30px;
   padding: 0 10px;
 }
 
@@ -925,6 +972,34 @@ a {
   padding: 8px 12px;
   border-top: 1px solid var(--ac-border);
   background: color-mix(in srgb, var(--ac-surface-muted) 68%, transparent);
+}
+
+.prompt-config-controls {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-config-menu {
+  max-width: calc(100vw - 32px);
+  background: var(--ac-surface);
+  color: var(--ac-text);
+}
+
+.prompt-config-controls--stacked {
+  display: grid;
+  width: min(320px, calc(100vw - 32px));
+  gap: 8px;
+  padding: 12px;
+}
+
+.prompt-config-controls--stacked .compact-select,
+.prompt-config-controls--stacked .prompt-config-chip {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 
 .new-session-actions {
@@ -1060,7 +1135,7 @@ a {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1023.98px) {
   .detail-grid,
   .diff-layout,
   .workflow-layout {
@@ -1124,17 +1199,17 @@ a {
 
   .overview-session-card__body {
     min-height: 164px;
+    gap: 10px;
     padding: 14px;
   }
 
   .overview-card-title {
-    min-height: 40px;
+    min-height: 0;
     font-size: 16px;
   }
 
   .overview-card-meta-grid {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 8px 12px;
   }
 
   .branch-lane__header .q-item__section--side {
@@ -1207,17 +1282,30 @@ a {
   }
 
   .table-toolbar .q-input,
-  .table-toolbar .q-select,
-  .toolbar-file-picker,
-  .compact-select {
+  .table-toolbar .q-select {
     width: 100%;
   }
 
-  .new-session-dialog {
-    width: 100vw;
-    max-width: 100vw;
-    min-height: 100vh;
-    border-radius: 0;
+  .prompt-toolbar > .prompt-config-controls {
+    display: grid;
+    width: 100%;
+  }
+
+  .prompt-toolbar > .prompt-config-controls .compact-select,
+  .prompt-toolbar > .prompt-config-controls .prompt-config-chip {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .prompt-shell--compact .prompt-toolbar {
+    flex-wrap: nowrap;
+  }
+
+  .prompt-shell--compact .toolbar-file-picker {
+    width: 44px;
+    max-width: 44px;
+    flex: 0 0 44px;
   }
 
   .new-session-actions {
@@ -1231,5 +1319,16 @@ a {
 
   .new-session-actions > .q-btn:last-child {
     width: 100%;
+  }
+}
+
+@media (max-width: 599.98px) {
+  .new-session-dialog {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
   }
 }

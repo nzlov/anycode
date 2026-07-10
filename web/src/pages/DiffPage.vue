@@ -110,15 +110,7 @@
 
         <q-separator v-if="showPagination" />
         <q-card-actions v-if="showPagination" align="center" class="files-pagination">
-          <q-pagination
-            v-model="page"
-            dense
-            boundary-numbers
-            direction-links
-            :max="pageMax"
-            :max-pages="5"
-            :disable="loading"
-          />
+          <AppPagination v-model="page" :max="pageMax" :disabled="loading" />
         </q-card-actions>
       </q-card>
 
@@ -165,6 +157,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Notify } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
+import AppPagination from '@/components/AppPagination.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import {
   getBranchAllDiff,
@@ -248,7 +241,11 @@ async function loadDiff() {
           ? await getBranchAllDiff({ ...input, projectId: projectId.value, branch: branch.value })
           : await getSessionAllDiff({ ...input, sessionId: sessionId.value })
         : branchMode.value
-          ? await getBranchSingleDiff({ ...input, projectId: projectId.value, branch: branch.value })
+          ? await getBranchSingleDiff({
+              ...input,
+              projectId: projectId.value,
+              branch: branch.value,
+            })
           : await getSessionSingleDiff({ ...input, sessionId: sessionId.value });
     diff.value = nextDiff;
     page.value = nextDiff.pageInfo.page;

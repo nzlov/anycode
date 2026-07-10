@@ -2,7 +2,15 @@
   <q-layout view="lHh Lpr lFf" class="app-layout">
     <q-header bordered class="app-header">
       <q-toolbar>
-        <q-btn flat dense round class="lt-md" icon="menu" aria-label="打开导航" @click="toggleLeftDrawer">
+        <q-btn
+          flat
+          dense
+          round
+          class="lt-md app-icon-btn"
+          icon="menu"
+          aria-label="打开导航"
+          @click="toggleLeftDrawer"
+        >
           <q-tooltip>打开导航</q-tooltip>
         </q-btn>
 
@@ -12,6 +20,7 @@
           flat
           round
           dense
+          class="app-icon-btn"
           icon="create_new_folder"
           aria-label="选择项目目录"
           @click="directoryDialogOpen = true"
@@ -19,10 +28,10 @@
           <q-tooltip>选择项目目录</q-tooltip>
         </q-btn>
 
-        <q-btn flat dense round icon="palette" aria-label="主题模式">
-          <q-tooltip>主题模式</q-tooltip>
+        <q-btn flat round dense class="app-icon-btn" icon="more_vert" aria-label="更多操作">
           <q-menu>
-            <q-list dense>
+            <q-list dense class="app-touch-list">
+              <q-item-label header>主题模式</q-item-label>
               <q-item
                 v-for="mode in themeModes"
                 :key="mode.value"
@@ -36,12 +45,20 @@
                 </q-item-section>
                 <q-item-section>{{ mode.label }}</q-item-section>
               </q-item>
+              <q-separator />
+              <q-item
+                v-close-popup
+                clickable
+                class="text-negative"
+                @click="logoutDialogOpen = true"
+              >
+                <q-item-section avatar>
+                  <q-icon name="logout" />
+                </q-item-section>
+                <q-item-section>退出</q-item-section>
+              </q-item>
             </q-list>
           </q-menu>
-        </q-btn>
-
-        <q-btn flat round dense icon="logout" aria-label="退出" @click="logoutDialogOpen = true">
-          <q-tooltip>退出</q-tooltip>
         </q-btn>
       </q-toolbar>
     </q-header>
@@ -72,23 +89,37 @@
             @click="$router.push({ name: 'overview', query: { projectId: project.id } })"
           >
             <q-item-section avatar>
-              <q-icon name="folder_open" :color="projectActive(project.id) ? 'positive' : undefined" />
+              <q-icon
+                name="folder_open"
+                :color="projectActive(project.id) ? 'positive' : undefined"
+              />
             </q-item-section>
             <q-item-section>
               <q-item-label>{{ project.name }}</q-item-label>
             </q-item-section>
             <q-item-section side>
-              <q-btn flat round dense icon="more_vert" aria-label="项目设置" @click.stop.prevent>
-                <q-tooltip>项目设置</q-tooltip>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="more_vert"
+                aria-label="项目设置"
+                @click.stop.prevent
+              >
                 <q-menu>
-                  <q-list dense class="project-menu">
+                  <q-list dense class="project-menu app-touch-list">
                     <q-item clickable :to="`/projects/${project.id}/workflow`">
                       <q-item-section avatar>
                         <q-icon name="account_tree" />
                       </q-item-section>
                       <q-item-section>流程配置</q-item-section>
                     </q-item>
-                    <q-item clickable class="text-negative" @click="confirmRemoveProject(project.id, project.name)">
+                    <q-item
+                      clickable
+                      class="text-negative"
+                      @click="confirmRemoveProject(project.id, project.name)"
+                    >
                       <q-item-section avatar>
                         <q-icon name="playlist_remove" />
                       </q-item-section>
@@ -104,11 +135,21 @@
     </q-drawer>
 
     <q-page-container :class="{ 'page-container--detail': $route.name === 'session-detail' }">
-      <router-view :key="`${$route.fullPath}:${pageRefreshKey}`" @create-session="newSessionOpen = true" />
+      <router-view
+        :key="`${$route.fullPath}:${pageRefreshKey}`"
+        @create-session="newSessionOpen = true"
+      />
     </q-page-container>
 
     <q-page-sticky v-if="$route.name === 'overview'" position="bottom-right" :offset="[24, 24]">
-      <q-btn fab color="positive" text-color="dark" icon="add" aria-label="新建卡片" @click="newSessionOpen = true">
+      <q-btn
+        fab
+        color="positive"
+        text-color="dark"
+        icon="add"
+        aria-label="新建卡片"
+        @click="newSessionOpen = true"
+      >
         <q-tooltip>新建卡片</q-tooltip>
       </q-btn>
     </q-page-sticky>
@@ -128,7 +169,7 @@
             <div class="text-caption text-muted">会停止该项目所有运行中的卡片，并从列表隐藏。</div>
           </div>
           <q-space />
-          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
+          <q-btn v-close-popup flat round dense class="app-icon-btn" icon="close" aria-label="关闭">
             <q-tooltip>关闭</q-tooltip>
           </q-btn>
         </q-card-section>
@@ -140,11 +181,20 @@
         </q-card-section>
 
         <q-card-actions align="right">
-          <q-btn v-close-popup flat round icon="close" color="primary" aria-label="取消">
+          <q-btn
+            v-close-popup
+            flat
+            round
+            class="app-icon-btn"
+            icon="close"
+            color="primary"
+            aria-label="取消"
+          >
             <q-tooltip>取消</q-tooltip>
           </q-btn>
           <q-btn
             unelevated
+            class="app-command-btn"
             color="negative"
             icon="playlist_remove"
             label="移除"
@@ -163,10 +213,26 @@
           <div class="text-body2 text-muted q-mt-xs">退出后需要重新输入访问密钥。</div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn v-close-popup flat round icon="close" color="primary" aria-label="取消">
+          <q-btn
+            v-close-popup
+            flat
+            round
+            class="app-icon-btn"
+            icon="close"
+            color="primary"
+            aria-label="取消"
+          >
             <q-tooltip>取消</q-tooltip>
           </q-btn>
-          <q-btn unelevated color="negative" icon="logout" label="退出" no-caps @click="logout" />
+          <q-btn
+            unelevated
+            class="app-command-btn"
+            color="negative"
+            icon="logout"
+            label="退出"
+            no-caps
+            @click="logout"
+          />
         </q-card-actions>
       </q-card>
     </q-dialog>

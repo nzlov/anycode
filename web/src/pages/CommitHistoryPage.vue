@@ -7,7 +7,14 @@
           {{ session?.title ?? sessionId }} · {{ session?.branch ?? '-' }}
         </div>
       </div>
-      <q-btn flat round dense icon="arrow_back" aria-label="返回卡片" :to="`/sessions/${sessionId}`">
+      <q-btn
+        flat
+        round
+        dense
+        icon="arrow_back"
+        aria-label="返回卡片"
+        :to="`/sessions/${sessionId}`"
+      >
         <q-tooltip>返回卡片</q-tooltip>
       </q-btn>
     </div>
@@ -21,7 +28,9 @@
         <q-icon name="block" color="grey-6" size="32px" />
         <div>
           <div class="text-subtitle1 text-weight-bold">提交记录不可用</div>
-          <div class="text-body2 text-muted">当前卡片没有可读取的 git worktree 或项目不是 git 仓库。</div>
+          <div class="text-body2 text-muted">
+            当前卡片没有可读取的 git worktree 或项目不是 git 仓库。
+          </div>
         </div>
       </q-card-section>
       <q-card-section v-else-if="history.commits.length === 0" class="commit-history-empty">
@@ -37,7 +46,9 @@
             <q-icon name="commit" color="primary" />
           </q-item-section>
           <q-item-section>
-            <q-item-label class="commit-subject">{{ commit.subject || commit.shortHash }}</q-item-label>
+            <q-item-label class="commit-subject">{{
+              commit.subject || commit.shortHash
+            }}</q-item-label>
             <q-item-label caption>
               <span class="commit-hash">{{ commit.shortHash }}</span>
               <span class="q-mx-xs">·</span>
@@ -50,16 +61,12 @@
       </q-list>
     </q-card>
 
-    <q-pagination
+    <AppPagination
       v-if="pageMax > 1"
       v-model="page"
-      dense
-      boundary-numbers
-      direction-links
       class="justify-center q-mt-md"
       :max="pageMax"
-      :max-pages="5"
-      :disable="loading"
+      :disabled="loading"
     />
   </q-page>
 </template>
@@ -69,6 +76,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Notify } from 'quasar';
 import { useRoute } from 'vue-router';
 
+import AppPagination from '@/components/AppPagination.vue';
 import { getSessionCommitHistory, type SessionCommitHistory } from '@/services/diff';
 import { getSessionDetail, type SessionDetail } from '@/services/sessions';
 

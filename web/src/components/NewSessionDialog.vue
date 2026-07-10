@@ -1,13 +1,27 @@
 <template>
-  <q-dialog :model-value="modelValue" persistent @update:model-value="emitModel">
+  <q-dialog
+    :model-value="modelValue"
+    :maximized="$q.screen.lt.sm"
+    persistent
+    @update:model-value="emitModel"
+  >
     <q-card class="new-session-dialog">
-      <q-card-section class="row items-center q-pb-sm">
+      <q-card-section class="new-session-dialog__header row items-center q-pb-sm">
         <div>
           <div class="text-subtitle1 text-weight-bold">新建卡片</div>
           <div class="text-caption text-muted">配置项目、分支和 Codex 运行参数</div>
         </div>
         <q-space />
-        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭" :disable="creating">
+        <q-btn
+          v-close-popup
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="close"
+          aria-label="关闭"
+          :disable="creating"
+        >
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
       </q-card-section>
@@ -41,6 +55,7 @@
               flat
               round
               dense
+              class="app-icon-btn"
               icon="refresh"
               aria-label="刷新分支"
               :disable="creating || branchesLoading"
@@ -83,6 +98,7 @@
           <template #actions>
             <q-btn
               unelevated
+              class="app-command-btn"
               color="positive"
               text-color="dark"
               icon="send"
@@ -101,7 +117,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Notify } from 'quasar';
+import { Notify, useQuasar } from 'quasar';
 
 import PromptComposer from '@/components/PromptComposer.vue';
 import {
@@ -127,6 +143,7 @@ const emit = defineEmits<{
   create: [];
 }>();
 
+const $q = useQuasar();
 const { projects, projectOptions, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
 const projectId = ref(projects.value[0]?.id ?? '');
