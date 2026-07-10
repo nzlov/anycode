@@ -481,29 +481,6 @@ export async function listSessions(input: ListSessionsInput = {}): Promise<Sessi
   };
 }
 
-export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
-  const eventPageSize = 50;
-  const [eventsData, sessionData] = await Promise.all([
-    getSessionEventPage(sessionId, '', eventPageSize),
-    graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
-      query: `
-        query Session($id: ID!) {
-          session(id: $id) {
-            ${sessionDetailFields}
-          }
-        }
-      `,
-      variables: { id: sessionId },
-    }),
-  ]);
-
-  return {
-    session: normalizeSessionDetail(sessionData.session),
-    events: eventsData.items,
-    eventsPageInfo: eventsData.pageInfo,
-  };
-}
-
 export async function getSession(sessionId: string): Promise<SessionDetail> {
   const data = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
     query: `
@@ -1274,13 +1251,19 @@ function eventKind(type: string, payload: Record<string, unknown> = {}): Session
 }
 
 function isToolItem(type: string) {
-  return ['tool_call', 'tool_result', 'custom_tool_call', 'tool_search', 'mcp_tool_call'].includes(
-    type,
-  );
+  return [
+    'tool_call',
+    'tool_result',
+    'custom_tool_call',
+    'tool_search',
+    'web_search',
+    'mcp_tool_call',
+  ].includes(type);
 }
 
 function toolItemTitle(type: string) {
   if (type === 'tool_search') return '搜索工具';
+  if (type === 'web_search') return '网页搜索';
   if (type === 'custom_tool_call') return '自定义工具';
   if (type === 'mcp_tool_call') return 'MCP 工具';
   if (type === 'tool_result') return '工具结果';

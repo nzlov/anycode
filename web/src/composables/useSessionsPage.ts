@@ -1,6 +1,15 @@
 import { computed, ref, watch } from 'vue';
 
-import { AnyCodeGraphQLError } from '@/services/graphqlClient';
+import {
+  AnyCodeGraphQLError,
+  getGraphQLAccessKey,
+  verifyGraphQLAccessKey,
+  type GraphQLSubscriptionClose,
+} from '@/services/graphqlClient';
+import {
+  createLatestRequestTracker,
+  shouldReconnectCardStream,
+} from '@/services/sessionEventTimeline';
 import {
   listSessions,
   subscribeSessionCardChanged,
@@ -35,6 +44,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   let eventSubscription: { unsubscribe: () => void } | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  const loadRequests = createLatestRequestTracker();
 
   const input = computed<ListSessionsInput>(() => {
     const value: ListSessionsInput = {
@@ -55,6 +65,8 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   });
 
   async function loadSessions() {
+    const requestGeneration = loadRequests.next();
+    const requestInput = { ...input.value };
     loading.value = true;
     try {
       if (defaultInput.loadAll) {
@@ -65,7 +77,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
         let lastPageItemCount = 0;
         do {
           const result = await listSessions({
-            ...input.value,
+            ...requestInput,
             page: currentPage,
             pageSize: 100,
           });
@@ -75,15 +87,19 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
           lastPageItemCount = result.items.length;
           currentPage += 1;
         } while (allItems.length < total && lastPageItemCount > 0);
+        if (!loadRequests.isCurrent(requestGeneration)) return;
         rows.value = allItems;
         pageInfo.value = lastPageInfo ?? { ...defaultPageInfo };
         return;
       }
-      const result = await listSessions(input.value);
+      const result = await listSessions(requestInput);
+      if (!loadRequests.isCurrent(requestGeneration)) return;
       rows.value = result.items;
       pageInfo.value = result.pageInfo;
     } finally {
-      loading.value = false;
+      if (loadRequests.isCurrent(requestGeneration)) {
+        loading.value = false;
+      }
     }
   }
 
@@ -117,9 +133,26 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
             scheduleReconnect();
           }
         },
-        onClose: scheduleReconnect,
+        onClose: (close) => {
+          void handleSubscriptionClose(close);
+        },
       },
     );
+  }
+
+  async function handleSubscriptionClose(close: GraphQLSubscriptionClose) {
+    const reconnect = await shouldReconnectCardStream(close, () =>
+      verifyGraphQLAccessKey(getGraphQLAccessKey()),
+    );
+    if (liveStopped) return;
+    if (reconnect) {
+      scheduleReconnect();
+      return;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
   }
 
   function restartLiveSubscription() {

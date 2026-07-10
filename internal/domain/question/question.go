@@ -73,7 +73,9 @@ type Repository interface {
 }
 
 type AnswerWaiter interface {
+	Prepare(ctx context.Context, batchID BatchID) error
 	Wait(ctx context.Context, batchID BatchID) ([]Answer, error)
 	Resume(ctx context.Context, batchID BatchID, answers []Answer) error
 	Cancel(ctx context.Context, batchID BatchID, reason string) error
+	Forget(batchID BatchID)
 }

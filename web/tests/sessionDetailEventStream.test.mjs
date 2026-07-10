@@ -174,3 +174,81 @@ test('subscription close before acknowledgement still releases the snapshot gate
   assert.match(closeHandler, /completedByServer: false/);
   assert.match(transportSource, /completedByServer: true/);
 });
+
+test('session detail does not reconnect or report auth failure after normal server completion', () => {
+  const composableSource = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    composableSource,
+    /shouldReconnectAfterClose\(\s*close\.acknowledged,\s*accessKeyValid,\s*close\.completedByServer/s,
+  );
+  assert.match(composableSource, /if \(close\.completedByServer\) return;/);
+});
+
+test('card subscriptions validate pre-ack closes before reconnecting', () => {
+  const sessionsPageSource = readFileSync(
+    new URL('../src/composables/useSessionsPage.ts', import.meta.url),
+    'utf8',
+  );
+  const overviewSource = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(sessionsPageSource, /onClose: \(close\) =>[\s\S]*handleSubscriptionClose\(close\)/);
+  assert.match(
+    sessionsPageSource,
+    /shouldReconnectCardStream\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
+  );
+  assert.match(
+    overviewSource,
+    /onClose: \(close\) =>[\s\S]*handleOverviewSubscriptionClose\(close\)/,
+  );
+  assert.match(
+    overviewSource,
+    /shouldReconnectCardStream\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
+  );
+});
+
+test('session list loads freeze their scope and reject stale responses', () => {
+  const sessionsPageSource = readFileSync(
+    new URL('../src/composables/useSessionsPage.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(sessionsPageSource, /const loadRequests = createLatestRequestTracker\(\)/);
+  assert.match(sessionsPageSource, /const requestGeneration = loadRequests\.next\(\)/);
+  assert.match(sessionsPageSource, /const requestInput = \{ \.\.\.input\.value \}/);
+  assert.match(sessionsPageSource, /listSessions\(\{\s*\.\.\.requestInput,/s);
+  assert.match(sessionsPageSource, /if \(!loadRequests\.isCurrent\(requestGeneration\)\) return;/);
+  assert.match(
+    sessionsPageSource,
+    /finally \{\s*if \(loadRequests\.isCurrent\(requestGeneration\)\) \{\s*loading\.value = false;/s,
+  );
+});
+
+test('session state remains independent from transcript snapshot failures', () => {
+  const composableSource = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+  const commitHistorySource = readFileSync(
+    new URL('../src/pages/CommitHistoryPage.vue', import.meta.url),
+    'utf8',
+  );
+  const sessionsServiceSource = readFileSync(
+    new URL('../src/services/sessions.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(composableSource, /getSessionDetail/);
+  assert.match(
+    composableSource,
+    /Promise\.allSettled\(\[getSession\(sessionId\), getSessionEventPage\(sessionId, '', eventPageSize\)\]\)/,
+  );
+  assert.match(composableSource, /sessionResult\.status === 'fulfilled'/);
+  assert.match(composableSource, /eventResult\.status === 'fulfilled'/);
+  assert.match(commitHistorySource, /getSession\(sessionId\)/);
+  assert.doesNotMatch(commitHistorySource, /getSessionDetail/);
+  assert.doesNotMatch(sessionsServiceSource, /export async function getSessionDetail/);
+});

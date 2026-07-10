@@ -134,6 +134,39 @@ test('reset disconnects active operations and the next page opens a fresh connec
   assert.equal(sockets.length, 2);
 });
 
+test('connection acknowledgement timeout closes active operations and allows a fresh socket', async () => {
+  const sockets = [];
+  const closes = [];
+  const transport = createGraphQLSubscriptionTransport({
+    createSocket: () => {
+      const socket = new FakeSocket();
+      sockets.push(socket);
+      return socket;
+    },
+    connectionInitPayload: () => ({}),
+    connectionAckTimeoutMs: 10,
+  });
+
+  transport.subscribe({
+    query: 'subscription First { first }',
+    onClose: (close) => closes.push(close),
+  });
+  transport.subscribe({
+    query: 'subscription Second { second }',
+    onClose: (close) => closes.push(close),
+  });
+  sockets[0].open();
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  assert.equal(sockets[0].closed, true);
+  assert.equal(sockets[0].closeCode, 4408);
+  assert.equal(closes.length, 2);
+  assert.equal(closes.every((close) => close.acknowledged === false), true);
+  transport.subscribe({ query: 'subscription Third { third }' });
+  assert.equal(sockets.length, 2);
+});
+
 class FakeSocket {
   static OPEN = 1;
 
@@ -141,6 +174,7 @@ class FakeSocket {
   readyState = 0;
   sent = [];
   closed = false;
+  closeCode = null;
 
   addEventListener(type, listener) {
     const listeners = this.listeners.get(type) ?? [];
@@ -152,11 +186,12 @@ class FakeSocket {
     this.sent.push(JSON.parse(raw));
   }
 
-  close() {
+  close(code = 1000) {
     if (this.closed) return;
     this.closed = true;
+    this.closeCode = code;
     this.readyState = 3;
-    this.emit('close', { code: 1000 });
+    this.emit('close', { code });
   }
 
   open() {

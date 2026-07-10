@@ -546,6 +546,13 @@ test('reasoning codex items render as thought events', () => {
   assert.match(source, /if \(type === 'reasoning'\) return `思考\$\{suffix\}`;/);
 });
 
+test('web search codex items render as tool events', () => {
+  const source = readFileSync(new URL('../src/services/sessions.ts', import.meta.url), 'utf8');
+
+  assert.match(source, /'web_search'/);
+  assert.match(source, /if \(type === 'web_search'\) return '网页搜索';/);
+});
+
 test('renderMarkdown formats assistant markdown and escapes raw html', () => {
   const html = renderMarkdown('**结论**\n\n- `npm test`\n\n<script>alert(1)</script>');
 

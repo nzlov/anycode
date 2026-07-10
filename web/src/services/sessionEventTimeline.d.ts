@@ -13,7 +13,12 @@ export function mergeSnapshotEvents(
 export function shouldReconnectAfterClose(
   acknowledged: boolean,
   accessKeyValid: boolean | undefined,
+  completedByServer: boolean,
 ): boolean;
+export function shouldReconnectCardStream(close: {
+  acknowledged: boolean;
+  completedByServer: boolean;
+}, validateAccessKey: () => Promise<boolean>): Promise<boolean>;
 export function createLatestRequestTracker(): {
   next(): number;
   isCurrent(requestGeneration: number): boolean;

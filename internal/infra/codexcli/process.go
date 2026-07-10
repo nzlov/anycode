@@ -21,7 +21,10 @@ import (
 	"github.com/nzlov/anycode/internal/domain/process"
 )
 
-var ErrProcessNotFound = errors.New("codex process run is not active")
+var (
+	ErrProcessNotFound      = errors.New("codex process run is not active")
+	errAmbiguousSessionLogs = errors.New("multiple active codex session logs")
+)
 
 type activeProcess struct {
 	cmd            *exec.Cmd
@@ -129,29 +132,52 @@ func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan
 		defer processRegistry.Delete(handle.ProcessRunID)
 		defer active.stdout.Close()
 
-		drained := drainStdout(active.stdout)
+		stdoutSessionIDs, drained := observeStdout(active.stdout)
 		exited := make(chan process.ExitResult, 1)
 		go func() {
 			<-drained
 			exited <- waitProcess(active.cmd, active.stderr)
 		}()
-		exitResult, readErr := tailSessionLog(ctx, active, events, exited)
+		exitResult, readErr := tailSessionLog(ctx, active, events, exited, stdoutSessionIDs)
 		sendProcessExit(ctx, events, exitResult, readErr)
 	}()
 	return events, nil
 }
 
-func drainStdout(stdout io.Reader) <-chan struct{} {
+func observeStdout(stdout io.Reader) (<-chan string, <-chan struct{}) {
+	sessionIDs := make(chan string, 1)
 	done := make(chan struct{})
 	go func() {
+		defer close(sessionIDs)
 		defer close(done)
-		_, _ = io.Copy(io.Discard, stdout)
+		reader := bufio.NewReader(stdout)
+		identified := false
+		for {
+			line, err := reader.ReadBytes('\n')
+			if !identified && len(line) > 0 {
+				if sessionID := stdoutSessionID(bytes.TrimSpace(line)); sessionID != "" {
+					sessionIDs <- sessionID
+					identified = true
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
 	}()
-	return done
+	return sessionIDs, done
 }
 
-func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult) (process.ExitResult, error) {
-	path, err := waitForActiveSessionLog(ctx, active)
+func stdoutSessionID(raw []byte) string {
+	var event map[string]any
+	if json.Unmarshal(raw, &event) != nil || stringValue(event, "type") != "thread.started" {
+		return ""
+	}
+	return stringValue(event, "thread_id", "session_id")
+}
+
+func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult, stdoutSessionIDs <-chan string) (process.ExitResult, error) {
+	path, err := waitForActiveSessionLog(ctx, active, stdoutSessionIDs)
 	if err != nil {
 		return failUnreadableProcess(active, exited, err), err
 	}
@@ -173,17 +199,24 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	offset, _ := file.Seek(0, io.SeekCurrent)
 	var exitResult process.ExitResult
 	processExited := false
+	var pending []byte
+	var pendingOffset int64
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
-			lineOffset := offset
+			if len(pending) == 0 {
+				pendingOffset = offset
+			}
 			offset += int64(len(line))
-			raw := bytes.TrimRight(line, "\r\n")
+			pending = append(pending, line...)
+		}
+		if len(pending) > 0 && (err == nil || processExited && errors.Is(err, io.EOF)) {
+			raw := bytes.TrimRight(pending, "\r\n")
 			raw = append([]byte(nil), raw...)
 			if cwd := sessionCWDFromMeta(raw); cwd != "" {
 				sessionCWD = cwd
 			}
-			for _, event := range parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset) {
+			for _, event := range parseSessionLogLine(raw, sessionCWD, sourceID, pendingOffset) {
 				select {
 				case events <- event:
 				case <-ctx.Done():
@@ -193,6 +226,7 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 					return exitResult, ctx.Err()
 				}
 			}
+			pending = nil
 		}
 		if err == nil {
 			continue
@@ -247,16 +281,22 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
-func waitForActiveSessionLog(ctx context.Context, active *activeProcess) (string, error) {
+func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutSessionIDs <-chan string) (string, error) {
 	deadline := time.Now().Add(5 * time.Second)
 	var last string
+	allowWorkdirFallback := active.codexSessionID != ""
 	for {
-		path, err := activeSessionLog(active)
-		if err == nil && path != "" {
-			return path, nil
-		}
-		if err != nil {
-			last = err.Error()
+		if active.codexSessionID != "" || allowWorkdirFallback {
+			path, err := activeSessionLog(active)
+			if err == nil && path != "" {
+				return path, nil
+			}
+			if err != nil {
+				if errors.Is(err, errAmbiguousSessionLogs) {
+					return "", fmt.Errorf("find codex session log: %w", err)
+				}
+				last = err.Error()
+			}
 		}
 		if time.Now().After(deadline) {
 			if last != "" {
@@ -267,6 +307,15 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess) (string
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
+		case sessionID, ok := <-stdoutSessionIDs:
+			if !ok {
+				allowWorkdirFallback = true
+				stdoutSessionIDs = nil
+				continue
+			}
+			if sessionID != "" {
+				active.codexSessionID = sessionID
+			}
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
@@ -336,7 +385,9 @@ func activeSessionLogByWorkdir(codexHome string, workdir string, baseline map[st
 	if len(matches) == 0 {
 		return "", nil
 	}
-	sortSessionLogsByModTimeAscending(matches)
+	if len(matches) > 1 {
+		return "", fmt.Errorf("%w for workdir %q", errAmbiguousSessionLogs, workdir)
+	}
 	return matches[0], nil
 }
 
@@ -351,20 +402,6 @@ func sortSessionLogsByModTime(paths []string) {
 			return left.ModTime().After(right.ModTime())
 		}
 		return paths[i] > paths[j]
-	})
-}
-
-func sortSessionLogsByModTimeAscending(paths []string) {
-	sort.Slice(paths, func(i, j int) bool {
-		left, leftErr := os.Stat(paths[i])
-		right, rightErr := os.Stat(paths[j])
-		if leftErr != nil || rightErr != nil {
-			return paths[i] < paths[j]
-		}
-		if !left.ModTime().Equal(right.ModTime()) {
-			return left.ModTime().Before(right.ModTime())
-		}
-		return paths[i] < paths[j]
 	})
 }
 
@@ -419,10 +456,12 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 			offset += int64(len(line))
 			raw := bytes.TrimRight(line, "\r\n")
 			raw = append([]byte(nil), raw...)
-			if cwd := sessionCWDFromMeta(raw); cwd != "" {
-				sessionCWD = cwd
+			if !errors.Is(err, io.EOF) || json.Valid(raw) {
+				if cwd := sessionCWDFromMeta(raw); cwd != "" {
+					sessionCWD = cwd
+				}
+				events = append(events, parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)...)
 			}
-			events = append(events, parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)...)
 		}
 		if err == nil {
 			continue
@@ -737,6 +776,24 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
+	case "web_search_call":
+		callID := stringValue(payload, "id", "call_id")
+		status := strings.ToLower(strings.TrimSpace(stringValue(payload, "status")))
+		if status == "" {
+			status = "completed"
+		}
+		eventType := "item.completed"
+		if status == "in_progress" {
+			eventType = "item.started"
+		}
+		normalized := normalizedItem("web_search", status)
+		normalized["output"] = stringOrJSON(payload["action"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, eventType, callID),
+			Type:      eventType,
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
 	case "message":
 		itemType := ""
 		switch stringValue(payload, "role") {
@@ -805,7 +862,8 @@ func codexEventsFromEventMessage(timestamp string, payload map[string]any, creat
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
-	case "user_message", "agent_message":
+	case "user_message", "agent_message", "context_compacted", "web_search_end":
+		// Richer canonical records are emitted as response_item or compacted entries.
 		return nil
 	case "task_started":
 		return []process.CodexEvent{{
@@ -831,12 +889,6 @@ func codexEventsFromEventMessage(timestamp string, payload map[string]any, creat
 		return []process.CodexEvent{{
 			EventID:   eventID(timestamp, "turn.aborted", stringValue(payload, "turn_id")),
 			Type:      "turn.aborted",
-			Payload:   payload,
-			CreatedAt: createdAt,
-		}}
-	case "context_compacted":
-		return []process.CodexEvent{{
-			Type:      "context.compacted",
 			Payload:   payload,
 			CreatedAt: createdAt,
 		}}

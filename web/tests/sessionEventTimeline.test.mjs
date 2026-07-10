@@ -7,6 +7,7 @@ import {
   mergeSnapshotEvents,
   prependOlderEvents,
   shouldReconnectAfterClose,
+  shouldReconnectCardStream,
   sortSessionEvents,
 } from '../src/services/sessionEventTimeline.js';
 
@@ -55,16 +56,78 @@ test('mergeSnapshotEvents preserves older pages and live events while replacing 
 
   assert.deepEqual(
     next.map((event) => event.id),
-    ['event-2', 'event-1', 'event-3'],
+    ['event-1', 'event-2', 'event-3'],
   );
   assert.equal(next.find((event) => event.id === 'event-2').title, 'live');
 });
 
-test('shouldReconnectAfterClose stops only confirmed pre-ack authorization failures', () => {
-  assert.equal(shouldReconnectAfterClose(true, false), true);
-  assert.equal(shouldReconnectAfterClose(false, true), true);
-  assert.equal(shouldReconnectAfterClose(false, undefined), true);
-  assert.equal(shouldReconnectAfterClose(false, false), false);
+test('mergeSnapshotEvents preserves loaded order across an equal-timestamp page boundary', () => {
+  const createdAt = '2026-07-08T01:15:23Z';
+  const started = { ...older, id: 'z-started', createdAt };
+  const completed = { ...middle, id: 'a-completed', createdAt };
+
+  const next = mergeSnapshotEvents([completed], [started, completed], []);
+
+  assert.deepEqual(
+    sortSessionEvents(next).map((event) => event.id),
+    ['z-started', 'a-completed'],
+  );
+});
+
+test('shouldReconnectAfterClose stops confirmed auth failures and normal server completion', () => {
+  assert.equal(shouldReconnectAfterClose(true, false, false), true);
+  assert.equal(shouldReconnectAfterClose(false, true, false), true);
+  assert.equal(shouldReconnectAfterClose(false, undefined, false), true);
+  assert.equal(shouldReconnectAfterClose(false, false, false), false);
+  assert.equal(shouldReconnectAfterClose(true, undefined, true), false);
+});
+
+test('card streams validate pre-ack closes before deciding whether to reconnect', async () => {
+  let validations = 0;
+  const validAccessKey = async () => {
+    validations += 1;
+    return true;
+  };
+  assert.equal(
+    await shouldReconnectCardStream(
+      { acknowledged: true, completedByServer: false },
+      validAccessKey,
+    ),
+    true,
+  );
+  assert.equal(validations, 0);
+  assert.equal(
+    await shouldReconnectCardStream(
+      { acknowledged: false, completedByServer: false },
+      validAccessKey,
+    ),
+    true,
+  );
+  assert.equal(validations, 1);
+  assert.equal(
+    await shouldReconnectCardStream(
+      { acknowledged: false, completedByServer: false },
+      async () => false,
+    ),
+    false,
+  );
+  assert.equal(
+    await shouldReconnectCardStream(
+      { acknowledged: false, completedByServer: false },
+      async () => {
+        throw new Error('health check unavailable');
+      },
+    ),
+    true,
+  );
+  assert.equal(
+    await shouldReconnectCardStream(
+      { acknowledged: true, completedByServer: true },
+      validAccessKey,
+    ),
+    false,
+  );
+  assert.equal(validations, 1);
 });
 
 test('sortSessionEvents preserves transcript order for equal timestamps', () => {

@@ -11,15 +11,28 @@ export function prependOlderEvents(events, olderEvents) {
 }
 
 export function mergeSnapshotEvents(snapshotEvents, currentEvents, bufferedEvents) {
-  const merged = new Map();
-  for (const event of [...snapshotEvents, ...currentEvents, ...bufferedEvents]) {
+  const merged = new Map(currentEvents.map((event) => [event.id, event]));
+  for (const event of snapshotEvents) {
+    if (!merged.has(event.id)) merged.set(event.id, event);
+  }
+  for (const event of bufferedEvents) {
     merged.set(event.id, event);
   }
   return [...merged.values()];
 }
 
-export function shouldReconnectAfterClose(acknowledged, accessKeyValid) {
-  return acknowledged || accessKeyValid !== false;
+export function shouldReconnectAfterClose(acknowledged, accessKeyValid, completedByServer) {
+  return !completedByServer && (acknowledged || accessKeyValid !== false);
+}
+
+export async function shouldReconnectCardStream(close, validateAccessKey) {
+  if (close.completedByServer) return false;
+  if (close.acknowledged) return true;
+  try {
+    return (await validateAccessKey()) !== false;
+  } catch {
+    return true;
+  }
 }
 
 export function createLatestRequestTracker() {

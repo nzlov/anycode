@@ -213,6 +213,92 @@ sleep 30
 	}
 }
 
+func TestEventsBindConcurrentSameWorkdirProcessesToStdoutThreadID(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+case "$*" in
+  *first*) id=a ;;
+  *second*) id=b ;;
+  *) exit 2 ;;
+esac
+printf '{"type":"thread.started","thread_id":"codex-session-%s"}\n' "$id"
+touch "$CODEX_HOME/$id.started"
+while [ ! -f "$CODEX_HOME/a.started" ] || [ ! -f "$CODEX_HOME/b.started" ]; do
+  sleep 0.01
+done
+if [ "$id" = a ]; then
+  sleep 0.15
+fi
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-concurrent-$id.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-$id","id":"codex-session-$id","cwd":"$PWD","originator":"codex_exec"}}
+{"timestamp":"2026-07-08T09:16:03.939Z","type":"response_item","payload":{"type":"message","id":"msg-$id","role":"assistant","content":[{"type":"output_text","text":"message-$id"}]}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	first, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-concurrent-first", Workdir: dir, Prompt: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-concurrent-second", Workdir: dir, Prompt: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstEvents, err := client.Events(context.Background(), first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondEvents, err := client.Events(context.Background(), second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstGot := collectEvents(t, firstEvents, 2)
+	secondGot := collectEvents(t, secondEvents, 2)
+	if firstGot[0].Payload["session_id"] != "codex-session-a" || eventNormalizedItem(t, firstGot[1])["output"] != "message-a" {
+		t.Fatalf("first process read wrong transcript = %#v", firstGot)
+	}
+	if secondGot[0].Payload["session_id"] != "codex-session-b" || eventNormalizedItem(t, secondGot[1])["output"] != "message-b" {
+		t.Fatalf("second process read wrong transcript = %#v", secondGot)
+	}
+}
+
+func TestEventsBuffersPartialSessionLogLine(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-partial"}'
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-partial","id":"codex-session-partial","cwd":"$PWD","originator":"codex_exec"}}
+EOF
+printf '%s' '{"timestamp":"2026-07-08T09:16:03.939Z","type":"response_item","payload":{"type":"message","id":"msg-partial","role":"assistant","content":[{"type":"output_text","text":"part' >> "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl"
+sleep 0.15
+printf '%s' 'ial"}]}}' >> "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl"
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-partial", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := collectEvents(t, events, 2)
+	if got[0].Type != "thread.started" {
+		t.Fatalf("first event = %#v", got[0])
+	}
+	if got[1].Type != "item.completed" || eventNormalizedItem(t, got[1])["output"] != "partial" {
+		t.Fatalf("partial line event = %#v", got[1])
+	}
+}
+
 func TestStartProcessOutlivesCallerContextCancellation(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
@@ -558,6 +644,8 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 {"timestamp":"2026-07-08T09:04:00Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-patch","output":"Success"}}
 {"timestamp":"2026-07-08T09:05:00Z","type":"response_item","payload":{"type":"tool_search_call","id":"ts-call","call_id":"call-search","arguments":{"query":"playwright"},"internal_chat_message_metadata_passthrough":{"turn_id":"turn-1"}}}
 {"timestamp":"2026-07-08T09:06:00Z","type":"response_item","payload":{"type":"tool_search_output","id":"ts-output","call_id":"call-search","tools":[{"name":"mcp__playwright"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-1"}}}
+{"timestamp":"2026-07-08T09:06:10Z","type":"response_item","payload":{"type":"web_search_call","id":"ws-call","status":"completed","action":{"type":"search","query":"AnyCode transcript"},"internal_chat_message_metadata_passthrough":{"turn_id":"turn-1"}}}
+{"timestamp":"2026-07-08T09:06:11Z","type":"event_msg","payload":{"type":"web_search_end","call_id":"ws-call","query":"AnyCode transcript"}}
 {"timestamp":"2026-07-08T09:07:00Z","type":"event_msg","payload":{"type":"mcp_tool_call_end","call_id":"call-mcp","invocation":{"server":"playwright","tool":"browser_resize"},"result":{"Ok":{"isError":false}}}}
 {"timestamp":"2026-07-08T09:08:00Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1","reason":"interrupted"}}
 {"timestamp":"2026-07-08T09:09:00Z","type":"event_msg","payload":{"type":"context_compacted","summary":"short"}}
@@ -590,9 +678,9 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 		"item.completed",
 		"item.started",
 		"item.completed",
+		"item.completed",
 		"mcp_tool_call_end",
 		"turn.aborted",
-		"context.compacted",
 		"context.compacted",
 		"turn.context",
 		"world.state",
@@ -600,7 +688,7 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 	if !reflect.DeepEqual(types, wantTypes) {
 		t.Fatalf("types = %#v, want %#v", types, wantTypes)
 	}
-	wantItemTypes := []string{"tool_call", "tool_result", "custom_tool_call", "custom_tool_call", "tool_search", "tool_search"}
+	wantItemTypes := []string{"tool_call", "tool_result", "custom_tool_call", "custom_tool_call", "tool_search", "tool_search", "web_search"}
 	if !reflect.DeepEqual(itemTypes, wantItemTypes) {
 		t.Fatalf("item types = %#v, want %#v", itemTypes, wantItemTypes)
 	}
@@ -613,6 +701,7 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 		{eventIndex: 5, id: "ct-patch", field: "input"},
 		{eventIndex: 7, id: "ts-call", field: "arguments"},
 		{eventIndex: 8, id: "ts-output", field: "tools"},
+		{eventIndex: 9, id: "ws-call", field: "action"},
 	} {
 		item := got[want.eventIndex].Payload["item"].(map[string]any)
 		if item["id"] != want.id || item[want.field] == nil || item["internal_chat_message_metadata_passthrough"] == nil {
@@ -624,11 +713,8 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 	if functionItem["type"] != "function_call" || functionItem["name"] != "browser_resize" || functionNormalized["type"] != "tool_call" || functionNormalized["qualifiedName"] != "mcp__playwright.browser_resize" {
 		t.Fatalf("function item = %#v", functionItem)
 	}
-	if got[9].Payload["invocation"] == nil || got[9].Payload["result"] == nil {
-		t.Fatalf("mcp tool end payload = %#v", got[9].Payload)
-	}
-	if got[11].Payload["type"] != "context_compacted" || got[11].Payload["summary"] != "short" {
-		t.Fatalf("context compacted payload = %#v", got[11].Payload)
+	if got[10].Payload["invocation"] == nil || got[10].Payload["result"] == nil {
+		t.Fatalf("mcp tool end payload = %#v", got[10].Payload)
 	}
 	if got[12].Payload["message"] != "summary" {
 		t.Fatalf("compacted payload = %#v", got[12].Payload)
@@ -782,7 +868,7 @@ exit 7
 	}
 }
 
-func TestEventsChoosesEarliestAdvancedSessionLogForSameWorkdir(t *testing.T) {
+func TestEventsRejectsAmbiguousSessionLogsWithoutStdoutThreadID(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
@@ -807,8 +893,12 @@ sleep 0.2
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 1)
-	if got[0].Type != "thread.started" || got[0].Payload["session_id"] != "codex-session-a" {
-		t.Fatalf("selected wrong session log = %+v", got[0])
+	if got[0].Type != "process.exit" {
+		t.Fatalf("ambiguous transcript event = %+v", got[0])
+	}
+	failureReason, _ := got[0].Payload["failureReason"].(string)
+	if !strings.Contains(failureReason, "multiple active codex session logs") {
+		t.Fatalf("ambiguous transcript failure = %+v", got[0])
 	}
 }
 
@@ -836,6 +926,49 @@ func TestSessionEventsReadsLongJSONLLines(t *testing.T) {
 	_, ok := got[1].Payload["item"].(map[string]any)
 	if !ok || eventNormalizedItem(t, got[1])["output"] != longOutput {
 		t.Fatalf("long output item = %#v", got[1].Payload["item"])
+	}
+}
+
+func TestSessionEventsIgnoresIncompleteFinalLineUntilNextSnapshot(t *testing.T) {
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-snapshot-partial.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-snapshot-partial","cwd":"/workspace/project"}}
+{"timestamp":"2026-07-08T09:16:03.939Z","type":"response_item","payload":{"type":"message","id":"msg-partial","role":"assistant","content":[{"type":"output_text","text":"part`
+	if err := os.WriteFile(sessionFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := New("codex", WithCodexHome(codexHome))
+
+	first, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-snapshot-partial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 1 || first[0].Type != "thread.started" {
+		t.Fatalf("partial snapshot events = %#v", first)
+	}
+
+	file, err := os.OpenFile(sessionFile, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString(`ial"}]}}
+`); err != nil {
+		file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-snapshot-partial"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second) != 2 || second[1].Type != "item.completed" || eventNormalizedItem(t, second[1])["output"] != "partial" {
+		t.Fatalf("completed snapshot events = %#v", second)
 	}
 }
 

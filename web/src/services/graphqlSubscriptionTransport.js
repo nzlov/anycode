@@ -1,4 +1,8 @@
-export function createGraphQLSubscriptionTransport({ createSocket, connectionInitPayload }) {
+export function createGraphQLSubscriptionTransport({
+  createSocket,
+  connectionInitPayload,
+  connectionAckTimeoutMs = 5000,
+}) {
   let connection = null;
   let nextOperationID = 0;
 
@@ -17,6 +21,7 @@ export function createGraphQLSubscriptionTransport({ createSocket, connectionIni
   function createConnection() {
     const socket = createSocket();
     const operations = new Map();
+    let connectionAckTimer = null;
     const state = {
       acknowledged: false,
       closed: false,
@@ -54,12 +59,20 @@ export function createGraphQLSubscriptionTransport({ createSocket, connectionIni
 
     socket.addEventListener('open', () => {
       send({ type: 'connection_init', payload: connectionInitPayload() });
+      if (connectionAckTimeoutMs > 0) {
+        connectionAckTimer = setTimeout(() => {
+          if (!state.closed && !state.acknowledged) {
+            socket.close(4408, 'Connection acknowledgement timeout');
+          }
+        }, connectionAckTimeoutMs);
+      }
     });
     socket.addEventListener('message', (event) => {
       const message = parseMessage(event.data);
       if (!message) return;
       if (message.type === 'connection_ack') {
         state.acknowledged = true;
+        clearConnectionAckTimer();
         for (const id of operations.keys()) startOperation(id);
         return;
       }
@@ -134,8 +147,15 @@ export function createGraphQLSubscriptionTransport({ createSocket, connectionIni
     }
 
     function detach() {
+      clearConnectionAckTimer();
       state.closed = true;
       if (connection === state) connection = null;
+    }
+
+    function clearConnectionAckTimer() {
+      if (connectionAckTimer === null) return;
+      clearTimeout(connectionAckTimer);
+      connectionAckTimer = null;
     }
 
     function send(message) {

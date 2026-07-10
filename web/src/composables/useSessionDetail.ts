@@ -14,7 +14,6 @@ import {
   getPendingQuestionBatches,
   getSession,
   getSessionEventPage,
-  getSessionDetail,
   subscribeSessionEvents,
   subscribeSessionStateUpdates,
   resumeSession as resumeSessionRequest,
@@ -76,18 +75,32 @@ export function useSessionDetail(sessionId: string) {
     if (!liveStopped) bufferingLiveEvents = true;
     error.value = '';
     try {
-      const result = await getSessionDetail(sessionId);
+      const [sessionResult, eventResult] = await Promise.allSettled([getSession(sessionId), getSessionEventPage(sessionId, '', eventPageSize)]);
       if (sessionRequests.isCurrent(sessionRequest)) {
-        session.value = result.session;
+        if (sessionResult.status === 'fulfilled') {
+          session.value = sessionResult.value;
+        } else {
+          error.value =
+            sessionResult.reason instanceof Error
+              ? sessionResult.reason.message
+              : '加载会话状态失败';
+        }
       }
       if (eventSnapshotRequests.isCurrent(eventRequest)) {
-        events.value = mergeSnapshotEvents(result.events, events.value, bufferedLiveEvents);
-        bufferedLiveEvents = [];
-        eventsPageInfo.value = result.eventsPageInfo;
-      }
-    } catch (err) {
-      if (eventSnapshotRequests.isCurrent(eventRequest)) {
-        error.value = err instanceof Error ? err.message : '加载会话详情失败';
+        if (eventResult.status === 'fulfilled') {
+          events.value = mergeSnapshotEvents(
+            eventResult.value.items,
+            events.value,
+            bufferedLiveEvents,
+          );
+          bufferedLiveEvents = [];
+          eventsPageInfo.value = eventResult.value.pageInfo;
+        } else {
+          error.value =
+            eventResult.reason instanceof Error
+              ? eventResult.reason.message
+              : '加载会话事件失败';
+        }
       }
     } finally {
       if (eventSnapshotRequests.isCurrent(eventRequest)) {
@@ -400,14 +413,21 @@ export function useSessionDetail(sessionId: string) {
 
   async function handleSubscriptionClose(close: GraphQLSubscriptionClose, generation: number) {
     let accessKeyValid: boolean | undefined;
-    if (!close.acknowledged) {
+    if (!close.acknowledged && !close.completedByServer) {
       accessKeyValid = await validateAccessKeyForReconnect();
     }
     if (generation !== subscriptionGeneration || liveStopped) return;
-    if (shouldReconnectAfterClose(close.acknowledged, accessKeyValid)) {
+    if (
+      shouldReconnectAfterClose(
+        close.acknowledged,
+        accessKeyValid,
+        close.completedByServer,
+      )
+    ) {
       scheduleReconnect();
       return;
     }
+    if (close.completedByServer) return;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
