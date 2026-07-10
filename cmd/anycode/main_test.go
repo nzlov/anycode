@@ -34,37 +34,59 @@ func TestLocalMCPSocketPathUsesTempDir(t *testing.T) {
 }
 
 func TestEnsureCodexReady(t *testing.T) {
-	err := ensureCodexReady(context.Background(), fakeCodexProber{
+	got, err := ensureCodexReady(context.Background(), fakeCodexProber{
 		capabilities: processdomain.CodexCapabilities{
 			Version:        "codex 1.2.3",
 			SupportsExec:   true,
 			SupportsResume: true,
+			Models:         []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
 		},
 	})
 	if err != nil {
 		t.Fatalf("ensureCodexReady() error = %v", err)
 	}
+	if len(got.Models) != 1 {
+		t.Fatalf("ensureCodexReady() capabilities = %+v", got)
+	}
 }
 
 func TestEnsureCodexReadyRejectsProbeFailure(t *testing.T) {
-	err := ensureCodexReady(context.Background(), fakeCodexProber{err: errors.New("not found")})
+	_, err := ensureCodexReady(context.Background(), fakeCodexProber{err: errors.New("not found")})
 	if err == nil || !strings.Contains(err.Error(), "probe codex cli") {
 		t.Fatalf("ensureCodexReady() error = %v", err)
 	}
 }
 
 func TestEnsureCodexReadyRequiresExecAndResume(t *testing.T) {
-	err := ensureCodexReady(context.Background(), fakeCodexProber{
-		capabilities: processdomain.CodexCapabilities{SupportsExec: true},
+	_, err := ensureCodexReady(context.Background(), fakeCodexProber{
+		capabilities: processdomain.CodexCapabilities{
+			SupportsExec: true,
+			Models:       []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
+		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "exec resume") {
 		t.Fatalf("ensureCodexReady() error = %v", err)
 	}
 
-	err = ensureCodexReady(context.Background(), fakeCodexProber{
-		capabilities: processdomain.CodexCapabilities{SupportsResume: true},
+	_, err = ensureCodexReady(context.Background(), fakeCodexProber{
+		capabilities: processdomain.CodexCapabilities{
+			SupportsResume: true,
+			Models:         []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
+		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "support exec") {
+		t.Fatalf("ensureCodexReady() error = %v", err)
+	}
+}
+
+func TestEnsureCodexReadyRequiresModelOptions(t *testing.T) {
+	_, err := ensureCodexReady(context.Background(), fakeCodexProber{
+		capabilities: processdomain.CodexCapabilities{
+			SupportsExec:   true,
+			SupportsResume: true,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "model options") {
 		t.Fatalf("ensureCodexReady() error = %v", err)
 	}
 }

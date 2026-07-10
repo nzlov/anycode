@@ -3,6 +3,7 @@ package codexcli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -115,12 +116,73 @@ func (c *Client) Probe(ctx context.Context) (process.CodexCapabilities, error) {
 			Err:  err,
 		}
 	}
+	models, err := probeModels(ctx, bin)
+	if err != nil {
+		return process.CodexCapabilities{}, &ProbeError{
+			Code: "models_failed",
+			Bin:  bin,
+			Args: []string{"debug", "models"},
+			Err:  err,
+		}
+	}
 
 	return process.CodexCapabilities{
 		Version:        firstLine(version),
 		SupportsExec:   commandWorks(ctx, bin, "exec", "--help"),
 		SupportsResume: commandWorks(ctx, bin, "exec", "resume", "--help"),
+		Models:         models,
 	}, nil
+}
+
+type modelCatalog struct {
+	Models []modelCatalogEntry `json:"models"`
+}
+
+type modelCatalogEntry struct {
+	Slug                     string                  `json:"slug"`
+	DisplayName              string                  `json:"display_name"`
+	DefaultReasoningLevel    string                  `json:"default_reasoning_level"`
+	SupportedReasoningLevels []modelCatalogReasoning `json:"supported_reasoning_levels"`
+	Visibility               string                  `json:"visibility"`
+}
+
+type modelCatalogReasoning struct {
+	Effort      string `json:"effort"`
+	Description string `json:"description"`
+}
+
+func probeModels(ctx context.Context, bin string) ([]process.CodexModel, error) {
+	raw, err := runText(ctx, bin, "debug", "models")
+	if err != nil {
+		return nil, err
+	}
+	var catalog modelCatalog
+	if err := json.Unmarshal([]byte(raw), &catalog); err != nil {
+		return nil, fmt.Errorf("parse model catalog: %w", err)
+	}
+	models := make([]process.CodexModel, 0, len(catalog.Models))
+	for _, entry := range catalog.Models {
+		if entry.Visibility != "list" || strings.TrimSpace(entry.Slug) == "" {
+			continue
+		}
+		levels := make([]process.CodexReasoningLevel, 0, len(entry.SupportedReasoningLevels))
+		for _, level := range entry.SupportedReasoningLevels {
+			if strings.TrimSpace(level.Effort) == "" {
+				continue
+			}
+			levels = append(levels, process.CodexReasoningLevel{
+				Effort:      level.Effort,
+				Description: level.Description,
+			})
+		}
+		models = append(models, process.CodexModel{
+			Slug:                     entry.Slug,
+			DisplayName:              entry.DisplayName,
+			DefaultReasoningLevel:    entry.DefaultReasoningLevel,
+			SupportedReasoningLevels: levels,
+		})
+	}
+	return models, nil
 }
 
 func runText(ctx context.Context, bin string, args ...string) (string, error) {

@@ -38,7 +38,7 @@
       aria-label="Codex 模型"
       class="compact-select"
       :disable="disabled"
-      :options="codexModelOptions"
+      :options="modelOptions"
     >
       <template #prepend>
         <q-icon name="smart_toy" />
@@ -75,8 +75,8 @@
 import { computed, watch } from 'vue';
 
 import {
+  type CodexModelOption,
   codexModelLabel,
-  codexModelOptions,
   normalizeCodexModel,
   normalizeReasoningEffort,
   permissionModeLabel,
@@ -91,6 +91,7 @@ const props = withDefaults(
     model: string;
     effort: string;
     permission: string;
+    modelOptions: CodexModelOption[];
     disabled?: boolean;
     readonlyConfig?: boolean;
   }>(),
@@ -109,7 +110,11 @@ const emit = defineEmits<{
 const modelModel = computed({
   get: () => props.model,
   set: (value: string) => {
-    for (const update of promptConfigUpdatesForModelChange(value, props.effort)) {
+    for (const update of promptConfigUpdatesForModelChange(
+      props.modelOptions,
+      value,
+      props.effort,
+    )) {
       if (update.field === 'model') {
         emit('update:model', update.value);
       } else {
@@ -120,7 +125,8 @@ const modelModel = computed({
 });
 const effortModel = computed({
   get: () => props.effort,
-  set: (value: string) => emit('update:effort', normalizeReasoningEffort(props.model, value)),
+  set: (value: string) =>
+    emit('update:effort', normalizeReasoningEffort(props.modelOptions, props.model, value)),
 });
 const permissionModel = computed({
   get: () => props.permission,
@@ -131,19 +137,23 @@ const permissionIcon = computed(
     permissionModeOptions.find((option) => option.value === props.permission)?.icon ?? 'edit_note',
 );
 const permissionLabel = computed(() => permissionModeLabel(props.permission));
-const modelLabel = computed(() => codexModelLabel(props.model));
-const effortLabel = computed(() => reasoningEffortLabel(props.model, props.effort));
-const reasoningEffortOptions = computed(() => reasoningEffortOptionsForModel(props.model));
+const modelLabel = computed(() => codexModelLabel(props.modelOptions, props.model));
+const effortLabel = computed(() =>
+  reasoningEffortLabel(props.modelOptions, props.model, props.effort),
+);
+const reasoningEffortOptions = computed(() =>
+  reasoningEffortOptionsForModel(props.modelOptions, props.model),
+);
 
 watch(
-  () => props.model,
-  (value) => {
-    const nextModel = normalizeCodexModel(value);
+  () => [props.model, props.modelOptions] as const,
+  ([value]) => {
+    const nextModel = normalizeCodexModel(props.modelOptions, value);
     if (nextModel !== value) {
       emit('update:model', nextModel);
       return;
     }
-    const nextEffort = normalizeReasoningEffort(nextModel, props.effort);
+    const nextEffort = normalizeReasoningEffort(props.modelOptions, nextModel, props.effort);
     if (nextEffort !== props.effort) {
       emit('update:effort', nextEffort);
     }
@@ -152,9 +162,9 @@ watch(
 );
 
 watch(
-  () => props.effort,
-  (value) => {
-    const nextEffort = normalizeReasoningEffort(props.model, value);
+  () => [props.effort, props.modelOptions] as const,
+  ([value]) => {
+    const nextEffort = normalizeReasoningEffort(props.modelOptions, props.model, value);
     if (nextEffort !== value) {
       emit('update:effort', nextEffort);
     }

@@ -3,34 +3,60 @@ import { test } from 'node:test';
 
 import * as promptOptions from '../src/components/promptOptions.ts';
 
-const { defaultReasoningEffortForModel, firstCodexModelValue, reasoningEffortOptionsForModel } =
-  promptOptions;
+const {
+  defaultReasoningEffortForModel,
+  firstCodexModelValue,
+  normalizeCodexModel,
+  normalizeReasoningEffort,
+  reasoningEffortOptionsForModel,
+} = promptOptions;
+
+const dynamicOptions = [
+  {
+    label: 'GPT-5.6-Sol',
+    value: 'gpt-5.6-sol',
+    defaultReasoningEffort: 'low',
+    reasoningEfforts: [
+      { label: 'low', value: 'low', description: 'Fast responses' },
+      { label: 'ultra', value: 'ultra', description: 'Delegated maximum' },
+    ],
+  },
+];
+
+test('Codex model defaults come from the loaded model catalog', () => {
+  assert.equal(firstCodexModelValue(dynamicOptions), 'gpt-5.6-sol');
+  assert.equal(normalizeCodexModel(dynamicOptions, 'missing-model'), 'gpt-5.6-sol');
+  assert.deepEqual(
+    reasoningEffortOptionsForModel(dynamicOptions, 'gpt-5.6-sol').map((option) => option.value),
+    ['low', 'ultra'],
+  );
+});
 
 test('model changes use the next model default reasoning effort', () => {
-  const nextModel = 'gpt-5.4-mini';
-  const nextDefault = reasoningEffortOptionsForModel(nextModel)[0]?.value ?? '';
+  const nextModel = 'gpt-5.6-sol';
 
-  assert.equal(defaultReasoningEffortForModel(nextModel), nextDefault);
+  assert.equal(defaultReasoningEffortForModel(dynamicOptions, nextModel), 'low');
+  assert.equal(normalizeReasoningEffort(dynamicOptions, nextModel, 'missing-effort'), 'low');
+});
+
+test('normalization preserves values while the catalog is still loading', () => {
+  assert.equal(normalizeCodexModel([], 'gpt-5.6-sol'), 'gpt-5.6-sol');
+  assert.equal(normalizeReasoningEffort([], 'gpt-5.6-sol', 'ultra'), 'ultra');
 });
 
 test('model change updates preserve supported models and emit model before effort', () => {
-  assert.equal(typeof promptOptions.promptConfigUpdatesForModelChange, 'function');
-  if (typeof promptOptions.promptConfigUpdatesForModelChange !== 'function') return;
-
-  const model = 'gpt-5.4-mini';
-  assert.deepEqual(promptOptions.promptConfigUpdatesForModelChange(model, 'high'), [
-    { field: 'model', value: model },
-    { field: 'effort', value: defaultReasoningEffortForModel(model) },
-  ]);
+  assert.deepEqual(
+    promptOptions.promptConfigUpdatesForModelChange(dynamicOptions, 'gpt-5.6-sol', 'ultra'),
+    [
+      { field: 'model', value: 'gpt-5.6-sol' },
+      { field: 'effort', value: 'low' },
+    ],
+  );
 });
 
 test('model change updates normalize invalid models and omit unchanged effort', () => {
-  assert.equal(typeof promptOptions.promptConfigUpdatesForModelChange, 'function');
-  if (typeof promptOptions.promptConfigUpdatesForModelChange !== 'function') return;
-
-  const model = firstCodexModelValue();
-  const effort = defaultReasoningEffortForModel(model);
-  assert.deepEqual(promptOptions.promptConfigUpdatesForModelChange('unsupported-model', effort), [
-    { field: 'model', value: model },
-  ]);
+  assert.deepEqual(
+    promptOptions.promptConfigUpdatesForModelChange(dynamicOptions, 'unsupported-model', 'low'),
+    [{ field: 'model', value: 'gpt-5.6-sol' }],
+  );
 });

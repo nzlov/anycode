@@ -1,9 +1,11 @@
 export interface PromptOption {
   label: string;
   value: string;
+  description?: string;
 }
 
 export interface CodexModelOption extends PromptOption {
+  defaultReasoningEffort: string;
   reasoningEfforts: PromptOption[];
 }
 
@@ -12,67 +14,71 @@ const reasoningEffortLabels: Record<string, string> = {
   medium: '中等思考',
   high: '高思考',
   xhigh: '极高思考',
+  max: '最强思考',
+  ultra: '极限思考',
 };
 
-function modelOption(label: string, value: string, efforts: string[]): CodexModelOption {
-  return {
-    label,
-    value,
-    reasoningEfforts: efforts.map((effort) => ({
-      label: reasoningEffortLabels[effort] ?? effort,
-      value: effort,
+export function normalizeCodexModelOptions(options: CodexModelOption[]) {
+  return options.map((option) => ({
+    ...option,
+    reasoningEfforts: option.reasoningEfforts.map((effort) => ({
+      ...effort,
+      label: reasoningEffortLabels[effort.value] ?? effort.label,
     })),
-  };
+  }));
 }
 
-export const codexModelOptions: CodexModelOption[] = [
-  modelOption('GPT-5.5', 'gpt-5.5', ['low', 'medium', 'high', 'xhigh']),
-  modelOption('GPT-5.4', 'gpt-5.4', ['low', 'medium', 'high', 'xhigh']),
-  modelOption('GPT-5.4-Mini', 'gpt-5.4-mini', ['low', 'medium', 'high', 'xhigh']),
-  modelOption('GPT-5.3 Codex', 'gpt-5.3-codex', ['low', 'medium', 'high', 'xhigh']),
-  modelOption('GPT-5.2', 'gpt-5.2', ['low', 'medium', 'high', 'xhigh']),
-];
-
-export function firstCodexModelValue() {
-  return codexModelOptions[0]?.value ?? '';
+export function firstCodexModelValue(options: CodexModelOption[]) {
+  return options[0]?.value ?? '';
 }
 
-export function normalizeCodexModel(value: string) {
-  if (codexModelOptions.some((option) => option.value === value)) return value;
-  return firstCodexModelValue();
+export function normalizeCodexModel(options: CodexModelOption[], value: string) {
+  if (options.length === 0) return value;
+  if (options.some((option) => option.value === value)) return value;
+  return firstCodexModelValue(options);
 }
 
-export function codexModelLabel(value: string) {
-  return codexModelOptions.find((option) => option.value === value)?.label ?? (value || '-');
+export function codexModelLabel(options: CodexModelOption[], value: string) {
+  return options.find((option) => option.value === value)?.label ?? (value || '-');
 }
 
-export function reasoningEffortOptionsForModel(model: string) {
+export function reasoningEffortOptionsForModel(options: CodexModelOption[], model: string) {
   return (
-    codexModelOptions.find((option) => option.value === model)?.reasoningEfforts ??
-    codexModelOptions[0]?.reasoningEfforts ??
+    options.find((option) => option.value === model)?.reasoningEfforts ??
+    options[0]?.reasoningEfforts ??
     []
   );
 }
 
-export function normalizeReasoningEffort(model: string, value: string) {
-  const options = reasoningEffortOptionsForModel(model);
-  if (options.some((option) => option.value === value)) return value;
-  return options[0]?.value ?? '';
+export function normalizeReasoningEffort(options: CodexModelOption[], model: string, value: string) {
+  if (options.length === 0) return value;
+  const efforts = reasoningEffortOptionsForModel(options, model);
+  if (efforts.some((option) => option.value === value)) return value;
+  return defaultReasoningEffortForModel(options, model);
 }
 
-export function defaultReasoningEffortForModel(model: string) {
-  return reasoningEffortOptionsForModel(model)[0]?.value ?? '';
+export function defaultReasoningEffortForModel(options: CodexModelOption[], model: string) {
+  const modelOption = options.find((option) => option.value === model) ?? options[0];
+  if (!modelOption) return '';
+  if (
+    modelOption.defaultReasoningEffort &&
+    modelOption.reasoningEfforts.some((option) => option.value === modelOption.defaultReasoningEffort)
+  ) {
+    return modelOption.defaultReasoningEffort;
+  }
+  return modelOption.reasoningEfforts[0]?.value ?? '';
 }
 
 export type PromptConfigUpdate =
   { field: 'model'; value: string } | { field: 'effort'; value: string };
 
 export function promptConfigUpdatesForModelChange(
+  options: CodexModelOption[],
   value: string,
   currentEffort: string,
 ): PromptConfigUpdate[] {
-  const model = normalizeCodexModel(value);
-  const effort = defaultReasoningEffortForModel(model);
+  const model = normalizeCodexModel(options, value);
+  const effort = defaultReasoningEffortForModel(options, model);
   const updates: PromptConfigUpdate[] = [{ field: 'model', value: model }];
   if (effort !== currentEffort) {
     updates.push({ field: 'effort', value: effort });
@@ -80,9 +86,9 @@ export function promptConfigUpdatesForModelChange(
   return updates;
 }
 
-export function reasoningEffortLabel(model: string, value: string) {
+export function reasoningEffortLabel(options: CodexModelOption[], model: string, value: string) {
   return (
-    reasoningEffortOptionsForModel(model).find((option) => option.value === value)?.label ??
+    reasoningEffortOptionsForModel(options, model).find((option) => option.value === value)?.label ??
     (value || '-')
   );
 }

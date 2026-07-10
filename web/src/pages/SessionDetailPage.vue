@@ -62,7 +62,7 @@
             </template>
             卡片已关闭，工作树与分支已清理，不能再追加描述或运行。
           </q-banner>
-          <PromptComposer
+          <CodexPromptComposer
             v-else
             v-model:prompt="appendText"
             v-model:files="appendFiles"
@@ -90,7 +90,7 @@
                 <q-tooltip>{{ composerAction.tooltip }}</q-tooltip>
               </q-btn>
             </template>
-          </PromptComposer>
+          </CodexPromptComposer>
         </div>
       </section>
 
@@ -400,16 +400,13 @@ import { useRoute } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
 import AppPagination from '@/components/AppPagination.vue';
+import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
-import PromptComposer from '@/components/PromptComposer.vue';
 import SessionEventMessage, {
   type SessionEventMessageEntry,
 } from '@/components/SessionEventMessage.vue';
 import {
-  firstCodexModelValue,
-  normalizeCodexModel,
   normalizePermissionMode,
-  normalizeReasoningEffort,
 } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
@@ -426,8 +423,8 @@ const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
 const appendUploading = ref(false);
-const composerModel = ref(firstCodexModelValue());
-const composerEffort = ref(normalizeReasoningEffort(composerModel.value, ''));
+const composerModel = ref('');
+const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerConfigReady = ref(false);
 const detailView = ref<'session' | 'info' | 'changes'>('session');
@@ -960,9 +957,8 @@ watch(
   (value) => {
     if (!value) return;
     if (composerConfigReady.value && composerConfigDirty.value) return;
-    const nextModel = normalizeCodexModel(value.config.codexModel);
-    composerModel.value = nextModel;
-    composerEffort.value = normalizeReasoningEffort(nextModel, value.config.reasoningEffort);
+    composerModel.value = value.config.codexModel;
+    composerEffort.value = value.config.reasoningEffort;
     composerPermission.value = normalizePermissionMode(value.config.permissionMode);
     composerConfigReady.value = true;
   },
@@ -1130,73 +1126,8 @@ async function scrollEventsToBottom() {
   background: var(--ac-surface-muted);
 }
 
-.detail-composer__header {
-  padding: 10px 14px;
-}
-
-.detail-composer__input {
-  flex: 1 1 auto;
-  padding: 10px 12px 6px;
-}
-
-.detail-composer__hint {
-  margin-bottom: 6px;
-  color: var(--ac-text-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.detail-composer__input .prompt-input {
-  min-height: 96px;
-}
-
-.detail-composer__input .prompt-input :deep(.q-field__control) {
-  min-height: 96px;
-  background: transparent;
-}
-
-.detail-composer__input .prompt-input :deep(.q-field__native) {
-  min-height: 72px;
-}
-
-.detail-composer__actions {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--ac-surface-muted) 68%, transparent);
-}
-
-.detail-composer__icon-btn {
-  width: 42px;
-  min-width: 42px;
-  height: 30px;
-  min-height: 30px;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface-muted);
-  color: var(--q-primary);
-}
-
-.detail-composer__select {
-  max-width: 180px;
-  background: var(--ac-surface-muted);
-  color: var(--ac-text);
-}
-
 .detail-composer__primary-btn {
   border-radius: 11px;
-}
-
-.detail-composer__status {
-  display: inline-flex;
-  flex: 1 1 180px;
-  min-width: 0;
-  align-items: center;
-  gap: 6px;
-  justify-content: flex-end;
-  color: var(--ac-text-muted);
-  font-size: 12px;
 }
 
 .state-block {

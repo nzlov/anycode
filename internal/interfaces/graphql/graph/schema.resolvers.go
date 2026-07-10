@@ -295,6 +295,11 @@ func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.
 	return mapQuestionBatch(dto), nil
 }
 
+// CodexModelOptions is the resolver for the codexModelOptions field.
+func (r *queryResolver) CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error) {
+	return mapCodexModelOptions(r.UseCases.CodexModels), nil
+}
+
 // Projects is the resolver for the projects field.
 func (r *queryResolver) Projects(ctx context.Context) ([]*model.Project, error) {
 	if r.UseCases.Projects == nil {

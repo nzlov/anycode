@@ -72,6 +72,7 @@
         :model="model"
         :effort="effort"
         :permission="permission"
+        :model-options="modelOptions"
         :disabled="disabled"
         :readonly-config="readonlyConfig"
         @update:model="emit('update:model', $event)"
@@ -93,6 +94,7 @@
             :model="model"
             :effort="effort"
             :permission="permission"
+            :model-options="modelOptions"
             :disabled="disabled"
             :readonly-config="readonlyConfig"
             @update:model="emit('update:model', $event)"
@@ -147,6 +149,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useQuasar } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
+import type { CodexModelOption } from '@/components/promptOptions';
 
 const props = withDefaults(
   defineProps<{
@@ -161,6 +164,7 @@ const props = withDefaults(
     compact?: boolean;
     showBadge?: boolean;
     readonlyConfig?: boolean;
+    modelOptions?: CodexModelOption[];
   }>(),
   {
     title: '',
@@ -169,6 +173,7 @@ const props = withDefaults(
     compact: false,
     showBadge: true,
     readonlyConfig: false,
+    modelOptions: () => [],
   },
 );
 

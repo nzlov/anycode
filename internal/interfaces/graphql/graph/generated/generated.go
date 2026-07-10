@@ -50,6 +50,19 @@ type ComplexityRoot struct {
 		Size        func(childComplexity int) int
 	}
 
+	CodexModelOption struct {
+		DefaultReasoningEffort func(childComplexity int) int
+		Label                  func(childComplexity int) int
+		ReasoningEfforts       func(childComplexity int) int
+		Value                  func(childComplexity int) int
+	}
+
+	CodexReasoningEffortOption struct {
+		Description func(childComplexity int) int
+		Label       func(childComplexity int) int
+		Value       func(childComplexity int) int
+	}
+
 	CommitRecord struct {
 		AuthorEmail func(childComplexity int) int
 		AuthorName  func(childComplexity int) int
@@ -182,6 +195,7 @@ type ComplexityRoot struct {
 	Query struct {
 		BranchDiff             func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory        func(childComplexity int, input model.BrowseDirectoryInput) int
+		CodexModelOptions      func(childComplexity int) int
 		PendingQuestionBatches func(childComplexity int, sessionID string) int
 		ProjectGitState        func(childComplexity int, projectID string, refresh bool) int
 		Projects               func(childComplexity int) int
@@ -441,6 +455,7 @@ type MutationResolver interface {
 	SubmitQuestionBatch(ctx context.Context, input model.SubmitQuestionBatchInput) (*model.QuestionBatch, error)
 }
 type QueryResolver interface {
+	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
 	Projects(ctx context.Context) ([]*model.Project, error)
 	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
@@ -518,6 +533,50 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Attachment.Size(childComplexity), true
+
+	case "CodexModelOption.defaultReasoningEffort":
+		if e.ComplexityRoot.CodexModelOption.DefaultReasoningEffort == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexModelOption.DefaultReasoningEffort(childComplexity), true
+	case "CodexModelOption.label":
+		if e.ComplexityRoot.CodexModelOption.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexModelOption.Label(childComplexity), true
+	case "CodexModelOption.reasoningEfforts":
+		if e.ComplexityRoot.CodexModelOption.ReasoningEfforts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexModelOption.ReasoningEfforts(childComplexity), true
+	case "CodexModelOption.value":
+		if e.ComplexityRoot.CodexModelOption.Value == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexModelOption.Value(childComplexity), true
+
+	case "CodexReasoningEffortOption.description":
+		if e.ComplexityRoot.CodexReasoningEffortOption.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexReasoningEffortOption.Description(childComplexity), true
+	case "CodexReasoningEffortOption.label":
+		if e.ComplexityRoot.CodexReasoningEffortOption.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexReasoningEffortOption.Label(childComplexity), true
+	case "CodexReasoningEffortOption.value":
+		if e.ComplexityRoot.CodexReasoningEffortOption.Value == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexReasoningEffortOption.Value(childComplexity), true
 
 	case "CommitRecord.authorEmail":
 		if e.ComplexityRoot.CommitRecord.AuthorEmail == nil {
@@ -1116,6 +1175,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.BrowseDirectory(childComplexity, args["input"].(model.BrowseDirectoryInput)), true
+	case "Query.codexModelOptions":
+		if e.ComplexityRoot.Query.CodexModelOptions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.CodexModelOptions(childComplexity), true
 
 	case "Query.pendingQuestionBatches":
 		if e.ComplexityRoot.Query.PendingQuestionBatches == nil {
@@ -2303,6 +2368,7 @@ scalar Upload
 scalar Int64
 
 type Query {
+  codexModelOptions: [CodexModelOption!]!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
@@ -2374,6 +2440,19 @@ type GitState {
 type GitBranch {
   name: String!
   isCurrent: Boolean!
+}
+
+type CodexModelOption {
+  label: String!
+  value: String!
+  defaultReasoningEffort: String!
+  reasoningEfforts: [CodexReasoningEffortOption!]!
+}
+
+type CodexReasoningEffortOption {
+  label: String!
+  value: String!
+  description: String!
 }
 
 type DirectoryPage {
@@ -3519,6 +3598,217 @@ func (ec *executionContext) fieldContext_Attachment_previewable(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexModelOption_label(ctx context.Context, field graphql.CollectedField, obj *model.CodexModelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexModelOption_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexModelOption_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexModelOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexModelOption_value(ctx context.Context, field graphql.CollectedField, obj *model.CodexModelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexModelOption_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexModelOption_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexModelOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexModelOption_defaultReasoningEffort(ctx context.Context, field graphql.CollectedField, obj *model.CodexModelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexModelOption_defaultReasoningEffort,
+		func(ctx context.Context) (any, error) {
+			return obj.DefaultReasoningEffort, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexModelOption_defaultReasoningEffort(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexModelOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexModelOption_reasoningEfforts(ctx context.Context, field graphql.CollectedField, obj *model.CodexModelOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexModelOption_reasoningEfforts,
+		func(ctx context.Context) (any, error) {
+			return obj.ReasoningEfforts, nil
+		},
+		nil,
+		ec.marshalNCodexReasoningEffortOption2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexReasoningEffortOptionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexModelOption_reasoningEfforts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexModelOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "label":
+				return ec.fieldContext_CodexReasoningEffortOption_label(ctx, field)
+			case "value":
+				return ec.fieldContext_CodexReasoningEffortOption_value(ctx, field)
+			case "description":
+				return ec.fieldContext_CodexReasoningEffortOption_description(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexReasoningEffortOption", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexReasoningEffortOption_label(ctx context.Context, field graphql.CollectedField, obj *model.CodexReasoningEffortOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexReasoningEffortOption_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexReasoningEffortOption_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexReasoningEffortOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexReasoningEffortOption_value(ctx context.Context, field graphql.CollectedField, obj *model.CodexReasoningEffortOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexReasoningEffortOption_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexReasoningEffortOption_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexReasoningEffortOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexReasoningEffortOption_description(ctx context.Context, field graphql.CollectedField, obj *model.CodexReasoningEffortOption) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexReasoningEffortOption_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexReasoningEffortOption_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexReasoningEffortOption",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -6441,6 +6731,45 @@ func (ec *executionContext) fieldContext_PromptAppend_createdAt(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_codexModelOptions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_codexModelOptions,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().CodexModelOptions(ctx)
+		},
+		nil,
+		ec.marshalNCodexModelOption2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexModelOptionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_codexModelOptions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "label":
+				return ec.fieldContext_CodexModelOption_label(ctx, field)
+			case "value":
+				return ec.fieldContext_CodexModelOption_value(ctx, field)
+			case "defaultReasoningEffort":
+				return ec.fieldContext_CodexModelOption_defaultReasoningEffort(ctx, field)
+			case "reasoningEfforts":
+				return ec.fieldContext_CodexModelOption_reasoningEfforts(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexModelOption", field.Name)
 		},
 	}
 	return fc, nil
@@ -14937,6 +15266,109 @@ func (ec *executionContext) _Attachment(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var codexModelOptionImplementors = []string{"CodexModelOption"}
+
+func (ec *executionContext) _CodexModelOption(ctx context.Context, sel ast.SelectionSet, obj *model.CodexModelOption) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexModelOptionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexModelOption")
+		case "label":
+			out.Values[i] = ec._CodexModelOption_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._CodexModelOption_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "defaultReasoningEffort":
+			out.Values[i] = ec._CodexModelOption_defaultReasoningEffort(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reasoningEfforts":
+			out.Values[i] = ec._CodexModelOption_reasoningEfforts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var codexReasoningEffortOptionImplementors = []string{"CodexReasoningEffortOption"}
+
+func (ec *executionContext) _CodexReasoningEffortOption(ctx context.Context, sel ast.SelectionSet, obj *model.CodexReasoningEffortOption) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexReasoningEffortOptionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexReasoningEffortOption")
+		case "label":
+			out.Values[i] = ec._CodexReasoningEffortOption_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._CodexReasoningEffortOption_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._CodexReasoningEffortOption_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var commitRecordImplementors = []string{"CommitRecord"}
 
 func (ec *executionContext) _CommitRecord(ctx context.Context, sel ast.SelectionSet, obj *model.CommitRecord) graphql.Marshaler {
@@ -15962,6 +16394,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
+		case "codexModelOptions":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_codexModelOptions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "projects":
 			field := field
 
@@ -18186,6 +18640,58 @@ func (ec *executionContext) unmarshalNBrowseDirectoryInput2githubᚗcomᚋnzlov�
 func (ec *executionContext) unmarshalNCloseSessionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCloseSessionInput(ctx context.Context, v any) (model.CloseSessionInput, error) {
 	res, err := ec.unmarshalInputCloseSessionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNCodexModelOption2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexModelOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CodexModelOption) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCodexModelOption2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexModelOption(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCodexModelOption2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexModelOption(ctx context.Context, sel ast.SelectionSet, v *model.CodexModelOption) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CodexModelOption(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNCodexReasoningEffortOption2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexReasoningEffortOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CodexReasoningEffortOption) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCodexReasoningEffortOption2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexReasoningEffortOption(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCodexReasoningEffortOption2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexReasoningEffortOption(ctx context.Context, sel ast.SelectionSet, v *model.CodexReasoningEffortOption) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CodexReasoningEffortOption(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNCommitRecord2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecordᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CommitRecord) graphql.Marshaler {
