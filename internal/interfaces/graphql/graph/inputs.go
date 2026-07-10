@@ -4,7 +4,6 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
@@ -51,19 +50,4 @@ func attachmentInput(file graphql.Upload, ownerKeyHash string) attachmentapp.Sta
 		Size:         file.Size,
 		Reader:       file.File,
 	}
-}
-
-func buildEventScope(input model.SessionEventsInput) eventdomain.Scope {
-	return eventdomain.Scope{
-		SessionID: eventSessionIDPtr(input.SessionID),
-		ProjectID: stringValue(input.ProjectID, ""),
-	}
-}
-
-func eventSessionIDPtr(value *string) *eventdomain.SessionID {
-	if value == nil {
-		return nil
-	}
-	id := eventdomain.SessionID(*value)
-	return &id
 }

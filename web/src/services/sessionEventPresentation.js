@@ -17,7 +17,9 @@ function inlineMarkdown(value) {
 }
 
 export function renderMarkdown(markdown) {
-  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = String(markdown || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n');
   const blocks = [];
   let listItems = [];
   let paragraph = [];
@@ -90,8 +92,20 @@ export function renderMarkdown(markdown) {
   return blocks.join('');
 }
 
-export function codexCommandResultBody(item) {
-  return commandOutputBody(firstNonEmptyString(item?.aggregated_output, item?.output, item?.text));
+export function codexCommandResultBody(item, normalizedItem) {
+  return commandOutputBody(
+    firstNonEmptyString(normalizedItem?.output, item?.aggregated_output, item?.output, item?.text),
+  );
+}
+
+export function codexMessageImages(item) {
+  const parts = [item?.content, item?.output].filter((value) => Array.isArray(value)).flat();
+  return parts.flatMap((part) => {
+    if (!part || part.type !== 'input_image' || typeof part.image_url !== 'string') return [];
+    const image = { src: part.image_url };
+    if (typeof part.detail === 'string' && part.detail !== '') image.detail = part.detail;
+    return [image];
+  });
 }
 
 export function prepareTerminalOutput(value) {
@@ -103,6 +117,21 @@ export function prepareTerminalOutput(value) {
   return String(value || '')
     .replace(/␛\[/g, `${escapeCode}[`)
     .replace(orphanSgr, '$1');
+}
+
+export function compactEventPayload(payload) {
+  return Object.entries(payload)
+    .filter(([key]) => !['processRunId', 'codexEventId'].includes(key))
+    .map(([key, value]) => {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return `${key}: ${value}`;
+      }
+      if (value === null) return `${key}: null`;
+      if (typeof value === 'object') return `${key}: ${JSON.stringify(value)}`;
+      return '';
+    })
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function firstNonEmptyString(...values) {
@@ -136,6 +165,14 @@ function isResultEvent(event) {
   return event?.kind === 'tool' && event.title === '命令结果';
 }
 
+function isToolStartEvent(event) {
+  return event?.kind === 'tool' && (event.toolPhase === 'started' || isCommandEvent(event));
+}
+
+function isToolResultEvent(event) {
+  return event?.kind === 'tool' && (event.toolPhase === 'completed' || isResultEvent(event));
+}
+
 function isFileChangeEvent(event) {
   return event?.kind === 'file_change';
 }
@@ -145,9 +182,9 @@ function resultMatchesCommand(result, command) {
   return shellCommandDisplay(result.command) === command;
 }
 
-export function mergeShellEvents(events) {
+export function mergeSessionEvents(events) {
   const merged = [];
-  const openCommands = [];
+  const openTools = [];
   const openFileChanges = new Map();
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index];
@@ -167,24 +204,32 @@ export function mergeShellEvents(events) {
       openFileChanges.set(fileChangeId, entry);
       continue;
     }
-    if (isCommandEvent(event)) {
+    if (isToolStartEvent(event)) {
+      const isCommand = isCommandEvent(event) || Boolean(event.command);
       const command = shellCommandDisplay(event.command || event.body);
       const entry = {
         ...event,
-        title: command ? `Shell ${command}` : 'Shell',
-        body: '',
+        title: isCommand ? (command ? `Shell ${command}` : 'Shell') : event.title,
+        body: isCommand ? '' : event.body,
       };
       merged.push(entry);
-      openCommands.push({ command, entry, toolCallId: event.toolCallId || '' });
+      openTools.push({
+        command,
+        entry,
+        input: event.body,
+        isCommand,
+        toolCallId: event.toolCallId || '',
+      });
       continue;
     }
-    if (isResultEvent(event)) {
-      const commandIndex = findOpenCommandIndex(openCommands, event);
-      if (commandIndex !== -1) {
-        const command = openCommands[commandIndex];
-        command.entry.body = shellBody(event.body);
-        command.entry.time = event.time || command.entry.time;
-        openCommands.splice(commandIndex, 1);
+    if (isToolResultEvent(event)) {
+      const toolIndex = findOpenToolIndex(openTools, event);
+      if (toolIndex !== -1) {
+        const tool = openTools[toolIndex];
+        tool.entry.body = tool.isCommand ? shellBody(event.body) : toolBody(tool.input, event.body);
+        tool.entry.time = event.time || tool.entry.time;
+        tool.entry.images = event.images || tool.entry.images;
+        openTools.splice(toolIndex, 1);
         continue;
       }
       const command = shellCommandDisplay(event.command);
@@ -198,6 +243,14 @@ export function mergeShellEvents(events) {
   return merged;
 }
 
+function toolBody(input, output) {
+  const inputText = String(input || '').trim();
+  const outputText = String(output || '').trim();
+  if (!inputText) return outputText;
+  if (!outputText) return inputText;
+  return `输入\n${inputText}\n\n输出\n${outputText}`;
+}
+
 function shellBody(resultBody) {
   return commandOutputBody(resultBody);
 }
@@ -206,14 +259,15 @@ function commandOutputBody(value) {
   return String(value || '').replace(/^命令完成(?:，退出码 \d+)?\n?/, '');
 }
 
-function findOpenCommandIndex(openCommands, result) {
+function findOpenToolIndex(openTools, result) {
   if (result.toolCallId) {
-    return openCommands.findIndex((command) => command.toolCallId === result.toolCallId);
+    return openTools.findIndex((tool) => tool.toolCallId === result.toolCallId);
   }
+  if (!isResultEvent(result)) return -1;
   const resultCommand = result.command ? shellCommandDisplay(result.command) : '';
-  for (let index = openCommands.length - 1; index >= 0; index -= 1) {
+  for (let index = openTools.length - 1; index >= 0; index -= 1) {
     if (!resultCommand) return index;
-    if (resultMatchesCommand(result, openCommands[index].command)) return index;
+    if (resultMatchesCommand(result, openTools[index].command)) return index;
   }
   return -1;
 }

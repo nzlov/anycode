@@ -352,11 +352,21 @@ type ComplexityRoot struct {
 		PageInfo func(childComplexity int) int
 	}
 
+	SessionEventStreamItem struct {
+		Event func(childComplexity int) int
+		Ready func(childComplexity int) int
+	}
+
+	SessionStateStreamItem struct {
+		QuestionBatch func(childComplexity int) int
+		Ready         func(childComplexity int) int
+		Session       func(childComplexity int) int
+	}
+
 	Subscription struct {
-		PendingQuestionBatches func(childComplexity int, sessionID string) int
-		SessionCardChanged     func(childComplexity int, projectID *string) int
-		SessionEvents          func(childComplexity int, input model.SessionEventsInput) int
-		SessionStatusChanged   func(childComplexity int, projectID *string, sessionID *string) int
+		SessionCardChanged  func(childComplexity int, projectID *string) int
+		SessionEvents       func(childComplexity int, sessionID string) int
+		SessionStateUpdates func(childComplexity int, sessionID string) int
 	}
 
 	TodoItem struct {
@@ -470,10 +480,9 @@ type QueryResolver interface {
 	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
 }
 type SubscriptionResolver interface {
-	SessionEvents(ctx context.Context, input model.SessionEventsInput) (<-chan *model.SessionEvent, error)
+	SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionEventStreamItem, error)
+	SessionStateUpdates(ctx context.Context, sessionID string) (<-chan *model.SessionStateStreamItem, error)
 	SessionCardChanged(ctx context.Context, projectID *string) (<-chan *model.SessionCard, error)
-	SessionStatusChanged(ctx context.Context, projectID *string, sessionID *string) (<-chan *model.Session, error)
-	PendingQuestionBatches(ctx context.Context, sessionID string) (<-chan *model.QuestionBatch, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -1914,17 +1923,38 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionEventPage.PageInfo(childComplexity), true
 
-	case "Subscription.pendingQuestionBatches":
-		if e.ComplexityRoot.Subscription.PendingQuestionBatches == nil {
+	case "SessionEventStreamItem.event":
+		if e.ComplexityRoot.SessionEventStreamItem.Event == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_pendingQuestionBatches_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
+		return e.ComplexityRoot.SessionEventStreamItem.Event(childComplexity), true
+	case "SessionEventStreamItem.ready":
+		if e.ComplexityRoot.SessionEventStreamItem.Ready == nil {
+			break
 		}
 
-		return e.ComplexityRoot.Subscription.PendingQuestionBatches(childComplexity, args["sessionId"].(string)), true
+		return e.ComplexityRoot.SessionEventStreamItem.Ready(childComplexity), true
+
+	case "SessionStateStreamItem.questionBatch":
+		if e.ComplexityRoot.SessionStateStreamItem.QuestionBatch == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionStateStreamItem.QuestionBatch(childComplexity), true
+	case "SessionStateStreamItem.ready":
+		if e.ComplexityRoot.SessionStateStreamItem.Ready == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionStateStreamItem.Ready(childComplexity), true
+	case "SessionStateStreamItem.session":
+		if e.ComplexityRoot.SessionStateStreamItem.Session == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionStateStreamItem.Session(childComplexity), true
+
 	case "Subscription.sessionCardChanged":
 		if e.ComplexityRoot.Subscription.SessionCardChanged == nil {
 			break
@@ -1946,18 +1976,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Subscription.SessionEvents(childComplexity, args["input"].(model.SessionEventsInput)), true
-	case "Subscription.sessionStatusChanged":
-		if e.ComplexityRoot.Subscription.SessionStatusChanged == nil {
+		return e.ComplexityRoot.Subscription.SessionEvents(childComplexity, args["sessionId"].(string)), true
+	case "Subscription.sessionStateUpdates":
+		if e.ComplexityRoot.Subscription.SessionStateUpdates == nil {
 			break
 		}
 
-		args, err := ec.field_Subscription_sessionStatusChanged_args(ctx, rawArgs)
+		args, err := ec.field_Subscription_sessionStateUpdates_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Subscription.SessionStatusChanged(childComplexity, args["projectId"].(*string), args["sessionId"].(*string)), true
+		return e.ComplexityRoot.Subscription.SessionStateUpdates(childComplexity, args["sessionId"].(string)), true
 
 	case "TodoItem.completed":
 		if e.ComplexityRoot.TodoItem.Completed == nil {
@@ -2257,7 +2287,6 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSessionCommitHistoryInput,
 		ec.unmarshalInputSessionConfigInput,
 		ec.unmarshalInputSessionDiffInput,
-		ec.unmarshalInputSessionEventsInput,
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputSubmitQuestionBatchInput,
@@ -2405,10 +2434,9 @@ type Mutation {
 }
 
 type Subscription {
-  sessionEvents(input: SessionEventsInput!): SessionEvent!
+  sessionEvents(sessionId: ID!): SessionEventStreamItem!
+  sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
-  sessionStatusChanged(projectId: ID, sessionId: ID): Session!
-  pendingQuestionBatches(sessionId: ID!): QuestionBatch!
 }
 
 type PageInfo {
@@ -2593,6 +2621,17 @@ type SessionEvent {
   type: String!
   payload: JSON!
   createdAt: String!
+}
+
+type SessionEventStreamItem {
+  ready: Boolean!
+  event: SessionEvent
+}
+
+type SessionStateStreamItem {
+  ready: Boolean!
+  session: SessionDetail
+  questionBatch: QuestionBatch
 }
 
 type EventScope {
@@ -2828,12 +2867,6 @@ input ListSessionEventsInput {
   sessionId: ID!
   beforeEventId: ID
   limit: Int
-}
-
-input SessionEventsInput {
-  sessionId: ID
-  projectId: ID
-  afterEventId: ID
 }
 
 input SessionDiffInput {
@@ -3299,17 +3332,6 @@ func (ec *executionContext) field_Query_workflowDefinition_args(ctx context.Cont
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_pendingQuestionBatches_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["sessionId"] = arg0
-	return args, nil
-}
-
 func (ec *executionContext) field_Subscription_sessionCardChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3324,27 +3346,22 @@ func (ec *executionContext) field_Subscription_sessionCardChanged_args(ctx conte
 func (ec *executionContext) field_Subscription_sessionEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSessionEventsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEventsInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
 	if err != nil {
 		return nil, err
 	}
-	args["input"] = arg0
+	args["sessionId"] = arg0
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_sessionStatusChanged_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Subscription_sessionStateUpdates_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalOID2ᚖstring)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
 	if err != nil {
 		return nil, err
 	}
-	args["projectId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalOID2ᚖstring)
-	if err != nil {
-		return nil, err
-	}
-	args["sessionId"] = arg1
+	args["sessionId"] = arg0
 	return args, nil
 }
 
@@ -10689,29 +10706,57 @@ func (ec *executionContext) fieldContext_SessionEventPage_pageInfo(_ context.Con
 	return fc, nil
 }
 
-func (ec *executionContext) _Subscription_sessionEvents(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	return graphql.ResolveFieldStream(
+func (ec *executionContext) _SessionEventStreamItem_ready(ctx context.Context, field graphql.CollectedField, obj *model.SessionEventStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Subscription_sessionEvents,
+		ec.fieldContext_SessionEventStreamItem_ready,
 		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Subscription().SessionEvents(ctx, fc.Args["input"].(model.SessionEventsInput))
+			return obj.Ready, nil
 		},
 		nil,
-		ec.marshalNSessionEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEvent,
+		ec.marshalNBoolean2bool,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SessionEventStreamItem_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
-		Object:     "Subscription",
+		Object:     "SessionEventStreamItem",
 		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionEventStreamItem_event(ctx context.Context, field graphql.CollectedField, obj *model.SessionEventStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionEventStreamItem_event,
+		func(ctx context.Context) (any, error) {
+			return obj.Event, nil
+		},
+		nil,
+		ec.marshalOSessionEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEvent,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionEventStreamItem_event(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionEventStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -10730,6 +10775,181 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 			return nil, fmt.Errorf("no field named %q was found under type SessionEvent", field.Name)
 		},
 	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStateStreamItem_ready(ctx context.Context, field graphql.CollectedField, obj *model.SessionStateStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStateStreamItem_ready,
+		func(ctx context.Context) (any, error) {
+			return obj.Ready, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStateStreamItem_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStateStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStateStreamItem_session(ctx context.Context, field graphql.CollectedField, obj *model.SessionStateStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStateStreamItem_session,
+		func(ctx context.Context) (any, error) {
+			return obj.Session, nil
+		},
+		nil,
+		ec.marshalOSessionDetail2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDetail,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStateStreamItem_session(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStateStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SessionDetail_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_SessionDetail_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_SessionDetail_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_SessionDetail_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_SessionDetail_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_SessionDetail_priority(ctx, field)
+			case "closeReason":
+				return ec.fieldContext_SessionDetail_closeReason(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_SessionDetail_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_SessionDetail_worktreeBranch(ctx, field)
+			case "currentNodeTitle":
+				return ec.fieldContext_SessionDetail_currentNodeTitle(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_SessionDetail_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_SessionDetail_config(ctx, field)
+			case "attachments":
+				return ec.fieldContext_SessionDetail_attachments(ctx, field)
+			case "promptAppends":
+				return ec.fieldContext_SessionDetail_promptAppends(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_SessionDetail_availableActions(ctx, field)
+			case "canResume":
+				return ec.fieldContext_SessionDetail_canResume(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_SessionDetail_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionDetail_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_SessionDetail_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionDetail", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionStateStreamItem_questionBatch(ctx context.Context, field graphql.CollectedField, obj *model.SessionStateStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionStateStreamItem_questionBatch,
+		func(ctx context.Context) (any, error) {
+			return obj.QuestionBatch, nil
+		},
+		nil,
+		ec.marshalOQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionStateStreamItem_questionBatch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionStateStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_QuestionBatch_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_QuestionBatch_sessionId(ctx, field)
+			case "status":
+				return ec.fieldContext_QuestionBatch_status(ctx, field)
+			case "questions":
+				return ec.fieldContext_QuestionBatch_questions(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuestionBatch", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_sessionEvents(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_sessionEvents,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().SessionEvents(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNSessionEventStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEventStreamItem,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "ready":
+				return ec.fieldContext_SessionEventStreamItem_ready(ctx, field)
+			case "event":
+				return ec.fieldContext_SessionEventStreamItem_event(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionEventStreamItem", field.Name)
+		},
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			err = ec.Recover(ctx, r)
@@ -10738,6 +10958,55 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_sessionEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_sessionStateUpdates(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_sessionStateUpdates,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().SessionStateUpdates(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNSessionStateStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStateStreamItem,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_sessionStateUpdates(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "ready":
+				return ec.fieldContext_SessionStateStreamItem_ready(ctx, field)
+			case "session":
+				return ec.fieldContext_SessionStateStreamItem_session(ctx, field)
+			case "questionBatch":
+				return ec.fieldContext_SessionStateStreamItem_questionBatch(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionStateStreamItem", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_sessionStateUpdates_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10817,130 +11086,6 @@ func (ec *executionContext) fieldContext_Subscription_sessionCardChanged(ctx con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_sessionCardChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Subscription_sessionStatusChanged(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	return graphql.ResolveFieldStream(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Subscription_sessionStatusChanged,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Subscription().SessionStatusChanged(ctx, fc.Args["projectId"].(*string), fc.Args["sessionId"].(*string))
-		},
-		nil,
-		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Subscription_sessionStatusChanged(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Subscription",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Session_id(ctx, field)
-			case "projectId":
-				return ec.fieldContext_Session_projectId(ctx, field)
-			case "requirement":
-				return ec.fieldContext_Session_requirement(ctx, field)
-			case "mode":
-				return ec.fieldContext_Session_mode(ctx, field)
-			case "status":
-				return ec.fieldContext_Session_status(ctx, field)
-			case "priority":
-				return ec.fieldContext_Session_priority(ctx, field)
-			case "baseBranch":
-				return ec.fieldContext_Session_baseBranch(ctx, field)
-			case "worktreeBranch":
-				return ec.fieldContext_Session_worktreeBranch(ctx, field)
-			case "worktreePath":
-				return ec.fieldContext_Session_worktreePath(ctx, field)
-			case "codexSessionId":
-				return ec.fieldContext_Session_codexSessionId(ctx, field)
-			case "config":
-				return ec.fieldContext_Session_config(ctx, field)
-			case "availableActions":
-				return ec.fieldContext_Session_availableActions(ctx, field)
-			case "lastRunAt":
-				return ec.fieldContext_Session_lastRunAt(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_Session_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_Session_updatedAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_sessionStatusChanged_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Subscription_pendingQuestionBatches(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
-	return graphql.ResolveFieldStream(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Subscription_pendingQuestionBatches,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Subscription().PendingQuestionBatches(ctx, fc.Args["sessionId"].(string))
-		},
-		nil,
-		ec.marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Subscription_pendingQuestionBatches(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Subscription",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_QuestionBatch_id(ctx, field)
-			case "sessionId":
-				return ec.fieldContext_QuestionBatch_sessionId(ctx, field)
-			case "status":
-				return ec.fieldContext_QuestionBatch_status(ctx, field)
-			case "questions":
-				return ec.fieldContext_QuestionBatch_questions(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type QuestionBatch", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_pendingQuestionBatches_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -14578,50 +14723,6 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputSessionEventsInput(ctx context.Context, obj any) (model.SessionEventsInput, error) {
-	var it model.SessionEventsInput
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"sessionId", "projectId", "afterEventId"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "sessionId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.SessionID = data
-		case "projectId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.ProjectID = data
-		case "afterEventId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("afterEventId"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.AfterEventID = data
-		}
-	}
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputSetDefaultWorkflowInput(ctx context.Context, obj any) (model.SetDefaultWorkflowInput, error) {
 	var it model.SetDefaultWorkflowInput
 	if obj == nil {
@@ -17670,6 +17771,90 @@ func (ec *executionContext) _SessionEventPage(ctx context.Context, sel ast.Selec
 	return out
 }
 
+var sessionEventStreamItemImplementors = []string{"SessionEventStreamItem"}
+
+func (ec *executionContext) _SessionEventStreamItem(ctx context.Context, sel ast.SelectionSet, obj *model.SessionEventStreamItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sessionEventStreamItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SessionEventStreamItem")
+		case "ready":
+			out.Values[i] = ec._SessionEventStreamItem_ready(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "event":
+			out.Values[i] = ec._SessionEventStreamItem_event(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var sessionStateStreamItemImplementors = []string{"SessionStateStreamItem"}
+
+func (ec *executionContext) _SessionStateStreamItem(ctx context.Context, sel ast.SelectionSet, obj *model.SessionStateStreamItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sessionStateStreamItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SessionStateStreamItem")
+		case "ready":
+			out.Values[i] = ec._SessionStateStreamItem_ready(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "session":
+			out.Values[i] = ec._SessionStateStreamItem_session(ctx, field, obj)
+		case "questionBatch":
+			out.Values[i] = ec._SessionStateStreamItem_questionBatch(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var subscriptionImplementors = []string{"Subscription"}
 
 func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
@@ -17685,12 +17870,10 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	switch fields[0].Name {
 	case "sessionEvents":
 		return ec._Subscription_sessionEvents(ctx, fields[0])
+	case "sessionStateUpdates":
+		return ec._Subscription_sessionStateUpdates(ctx, fields[0])
 	case "sessionCardChanged":
 		return ec._Subscription_sessionCardChanged(ctx, fields[0])
-	case "sessionStatusChanged":
-		return ec._Subscription_sessionStatusChanged(ctx, fields[0])
-	case "pendingQuestionBatches":
-		return ec._Subscription_pendingQuestionBatches(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -19373,10 +19556,6 @@ func (ec *executionContext) unmarshalNSessionDiffInput2githubᚗcomᚋnzlovᚋan
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNSessionEvent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEvent(ctx context.Context, sel ast.SelectionSet, v model.SessionEvent) graphql.Marshaler {
-	return ec._SessionEvent(ctx, sel, &v)
-}
-
 func (ec *executionContext) marshalNSessionEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionEvent) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -19417,9 +19596,32 @@ func (ec *executionContext) marshalNSessionEventPage2ᚖgithubᚗcomᚋnzlovᚋa
 	return ec._SessionEventPage(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNSessionEventsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEventsInput(ctx context.Context, v any) (model.SessionEventsInput, error) {
-	res, err := ec.unmarshalInputSessionEventsInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
+func (ec *executionContext) marshalNSessionEventStreamItem2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEventStreamItem(ctx context.Context, sel ast.SelectionSet, v model.SessionEventStreamItem) graphql.Marshaler {
+	return ec._SessionEventStreamItem(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSessionEventStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEventStreamItem(ctx context.Context, sel ast.SelectionSet, v *model.SessionEventStreamItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SessionEventStreamItem(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNSessionStateStreamItem2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStateStreamItem(ctx context.Context, sel ast.SelectionSet, v model.SessionStateStreamItem) graphql.Marshaler {
+	return ec._SessionStateStreamItem(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNSessionStateStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStateStreamItem(ctx context.Context, sel ast.SelectionSet, v *model.SessionStateStreamItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SessionStateStreamItem(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNSetDefaultWorkflowInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetDefaultWorkflowInput(ctx context.Context, v any) (model.SetDefaultWorkflowInput, error) {
@@ -20062,6 +20264,13 @@ func (ec *executionContext) unmarshalOMergeConfigInput2ᚖgithubᚗcomᚋnzlov�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) marshalOQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx context.Context, sel ast.SelectionSet, v *model.QuestionBatch) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._QuestionBatch(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalORetryConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐRetryConfigInput(ctx context.Context, v any) (*model.RetryConfigInput, error) {
 	if v == nil {
 		return nil, nil
@@ -20076,6 +20285,20 @@ func (ec *executionContext) unmarshalOSessionConfigInput2ᚖgithubᚗcomᚋnzlov
 	}
 	res, err := ec.unmarshalInputSessionConfigInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOSessionDetail2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDetail(ctx context.Context, sel ast.SelectionSet, v *model.SessionDetail) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SessionDetail(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOSessionEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionEvent(ctx context.Context, sel ast.SelectionSet, v *model.SessionEvent) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SessionEvent(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {

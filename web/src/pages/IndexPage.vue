@@ -204,7 +204,13 @@ import { useRoute } from 'vue-router';
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
+import {
+  getGraphQLAccessKey,
+  verifyGraphQLAccessKey,
+  type GraphQLSubscriptionClose,
+} from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
+import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
 import {
   closeSession,
   getPendingQuestionBatches,
@@ -339,9 +345,26 @@ function startOverviewLiveUpdates() {
     {
       onData: scheduleOverviewRefresh,
       onError: scheduleOverviewReconnect,
-      onClose: scheduleOverviewReconnect,
+      onClose: (close) => {
+        void handleOverviewSubscriptionClose(close);
+      },
     },
   );
+}
+
+async function handleOverviewSubscriptionClose(close: GraphQLSubscriptionClose) {
+  const reconnect = await shouldReconnectCardStream(close, () =>
+    verifyGraphQLAccessKey(getGraphQLAccessKey()),
+  );
+  if (liveStopped) return;
+  if (reconnect) {
+    scheduleOverviewReconnect();
+    return;
+  }
+  if (cardReconnectTimer) {
+    clearTimeout(cardReconnectTimer);
+    cardReconnectTimer = null;
+  }
 }
 
 function stopOverviewLiveUpdates() {

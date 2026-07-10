@@ -3819,7 +3819,7 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 		},
 	}
 	close(source)
-	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}, events: source}
 	events := &fakeEventStore{}
 	publisher := &fakeEventPublisher{}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithEventPublisher(publisher))
@@ -3845,7 +3845,10 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 		t.Fatalf("StartSession() error = %v", err)
 	}
 	got := waitForPublishedEventType(t, publisher, "process.codex_event")
-	if got.Payload["codexEventId"] != "codex-event-1" || got.Payload["codexType"] != "assistant_message" {
+	if got.ID != "codex:codex-session-1:codex-event-1" {
+		t.Fatalf("codex event id = %q", got.ID)
+	}
+	if got.Payload["codexEventId"] != "codex-event-1" || got.Payload["codexSessionId"] != "codex-session-1" || got.Payload["codexType"] != "assistant_message" {
 		t.Fatalf("codex event payload identifiers = %#v", got.Payload)
 	}
 	if !got.CreatedAt.Equal(time.Unix(39, 0).UTC()) {

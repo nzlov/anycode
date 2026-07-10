@@ -27,11 +27,24 @@ func NewMemoryAnswerWaiter() *MemoryAnswerWaiter {
 	return &MemoryAnswerWaiter{entries: map[domain.BatchID]*waitEntry{}}
 }
 
+func (w *MemoryAnswerWaiter) Prepare(_ context.Context, batchID domain.BatchID) error {
+	if w == nil {
+		return errors.New("question answer waiter is nil")
+	}
+	w.entry(batchID)
+	return nil
+}
+
 func (w *MemoryAnswerWaiter) Wait(ctx context.Context, batchID domain.BatchID) ([]domain.Answer, error) {
 	if w == nil {
 		return nil, errors.New("question answer waiter is nil")
 	}
-	entry := w.entry(batchID)
+	w.mu.Lock()
+	entry := w.entries[batchID]
+	w.mu.Unlock()
+	if entry == nil {
+		return nil, ErrWaitCancelled
+	}
 	select {
 	case <-ctx.Done():
 		w.removeIfPending(batchID, entry)
@@ -49,9 +62,12 @@ func (w *MemoryAnswerWaiter) Resume(_ context.Context, batchID domain.BatchID, a
 	if w == nil {
 		return errors.New("question answer waiter is nil")
 	}
-	entry := w.entry(batchID)
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	entry := w.entries[batchID]
+	if entry == nil {
+		return nil
+	}
 	if entry.closed {
 		return nil
 	}
@@ -65,9 +81,12 @@ func (w *MemoryAnswerWaiter) Cancel(_ context.Context, batchID domain.BatchID, r
 	if w == nil {
 		return errors.New("question answer waiter is nil")
 	}
-	entry := w.entry(batchID)
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	entry := w.entries[batchID]
+	if entry == nil {
+		return nil
+	}
 	if entry.closed {
 		return nil
 	}
@@ -79,6 +98,15 @@ func (w *MemoryAnswerWaiter) Cancel(_ context.Context, batchID domain.BatchID, r
 	entry.closed = true
 	close(entry.done)
 	return nil
+}
+
+func (w *MemoryAnswerWaiter) Forget(batchID domain.BatchID) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.entries, batchID)
 }
 
 func (w *MemoryAnswerWaiter) entry(batchID domain.BatchID) *waitEntry {

@@ -20,6 +20,7 @@ func sessionCardChangeEvent(eventDTO eventapp.DTO, projectID *string) bool {
 		"session.blocked",
 		"session.completed",
 		"session.closed",
+		"session.config_changed",
 		"session.priority_changed",
 		"session.todo_list_updated",
 		"workflow.waiting_resume_action",

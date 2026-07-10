@@ -1,6 +1,14 @@
-import { graphqlFetch, graphqlSubscribe } from '@/services/graphqlClient';
+import {
+  graphqlFetch,
+  graphqlSubscribe,
+  type GraphQLSubscriptionClose,
+} from '@/services/graphqlClient';
 import { latestSessionEventPageInput } from '@/services/sessionEventPaging';
-import { codexCommandResultBody } from '@/services/sessionEventPresentation';
+import {
+  codexCommandResultBody,
+  codexMessageImages,
+  compactEventPayload,
+} from '@/services/sessionEventPresentation';
 
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
@@ -86,16 +94,33 @@ export interface SessionAttachment {
 
 export interface SessionEvent {
   id: string;
-  kind: 'thought' | 'tool' | 'assistant' | 'status' | 'question' | 'file_change';
+  kind: 'thought' | 'tool' | 'assistant' | 'user' | 'status' | 'usage' | 'question' | 'file_change';
   rawType: string;
   title: string;
   body: string;
   command?: string;
   toolCallId?: string;
+  toolPhase?: 'started' | 'completed';
   fileChangeId?: string;
   fileChanges?: FileChange[];
+  usage?: SessionTokenUsage;
+  images?: SessionEventImage[];
   createdAt: string;
   time: string;
+}
+
+export interface SessionEventImage {
+  src: string;
+  detail?: string;
+}
+
+export interface SessionTokenUsage {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  contextWindow: number;
 }
 
 export interface FileChange {
@@ -166,12 +191,6 @@ export interface SessionDetailData {
   session: SessionDetail;
   events: SessionEvent[];
   eventsPageInfo: PageInfo;
-}
-
-export interface SessionEventsSubscriptionInput {
-  sessionId?: string;
-  projectId?: string;
-  afterEventId?: string;
 }
 
 export interface SessionCardChangedSubscriptionInput {
@@ -304,6 +323,17 @@ interface GraphQLSessionEvent {
   type?: string;
   payload?: Record<string, unknown>;
   createdAt: string;
+}
+
+interface GraphQLSessionEventStreamItem {
+  ready: boolean;
+  event?: GraphQLSessionEvent | null;
+}
+
+interface GraphQLSessionStateStreamItem {
+  ready: boolean;
+  session?: GraphQLSessionDetail | null;
+  questionBatch?: GraphQLQuestionBatch | null;
 }
 
 interface GraphQLQuestionBatch {
@@ -451,29 +481,6 @@ export async function listSessions(input: ListSessionsInput = {}): Promise<Sessi
   };
 }
 
-export async function getSessionDetail(sessionId: string): Promise<SessionDetailData> {
-  const eventPageSize = 50;
-  const [eventsData, sessionData] = await Promise.all([
-    getSessionEventPage(sessionId, '', eventPageSize),
-    graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
-      query: `
-        query Session($id: ID!) {
-          session(id: $id) {
-            ${sessionDetailFields}
-          }
-        }
-      `,
-      variables: { id: sessionId },
-    }),
-  ]);
-
-  return {
-    session: normalizeSessionDetail(sessionData.session),
-    events: eventsData.items,
-    eventsPageInfo: eventsData.pageInfo,
-  };
-}
-
 export async function getSession(sessionId: string): Promise<SessionDetail> {
   const data = await graphqlFetch<{ session: GraphQLSessionDetail }, { id: string }>({
     query: `
@@ -520,27 +527,38 @@ export async function getSessionEventPage(sessionId: string, beforeEventId: stri
 }
 
 export function subscribeSessionEvents(
-  input: SessionEventsSubscriptionInput,
+  sessionId: string,
   handlers: {
     onData: (event: SessionEvent) => void;
     onError?: (error: Error) => void;
-    onClose?: () => void;
+    onClose?: (close: GraphQLSubscriptionClose) => void;
+    onSubscribed?: () => void;
   },
 ) {
   const options = {
     query: `
-      subscription SessionEvents($input: SessionEventsInput!) {
-        sessionEvents(input: $input) {
-          id
-          type
-          payload
-          createdAt
+      subscription SessionEvents($sessionId: ID!) {
+        sessionEvents(sessionId: $sessionId) {
+          ready
+          event {
+            id
+            type
+            payload
+            createdAt
+          }
         }
       }
     `,
-    variables: { input },
-    onData: (data: { sessionEvents: GraphQLSessionEvent }) =>
-      handlers.onData(normalizeSessionEvent(data.sessionEvents)),
+    variables: { sessionId },
+    onData: (data: { sessionEvents: GraphQLSessionEventStreamItem }) => {
+      if (data.sessionEvents.ready) {
+        handlers.onSubscribed?.();
+        return;
+      }
+      if (data.sessionEvents.event) {
+        handlers.onData(normalizeSessionEvent(data.sessionEvents.event));
+      }
+    },
   };
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
@@ -548,10 +566,9 @@ export function subscribeSessionEvents(
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
-  return graphqlSubscribe<
-    { sessionEvents: GraphQLSessionEvent },
-    { input: SessionEventsSubscriptionInput }
->(options);
+  return graphqlSubscribe<{ sessionEvents: GraphQLSessionEventStreamItem }, { sessionId: string }>(
+    options,
+  );
 }
 
 export function subscribeSessionCardChanged(
@@ -559,7 +576,7 @@ export function subscribeSessionCardChanged(
   handlers: {
     onData: (card: SessionCard) => void;
     onError?: (error: Error) => void;
-    onClose?: () => void;
+    onClose?: (close: GraphQLSubscriptionClose) => void;
   },
 ) {
   const options = {
@@ -580,31 +597,46 @@ export function subscribeSessionCardChanged(
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
-  return graphqlSubscribe<
-    { sessionCardChanged: GraphQLSessionCard },
-    { projectId?: string }
-  >(options);
+  return graphqlSubscribe<{ sessionCardChanged: GraphQLSessionCard }, { projectId?: string }>(
+    options,
+  );
 }
 
-export function subscribePendingQuestionBatches(
+export function subscribeSessionStateUpdates(
   sessionId: string,
   handlers: {
-    onData: (batch: QuestionBatch) => void;
+    onData: (update: { session?: SessionDetail; questionBatch?: QuestionBatch }) => void;
     onError?: (error: Error) => void;
-    onClose?: () => void;
+    onClose?: (close: GraphQLSubscriptionClose) => void;
+    onSubscribed?: () => void;
   },
 ) {
   const options = {
     query: `
-      subscription PendingQuestionBatches($sessionId: ID!) {
-        pendingQuestionBatches(sessionId: $sessionId) {
-          ${questionBatchFields}
+      subscription SessionStateUpdates($sessionId: ID!) {
+        sessionStateUpdates(sessionId: $sessionId) {
+          ready
+          session {
+            ${sessionDetailFields}
+          }
+          questionBatch {
+            ${questionBatchFields}
+          }
         }
       }
     `,
     variables: { sessionId },
-    onData: (data: { pendingQuestionBatches: GraphQLQuestionBatch }) =>
-      handlers.onData(normalizeQuestionBatch(data.pendingQuestionBatches)),
+    onData: (data: { sessionStateUpdates: GraphQLSessionStateStreamItem }) => {
+      const item = data.sessionStateUpdates;
+      if (item.ready) {
+        handlers.onSubscribed?.();
+        return;
+      }
+      const update: { session?: SessionDetail; questionBatch?: QuestionBatch } = {};
+      if (item.session) update.session = normalizeSessionDetail(item.session);
+      if (item.questionBatch) update.questionBatch = normalizeQuestionBatch(item.questionBatch);
+      handlers.onData(update);
+    },
   };
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
@@ -612,12 +644,17 @@ export function subscribePendingQuestionBatches(
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
-  return graphqlSubscribe<{ pendingQuestionBatches: GraphQLQuestionBatch }, { sessionId: string }>(
-    options,
-  );
+  return graphqlSubscribe<
+    { sessionStateUpdates: GraphQLSessionStateStreamItem },
+    { sessionId: string }
+  >(options);
 }
 
-export async function appendPrompt(sessionId: string, body: string, stagedAttachmentIds?: string[]) {
+export async function appendPrompt(
+  sessionId: string,
+  body: string,
+  stagedAttachmentIds?: string[],
+) {
   const input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } = {
     sessionId,
     body,
@@ -715,7 +752,9 @@ export async function updateSessionConfig(sessionId: string, config: SessionConf
   });
   return {
     config: data.updateSessionConfig.config,
-    updatedAt: formatSessionTime(data.updateSessionConfig.lastRunAt ?? data.updateSessionConfig.updatedAt),
+    updatedAt: formatSessionTime(
+      data.updateSessionConfig.lastRunAt ?? data.updateSessionConfig.updatedAt,
+    ),
   };
 }
 
@@ -946,11 +985,23 @@ export function normalizeSessionEvent(event: GraphQLSessionEvent): SessionEvent 
   if (readable.toolCallId) {
     normalized.toolCallId = readable.toolCallId;
   }
+  if (normalized.kind === 'tool') {
+    const codexType = stringPayload(payload, 'codexType');
+    if (codexType === 'item.started' || codexType === 'item.completed') {
+      normalized.toolPhase = codexType === 'item.started' ? 'started' : 'completed';
+    }
+  }
   if (readable.fileChangeId) {
     normalized.fileChangeId = readable.fileChangeId;
   }
   if (readable.fileChanges) {
     normalized.fileChanges = readable.fileChanges;
+  }
+  if (readable.usage) {
+    normalized.usage = readable.usage;
+  }
+  if (readable.images?.length) {
+    normalized.images = readable.images;
   }
   return normalized;
 }
@@ -1009,24 +1060,51 @@ function readableEventPayload(type: string, payload: Record<string, unknown>) {
   }
   if (status) return { title: eventTitle(type), body: statusText(status) };
 
-  return { title: '', body: compactPayload(payload) };
+  return { title: '', body: compactEventPayload(payload) };
 }
 
 function readableCodexEvent(payload: Record<string, unknown>) {
   const codexType = stringPayload(payload, 'codexType');
   const status = stringPayload(payload, 'status');
   const item = objectPayload(payload, 'item');
-  const itemType = stringPayload(item, 'type');
-  const output = stringPayload(item, 'aggregated_output');
+  const normalizedItem = objectPayload(payload, 'normalizedItem');
+  const itemType = stringPayload(normalizedItem, 'type') || stringPayload(item, 'type');
+  const output =
+    stringPayload(normalizedItem, 'output') || stringPayload(item, 'aggregated_output');
   const text = stringPayload(item, 'text') || stringPayload(payload, 'text');
-  const command = stringPayload(item, 'command');
+  const command = stringPayload(normalizedItem, 'command') || stringPayload(item, 'command');
+  const itemName = stringPayload(normalizedItem, 'qualifiedName') || stringPayload(item, 'name');
+  const input = stringPayload(normalizedItem, 'input') || stringPayload(item, 'input');
   const toolCallId = codexItemID(item, payload);
-  const processExitCode = numberPayload(payload, 'exitCode');
-  const failure = stringPayload(payload, 'failureReason');
 
   if (codexType === 'thread.started') {
-    const threadID = stringPayload(payload, 'thread_id');
+    const threadID = stringPayload(payload, 'session_id') || stringPayload(payload, 'id');
     return { title: '线程已创建', body: threadID ? `线程 ${threadID}` : statusText(status) };
+  }
+  if (codexType === 'task.started') return { title: '任务开始', body: 'Codex 开始处理当前请求。' };
+  if (codexType === 'task.completed') {
+    const durationMs = numberPayload(payload, 'duration_ms');
+    return {
+      title: '任务完成',
+      body: durationMs === null ? 'Codex 已完成当前请求。' : `耗时 ${formatDuration(durationMs)}`,
+    };
+  }
+  if (codexType === 'turn.aborted') {
+    return { title: '本轮已中止', body: stringPayload(payload, 'reason') || '当前执行被中止。' };
+  }
+  if (codexType === 'context.compacted')
+    return { title: '上下文已压缩', body: stringPayload(payload, 'message') };
+  if (codexType === 'turn.context') {
+    return { title: '回合上下文', body: stringPayload(payload, 'cwd') };
+  }
+  if (codexType === 'world.state') return { title: '工作区状态', body: 'Codex 已同步工作区状态。' };
+  if (codexType === 'token_count') {
+    const usage = tokenUsage(payload);
+    return {
+      title: 'Token 用量',
+      body: usage.totalTokens > 0 ? `累计 ${usage.totalTokens.toLocaleString()} tokens` : '',
+      usage,
+    };
   }
   if (codexType === 'turn.started') return { title: '开始执行', body: 'Codex 开始处理当前请求。' };
   if (codexType === 'item.started') {
@@ -1034,7 +1112,7 @@ function readableCodexEvent(payload: Record<string, unknown>) {
       return { title: '执行命令', body: command || 'Codex 正在执行命令。', command, toolCallId };
     }
     if (itemType === 'file_change') {
-      const fileChanges = fileChangesFromItem(item);
+      const fileChanges = fileChangesFromItem(normalizedItem);
       return {
         title: fileChangeTitle(fileChanges),
         body: fileChangeBody(fileChanges),
@@ -1045,17 +1123,30 @@ function readableCodexEvent(payload: Record<string, unknown>) {
     if (itemType === 'agent_message') {
       return { title: '模型输出', body: text || 'Codex 正在生成回复。' };
     }
+    if (isToolItem(itemType)) {
+      return {
+        title: itemName || toolItemTitle(itemType),
+        body: input || command || '工具正在执行。',
+        command,
+        toolCallId,
+      };
+    }
     return {
       title: itemEventTitle(itemType, '开始'),
-      body: compactPayload(item) || statusText(status),
+      body: compactEventPayload(item) || statusText(status),
     };
   }
   if (codexType === 'item.completed') {
     if (itemType === 'command_execution') {
-      return { title: '命令结果', body: codexCommandResultBody(item), command, toolCallId };
+      return {
+        title: '命令结果',
+        body: codexCommandResultBody(item, normalizedItem),
+        command,
+        toolCallId,
+      };
     }
     if (itemType === 'file_change') {
-      const fileChanges = fileChangesFromItem(item);
+      const fileChanges = fileChangesFromItem(normalizedItem);
       return {
         title: fileChangeTitle(fileChanges),
         body: fileChangeBody(fileChanges),
@@ -1064,36 +1155,36 @@ function readableCodexEvent(payload: Record<string, unknown>) {
       };
     }
     if (itemType === 'agent_message') {
-      return { title: '模型输出', body: output || text || compactPayload(item) };
+      return { title: '模型输出', body: output || text || compactEventPayload(item) };
+    }
+    if (itemType === 'user_message') {
+      return { title: '用户输入', body: output || text, images: codexMessageImages(item) };
+    }
+    if (isToolItem(itemType)) {
+      return {
+        title: itemName || toolItemTitle(itemType),
+        body: output || compactEventPayload(item),
+        command,
+        toolCallId,
+        images: codexMessageImages(item),
+      };
     }
     return {
       title: itemEventTitle(itemType, '完成'),
-      body: output || compactPayload(item) || statusText(status),
+      body: output || compactEventPayload(item) || statusText(status),
     };
   }
   if (codexType === 'turn.completed') return { title: '本轮完成', body: 'Codex 已完成本轮处理。' };
-  if (codexType === 'process.exit') {
-    const body =
-      processExitCode === null
-        ? failure || 'Codex 进程已退出。'
-        : processExitCode === 0 && !failure
-          ? ''
-          : `退出码 ${processExitCode}${failure ? `，${failure}` : ''}`;
-    return {
-      title: '进程退出',
-      body,
-    };
-  }
   if (codexType === 'error') {
     return {
       title: 'Codex 错误',
-      body: stringPayload(payload, 'message') || compactPayload(payload),
+      body: stringPayload(payload, 'message') || compactEventPayload(payload),
     };
   }
 
   return {
     title: codexType ? codexType.replaceAll('.', ' ') : 'Codex 事件',
-    body: compactPayload(payload),
+    body: compactEventPayload(payload),
   };
 }
 
@@ -1141,11 +1232,15 @@ function eventKind(type: string, payload: Record<string, unknown> = {}): Session
   if (type === 'process.codex_event') {
     const codexType = stringPayload(payload, 'codexType');
     const item = objectPayload(payload, 'item');
-    const itemType = stringPayload(item, 'type');
+    const normalizedItem = objectPayload(payload, 'normalizedItem');
+    const itemType = stringPayload(normalizedItem, 'type') || stringPayload(item, 'type');
     if (itemType === 'command_execution') return 'tool';
+    if (isToolItem(itemType)) return 'tool';
     if (itemType === 'file_change') return 'file_change';
     if (itemType === 'agent_message') return 'assistant';
+    if (itemType === 'user_message') return 'user';
     if (itemType === 'reasoning') return 'thought';
+    if (codexType === 'token_count') return 'usage';
     if (codexType === 'error') return 'status';
   }
   if (type.includes('tool')) return 'tool';
@@ -1153,6 +1248,44 @@ function eventKind(type: string, payload: Record<string, unknown> = {}): Session
   if (type.includes('question')) return 'question';
   if (type.includes('thought')) return 'thought';
   return 'status';
+}
+
+function isToolItem(type: string) {
+  return [
+    'tool_call',
+    'tool_result',
+    'custom_tool_call',
+    'tool_search',
+    'web_search',
+    'mcp_tool_call',
+  ].includes(type);
+}
+
+function toolItemTitle(type: string) {
+  if (type === 'tool_search') return '搜索工具';
+  if (type === 'web_search') return '网页搜索';
+  if (type === 'custom_tool_call') return '自定义工具';
+  if (type === 'mcp_tool_call') return 'MCP 工具';
+  if (type === 'tool_result') return '工具结果';
+  return '工具调用';
+}
+
+function tokenUsage(payload: Record<string, unknown>): SessionTokenUsage {
+  const info = objectPayload(payload, 'info');
+  const total = objectPayload(info, 'total_token_usage');
+  return {
+    inputTokens: numberPayload(total, 'input_tokens') ?? 0,
+    cachedInputTokens: numberPayload(total, 'cached_input_tokens') ?? 0,
+    outputTokens: numberPayload(total, 'output_tokens') ?? 0,
+    reasoningOutputTokens: numberPayload(total, 'reasoning_output_tokens') ?? 0,
+    totalTokens: numberPayload(total, 'total_tokens') ?? 0,
+    contextWindow: numberPayload(info, 'model_context_window') ?? 0,
+  };
+}
+
+function formatDuration(durationMs: number) {
+  if (durationMs < 1000) return `${durationMs} ms`;
+  return `${(durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0)} s`;
 }
 
 function eventTitle(type: string) {
@@ -1242,16 +1375,16 @@ function objectPayload(payload: Record<string, unknown>, key: string): Record<st
 
 function codexItemID(item: Record<string, unknown>, payload: Record<string, unknown>) {
   return (
+    stringPayload(item, 'call_id') ||
+    stringPayload(item, 'callId') ||
     stringPayload(item, 'id') ||
     stringPayload(item, 'item_id') ||
     stringPayload(item, 'itemId') ||
-    stringPayload(item, 'call_id') ||
-    stringPayload(item, 'callId') ||
+    stringPayload(payload, 'call_id') ||
+    stringPayload(payload, 'callId') ||
     stringPayload(payload, 'id') ||
     stringPayload(payload, 'item_id') ||
-    stringPayload(payload, 'itemId') ||
-    stringPayload(payload, 'call_id') ||
-    stringPayload(payload, 'callId')
+    stringPayload(payload, 'itemId')
   );
 }
 
@@ -1268,7 +1401,8 @@ function fileChangesFromItem(item: Record<string, unknown>): FileChange[] {
         kind: stringPayload(entry, 'kind') || 'update',
         path,
       };
-      const unifiedDiff = stringPayload(entry, 'unifiedDiff') || stringPayload(entry, 'unified_diff');
+      const unifiedDiff =
+        stringPayload(entry, 'unifiedDiff') || stringPayload(entry, 'unified_diff');
       if (unifiedDiff) normalized.unifiedDiff = unifiedDiff;
       const movePath = stringPayload(entry, 'movePath') || stringPayload(entry, 'move_path');
       if (movePath) normalized.movePath = movePath;
@@ -1301,19 +1435,6 @@ function fileChangeKindText(kind: string) {
     rename: '重命名',
   };
   return labels[kind] ?? kind;
-}
-
-function compactPayload(payload: Record<string, unknown>) {
-  const parts = Object.entries(payload)
-    .filter(([key]) => !['processRunId', 'codexEventId'].includes(key))
-    .map(([key, value]) => {
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        return `${key}: ${value}`;
-      }
-      return '';
-    })
-    .filter(Boolean);
-  return parts.join(' · ');
 }
 
 function firstLine(value: string) {

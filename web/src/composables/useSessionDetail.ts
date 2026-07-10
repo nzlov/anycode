@@ -1,17 +1,21 @@
 import { ref } from 'vue';
 
 import { deleteStagedAttachment } from '@/services/attachments';
-import { AnyCodeGraphQLError } from '@/services/graphqlClient';
+import {
+  AnyCodeGraphQLError,
+  getGraphQLAccessKey,
+  type GraphQLSubscriptionClose,
+  verifyGraphQLAccessKey,
+} from '@/services/graphqlClient';
 import { olderSessionEventCursor } from '@/services/sessionEventPaging';
 import {
   appendPrompt,
   closeSession as closeSessionRequest,
   getPendingQuestionBatches,
-  getSessionEventPage,
   getSession,
-  getSessionDetail,
-  subscribePendingQuestionBatches,
+  getSessionEventPage,
   subscribeSessionEvents,
+  subscribeSessionStateUpdates,
   resumeSession as resumeSessionRequest,
   startSession as startSessionRequest,
   submitQuestionBatch,
@@ -25,13 +29,14 @@ import {
 } from '@/services/sessions';
 import {
   appendLiveEvent,
-  eventAfterId,
-  isEventAtOrAfter,
+  createLatestRequestTracker,
+  mergeSnapshotEvents,
   prependOlderEvents,
-  shouldRefreshSessionForEvent,
+  shouldReconnectAfterClose,
 } from '@/services/sessionEventTimeline';
 
 const eventPageSize = 50;
+const subscriptionReadyTimeoutMs = 3000;
 const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, nextCursor: '' };
 
 export function useSessionDetail(sessionId: string) {
@@ -53,30 +58,57 @@ export function useSessionDetail(sessionId: string) {
   let liveStopped = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let eventSubscription: { unsubscribe: () => void } | null = null;
-  let questionSubscription: { unsubscribe: () => void } | null = null;
-  let liveEventsOnly = false;
-  let subscriptionOpenedAt = 0;
+  let stateSubscription: { unsubscribe: () => void } | null = null;
+  let bufferingLiveEvents = false;
+  let bufferedLiveEvents: SessionDetailData['events'] = [];
+  let releaseSubscriptionReadiness: (() => void) | null = null;
+  let subscriptionGeneration = 0;
+  const eventSnapshotRequests = createLatestRequestTracker();
+  const sessionRequests = createLatestRequestTracker();
+  const questionRequests = createLatestRequestTracker();
+  let accessValidation: Promise<boolean> | null = null;
 
   async function loadSessionDetail() {
+    const eventRequest = eventSnapshotRequests.next();
+    const sessionRequest = sessionRequests.next();
     loading.value = true;
+    if (!liveStopped) bufferingLiveEvents = true;
     error.value = '';
     try {
-      const result = await getSessionDetail(sessionId);
-      session.value = result.session;
-      events.value = result.events;
-      eventsPageInfo.value = result.eventsPageInfo;
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : '加载会话详情失败';
+      const [sessionResult, eventResult] = await Promise.allSettled([getSession(sessionId), getSessionEventPage(sessionId, '', eventPageSize)]);
+      if (sessionRequests.isCurrent(sessionRequest)) {
+        if (sessionResult.status === 'fulfilled') {
+          session.value = sessionResult.value;
+        } else {
+          error.value =
+            sessionResult.reason instanceof Error
+              ? sessionResult.reason.message
+              : '加载会话状态失败';
+        }
+      }
+      if (eventSnapshotRequests.isCurrent(eventRequest)) {
+        if (eventResult.status === 'fulfilled') {
+          events.value = mergeSnapshotEvents(
+            eventResult.value.items,
+            events.value,
+            bufferedLiveEvents,
+          );
+          bufferedLiveEvents = [];
+          eventsPageInfo.value = eventResult.value.pageInfo;
+        } else {
+          error.value =
+            eventResult.reason instanceof Error
+              ? eventResult.reason.message
+              : '加载会话事件失败';
+        }
+      }
     } finally {
-      loading.value = false;
-    }
-  }
-
-  async function loadSessionSummary() {
-    try {
-      session.value = await getSession(sessionId);
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : '加载会话状态失败';
+      if (eventSnapshotRequests.isCurrent(eventRequest)) {
+        events.value = mergeSnapshotEvents([], events.value, bufferedLiveEvents);
+        bufferedLiveEvents = [];
+        bufferingLiveEvents = false;
+        loading.value = false;
+      }
     }
   }
 
@@ -133,6 +165,7 @@ export function useSessionDetail(sessionId: string) {
     try {
       const next = await updateSessionConfig(sessionId, config);
       if (session.value) {
+        sessionRequests.invalidate();
         session.value = { ...session.value, config: next.config, updatedAt: next.updatedAt };
       }
     } catch (err) {
@@ -172,14 +205,36 @@ export function useSessionDetail(sessionId: string) {
   }
 
   async function loadPendingQuestions() {
+    const requestGeneration = questionRequests.next();
     questionsLoading.value = true;
     error.value = '';
     try {
-      pendingQuestionBatches.value = await getPendingQuestionBatches(sessionId);
+      const batches = await getPendingQuestionBatches(sessionId);
+      if (questionRequests.isCurrent(requestGeneration)) {
+        pendingQuestionBatches.value = batches;
+      }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '加载待回答问题失败';
+      if (questionRequests.isCurrent(requestGeneration)) {
+        error.value = err instanceof Error ? err.message : '加载待回答问题失败';
+      }
     } finally {
-      questionsLoading.value = false;
+      if (questionRequests.isCurrent(requestGeneration)) {
+        questionsLoading.value = false;
+      }
+    }
+  }
+
+  async function loadSessionState() {
+    const requestGeneration = sessionRequests.next();
+    try {
+      const next = await getSession(sessionId);
+      if (sessionRequests.isCurrent(requestGeneration)) {
+        session.value = next;
+      }
+    } catch (err) {
+      if (sessionRequests.isCurrent(requestGeneration)) {
+        error.value = err instanceof Error ? err.message : '加载会话状态失败';
+      }
     }
   }
 
@@ -214,9 +269,10 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  function startLiveUpdates() {
+  async function startLiveUpdates() {
     liveStopped = false;
-    openSubscriptions();
+    bufferingLiveEvents = true;
+    await waitForSubscriptionRegistration(openSubscriptions());
   }
 
   function stopLiveUpdates() {
@@ -225,55 +281,93 @@ export function useSessionDetail(sessionId: string) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
+    subscriptionGeneration += 1;
+    releaseSubscriptionReadiness?.();
+    releaseSubscriptionReadiness = null;
     eventSubscription?.unsubscribe();
-    questionSubscription?.unsubscribe();
+    stateSubscription?.unsubscribe();
     eventSubscription = null;
-    questionSubscription = null;
+    stateSubscription = null;
+    bufferingLiveEvents = false;
+    bufferedLiveEvents = [];
   }
 
   function openSubscriptions() {
+    const generation = ++subscriptionGeneration;
+    releaseSubscriptionReadiness?.();
     eventSubscription?.unsubscribe();
-    questionSubscription?.unsubscribe();
-    const afterEventId = eventAfterId(events.value);
-    const replayStateCanRefresh = !afterEventId && events.value.length === 0;
-    liveEventsOnly = Boolean(afterEventId);
-    subscriptionOpenedAt = Date.now();
-    eventSubscription = subscribeSessionEvents(
-      { sessionId, ...(afterEventId ? { afterEventId } : {}) },
-      {
-        onData: (event) => {
-          const nextEvents = appendLiveEvent(events.value, event);
-          const added = nextEvents !== events.value;
-          events.value = nextEvents;
-          const isLiveEvent = liveEventsOnly || isEventAtOrAfter(event, subscriptionOpenedAt);
-          if (added && shouldRefreshSessionForEvent(event, isLiveEvent, replayStateCanRefresh)) {
-            void loadSessionSummary();
-          }
-        },
-        onError: (err) => {
-          error.value = err.message;
-          if (shouldReconnectLiveError(err)) {
-            scheduleReconnect();
-          }
-        },
-        onClose: scheduleReconnect,
-      },
-    );
-    questionSubscription = subscribePendingQuestionBatches(sessionId, {
-      onData: (batch) => {
-        pendingQuestionBatches.value = mergeQuestionBatch(pendingQuestionBatches.value, batch);
-        if (batch.status !== 'pending') {
-          void loadSessionSummary();
+    stateSubscription?.unsubscribe();
+    eventSubscription = null;
+    stateSubscription = null;
+    const transcriptReady = createSubscriptionReady();
+    const stateReady = createSubscriptionReady();
+    releaseSubscriptionReadiness = () => {
+      transcriptReady.release();
+      stateReady.release();
+    };
+    eventSubscription = subscribeSessionEvents(sessionId, {
+      onSubscribed: transcriptReady.resolve,
+      onData: (event) => {
+        if (generation !== subscriptionGeneration) return;
+        if (bufferingLiveEvents) {
+          bufferedLiveEvents = appendLiveEvent(bufferedLiveEvents, event);
+          return;
         }
+        const nextEvents = appendLiveEvent(events.value, event);
+        events.value = nextEvents;
       },
       onError: (err) => {
+        transcriptReady.release();
+        if (generation !== subscriptionGeneration) return;
         error.value = err.message;
         if (shouldReconnectLiveError(err)) {
           scheduleReconnect();
         }
       },
-      onClose: scheduleReconnect,
+      onClose: (close) => {
+        transcriptReady.release();
+        if (generation === subscriptionGeneration) {
+          void handleSubscriptionClose(close, generation);
+        }
+      },
     });
+    stateSubscription = subscribeSessionStateUpdates(sessionId, {
+      onSubscribed: stateReady.resolve,
+      onData: (update) => {
+        if (generation !== subscriptionGeneration) return;
+        if (update.session) {
+          sessionRequests.invalidate();
+          session.value = update.session;
+        }
+        if (update.questionBatch) {
+          questionRequests.invalidate();
+          questionsLoading.value = false;
+          pendingQuestionBatches.value = mergeQuestionBatch(
+            pendingQuestionBatches.value,
+            update.questionBatch,
+          );
+        }
+      },
+      onError: (err) => {
+        stateReady.release();
+        if (generation !== subscriptionGeneration) return;
+        error.value = err.message;
+        if (shouldReconnectLiveError(err)) {
+          scheduleReconnect();
+        }
+      },
+      onClose: (close) => {
+        stateReady.release();
+        if (generation === subscriptionGeneration) {
+          void handleSubscriptionClose(close, generation);
+        }
+      },
+    });
+    return {
+      generation,
+      transcriptReady: transcriptReady.promise.then(() => transcriptReady.registered()),
+      stateReady: stateReady.promise.then(() => stateReady.registered()),
+    };
   }
 
   function scheduleReconnect() {
@@ -286,10 +380,70 @@ export function useSessionDetail(sessionId: string) {
 
   async function reconnectFromSnapshot() {
     if (liveStopped) return;
+    bufferingLiveEvents = true;
+    await waitForSubscriptionRegistration(openSubscriptions());
+    if (liveStopped) return;
     await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
-    if (!liveStopped) {
-      openSubscriptions();
+  }
+
+  async function waitForSubscriptionRegistration(registration: {
+    generation: number;
+    transcriptReady: Promise<boolean>;
+    stateReady: Promise<boolean>;
+  }) {
+    const [transcriptRegistered, stateRegistered] = await Promise.all([
+      waitWithTimeout(registration.transcriptReady, subscriptionReadyTimeoutMs, false),
+      waitWithTimeout(registration.stateReady, subscriptionReadyTimeoutMs, false),
+    ]);
+    if (!transcriptRegistered) {
+      void registration.transcriptReady.then((lateRegistered) => {
+        if (!lateRegistered || liveStopped || registration.generation !== subscriptionGeneration)
+          return;
+        void loadSessionDetail();
+      });
     }
+    if (!stateRegistered) {
+      void registration.stateReady.then((lateRegistered) => {
+        if (!lateRegistered || liveStopped || registration.generation !== subscriptionGeneration)
+          return;
+        void Promise.all([loadSessionState(), loadPendingQuestions()]);
+      });
+    }
+  }
+
+  async function handleSubscriptionClose(close: GraphQLSubscriptionClose, generation: number) {
+    let accessKeyValid: boolean | undefined;
+    if (!close.acknowledged && !close.completedByServer) {
+      accessKeyValid = await validateAccessKeyForReconnect();
+    }
+    if (generation !== subscriptionGeneration || liveStopped) return;
+    if (
+      shouldReconnectAfterClose(
+        close.acknowledged,
+        accessKeyValid,
+        close.completedByServer,
+      )
+    ) {
+      scheduleReconnect();
+      return;
+    }
+    if (close.completedByServer) return;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    error.value = '访问密钥无效，请重新登录';
+  }
+
+  function validateAccessKeyForReconnect() {
+    if (!accessValidation) {
+      accessValidation = verifyGraphQLAccessKey(getGraphQLAccessKey())
+        .catch(() => true)
+        .finally(() => {
+          accessValidation = null;
+        });
+    }
+    return accessValidation;
   }
 
   return {
@@ -321,6 +475,38 @@ export function useSessionDetail(sessionId: string) {
     startLiveUpdates,
     stopLiveUpdates,
   };
+}
+
+function createSubscriptionReady() {
+  let settled = false;
+  let subscribed = false;
+  let settlePromise: (() => void) | null = null;
+  const promise = new Promise<void>((resolve) => {
+    settlePromise = resolve;
+  });
+  const settle = (registered: boolean) => {
+    if (settled) return;
+    settled = true;
+    subscribed = registered;
+    settlePromise?.();
+    settlePromise = null;
+  };
+  return {
+    promise,
+    resolve: () => settle(true),
+    release: () => settle(false),
+    registered: () => subscribed,
+  };
+}
+
+function waitWithTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T) {
+  return new Promise<T>((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), timeoutMs);
+    void promise.then((value) => {
+      clearTimeout(timer);
+      resolve(value);
+    });
+  });
 }
 
 function shouldReconnectLiveError(err: Error) {

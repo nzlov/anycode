@@ -83,7 +83,7 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 		t.Fatalf("pending batches = %#v", pending)
 	}
 
-	if err := repo.SubmitAnswers(ctx, batch.ID, []question.Answer{
+	persisted, transitioned, err := repo.SubmitAnswers(ctx, batch.ID, []question.Answer{
 		{
 			QuestionID:       question.QuestionID("question-1"),
 			SelectedOptionID: &optionID,
@@ -91,8 +91,12 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 				"accepted": true,
 			},
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("submit answers: %v", err)
+	}
+	if !transitioned || persisted.Status != question.BatchAnswered {
+		t.Fatalf("submit transition = %#v %t", persisted, transitioned)
 	}
 
 	answered, err := repo.FindBatch(ctx, batch.ID)
@@ -143,8 +147,12 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 		t.Fatalf("create other session batch: %v", err)
 	}
 
-	if err := repo.CancelPendingBySession(ctx, batch.SessionID, "session stopped"); err != nil {
+	cancelledBatches, err := repo.CancelPendingBySession(ctx, batch.SessionID, "session stopped")
+	if err != nil {
 		t.Fatalf("cancel pending by session: %v", err)
+	}
+	if len(cancelledBatches) != 1 || cancelledBatches[0].ID != cancelBatch.ID {
+		t.Fatalf("cancelled batches = %#v", cancelledBatches)
 	}
 	cancelled, err := repo.FindBatch(ctx, cancelBatch.ID)
 	if err != nil {
@@ -152,6 +160,15 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	}
 	if cancelled.Status != question.BatchCancelled {
 		t.Fatalf("cancelled batch status mismatch: %#v", cancelled)
+	}
+	lateSubmit, transitioned, err := repo.SubmitAnswers(ctx, cancelBatch.ID, []question.Answer{
+		{QuestionID: "question-2", CustomAnswer: "late answer"},
+	})
+	if err != nil {
+		t.Fatalf("submit cancelled batch: %v", err)
+	}
+	if transitioned || lateSubmit.Status != question.BatchCancelled {
+		t.Fatalf("cancelled batch was revived: %#v transitioned=%t", lateSubmit, transitioned)
 	}
 	stillPending, err := repo.FindBatch(ctx, otherSessionBatch.ID)
 	if err != nil {

@@ -42,10 +42,9 @@ type Mutation {
 }
 
 type Subscription {
-  sessionEvents(input: SessionEventsInput!): SessionEvent!
+  sessionEvents(sessionId: ID!): SessionEventStreamItem!
+  sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
-  sessionStatusChanged(projectId: ID, sessionId: ID): Session!
-  pendingQuestionBatches(sessionId: ID!): QuestionBatch!
 }
 
 type PageInfo {
@@ -230,6 +229,17 @@ type SessionEvent {
   type: String!
   payload: JSON!
   createdAt: String!
+}
+
+type SessionEventStreamItem {
+  ready: Boolean!
+  event: SessionEvent
+}
+
+type SessionStateStreamItem {
+  ready: Boolean!
+  session: SessionDetail
+  questionBatch: QuestionBatch
 }
 
 type EventScope {
@@ -465,12 +475,6 @@ input ListSessionEventsInput {
   sessionId: ID!
   beforeEventId: ID
   limit: Int
-}
-
-input SessionEventsInput {
-  sessionId: ID
-  projectId: ID
-  afterEventId: ID
 }
 
 input SessionDiffInput {

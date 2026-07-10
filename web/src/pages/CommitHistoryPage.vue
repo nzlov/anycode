@@ -78,7 +78,7 @@ import { useRoute } from 'vue-router';
 
 import AppPagination from '@/components/AppPagination.vue';
 import { getSessionCommitHistory, type SessionCommitHistory } from '@/services/diff';
-import { getSessionDetail, type SessionDetail } from '@/services/sessions';
+import { getSession, type SessionDetail } from '@/services/sessions';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -96,11 +96,11 @@ const pageMax = computed(() => {
 async function loadPage() {
   loading.value = true;
   try {
-    const [detail, nextHistory] = await Promise.all([
-      session.value ? Promise.resolve({ session: session.value }) : getSessionDetail(sessionId),
+    const [nextSession, nextHistory] = await Promise.all([
+      session.value ? Promise.resolve(session.value) : getSession(sessionId),
       getSessionCommitHistory({ sessionId, page: page.value, pageSize }),
     ]);
-    session.value = detail.session;
+    session.value = nextSession;
     history.value = nextHistory;
     page.value = nextHistory.pageInfo.page;
   } catch (err) {

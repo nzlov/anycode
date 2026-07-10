@@ -21,7 +21,10 @@ import (
 	"github.com/nzlov/anycode/internal/domain/process"
 )
 
-var ErrProcessNotFound = errors.New("codex process run is not active")
+var (
+	ErrProcessNotFound      = errors.New("codex process run is not active")
+	errAmbiguousSessionLogs = errors.New("multiple active codex session logs")
+)
 
 type activeProcess struct {
 	cmd            *exec.Cmd
@@ -129,29 +132,52 @@ func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan
 		defer processRegistry.Delete(handle.ProcessRunID)
 		defer active.stdout.Close()
 
-		drained := drainStdout(active.stdout)
+		stdoutSessionIDs, drained := observeStdout(active.stdout)
 		exited := make(chan process.ExitResult, 1)
 		go func() {
 			<-drained
 			exited <- waitProcess(active.cmd, active.stderr)
 		}()
-		exitResult, readErr := tailSessionLog(ctx, active, events, exited)
+		exitResult, readErr := tailSessionLog(ctx, active, events, exited, stdoutSessionIDs)
 		sendProcessExit(ctx, events, exitResult, readErr)
 	}()
 	return events, nil
 }
 
-func drainStdout(stdout io.Reader) <-chan struct{} {
+func observeStdout(stdout io.Reader) (<-chan string, <-chan struct{}) {
+	sessionIDs := make(chan string, 1)
 	done := make(chan struct{})
 	go func() {
+		defer close(sessionIDs)
 		defer close(done)
-		_, _ = io.Copy(io.Discard, stdout)
+		reader := bufio.NewReader(stdout)
+		identified := false
+		for {
+			line, err := reader.ReadBytes('\n')
+			if !identified && len(line) > 0 {
+				if sessionID := stdoutSessionID(bytes.TrimSpace(line)); sessionID != "" {
+					sessionIDs <- sessionID
+					identified = true
+				}
+			}
+			if err != nil {
+				return
+			}
+		}
 	}()
-	return done
+	return sessionIDs, done
 }
 
-func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult) (process.ExitResult, error) {
-	path, err := waitForActiveSessionLog(ctx, active)
+func stdoutSessionID(raw []byte) string {
+	var event map[string]any
+	if json.Unmarshal(raw, &event) != nil || stringValue(event, "type") != "thread.started" {
+		return ""
+	}
+	return stringValue(event, "thread_id", "session_id")
+}
+
+func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult, stdoutSessionIDs <-chan string) (process.ExitResult, error) {
+	path, err := waitForActiveSessionLog(ctx, active, stdoutSessionIDs)
 	if err != nil {
 		return failUnreadableProcess(active, exited, err), err
 	}
@@ -173,17 +199,24 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	offset, _ := file.Seek(0, io.SeekCurrent)
 	var exitResult process.ExitResult
 	processExited := false
+	var pending []byte
+	var pendingOffset int64
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
-			lineOffset := offset
+			if len(pending) == 0 {
+				pendingOffset = offset
+			}
 			offset += int64(len(line))
-			raw := bytes.TrimRight(line, "\r\n")
+			pending = append(pending, line...)
+		}
+		if len(pending) > 0 && (err == nil || processExited && errors.Is(err, io.EOF)) {
+			raw := bytes.TrimRight(pending, "\r\n")
 			raw = append([]byte(nil), raw...)
 			if cwd := sessionCWDFromMeta(raw); cwd != "" {
 				sessionCWD = cwd
 			}
-			for _, event := range parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset) {
+			for _, event := range parseSessionLogLine(raw, sessionCWD, sourceID, pendingOffset) {
 				select {
 				case events <- event:
 				case <-ctx.Done():
@@ -193,6 +226,7 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 					return exitResult, ctx.Err()
 				}
 			}
+			pending = nil
 		}
 		if err == nil {
 			continue
@@ -247,16 +281,22 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
-func waitForActiveSessionLog(ctx context.Context, active *activeProcess) (string, error) {
+func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutSessionIDs <-chan string) (string, error) {
 	deadline := time.Now().Add(5 * time.Second)
 	var last string
+	allowWorkdirFallback := active.codexSessionID != ""
 	for {
-		path, err := activeSessionLog(active)
-		if err == nil && path != "" {
-			return path, nil
-		}
-		if err != nil {
-			last = err.Error()
+		if active.codexSessionID != "" || allowWorkdirFallback {
+			path, err := activeSessionLog(active)
+			if err == nil && path != "" {
+				return path, nil
+			}
+			if err != nil {
+				if errors.Is(err, errAmbiguousSessionLogs) {
+					return "", fmt.Errorf("find codex session log: %w", err)
+				}
+				last = err.Error()
+			}
 		}
 		if time.Now().After(deadline) {
 			if last != "" {
@@ -267,6 +307,15 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess) (string
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
+		case sessionID, ok := <-stdoutSessionIDs:
+			if !ok {
+				allowWorkdirFallback = true
+				stdoutSessionIDs = nil
+				continue
+			}
+			if sessionID != "" {
+				active.codexSessionID = sessionID
+			}
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
@@ -336,7 +385,9 @@ func activeSessionLogByWorkdir(codexHome string, workdir string, baseline map[st
 	if len(matches) == 0 {
 		return "", nil
 	}
-	sortSessionLogsByModTimeAscending(matches)
+	if len(matches) > 1 {
+		return "", fmt.Errorf("%w for workdir %q", errAmbiguousSessionLogs, workdir)
+	}
 	return matches[0], nil
 }
 
@@ -351,20 +402,6 @@ func sortSessionLogsByModTime(paths []string) {
 			return left.ModTime().After(right.ModTime())
 		}
 		return paths[i] > paths[j]
-	})
-}
-
-func sortSessionLogsByModTimeAscending(paths []string) {
-	sort.Slice(paths, func(i, j int) bool {
-		left, leftErr := os.Stat(paths[i])
-		right, rightErr := os.Stat(paths[j])
-		if leftErr != nil || rightErr != nil {
-			return paths[i] < paths[j]
-		}
-		if !left.ModTime().Equal(right.ModTime()) {
-			return left.ModTime().Before(right.ModTime())
-		}
-		return paths[i] < paths[j]
 	})
 }
 
@@ -419,10 +456,12 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 			offset += int64(len(line))
 			raw := bytes.TrimRight(line, "\r\n")
 			raw = append([]byte(nil), raw...)
-			if cwd := sessionCWDFromMeta(raw); cwd != "" {
-				sessionCWD = cwd
+			if !errors.Is(err, io.EOF) || json.Valid(raw) {
+				if cwd := sessionCWDFromMeta(raw); cwd != "" {
+					sessionCWD = cwd
+				}
+				events = append(events, parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)...)
 			}
-			events = append(events, parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)...)
 		}
 		if err == nil {
 			continue
@@ -600,18 +639,42 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 	case "session_meta":
 		threadID := stringValue(payload, "session_id", "id")
 		events = []process.CodexEvent{{
-			EventID: eventID(record.Timestamp, "thread.started", threadID),
-			Type:    "thread.started",
-			Payload: map[string]any{
-				"thread_id":  threadID,
-				"session_id": threadID,
-			},
+			EventID:   eventID(record.Timestamp, "thread.started", threadID),
+			Type:      "thread.started",
+			Payload:   payload,
 			CreatedAt: createdAt,
 		}}
 	case "response_item":
 		events = codexEventsFromResponseItem(record.Timestamp, payload, createdAt)
 	case "event_msg":
 		events = codexEventsFromEventMessage(record.Timestamp, payload, createdAt, sessionCWD)
+	case "compacted":
+		events = []process.CodexEvent{{
+			Type:      "context.compacted",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "turn_context":
+		events = []process.CodexEvent{{
+			Type:      "turn.context",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "world_state":
+		events = []process.CodexEvent{{
+			Type:      "world.state",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	default:
+		if record.Type == "" {
+			return nil
+		}
+		events = []process.CodexEvent{{
+			Type:      record.Type,
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
 	}
 	for index := range events {
 		if events[index].EventID == "" {
@@ -644,103 +707,223 @@ func parseSessionTimestamp(value string) time.Time {
 }
 
 func codexEventsFromResponseItem(timestamp string, payload map[string]any, createdAt time.Time) []process.CodexEvent {
-	switch stringValue(payload, "type") {
+	itemType := stringValue(payload, "type")
+	switch itemType {
 	case "function_call":
 		callID := stringValue(payload, "call_id")
+		command := commandFromFunctionArguments(payload)
+		itemType := "tool_call"
+		if command != "" {
+			itemType = "command_execution"
+		}
+		normalized := normalizedItem(itemType, "in_progress")
+		normalized["qualifiedName"] = qualifiedToolName(payload)
+		normalized["input"] = stringOrJSON(payload["arguments"])
+		normalized["command"] = command
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.started", callID),
-			Type:    "item.started",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":      callID,
-					"type":    "command_execution",
-					"command": commandFromFunctionArguments(payload),
-					"status":  "in_progress",
-				},
-			},
+			EventID:   eventID(timestamp, "item.started", callID),
+			Type:      "item.started",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	case "function_call_output":
 		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("tool_result", "completed")
+		normalized["output"] = textFromValue(payload["output"])
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.completed", callID),
-			Type:    "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":                callID,
-					"type":              "command_execution",
-					"aggregated_output": stringValue(payload, "output"),
-					"status":            "completed",
-				},
-			},
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "custom_tool_call":
+		callID := stringValue(payload, "call_id")
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.started", callID),
+			Type:      "item.started",
+			Payload:   itemEventPayload(payload, normalizedItem("custom_tool_call", "in_progress")),
+			CreatedAt: createdAt,
+		}}
+	case "custom_tool_call_output":
+		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("custom_tool_call", "completed")
+		normalized["output"] = textFromValue(payload["output"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "tool_search_call":
+		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("tool_search", "in_progress")
+		normalized["qualifiedName"] = "tool_search"
+		normalized["input"] = stringOrJSON(payload["arguments"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.started", callID),
+			Type:      "item.started",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "tool_search_output":
+		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("tool_search", "completed")
+		normalized["qualifiedName"] = "tool_search"
+		normalized["output"] = jsonText(payload["tools"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "web_search_call":
+		callID := stringValue(payload, "id", "call_id")
+		status := strings.ToLower(strings.TrimSpace(stringValue(payload, "status")))
+		if status == "" {
+			status = "completed"
+		}
+		eventType := "item.completed"
+		if status == "in_progress" {
+			eventType = "item.started"
+		}
+		normalized := normalizedItem("web_search", status)
+		normalized["output"] = stringOrJSON(payload["action"])
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, eventType, callID),
+			Type:      eventType,
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	case "message":
-		if stringValue(payload, "role") == "assistant" {
-			id := stringValue(payload, "id")
-			return []process.CodexEvent{{
-				EventID: eventID(timestamp, "item.completed", id),
-				Type:    "item.completed",
-				Payload: map[string]any{
-					"item": map[string]any{
-						"id":                id,
-						"type":              "agent_message",
-						"aggregated_output": messageText(payload),
-						"status":            "completed",
-					},
-				},
-				CreatedAt: createdAt,
-			}}
+		itemType := ""
+		switch stringValue(payload, "role") {
+		case "user":
+			itemType = "user_message"
+		case "assistant":
+			itemType = "agent_message"
 		}
-	case "reasoning":
+		if itemType == "" {
+			return nil
+		}
+		id := stringValue(payload, "id")
+		normalized := normalizedItem(itemType, "completed")
+		normalized["output"] = messageText(payload)
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.completed", stringValue(payload, "id")),
-			Type:    "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":                stringValue(payload, "id"),
-					"type":              "reasoning",
-					"aggregated_output": reasoningText(payload),
-					"status":            "completed",
-				},
-			},
+			EventID:   eventID(timestamp, "item.completed", id),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "reasoning":
+		normalized := normalizedItem("reasoning", "completed")
+		normalized["output"] = reasoningText(payload)
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", stringValue(payload, "id")),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	}
-	return nil
+	if itemType == "" {
+		return nil
+	}
+	return []process.CodexEvent{{
+		Type:      itemType,
+		Payload:   payload,
+		CreatedAt: createdAt,
+	}}
+}
+
+func normalizedItem(itemType string, status string) map[string]any {
+	return map[string]any{"type": itemType, "status": status}
+}
+
+func itemEventPayload(item map[string]any, normalized map[string]any) map[string]any {
+	return map[string]any{"item": item, "normalizedItem": normalized}
+}
+
+func stringOrJSON(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	return jsonText(value)
 }
 
 func codexEventsFromEventMessage(timestamp string, payload map[string]any, createdAt time.Time, sessionCWD string) []process.CodexEvent {
-	switch stringValue(payload, "type") {
+	eventType := stringValue(payload, "type")
+	switch eventType {
 	case "patch_apply_end":
 		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("file_change", stringValue(payload, "status"))
+		normalized["changes"] = fileChangesFromPatch(payload, sessionCWD)
 		return []process.CodexEvent{{
-			EventID: eventID(timestamp, "item.completed", callID),
-			Type:    "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"id":      callID,
-					"type":    "file_change",
-					"changes": fileChangesFromPatch(payload, sessionCWD),
-					"status":  stringValue(payload, "status"),
-				},
-			},
+			EventID:   eventID(timestamp, "item.completed", callID),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
-	case "agent_message":
+	case "user_message", "agent_message", "context_compacted", "web_search_end":
+		// Richer canonical records are emitted as response_item or compacted entries.
+		return nil
+	case "task_started":
 		return []process.CodexEvent{{
-			Type: "item.completed",
-			Payload: map[string]any{
-				"item": map[string]any{
-					"type":              "agent_message",
-					"aggregated_output": stringValue(payload, "message"),
-					"status":            "completed",
-				},
-			},
+			EventID:   eventID(timestamp, "task.started", stringValue(payload, "turn_id")),
+			Type:      "task.started",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "task_complete":
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "task.completed", stringValue(payload, "turn_id")),
+			Type:      "task.completed",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "token_count":
+		return []process.CodexEvent{{
+			Type:      "token_count",
+			Payload:   payload,
+			CreatedAt: createdAt,
+		}}
+	case "turn_aborted":
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "turn.aborted", stringValue(payload, "turn_id")),
+			Type:      "turn.aborted",
+			Payload:   payload,
 			CreatedAt: createdAt,
 		}}
 	}
-	return nil
+	if eventType == "" {
+		return nil
+	}
+	return []process.CodexEvent{{
+		Type:      eventType,
+		Payload:   payload,
+		CreatedAt: createdAt,
+	}}
+}
+
+func qualifiedToolName(payload map[string]any) string {
+	name := stringValue(payload, "name")
+	namespace := stringValue(payload, "namespace")
+	if namespace == "" {
+		return name
+	}
+	if name == "" {
+		return namespace
+	}
+	return namespace + "." + name
+}
+
+func jsonText(value any) string {
+	if value == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func commandFromFunctionArguments(payload map[string]any) string {
@@ -849,7 +1032,7 @@ func normalizePatchPath(path string, sessionCWD string) string {
 			return filepath.ToSlash(rel)
 		}
 	}
-	return filepath.Base(path)
+	return filepath.ToSlash(path)
 }
 
 func eventID(timestamp string, typ string, key string) string {

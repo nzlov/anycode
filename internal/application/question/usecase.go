@@ -21,7 +21,7 @@ type UseCase interface {
 	SubmitBatch(ctx context.Context, input SubmitBatchInput) (BatchDTO, error)
 	GetBatch(ctx context.Context, id domain.BatchID) (BatchDTO, error)
 	ListPendingBySession(ctx context.Context, sessionID domain.SessionID) ([]BatchDTO, error)
-	PendingQuestionBatches(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error)
+	QuestionBatchUpdates(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error)
 	CancelPendingBySession(ctx context.Context, sessionID domain.SessionID, reason string) error
 }
 
@@ -45,12 +45,18 @@ type BatchDTO struct {
 }
 
 type Service struct {
-	repo       domain.Repository
-	policy     domain.Policy
-	waiter     domain.AnswerWaiter
-	now        func() time.Time
-	generateID func() (string, error)
-	broker     *pendingBroker
+	repo           domain.Repository
+	policy         domain.Policy
+	waiter         domain.AnswerWaiter
+	now            func() time.Time
+	generateID     func() (string, error)
+	broker         *pendingBroker
+	waitDeliveries sync.Map
+}
+
+type waitDelivery struct {
+	mu           sync.Mutex
+	resumeFailed bool
 }
 
 func New(repo domain.Repository, waiter domain.AnswerWaiter) *Service {
@@ -116,6 +122,31 @@ func (s *Service) Wait(ctx context.Context, id domain.BatchID) ([]domain.Answer,
 	if s.waiter == nil {
 		return nil, errors.New("question answer waiter is required")
 	}
+	if s.repo == nil {
+		return nil, errors.New("question repository is required")
+	}
+	delivery := s.ensureWaitDelivery(id)
+	if err := s.waiter.Prepare(ctx, id); err != nil {
+		s.removeWaitDelivery(id, delivery)
+		return nil, fmt.Errorf("prepare question answer waiter: %w", err)
+	}
+	defer func() {
+		s.waiter.Forget(id)
+		s.removeWaitDelivery(id, delivery)
+	}()
+	batch, err := s.repo.FindBatch(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("find question batch before wait: %w", err)
+	}
+	switch batch.Status {
+	case domain.BatchAnswered:
+		return answersFromBatch(batch), nil
+	case domain.BatchCancelled:
+		return nil, apperror.Wrap(ErrWaitCancelled, apperror.CodeAnswerUserCancelled, apperror.CategoryUserActionRequired, "answer_user wait was cancelled")
+	case domain.BatchPending:
+	default:
+		return nil, fmt.Errorf("question batch %s cannot wait in status %s", id, batch.Status)
+	}
 	answers, err := s.waiter.Wait(ctx, id)
 	if err != nil {
 		if errors.Is(err, ErrWaitCancelled) {
@@ -136,6 +167,11 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 	if s.policy == nil {
 		return BatchDTO{}, errors.New("question policy is required")
 	}
+	delivery := s.loadWaitDelivery(input.BatchID)
+	if delivery != nil {
+		delivery.mu.Lock()
+		defer delivery.mu.Unlock()
+	}
 	batch, err := s.repo.FindBatch(ctx, input.BatchID)
 	if err != nil {
 		return BatchDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "question batch not found").WithDetails(map[string]any{"batchId": string(input.BatchID)})
@@ -144,21 +180,49 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 		if err := ensureAnswersMatchAnsweredBatch(batch, input.Answers); err != nil {
 			return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
 		}
-		return toDTO(batch), nil
+		if delivery == nil || !delivery.resumeFailed {
+			return toDTO(batch), nil
+		}
+		return s.completeAnsweredBatch(ctx, batch, input.Answers, delivery)
 	}
-	answered, err := s.policy.ApplyAnswers(batch, input.Answers)
-	if err != nil {
+	if err := s.policy.CanSubmit(batch, input.Answers); err != nil {
 		return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers are invalid").WithDetails(map[string]any{"batchId": string(input.BatchID)})
 	}
-	if err := s.repo.SubmitAnswers(ctx, input.BatchID, input.Answers); err != nil {
+	persisted, transitioned, err := s.repo.SubmitAnswers(ctx, input.BatchID, input.Answers)
+	if err != nil {
 		return BatchDTO{}, fmt.Errorf("submit question answers: %w", err)
 	}
-	if s.waiter != nil {
-		if err := s.waiter.Resume(ctx, input.BatchID, input.Answers); err != nil {
-			return BatchDTO{}, fmt.Errorf("resume question waiter: %w", err)
+	if delivery == nil {
+		delivery = s.loadWaitDelivery(input.BatchID)
+		if delivery != nil {
+			delivery.mu.Lock()
+			defer delivery.mu.Unlock()
 		}
 	}
-	dto := toDTO(answered)
+	if !transitioned {
+		if persisted.Status == domain.BatchAnswered {
+			if err := ensureAnswersMatchAnsweredBatch(persisted, input.Answers); err != nil {
+				return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
+			}
+			if delivery == nil || !delivery.resumeFailed {
+				return toDTO(persisted), nil
+			}
+			return s.completeAnsweredBatch(ctx, persisted, input.Answers, delivery)
+		}
+		return BatchDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question batch is no longer pending").WithDetails(map[string]any{"batchId": string(input.BatchID), "status": string(persisted.Status)})
+	}
+	return s.completeAnsweredBatch(ctx, persisted, input.Answers, delivery)
+}
+
+func (s *Service) completeAnsweredBatch(ctx context.Context, batch domain.Batch, answers []domain.Answer, delivery *waitDelivery) (BatchDTO, error) {
+	if delivery != nil {
+		if err := s.waiter.Resume(ctx, batch.ID, answers); err != nil {
+			delivery.resumeFailed = true
+			return BatchDTO{}, fmt.Errorf("resume question waiter: %w", err)
+		}
+		delivery.resumeFailed = false
+	}
+	dto := toDTO(batch)
 	s.publish(dto)
 	return dto, nil
 }
@@ -185,7 +249,7 @@ func ensureAnswersMatchAnsweredBatch(batch domain.Batch, answers []domain.Answer
 		if strings.TrimSpace(question.CustomAnswer) != strings.TrimSpace(answer.CustomAnswer) {
 			return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
 		}
-		if len(answer.Payload) > 0 && len(question.Answer) > 0 && !reflect.DeepEqual(question.Answer, answer.Payload) {
+		if (len(answer.Payload) > 0 || len(question.Answer) > 0) && !reflect.DeepEqual(question.Answer, answer.Payload) {
 			return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
 		}
 	}
@@ -235,21 +299,11 @@ func (s *Service) ListPendingBySession(ctx context.Context, sessionID domain.Ses
 	return dtos, nil
 }
 
-func (s *Service) PendingQuestionBatches(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error) {
-	pending, err := s.ListPendingBySession(ctx, sessionID)
-	if err != nil {
-		return nil, err
+func (s *Service) QuestionBatchUpdates(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error) {
+	if s == nil || s.broker == nil {
+		return nil, errors.New("question update broker is required")
 	}
-	out := make(chan BatchDTO, len(pending)+1)
-	for _, batch := range pending {
-		out <- batch
-	}
-	if s.broker == nil {
-		close(out)
-		return out, nil
-	}
-	s.broker.subscribe(ctx, sessionID, out)
-	return out, nil
+	return s.broker.subscribe(ctx, sessionID)
 }
 
 func (s *Service) CancelPendingBySession(ctx context.Context, sessionID domain.SessionID, reason string) error {
@@ -259,29 +313,59 @@ func (s *Service) CancelPendingBySession(ctx context.Context, sessionID domain.S
 	if s.repo == nil {
 		return errors.New("question repository is required")
 	}
-	if s.policy == nil {
-		return errors.New("question policy is required")
-	}
-	pending, err := s.repo.ListPendingBySession(ctx, sessionID)
+	cancelled, err := s.repo.CancelPendingBySession(ctx, sessionID, reason)
 	if err != nil {
-		return fmt.Errorf("list pending question batches: %w", err)
-	}
-	if err := s.repo.CancelPendingBySession(ctx, sessionID, reason); err != nil {
 		return fmt.Errorf("cancel pending question batches: %w", err)
 	}
-	for _, batch := range pending {
-		cancelled, err := s.policy.Cancel(batch, reason)
-		if err != nil {
-			return err
-		}
-		s.publish(toDTO(cancelled))
-		if s.waiter != nil {
+	for _, batch := range cancelled {
+		s.publish(toDTO(batch))
+		delivery := s.loadWaitDelivery(batch.ID)
+		if delivery != nil {
+			delivery.mu.Lock()
 			if err := s.waiter.Cancel(ctx, batch.ID, reason); err != nil {
+				delivery.mu.Unlock()
 				return fmt.Errorf("cancel question waiter: %w", err)
 			}
+			s.waiter.Forget(batch.ID)
+			s.removeWaitDelivery(batch.ID, delivery)
+			delivery.mu.Unlock()
 		}
 	}
 	return nil
+}
+
+func answersFromBatch(batch domain.Batch) []domain.Answer {
+	answers := make([]domain.Answer, 0, len(batch.Questions))
+	for _, question := range batch.Questions {
+		answers = append(answers, domain.Answer{
+			QuestionID:       question.ID,
+			SelectedOptionID: question.SelectedOptionID,
+			CustomAnswer:     question.CustomAnswer,
+			Payload:          question.Answer,
+		})
+	}
+	return answers
+}
+
+func (s *Service) ensureWaitDelivery(id domain.BatchID) *waitDelivery {
+	if delivery := s.loadWaitDelivery(id); delivery != nil {
+		return delivery
+	}
+	delivery := &waitDelivery{}
+	actual, _ := s.waitDeliveries.LoadOrStore(id, delivery)
+	return actual.(*waitDelivery)
+}
+
+func (s *Service) loadWaitDelivery(id domain.BatchID) *waitDelivery {
+	value, ok := s.waitDeliveries.Load(id)
+	if !ok {
+		return nil
+	}
+	return value.(*waitDelivery)
+}
+
+func (s *Service) removeWaitDelivery(id domain.BatchID, delivery *waitDelivery) {
+	s.waitDeliveries.CompareAndDelete(id, delivery)
 }
 
 func toDTO(batch domain.Batch) BatchDTO {
@@ -310,50 +394,154 @@ func (s *Service) publish(batch BatchDTO) {
 
 type pendingBroker struct {
 	mu          sync.Mutex
-	subscribers map[domain.SessionID]map[chan BatchDTO]struct{}
+	subscribers map[domain.SessionID]map[*pendingSubscriber]struct{}
 }
 
 func newPendingBroker() *pendingBroker {
-	return &pendingBroker{subscribers: map[domain.SessionID]map[chan BatchDTO]struct{}{}}
+	return &pendingBroker{subscribers: map[domain.SessionID]map[*pendingSubscriber]struct{}{}}
 }
 
-func (b *pendingBroker) subscribe(ctx context.Context, sessionID domain.SessionID, out chan BatchDTO) {
+func (b *pendingBroker) subscribe(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error) {
+	subscriber := newPendingSubscriber()
 	b.mu.Lock()
 	if b.subscribers == nil {
-		b.subscribers = map[domain.SessionID]map[chan BatchDTO]struct{}{}
+		b.subscribers = map[domain.SessionID]map[*pendingSubscriber]struct{}{}
 	}
 	if b.subscribers[sessionID] == nil {
-		b.subscribers[sessionID] = map[chan BatchDTO]struct{}{}
+		b.subscribers[sessionID] = map[*pendingSubscriber]struct{}{}
 	}
-	b.subscribers[sessionID][out] = struct{}{}
+	b.subscribers[sessionID][subscriber] = struct{}{}
 	b.mu.Unlock()
 
+	if err := ctx.Err(); err != nil {
+		b.unsubscribe(sessionID, subscriber)
+		return nil, err
+	}
+	if !subscriber.start() {
+		b.unsubscribe(sessionID, subscriber)
+		return nil, errors.New("pending subscriber could not start")
+	}
 	go func() {
 		<-ctx.Done()
-		b.mu.Lock()
-		if subscribers := b.subscribers[sessionID]; subscribers != nil {
-			delete(subscribers, out)
-			if len(subscribers) == 0 {
-				delete(b.subscribers, sessionID)
-			}
-		}
-		b.mu.Unlock()
-		close(out)
+		b.unsubscribe(sessionID, subscriber)
 	}()
+	return subscriber.updates, nil
+}
+
+func (b *pendingBroker) unsubscribe(sessionID domain.SessionID, subscriber *pendingSubscriber) {
+	b.mu.Lock()
+	if subscribers := b.subscribers[sessionID]; subscribers != nil {
+		delete(subscribers, subscriber)
+		if len(subscribers) == 0 {
+			delete(b.subscribers, sessionID)
+		}
+	}
+	b.mu.Unlock()
+	subscriber.close()
 }
 
 func (b *pendingBroker) publish(batch BatchDTO) {
 	b.mu.Lock()
-	targets := make([]chan BatchDTO, 0, len(b.subscribers[batch.SessionID]))
+	targets := make([]*pendingSubscriber, 0, len(b.subscribers[batch.SessionID]))
 	for subscriber := range b.subscribers[batch.SessionID] {
 		targets = append(targets, subscriber)
 	}
 	b.mu.Unlock()
 
 	for _, target := range targets {
+		target.send(batch)
+	}
+}
+
+type pendingSubscriber struct {
+	mu      sync.Mutex
+	updates chan BatchDTO
+	wake    chan struct{}
+	done    chan struct{}
+	queue   []BatchDTO
+	started bool
+	closed  bool
+}
+
+func newPendingSubscriber() *pendingSubscriber {
+	return &pendingSubscriber{
+		updates: make(chan BatchDTO),
+		wake:    make(chan struct{}, 1),
+		done:    make(chan struct{}),
+	}
+}
+
+func (s *pendingSubscriber) start() bool {
+	s.mu.Lock()
+	if s.closed || s.started {
+		s.mu.Unlock()
+		return false
+	}
+	s.started = true
+	s.mu.Unlock()
+	go s.run()
+	return true
+}
+
+func (s *pendingSubscriber) send(batch BatchDTO) bool {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return false
+	}
+	s.queue = append(s.queue, batch)
+	s.mu.Unlock()
+
+	select {
+	case s.wake <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+func (s *pendingSubscriber) close() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
+	if s.started {
+		close(s.done)
+	} else {
+		close(s.updates)
+	}
+	s.mu.Unlock()
+}
+
+func (s *pendingSubscriber) run() {
+	defer close(s.updates)
+	for {
+		batch, ok := s.next()
+		if ok {
+			select {
+			case s.updates <- batch:
+			case <-s.done:
+				return
+			}
+			continue
+		}
 		select {
-		case target <- batch:
-		default:
+		case <-s.wake:
+		case <-s.done:
+			return
 		}
 	}
+}
+
+func (s *pendingSubscriber) next() (BatchDTO, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.queue) == 0 {
+		return BatchDTO{}, false
+	}
+	batch := s.queue[0]
+	s.queue[0] = BatchDTO{}
+	s.queue = s.queue[1:]
+	return batch, true
 }

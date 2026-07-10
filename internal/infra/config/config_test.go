@@ -7,6 +7,7 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 	t.Setenv("ANYCODE_HTTP_ADDR", "")
 	t.Setenv("ANYCODE_DATA_DIR", "")
 	t.Setenv("CODEX_BIN", "")
+	t.Setenv("ANYCODE_AGENT_MAX_CONCURRENT", "")
 
 	got := LoadFromEnv()
 	if got.AccessKey != "secret" {

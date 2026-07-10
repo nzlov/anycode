@@ -2,7 +2,6 @@ package timeline
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -13,28 +12,7 @@ import (
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
-func TestListSessionEventsUsesStoredSessionEventsAndCodexTranscript(t *testing.T) {
-	sessionID := eventdomain.SessionID("session-1")
-	store := &fakeStore{
-		events: []eventdomain.DomainEvent{
-			{
-				ID:        "stored-codex-event",
-				Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
-				SessionID: &sessionID,
-				Type:      "process.codex_event",
-				Payload:   map[string]any{"codexType": "item.completed"},
-				CreatedAt: time.Unix(5, 0).UTC(),
-			},
-			{
-				ID:        "event-running",
-				Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
-				SessionID: &sessionID,
-				Type:      "session.running",
-				Payload:   map[string]any{"processRunId": "process-run-1"},
-				CreatedAt: time.Unix(10, 0).UTC(),
-			},
-		},
-	}
+func TestListSessionEventsUsesOnlyCodexTranscript(t *testing.T) {
 	sessions := &fakeSessionRepository{
 		sessions: map[sessiondomain.ID]sessiondomain.Session{
 			"session-1": {
@@ -53,7 +31,7 @@ func TestListSessionEventsUsesStoredSessionEventsAndCodexTranscript(t *testing.T
 			CreatedAt: time.Unix(20, 0).UTC(),
 		}},
 	}
-	service := New(store, &fakeLiveSource{}, sessions, transcript, nil)
+	service := New(&fakeLiveSource{}, sessions, transcript, nil)
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: "session-1",
@@ -62,11 +40,11 @@ func TestListSessionEventsUsesStoredSessionEventsAndCodexTranscript(t *testing.T
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
-	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"event-running", "codex:codex-event-1"}) {
+	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"codex:codex-session-1:codex-event-1"}) {
 		t.Fatalf("items = %#v", gotIDs)
 	}
-	codex := got.Items[1]
-	if codex.Type != "process.codex_event" || codex.Payload["codexType"] != "item.completed" || codex.Payload["codexEventId"] != "codex-event-1" {
+	codex := got.Items[0]
+	if codex.Type != "process.codex_event" || codex.Payload["codexType"] != "item.completed" || codex.Payload["codexEventId"] != "codex-event-1" || codex.Payload["codexSessionId"] != "codex-session-1" {
 		t.Fatalf("codex event = %#v", codex)
 	}
 	if transcript.input.CodexSessionID != "codex-session-1" || transcript.input.Workdir != "" {
@@ -76,7 +54,6 @@ func TestListSessionEventsUsesStoredSessionEventsAndCodexTranscript(t *testing.T
 
 func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
-	store := &fakeStore{}
 	sessions := &fakeSessionRepository{
 		sessions: map[sessiondomain.ID]sessiondomain.Session{
 			"session-1": {
@@ -90,13 +67,13 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	transcript := &fakeTranscriptSource{
 		eventsByID: map[string][]process.CodexEvent{
 			"codex-session-1": {{
-				EventID:   "codex-event-1",
+				EventID:   "shared-event",
 				Type:      "item.completed",
 				Payload:   map[string]any{"item": map[string]any{"type": "agent_message", "aggregated_output": "first run"}},
 				CreatedAt: time.Unix(10, 0).UTC(),
 			}},
 			"codex-session-2": {{
-				EventID:   "codex-event-2",
+				EventID:   "shared-event",
 				Type:      "item.completed",
 				Payload:   map[string]any{"item": map[string]any{"type": "agent_message", "aggregated_output": "second run"}},
 				CreatedAt: time.Unix(20, 0).UTC(),
@@ -104,7 +81,7 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 		},
 	}
 	index := &fakeCodexSessionIndex{ids: []string{"codex-session-1", "codex-session-2"}}
-	service := New(store, &fakeLiveSource{}, sessions, transcript, index)
+	service := New(&fakeLiveSource{}, sessions, transcript, index)
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: "session-1",
@@ -113,10 +90,28 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
-	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"codex:codex-event-1", "codex:codex-event-2"}) {
+	wantIDs := []eventdomain.ID{"codex:codex-session-1:shared-event", "codex:codex-session-2:shared-event"}
+	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("items = %#v", gotIDs)
 	}
-	if !reflect.DeepEqual(transcript.inputs, []process.CodexTranscriptInput{{CodexSessionID: "codex-session-1"}, {CodexSessionID: "codex-session-2"}}) {
+	older, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
+		SessionID:     "session-1",
+		BeforeEventID: wantIDs[1],
+		Limit:         1,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents(before) error = %v", err)
+	}
+	if gotIDs := dtoIDs(older.Items); !reflect.DeepEqual(gotIDs, wantIDs[:1]) {
+		t.Fatalf("older items = %#v", gotIDs)
+	}
+	wantInputs := []process.CodexTranscriptInput{
+		{CodexSessionID: "codex-session-1"},
+		{CodexSessionID: "codex-session-2"},
+		{CodexSessionID: "codex-session-1"},
+		{CodexSessionID: "codex-session-2"},
+	}
+	if !reflect.DeepEqual(transcript.inputs, wantInputs) {
 		t.Fatalf("transcript inputs = %#v", transcript.inputs)
 	}
 	if index.input != process.SessionID(sessionID) {
@@ -124,9 +119,37 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	}
 }
 
+func TestListSessionEventsPreservesTranscriptOrderForEqualTimestamps(t *testing.T) {
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {
+			ID:             "session-1",
+			ProjectID:      "project-1",
+			CodexSessionID: "codex-session-1",
+			UpdatedAt:      time.Unix(30, 0).UTC(),
+		},
+	}}
+	createdAt := time.Unix(20, 0).UTC()
+	transcript := &fakeTranscriptSource{events: []process.CodexEvent{
+		{EventID: "z-started", Type: "item.started", CreatedAt: createdAt},
+		{EventID: "a-completed", Type: "item.completed", CreatedAt: createdAt},
+	}}
+	service := New(&fakeLiveSource{}, sessions, transcript, nil)
+
+	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() error = %v", err)
+	}
+	want := []eventdomain.ID{
+		"codex:codex-session-1:z-started",
+		"codex:codex-session-1:a-completed",
+	}
+	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, want) {
+		t.Fatalf("items = %#v, want %#v", gotIDs, want)
+	}
+}
+
 func TestListSessionEventsPreservesHistoricalCodexPayload(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
-	store := &fakeStore{}
 	sessions := &fakeSessionRepository{
 		sessions: map[sessiondomain.ID]sessiondomain.Session{
 			"session-1": {
@@ -148,7 +171,7 @@ func TestListSessionEventsPreservesHistoricalCodexPayload(t *testing.T) {
 			CreatedAt: time.Unix(20, 0).UTC(),
 		}},
 	}
-	service := New(store, &fakeLiveSource{}, sessions, transcript, nil)
+	service := New(&fakeLiveSource{}, sessions, transcript, nil)
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: sessiondomain.ID(sessionID),
@@ -163,71 +186,38 @@ func TestListSessionEventsPreservesHistoricalCodexPayload(t *testing.T) {
 	}
 }
 
-func TestSessionEventsQueuesLiveEventsPublishedWhileLoadingSnapshot(t *testing.T) {
+func TestSessionEventsForwardsOnlyLiveEvents(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
-	afterStarted := make(chan struct{})
-	releaseAfter := make(chan struct{})
-	store := &fakeStore{
-		events: []eventdomain.DomainEvent{
-			{ID: "event-1", Scope: eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"}, SessionID: &sessionID, Type: "history", CreatedAt: time.Unix(1, 0).UTC()},
-		},
-		afterStarted: afterStarted,
-		releaseAfter: releaseAfter,
-	}
-	liveSource := &fakeLiveSource{ch: make(chan event.DTO, 1)}
-	service := New(store, liveSource, nil, nil, nil)
+	liveSource := &fakeLiveSource{ch: make(chan event.DTO, 2)}
+	transcript := &fakeTranscriptSource{err: context.Canceled}
+	service := New(liveSource, nil, transcript, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	result := make(chan (<-chan DTO), 1)
-	errs := make(chan error, 1)
-	go func() {
-		ch, err := service.SessionEvents(ctx, SessionEventsInput{Scope: eventdomain.Scope{SessionID: &sessionID}})
-		if err != nil {
-			errs <- err
-			return
-		}
-		result <- ch
-	}()
-	<-afterStarted
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{
+		Scope: eventdomain.Scope{SessionID: &sessionID},
+	})
+	if err != nil {
+		t.Fatalf("SessionEvents() error = %v", err)
+	}
+	liveSource.ch <- event.DTO{
+		ID:        "event-status",
+		Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+		SessionID: &sessionID,
+		Type:      "session.running",
+		CreatedAt: time.Unix(1, 0).UTC().Format(time.RFC3339Nano),
+	}
 	liveSource.ch <- event.DTO{
 		ID:        "event-2",
 		Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
 		SessionID: &sessionID,
-		Type:      "live",
+		Type:      "process.codex_event",
 		CreatedAt: time.Unix(2, 0).UTC().Format(time.RFC3339Nano),
 	}
-	close(releaseAfter)
-
-	var ch <-chan DTO
-	select {
-	case err := <-errs:
-		t.Fatalf("SessionEvents() error = %v", err)
-	case ch = <-result:
-	case <-time.After(time.Second):
-		t.Fatal("SessionEvents() did not return")
-	}
-	if got := <-ch; got.ID != "event-1" {
-		t.Fatalf("first event = %#v", got)
-	}
 	if got := <-ch; got.ID != "event-2" {
-		t.Fatalf("second event = %#v", got)
+		t.Fatalf("live event = %#v", got)
 	}
-}
-
-func TestSessionEventsCancelsLiveSubscriptionWhenSnapshotFails(t *testing.T) {
-	sessionID := eventdomain.SessionID("session-1")
-	store := &fakeStore{err: errors.New("snapshot failed")}
-	liveSource := &fakeLiveSource{ch: make(chan event.DTO)}
-	service := New(store, liveSource, nil, nil, nil)
-
-	_, err := service.SessionEvents(context.Background(), SessionEventsInput{Scope: eventdomain.Scope{SessionID: &sessionID}})
-	if err == nil {
-		t.Fatal("SessionEvents() expected error")
-	}
-	select {
-	case <-liveSource.done:
-	case <-time.After(time.Second):
-		t.Fatal("live subscription context was not canceled")
+	if len(transcript.inputs) != 0 {
+		t.Fatalf("subscription read transcript: %#v", transcript.inputs)
 	}
 }
 
@@ -237,40 +227,6 @@ func dtoIDs(items []DTO) []eventdomain.ID {
 		ids = append(ids, item.ID)
 	}
 	return ids
-}
-
-type fakeStore struct {
-	events       []eventdomain.DomainEvent
-	err          error
-	lastScope    eventdomain.Scope
-	lastAfter    eventdomain.ID
-	afterStarted chan struct{}
-	releaseAfter chan struct{}
-}
-
-func (s *fakeStore) Append(context.Context, eventdomain.DomainEvent) error {
-	return errors.New("unexpected Append call")
-}
-
-func (s *fakeStore) List(_ context.Context, scope eventdomain.Scope) ([]eventdomain.DomainEvent, error) {
-	s.lastScope = scope
-	return s.events, s.err
-}
-
-func (s *fakeStore) After(_ context.Context, scope eventdomain.Scope, after eventdomain.ID) ([]eventdomain.DomainEvent, error) {
-	s.lastScope = scope
-	s.lastAfter = after
-	if s.afterStarted != nil {
-		close(s.afterStarted)
-	}
-	if s.releaseAfter != nil {
-		<-s.releaseAfter
-	}
-	return s.events, s.err
-}
-
-func (s *fakeStore) Before(context.Context, eventdomain.Scope, eventdomain.ID, int) ([]eventdomain.DomainEvent, int, bool, error) {
-	return nil, 0, false, errors.New("unexpected Before call")
 }
 
 type fakeLiveSource struct {
