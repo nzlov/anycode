@@ -23,6 +23,8 @@ type Project struct {
 	Path string `json:"path,omitempty"`
 	// IsGit holds the value of the "is_git" field.
 	IsGit bool `json:"is_git,omitempty"`
+	// WorktreeInitCommand holds the value of the "worktree_init_command" field.
+	WorktreeInitCommand string `json:"worktree_init_command,omitempty"`
 	// DefaultWorkflowID holds the value of the "default_workflow_id" field.
 	DefaultWorkflowID *string `json:"default_workflow_id,omitempty"`
 	// RemovedAt holds the value of the "removed_at" field.
@@ -41,7 +43,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldIsGit:
 			values[i] = new(sql.NullBool)
-		case project.FieldID, project.FieldName, project.FieldPath, project.FieldDefaultWorkflowID:
+		case project.FieldID, project.FieldName, project.FieldPath, project.FieldWorktreeInitCommand, project.FieldDefaultWorkflowID:
 			values[i] = new(sql.NullString)
 		case project.FieldRemovedAt, project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -83,6 +85,12 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field is_git", values[i])
 			} else if value.Valid {
 				_m.IsGit = value.Bool
+			}
+		case project.FieldWorktreeInitCommand:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_init_command", values[i])
+			} else if value.Valid {
+				_m.WorktreeInitCommand = value.String
 			}
 		case project.FieldDefaultWorkflowID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -154,6 +162,9 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("is_git=")
 	builder.WriteString(fmt.Sprintf("%v", _m.IsGit))
+	builder.WriteString(", ")
+	builder.WriteString("worktree_init_command=")
+	builder.WriteString(_m.WorktreeInitCommand)
 	builder.WriteString(", ")
 	if v := _m.DefaultWorkflowID; v != nil {
 		builder.WriteString("default_workflow_id=")

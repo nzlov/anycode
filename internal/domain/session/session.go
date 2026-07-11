@@ -275,6 +275,17 @@ type WorktreeManager interface {
 	PathForSession(projectID ProjectID, sessionID ID) string
 }
 
+type WorktreeInitResult struct {
+	Success         bool
+	ExitCode        *int
+	Output          string
+	OutputTruncated bool
+}
+
+type WorktreeInitializer interface {
+	Run(ctx context.Context, worktreePath string, script string) (WorktreeInitResult, error)
+}
+
 type WorkflowStartInput struct {
 	ProjectID            ProjectID
 	SessionID            ID

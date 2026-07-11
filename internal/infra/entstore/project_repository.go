@@ -24,7 +24,8 @@ func (r *ProjectRepository) Save(ctx context.Context, p project.Project) error {
 		update := r.client.Project.UpdateOneID(string(p.ID)).
 			SetName(p.Name).
 			SetPath(p.Path.Value).
-			SetIsGit(p.IsGit)
+			SetIsGit(p.IsGit).
+			SetWorktreeInitCommand(p.WorktreeInitCommand)
 		if p.DefaultWorkflowID != nil {
 			update.SetDefaultWorkflowID(string(*p.DefaultWorkflowID))
 		} else {
@@ -50,7 +51,8 @@ func (r *ProjectRepository) Save(ctx context.Context, p project.Project) error {
 		SetID(string(p.ID)).
 		SetName(p.Name).
 		SetPath(p.Path.Value).
-		SetIsGit(p.IsGit)
+		SetIsGit(p.IsGit).
+		SetWorktreeInitCommand(p.WorktreeInitCommand)
 	if p.DefaultWorkflowID != nil {
 		create.SetDefaultWorkflowID(string(*p.DefaultWorkflowID))
 	}
@@ -130,13 +132,14 @@ func toDomainProject(row *ent.Project) project.Project {
 		defaultWorkflowID = &id
 	}
 	return project.Project{
-		ID:                project.ID(row.ID),
-		Name:              row.Name,
-		Path:              project.ProjectPath{Value: row.Path},
-		IsGit:             row.IsGit,
-		DefaultWorkflowID: defaultWorkflowID,
-		RemovedAt:         row.RemovedAt,
-		CreatedAt:         row.CreatedAt,
-		UpdatedAt:         row.UpdatedAt,
+		ID:                  project.ID(row.ID),
+		Name:                row.Name,
+		Path:                project.ProjectPath{Value: row.Path},
+		IsGit:               row.IsGit,
+		WorktreeInitCommand: row.WorktreeInitCommand,
+		DefaultWorkflowID:   defaultWorkflowID,
+		RemovedAt:           row.RemovedAt,
+		CreatedAt:           row.CreatedAt,
+		UpdatedAt:           row.UpdatedAt,
 	}
 }

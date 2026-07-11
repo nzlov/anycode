@@ -18,6 +18,7 @@ func (Project) Fields() []ent.Field {
 		field.String("name").NotEmpty(),
 		field.String("path").NotEmpty(),
 		field.Bool("is_git").Default(false),
+		field.String("worktree_init_command").Default(""),
 		field.String("default_workflow_id").Optional().Nillable(),
 		field.Time("removed_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),

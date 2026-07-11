@@ -1091,6 +1091,31 @@ a {
   min-width: 180px;
 }
 
+.project-settings-dialog {
+  width: min(680px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px) !important;
+  background: var(--ac-surface);
+  color: var(--ac-text);
+}
+
+.project-settings-dialog__body {
+  min-height: 280px;
+}
+
+.project-settings-dialog__body textarea {
+  min-height: 220px !important;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+}
+
+@media (max-width: 599px) {
+  .project-settings-dialog {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100%;
+    border-radius: 0;
+  }
+}
+
 .state-card {
   background: var(--ac-surface);
   border-color: var(--ac-border);
