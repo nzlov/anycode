@@ -17,6 +17,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/question"
 	"github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/domain/setting"
 	"github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	_ "modernc.org/sqlite"
@@ -116,6 +117,10 @@ func (s *Store) Processes() *ProcessRepository {
 
 func (s *Store) Questions() question.Repository {
 	return NewQuestionRepository(s.client)
+}
+
+func (s *Store) Settings() setting.Repository {
+	return NewQuickCommandRepository(s.client)
 }
 
 func (s *Store) Workflows() workflow.Repository {

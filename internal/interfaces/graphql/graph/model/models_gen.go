@@ -82,6 +82,10 @@ type CreateProjectInput struct {
 	Name string `json:"name"`
 }
 
+type CreateQuickCommandInput struct {
+	Content string `json:"content"`
+}
+
 type CreateSessionInput struct {
 	ProjectID           string              `json:"projectId"`
 	Requirement         string              `json:"requirement"`
@@ -154,6 +158,11 @@ type GitState struct {
 	Branches      []*GitBranch `json:"branches"`
 	ErrorCode     string       `json:"errorCode"`
 	ErrorMessage  string       `json:"errorMessage"`
+}
+
+type ListQuickCommandsInput struct {
+	Page     *int `json:"page,omitempty"`
+	PageSize *int `json:"pageSize,omitempty"`
 }
 
 type ListSessionEventsInput struct {
@@ -245,6 +254,17 @@ type QuestionOption struct {
 	Label       string         `json:"label"`
 	Description string         `json:"description"`
 	Payload     map[string]any `json:"payload"`
+}
+
+type QuickCommand struct {
+	ID        string    `json:"id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type QuickCommandPage struct {
+	Items    []*QuickCommand `json:"items"`
+	PageInfo *PageInfo       `json:"pageInfo"`
 }
 
 type RetryConfig struct {

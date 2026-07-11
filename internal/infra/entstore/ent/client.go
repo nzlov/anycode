@@ -21,6 +21,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
@@ -47,6 +48,8 @@ type Client struct {
 	PromptAppend *PromptAppendClient
 	// QuestionBatch is the client for interacting with the QuestionBatch builders.
 	QuestionBatch *QuestionBatchClient
+	// QuickCommand is the client for interacting with the QuickCommand builders.
+	QuickCommand *QuickCommandClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
 	// SessionAttachment is the client for interacting with the SessionAttachment builders.
@@ -75,6 +78,7 @@ func (c *Client) init() {
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
 	c.QuestionBatch = NewQuestionBatchClient(c.config)
+	c.QuickCommand = NewQuickCommandClient(c.config)
 	c.Session = NewSessionClient(c.config)
 	c.SessionAttachment = NewSessionAttachmentClient(c.config)
 	c.StagedAttachment = NewStagedAttachmentClient(c.config)
@@ -179,6 +183,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
 		QuestionBatch:      NewQuestionBatchClient(cfg),
+		QuickCommand:       NewQuickCommandClient(cfg),
 		Session:            NewSessionClient(cfg),
 		SessionAttachment:  NewSessionAttachmentClient(cfg),
 		StagedAttachment:   NewStagedAttachmentClient(cfg),
@@ -210,6 +215,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Project:            NewProjectClient(cfg),
 		PromptAppend:       NewPromptAppendClient(cfg),
 		QuestionBatch:      NewQuestionBatchClient(cfg),
+		QuickCommand:       NewQuickCommandClient(cfg),
 		Session:            NewSessionClient(cfg),
 		SessionAttachment:  NewSessionAttachmentClient(cfg),
 		StagedAttachment:   NewStagedAttachmentClient(cfg),
@@ -245,8 +251,8 @@ func (c *Client) Close() error {
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
-		c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
-		c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
+		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session,
+		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
 	} {
 		n.Use(hooks...)
 	}
@@ -257,8 +263,8 @@ func (c *Client) Use(hooks ...Hook) {
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
-		c.PromptAppend, c.QuestionBatch, c.Session, c.SessionAttachment,
-		c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
+		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session,
+		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -281,6 +287,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PromptAppend.mutate(ctx, m)
 	case *QuestionBatchMutation:
 		return c.QuestionBatch.mutate(ctx, m)
+	case *QuickCommandMutation:
+		return c.QuickCommand.mutate(ctx, m)
 	case *SessionMutation:
 		return c.Session.mutate(ctx, m)
 	case *SessionAttachmentMutation:
@@ -1227,6 +1235,139 @@ func (c *QuestionBatchClient) mutate(ctx context.Context, m *QuestionBatchMutati
 	}
 }
 
+// QuickCommandClient is a client for the QuickCommand schema.
+type QuickCommandClient struct {
+	config
+}
+
+// NewQuickCommandClient returns a client for the QuickCommand from the given config.
+func NewQuickCommandClient(c config) *QuickCommandClient {
+	return &QuickCommandClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `quickcommand.Hooks(f(g(h())))`.
+func (c *QuickCommandClient) Use(hooks ...Hook) {
+	c.hooks.QuickCommand = append(c.hooks.QuickCommand, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `quickcommand.Intercept(f(g(h())))`.
+func (c *QuickCommandClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QuickCommand = append(c.inters.QuickCommand, interceptors...)
+}
+
+// Create returns a builder for creating a QuickCommand entity.
+func (c *QuickCommandClient) Create() *QuickCommandCreate {
+	mutation := newQuickCommandMutation(c.config, OpCreate)
+	return &QuickCommandCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of QuickCommand entities.
+func (c *QuickCommandClient) CreateBulk(builders ...*QuickCommandCreate) *QuickCommandCreateBulk {
+	return &QuickCommandCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *QuickCommandClient) MapCreateBulk(slice any, setFunc func(*QuickCommandCreate, int)) *QuickCommandCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &QuickCommandCreateBulk{err: fmt.Errorf("calling to QuickCommandClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*QuickCommandCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &QuickCommandCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for QuickCommand.
+func (c *QuickCommandClient) Update() *QuickCommandUpdate {
+	mutation := newQuickCommandMutation(c.config, OpUpdate)
+	return &QuickCommandUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *QuickCommandClient) UpdateOne(_m *QuickCommand) *QuickCommandUpdateOne {
+	mutation := newQuickCommandMutation(c.config, OpUpdateOne, withQuickCommand(_m))
+	return &QuickCommandUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *QuickCommandClient) UpdateOneID(id string) *QuickCommandUpdateOne {
+	mutation := newQuickCommandMutation(c.config, OpUpdateOne, withQuickCommandID(id))
+	return &QuickCommandUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for QuickCommand.
+func (c *QuickCommandClient) Delete() *QuickCommandDelete {
+	mutation := newQuickCommandMutation(c.config, OpDelete)
+	return &QuickCommandDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *QuickCommandClient) DeleteOne(_m *QuickCommand) *QuickCommandDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *QuickCommandClient) DeleteOneID(id string) *QuickCommandDeleteOne {
+	builder := c.Delete().Where(quickcommand.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &QuickCommandDeleteOne{builder}
+}
+
+// Query returns a query builder for QuickCommand.
+func (c *QuickCommandClient) Query() *QuickCommandQuery {
+	return &QuickCommandQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeQuickCommand},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a QuickCommand entity by its id.
+func (c *QuickCommandClient) Get(ctx context.Context, id string) (*QuickCommand, error) {
+	return c.Query().Where(quickcommand.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *QuickCommandClient) GetX(ctx context.Context, id string) *QuickCommand {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *QuickCommandClient) Hooks() []Hook {
+	return c.hooks.QuickCommand
+}
+
+// Interceptors returns the client interceptors.
+func (c *QuickCommandClient) Interceptors() []Interceptor {
+	return c.inters.QuickCommand
+}
+
+func (c *QuickCommandClient) mutate(ctx context.Context, m *QuickCommandMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&QuickCommandCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&QuickCommandUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&QuickCommandUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&QuickCommandDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown QuickCommand mutation op: %q", m.Op())
+	}
+}
+
 // SessionClient is a client for the Session schema.
 type SessionClient struct {
 	config
@@ -1896,12 +2037,12 @@ func (c *WorkflowRunClient) mutate(ctx context.Context, m *WorkflowRunMutation) 
 type (
 	hooks struct {
 		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
-		QuestionBatch, Session, SessionAttachment, StagedAttachment,
+		QuestionBatch, QuickCommand, Session, SessionAttachment, StagedAttachment,
 		WorkflowDefinition, WorkflowRun []ent.Hook
 	}
 	inters struct {
 		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
-		QuestionBatch, Session, SessionAttachment, StagedAttachment,
+		QuestionBatch, QuickCommand, Session, SessionAttachment, StagedAttachment,
 		WorkflowDefinition, WorkflowRun []ent.Interceptor
 	}
 )

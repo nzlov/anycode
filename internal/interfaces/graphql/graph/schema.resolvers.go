@@ -14,16 +14,41 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
+
+// CreateQuickCommand is the resolver for the createQuickCommand field.
+func (r *mutationResolver) CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.CreateQuickCommand(ctx, settingapp.CreateQuickCommandInput{Content: input.Content})
+	if err != nil {
+		return nil, err
+	}
+	return mapQuickCommand(dto), nil
+}
+
+// DeleteQuickCommand is the resolver for the deleteQuickCommand field.
+func (r *mutationResolver) DeleteQuickCommand(ctx context.Context, id string) (bool, error) {
+	if r.UseCases.Settings == nil {
+		return false, missingUseCase("settings")
+	}
+	if err := r.UseCases.Settings.DeleteQuickCommand(ctx, settingapp.DeleteQuickCommandInput{ID: settingdomain.QuickCommandID(id)}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
 
 // CreateProject is the resolver for the createProject field.
 func (r *mutationResolver) CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error) {
@@ -298,6 +323,23 @@ func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.
 // CodexModelOptions is the resolver for the codexModelOptions field.
 func (r *queryResolver) CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error) {
 	return mapCodexModelOptions(r.UseCases.CodexModels), nil
+}
+
+// QuickCommands is the resolver for the quickCommands field.
+func (r *queryResolver) QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	listInput := settingapp.ListQuickCommandsInput{}
+	if input != nil {
+		listInput.Page = intValue(input.Page, 0)
+		listInput.PageSize = intValue(input.PageSize, 0)
+	}
+	page, err := r.UseCases.Settings.ListQuickCommands(ctx, listInput)
+	if err != nil {
+		return nil, err
+	}
+	return mapQuickCommandPage(page), nil
 }
 
 // Projects is the resolver for the projects field.

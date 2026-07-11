@@ -14,6 +14,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
@@ -21,6 +22,7 @@ import (
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 	"github.com/vektah/gqlparser/v2/ast"
@@ -53,6 +55,45 @@ func TestQueryCodexModelOptionsReturnsStartupCatalog(t *testing.T) {
 	}
 	if len(got[0].ReasoningEfforts) != 2 || got[0].ReasoningEfforts[1].Value != "ultra" {
 		t.Fatalf("ReasoningEfforts = %#v", got[0].ReasoningEfforts)
+	}
+}
+
+func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
+	now := time.Unix(10, 0).UTC()
+	settings := &fakeSettingUseCase{
+		listResult: port.Page[settingapp.QuickCommandDTO]{
+			Items: []settingapp.QuickCommandDTO{
+				{ID: "command-1", Content: "检查测试", CreatedAt: now},
+				{ID: "command-2", Content: "检查测试", CreatedAt: now.Add(time.Second)},
+			},
+			Page: 2, PageSize: 20, Total: 22,
+		},
+		createResult: settingapp.QuickCommandDTO{ID: "command-3", Content: "总结变更", CreatedAt: now.Add(2 * time.Second)},
+	}
+	resolver := NewResolver(UseCases{Settings: settings})
+
+	pageValue := 2
+	pageSize := 20
+	listed, err := resolver.Query().QuickCommands(context.Background(), &model.ListQuickCommandsInput{Page: &pageValue, PageSize: &pageSize})
+	if err != nil {
+		t.Fatalf("QuickCommands() error = %v", err)
+	}
+	if settings.listInput.Page != 2 || settings.listInput.PageSize != 20 || len(listed.Items) != 2 || listed.Items[0].ID != "command-1" || listed.PageInfo.Total != 22 {
+		t.Fatalf("QuickCommands() = %#v", listed)
+	}
+	created, err := resolver.Mutation().CreateQuickCommand(context.Background(), model.CreateQuickCommandInput{Content: "总结变更"})
+	if err != nil {
+		t.Fatalf("CreateQuickCommand() error = %v", err)
+	}
+	if settings.createInput.Content != "总结变更" || created.ID != "command-3" {
+		t.Fatalf("create input=%#v result=%#v", settings.createInput, created)
+	}
+	deleted, err := resolver.Mutation().DeleteQuickCommand(context.Background(), "command-1")
+	if err != nil {
+		t.Fatalf("DeleteQuickCommand() error = %v", err)
+	}
+	if !deleted || settings.deleteInput.ID != settingdomain.QuickCommandID("command-1") {
+		t.Fatalf("delete result=%t input=%#v", deleted, settings.deleteInput)
 	}
 }
 
@@ -892,6 +933,30 @@ type fakeProjectUseCase struct {
 	browseResult   projectapp.DirectoryPageDTO
 }
 
+type fakeSettingUseCase struct {
+	settingapp.UseCase
+	listInput    settingapp.ListQuickCommandsInput
+	listResult   port.Page[settingapp.QuickCommandDTO]
+	createInput  settingapp.CreateQuickCommandInput
+	createResult settingapp.QuickCommandDTO
+	deleteInput  settingapp.DeleteQuickCommandInput
+}
+
+func (f *fakeSettingUseCase) ListQuickCommands(_ context.Context, input settingapp.ListQuickCommandsInput) (port.Page[settingapp.QuickCommandDTO], error) {
+	f.listInput = input
+	return f.listResult, nil
+}
+
+func (f *fakeSettingUseCase) CreateQuickCommand(_ context.Context, input settingapp.CreateQuickCommandInput) (settingapp.QuickCommandDTO, error) {
+	f.createInput = input
+	return f.createResult, nil
+}
+
+func (f *fakeSettingUseCase) DeleteQuickCommand(_ context.Context, input settingapp.DeleteQuickCommandInput) error {
+	f.deleteInput = input
+	return nil
+}
+
 func (f *fakeProjectUseCase) CreateProject(_ context.Context, input projectapp.CreateProjectInput) (projectapp.DTO, error) {
 	f.createInput = input
 	return f.createResult, nil
@@ -940,13 +1005,13 @@ func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain
 
 type fakeQuestionUseCase struct {
 	questionapp.UseCase
-	pending                  []questionapp.BatchDTO
-	updateSource             <-chan questionapp.BatchDTO
-	submitResult             questionapp.BatchDTO
-	gotSubmit                questionapp.SubmitBatchInput
-	submitCalls              int
-	gotPendingSessionID      questiondomain.SessionID
-	gotUpdateSessionID       questiondomain.SessionID
+	pending             []questionapp.BatchDTO
+	updateSource        <-chan questionapp.BatchDTO
+	submitResult        questionapp.BatchDTO
+	gotSubmit           questionapp.SubmitBatchInput
+	submitCalls         int
+	gotPendingSessionID questiondomain.SessionID
+	gotUpdateSessionID  questiondomain.SessionID
 }
 
 func (f *fakeQuestionUseCase) SubmitBatch(_ context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {

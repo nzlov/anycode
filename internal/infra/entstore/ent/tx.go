@@ -26,6 +26,8 @@ type Tx struct {
 	PromptAppend *PromptAppendClient
 	// QuestionBatch is the client for interacting with the QuestionBatch builders.
 	QuestionBatch *QuestionBatchClient
+	// QuickCommand is the client for interacting with the QuickCommand builders.
+	QuickCommand *QuickCommandClient
 	// Session is the client for interacting with the Session builders.
 	Session *SessionClient
 	// SessionAttachment is the client for interacting with the SessionAttachment builders.
@@ -174,6 +176,7 @@ func (tx *Tx) init() {
 	tx.Project = NewProjectClient(tx.config)
 	tx.PromptAppend = NewPromptAppendClient(tx.config)
 	tx.QuestionBatch = NewQuestionBatchClient(tx.config)
+	tx.QuickCommand = NewQuickCommandClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
 	tx.SessionAttachment = NewSessionAttachmentClient(tx.config)
 	tx.StagedAttachment = NewStagedAttachmentClient(tx.config)

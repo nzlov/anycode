@@ -19,6 +19,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
@@ -135,6 +136,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 		Diff:        diffapp.New(store.Sessions(), store.Projects(), gitdiffClient),
 		Workflows:   workflowService,
 		Questions:   questionService,
+		Settings:    settingapp.New(store.Settings()),
 		CodexModels: capabilities.Models,
 	}, nil
 }

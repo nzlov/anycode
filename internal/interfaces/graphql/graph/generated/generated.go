@@ -150,7 +150,9 @@ type ComplexityRoot struct {
 		AppendPrompt               func(childComplexity int, input model.AppendPromptInput) int
 		CloseSession               func(childComplexity int, input model.CloseSessionInput) int
 		CreateProject              func(childComplexity int, input model.CreateProjectInput) int
+		CreateQuickCommand         func(childComplexity int, input model.CreateQuickCommandInput) int
 		CreateSession              func(childComplexity int, input model.CreateSessionInput) int
+		DeleteQuickCommand         func(childComplexity int, id string) int
 		DeleteSessionAttachment    func(childComplexity int, id string) int
 		DeleteStagedAttachment     func(childComplexity int, id string) int
 		RemoveProject              func(childComplexity int, id string) int
@@ -200,6 +202,7 @@ type ComplexityRoot struct {
 		ProjectGitState        func(childComplexity int, projectID string, refresh bool) int
 		Projects               func(childComplexity int) int
 		QuestionBatch          func(childComplexity int, id string) int
+		QuickCommands          func(childComplexity int, input *model.ListQuickCommandsInput) int
 		Session                func(childComplexity int, id string) int
 		SessionCommitHistory   func(childComplexity int, input model.SessionCommitHistoryInput) int
 		SessionDiff            func(childComplexity int, input model.SessionDiffInput) int
@@ -234,6 +237,17 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 		Label       func(childComplexity int) int
 		Payload     func(childComplexity int) int
+	}
+
+	QuickCommand struct {
+		Content   func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		ID        func(childComplexity int) int
+	}
+
+	QuickCommandPage struct {
+		Items    func(childComplexity int) int
+		PageInfo func(childComplexity int) int
 	}
 
 	RetryConfig struct {
@@ -445,6 +459,8 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
+	CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error)
+	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
 	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
@@ -466,6 +482,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
+	QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error)
 	Projects(ctx context.Context) ([]*model.Project, error)
 	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
@@ -902,6 +919,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateProject(childComplexity, args["input"].(model.CreateProjectInput)), true
+	case "Mutation.createQuickCommand":
+		if e.ComplexityRoot.Mutation.CreateQuickCommand == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_createQuickCommand_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CreateQuickCommand(childComplexity, args["input"].(model.CreateQuickCommandInput)), true
 	case "Mutation.createSession":
 		if e.ComplexityRoot.Mutation.CreateSession == nil {
 			break
@@ -913,6 +941,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CreateSession(childComplexity, args["input"].(model.CreateSessionInput)), true
+	case "Mutation.deleteQuickCommand":
+		if e.ComplexityRoot.Mutation.DeleteQuickCommand == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_deleteQuickCommand_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.DeleteQuickCommand(childComplexity, args["id"].(string)), true
 	case "Mutation.deleteSessionAttachment":
 		if e.ComplexityRoot.Mutation.DeleteSessionAttachment == nil {
 			break
@@ -1230,6 +1269,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.QuestionBatch(childComplexity, args["id"].(string)), true
+	case "Query.quickCommands":
+		if e.ComplexityRoot.Query.QuickCommands == nil {
+			break
+		}
+
+		args, err := ec.field_Query_quickCommands_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.QuickCommands(childComplexity, args["input"].(*model.ListQuickCommandsInput)), true
 	case "Query.session":
 		if e.ComplexityRoot.Query.Session == nil {
 			break
@@ -1413,6 +1463,38 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QuestionOption.Payload(childComplexity), true
+
+	case "QuickCommand.content":
+		if e.ComplexityRoot.QuickCommand.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuickCommand.Content(childComplexity), true
+	case "QuickCommand.createdAt":
+		if e.ComplexityRoot.QuickCommand.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuickCommand.CreatedAt(childComplexity), true
+	case "QuickCommand.id":
+		if e.ComplexityRoot.QuickCommand.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuickCommand.ID(childComplexity), true
+
+	case "QuickCommandPage.items":
+		if e.ComplexityRoot.QuickCommandPage.Items == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuickCommandPage.Items(childComplexity), true
+	case "QuickCommandPage.pageInfo":
+		if e.ComplexityRoot.QuickCommandPage.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuickCommandPage.PageInfo(childComplexity), true
 
 	case "RetryConfig.maxAttempts":
 		if e.ComplexityRoot.RetryConfig.MaxAttempts == nil {
@@ -2277,7 +2359,9 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBrowseDirectoryInput,
 		ec.unmarshalInputCloseSessionInput,
 		ec.unmarshalInputCreateProjectInput,
+		ec.unmarshalInputCreateQuickCommandInput,
 		ec.unmarshalInputCreateSessionInput,
+		ec.unmarshalInputListQuickCommandsInput,
 		ec.unmarshalInputListSessionEventsInput,
 		ec.unmarshalInputListSessionsInput,
 		ec.unmarshalInputMergeConfigInput,
@@ -2398,6 +2482,7 @@ scalar Int64
 
 type Query {
   codexModelOptions: [CodexModelOption!]!
+  quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
@@ -2413,6 +2498,8 @@ type Query {
 }
 
 type Mutation {
+  createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
+  deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
@@ -2444,6 +2531,26 @@ type PageInfo {
   pageSize: Int!
   total: Int!
   nextCursor: String!
+}
+
+type QuickCommand {
+  id: ID!
+  content: String!
+  createdAt: Time!
+}
+
+type QuickCommandPage {
+  items: [QuickCommand!]!
+  pageInfo: PageInfo!
+}
+
+input ListQuickCommandsInput {
+  page: Int
+  pageSize: Int
+}
+
+input CreateQuickCommandInput {
+  content: String!
 }
 
 type Project {
@@ -3031,6 +3138,17 @@ func (ec *executionContext) field_Mutation_createProject_args(ctx context.Contex
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_createQuickCommand_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateQuickCommandInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCreateQuickCommandInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_createSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -3039,6 +3157,17 @@ func (ec *executionContext) field_Mutation_createSession_args(ctx context.Contex
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_deleteQuickCommand_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -3263,6 +3392,17 @@ func (ec *executionContext) field_Query_questionBatch_args(ctx context.Context, 
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_quickCommands_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalOListQuickCommandsInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListQuickCommandsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -5172,6 +5312,96 @@ func (ec *executionContext) fieldContext_MergeConfig_strategy(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_createQuickCommand(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_createQuickCommand,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CreateQuickCommand(ctx, fc.Args["input"].(model.CreateQuickCommandInput))
+		},
+		nil,
+		ec.marshalNQuickCommand2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommand,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_createQuickCommand(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_QuickCommand_id(ctx, field)
+			case "content":
+				return ec.fieldContext_QuickCommand_content(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_QuickCommand_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuickCommand", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_createQuickCommand_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_deleteQuickCommand(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_deleteQuickCommand,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().DeleteQuickCommand(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_deleteQuickCommand(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_deleteQuickCommand_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_createProject(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6792,6 +7022,53 @@ func (ec *executionContext) fieldContext_Query_codexModelOptions(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_quickCommands(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_quickCommands,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().QuickCommands(ctx, fc.Args["input"].(*model.ListQuickCommandsInput))
+		},
+		nil,
+		ec.marshalNQuickCommandPage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommandPage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_quickCommands(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "items":
+				return ec.fieldContext_QuickCommandPage_items(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_QuickCommandPage_pageInfo(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuickCommandPage", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_quickCommands_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_projects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8120,6 +8397,169 @@ func (ec *executionContext) fieldContext_QuestionOption_payload(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuickCommand_id(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuickCommand_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuickCommand_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuickCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuickCommand_content(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuickCommand_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuickCommand_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuickCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuickCommand_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuickCommand_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuickCommand_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuickCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuickCommandPage_items(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommandPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuickCommandPage_items,
+		func(ctx context.Context) (any, error) {
+			return obj.Items, nil
+		},
+		nil,
+		ec.marshalNQuickCommand2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommandᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuickCommandPage_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuickCommandPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_QuickCommand_id(ctx, field)
+			case "content":
+				return ec.fieldContext_QuickCommand_content(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_QuickCommand_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuickCommand", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuickCommandPage_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.QuickCommandPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuickCommandPage_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuickCommandPage_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuickCommandPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "page":
+				return ec.fieldContext_PageInfo_page(ctx, field)
+			case "pageSize":
+				return ec.fieldContext_PageInfo_pageSize(ctx, field)
+			case "total":
+				return ec.fieldContext_PageInfo_total(ctx, field)
+			case "nextCursor":
+				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
 		},
 	}
 	return fc, nil
@@ -14220,6 +14660,36 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCreateQuickCommandInput(ctx context.Context, obj any) (model.CreateQuickCommandInput, error) {
+	var it model.CreateQuickCommandInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"content"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context, obj any) (model.CreateSessionInput, error) {
 	var it model.CreateSessionInput
 	if obj == nil {
@@ -14287,6 +14757,43 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 				return it, err
 			}
 			it.StagedAttachmentIds = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputListQuickCommandsInput(ctx context.Context, obj any) (model.ListQuickCommandsInput, error) {
+	var it model.ListQuickCommandsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"page", "pageSize"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "page":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Page = data
+		case "pageSize":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PageSize = data
 		}
 	}
 	return it, nil
@@ -16143,6 +16650,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
+		case "createQuickCommand":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_createQuickCommand(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteQuickCommand":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_deleteQuickCommand(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createProject":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createProject(ctx, field)
@@ -16505,6 +17026,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_codexModelOptions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "quickCommands":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_quickCommands(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -16977,6 +17520,99 @@ func (ec *executionContext) _QuestionOption(ctx context.Context, sel ast.Selecti
 			}
 		case "payload":
 			out.Values[i] = ec._QuestionOption_payload(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var quickCommandImplementors = []string{"QuickCommand"}
+
+func (ec *executionContext) _QuickCommand(ctx context.Context, sel ast.SelectionSet, obj *model.QuickCommand) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, quickCommandImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("QuickCommand")
+		case "id":
+			out.Values[i] = ec._QuickCommand_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._QuickCommand_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._QuickCommand_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var quickCommandPageImplementors = []string{"QuickCommandPage"}
+
+func (ec *executionContext) _QuickCommandPage(ctx context.Context, sel ast.SelectionSet, obj *model.QuickCommandPage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, quickCommandPageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("QuickCommandPage")
+		case "items":
+			out.Values[i] = ec._QuickCommandPage_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._QuickCommandPage_pageInfo(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -18918,6 +19554,11 @@ func (ec *executionContext) unmarshalNCreateProjectInput2githubᚗcomᚋnzlovᚋ
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCreateQuickCommandInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCreateQuickCommandInput(ctx context.Context, v any) (model.CreateQuickCommandInput, error) {
+	res, err := ec.unmarshalInputCreateQuickCommandInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNCreateSessionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCreateSessionInput(ctx context.Context, v any) (model.CreateSessionInput, error) {
 	res, err := ec.unmarshalInputCreateSessionInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -19388,6 +20029,50 @@ func (ec *executionContext) marshalNQuestionOption2ᚖgithubᚗcomᚋnzlovᚋany
 		return graphql.Null
 	}
 	return ec._QuestionOption(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNQuickCommand2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommand(ctx context.Context, sel ast.SelectionSet, v model.QuickCommand) graphql.Marshaler {
+	return ec._QuickCommand(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNQuickCommand2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommandᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuickCommand) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNQuickCommand2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommand(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNQuickCommand2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommand(ctx context.Context, sel ast.SelectionSet, v *model.QuickCommand) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._QuickCommand(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNQuickCommandPage2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommandPage(ctx context.Context, sel ast.SelectionSet, v model.QuickCommandPage) graphql.Marshaler {
+	return ec._QuickCommandPage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNQuickCommandPage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommandPage(ctx context.Context, sel ast.SelectionSet, v *model.QuickCommandPage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._QuickCommandPage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRetryConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐRetryConfig(ctx context.Context, sel ast.SelectionSet, v *model.RetryConfig) graphql.Marshaler {
@@ -20239,6 +20924,14 @@ func (ec *executionContext) marshalOJSON2map(ctx context.Context, sel ast.Select
 	_ = ctx
 	res := graphql.MarshalMap(v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOListQuickCommandsInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListQuickCommandsInput(ctx context.Context, v any) (*model.ListQuickCommandsInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := ec.unmarshalInputListQuickCommandsInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalOListSessionsInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListSessionsInput(ctx context.Context, v any) (*model.ListSessionsInput, error) {

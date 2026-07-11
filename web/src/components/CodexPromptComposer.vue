@@ -19,19 +19,81 @@
     @update:permission="emit('update:permission', $event)"
   >
     <template #actions>
+      <q-btn
+        flat
+        no-caps
+        class="quick-reply-btn app-command-btn"
+        icon="bolt"
+        label="快捷回复"
+        :disable="disabled"
+      >
+        <q-menu
+          class="quick-reply-menu"
+          anchor="top right"
+          self="bottom right"
+          @before-show="refreshQuickCommands"
+        >
+          <q-linear-progress v-if="quickCommandsLoading" indeterminate color="primary" />
+          <q-list v-if="quickCommands.length" dense class="app-touch-list">
+            <q-item
+              v-for="command in quickCommands"
+              :key="command.id"
+              v-close-popup
+              clickable
+              :disable="quickCommandsLoading"
+              @click="applyQuickCommand(command.content)"
+            >
+              <q-item-section>{{ command.content }}</q-item-section>
+            </q-item>
+          </q-list>
+          <div v-else class="quick-reply-menu__empty">
+            <q-spinner v-if="quickCommandsLoading" color="primary" size="20px" />
+            <template v-else-if="quickCommandsError">加载失败</template>
+            <template v-else>暂无快捷指令</template>
+          </div>
+          <div
+            v-if="quickCommandsError || quickCommandPageMax > 1"
+            class="quick-reply-menu__footer"
+          >
+            <span v-if="quickCommandsError" class="text-negative">{{ quickCommandsError }}</span>
+            <AppPagination
+              v-if="quickCommandPageMax > 1"
+              :model-value="quickCommandsPageInfo.page"
+              :max="quickCommandPageMax"
+              :disabled="quickCommandsLoading"
+              @update:model-value="changeQuickCommandPage"
+            />
+            <q-btn
+              v-if="quickCommandsError"
+              flat
+              round
+              dense
+              class="app-icon-btn"
+              icon="refresh"
+              aria-label="重试加载快捷指令"
+              @click="refreshQuickCommands"
+            >
+              <q-tooltip>重试</q-tooltip>
+            </q-btn>
+          </div>
+        </q-menu>
+      </q-btn>
       <slot name="actions" />
     </template>
   </PromptComposer>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
+import AppPagination from '@/components/AppPagination.vue';
 import PromptComposer from '@/components/PromptComposer.vue';
 import type { CodexModelOption } from '@/components/promptOptions';
+import { useQuickCommands } from '@/composables/useQuickCommands';
 import { listCodexModelOptions } from '@/services/codexOptions';
+import { appendQuickCommand } from '@/services/quickCommandText';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
@@ -64,8 +126,31 @@ const emit = defineEmits<{
 }>();
 
 const modelOptions = ref<CodexModelOption[]>([]);
+const {
+  quickCommands,
+  quickCommandsLoading,
+  quickCommandsError,
+  quickCommandsPageInfo,
+  loadQuickCommands,
+} = useQuickCommands();
+const quickCommandPageMax = computed(() =>
+  Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
+);
+
+function applyQuickCommand(command: string) {
+  emit('update:prompt', appendQuickCommand(props.prompt, command));
+}
+
+function refreshQuickCommands() {
+  void loadQuickCommands({ force: true, page: 1 }).catch(() => undefined);
+}
+
+function changeQuickCommandPage(page: number) {
+  void loadQuickCommands({ force: true, page }).catch(() => undefined);
+}
 
 onMounted(async () => {
+  void loadQuickCommands().catch(() => undefined);
   modelOptions.value = await listCodexModelOptions();
 });
 </script>

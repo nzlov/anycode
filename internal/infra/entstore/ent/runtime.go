@@ -12,6 +12,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
@@ -196,6 +197,16 @@ func init() {
 	questionbatchDescCreatedAt := questionbatchFields[7].Descriptor()
 	// questionbatch.DefaultCreatedAt holds the default value on creation for the created_at field.
 	questionbatch.DefaultCreatedAt = questionbatchDescCreatedAt.Default.(func() time.Time)
+	quickcommandFields := schema.QuickCommand{}.Fields()
+	_ = quickcommandFields
+	// quickcommandDescContent is the schema descriptor for content field.
+	quickcommandDescContent := quickcommandFields[1].Descriptor()
+	// quickcommand.ContentValidator is a validator for the "content" field. It is called by the builders before save.
+	quickcommand.ContentValidator = quickcommandDescContent.Validators[0].(func(string) error)
+	// quickcommandDescCreatedAt is the schema descriptor for created_at field.
+	quickcommandDescCreatedAt := quickcommandFields[2].Descriptor()
+	// quickcommand.DefaultCreatedAt holds the default value on creation for the created_at field.
+	quickcommand.DefaultCreatedAt = quickcommandDescCreatedAt.Default.(func() time.Time)
 	entsessionFields := schema.Session{}.Fields()
 	_ = entsessionFields
 	// entsessionDescProjectID is the schema descriptor for project_id field.

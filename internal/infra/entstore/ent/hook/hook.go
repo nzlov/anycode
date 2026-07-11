@@ -93,6 +93,18 @@ func (f QuestionBatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QuestionBatchMutation", m)
 }
 
+// The QuickCommandFunc type is an adapter to allow the use of ordinary
+// function as QuickCommand mutator.
+type QuickCommandFunc func(context.Context, *ent.QuickCommandMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f QuickCommandFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QuickCommandMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QuickCommandMutation", m)
+}
+
 // The SessionFunc type is an adapter to allow the use of ordinary
 // function as Session mutator.
 type SessionFunc func(context.Context, *ent.SessionMutation) (ent.Value, error)

@@ -11,6 +11,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
@@ -31,6 +32,7 @@ type UseCases struct {
 	Diff        diffapp.UseCase
 	Workflows   workflowapp.UseCase
 	Questions   questionapp.UseCase
+	Settings    settingapp.UseCase
 	CodexModels []processdomain.CodexModel
 }
 

@@ -31,6 +31,13 @@
         <q-btn flat round dense class="app-icon-btn" icon="more_vert" aria-label="更多操作">
           <q-menu>
             <q-list dense class="app-touch-list">
+              <q-item v-close-popup clickable @click="settingsDialogOpen = true">
+                <q-item-section avatar>
+                  <q-icon name="settings" />
+                </q-item-section>
+                <q-item-section>全局设置</q-item-section>
+              </q-item>
+              <q-separator />
               <q-item-label header>主题模式</q-item-label>
               <q-item
                 v-for="mode in themeModes"
@@ -160,6 +167,7 @@
       @create="handleSessionCreated"
     />
     <project-directory-dialog v-model="directoryDialogOpen" />
+    <GlobalSettingsDialog v-model="settingsDialogOpen" />
 
     <q-dialog v-model="removeProjectDialogOpen">
       <q-card class="confirm-dialog">
@@ -243,6 +251,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useProjects } from '@/composables/useProjects';
@@ -253,6 +262,7 @@ import { getSession } from '@/services/sessions';
 const leftDrawerOpen = ref(false);
 const newSessionOpen = ref(false);
 const directoryDialogOpen = ref(false);
+const settingsDialogOpen = ref(false);
 const removeProjectDialogOpen = ref(false);
 const removingProjectId = ref('');
 const removingProjectName = ref('');

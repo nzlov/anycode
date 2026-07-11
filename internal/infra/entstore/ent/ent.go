@@ -19,6 +19,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
@@ -92,6 +93,7 @@ func checkColumn(t, c string) error {
 			project.Table:            project.ValidColumn,
 			promptappend.Table:       promptappend.ValidColumn,
 			questionbatch.Table:      questionbatch.ValidColumn,
+			quickcommand.Table:       quickcommand.ValidColumn,
 			entsession.Table:         entsession.ValidColumn,
 			sessionattachment.Table:  sessionattachment.ValidColumn,
 			stagedattachment.Table:   stagedattachment.ValidColumn,

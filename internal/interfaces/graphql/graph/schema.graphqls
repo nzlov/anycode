@@ -6,6 +6,7 @@ scalar Int64
 
 type Query {
   codexModelOptions: [CodexModelOption!]!
+  quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
@@ -21,6 +22,8 @@ type Query {
 }
 
 type Mutation {
+  createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
+  deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
@@ -52,6 +55,26 @@ type PageInfo {
   pageSize: Int!
   total: Int!
   nextCursor: String!
+}
+
+type QuickCommand {
+  id: ID!
+  content: String!
+  createdAt: Time!
+}
+
+type QuickCommandPage {
+  items: [QuickCommand!]!
+  pageInfo: PageInfo!
+}
+
+input ListQuickCommandsInput {
+  page: Int
+  pageSize: Int
+}
+
+input CreateQuickCommandInput {
+  content: String!
 }
 
 type Project {

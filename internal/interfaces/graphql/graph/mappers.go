@@ -7,6 +7,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
@@ -38,6 +39,25 @@ func mapCodexModelOptions(items []processdomain.CodexModel) []*model.CodexModelO
 		})
 	}
 	return options
+}
+
+func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
+	return &model.QuickCommand{
+		ID:        string(dto.ID),
+		Content:   dto.Content,
+		CreatedAt: dto.CreatedAt,
+	}
+}
+
+func mapQuickCommandPage(page port.Page[settingapp.QuickCommandDTO]) *model.QuickCommandPage {
+	items := make([]*model.QuickCommand, 0, len(page.Items))
+	for _, item := range page.Items {
+		items = append(items, mapQuickCommand(item))
+	}
+	return &model.QuickCommandPage{
+		Items:    items,
+		PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor),
+	}
 }
 
 func mapProject(dto projectapp.DTO) *model.Project {

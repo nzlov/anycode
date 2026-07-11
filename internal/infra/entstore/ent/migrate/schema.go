@@ -206,6 +206,18 @@ var (
 			},
 		},
 	}
+	// QuickCommandsColumns holds the columns for the "quick_commands" table.
+	QuickCommandsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "content", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// QuickCommandsTable holds the schema information for the "quick_commands" table.
+	QuickCommandsTable = &schema.Table{
+		Name:       "quick_commands",
+		Columns:    QuickCommandsColumns,
+		PrimaryKey: []*schema.Column{QuickCommandsColumns[0]},
+	}
 	// SessionsColumns holds the columns for the "sessions" table.
 	SessionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -397,6 +409,7 @@ var (
 		ProjectsTable,
 		PromptAppendsTable,
 		QuestionBatchesTable,
+		QuickCommandsTable,
 		SessionsTable,
 		SessionAttachmentsTable,
 		StagedAttachmentsTable,
