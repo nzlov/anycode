@@ -3189,7 +3189,7 @@ func TestCloseSessionCanRetryAfterWorktreeRemovedAndSnapshotStored(t *testing.T)
 	}
 }
 
-func TestCloseSessionFailsWhenMissingWorktreeSnapshotIncomplete(t *testing.T) {
+func TestCloseSessionRecoversHeadFromBranchWhenWorktreeMissing(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -3208,27 +3208,106 @@ func TestCloseSessionFailsWhenMissingWorktreeSnapshotIncomplete(t *testing.T) {
 		IsGit: true,
 	}
 	worktrees := newFakeWorktreeManager()
+	worktrees.headCommit = "head"
 	worktrees.setMissing("/data/worktrees/project-1/session-1", true)
 	service := New(repo, projects, WithWorktrees(worktrees))
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
 
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.Status != domain.StatusClosed || got.WorktreePath != "" || got.WorktreeHeadCommit != "head" {
+		t.Fatalf("CloseSession() = %#v", got)
+	}
+	if worktrees.headCommitPath != "/workspace/project-1" || worktrees.headCommitRef != "session-1" {
+		t.Fatalf("HeadCommit() = path %q ref %q", worktrees.headCommitPath, worktrees.headCommitRef)
+	}
+	if len(worktrees.removed) != 0 {
+		t.Fatalf("missing worktree should not remove again: %#v", worktrees.removed)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.WorktreePath != "" || saved.WorktreeBaseCommit != "base" || saved.WorktreeHeadCommit != "head" || saved.Status != domain.StatusClosed {
+		t.Fatalf("saved session = %#v", saved)
+	}
+}
+
+func TestCloseSessionFailsWhenMissingWorktreeBranchHeadUnavailable(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusCreated,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBaseCommit: "base",
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := newFakeWorktreeManager()
+	worktrees.headCommitErr = errors.New("branch missing")
+	worktrees.setMissing("/data/worktrees/project-1/session-1", true)
+	service := New(repo, projects, WithWorktrees(worktrees))
+
 	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
-		t.Fatal("CloseSession() expected missing worktree snapshot error")
+		t.Fatal("CloseSession() expected missing branch head error")
 	} else {
 		appErr, ok := apperror.From(err)
 		if !ok || appErr.Code != apperror.CodeCloseFailed {
 			t.Fatalf("CloseSession() error = %#v", err)
 		}
 	}
-	if worktrees.headCommitPath != "" || worktrees.mergeBasePath != "" {
-		t.Fatalf("missing worktree should fail before rereading commits: head=%q mergeBase=%q", worktrees.headCommitPath, worktrees.mergeBasePath)
+	if worktrees.headCommitPath != "/workspace/project-1" || worktrees.headCommitRef != "session-1" {
+		t.Fatalf("HeadCommit() = path %q ref %q", worktrees.headCommitPath, worktrees.headCommitRef)
 	}
-	if len(worktrees.removed) != 0 {
-		t.Fatalf("missing worktree should not remove again: %#v", worktrees.removed)
+	saved := repo.sessions["session-1"]
+	if saved.WorktreePath != "/data/worktrees/project-1/session-1" || saved.WorktreeHeadCommit != "" || saved.Status == domain.StatusClosed {
+		t.Fatalf("session should remain open after missing branch failure: %#v", saved)
+	}
+}
+
+func TestCloseSessionFailsWhenMissingWorktreeBaseCommitUnavailable(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Status:       domain.StatusCreated,
+		BaseBranch:   "main",
+		WorktreePath: "/data/worktrees/project-1/session-1",
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := newFakeWorktreeManager()
+	worktrees.headCommit = "head"
+	worktrees.setMissing("/data/worktrees/project-1/session-1", true)
+	service := New(repo, projects, WithWorktrees(worktrees))
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected missing base commit error")
+	} else {
+		appErr, ok := apperror.From(err)
+		if !ok || appErr.Code != apperror.CodeCloseFailed {
+			t.Fatalf("CloseSession() error = %#v", err)
+		}
+	}
+	if worktrees.headCommitPath != "" {
+		t.Fatalf("HeadCommit() should not run without a stored base commit, got path %q", worktrees.headCommitPath)
 	}
 	saved := repo.sessions["session-1"]
 	if saved.WorktreePath != "/data/worktrees/project-1/session-1" || saved.Status == domain.StatusClosed {
-		t.Fatalf("session should remain open with original path after incomplete snapshot failure: %#v", saved)
+		t.Fatalf("session should remain open after missing base failure: %#v", saved)
 	}
 }
 
@@ -3586,6 +3665,36 @@ func TestStartSessionPromptMentionsAnswerUserGuidance(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "不要使用 `request_user_input`") {
 		t.Fatalf("prompt should tell Codex not to use request_user_input for AnyCode questions: %q", prompt)
+	}
+}
+
+func TestStartSessionPromptProtectsManagedWorktree(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "Implement the requested change",
+		Mode:         domain.ModeChat,
+		Status:       domain.StatusCreated,
+		BaseBranch:   "main",
+		WorktreePath: "/workspace/project",
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSessionWithOptions() error = %v", err)
+	}
+	prompt := codex.startInput.Prompt
+	if !strings.Contains(prompt, "不得删除、移动、重建或清理当前工作树") {
+		t.Fatalf("prompt missing worktree lifecycle guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "卡片关闭时由 AnyCode") {
+		t.Fatalf("prompt should assign cleanup ownership to AnyCode: %q", prompt)
 	}
 }
 
