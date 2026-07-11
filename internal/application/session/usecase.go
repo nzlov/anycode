@@ -1762,7 +1762,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			return processdomain.CodexHandle{}, err
 		}
 	}
-	prompt = promptWithAnswerUserGuidance(prompt)
+	prompt = promptWithSessionGuidance(prompt, session)
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
@@ -1790,6 +1790,15 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
 const answerUserPromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。"
+const worktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责保存 Diff 快照并清理工作树。"
+
+func promptWithSessionGuidance(prompt string, session domain.Session) string {
+	prompt = promptWithAnswerUserGuidance(prompt)
+	if strings.TrimSpace(session.BaseBranch) == "" || strings.Contains(prompt, worktreePromptGuidance) {
+		return prompt
+	}
+	return prompt + "\n\n" + worktreePromptGuidance
+}
 
 func promptWithAnswerUserGuidance(prompt string) string {
 	prompt = strings.TrimSpace(prompt)
@@ -3410,10 +3419,27 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 				}).WithRetryable(true)
 			}
 			if !exists {
-				if strings.TrimSpace(session.WorktreeBaseCommit) == "" || strings.TrimSpace(session.WorktreeHeadCommit) == "" {
+				if strings.TrimSpace(session.WorktreeBaseCommit) == "" {
 					return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree is missing before diff snapshot was fully stored").WithDetails(map[string]any{
 						"sessionId": string(session.ID),
 					})
+				}
+				if strings.TrimSpace(session.WorktreeHeadCommit) == "" {
+					branch := worktreeBranchName(session.ID)
+					headCommit, err := s.worktrees.HeadCommit(ctx, project.Path.Value, branch)
+					if err != nil {
+						return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "read missing session worktree branch head failed").WithDetails(map[string]any{
+							"sessionId":      string(session.ID),
+							"worktreeBranch": branch,
+						}).WithRetryable(true)
+					}
+					session.WorktreeHeadCommit = strings.TrimSpace(headCommit)
+					if session.WorktreeHeadCommit == "" {
+						return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree is missing before diff snapshot was fully stored").WithDetails(map[string]any{
+							"sessionId":      string(session.ID),
+							"worktreeBranch": branch,
+						})
+					}
 				}
 			} else {
 				if strings.TrimSpace(session.WorktreeBaseCommit) == "" {
