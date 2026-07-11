@@ -2,6 +2,7 @@ package gitdiffcli
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,319 @@ import (
 
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
 )
+
+func TestResolveSessionDiffSourceUsesLiveWorktree(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	worktreePath := filepath.Join(t.TempDir(), "linked\tworktree")
+	runGit(t, repo, "worktree", "add", "-b", "session-1", worktreePath, "main")
+
+	got, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       worktreePath,
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if !ok || got.WorktreePath != worktreePath || got.BaseRef != baseCommit || got.HeadRef != "" {
+		t.Fatalf("ResolveSessionDiffSource() = %#v, %v", got, ok)
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	relativeWorktreePath, err := filepath.Rel(cwd, worktreePath)
+	if err != nil {
+		t.Fatalf("make relative worktree path: %v", err)
+	}
+	got, ok, err = New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       relativeWorktreePath,
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource(relative) error = %v", err)
+	}
+	if !ok || got.WorktreePath != relativeWorktreePath || got.BaseRef != baseCommit || got.HeadRef != "" {
+		t.Fatalf("ResolveSessionDiffSource(relative) = %#v, %v", got, ok)
+	}
+}
+
+func TestResolveSessionDiffSourceUsesMergedRangeWhenWorktreeMissing(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "switch", "-c", "session-1")
+	writeFile(t, repo, "session.txt", "session\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "session change")
+	runGit(t, repo, "switch", "main")
+	writeFile(t, repo, "main-only.txt", "main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "main change")
+	firstParent := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+	mergeCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "branch", "-D", "session-1")
+
+	client := New("")
+	got, ok, err := client.ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       filepath.Join(repo, "missing-worktree"),
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if !ok || got.WorktreePath != repo || got.BaseRef != firstParent || got.HeadRef != mergeCommit {
+		t.Fatalf("ResolveSessionDiffSource() = %#v, %v", got, ok)
+	}
+	files, err := client.ChangedFiles(ctx, got)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if findFile(files, "session.txt").Path == "" || findFile(files, "main-only.txt").Path != "" {
+		t.Fatalf("ChangedFiles() = %#v", files)
+	}
+}
+
+func TestResolveSessionDiffSourceUsesMergeLogWhenPathExistsButIsNotAWorktree(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "switch", "-c", "session-1")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "session change")
+	runGit(t, repo, "switch", "main")
+	firstParent := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+	mergeCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "branch", "-D", "session-1")
+	staleDirectory := filepath.Join(repo, "stale-worktree")
+	if err := os.Mkdir(staleDirectory, 0o755); err != nil {
+		t.Fatalf("create stale worktree path: %v", err)
+	}
+	staleFile := filepath.Join(repo, "stale-worktree-file")
+	if err := os.WriteFile(staleFile, []byte("not a worktree\n"), 0o644); err != nil {
+		t.Fatalf("create stale worktree file: %v", err)
+	}
+
+	for name, stalePath := range map[string]string{"directory": staleDirectory, "file": staleFile} {
+		t.Run(name, func(t *testing.T) {
+			got, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+				ProjectPath:        repo,
+				WorktreePath:       stalePath,
+				BaseBranch:         "main",
+				WorktreeBranch:     "session-1",
+				WorktreeBaseCommit: baseCommit,
+			})
+			if err != nil {
+				t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+			}
+			if !ok || got.WorktreePath != repo || got.BaseRef != firstParent || got.HeadRef != mergeCommit {
+				t.Fatalf("ResolveSessionDiffSource() = %#v, %v", got, ok)
+			}
+		})
+	}
+}
+
+func TestResolveSessionDiffSourceUsesMergeLogWhenRegisteredWorktreeIsBroken(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	worktreePath := filepath.Join(t.TempDir(), "session-worktree")
+	runGit(t, repo, "worktree", "add", "-b", "session-1", worktreePath, "main")
+	runGit(t, worktreePath, "commit", "--allow-empty", "-m", "session change")
+	firstParent := gitOutput(t, repo, "rev-parse", "main")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+	mergeCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	if err := os.Remove(filepath.Join(worktreePath, ".git")); err != nil {
+		t.Fatalf("remove linked worktree git file: %v", err)
+	}
+
+	got, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       worktreePath,
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if !ok || got.WorktreePath != repo || got.BaseRef != firstParent || got.HeadRef != mergeCommit {
+		t.Fatalf("ResolveSessionDiffSource() = %#v, %v", got, ok)
+	}
+}
+
+func TestResolveSessionDiffSourceRejectsMissingBaseCommitInvariant(t *testing.T) {
+	repo := initRepo(t)
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+
+	_, _, err := New("").ResolveSessionDiffSource(context.Background(), gitdiff.ResolveSessionDiffInput{
+		ProjectPath:    repo,
+		WorktreePath:   filepath.Join(repo, "missing-worktree"),
+		BaseBranch:     "main",
+		WorktreeBranch: "session-1",
+	})
+	if !errors.Is(err, gitdiff.ErrSessionDiffInvariant) {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+}
+
+func TestResolveSessionDiffSourceRejectsUnrelatedMerge(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "switch", "-c", "other")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "other")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "merge", "--no-ff", "other")
+
+	_, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       filepath.Join(repo, "missing-worktree"),
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if ok {
+		t.Fatal("ResolveSessionDiffSource() unexpectedly found unrelated merge")
+	}
+}
+
+func TestResolveSessionDiffSourceRejectsAmbiguousMerge(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "switch", "-c", "session-1")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "first")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+	runGit(t, repo, "switch", "session-1")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "second")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+
+	_, _, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       filepath.Join(repo, "missing-worktree"),
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if !errors.Is(err, gitdiff.ErrAmbiguousSessionMerge) {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+}
+
+func TestResolveSessionDiffSourceRejectsCustomMergeSubject(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "switch", "-c", "session-1")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "session change")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "merge", "--no-ff", "-m", "merge session manually", "session-1")
+
+	_, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       filepath.Join(repo, "missing-worktree"),
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if ok {
+		t.Fatal("ResolveSessionDiffSource() unexpectedly accepted custom merge subject")
+	}
+}
+
+func TestResolveSessionDiffSourceRejectsCutoutOutsideSecondParent(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+	runGit(t, repo, "switch", "-c", "session-1")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "session change")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "main-only cutout")
+	unrelatedCutout := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+
+	_, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       filepath.Join(repo, "missing-worktree"),
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: unrelatedCutout,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if ok {
+		t.Fatal("ResolveSessionDiffSource() unexpectedly accepted unrelated cutout commit")
+	}
+}
+
+func TestResolveSessionDiffSourceRejectsOctopusMerge(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	runGit(t, repo, "switch", "-c", "session-1")
+	writeFile(t, repo, "session.txt", "session\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "session change")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "switch", "-c", "other")
+	writeFile(t, repo, "other.txt", "other\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "other change")
+	runGit(t, repo, "switch", "main")
+	runGit(t, repo, "merge", "--no-ff", "session-1", "other")
+	runGit(t, repo, "commit", "--amend", "-m", "Merge branch 'session-1'")
+
+	_, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       filepath.Join(repo, "missing-worktree"),
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if ok {
+		t.Fatal("ResolveSessionDiffSource() unexpectedly accepted octopus merge")
+	}
+}
 
 func TestChangedFilesAndFileDiff(t *testing.T) {
 	ctx := context.Background()

@@ -231,7 +231,6 @@ var (
 		{Name: "base_branch", Type: field.TypeString, Default: ""},
 		{Name: "worktree_path", Type: field.TypeString, Default: ""},
 		{Name: "worktree_base_commit", Type: field.TypeString, Default: ""},
-		{Name: "worktree_head_commit", Type: field.TypeString, Default: ""},
 		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
 		{Name: "codex_model", Type: field.TypeString, Default: ""},
 		{Name: "reasoning_effort", Type: field.TypeString, Default: ""},
@@ -263,12 +262,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[25]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[24]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[23]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[22]},
 			},
 			{
 				Name:    "session_status",
@@ -278,7 +277,7 @@ var (
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[18], SessionsColumns[5], SessionsColumns[16]},
+				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[17], SessionsColumns[5], SessionsColumns[15]},
 			},
 		},
 	}

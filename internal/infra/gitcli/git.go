@@ -15,7 +15,6 @@ import (
 )
 
 const defaultGitBin = "git"
-const emptyTreeCommit = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 type Client struct {
 	gitBin  string
@@ -151,63 +150,6 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 	return strings.TrimSpace(out), nil
 }
 
-func (c *Client) SnapshotCommit(ctx context.Context, path string, branch string) (string, error) {
-	branch = strings.TrimSpace(branch)
-	if _, err := c.run(ctx, path, "add", "-A", "--"); err != nil {
-		return "", err
-	}
-	if _, err := c.run(ctx, path,
-		"-c", "user.name=AnyCode",
-		"-c", "user.email=anycode@localhost",
-		"commit", "--allow-empty", "--no-verify", "-m", "anycode session diff snapshot",
-	); err != nil {
-		return "", err
-	}
-	commit, err := c.HeadCommit(ctx, path, "")
-	if err != nil {
-		return "", err
-	}
-	refName := snapshotRefName(branch)
-	if _, err := c.run(ctx, path, "update-ref", refName, commit); err != nil {
-		return "", err
-	}
-	return commit, nil
-}
-
-func snapshotRefName(branch string) string {
-	branch = sanitizeRefPath(branch)
-	if branch == "" {
-		branch = "snapshot"
-	}
-	return "refs/anycode/session-snapshots/" + branch
-}
-
-func sanitizeRefPath(value string) string {
-	value = strings.TrimSpace(value)
-	var builder strings.Builder
-	lastSlash := false
-	for _, r := range value {
-		valid := r >= 'a' && r <= 'z' ||
-			r >= 'A' && r <= 'Z' ||
-			r >= '0' && r <= '9' ||
-			r == '-' || r == '_' || r == '.' || r == '/'
-		if !valid {
-			r = '-'
-		}
-		if r == '/' {
-			if builder.Len() == 0 || lastSlash {
-				continue
-			}
-			lastSlash = true
-			builder.WriteRune(r)
-			continue
-		}
-		lastSlash = false
-		builder.WriteRune(r)
-	}
-	return strings.Trim(builder.String(), "./")
-}
-
 func (c *Client) Exists(_ context.Context, path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -217,25 +159,6 @@ func (c *Client) Exists(_ context.Context, path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
-}
-
-func (c *Client) MergeBase(ctx context.Context, worktreePath string, baseRef string) (string, error) {
-	baseRef = strings.TrimSpace(baseRef)
-	if baseRef == "" {
-		baseRef = "HEAD"
-	}
-	hasCommits, err := c.hasCommits(ctx, worktreePath)
-	if err != nil {
-		return "", err
-	}
-	if !hasCommits {
-		return emptyTreeCommit, nil
-	}
-	out, err := c.run(ctx, worktreePath, "merge-base", baseRef, "HEAD")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
 }
 
 func (c *Client) CurrentBranch(ctx context.Context, path string) (string, error) {
@@ -319,10 +242,13 @@ func (c *Client) Remove(ctx context.Context, path string) error {
 		return err
 	}
 	if _, err := c.run(ctx, path, "worktree", "remove", "--force", path); err != nil {
+		if ctx.Err() != nil {
+			return err
+		}
 		if removeErr := os.RemoveAll(path); removeErr != nil {
 			return fmt.Errorf("%w; remove path: %v", err, removeErr)
 		}
-		return err
+		return nil
 	}
 	return nil
 }
@@ -333,20 +259,15 @@ func (c *Client) DeleteBranch(ctx context.Context, projectPath string, branch st
 		return nil
 	}
 	_, _ = c.run(ctx, projectPath, "worktree", "prune")
-	branches, err := c.Branches(ctx, projectPath)
+	out, err := c.run(ctx, projectPath, "branch", "--list", "--format=%(refname:short)", branch)
 	if err != nil {
 		return err
 	}
-	for _, item := range branches {
-		if item.Name != branch {
-			continue
-		}
-		if _, err := c.run(ctx, projectPath, "branch", "-D", branch); err != nil {
-			return err
-		}
+	if strings.TrimSpace(out) == "" {
 		return nil
 	}
-	return nil
+	_, err = c.run(ctx, projectPath, "branch", "-D", branch)
+	return err
 }
 
 func (c *Client) run(ctx context.Context, path string, args ...string) (string, error) {

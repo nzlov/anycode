@@ -37,8 +37,6 @@ type Session struct {
 	WorktreePath string `json:"worktree_path,omitempty"`
 	// WorktreeBaseCommit holds the value of the "worktree_base_commit" field.
 	WorktreeBaseCommit string `json:"worktree_base_commit,omitempty"`
-	// WorktreeHeadCommit holds the value of the "worktree_head_commit" field.
-	WorktreeHeadCommit string `json:"worktree_head_commit,omitempty"`
 	// CodexSessionID holds the value of the "codex_session_id" field.
 	CodexSessionID string `json:"codex_session_id,omitempty"`
 	// CodexModel holds the value of the "codex_model" field.
@@ -81,7 +79,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case entsession.FieldTodoList:
 			values[i] = new([]byte)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -160,12 +158,6 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field worktree_base_commit", values[i])
 			} else if value.Valid {
 				_m.WorktreeBaseCommit = value.String
-			}
-		case entsession.FieldWorktreeHeadCommit:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field worktree_head_commit", values[i])
-			} else if value.Valid {
-				_m.WorktreeHeadCommit = value.String
 			}
 		case entsession.FieldCodexSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -332,9 +324,6 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("worktree_base_commit=")
 	builder.WriteString(_m.WorktreeBaseCommit)
-	builder.WriteString(", ")
-	builder.WriteString("worktree_head_commit=")
-	builder.WriteString(_m.WorktreeHeadCommit)
 	builder.WriteString(", ")
 	builder.WriteString("codex_session_id=")
 	builder.WriteString(_m.CodexSessionID)

@@ -1,6 +1,14 @@
 package gitdiff
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var (
+	ErrAmbiguousSessionMerge = errors.New("ambiguous session merge")
+	ErrSessionDiffInvariant  = errors.New("session diff invariant violation")
+)
 
 type SessionID string
 type ProjectID string
@@ -89,6 +97,14 @@ type DiffInput struct {
 	HeadRef      string
 }
 
+type ResolveSessionDiffInput struct {
+	ProjectPath        string
+	WorktreePath       string
+	BaseBranch         string
+	WorktreeBranch     string
+	WorktreeBaseCommit string
+}
+
 type FileDiffInput struct {
 	DiffInput
 	FilePath      string
@@ -125,6 +141,7 @@ type MergePort interface {
 
 type DiffPort interface {
 	CurrentBranch(ctx context.Context, path string) (string, error)
+	ResolveSessionDiffSource(ctx context.Context, input ResolveSessionDiffInput) (DiffInput, bool, error)
 	ChangedFiles(ctx context.Context, input DiffInput) ([]DiffFile, error)
 	FileDiff(ctx context.Context, input FileDiffInput) (FileDiff, error)
 	RangeDiff(ctx context.Context, input RangeDiffInput) (SessionDiff, error)
