@@ -274,6 +274,196 @@ func TestCreateSessionStoresWorktreeBaseCommit(t *testing.T) {
 	}
 }
 
+func TestCreateSessionRunsWorktreeInitBeforeArchivingAttachments(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{ID: "staged-1", Filename: "note.txt"}
+	projects := newFakeProjectRepository()
+	command := "  echo first\necho second\n"
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                  "project-1",
+		Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit:               true,
+		WorktreeInitCommand: command,
+	}
+	files := newFakeAttachmentStore()
+	initializer := &fakeWorktreeInitializer{
+		result: domain.WorktreeInitResult{Success: true},
+		onRun: func() {
+			if _, ok := repo.stagedAttachments["staged-1"]; !ok {
+				t.Fatal("worktree init ran after staged attachment metadata was deleted")
+			}
+			if files.promoted["staged-1"] {
+				t.Fatal("worktree init ran after attachment promotion")
+			}
+		},
+	}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base"}
+	service := New(repo, projects, WithAttachments(repo, files), WithWorktrees(worktrees), WithWorktreeInitializer(initializer))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:           "project-1",
+		Requirement:         "use attachment",
+		BaseBranch:          "main",
+		StagedAttachmentIDs: []domain.StagedAttachmentID{"staged-1"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if !initializer.called || initializer.worktreePath != worktrees.path || initializer.script != command {
+		t.Fatalf("worktree initializer call = called:%t path:%q script:%q", initializer.called, initializer.worktreePath, initializer.script)
+	}
+	if !files.promoted["staged-1"] || got.Status != domain.StatusQueued {
+		t.Fatalf("CreateSession() result = promoted:%t session:%#v", files.promoted["staged-1"], got)
+	}
+}
+
+func TestCreateSessionRecordsWorktreeInitFailureAndContinues(t *testing.T) {
+	tests := []struct {
+		name   string
+		result domain.WorktreeInitResult
+		err    error
+	}{
+		{name: "nonzero exit", result: domain.WorktreeInitResult{ExitCode: intPointer(7), Output: "setup failed\n"}},
+		{name: "start failure", err: errors.New("start failed")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := newFakeRepository()
+			projects := newFakeProjectRepository()
+			projects.projects["project-1"] = projectdomain.Project{
+				ID:                  "project-1",
+				Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+				IsGit:               true,
+				WorktreeInitCommand: "./setup.sh",
+			}
+			worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base"}
+			initializer := &fakeWorktreeInitializer{result: tt.result, err: tt.err}
+			events := &fakeEventStore{}
+			service := New(repo, projects, WithWorktrees(worktrees), WithWorktreeInitializer(initializer), WithEvents(events))
+			service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+			ids := []domain.ID{"session-1", "event-init", "event-queued"}
+			service.generateID = func() (domain.ID, error) {
+				id := ids[0]
+				ids = ids[1:]
+				return id, nil
+			}
+
+			got, err := service.CreateSession(ctx, CreateSessionInput{
+				ProjectID:   "project-1",
+				Requirement: "create card",
+				BaseBranch:  "main",
+			})
+			if err != nil {
+				t.Fatalf("CreateSession() error = %v", err)
+			}
+			if got.Status != domain.StatusQueued {
+				t.Fatalf("session status = %q", got.Status)
+			}
+			if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
+				t.Fatalf("worktree was cleaned after init failure: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
+			}
+			event := waitForEventType(t, events, "session.worktree_init_failed")
+			if event.Payload["output"] != tt.result.Output || event.Payload["outputTruncated"] != tt.result.OutputTruncated {
+				t.Fatalf("failure event payload = %#v", event.Payload)
+			}
+			if tt.result.ExitCode != nil && event.Payload["exitCode"] != *tt.result.ExitCode {
+				t.Fatalf("failure event exitCode = %#v", event.Payload["exitCode"])
+			}
+			if tt.err != nil && event.Payload["error"] != tt.err.Error() {
+				t.Fatalf("failure event error = %#v", event.Payload["error"])
+			}
+		})
+	}
+}
+
+func TestCreateSessionContinuesWhenWorktreeInitFailureEventCannotBeRecorded(t *testing.T) {
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                  "project-1",
+		Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit:               true,
+		WorktreeInitCommand: "exit 1",
+	}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1"}
+	events := &fakeEventStore{appendErrs: []error{errors.New("event store failed"), nil}}
+	service := New(repo, projects,
+		WithWorktrees(worktrees),
+		WithWorktreeInitializer(&fakeWorktreeInitializer{result: domain.WorktreeInitResult{ExitCode: intPointer(1)}}),
+		WithEvents(events),
+	)
+	ids := []domain.ID{"session-1", "event-init", "event-queued"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	got, err := service.CreateSession(context.Background(), CreateSessionInput{ProjectID: "project-1", Requirement: "create card", BaseBranch: "main"})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.Status != domain.StatusQueued || len(worktrees.removed) != 0 || repo.sessions["session-1"].Status != domain.StatusQueued {
+		t.Fatalf("worktree/session changed after event persistence failure: removed=%#v session=%#v", worktrees.removed, repo.sessions["session-1"])
+	}
+}
+
+func TestCreateSessionSkipsWorktreeInitForBlankCommandAndNonGitProject(t *testing.T) {
+	tests := []struct {
+		name    string
+		project projectdomain.Project
+		branch  string
+	}{
+		{name: "blank command", project: projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/workspace/project-1"}, IsGit: true, WorktreeInitCommand: " \n\t"}, branch: "main"},
+		{name: "non git", project: projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/workspace/project-1"}, WorktreeInitCommand: "echo should-not-run"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newFakeRepository()
+			projects := newFakeProjectRepository()
+			projects.projects["project-1"] = tt.project
+			worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1"}
+			initializer := &fakeWorktreeInitializer{result: domain.WorktreeInitResult{Success: true}}
+			service := New(repo, projects, WithWorktrees(worktrees), WithWorktreeInitializer(initializer))
+			service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+			if _, err := service.CreateSession(context.Background(), CreateSessionInput{ProjectID: "project-1", Requirement: "create card", BaseBranch: tt.branch}); err != nil {
+				t.Fatalf("CreateSession() error = %v", err)
+			}
+			if initializer.called {
+				t.Fatal("worktree initializer should not be called")
+			}
+		})
+	}
+}
+
+func TestCreateSessionStopsWhenRequestIsCancelledDuringWorktreeInit(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                  "project-1",
+		Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit:               true,
+		WorktreeInitCommand: "sleep 30",
+	}
+	initializer := &fakeWorktreeInitializer{err: context.Canceled, onRun: cancel}
+	service := New(repo, projects, WithWorktrees(&fakeWorktreeManager{path: "/data/worktrees/project-1/session-1"}), WithWorktreeInitializer(initializer))
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+
+	_, err := service.CreateSession(ctx, CreateSessionInput{ProjectID: "project-1", Requirement: "create card", BaseBranch: "main"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("CreateSession() error = %v, want context.Canceled", err)
+	}
+	if repo.sessions["session-1"].Status != domain.StatusCreated {
+		t.Fatalf("session status = %q", repo.sessions["session-1"].Status)
+	}
+}
+
 func TestCreateSessionUsesShortIDForGitWorktreeBranch(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -5836,6 +6026,29 @@ type fakeWorktreeManager struct {
 	missingPaths      map[string]bool
 }
 
+type fakeWorktreeInitializer struct {
+	called       bool
+	worktreePath string
+	script       string
+	result       domain.WorktreeInitResult
+	err          error
+	onRun        func()
+}
+
+func (r *fakeWorktreeInitializer) Run(_ context.Context, worktreePath string, script string) (domain.WorktreeInitResult, error) {
+	r.called = true
+	r.worktreePath = worktreePath
+	r.script = script
+	if r.onRun != nil {
+		r.onRun()
+	}
+	return r.result, r.err
+}
+
+func intPointer(value int) *int {
+	return &value
+}
+
 func newFakeWorktreeManager() *fakeWorktreeManager {
 	return &fakeWorktreeManager{missingPaths: map[string]bool{}}
 }
@@ -6289,8 +6502,9 @@ func (tx fakeTx) Events() eventdomain.Store {
 }
 
 type fakeEventStore struct {
-	mu     sync.Mutex
-	events []eventdomain.DomainEvent
+	mu         sync.Mutex
+	events     []eventdomain.DomainEvent
+	appendErrs []error
 }
 
 type fakeEventPublisher struct {
@@ -6320,6 +6534,13 @@ func (p *fakeEventPublisher) snapshot() []eventdomain.DomainEvent {
 func (s *fakeEventStore) Append(_ context.Context, event eventdomain.DomainEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.appendErrs) > 0 {
+		err := s.appendErrs[0]
+		s.appendErrs = s.appendErrs[1:]
+		if err != nil {
+			return err
+		}
+	}
 	s.events = append(s.events, event)
 	return nil
 }

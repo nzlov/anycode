@@ -42,14 +42,15 @@ func mapCodexModelOptions(items []processdomain.CodexModel) []*model.CodexModelO
 
 func mapProject(dto projectapp.DTO) *model.Project {
 	return &model.Project{
-		ID:                string(dto.ID),
-		Name:              dto.Name,
-		Path:              dto.Path,
-		IsGit:             dto.IsGit,
-		DefaultWorkflowID: stringPtr(dto.DefaultWorkflowID),
-		GitState:          mapGitState(dto.GitState),
-		CreatedAt:         dto.CreatedAt,
-		UpdatedAt:         dto.UpdatedAt,
+		ID:                  string(dto.ID),
+		Name:                dto.Name,
+		Path:                dto.Path,
+		IsGit:               dto.IsGit,
+		WorktreeInitCommand: dto.WorktreeInitCommand,
+		DefaultWorkflowID:   stringPtr(dto.DefaultWorkflowID),
+		GitState:            mapGitState(dto.GitState),
+		CreatedAt:           dto.CreatedAt,
+		UpdatedAt:           dto.UpdatedAt,
 	}
 }
 

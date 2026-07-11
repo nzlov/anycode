@@ -9,14 +9,15 @@ type ID string
 type WorkflowDefinitionID string
 
 type Project struct {
-	ID                ID
-	Name              string
-	Path              ProjectPath
-	IsGit             bool
-	DefaultWorkflowID *WorkflowDefinitionID
-	RemovedAt         *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                  ID
+	Name                string
+	Path                ProjectPath
+	IsGit               bool
+	WorktreeInitCommand string
+	DefaultWorkflowID   *WorkflowDefinitionID
+	RemovedAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type ProjectPath struct {

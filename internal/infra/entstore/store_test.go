@@ -30,12 +30,13 @@ func TestProjectRepositoryWithLocalSQLite(t *testing.T) {
 	createdAt := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
 	updatedAt := createdAt.Add(time.Minute)
 	input := project.Project{
-		ID:        project.ID("project-1"),
-		Name:      "AnyCode",
-		Path:      project.ProjectPath{Value: "/workspaces/anycode"},
-		IsGit:     true,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
+		ID:                  project.ID("project-1"),
+		Name:                "AnyCode",
+		Path:                project.ProjectPath{Value: "/workspaces/anycode"},
+		IsGit:               true,
+		WorktreeInitCommand: "echo first\necho second\n",
+		CreatedAt:           createdAt,
+		UpdatedAt:           updatedAt,
 	}
 	if err := repo.Save(ctx, input); err != nil {
 		t.Fatalf("save project: %v", err)
@@ -45,7 +46,7 @@ func TestProjectRepositoryWithLocalSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find project: %v", err)
 	}
-	if found.ID != input.ID || found.Name != input.Name || found.Path.Value != input.Path.Value || !found.IsGit {
+	if found.ID != input.ID || found.Name != input.Name || found.Path.Value != input.Path.Value || !found.IsGit || found.WorktreeInitCommand != input.WorktreeInitCommand {
 		t.Fatalf("found project mismatch: %#v", found)
 	}
 

@@ -6,6 +6,7 @@ export interface ProjectSummary {
   path: string;
   active: boolean;
   isGit: boolean;
+  worktreeInitCommand: string;
   defaultWorkflowId: string;
   openSessions: number;
 }
@@ -36,6 +37,7 @@ interface GraphQLProject {
   name: string;
   path: string;
   isGit: boolean;
+  worktreeInitCommand: string;
   defaultWorkflowId?: string | null;
 }
 
@@ -62,6 +64,7 @@ const projectFields = `
   name
   path
   isGit
+  worktreeInitCommand
   defaultWorkflowId
 `;
 
@@ -160,6 +163,26 @@ export async function removeProject(id: string) {
   return data.removeProject;
 }
 
+export async function updateProjectSettings(input: {
+  projectId: string;
+  worktreeInitCommand: string;
+}) {
+  const data = await graphqlFetch<
+    { updateProjectSettings: GraphQLProject },
+    { input: { projectId: string; worktreeInitCommand: string } }
+  >({
+    query: `
+      mutation UpdateProjectSettings($input: UpdateProjectSettingsInput!) {
+        updateProjectSettings(input: $input) {
+          ${projectFields}
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return normalizeProject(data.updateProjectSettings, false);
+}
+
 function normalizeProjects(projects: GraphQLProject[]) {
   return projects.map((project, index) => normalizeProject(project, index === 0));
 }
@@ -171,6 +194,7 @@ function normalizeProject(project: GraphQLProject, active: boolean): ProjectSumm
     path: project.path,
     active,
     isGit: project.isGit,
+    worktreeInitCommand: project.worktreeInitCommand,
     defaultWorkflowId: project.defaultWorkflowId ?? '',
     openSessions: 0,
   };

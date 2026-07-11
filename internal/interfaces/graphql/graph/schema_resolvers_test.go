@@ -166,6 +166,32 @@ func TestMutationCreateProjectForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestMutationUpdateProjectSettingsForwardsRawCommand(t *testing.T) {
+	command := "  echo first\necho second\n\n"
+	projects := &fakeProjectUseCase{
+		updateSettingsResult: projectapp.DTO{
+			ID:                  "project-1",
+			Name:                "AnyCode",
+			WorktreeInitCommand: command,
+		},
+	}
+	resolver := NewResolver(UseCases{Projects: projects}).Mutation()
+
+	got, err := resolver.UpdateProjectSettings(context.Background(), model.UpdateProjectSettingsInput{
+		ProjectID:           "project-1",
+		WorktreeInitCommand: command,
+	})
+	if err != nil {
+		t.Fatalf("UpdateProjectSettings() error = %v", err)
+	}
+	if projects.updateSettingsInput.ProjectID != "project-1" || projects.updateSettingsInput.WorktreeInitCommand != command {
+		t.Fatalf("UpdateProjectSettings input = %#v", projects.updateSettingsInput)
+	}
+	if got.WorktreeInitCommand != command {
+		t.Fatalf("UpdateProjectSettings() = %#v", got)
+	}
+}
+
 func TestMutationRemoveProjectStopsSessionsAndForwardsUseCase(t *testing.T) {
 	projects := &fakeProjectUseCase{}
 	sessions := &fakeSessionUseCase{}
@@ -880,16 +906,23 @@ type fakeWorkflowUseCase struct {
 
 type fakeProjectUseCase struct {
 	projectapp.UseCase
-	createInput    projectapp.CreateProjectInput
-	createResult   projectapp.DTO
-	removeInput    projectapp.RemoveProjectInput
-	removeCalls    int
-	listResult     []projectapp.DTO
-	listCalls      int
-	gitStateInput  projectapp.ProjectGitStateInput
-	gitStateResult projectdomain.GitState
-	browseInput    projectapp.BrowseDirectoryInput
-	browseResult   projectapp.DirectoryPageDTO
+	createInput          projectapp.CreateProjectInput
+	createResult         projectapp.DTO
+	removeInput          projectapp.RemoveProjectInput
+	removeCalls          int
+	listResult           []projectapp.DTO
+	listCalls            int
+	gitStateInput        projectapp.ProjectGitStateInput
+	gitStateResult       projectdomain.GitState
+	browseInput          projectapp.BrowseDirectoryInput
+	browseResult         projectapp.DirectoryPageDTO
+	updateSettingsInput  projectapp.UpdateProjectSettingsInput
+	updateSettingsResult projectapp.DTO
+}
+
+func (f *fakeProjectUseCase) UpdateProjectSettings(_ context.Context, input projectapp.UpdateProjectSettingsInput) (projectapp.DTO, error) {
+	f.updateSettingsInput = input
+	return f.updateSettingsResult, nil
 }
 
 func (f *fakeProjectUseCase) CreateProject(_ context.Context, input projectapp.CreateProjectInput) (projectapp.DTO, error) {
@@ -940,13 +973,13 @@ func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain
 
 type fakeQuestionUseCase struct {
 	questionapp.UseCase
-	pending                  []questionapp.BatchDTO
-	updateSource             <-chan questionapp.BatchDTO
-	submitResult             questionapp.BatchDTO
-	gotSubmit                questionapp.SubmitBatchInput
-	submitCalls              int
-	gotPendingSessionID      questiondomain.SessionID
-	gotUpdateSessionID       questiondomain.SessionID
+	pending             []questionapp.BatchDTO
+	updateSource        <-chan questionapp.BatchDTO
+	submitResult        questionapp.BatchDTO
+	gotSubmit           questionapp.SubmitBatchInput
+	submitCalls         int
+	gotPendingSessionID questiondomain.SessionID
+	gotUpdateSessionID  questiondomain.SessionID
 }
 
 func (f *fakeQuestionUseCase) SubmitBatch(_ context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {

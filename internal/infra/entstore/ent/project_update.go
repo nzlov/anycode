@@ -70,6 +70,20 @@ func (_u *ProjectUpdate) SetNillableIsGit(v *bool) *ProjectUpdate {
 	return _u
 }
 
+// SetWorktreeInitCommand sets the "worktree_init_command" field.
+func (_u *ProjectUpdate) SetWorktreeInitCommand(v string) *ProjectUpdate {
+	_u.mutation.SetWorktreeInitCommand(v)
+	return _u
+}
+
+// SetNillableWorktreeInitCommand sets the "worktree_init_command" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableWorktreeInitCommand(v *string) *ProjectUpdate {
+	if v != nil {
+		_u.SetWorktreeInitCommand(*v)
+	}
+	return _u
+}
+
 // SetDefaultWorkflowID sets the "default_workflow_id" field.
 func (_u *ProjectUpdate) SetDefaultWorkflowID(v string) *ProjectUpdate {
 	_u.mutation.SetDefaultWorkflowID(v)
@@ -193,6 +207,9 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.IsGit(); ok {
 		_spec.SetField(project.FieldIsGit, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.WorktreeInitCommand(); ok {
+		_spec.SetField(project.FieldWorktreeInitCommand, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)
 	}
@@ -266,6 +283,20 @@ func (_u *ProjectUpdateOne) SetIsGit(v bool) *ProjectUpdateOne {
 func (_u *ProjectUpdateOne) SetNillableIsGit(v *bool) *ProjectUpdateOne {
 	if v != nil {
 		_u.SetIsGit(*v)
+	}
+	return _u
+}
+
+// SetWorktreeInitCommand sets the "worktree_init_command" field.
+func (_u *ProjectUpdateOne) SetWorktreeInitCommand(v string) *ProjectUpdateOne {
+	_u.mutation.SetWorktreeInitCommand(v)
+	return _u
+}
+
+// SetNillableWorktreeInitCommand sets the "worktree_init_command" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableWorktreeInitCommand(v *string) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetWorktreeInitCommand(*v)
 	}
 	return _u
 }
@@ -422,6 +453,9 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.IsGit(); ok {
 		_spec.SetField(project.FieldIsGit, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.WorktreeInitCommand(); ok {
+		_spec.SetField(project.FieldWorktreeInitCommand, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)

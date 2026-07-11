@@ -17,6 +17,7 @@ import (
 type UseCase interface {
 	CreateProject(ctx context.Context, input CreateProjectInput) (DTO, error)
 	BrowseDirectory(ctx context.Context, input BrowseDirectoryInput) (DirectoryPageDTO, error)
+	UpdateProjectSettings(ctx context.Context, input UpdateProjectSettingsInput) (DTO, error)
 	SetDefaultWorkflow(ctx context.Context, input SetDefaultWorkflowInput) (DTO, error)
 	RemoveProject(ctx context.Context, input RemoveProjectInput) error
 	ListProjects(ctx context.Context) ([]DTO, error)
@@ -37,6 +38,11 @@ type SetDefaultWorkflowInput struct {
 	WorkflowID domain.WorkflowDefinitionID
 }
 
+type UpdateProjectSettingsInput struct {
+	ProjectID           domain.ID
+	WorktreeInitCommand string
+}
+
 type RemoveProjectInput struct {
 	ProjectID domain.ID
 }
@@ -47,15 +53,16 @@ type ProjectGitStateInput struct {
 }
 
 type DTO struct {
-	ID                domain.ID
-	Name              string
-	Path              string
-	IsGit             bool
-	DefaultWorkflowID *domain.WorkflowDefinitionID
-	RemovedAt         *time.Time
-	GitState          domain.GitState
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                  domain.ID
+	Name                string
+	Path                string
+	IsGit               bool
+	WorktreeInitCommand string
+	DefaultWorkflowID   *domain.WorkflowDefinitionID
+	RemovedAt           *time.Time
+	GitState            domain.GitState
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type DirectoryPageDTO struct {
@@ -151,6 +158,25 @@ func (s *Service) BrowseDirectory(ctx context.Context, input BrowseDirectoryInpu
 	}, nil
 }
 
+func (s *Service) UpdateProjectSettings(ctx context.Context, input UpdateProjectSettingsInput) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("project usecase: nil service")
+	}
+	if input.ProjectID == "" {
+		return DTO{}, errors.New("project id is required")
+	}
+	project, err := s.repo.Find(ctx, input.ProjectID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find project: %w", err)
+	}
+	project.WorktreeInitCommand = input.WorktreeInitCommand
+	project.UpdatedAt = s.now()
+	if err := s.repo.Save(ctx, project); err != nil {
+		return DTO{}, fmt.Errorf("save project settings: %w", err)
+	}
+	return toDTO(project, s.gitState(ctx, project.Path.Value)), nil
+}
+
 func (s *Service) SetDefaultWorkflow(ctx context.Context, input SetDefaultWorkflowInput) (DTO, error) {
 	if s == nil {
 		return DTO{}, errors.New("project usecase: nil service")
@@ -243,15 +269,16 @@ func (s *Service) cacheGitState(projectID domain.ID, state domain.GitState) {
 
 func toDTO(project domain.Project, gitState domain.GitState) DTO {
 	return DTO{
-		ID:                project.ID,
-		Name:              project.Name,
-		Path:              project.Path.Value,
-		IsGit:             project.IsGit,
-		DefaultWorkflowID: project.DefaultWorkflowID,
-		RemovedAt:         project.RemovedAt,
-		GitState:          gitState,
-		CreatedAt:         project.CreatedAt,
-		UpdatedAt:         project.UpdatedAt,
+		ID:                  project.ID,
+		Name:                project.Name,
+		Path:                project.Path.Value,
+		IsGit:               project.IsGit,
+		WorktreeInitCommand: project.WorktreeInitCommand,
+		DefaultWorkflowID:   project.DefaultWorkflowID,
+		RemovedAt:           project.RemovedAt,
+		GitState:            gitState,
+		CreatedAt:           project.CreatedAt,
+		UpdatedAt:           project.UpdatedAt,
 	}
 }
 
