@@ -19,6 +19,8 @@ const (
 	FieldPath = "path"
 	// FieldIsGit holds the string denoting the is_git field in the database.
 	FieldIsGit = "is_git"
+	// FieldWorktreeInitCommand holds the string denoting the worktree_init_command field in the database.
+	FieldWorktreeInitCommand = "worktree_init_command"
 	// FieldDefaultWorkflowID holds the string denoting the default_workflow_id field in the database.
 	FieldDefaultWorkflowID = "default_workflow_id"
 	// FieldRemovedAt holds the string denoting the removed_at field in the database.
@@ -37,6 +39,7 @@ var Columns = []string{
 	FieldName,
 	FieldPath,
 	FieldIsGit,
+	FieldWorktreeInitCommand,
 	FieldDefaultWorkflowID,
 	FieldRemovedAt,
 	FieldCreatedAt,
@@ -60,6 +63,8 @@ var (
 	PathValidator func(string) error
 	// DefaultIsGit holds the default value on creation for the "is_git" field.
 	DefaultIsGit bool
+	// DefaultWorktreeInitCommand holds the default value on creation for the "worktree_init_command" field.
+	DefaultWorktreeInitCommand string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -89,6 +94,11 @@ func ByPath(opts ...sql.OrderTermOption) OrderOption {
 // ByIsGit orders the results by the is_git field.
 func ByIsGit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsGit, opts...).ToFunc()
+}
+
+// ByWorktreeInitCommand orders the results by the worktree_init_command field.
+func ByWorktreeInitCommand(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeInitCommand, opts...).ToFunc()
 }
 
 // ByDefaultWorkflowID orders the results by the default_workflow_id field.

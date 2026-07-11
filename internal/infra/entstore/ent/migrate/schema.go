@@ -138,6 +138,7 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "path", Type: field.TypeString},
 		{Name: "is_git", Type: field.TypeBool, Default: false},
+		{Name: "worktree_init_command", Type: field.TypeString, Default: ""},
 		{Name: "default_workflow_id", Type: field.TypeString, Nullable: true},
 		{Name: "removed_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},

@@ -146,12 +146,16 @@ func init() {
 	projectDescIsGit := projectFields[3].Descriptor()
 	// project.DefaultIsGit holds the default value on creation for the is_git field.
 	project.DefaultIsGit = projectDescIsGit.Default.(bool)
+	// projectDescWorktreeInitCommand is the schema descriptor for worktree_init_command field.
+	projectDescWorktreeInitCommand := projectFields[4].Descriptor()
+	// project.DefaultWorktreeInitCommand holds the default value on creation for the worktree_init_command field.
+	project.DefaultWorktreeInitCommand = projectDescWorktreeInitCommand.Default.(string)
 	// projectDescCreatedAt is the schema descriptor for created_at field.
-	projectDescCreatedAt := projectFields[6].Descriptor()
+	projectDescCreatedAt := projectFields[7].Descriptor()
 	// project.DefaultCreatedAt holds the default value on creation for the created_at field.
 	project.DefaultCreatedAt = projectDescCreatedAt.Default.(func() time.Time)
 	// projectDescUpdatedAt is the schema descriptor for updated_at field.
-	projectDescUpdatedAt := projectFields[7].Descriptor()
+	projectDescUpdatedAt := projectFields[8].Descriptor()
 	// project.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	project.DefaultUpdatedAt = projectDescUpdatedAt.Default.(func() time.Time)
 	// project.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

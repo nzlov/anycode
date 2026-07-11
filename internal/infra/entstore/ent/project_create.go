@@ -46,6 +46,20 @@ func (_c *ProjectCreate) SetNillableIsGit(v *bool) *ProjectCreate {
 	return _c
 }
 
+// SetWorktreeInitCommand sets the "worktree_init_command" field.
+func (_c *ProjectCreate) SetWorktreeInitCommand(v string) *ProjectCreate {
+	_c.mutation.SetWorktreeInitCommand(v)
+	return _c
+}
+
+// SetNillableWorktreeInitCommand sets the "worktree_init_command" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableWorktreeInitCommand(v *string) *ProjectCreate {
+	if v != nil {
+		_c.SetWorktreeInitCommand(*v)
+	}
+	return _c
+}
+
 // SetDefaultWorkflowID sets the "default_workflow_id" field.
 func (_c *ProjectCreate) SetDefaultWorkflowID(v string) *ProjectCreate {
 	_c.mutation.SetDefaultWorkflowID(v)
@@ -147,6 +161,10 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultIsGit
 		_c.mutation.SetIsGit(v)
 	}
+	if _, ok := _c.mutation.WorktreeInitCommand(); !ok {
+		v := project.DefaultWorktreeInitCommand
+		_c.mutation.SetWorktreeInitCommand(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := project.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -177,6 +195,9 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.IsGit(); !ok {
 		return &ValidationError{Name: "is_git", err: errors.New(`ent: missing required field "Project.is_git"`)}
+	}
+	if _, ok := _c.mutation.WorktreeInitCommand(); !ok {
+		return &ValidationError{Name: "worktree_init_command", err: errors.New(`ent: missing required field "Project.worktree_init_command"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Project.created_at"`)}
@@ -230,6 +251,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IsGit(); ok {
 		_spec.SetField(project.FieldIsGit, field.TypeBool, value)
 		_node.IsGit = value
+	}
+	if value, ok := _c.mutation.WorktreeInitCommand(); ok {
+		_spec.SetField(project.FieldWorktreeInitCommand, field.TypeString, value)
+		_node.WorktreeInitCommand = value
 	}
 	if value, ok := _c.mutation.DefaultWorkflowID(); ok {
 		_spec.SetField(project.FieldDefaultWorkflowID, field.TypeString, value)

@@ -40,6 +40,21 @@ func (r *mutationResolver) CreateProject(ctx context.Context, input model.Create
 	return mapProject(dto), nil
 }
 
+// UpdateProjectSettings is the resolver for the updateProjectSettings field.
+func (r *mutationResolver) UpdateProjectSettings(ctx context.Context, input model.UpdateProjectSettingsInput) (*model.Project, error) {
+	if r.UseCases.Projects == nil {
+		return nil, missingUseCase("projects")
+	}
+	dto, err := r.UseCases.Projects.UpdateProjectSettings(ctx, projectapp.UpdateProjectSettingsInput{
+		ProjectID:           projectdomain.ID(input.ProjectID),
+		WorktreeInitCommand: input.WorktreeInitCommand,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapProject(dto), nil
+}
+
 // RemoveProject is the resolver for the removeProject field.
 func (r *mutationResolver) RemoveProject(ctx context.Context, id string) (bool, error) {
 	if r.UseCases.Projects == nil {
