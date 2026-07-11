@@ -228,10 +228,7 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 		return dto, nil
 	}
 
-	diffInput := gitdiff.DiffInput{
-		WorktreePath: strings.TrimSpace(sess.WorktreePath),
-		BaseRef:      liveWorktreeBaseRef(sess.BaseBranch),
-	}
+	diffInput := liveWorktreeDiffInput(sess)
 	files, err := s.diff.ChangedFiles(ctx, diffInput)
 	if err != nil {
 		return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list changed files failed").WithRetryable(true)
@@ -431,7 +428,7 @@ func (s *Service) branchSessionDiffSources(ctx context.Context, sess session.Ses
 	if worktreePath == "" {
 		return nil, map[string]branchDiffSource{}, nil
 	}
-	diffInput := gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: liveWorktreeBaseRef(sess.BaseBranch)}
+	diffInput := liveWorktreeDiffInput(sess)
 	files, err := s.diff.ChangedFiles(ctx, diffInput)
 	if err != nil {
 		return nil, nil, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list branch session changed files failed").WithRetryable(true)
@@ -456,15 +453,27 @@ func storedWorktreeDiffInput(project projectdomain.Project, sess session.Session
 	}
 }
 
-func liveWorktreeBaseRef(baseBranch string) string {
-	baseRef := strings.TrimSpace(baseBranch)
+func liveWorktreeDiffInput(sess session.Session) gitdiff.DiffInput {
+	baseRef := sessionBaseRef(sess)
+	if strings.TrimSpace(sess.WorktreeBaseCommit) == "" && !strings.Contains(baseRef, "...") {
+		baseRef += "..."
+	}
+	return gitdiff.DiffInput{
+		WorktreePath: strings.TrimSpace(sess.WorktreePath),
+		BaseRef:      baseRef,
+	}
+}
+
+func sessionBaseRef(sess session.Session) string {
+	baseRef := strings.TrimSpace(sess.WorktreeBaseCommit)
+	if baseRef != "" {
+		return baseRef
+	}
+	baseRef = strings.TrimSpace(sess.BaseBranch)
 	if baseRef == "" {
 		baseRef = "HEAD"
 	}
-	if strings.Contains(baseRef, "...") {
-		return baseRef
-	}
-	return baseRef + "..."
+	return baseRef
 }
 
 func prefixBranchDiff(sessionID session.ID, files []gitdiff.DiffFile, hunks []gitdiff.FileDiff, input *gitdiff.DiffInput) ([]gitdiff.DiffFile, map[string]branchDiffSource) {
@@ -563,13 +572,9 @@ func (s *Service) GetCommitHistory(ctx context.Context, input CommitHistoryInput
 		if strings.TrimSpace(sess.WorktreePath) == "" {
 			return dto, nil
 		}
-		baseRef := strings.TrimSpace(sess.BaseBranch)
-		if baseRef == "" {
-			baseRef = "HEAD"
-		}
 		historyInput = gitdiff.CommitHistoryInput{
 			WorktreePath: strings.TrimSpace(sess.WorktreePath),
-			BaseRef:      baseRef,
+			BaseRef:      sessionBaseRef(sess),
 			HeadRef:      "HEAD",
 		}
 	}
