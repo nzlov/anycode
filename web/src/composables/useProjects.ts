@@ -1,6 +1,12 @@
 import { computed, ref } from 'vue';
 
-import { createProject, listProjects, removeProject, type ProjectSummary } from '@/services/projects';
+import {
+  createProject,
+  listProjects,
+  removeProject,
+  updateProjectSettings,
+  type ProjectSummary,
+} from '@/services/projects';
 
 const projects = ref<ProjectSummary[]>([]);
 const loading = ref(false);
@@ -41,6 +47,23 @@ export function useProjects() {
     projects.value = projects.value.filter((project) => project.id !== id);
   }
 
+  async function updateProjectSettingsById(input: {
+    projectId: string;
+    worktreeInitCommand: string;
+  }) {
+    const project = await updateProjectSettings(input);
+    const index = projects.value.findIndex((item) => item.id === project.id);
+    if (index >= 0) {
+      const current = projects.value[index]!;
+      projects.value.splice(index, 1, {
+        ...project,
+        active: current.active,
+        openSessions: current.openSessions,
+      });
+    }
+    return project;
+  }
+
   return {
     projects,
     projectOptions,
@@ -49,6 +72,7 @@ export function useProjects() {
     loadProjects,
     createProjectFromPath,
     removeProjectById,
+    updateProjectSettingsById,
   };
 }
 

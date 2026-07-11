@@ -79,6 +79,11 @@ func IsGit(v bool) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldIsGit, v))
 }
 
+// WorktreeInitCommand applies equality check predicate on the "worktree_init_command" field. It's identical to WorktreeInitCommandEQ.
+func WorktreeInitCommand(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldWorktreeInitCommand, v))
+}
+
 // DefaultWorkflowID applies equality check predicate on the "default_workflow_id" field. It's identical to DefaultWorkflowIDEQ.
 func DefaultWorkflowID(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldDefaultWorkflowID, v))
@@ -237,6 +242,71 @@ func IsGitEQ(v bool) predicate.Project {
 // IsGitNEQ applies the NEQ predicate on the "is_git" field.
 func IsGitNEQ(v bool) predicate.Project {
 	return predicate.Project(sql.FieldNEQ(FieldIsGit, v))
+}
+
+// WorktreeInitCommandEQ applies the EQ predicate on the "worktree_init_command" field.
+func WorktreeInitCommandEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandNEQ applies the NEQ predicate on the "worktree_init_command" field.
+func WorktreeInitCommandNEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandIn applies the In predicate on the "worktree_init_command" field.
+func WorktreeInitCommandIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldWorktreeInitCommand, vs...))
+}
+
+// WorktreeInitCommandNotIn applies the NotIn predicate on the "worktree_init_command" field.
+func WorktreeInitCommandNotIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldWorktreeInitCommand, vs...))
+}
+
+// WorktreeInitCommandGT applies the GT predicate on the "worktree_init_command" field.
+func WorktreeInitCommandGT(v string) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandGTE applies the GTE predicate on the "worktree_init_command" field.
+func WorktreeInitCommandGTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandLT applies the LT predicate on the "worktree_init_command" field.
+func WorktreeInitCommandLT(v string) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandLTE applies the LTE predicate on the "worktree_init_command" field.
+func WorktreeInitCommandLTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandContains applies the Contains predicate on the "worktree_init_command" field.
+func WorktreeInitCommandContains(v string) predicate.Project {
+	return predicate.Project(sql.FieldContains(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandHasPrefix applies the HasPrefix predicate on the "worktree_init_command" field.
+func WorktreeInitCommandHasPrefix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasPrefix(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandHasSuffix applies the HasSuffix predicate on the "worktree_init_command" field.
+func WorktreeInitCommandHasSuffix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasSuffix(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandEqualFold applies the EqualFold predicate on the "worktree_init_command" field.
+func WorktreeInitCommandEqualFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldEqualFold(FieldWorktreeInitCommand, v))
+}
+
+// WorktreeInitCommandContainsFold applies the ContainsFold predicate on the "worktree_init_command" field.
+func WorktreeInitCommandContainsFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldContainsFold(FieldWorktreeInitCommand, v))
 }
 
 // DefaultWorkflowIDEQ applies the EQ predicate on the "default_workflow_id" field.

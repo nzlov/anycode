@@ -116,16 +116,23 @@
               >
                 <q-menu>
                   <q-list dense class="project-menu app-touch-list">
-                    <q-item clickable :to="`/projects/${project.id}/workflow`">
+                    <q-item v-close-popup clickable @click.stop="openProjectSettings(project)">
+                      <q-item-section avatar>
+                        <q-icon name="settings" />
+                      </q-item-section>
+                      <q-item-section>设置</q-item-section>
+                    </q-item>
+                    <q-item v-close-popup clickable :to="`/projects/${project.id}/workflow`">
                       <q-item-section avatar>
                         <q-icon name="account_tree" />
                       </q-item-section>
                       <q-item-section>流程配置</q-item-section>
                     </q-item>
                     <q-item
+                      v-close-popup
                       clickable
                       class="text-negative"
-                      @click="confirmRemoveProject(project.id, project.name)"
+                      @click.stop="confirmRemoveProject(project.id, project.name)"
                     >
                       <q-item-section avatar>
                         <q-icon name="playlist_remove" />
@@ -168,6 +175,7 @@
     />
     <project-directory-dialog v-model="directoryDialogOpen" />
     <GlobalSettingsDialog v-model="settingsDialogOpen" />
+    <project-settings-dialog v-model="projectSettingsOpen" :project="settingsProject" />
 
     <q-dialog v-model="removeProjectDialogOpen">
       <q-card class="confirm-dialog">
@@ -254,15 +262,19 @@ import { useRoute, useRouter } from 'vue-router';
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
 import { getSession } from '@/services/sessions';
+import type { ProjectSummary } from '@/services/projects';
 
 const leftDrawerOpen = ref(false);
 const newSessionOpen = ref(false);
 const directoryDialogOpen = ref(false);
 const settingsDialogOpen = ref(false);
+const projectSettingsOpen = ref(false);
+const settingsProject = ref<ProjectSummary | null>(null);
 const removeProjectDialogOpen = ref(false);
 const removingProjectId = ref('');
 const removingProjectName = ref('');
@@ -339,6 +351,11 @@ function confirmRemoveProject(projectId: string, projectName: string) {
   removingProjectId.value = projectId;
   removingProjectName.value = projectName;
   removeProjectDialogOpen.value = true;
+}
+
+function openProjectSettings(project: ProjectSummary) {
+  settingsProject.value = project;
+  projectSettingsOpen.value = true;
 }
 
 async function removeSelectedProject() {

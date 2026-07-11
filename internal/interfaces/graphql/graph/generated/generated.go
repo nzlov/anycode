@@ -165,6 +165,7 @@ type ComplexityRoot struct {
 		StopSession                func(childComplexity int, id string) int
 		SubmitQuestionBatch        func(childComplexity int, input model.SubmitQuestionBatchInput) int
 		SubmitWorkflowApproval     func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
+		UpdateProjectSettings      func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdateSessionConfig        func(childComplexity int, input model.UpdateSessionConfigInput) int
 	}
 
@@ -176,14 +177,15 @@ type ComplexityRoot struct {
 	}
 
 	Project struct {
-		CreatedAt         func(childComplexity int) int
-		DefaultWorkflowID func(childComplexity int) int
-		GitState          func(childComplexity int) int
-		ID                func(childComplexity int) int
-		IsGit             func(childComplexity int) int
-		Name              func(childComplexity int) int
-		Path              func(childComplexity int) int
-		UpdatedAt         func(childComplexity int) int
+		CreatedAt           func(childComplexity int) int
+		DefaultWorkflowID   func(childComplexity int) int
+		GitState            func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		IsGit               func(childComplexity int) int
+		Name                func(childComplexity int) int
+		Path                func(childComplexity int) int
+		UpdatedAt           func(childComplexity int) int
+		WorktreeInitCommand func(childComplexity int) int
 	}
 
 	PromptAppend struct {
@@ -462,6 +464,7 @@ type MutationResolver interface {
 	CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error)
 	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
+	UpdateProjectSettings(ctx context.Context, input model.UpdateProjectSettingsInput) (*model.Project, error)
 	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
@@ -1084,6 +1087,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SubmitWorkflowApproval(childComplexity, args["input"].(model.SubmitWorkflowApprovalInput)), true
+	case "Mutation.updateProjectSettings":
+		if e.ComplexityRoot.Mutation.UpdateProjectSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateProjectSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateProjectSettings(childComplexity, args["input"].(model.UpdateProjectSettingsInput)), true
 	case "Mutation.updateSessionConfig":
 		if e.ComplexityRoot.Mutation.UpdateSessionConfig == nil {
 			break
@@ -1169,6 +1183,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Project.UpdatedAt(childComplexity), true
+	case "Project.worktreeInitCommand":
+		if e.ComplexityRoot.Project.WorktreeInitCommand == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Project.WorktreeInitCommand(childComplexity), true
 
 	case "PromptAppend.attachments":
 		if e.ComplexityRoot.PromptAppend.Attachments == nil {
@@ -2375,6 +2395,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputSubmitQuestionBatchInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
+		ec.unmarshalInputUpdateProjectSettingsInput,
 		ec.unmarshalInputUpdateSessionConfigInput,
 		ec.unmarshalInputWorkflowConditionInput,
 		ec.unmarshalInputWorkflowEdgeInput,
@@ -2501,6 +2522,7 @@ type Mutation {
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
+  updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
@@ -2558,6 +2580,7 @@ type Project {
   name: String!
   path: String!
   isGit: Boolean!
+  worktreeInitCommand: String!
   defaultWorkflowId: ID
   gitState: GitState!
   createdAt: Time!
@@ -2916,6 +2939,11 @@ input BrowseDirectoryInput {
 input CreateProjectInput {
   path: String!
   name: String!
+}
+
+input UpdateProjectSettingsInput {
+  projectId: ID!
+  worktreeInitCommand: String!
 }
 
 input SetDefaultWorkflowInput {
@@ -3306,6 +3334,17 @@ func (ec *executionContext) field_Mutation_submitWorkflowApproval_args(ctx conte
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSubmitWorkflowApprovalInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSubmitWorkflowApprovalInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateProjectSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -5435,6 +5474,8 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 				return ec.fieldContext_Project_path(ctx, field)
 			case "isGit":
 				return ec.fieldContext_Project_isGit(ctx, field)
+			case "worktreeInitCommand":
+				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -5455,6 +5496,67 @@ func (ec *executionContext) fieldContext_Mutation_createProject(ctx context.Cont
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createProject_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateProjectSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateProjectSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateProjectSettings(ctx, fc.Args["input"].(model.UpdateProjectSettingsInput))
+		},
+		nil,
+		ec.marshalNProject2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐProject,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateProjectSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "path":
+				return ec.fieldContext_Project_path(ctx, field)
+			case "isGit":
+				return ec.fieldContext_Project_isGit(ctx, field)
+			case "worktreeInitCommand":
+				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
+			case "defaultWorkflowId":
+				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
+			case "gitState":
+				return ec.fieldContext_Project_gitState(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Project_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Project_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateProjectSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -5535,6 +5637,8 @@ func (ec *executionContext) fieldContext_Mutation_setDefaultWorkflow(ctx context
 				return ec.fieldContext_Project_path(ctx, field)
 			case "isGit":
 				return ec.fieldContext_Project_isGit(ctx, field)
+			case "worktreeInitCommand":
+				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -6692,6 +6796,35 @@ func (ec *executionContext) fieldContext_Project_isGit(_ context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Project_worktreeInitCommand(ctx context.Context, field graphql.CollectedField, obj *model.Project) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Project_worktreeInitCommand,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreeInitCommand, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Project_worktreeInitCommand(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Project",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Project_defaultWorkflowId(ctx context.Context, field graphql.CollectedField, obj *model.Project) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7101,6 +7234,8 @@ func (ec *executionContext) fieldContext_Query_projects(_ context.Context, field
 				return ec.fieldContext_Project_path(ctx, field)
 			case "isGit":
 				return ec.fieldContext_Project_isGit(ctx, field)
+			case "worktreeInitCommand":
+				return ec.fieldContext_Project_worktreeInitCommand(ctx, field)
 			case "defaultWorkflowId":
 				return ec.fieldContext_Project_defaultWorkflowId(ctx, field)
 			case "gitState":
@@ -15392,6 +15527,43 @@ func (ec *executionContext) unmarshalInputSubmitWorkflowApprovalInput(ctx contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateProjectSettingsInput(ctx context.Context, obj any) (model.UpdateProjectSettingsInput, error) {
+	var it model.UpdateProjectSettingsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "worktreeInitCommand"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "worktreeInitCommand":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("worktreeInitCommand"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.WorktreeInitCommand = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateSessionConfigInput(ctx context.Context, obj any) (model.UpdateSessionConfigInput, error) {
 	var it model.UpdateSessionConfigInput
 	if obj == nil {
@@ -16671,6 +16843,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updateProjectSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateProjectSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "removeProject":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_removeProject(ctx, field)
@@ -16895,6 +17074,11 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "isGit":
 			out.Values[i] = ec._Project_isGit(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "worktreeInitCommand":
+			out.Values[i] = ec._Project_worktreeInitCommand(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -20415,6 +20599,11 @@ func (ec *executionContext) marshalNTodoItem2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._TodoItem(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput(ctx context.Context, v any) (model.UpdateProjectSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdateProjectSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNUpdateSessionConfigInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateSessionConfigInput(ctx context.Context, v any) (model.UpdateSessionConfigInput, error) {

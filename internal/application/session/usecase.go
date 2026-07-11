@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -179,6 +180,7 @@ type Service struct {
 	attachments         domain.AttachmentRepository
 	files               domain.AttachmentStore
 	worktrees           domain.WorktreeManager
+	worktreeInitializer domain.WorktreeInitializer
 	workflows           domain.WorkflowStarter
 	merge               gitdiffdomain.MergePort
 	processes           processdomain.Repository
@@ -212,6 +214,12 @@ func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentSt
 func WithWorktrees(worktrees domain.WorktreeManager) Option {
 	return func(s *Service) {
 		s.worktrees = worktrees
+	}
+}
+
+func WithWorktreeInitializer(initializer domain.WorktreeInitializer) Option {
+	return func(s *Service) {
+		s.worktreeInitializer = initializer
 	}
 }
 
@@ -519,6 +527,11 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			}
 		}
 	}
+	if project.IsGit && strings.TrimSpace(project.WorktreeInitCommand) != "" {
+		if err := s.initializeWorktree(ctx, session, project.WorktreeInitCommand); err != nil {
+			return DTO{}, err
+		}
+	}
 	if _, err := s.archiveStagedAttachments(ctx, id, domain.AttachmentSourceRequirement, string(id), stagedAttachments); err != nil {
 		failedAt := s.now()
 		session.Status = domain.StatusFailed
@@ -548,6 +561,51 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return dto, nil
 	}
 	return s.enqueueCodex(ctx, session, codexStartOptions{}, queuePriorityForSession(session))
+}
+
+func (s *Service) initializeWorktree(ctx context.Context, session domain.Session, script string) error {
+	var result domain.WorktreeInitResult
+	var runErr error
+	if s.worktreeInitializer == nil {
+		runErr = errors.New("session worktree initializer is required")
+	} else {
+		result, runErr = s.worktreeInitializer.Run(ctx, session.WorktreePath, script)
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	if runErr == nil && result.Success {
+		return nil
+	}
+
+	var exitCode any
+	if result.ExitCode != nil {
+		exitCode = *result.ExitCode
+	}
+	payload := map[string]any{
+		"exitCode":        exitCode,
+		"output":          result.Output,
+		"outputTruncated": result.OutputTruncated,
+	}
+	if runErr != nil {
+		payload["error"] = runErr.Error()
+	}
+	if err := s.recordSessionEvent(ctx, session, "session.worktree_init_failed", payload); err != nil {
+		log.Printf("record worktree init failure event: project=%s session=%s error=%v", session.ProjectID, session.ID, err)
+	}
+	return nil
+}
+
+func (s *Service) recordSessionEvent(ctx context.Context, session domain.Session, eventType string, payload map[string]any) error {
+	event, ok, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil || !ok {
+		return err
+	}
+	if err := s.events.Append(ctx, event); err != nil {
+		return err
+	}
+	s.publishSessionEvent(ctx, event)
+	return nil
 }
 
 func (s *Service) cleanupCreatedWorktree(ctx context.Context, projectPath string, worktreePath string, sessionID domain.ID) error {

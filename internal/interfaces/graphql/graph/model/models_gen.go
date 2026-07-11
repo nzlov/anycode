@@ -200,14 +200,15 @@ type PageInfo struct {
 }
 
 type Project struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	Path              string    `json:"path"`
-	IsGit             bool      `json:"isGit"`
-	DefaultWorkflowID *string   `json:"defaultWorkflowId,omitempty"`
-	GitState          *GitState `json:"gitState"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	ID                  string    `json:"id"`
+	Name                string    `json:"name"`
+	Path                string    `json:"path"`
+	IsGit               bool      `json:"isGit"`
+	WorktreeInitCommand string    `json:"worktreeInitCommand"`
+	DefaultWorkflowID   *string   `json:"defaultWorkflowId,omitempty"`
+	GitState            *GitState `json:"gitState"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 type PromptAppend struct {
@@ -460,6 +461,11 @@ type TodoList struct {
 	Completed int         `json:"completed"`
 	Total     int         `json:"total"`
 	Items     []*TodoItem `json:"items"`
+}
+
+type UpdateProjectSettingsInput struct {
+	ProjectID           string `json:"projectId"`
+	WorktreeInitCommand string `json:"worktreeInitCommand"`
 }
 
 type UpdateSessionConfigInput struct {

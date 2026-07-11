@@ -25,6 +25,7 @@ type Mutation {
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
+  updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
@@ -82,6 +83,7 @@ type Project {
   name: String!
   path: String!
   isGit: Boolean!
+  worktreeInitCommand: String!
   defaultWorkflowId: ID
   gitState: GitState!
   createdAt: Time!
@@ -440,6 +442,11 @@ input BrowseDirectoryInput {
 input CreateProjectInput {
   path: String!
   name: String!
+}
+
+input UpdateProjectSettingsInput {
+  projectId: ID!
+  worktreeInitCommand: String!
 }
 
 input SetDefaultWorkflowInput {

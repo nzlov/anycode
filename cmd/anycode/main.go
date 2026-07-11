@@ -31,6 +31,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/gitcli"
 	"github.com/nzlov/anycode/internal/infra/gitdiffcli"
 	"github.com/nzlov/anycode/internal/infra/mcpstdio"
+	"github.com/nzlov/anycode/internal/infra/shellinit"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
 	httpinterface "github.com/nzlov/anycode/internal/interfaces/http"
 )
@@ -126,7 +127,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	questionService := questionapp.New(store.Questions(), questionWaiter)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
 	return graph.UseCases{
 		Projects:    projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
 		Sessions:    sessionService,

@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -236,6 +237,59 @@ func TestSetDefaultWorkflowUpdatesAndReturnsProject(t *testing.T) {
 	}
 	if got.GitState.CurrentBranch != "dev" {
 		t.Fatalf("GitState = %#v", got.GitState)
+	}
+}
+
+func TestUpdateProjectSettingsPreservesRawWorktreeInitCommand(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.projects = []domain.Project{
+		{ID: "project-1", Name: "AnyCode", Path: domain.ProjectPath{Value: "/repo"}, IsGit: true, UpdatedAt: time.Unix(1, 0).UTC()},
+	}
+	repo.reindex()
+	service := New(repo, nil, &fakeGitInspector{states: map[string]domain.GitState{"/repo": {IsRepository: true}}})
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	command := "  echo first\nprintf 'second\\n'\n\n"
+
+	got, err := service.UpdateProjectSettings(ctx, UpdateProjectSettingsInput{
+		ProjectID:           "project-1",
+		WorktreeInitCommand: command,
+	})
+	if err != nil {
+		t.Fatalf("UpdateProjectSettings() error = %v", err)
+	}
+	if got.WorktreeInitCommand != command {
+		t.Fatalf("WorktreeInitCommand = %q, want %q", got.WorktreeInitCommand, command)
+	}
+	saved := repo.byID["project-1"]
+	if saved.WorktreeInitCommand != command || !saved.UpdatedAt.Equal(time.Unix(10, 0).UTC()) {
+		t.Fatalf("saved project = %#v", saved)
+	}
+}
+
+func TestUpdateProjectSettingsSavesBlankAndClearedCommands(t *testing.T) {
+	for _, command := range []string{" \n\t", ""} {
+		t.Run(fmt.Sprintf("command_%q", command), func(t *testing.T) {
+			repo := newFakeRepository()
+			repo.projects = []domain.Project{{
+				ID:                  "project-1",
+				Path:                domain.ProjectPath{Value: "/repo"},
+				WorktreeInitCommand: "old command",
+			}}
+			repo.reindex()
+			service := New(repo, nil, &fakeGitInspector{states: map[string]domain.GitState{"/repo": {}}})
+
+			got, err := service.UpdateProjectSettings(context.Background(), UpdateProjectSettingsInput{
+				ProjectID:           "project-1",
+				WorktreeInitCommand: command,
+			})
+			if err != nil {
+				t.Fatalf("UpdateProjectSettings() error = %v", err)
+			}
+			if got.WorktreeInitCommand != command || repo.byID["project-1"].WorktreeInitCommand != command {
+				t.Fatalf("saved command = DTO:%q repository:%q", got.WorktreeInitCommand, repo.byID["project-1"].WorktreeInitCommand)
+			}
+		})
 	}
 }
 

@@ -3439,20 +3439,21 @@ func (m *ProcessRunMutation) ResetEdge(name string) error {
 // ProjectMutation represents an operation that mutates the Project nodes in the graph.
 type ProjectMutation struct {
 	config
-	op                  Op
-	typ                 string
-	id                  *string
-	name                *string
-	_path               *string
-	is_git              *bool
-	default_workflow_id *string
-	removed_at          *time.Time
-	created_at          *time.Time
-	updated_at          *time.Time
-	clearedFields       map[string]struct{}
-	done                bool
-	oldValue            func(context.Context) (*Project, error)
-	predicates          []predicate.Project
+	op                    Op
+	typ                   string
+	id                    *string
+	name                  *string
+	_path                 *string
+	is_git                *bool
+	worktree_init_command *string
+	default_workflow_id   *string
+	removed_at            *time.Time
+	created_at            *time.Time
+	updated_at            *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*Project, error)
+	predicates            []predicate.Project
 }
 
 var _ ent.Mutation = (*ProjectMutation)(nil)
@@ -3667,6 +3668,42 @@ func (m *ProjectMutation) ResetIsGit() {
 	m.is_git = nil
 }
 
+// SetWorktreeInitCommand sets the "worktree_init_command" field.
+func (m *ProjectMutation) SetWorktreeInitCommand(s string) {
+	m.worktree_init_command = &s
+}
+
+// WorktreeInitCommand returns the value of the "worktree_init_command" field in the mutation.
+func (m *ProjectMutation) WorktreeInitCommand() (r string, exists bool) {
+	v := m.worktree_init_command
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeInitCommand returns the old "worktree_init_command" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldWorktreeInitCommand(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeInitCommand is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeInitCommand requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeInitCommand: %w", err)
+	}
+	return oldValue.WorktreeInitCommand, nil
+}
+
+// ResetWorktreeInitCommand resets all changes to the "worktree_init_command" field.
+func (m *ProjectMutation) ResetWorktreeInitCommand() {
+	m.worktree_init_command = nil
+}
+
 // SetDefaultWorkflowID sets the "default_workflow_id" field.
 func (m *ProjectMutation) SetDefaultWorkflowID(s string) {
 	m.default_workflow_id = &s
@@ -3871,7 +3908,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.name != nil {
 		fields = append(fields, project.FieldName)
 	}
@@ -3880,6 +3917,9 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.is_git != nil {
 		fields = append(fields, project.FieldIsGit)
+	}
+	if m.worktree_init_command != nil {
+		fields = append(fields, project.FieldWorktreeInitCommand)
 	}
 	if m.default_workflow_id != nil {
 		fields = append(fields, project.FieldDefaultWorkflowID)
@@ -3907,6 +3947,8 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.Path()
 	case project.FieldIsGit:
 		return m.IsGit()
+	case project.FieldWorktreeInitCommand:
+		return m.WorktreeInitCommand()
 	case project.FieldDefaultWorkflowID:
 		return m.DefaultWorkflowID()
 	case project.FieldRemovedAt:
@@ -3930,6 +3972,8 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldPath(ctx)
 	case project.FieldIsGit:
 		return m.OldIsGit(ctx)
+	case project.FieldWorktreeInitCommand:
+		return m.OldWorktreeInitCommand(ctx)
 	case project.FieldDefaultWorkflowID:
 		return m.OldDefaultWorkflowID(ctx)
 	case project.FieldRemovedAt:
@@ -3967,6 +4011,13 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIsGit(v)
+		return nil
+	case project.FieldWorktreeInitCommand:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeInitCommand(v)
 		return nil
 	case project.FieldDefaultWorkflowID:
 		v, ok := value.(string)
@@ -4068,6 +4119,9 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldIsGit:
 		m.ResetIsGit()
+		return nil
+	case project.FieldWorktreeInitCommand:
+		m.ResetWorktreeInitCommand()
 		return nil
 	case project.FieldDefaultWorkflowID:
 		m.ResetDefaultWorkflowID()
