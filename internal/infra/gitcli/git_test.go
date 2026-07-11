@@ -212,33 +212,53 @@ func TestCreateAndRemoveWorktree(t *testing.T) {
 	}
 }
 
-func TestMergeBaseReturnsBaseCommitForWorktree(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not available")
+func TestRemoveFallsBackForDamagedWorktreeDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "damaged-worktree")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatalf("create damaged worktree directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "leftover.txt"), []byte("leftover\n"), 0o644); err != nil {
+		t.Fatalf("write leftover file: %v", err)
 	}
 
-	ctx := context.Background()
+	if err := New("").Remove(context.Background(), path); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("damaged worktree directory still exists: %v", err)
+	}
+}
+
+func TestRemoveDoesNotFallbackAfterContextCancellation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cancelled-worktree")
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatalf("create worktree directory: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := New("").Remove(ctx, path); err == nil {
+		t.Fatal("Remove() expected canceled error")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("cancelled worktree directory was removed: %v", err)
+	}
+}
+
+func TestDeleteBranchDoesNotFetchRemotes(t *testing.T) {
 	repo := t.TempDir()
-	dataDir := t.TempDir()
-	runGit(t, repo, "init")
-	runGit(t, repo, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "init")
-	runGit(t, repo, "checkout", "-b", "feature/base")
-	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
-	runGit(t, repo, "checkout", "-b", "feature/next")
-	runGit(t, repo, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "next")
+	runGit(t, repo, "init", "-b", "main")
+	runGit(t, repo, "config", "user.name", "Tester")
+	runGit(t, repo, "config", "user.email", "tester@example.com")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "base")
+	runGit(t, repo, "branch", "session-1")
+	runGit(t, repo, "remote", "add", "origin", "https://127.0.0.1:1/unreachable.git")
 
-	client := NewWorktrees(dataDir)
-	worktreePath, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "feature/next")
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
+	if err := New("").DeleteBranch(context.Background(), repo, "session-1"); err != nil {
+		t.Fatalf("DeleteBranch() error = %v", err)
 	}
-
-	mergeBase, err := client.MergeBase(ctx, worktreePath, "feature/base")
-	if err != nil {
-		t.Fatalf("MergeBase() error = %v", err)
-	}
-	if mergeBase != baseCommit {
-		t.Fatalf("MergeBase() = %q, want %q", mergeBase, baseCommit)
+	if got := strings.TrimSpace(gitOutput(t, repo, "branch", "--list", "session-1")); got != "" {
+		t.Fatalf("session branch still exists: %q", got)
 	}
 }
 
@@ -304,186 +324,6 @@ func TestCreateWorktreeFromEmptyRepositoryCreatesOrphanBranch(t *testing.T) {
 	}
 	if branch != "session-1" {
 		t.Fatalf("worktree branch = %q, want %q", branch, "session-1")
-	}
-}
-
-func TestSnapshotCommitCapturesUncommittedAndUntrackedChanges(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not available")
-	}
-
-	ctx := context.Background()
-	repo := t.TempDir()
-	dataDir := t.TempDir()
-	runGit(t, repo, "init", "-b", "main")
-	runGit(t, repo, "config", "user.name", "Tester")
-	runGit(t, repo, "config", "user.email", "tester@example.com")
-	if err := os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("base\n"), 0o644); err != nil {
-		t.Fatalf("write tracked: %v", err)
-	}
-	runGit(t, repo, "add", "tracked.txt")
-	runGit(t, repo, "commit", "-m", "base")
-
-	client := NewWorktrees(dataDir)
-	worktreePath, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "main")
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(worktreePath, "tracked.txt"), []byte("base\nchanged\n"), 0o644); err != nil {
-		t.Fatalf("write tracked change: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(worktreePath, "untracked.txt"), []byte("new\n"), 0o644); err != nil {
-		t.Fatalf("write untracked: %v", err)
-	}
-
-	snapshot, err := client.SnapshotCommit(ctx, worktreePath, "session-1")
-	if err != nil {
-		t.Fatalf("SnapshotCommit() error = %v", err)
-	}
-	if snapshot == "" {
-		t.Fatal("SnapshotCommit() returned empty commit")
-	}
-	if got := gitOutput(t, repo, "diff", "--name-only", "main", snapshot); got != "tracked.txt\nuntracked.txt" && got != "untracked.txt\ntracked.txt" {
-		t.Fatalf("snapshot diff files = %q", got)
-	}
-	if status := gitOutput(t, worktreePath, "status", "--porcelain"); status != "" {
-		t.Fatalf("worktree status after snapshot = %q", status)
-	}
-	if err := client.Remove(ctx, worktreePath); err != nil {
-		t.Fatalf("Remove() error = %v", err)
-	}
-	if err := client.DeleteBranch(ctx, repo, "session-1"); err != nil {
-		t.Fatalf("DeleteBranch() error = %v", err)
-	}
-	runGit(t, repo, "gc", "--prune=now")
-	runGit(t, repo, "cat-file", "-e", snapshot+"^{commit}")
-	if got := gitOutput(t, repo, "diff", "--name-only", "main", snapshot); got != "tracked.txt\nuntracked.txt" && got != "untracked.txt\ntracked.txt" {
-		t.Fatalf("snapshot diff files after gc = %q", got)
-	}
-}
-
-func TestSnapshotCommitSkipsUserHooks(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not available")
-	}
-
-	ctx := context.Background()
-	repo := t.TempDir()
-	dataDir := t.TempDir()
-	runGit(t, repo, "init", "-b", "main")
-	runGit(t, repo, "config", "user.name", "Tester")
-	runGit(t, repo, "config", "user.email", "tester@example.com")
-	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
-		t.Fatalf("write readme: %v", err)
-	}
-	runGit(t, repo, "add", "README.md")
-	runGit(t, repo, "commit", "-m", "base")
-	hookPath := filepath.Join(repo, ".git", "hooks", "pre-commit")
-	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-		t.Fatalf("write hook: %v", err)
-	}
-
-	client := NewWorktrees(dataDir)
-	worktreePath, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "main")
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(worktreePath, "README.md"), []byte("changed\n"), 0o644); err != nil {
-		t.Fatalf("write change: %v", err)
-	}
-	if snapshot, err := client.SnapshotCommit(ctx, worktreePath, "session-1"); err != nil {
-		t.Fatalf("SnapshotCommit() error = %v", err)
-	} else if snapshot == "" {
-		t.Fatal("SnapshotCommit() returned empty commit")
-	}
-}
-
-func TestSnapshotCommitCapturesRenamedWorktreeBranch(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not available")
-	}
-
-	ctx := context.Background()
-	repo := t.TempDir()
-	dataDir := t.TempDir()
-	runGit(t, repo, "init", "-b", "main")
-	runGit(t, repo, "config", "user.name", "Tester")
-	runGit(t, repo, "config", "user.email", "tester@example.com")
-	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("base\n"), 0o644); err != nil {
-		t.Fatalf("write readme: %v", err)
-	}
-	runGit(t, repo, "add", "README.md")
-	runGit(t, repo, "commit", "-m", "base")
-
-	client := NewWorktrees(dataDir)
-	worktreePath, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "main")
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	runGit(t, worktreePath, "switch", "-c", "other")
-	if err := os.WriteFile(filepath.Join(worktreePath, "README.md"), []byte("changed\n"), 0o644); err != nil {
-		t.Fatalf("write change: %v", err)
-	}
-
-	snapshot, err := client.SnapshotCommit(ctx, worktreePath, "session-1")
-	if err != nil {
-		t.Fatalf("SnapshotCommit() error = %v", err)
-	}
-	if got := gitOutput(t, repo, "show", snapshot+":README.md"); got != "changed" {
-		t.Fatalf("snapshot README = %q", got)
-	}
-	if got := gitOutput(t, repo, "rev-parse", snapshotRefName("session-1")); got != snapshot {
-		t.Fatalf("snapshot ref = %q, want %q", got, snapshot)
-	}
-	if err := client.Remove(ctx, worktreePath); err != nil {
-		t.Fatalf("Remove() error = %v", err)
-	}
-	if err := client.DeleteBranch(ctx, repo, "session-1"); err != nil {
-		t.Fatalf("DeleteBranch() error = %v", err)
-	}
-	runGit(t, repo, "gc", "--prune=now")
-	runGit(t, repo, "cat-file", "-e", snapshot+"^{commit}")
-}
-
-func TestSnapshotCommitFromEmptyRepositorySurvivesCleanup(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not available")
-	}
-
-	ctx := context.Background()
-	repo := t.TempDir()
-	dataDir := t.TempDir()
-	runGit(t, repo, "init")
-
-	client := NewWorktrees(dataDir)
-	worktreePath, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "main")
-	if err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-	base, err := client.MergeBase(ctx, worktreePath, "main")
-	if err != nil {
-		t.Fatalf("MergeBase() error = %v", err)
-	}
-	if base != emptyTreeCommit {
-		t.Fatalf("MergeBase() = %q, want empty tree %q", base, emptyTreeCommit)
-	}
-	if err := os.WriteFile(filepath.Join(worktreePath, "first.txt"), []byte("first\n"), 0o644); err != nil {
-		t.Fatalf("write first file: %v", err)
-	}
-	snapshot, err := client.SnapshotCommit(ctx, worktreePath, "session-1")
-	if err != nil {
-		t.Fatalf("SnapshotCommit() error = %v", err)
-	}
-	if err := client.Remove(ctx, worktreePath); err != nil {
-		t.Fatalf("Remove() error = %v", err)
-	}
-	if err := client.DeleteBranch(ctx, repo, "session-1"); err != nil {
-		t.Fatalf("DeleteBranch() error = %v", err)
-	}
-	runGit(t, repo, "gc", "--prune=now")
-	runGit(t, repo, "cat-file", "-e", snapshot+"^{commit}")
-	if got := gitOutput(t, repo, "diff", "--name-only", base, snapshot); got != "first.txt" {
-		t.Fatalf("snapshot diff files after gc = %q", got)
 	}
 }
 

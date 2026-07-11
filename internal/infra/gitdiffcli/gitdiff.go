@@ -71,6 +71,145 @@ func (c *Client) CurrentBranch(ctx context.Context, path string) (string, error)
 	return c.currentBranch(ctx, path)
 }
 
+func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.ResolveSessionDiffInput) (gitdiff.DiffInput, bool, error) {
+	projectPath := strings.TrimSpace(input.ProjectPath)
+	worktreePath := strings.TrimSpace(input.WorktreePath)
+	baseBranch := strings.TrimSpace(input.BaseBranch)
+	worktreeBranch := strings.TrimSpace(input.WorktreeBranch)
+	baseCommit := strings.TrimSpace(input.WorktreeBaseCommit)
+	required := []struct {
+		name  string
+		value string
+	}{
+		{name: "project path", value: projectPath},
+		{name: "base branch", value: baseBranch},
+		{name: "worktree branch", value: worktreeBranch},
+		{name: "worktree base commit", value: baseCommit},
+	}
+	for _, field := range required {
+		if field.value == "" {
+			return gitdiff.DiffInput{}, false, fmt.Errorf("%w: %s is required", gitdiff.ErrSessionDiffInvariant, field.name)
+		}
+	}
+	if worktreePath != "" {
+		if info, err := os.Stat(worktreePath); err == nil {
+			if info.IsDir() {
+				usable, err := c.isUsableProjectWorktree(ctx, projectPath, worktreePath)
+				if err != nil {
+					return gitdiff.DiffInput{}, false, err
+				}
+				if usable {
+					return gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: baseCommit}, true, nil
+				}
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return gitdiff.DiffInput{}, false, err
+		}
+	}
+
+	mergeSubject := "Merge branch '" + worktreeBranch + "'"
+	out, err := c.run(ctx, projectPath, "log", "--first-parent", "--merges", "--fixed-strings", "--grep="+mergeSubject, "--format=%H%x00%P%x00%s", baseBranch)
+	if err != nil {
+		return gitdiff.DiffInput{}, false, err
+	}
+	type candidate struct {
+		commit      string
+		firstParent string
+	}
+	var found *candidate
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		commit, rest, ok := strings.Cut(line, "\x00")
+		if !ok {
+			continue
+		}
+		parents, subject, ok := strings.Cut(rest, "\x00")
+		if !ok {
+			continue
+		}
+		subject = strings.TrimSpace(subject)
+		if subject != mergeSubject && !strings.HasPrefix(subject, mergeSubject+" into ") {
+			continue
+		}
+		parentCommits := strings.Fields(parents)
+		if len(parentCommits) != 2 {
+			continue
+		}
+		mergeBase, err := c.run(ctx, projectPath, "merge-base", baseCommit, parentCommits[1])
+		if err != nil {
+			return gitdiff.DiffInput{}, false, err
+		}
+		if strings.TrimSpace(mergeBase) != baseCommit {
+			continue
+		}
+		if found != nil {
+			return gitdiff.DiffInput{}, false, fmt.Errorf("%w: branch %q has multiple merge commits", gitdiff.ErrAmbiguousSessionMerge, worktreeBranch)
+		}
+		found = &candidate{commit: strings.TrimSpace(commit), firstParent: parentCommits[0]}
+	}
+	if found == nil {
+		return gitdiff.DiffInput{}, false, nil
+	}
+	return gitdiff.DiffInput{
+		WorktreePath: projectPath,
+		BaseRef:      found.firstParent,
+		HeadRef:      found.commit,
+	}, true, nil
+}
+
+func (c *Client) isUsableProjectWorktree(ctx context.Context, projectPath string, worktreePath string) (bool, error) {
+	topLevel, err := c.run(ctx, worktreePath, "rev-parse", "--show-toplevel")
+	if err != nil {
+		var gitErr *Error
+		if errors.As(err, &gitErr) && gitErr.Code == "not_git_repository" {
+			return false, nil
+		}
+		return false, err
+	}
+	wantTopLevel, err := canonicalGitPath("", worktreePath)
+	if err != nil {
+		return false, err
+	}
+	gotTopLevel, err := canonicalGitPath(worktreePath, strings.TrimSpace(topLevel))
+	if err != nil {
+		return false, err
+	}
+	if gotTopLevel != wantTopLevel {
+		return false, nil
+	}
+	worktreeCommonDir, err := c.run(ctx, worktreePath, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return false, err
+	}
+	projectCommonDir, err := c.run(ctx, projectPath, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return false, err
+	}
+	worktreeCommonPath, err := canonicalGitPath(worktreePath, strings.TrimSpace(worktreeCommonDir))
+	if err != nil {
+		return false, err
+	}
+	projectCommonPath, err := canonicalGitPath(projectPath, strings.TrimSpace(projectCommonDir))
+	if err != nil {
+		return false, err
+	}
+	return worktreeCommonPath == projectCommonPath, nil
+}
+
+func canonicalGitPath(basePath string, path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(basePath, path)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err == nil {
+		absPath = resolvedPath
+	}
+	return filepath.Clean(absPath), nil
+}
+
 func (c *Client) MergeToBase(ctx context.Context, input gitdiff.MergeInput) (gitdiff.MergeResult, error) {
 	return c.mergeToBase(ctx, "merge", input.WorktreePath, input.BaseBranch)
 }

@@ -123,20 +123,6 @@ func (_c *SessionCreate) SetNillableWorktreeBaseCommit(v *string) *SessionCreate
 	return _c
 }
 
-// SetWorktreeHeadCommit sets the "worktree_head_commit" field.
-func (_c *SessionCreate) SetWorktreeHeadCommit(v string) *SessionCreate {
-	_c.mutation.SetWorktreeHeadCommit(v)
-	return _c
-}
-
-// SetNillableWorktreeHeadCommit sets the "worktree_head_commit" field if the given value is not nil.
-func (_c *SessionCreate) SetNillableWorktreeHeadCommit(v *string) *SessionCreate {
-	if v != nil {
-		_c.SetWorktreeHeadCommit(*v)
-	}
-	return _c
-}
-
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_c *SessionCreate) SetCodexSessionID(v string) *SessionCreate {
 	_c.mutation.SetCodexSessionID(v)
@@ -422,10 +408,6 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultWorktreeBaseCommit
 		_c.mutation.SetWorktreeBaseCommit(v)
 	}
-	if _, ok := _c.mutation.WorktreeHeadCommit(); !ok {
-		v := entsession.DefaultWorktreeHeadCommit
-		_c.mutation.SetWorktreeHeadCommit(v)
-	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
 		v := entsession.DefaultCodexSessionID
 		_c.mutation.SetCodexSessionID(v)
@@ -516,9 +498,6 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.WorktreeBaseCommit(); !ok {
 		return &ValidationError{Name: "worktree_base_commit", err: errors.New(`ent: missing required field "Session.worktree_base_commit"`)}
-	}
-	if _, ok := _c.mutation.WorktreeHeadCommit(); !ok {
-		return &ValidationError{Name: "worktree_head_commit", err: errors.New(`ent: missing required field "Session.worktree_head_commit"`)}
 	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
 		return &ValidationError{Name: "codex_session_id", err: errors.New(`ent: missing required field "Session.codex_session_id"`)}
@@ -626,10 +605,6 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.WorktreeBaseCommit(); ok {
 		_spec.SetField(entsession.FieldWorktreeBaseCommit, field.TypeString, value)
 		_node.WorktreeBaseCommit = value
-	}
-	if value, ok := _c.mutation.WorktreeHeadCommit(); ok {
-		_spec.SetField(entsession.FieldWorktreeHeadCommit, field.TypeString, value)
-		_node.WorktreeHeadCommit = value
 	}
 	if value, ok := _c.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)

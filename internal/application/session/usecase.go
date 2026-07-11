@@ -113,7 +113,6 @@ type DTO struct {
 	WorktreeBranch     string
 	WorktreePath       string
 	WorktreeBaseCommit string
-	WorktreeHeadCommit string
 	CodexSessionID     string
 	Config             domain.Config
 	AvailableActions   []string
@@ -437,8 +436,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return DTO{}, err
 	}
 	now := s.now()
-	baseBranch := strings.TrimSpace(input.BaseBranch)
+	baseBranch := ""
 	if project.IsGit {
+		baseBranch = strings.TrimSpace(input.BaseBranch)
 		if baseBranch == "" {
 			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "base branch is required for git project").WithDetails(map[string]any{
 				"projectId": string(input.ProjectID),
@@ -1848,7 +1848,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
 const answerUserPromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。"
-const worktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责保存 Diff 快照并清理工作树。"
+const worktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 
 func promptWithSessionGuidance(prompt string, session domain.Session) string {
 	prompt = promptWithAnswerUserGuidance(prompt)
@@ -3445,9 +3445,6 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
 	}
 	if session.Status == domain.StatusClosed {
-		if err := s.deleteSessionBranch(ctx, session); err != nil {
-			return DTO{}, err
-		}
 		return toDTO(session), nil
 	}
 	requiresStop, err := closeRequiresStop(ctx, s, session)
@@ -3463,79 +3460,58 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			return DTO{}, fmt.Errorf("find stopped session: %w", err)
 		}
 	}
-	var cleanupErr error
-	if s.worktrees != nil && strings.TrimSpace(session.WorktreePath) != "" {
-		project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
-		if err != nil {
-			return DTO{}, fmt.Errorf("find project for session worktree cleanup: %w", err)
+	if session.Status == domain.StatusWaitingUser || session.Queue.Kind == domain.QueueKindAnswerUser {
+		now := s.now()
+		session.Status = domain.StatusStopped
+		session.UpdatedAt = now
+		clearQueue(&session)
+		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "closing_without_active_process"}); err != nil {
+			return DTO{}, err
 		}
-		if project.IsGit {
-			exists, err := s.worktrees.Exists(ctx, session.WorktreePath)
+	}
+	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
+		return DTO{}, err
+	}
+	closedPayload := map[string]any{"reason": string(reason)}
+	if strings.TrimSpace(session.BaseBranch) != "" && strings.TrimSpace(session.WorktreePath) != "" {
+		if s.worktrees == nil {
+			return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree manager is required").WithDetails(map[string]any{
+				"sessionId": string(session.ID),
+			})
+		}
+		exists, err := s.worktrees.Exists(ctx, session.WorktreePath)
+		if err != nil {
+			return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "check session worktree existence failed").WithDetails(map[string]any{
+				"sessionId": string(session.ID),
+			}).WithRetryable(true)
+		}
+		var project projectdomain.Project
+		if exists {
+			project, err = s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
 			if err != nil {
-				return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "check session worktree existence failed").WithDetails(map[string]any{
-					"sessionId": string(session.ID),
-				}).WithRetryable(true)
+				return DTO{}, fmt.Errorf("find project for session worktree cleanup: %w", err)
 			}
-			if !exists {
-				if strings.TrimSpace(session.WorktreeBaseCommit) == "" {
-					return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree is missing before diff snapshot was fully stored").WithDetails(map[string]any{
-						"sessionId": string(session.ID),
-					})
-				}
-				if strings.TrimSpace(session.WorktreeHeadCommit) == "" {
-					branch := worktreeBranchName(session.ID)
-					headCommit, err := s.worktrees.HeadCommit(ctx, project.Path.Value, branch)
-					if err != nil {
-						return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "read missing session worktree branch head failed").WithDetails(map[string]any{
-							"sessionId":      string(session.ID),
-							"worktreeBranch": branch,
-						}).WithRetryable(true)
-					}
-					session.WorktreeHeadCommit = strings.TrimSpace(headCommit)
-					if session.WorktreeHeadCommit == "" {
-						return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree is missing before diff snapshot was fully stored").WithDetails(map[string]any{
-							"sessionId":      string(session.ID),
-							"worktreeBranch": branch,
-						})
-					}
-				}
-			} else {
-				if strings.TrimSpace(session.WorktreeBaseCommit) == "" {
-					baseCommit, err := s.worktrees.MergeBase(ctx, session.WorktreePath, session.BaseBranch)
-					if err != nil {
-						return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "read session worktree merge base failed").WithDetails(map[string]any{
-							"sessionId": string(session.ID),
-						}).WithRetryable(true)
-					}
-					session.WorktreeBaseCommit = baseCommit
-				}
-				headCommit, err := s.worktrees.SnapshotCommit(ctx, session.WorktreePath, worktreeBranchName(session.ID))
-				if err != nil {
-					return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "snapshot session worktree failed").WithDetails(map[string]any{
-						"sessionId": string(session.ID),
-					}).WithRetryable(true)
-				}
-				session.WorktreeHeadCommit = headCommit
-				if err := s.saveSession(ctx, session); err != nil {
-					return DTO{}, err
-				}
+			if project.IsGit {
 				if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
 					return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "remove session worktree failed").WithDetails(map[string]any{
 						"sessionId": string(session.ID),
 					}).WithRetryable(true)
 				}
 			}
-			session.WorktreePath = ""
-			if err := s.saveSession(ctx, session); err != nil {
-				return DTO{}, err
-			}
-			if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
-				cleanupErr = apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "delete session worktree branch failed").WithDetails(map[string]any{
-					"sessionId":      string(session.ID),
-					"worktreeBranch": worktreeBranchName(session.ID),
-				}).WithRetryable(true)
+		} else {
+			project, err = s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+			if err != nil {
+				closedPayload["branchCleanupFailed"] = true
+				closedPayload["branchCleanupError"] = fmt.Sprintf("find project for branch cleanup: %v", err)
 			}
 		}
+		if project.IsGit {
+			if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
+				closedPayload["branchCleanupFailed"] = true
+				closedPayload["branchCleanupError"] = err.Error()
+			}
+		}
+		session.WorktreePath = ""
 	}
 	now := s.now()
 	session.Status = domain.StatusClosed
@@ -3543,38 +3519,10 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	session.ClosedAt = &now
 	session.UpdatedAt = now
 	clearQueue(&session)
-	if err := s.saveSessionWithEvent(ctx, session, "session.closed", map[string]any{
-		"reason": string(reason),
-	}); err != nil {
+	if err := s.saveSessionWithEvent(ctx, session, "session.closed", closedPayload); err != nil {
 		return DTO{}, err
-	}
-	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
-		return DTO{}, err
-	}
-	if cleanupErr != nil {
-		return DTO{}, cleanupErr
 	}
 	return toDTO(session), nil
-}
-
-func (s *Service) deleteSessionBranch(ctx context.Context, session domain.Session) error {
-	if s == nil || s.worktrees == nil || strings.TrimSpace(session.BaseBranch) == "" {
-		return nil
-	}
-	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
-	if err != nil {
-		return fmt.Errorf("find project for session branch cleanup: %w", err)
-	}
-	if !project.IsGit {
-		return nil
-	}
-	if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
-		return apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "delete session worktree branch failed").WithDetails(map[string]any{
-			"sessionId":      string(session.ID),
-			"worktreeBranch": worktreeBranchName(session.ID),
-		}).WithRetryable(true)
-	}
-	return nil
 }
 
 func closeRequiresStop(ctx context.Context, s *Service, session domain.Session) (bool, error) {
@@ -3872,7 +3820,6 @@ func toDTO(session domain.Session) DTO {
 		WorktreeBranch:     worktreeBranchForSession(session),
 		WorktreePath:       session.WorktreePath,
 		WorktreeBaseCommit: session.WorktreeBaseCommit,
-		WorktreeHeadCommit: session.WorktreeHeadCommit,
 		CodexSessionID:     session.CodexSessionID,
 		Config:             session.Config,
 		AvailableActions:   availableActions(session),
