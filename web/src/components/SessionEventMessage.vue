@@ -2,6 +2,8 @@
   <SessionTextMessage
     v-if="event.content.__typename === 'SessionTextMessageContent'"
     :event="textEvent"
+    :known-user-prompts="knownUserPrompts"
+    :workflow-prompt="workflowPrompt"
   />
   <SessionReasoningEvent
     v-else-if="event.content.__typename === 'SessionReasoningContent'"
@@ -47,7 +49,14 @@ import type {
   SessionUnknownContent,
 } from '@/services/sessionTimeline';
 
-const props = defineProps<{ event: SessionTimelineItem }>();
+const props = withDefaults(
+  defineProps<{
+    event: SessionTimelineItem;
+    knownUserPrompts?: readonly string[];
+    workflowPrompt?: boolean;
+  }>(),
+  { knownUserPrompts: () => [], workflowPrompt: false },
+);
 
 const textEvent = computed(
   () => props.event as SessionTimelineItem & { content: SessionTextMessageContent },

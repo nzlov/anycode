@@ -122,6 +122,195 @@ export function formatTokenCount(value: number) {
   return compactTokenCountFormatter.format(value);
 }
 
+export interface SessionTextPresentation {
+  text: string;
+  foldedLabel: string;
+  foldedText: string;
+}
+
+const agentsContextPrefix = '# AGENTS.md instructions for ';
+const agentsInstructionsOpen = '<INSTRUCTIONS>';
+const agentsInstructionsClose = '</INSTRUCTIONS>';
+const environmentContextPrefix = '<environment_context>';
+const environmentContextClose = '</environment_context>';
+
+// GLUE: These exact suffixes mirror backend-injected guidance for frontend-only folding.
+// Remove them when timeline messages expose their user/injected provenance.
+const answerUserPromptGuidance =
+  'AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。';
+const worktreePromptGuidance =
+  '当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。';
+const anyCodeGuidanceSuffixes = [
+  `${answerUserPromptGuidance}\n\n${worktreePromptGuidance}`,
+  answerUserPromptGuidance,
+  worktreePromptGuidance,
+];
+const attachedFilesMarker = '\n\nAttached files available on disk:\n';
+const workflowRequirementPrefix = 'User requirement:\n';
+const workflowInputMarker = '\n\nWorkflow input params JSON:\n';
+const rebuiltPromptNotice = '无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。';
+const originalRequirementPrefix = '原始需求：\n';
+const appendedRequirementPrefix = '追加描述：\n';
+const currentNodePromptPrefix = '当前流程节点提示词：\n';
+
+export function sessionTextPresentation(
+  role: string,
+  text: string,
+  knownUserPrompts: readonly string[] = [],
+  workflowPrompt = false,
+): SessionTextPresentation {
+  if (role !== 'user') {
+    return { text, foldedLabel: '', foldedText: '' };
+  }
+
+  const normalizedKnownPrompts = knownUserPrompts.map((prompt) => prompt.trim()).filter(Boolean);
+  const knownPromptSet = new Set(normalizedKnownPrompts);
+  if (knownPromptSet.has(text.trim())) {
+    return { text, foldedLabel: '', foldedText: '' };
+  }
+
+  if (isCompleteInjectedContext(text)) {
+    return { text: '', foldedLabel: '运行上下文', foldedText: text.trim() };
+  }
+
+  const textWithoutTrailingWhitespace = text.trimEnd();
+  const attachmentOffset = attachedFilesOffset(textWithoutTrailingWhitespace);
+  const guidanceSearchText =
+    attachmentOffset >= 0
+      ? textWithoutTrailingWhitespace.slice(0, attachmentOffset)
+      : textWithoutTrailingWhitespace;
+  const guidanceOffset = anyCodeGuidanceSuffixes.reduce((firstOffset, suffix) => {
+    const marker = `\n\n${suffix}`;
+    if (!guidanceSearchText.endsWith(marker)) return firstOffset;
+    const offset = guidanceSearchText.length - marker.length;
+    if (firstOffset < 0) return offset;
+    return Math.min(firstOffset, offset);
+  }, -1);
+  const userText = text.slice(0, guidanceOffset).trimEnd();
+  if (
+    guidanceOffset > 0 &&
+    isKnownPrompt(userText, normalizedKnownPrompts, knownPromptSet, workflowPrompt)
+  ) {
+    return {
+      text: userText,
+      foldedLabel: 'AnyCode 附加说明',
+      foldedText: text.slice(guidanceOffset).trim(),
+    };
+  }
+  const attachmentUserText = text.slice(0, attachmentOffset).trimEnd();
+  if (
+    attachmentOffset > 0 &&
+    isKnownPrompt(attachmentUserText, normalizedKnownPrompts, knownPromptSet, workflowPrompt)
+  ) {
+    return {
+      text: attachmentUserText,
+      foldedLabel: 'AnyCode 附加说明',
+      foldedText: text.slice(attachmentOffset).trim(),
+    };
+  }
+
+  return { text, foldedLabel: '', foldedText: '' };
+}
+
+function attachedFilesOffset(text: string) {
+  const offset = text.lastIndexOf(attachedFilesMarker);
+  if (offset < 0) return -1;
+  const lines = text.slice(offset + attachedFilesMarker.length).split('\n');
+  if (lines.length === 0 || lines.some((line) => !line.startsWith('- ') || !line.slice(2).trim())) {
+    return -1;
+  }
+  return offset;
+}
+
+function isKnownPrompt(
+  text: string,
+  normalizedKnownPrompts: readonly string[],
+  knownPromptSet: ReadonlySet<string>,
+  workflowPrompt: boolean,
+) {
+  const normalized = text.trim();
+  if (knownPromptSet.has(normalized)) return true;
+  if (isRebuiltSessionPrompt(normalized, normalizedKnownPrompts)) return true;
+  if (!workflowPrompt) return false;
+
+  for (const prompt of knownPromptSet) {
+    const requirement = `${workflowRequirementPrefix}${prompt}`;
+    let offset = normalized.indexOf(requirement);
+    while (offset >= 0) {
+      const atSectionBoundary = offset === 0 || normalized.slice(offset - 2, offset) === '\n\n';
+      const afterRequirement = offset + requirement.length;
+      if (atSectionBoundary && normalized.startsWith(workflowInputMarker, afterRequirement)) {
+        return true;
+      }
+      offset = normalized.indexOf(requirement, offset + requirement.length);
+    }
+  }
+  return false;
+}
+
+function isRebuiltSessionPrompt(text: string, knownPrompts: readonly string[]) {
+  if (knownPrompts.length === 0) return false;
+  const [original, ...appends] = knownPrompts;
+  const sections = [rebuiltPromptNotice];
+  if (original) sections.push(`${originalRequirementPrefix}${original}`);
+  for (let appendCount = 0; appendCount <= appends.length; appendCount += 1) {
+    const knownContext = [
+      ...sections,
+      ...appends
+        .slice(0, appendCount)
+        .map((append) => `${appendedRequirementPrefix}${append}`),
+    ].join('\n\n');
+    if (text === knownContext) return true;
+    const nodePromptOffset = `${knownContext}\n\n${currentNodePromptPrefix}`;
+    if (text.startsWith(nodePromptOffset) && text.slice(nodePromptOffset.length).trim()) return true;
+  }
+  return false;
+}
+
+function isCompleteInjectedContext(text: string) {
+  const normalized = text.trim();
+  if (normalized.startsWith(environmentContextPrefix)) {
+    return isCompleteEnvironmentContext(normalized);
+  }
+  if (!normalized.startsWith(agentsContextPrefix)) return false;
+
+  const instructionsOpen = normalized.indexOf(agentsInstructionsOpen);
+  if (instructionsOpen < 0) return false;
+  if (
+    normalized.indexOf(agentsInstructionsOpen, instructionsOpen + agentsInstructionsOpen.length) >=
+    0
+  ) {
+    return false;
+  }
+  const instructionsClose = normalized.indexOf(
+    agentsInstructionsClose,
+    instructionsOpen + agentsInstructionsOpen.length,
+  );
+  if (instructionsClose < 0) return false;
+  if (
+    normalized.indexOf(
+      agentsInstructionsClose,
+      instructionsClose + agentsInstructionsClose.length,
+    ) >= 0
+  ) {
+    return false;
+  }
+
+  const remainder = normalized.slice(instructionsClose + agentsInstructionsClose.length).trim();
+  return remainder === '' || isCompleteEnvironmentContext(remainder);
+}
+
+function isCompleteEnvironmentContext(text: string) {
+  if (!text.startsWith(environmentContextPrefix)) return false;
+  if (text.indexOf(environmentContextPrefix, environmentContextPrefix.length) >= 0) return false;
+  const close = text.indexOf(environmentContextClose, environmentContextPrefix.length);
+  if (close < 0) return false;
+  if (text.indexOf(environmentContextClose, close + environmentContextClose.length) >= 0) {
+    return false;
+  }
+  return text.slice(close + environmentContextClose.length).trim() === '';
+}
+
 export function stripUnsupportedAnsiControls(value: string) {
   const oscSequence = new RegExp(
     String.raw`(?:\u001b\]|\u009d)[\s\S]*?(?:\u0007|\u001b\\|\u009c|$)`,
