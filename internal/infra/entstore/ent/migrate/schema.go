@@ -239,6 +239,7 @@ var (
 		{Name: "queued_at", Type: field.TypeTime, Nullable: true},
 		{Name: "queue_kind", Type: field.TypeString, Default: ""},
 		{Name: "queue_priority", Type: field.TypeString, Default: "medium"},
+		{Name: "queue_initial_start", Type: field.TypeBool, Nullable: true},
 		{Name: "queue_workflow_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
@@ -262,12 +263,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[24]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[25]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[22]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[23]},
 			},
 			{
 				Name:    "session_status",

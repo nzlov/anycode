@@ -5819,6 +5819,7 @@ type SessionMutation struct {
 	queued_at                     *time.Time
 	queue_kind                    *string
 	queue_priority                *string
+	queue_initial_start           *bool
 	queue_workflow_run_id         *string
 	queue_node_run_id             *string
 	queue_prompt                  *string
@@ -6588,6 +6589,55 @@ func (m *SessionMutation) ResetQueuePriority() {
 	m.queue_priority = nil
 }
 
+// SetQueueInitialStart sets the "queue_initial_start" field.
+func (m *SessionMutation) SetQueueInitialStart(b bool) {
+	m.queue_initial_start = &b
+}
+
+// QueueInitialStart returns the value of the "queue_initial_start" field in the mutation.
+func (m *SessionMutation) QueueInitialStart() (r bool, exists bool) {
+	v := m.queue_initial_start
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueInitialStart returns the old "queue_initial_start" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueInitialStart(ctx context.Context) (v *bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueInitialStart is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueInitialStart requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueInitialStart: %w", err)
+	}
+	return oldValue.QueueInitialStart, nil
+}
+
+// ClearQueueInitialStart clears the value of the "queue_initial_start" field.
+func (m *SessionMutation) ClearQueueInitialStart() {
+	m.queue_initial_start = nil
+	m.clearedFields[entsession.FieldQueueInitialStart] = struct{}{}
+}
+
+// QueueInitialStartCleared returns if the "queue_initial_start" field was cleared in this mutation.
+func (m *SessionMutation) QueueInitialStartCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldQueueInitialStart]
+	return ok
+}
+
+// ResetQueueInitialStart resets all changes to the "queue_initial_start" field.
+func (m *SessionMutation) ResetQueueInitialStart() {
+	m.queue_initial_start = nil
+	delete(m.clearedFields, entsession.FieldQueueInitialStart)
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (m *SessionMutation) SetQueueWorkflowRunID(s string) {
 	m.queue_workflow_run_id = &s
@@ -6936,7 +6986,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 25)
+	fields := make([]string, 0, 26)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -6987,6 +7037,9 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.queue_priority != nil {
 		fields = append(fields, entsession.FieldQueuePriority)
+	}
+	if m.queue_initial_start != nil {
+		fields = append(fields, entsession.FieldQueueInitialStart)
 	}
 	if m.queue_workflow_run_id != nil {
 		fields = append(fields, entsession.FieldQueueWorkflowRunID)
@@ -7054,6 +7107,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.QueueKind()
 	case entsession.FieldQueuePriority:
 		return m.QueuePriority()
+	case entsession.FieldQueueInitialStart:
+		return m.QueueInitialStart()
 	case entsession.FieldQueueWorkflowRunID:
 		return m.QueueWorkflowRunID()
 	case entsession.FieldQueueNodeRunID:
@@ -7113,6 +7168,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldQueueKind(ctx)
 	case entsession.FieldQueuePriority:
 		return m.OldQueuePriority(ctx)
+	case entsession.FieldQueueInitialStart:
+		return m.OldQueueInitialStart(ctx)
 	case entsession.FieldQueueWorkflowRunID:
 		return m.OldQueueWorkflowRunID(ctx)
 	case entsession.FieldQueueNodeRunID:
@@ -7257,6 +7314,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetQueuePriority(v)
 		return nil
+	case entsession.FieldQueueInitialStart:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueInitialStart(v)
+		return nil
 	case entsession.FieldQueueWorkflowRunID:
 		v, ok := value.(string)
 		if !ok {
@@ -7352,6 +7416,9 @@ func (m *SessionMutation) ClearedFields() []string {
 	if m.FieldCleared(entsession.FieldQueuedAt) {
 		fields = append(fields, entsession.FieldQueuedAt)
 	}
+	if m.FieldCleared(entsession.FieldQueueInitialStart) {
+		fields = append(fields, entsession.FieldQueueInitialStart)
+	}
 	if m.FieldCleared(entsession.FieldLastRunAt) {
 		fields = append(fields, entsession.FieldLastRunAt)
 	}
@@ -7380,6 +7447,9 @@ func (m *SessionMutation) ClearField(name string) error {
 		return nil
 	case entsession.FieldQueuedAt:
 		m.ClearQueuedAt()
+		return nil
+	case entsession.FieldQueueInitialStart:
+		m.ClearQueueInitialStart()
 		return nil
 	case entsession.FieldLastRunAt:
 		m.ClearLastRunAt()
@@ -7445,6 +7515,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldQueuePriority:
 		m.ResetQueuePriority()
+		return nil
+	case entsession.FieldQueueInitialStart:
+		m.ResetQueueInitialStart()
 		return nil
 	case entsession.FieldQueueWorkflowRunID:
 		m.ResetQueueWorkflowRunID()

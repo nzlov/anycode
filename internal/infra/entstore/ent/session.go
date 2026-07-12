@@ -53,6 +53,8 @@ type Session struct {
 	QueueKind string `json:"queue_kind,omitempty"`
 	// QueuePriority holds the value of the "queue_priority" field.
 	QueuePriority string `json:"queue_priority,omitempty"`
+	// QueueInitialStart holds the value of the "queue_initial_start" field.
+	QueueInitialStart *bool `json:"queue_initial_start,omitempty"`
 	// QueueWorkflowRunID holds the value of the "queue_workflow_run_id" field.
 	QueueWorkflowRunID string `json:"queue_workflow_run_id,omitempty"`
 	// QueueNodeRunID holds the value of the "queue_node_run_id" field.
@@ -79,6 +81,8 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case entsession.FieldTodoList:
 			values[i] = new([]byte)
+		case entsession.FieldQueueInitialStart:
+			values[i] = new(sql.NullBool)
 		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
@@ -209,6 +213,13 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field queue_priority", values[i])
 			} else if value.Valid {
 				_m.QueuePriority = value.String
+			}
+		case entsession.FieldQueueInitialStart:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_initial_start", values[i])
+			} else if value.Valid {
+				_m.QueueInitialStart = new(bool)
+				*_m.QueueInitialStart = value.Bool
 			}
 		case entsession.FieldQueueWorkflowRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -350,6 +361,11 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("queue_priority=")
 	builder.WriteString(_m.QueuePriority)
+	builder.WriteString(", ")
+	if v := _m.QueueInitialStart; v != nil {
+		builder.WriteString("queue_initial_start=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("queue_workflow_run_id=")
 	builder.WriteString(_m.QueueWorkflowRunID)

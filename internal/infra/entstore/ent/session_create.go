@@ -235,6 +235,20 @@ func (_c *SessionCreate) SetNillableQueuePriority(v *string) *SessionCreate {
 	return _c
 }
 
+// SetQueueInitialStart sets the "queue_initial_start" field.
+func (_c *SessionCreate) SetQueueInitialStart(v bool) *SessionCreate {
+	_c.mutation.SetQueueInitialStart(v)
+	return _c
+}
+
+// SetNillableQueueInitialStart sets the "queue_initial_start" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueInitialStart(v *bool) *SessionCreate {
+	if v != nil {
+		_c.SetQueueInitialStart(*v)
+	}
+	return _c
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_c *SessionCreate) SetQueueWorkflowRunID(v string) *SessionCreate {
 	_c.mutation.SetQueueWorkflowRunID(v)
@@ -637,6 +651,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.QueuePriority(); ok {
 		_spec.SetField(entsession.FieldQueuePriority, field.TypeString, value)
 		_node.QueuePriority = value
+	}
+	if value, ok := _c.mutation.QueueInitialStart(); ok {
+		_spec.SetField(entsession.FieldQueueInitialStart, field.TypeBool, value)
+		_node.QueueInitialStart = &value
 	}
 	if value, ok := _c.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)

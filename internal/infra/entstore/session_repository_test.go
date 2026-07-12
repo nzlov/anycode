@@ -46,6 +46,10 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			{Text: "梳理需求", Completed: true},
 			{Text: "实现卡片展示", Completed: false},
 		}},
+		Queue: session.QueueIntent{
+			Kind:         session.QueueKindStart,
+			InitialStart: true,
+		},
 		LastRunAt: &now,
 		CreatedAt: now.Add(-10 * time.Minute),
 		UpdatedAt: now.Add(-25 * time.Minute),
@@ -59,10 +63,14 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		t.Fatalf("find session: %v", err)
 	}
 	assertSessionEqual(t, found, input)
+	if !found.Queue.InitialStart {
+		t.Fatalf("queue initial start = false, want true: %#v", found.Queue)
+	}
 
 	updatedAt := now.Add(time.Minute)
 	input.Status = session.StatusStopped
 	input.Config.CodexModel = "gpt-5.4-mini"
+	input.Queue.InitialStart = false
 	input.UpdatedAt = updatedAt
 	if err := repo.Save(ctx, input); err != nil {
 		t.Fatalf("update session: %v", err)
@@ -73,6 +81,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 	if found.Status != session.StatusStopped || found.Config.CodexModel != "gpt-5.4-mini" {
 		t.Fatalf("updated session mismatch: %#v", found)
+	}
+	if found.Queue.InitialStart {
+		t.Fatalf("updated queue initial start = true, want false: %#v", found.Queue)
 	}
 
 	recentRun := now.Add(-24 * time.Hour)
@@ -426,7 +437,7 @@ func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	}
 }
 
-func TestSessionRepositoryMigrateAddsTodoListToExistingSessions(t *testing.T) {
+func TestSessionRepositoryMigrateAddsFieldsToExistingSessions(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "anycode.db")
 	db, err := sql.Open(sqliteDriverName, dbPath)
@@ -463,12 +474,55 @@ func TestSessionRepositoryMigrateAddsTodoListToExistingSessions(t *testing.T) {
 		db.Close()
 		t.Fatalf("create legacy sessions table: %v", err)
 	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE process_runs (
+		id text NOT NULL PRIMARY KEY,
+		session_id text NOT NULL,
+		node_run_id text NULL,
+		status text NOT NULL,
+		pid integer NULL,
+		codex_session_id text NOT NULL DEFAULT '',
+		resume_of text NULL,
+		exit_code integer NULL,
+		failure_reason text NOT NULL DEFAULT '',
+		started_at datetime NOT NULL,
+		finished_at datetime NULL
+	)`); err != nil {
+		db.Close()
+		t.Fatalf("create legacy process runs table: %v", err)
+	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (
 		id, project_id, requirement, mode, status, created_at, updated_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		"legacy-session", "project-1", "legacy row", string(session.ModeChat), string(session.StatusStopped), now, now); err != nil {
 		db.Close()
 		t.Fatalf("insert legacy session: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (
+		id, project_id, requirement, mode, status, queue_kind, queue_prompt, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-queued-session", "project-1", "legacy queued row", string(session.ModeChat), string(session.StatusQueued), string(session.QueueKindStart), "legacy prompt", now, now); err != nil {
+		db.Close()
+		t.Fatalf("insert legacy queued session: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (
+		id, project_id, requirement, mode, status, queue_kind, queue_prompt, queue_resume_codex_session_id, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-resume-session", "project-1", "legacy resume row", string(session.ModeChat), string(session.StatusQueued), string(session.QueueKindResume), "resume prompt", "codex-legacy", now, now); err != nil {
+		db.Close()
+		t.Fatalf("insert legacy resume session: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO sessions (
+		id, project_id, requirement, mode, status, queue_kind, queue_prompt, created_at, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-retry-session", "project-1", "legacy retry row", string(session.ModeChat), string(session.StatusQueued), string(session.QueueKindStart), "retry prompt", now, now); err != nil {
+		db.Close()
+		t.Fatalf("insert legacy retry session: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO process_runs (
+		id, session_id, status, started_at
+	) VALUES (?, ?, ?, ?)`, "legacy-process-run", "legacy-retry-session", "failed", now); err != nil {
+		db.Close()
+		t.Fatalf("insert legacy process run: %v", err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatalf("close setup db: %v", err)
@@ -489,6 +543,27 @@ func TestSessionRepositoryMigrateAddsTodoListToExistingSessions(t *testing.T) {
 	}
 	if found.TodoList.Total() != 0 {
 		t.Fatalf("todo list = %#v, want empty", found.TodoList)
+	}
+	queued, err := store.Sessions().Find(ctx, "legacy-queued-session")
+	if err != nil {
+		t.Fatalf("find migrated queued session: %v", err)
+	}
+	if !queued.Queue.InitialStart || queued.Queue.Prompt != "legacy prompt" {
+		t.Fatalf("migrated queued session = %#v", queued)
+	}
+	resumed, err := store.Sessions().Find(ctx, "legacy-resume-session")
+	if err != nil {
+		t.Fatalf("find migrated resume session: %v", err)
+	}
+	if resumed.Queue.InitialStart {
+		t.Fatalf("migrated resume session should not be initial: %#v", resumed)
+	}
+	retried, err := store.Sessions().Find(ctx, "legacy-retry-session")
+	if err != nil {
+		t.Fatalf("find migrated retry session: %v", err)
+	}
+	if retried.Queue.InitialStart {
+		t.Fatalf("migrated retry session should not be initial: %#v", retried)
 	}
 }
 

@@ -108,6 +108,7 @@ type Session struct {
 type QueueIntent struct {
 	Kind                 QueueKind
 	Priority             QueuePriority
+	InitialStart         bool
 	WorkflowRunID        WorkflowRunID
 	NodeRunID            *NodeRunID
 	Prompt               string

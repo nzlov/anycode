@@ -47,6 +47,8 @@ const (
 	FieldQueueKind = "queue_kind"
 	// FieldQueuePriority holds the string denoting the queue_priority field in the database.
 	FieldQueuePriority = "queue_priority"
+	// FieldQueueInitialStart holds the string denoting the queue_initial_start field in the database.
+	FieldQueueInitialStart = "queue_initial_start"
 	// FieldQueueWorkflowRunID holds the string denoting the queue_workflow_run_id field in the database.
 	FieldQueueWorkflowRunID = "queue_workflow_run_id"
 	// FieldQueueNodeRunID holds the string denoting the queue_node_run_id field in the database.
@@ -87,6 +89,7 @@ var Columns = []string{
 	FieldQueuedAt,
 	FieldQueueKind,
 	FieldQueuePriority,
+	FieldQueueInitialStart,
 	FieldQueueWorkflowRunID,
 	FieldQueueNodeRunID,
 	FieldQueuePrompt,
@@ -238,6 +241,11 @@ func ByQueueKind(opts ...sql.OrderTermOption) OrderOption {
 // ByQueuePriority orders the results by the queue_priority field.
 func ByQueuePriority(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueuePriority, opts...).ToFunc()
+}
+
+// ByQueueInitialStart orders the results by the queue_initial_start field.
+func ByQueueInitialStart(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueInitialStart, opts...).ToFunc()
 }
 
 // ByQueueWorkflowRunID orders the results by the queue_workflow_run_id field.

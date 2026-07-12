@@ -52,7 +52,7 @@ func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
 		t.Fatalf("saved sessions = %d", len(repo.saved))
 	}
 	saved := repo.saved[len(repo.saved)-1]
-	if saved.Status != domain.StatusQueued || saved.Mode != domain.ModeChat || saved.Queue.Kind != domain.QueueKindStart {
+	if saved.Status != domain.StatusQueued || saved.Mode != domain.ModeChat || saved.Queue.Kind != domain.QueueKindStart || !saved.Queue.InitialStart {
 		t.Fatalf("saved session status/mode = %q/%q", saved.Status, saved.Mode)
 	}
 	if !reflect.DeepEqual(saved.Config, got.Config) {
@@ -635,7 +635,7 @@ func TestCreateWorkflowSessionStartsFirstNodeCodexWithNodeRun(t *testing.T) {
 		t.Fatalf("process runs = %#v", processes.created)
 	}
 	saved := repo.sessions["session-1"]
-	if codex.startCalled || saved.Queue.WorkflowRunID != "workflow-run-1" || saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-1" || saved.Queue.Prompt != "Validate build" {
+	if codex.startCalled || !saved.Queue.InitialStart || saved.Queue.WorkflowRunID != "workflow-run-1" || saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-1" || saved.Queue.Prompt != "Validate build" {
 		t.Fatalf("queued workflow session = %#v codexCalled=%v", saved, codex.startCalled)
 	}
 }
@@ -724,12 +724,12 @@ func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T
 	if codex.startCalled {
 		t.Fatalf("codex should not start before queue drain: %#v", codex.startInput)
 	}
-	if saved := repo.sessions["session-1"]; saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-1" || saved.Queue.Prompt != "Run workflow node" {
+	if saved := repo.sessions["session-1"]; saved.Queue.InitialStart || saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-1" || saved.Queue.Prompt != "Run workflow node" {
 		t.Fatalf("queued session = %#v", saved)
 	}
 }
 
-func TestWorkflowNodePromptMentionsAnswerUserGuidance(t *testing.T) {
+func TestRestartedWorkflowNodePromptDoesNotRepeatAnswerUserGuidance(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -778,8 +778,8 @@ func TestWorkflowNodePromptMentionsAnswerUserGuidance(t *testing.T) {
 	if !strings.Contains(prompt, "Run workflow node") {
 		t.Fatalf("prompt missing workflow node prompt: %q", prompt)
 	}
-	if !strings.Contains(prompt, "answer_user") {
-		t.Fatalf("workflow prompt missing answer_user guidance: %q", prompt)
+	if strings.Contains(prompt, answerUserPromptGuidance) {
+		t.Fatalf("restarted workflow prompt should not repeat answer_user guidance: %q", prompt)
 	}
 }
 
@@ -1239,6 +1239,64 @@ func TestWorkflowExprNodeCompletesWithResults(t *testing.T) {
 	}
 }
 
+func TestRestartedWorkflowExprDoesNotMarkNextCodexInitial(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                "project-1",
+		DefaultWorkflowID: &workflowID,
+	}
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Mode:         domain.ModeWorkflow,
+		Status:       domain.StatusStopped,
+		BaseBranch:   "main",
+		WorktreePath: "/workspace/project-1",
+	}
+	exprNodeRunID := domain.NodeRunID("node-run-expr")
+	nextNodeRunID := domain.NodeRunID("node-run-build")
+	workflows := &fakeWorkflowStarter{
+		start: domain.WorkflowStart{
+			WorkflowRunID: "workflow-run-2",
+			NodeRunID:     &exprNodeRunID,
+			CurrentNodeID: "derive",
+			Status:        "running",
+			Expr: &domain.WorkflowExpr{
+				Script: `{status: "ready"}`,
+			},
+		},
+		advance: domain.WorkflowAdvance{
+			WorkflowRunID: "workflow-run-2",
+			NodeRunID:     &nextNodeRunID,
+			CurrentNodeID: "build",
+			Status:        "running",
+			RequiresCodex: true,
+			Prompt:        "Build after expr",
+		},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	if _, err := service.StartSession(ctx, "session-1"); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	queued := repo.sessions["session-1"]
+	if queued.Status != domain.StatusQueued || queued.Queue.InitialStart {
+		t.Fatalf("restarted expr queued session = %#v", queued)
+	}
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if codex.startInput.Prompt != "Build after expr" {
+		t.Fatalf("restarted expr prompt = %q", codex.startInput.Prompt)
+	}
+}
+
 func TestHandleQuestionBatchAnsweredRetriesMerge(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -1557,7 +1615,7 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
 		t.Fatalf("second process run = %#v", processes.created[1])
 	}
-	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != promptWithAnswerUserGuidance("Verify") {
+	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != "Verify" {
 		t.Fatalf("codex resume input = %#v", codex.resumeInput)
 	}
 	if workflows.completeInput.NodeRunID != "node-run-1" {
@@ -1854,6 +1912,7 @@ func TestSubmitWorkflowApprovalStartsNextCodexNode(t *testing.T) {
 		Mode:         domain.ModeWorkflow,
 		Status:       domain.StatusWaitingApproval,
 		WorktreePath: "/workspace/project-1",
+		Queue:        domain.QueueIntent{InitialStart: true},
 	}
 	nextNodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{
@@ -1911,8 +1970,86 @@ func TestSubmitWorkflowApprovalStartsNextCodexNode(t *testing.T) {
 	if len(processes.created) != 0 {
 		t.Fatalf("process runs = %#v", processes.created)
 	}
-	if codex.startCalled || repo.sessions["session-1"].Queue.NodeRunID == nil || *repo.sessions["session-1"].Queue.NodeRunID != "node-run-2" || repo.sessions["session-1"].Queue.Prompt != "Verify build" {
+	if codex.startCalled || !repo.sessions["session-1"].Queue.InitialStart || repo.sessions["session-1"].Queue.NodeRunID == nil || *repo.sessions["session-1"].Queue.NodeRunID != "node-run-2" || repo.sessions["session-1"].Queue.Prompt != "Verify build" {
 		t.Fatalf("queued session = %#v codexCalled=%v", repo.sessions["session-1"], codex.startCalled)
+	}
+}
+
+func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "ship feature",
+		Mode:         domain.ModeWorkflow,
+		Status:       domain.StatusStopped,
+		BaseBranch:   "main",
+		WorktreePath: "/workspace/project-1",
+	}
+	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                "project-1",
+		DefaultWorkflowID: &workflowID,
+	}
+	approvalNodeRunID := domain.NodeRunID("node-run-approval")
+	nextNodeRunID := domain.NodeRunID("node-run-verify")
+	workflows := &fakeWorkflowStarter{
+		start: domain.WorkflowStart{
+			WorkflowRunID:    "workflow-run-2",
+			NodeRunID:        &approvalNodeRunID,
+			CurrentNodeID:    "approve",
+			CurrentNodeTitle: "Approve",
+			Status:           "waiting_approval",
+			RequiresCodex:    false,
+		},
+		approvalResult: domain.WorkflowApprovalResult{
+			Run: domain.WorkflowRunSnapshot{
+				ID:            "workflow-run-2",
+				SessionID:     "session-1",
+				Status:        "running",
+				CurrentNodeID: "verify",
+			},
+			Advance: domain.WorkflowAdvance{
+				WorkflowRunID:    "workflow-run-2",
+				NodeRunID:        &nextNodeRunID,
+				CurrentNodeID:    "verify",
+				CurrentNodeTitle: "Verify",
+				Status:           "running",
+				RequiresCodex:    true,
+				Prompt:           "Verify build",
+			},
+		},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	if _, err := service.StartSession(ctx, "session-1"); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	waiting := repo.sessions["session-1"]
+	if waiting.Status != domain.StatusWaitingApproval || waiting.Queue.InitialStart {
+		t.Fatalf("restarted workflow waiting session = %#v", waiting)
+	}
+	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-2",
+		NodeID:        "approve",
+		Approved:      true,
+	}); err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	queued := repo.sessions["session-1"]
+	if queued.Status != domain.StatusQueued || queued.Queue.InitialStart {
+		t.Fatalf("restarted workflow queued session = %#v", queued)
+	}
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if codex.startInput.Prompt != "Verify build" {
+		t.Fatalf("restarted workflow prompt = %q", codex.startInput.Prompt)
 	}
 }
 
@@ -2106,7 +2243,7 @@ func TestCreateWorkflowSessionRetriesWhenCodexStartFailsBeforeMaxAttempts(t *tes
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
 		t.Fatalf("second process run = %#v", processes.created[1])
 	}
-	if len(codex.startInputs) != 2 || codex.startInputs[1].Prompt != promptWithAnswerUserGuidance("Retry workflow node") {
+	if len(codex.startInputs) != 2 || codex.startInputs[1].Prompt != "Retry workflow node" {
 		t.Fatalf("codex start inputs = %#v", codex.startInputs)
 	}
 }
@@ -2898,14 +3035,17 @@ func TestAppendPromptAutoStartsStoppedChatSession(t *testing.T) {
 func TestAppendPromptResumesStoppedChatSessionWithOnlyNewBody(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
+	lastRunAt := time.Unix(5, 0).UTC()
 	repo.sessions["session-1"] = domain.Session{
 		ID:             "session-1",
 		ProjectID:      "project-1",
 		Requirement:    "original requirement",
 		Mode:           domain.ModeChat,
 		Status:         domain.StatusStopped,
+		BaseBranch:     "main",
 		CodexSessionID: "codex-session-1",
 		WorktreePath:   "/workspace/session-1",
+		LastRunAt:      &lastRunAt,
 	}
 	repo.appends = []domain.PromptAppend{
 		{ID: "append-0", SessionID: "session-1", Body: "old context", CreatedAt: time.Unix(10, 0).UTC()},
@@ -2950,6 +3090,9 @@ func TestAppendPromptResumesStoppedChatSessionWithOnlyNewBody(t *testing.T) {
 	if saved.Queue.ResumeCodexSessionID != "codex-session-1" {
 		t.Fatalf("resume codex session id = %q", saved.Queue.ResumeCodexSessionID)
 	}
+	if saved.Queue.InitialStart {
+		t.Fatalf("resume queue should not be marked as initial start: %#v", saved.Queue)
+	}
 	newPath := "/attachments/sessions/session-1/staged-1/new-note.md"
 	if saved.Queue.Prompt != "only this new instruction\n\nAttached files available on disk:\n- "+newPath {
 		t.Fatalf("resume prompt = %q", saved.Queue.Prompt)
@@ -2967,8 +3110,11 @@ func TestAppendPromptResumesStoppedChatSessionWithOnlyNewBody(t *testing.T) {
 	if !files.promoted["staged-1"] {
 		t.Fatal("staged attachment file was not promoted")
 	}
-	if codex.resumeInput.Prompt != promptWithAnswerUserGuidance("only this new instruction\n\nAttached files available on disk:\n- "+newPath) {
+	if codex.resumeInput.Prompt != "only this new instruction\n\nAttached files available on disk:\n- "+newPath {
 		t.Fatalf("codex resume prompt = %q", codex.resumeInput.Prompt)
+	}
+	if strings.Contains(codex.resumeInput.Prompt, answerUserPromptGuidance) || strings.Contains(codex.resumeInput.Prompt, worktreePromptGuidance) {
+		t.Fatalf("codex resume prompt should not repeat session guidance: %q", codex.resumeInput.Prompt)
 	}
 	if strings.Contains(codex.resumeInput.Prompt, "/data/attachments/sessions/session-1/notes.md") {
 		t.Fatalf("codex resume prompt should not include old attachment path: %q", codex.resumeInput.Prompt)
@@ -3075,6 +3221,7 @@ func TestAppendPromptRebuiltStartSendsPromptToCodexOnce(t *testing.T) {
 		Requirement:  "original requirement",
 		Mode:         domain.ModeChat,
 		Status:       domain.StatusStopped,
+		BaseBranch:   "main",
 		WorktreePath: "/workspace/session-1",
 	}
 	repo.appends = []domain.PromptAppend{
@@ -3111,6 +3258,9 @@ func TestAppendPromptRebuiltStartSendsPromptToCodexOnce(t *testing.T) {
 	}
 	if strings.Contains(prompt, "当前流程节点提示词") {
 		t.Fatalf("chat rebuilt prompt should not wrap itself as node prompt: %q", prompt)
+	}
+	if strings.Contains(prompt, answerUserPromptGuidance) || strings.Contains(prompt, worktreePromptGuidance) {
+		t.Fatalf("chat rebuilt prompt should not repeat session guidance: %q", prompt)
 	}
 	for _, want := range []string{
 		"原始需求：\noriginal requirement",
@@ -4782,9 +4932,10 @@ func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
 		Requirement:  "high priority",
 		Status:       domain.StatusQueued,
 		Priority:     domain.PriorityHigh,
+		BaseBranch:   "main",
 		WorktreePath: "/workspace/high-session",
 		QueuedAt:     &highQueuedAt,
-		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, Prompt: "high priority"},
+		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, InitialStart: true, Prompt: "high priority"},
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
@@ -4802,6 +4953,9 @@ func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
 	}
 	if codex.startInput.SessionID != "high-session" {
 		t.Fatalf("started session = %q, want high-session", codex.startInput.SessionID)
+	}
+	if codex.startInput.Prompt != promptWithSessionGuidance("high priority", repo.sessions["high-session"]) {
+		t.Fatalf("initial queued prompt = %q", codex.startInput.Prompt)
 	}
 	if repo.sessions["high-session"].Status != domain.StatusRunning || repo.sessions["low-session"].Status != domain.StatusQueued {
 		t.Fatalf("session statuses: high=%q low=%q", repo.sessions["high-session"].Status, repo.sessions["low-session"].Status)

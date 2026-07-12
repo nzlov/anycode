@@ -285,6 +285,26 @@ func (_u *SessionUpdate) SetNillableQueuePriority(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetQueueInitialStart sets the "queue_initial_start" field.
+func (_u *SessionUpdate) SetQueueInitialStart(v bool) *SessionUpdate {
+	_u.mutation.SetQueueInitialStart(v)
+	return _u
+}
+
+// SetNillableQueueInitialStart sets the "queue_initial_start" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueInitialStart(v *bool) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueInitialStart(*v)
+	}
+	return _u
+}
+
+// ClearQueueInitialStart clears the value of the "queue_initial_start" field.
+func (_u *SessionUpdate) ClearQueueInitialStart() *SessionUpdate {
+	_u.mutation.ClearQueueInitialStart()
+	return _u
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_u *SessionUpdate) SetQueueWorkflowRunID(v string) *SessionUpdate {
 	_u.mutation.SetQueueWorkflowRunID(v)
@@ -519,6 +539,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.QueuePriority(); ok {
 		_spec.SetField(entsession.FieldQueuePriority, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueInitialStart(); ok {
+		_spec.SetField(entsession.FieldQueueInitialStart, field.TypeBool, value)
+	}
+	if _u.mutation.QueueInitialStartCleared() {
+		_spec.ClearField(entsession.FieldQueueInitialStart, field.TypeBool)
 	}
 	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
@@ -823,6 +849,26 @@ func (_u *SessionUpdateOne) SetNillableQueuePriority(v *string) *SessionUpdateOn
 	return _u
 }
 
+// SetQueueInitialStart sets the "queue_initial_start" field.
+func (_u *SessionUpdateOne) SetQueueInitialStart(v bool) *SessionUpdateOne {
+	_u.mutation.SetQueueInitialStart(v)
+	return _u
+}
+
+// SetNillableQueueInitialStart sets the "queue_initial_start" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueInitialStart(v *bool) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueInitialStart(*v)
+	}
+	return _u
+}
+
+// ClearQueueInitialStart clears the value of the "queue_initial_start" field.
+func (_u *SessionUpdateOne) ClearQueueInitialStart() *SessionUpdateOne {
+	_u.mutation.ClearQueueInitialStart()
+	return _u
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_u *SessionUpdateOne) SetQueueWorkflowRunID(v string) *SessionUpdateOne {
 	_u.mutation.SetQueueWorkflowRunID(v)
@@ -1087,6 +1133,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.QueuePriority(); ok {
 		_spec.SetField(entsession.FieldQueuePriority, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueInitialStart(); ok {
+		_spec.SetField(entsession.FieldQueueInitialStart, field.TypeBool, value)
+	}
+	if _u.mutation.QueueInitialStartCleared() {
+		_spec.ClearField(entsession.FieldQueueInitialStart, field.TypeBool)
 	}
 	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
