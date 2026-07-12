@@ -81,7 +81,12 @@ function mergeImages(current = [], incoming = []) {
 }
 
 function cloneContent(content) {
-  return structuredClone(content);
+  if (Array.isArray(content)) return content.map(cloneContent);
+  if (content === null || typeof content !== 'object') return content;
+
+  return Object.fromEntries(
+    Object.entries(content).map(([key, value]) => [key, cloneContent(value)]),
+  );
 }
 
 function compareTimelineEvents(left, right) {
