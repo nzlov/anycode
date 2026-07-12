@@ -113,6 +113,15 @@ export function formatDuration(durationMs: number | null) {
   return `${(durationMs / 1000).toFixed(durationMs < 10000 ? 1 : 0)} s`;
 }
 
+const compactTokenCountFormatter = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+export function formatTokenCount(value: number) {
+  return compactTokenCountFormatter.format(value);
+}
+
 export function stripUnsupportedAnsiControls(value: string) {
   const oscSequence = new RegExp(
     String.raw`(?:\u001b\]|\u009d)[\s\S]*?(?:\u0007|\u001b\\|\u009c|$)`,
