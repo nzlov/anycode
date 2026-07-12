@@ -48,6 +48,7 @@
       class="prompt-input"
       :placeholder="placeholder"
       :disable="disabled"
+      @paste="onPaste"
     />
 
     <div class="prompt-toolbar">
@@ -150,6 +151,7 @@ import { useQuasar } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
 import type { CodexModelOption } from '@/components/promptOptions';
+import { filesFromTransfer } from '@/services/promptAttachments';
 
 const props = withDefaults(
   defineProps<{
@@ -270,7 +272,12 @@ function onDrop(event: DragEvent) {
   dragDepth.value = 0;
   draggingFiles.value = false;
   if (props.disabled) return;
-  appendFiles(draggedFiles(event));
+  appendFiles(filesFromTransfer(event.dataTransfer));
+}
+
+function onPaste(event: ClipboardEvent) {
+  if (props.disabled) return;
+  appendFiles(filesFromTransfer(event.clipboardData));
 }
 
 function hasDraggedFiles(event: DragEvent) {
@@ -280,17 +287,6 @@ function hasDraggedFiles(event: DragEvent) {
 function appendFiles(nextFiles: File[]) {
   if (nextFiles.length === 0) return;
   emit('update:files', [...props.files, ...nextFiles]);
-}
-
-function draggedFiles(event: DragEvent) {
-  const dataTransfer = event.dataTransfer;
-  if (!dataTransfer) return [];
-  const files = Array.from(dataTransfer.files ?? []);
-  if (files.length > 0) return files;
-  return Array.from(dataTransfer.items ?? [])
-    .filter((item) => item.kind === 'file')
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => Boolean(file));
 }
 
 onBeforeUnmount(revokePreviewUrl);
