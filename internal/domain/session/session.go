@@ -111,13 +111,14 @@ type Session struct {
 }
 
 type QueueIntent struct {
-	Kind                 QueueKind
-	Priority             QueuePriority
-	InitialStart         bool
-	WorkflowRunID        WorkflowRunID
-	NodeRunID            *NodeRunID
-	Prompt               string
-	ResumeCodexSessionID string
+	Kind                    QueueKind
+	Priority                QueuePriority
+	InitialStart            bool
+	ReviewAfterReuseFailure bool
+	WorkflowRunID           WorkflowRunID
+	NodeRunID               *NodeRunID
+	Prompt                  string
+	ResumeCodexSessionID    string
 }
 
 func (s *Session) QueueExecution(intent QueueIntent, now time.Time) error {
@@ -278,12 +279,23 @@ type AttachmentStream struct {
 	Reader   io.ReadCloser
 }
 
+type PromptAppendStatus string
+
+const (
+	PromptAppendPending    PromptAppendStatus = "pending"
+	PromptAppendInflight   PromptAppendStatus = "inflight"
+	PromptAppendDispatched PromptAppendStatus = "dispatched"
+)
+
 type PromptAppend struct {
-	ID          string
-	SessionID   ID
-	Body        string
-	CreatedAt   time.Time
-	Attachments []SessionAttachment
+	ID                     string
+	SessionID              ID
+	Body                   string
+	Status                 PromptAppendStatus
+	DispatchedAt           *time.Time
+	DispatchedProcessRunID string
+	CreatedAt              time.Time
+	Attachments            []SessionAttachment
 }
 
 type MergeRecord struct {
@@ -325,6 +337,10 @@ type Repository interface {
 	AppendPrompt(ctx context.Context, append PromptAppend) error
 	DeletePromptAppend(ctx context.Context, id string) error
 	ListPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)
+	ListPendingPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)
+	MarkPromptAppendsInflight(ctx context.Context, ids []string, processRunID string) error
+	CompletePromptAppends(ctx context.Context, processRunID string, dispatchedAt time.Time) error
+	ReleasePromptAppends(ctx context.Context, processRunID string) error
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
 	LatestSuccessfulMergeRecord(ctx context.Context, sessionID ID) (MergeRecord, bool, error)
 }

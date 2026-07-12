@@ -17,6 +17,12 @@ const (
 	FieldSessionID = "session_id"
 	// FieldBody holds the string denoting the body field in the database.
 	FieldBody = "body"
+	// FieldStatus holds the string denoting the status field in the database.
+	FieldStatus = "status"
+	// FieldDispatchedAt holds the string denoting the dispatched_at field in the database.
+	FieldDispatchedAt = "dispatched_at"
+	// FieldDispatchedProcessRunID holds the string denoting the dispatched_process_run_id field in the database.
+	FieldDispatchedProcessRunID = "dispatched_process_run_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the promptappend in the database.
@@ -28,6 +34,9 @@ var Columns = []string{
 	FieldID,
 	FieldSessionID,
 	FieldBody,
+	FieldStatus,
+	FieldDispatchedAt,
+	FieldDispatchedProcessRunID,
 	FieldCreatedAt,
 }
 
@@ -46,6 +55,10 @@ var (
 	SessionIDValidator func(string) error
 	// DefaultBody holds the default value on creation for the "body" field.
 	DefaultBody string
+	// DefaultStatus holds the default value on creation for the "status" field.
+	DefaultStatus string
+	// DefaultDispatchedProcessRunID holds the default value on creation for the "dispatched_process_run_id" field.
+	DefaultDispatchedProcessRunID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -66,6 +79,21 @@ func BySessionID(opts ...sql.OrderTermOption) OrderOption {
 // ByBody orders the results by the body field.
 func ByBody(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBody, opts...).ToFunc()
+}
+
+// ByStatus orders the results by the status field.
+func ByStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByDispatchedAt orders the results by the dispatched_at field.
+func ByDispatchedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDispatchedAt, opts...).ToFunc()
+}
+
+// ByDispatchedProcessRunID orders the results by the dispatched_process_run_id field.
+func ByDispatchedProcessRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDispatchedProcessRunID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

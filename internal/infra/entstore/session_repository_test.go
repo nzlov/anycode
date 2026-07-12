@@ -305,6 +305,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		ID:        "append-1",
 		SessionID: input.ID,
 		Body:      "continue with tests",
+		Status:    session.PromptAppendPending,
 		CreatedAt: appendAt,
 	}); err != nil {
 		t.Fatalf("append prompt: %v", err)
@@ -313,8 +314,49 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list prompt appends: %v", err)
 	}
-	if len(appends) != 1 || appends[0].SessionID != input.ID || appends[0].Body != "continue with tests" {
+	if len(appends) != 1 || appends[0].SessionID != input.ID || appends[0].Body != "continue with tests" || appends[0].Status != session.PromptAppendPending {
 		t.Fatalf("prompt append mismatch: %#v", appends)
+	}
+	pending, err := repo.ListPendingPromptAppends(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("list pending prompt appends: %v", err)
+	}
+	if len(pending) != 1 || pending[0].ID != "append-1" {
+		t.Fatalf("pending prompt appends = %#v", pending)
+	}
+	dispatchedAt := appendAt.Add(time.Minute)
+	if err := repo.MarkPromptAppendsInflight(ctx, []string{"append-1"}, "process-run-1"); err != nil {
+		t.Fatalf("mark prompt append inflight: %v", err)
+	}
+	pending, err = repo.ListPendingPromptAppends(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("list inflight prompt appends: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending prompt appends while inflight = %#v", pending)
+	}
+	appends, err = repo.ListPromptAppends(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("list inflight prompt append: %v", err)
+	}
+	if len(appends) != 1 || appends[0].Status != session.PromptAppendInflight || appends[0].DispatchedAt != nil || appends[0].DispatchedProcessRunID != "process-run-1" {
+		t.Fatalf("inflight prompt append = %#v", appends)
+	}
+	if err := repo.ReleasePromptAppends(ctx, "process-run-1"); err != nil {
+		t.Fatalf("release prompt append: %v", err)
+	}
+	if err := repo.MarkPromptAppendsInflight(ctx, []string{"append-1"}, "process-run-2"); err != nil {
+		t.Fatalf("mark prompt append inflight again: %v", err)
+	}
+	if err := repo.CompletePromptAppends(ctx, "process-run-2", dispatchedAt); err != nil {
+		t.Fatalf("complete prompt append: %v", err)
+	}
+	appends, err = repo.ListPromptAppends(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("list dispatched prompt append: %v", err)
+	}
+	if len(appends) != 1 || appends[0].Status != session.PromptAppendDispatched || appends[0].DispatchedAt == nil || !appends[0].DispatchedAt.Equal(dispatchedAt) || appends[0].DispatchedProcessRunID != "process-run-2" {
+		t.Fatalf("dispatched prompt append = %#v", appends)
 	}
 
 	if err := repo.AddMergeRecord(ctx, session.MergeRecord{

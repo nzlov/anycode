@@ -49,6 +49,8 @@ const (
 	FieldQueuePriority = "queue_priority"
 	// FieldQueueInitialStart holds the string denoting the queue_initial_start field in the database.
 	FieldQueueInitialStart = "queue_initial_start"
+	// FieldQueueReviewAfterReuseFailure holds the string denoting the queue_review_after_reuse_failure field in the database.
+	FieldQueueReviewAfterReuseFailure = "queue_review_after_reuse_failure"
 	// FieldQueueWorkflowRunID holds the string denoting the queue_workflow_run_id field in the database.
 	FieldQueueWorkflowRunID = "queue_workflow_run_id"
 	// FieldQueueNodeRunID holds the string denoting the queue_node_run_id field in the database.
@@ -90,6 +92,7 @@ var Columns = []string{
 	FieldQueueKind,
 	FieldQueuePriority,
 	FieldQueueInitialStart,
+	FieldQueueReviewAfterReuseFailure,
 	FieldQueueWorkflowRunID,
 	FieldQueueNodeRunID,
 	FieldQueuePrompt,
@@ -139,6 +142,8 @@ var (
 	DefaultQueueKind string
 	// DefaultQueuePriority holds the default value on creation for the "queue_priority" field.
 	DefaultQueuePriority string
+	// DefaultQueueReviewAfterReuseFailure holds the default value on creation for the "queue_review_after_reuse_failure" field.
+	DefaultQueueReviewAfterReuseFailure bool
 	// DefaultQueueWorkflowRunID holds the default value on creation for the "queue_workflow_run_id" field.
 	DefaultQueueWorkflowRunID string
 	// DefaultQueueNodeRunID holds the default value on creation for the "queue_node_run_id" field.
@@ -246,6 +251,11 @@ func ByQueuePriority(opts ...sql.OrderTermOption) OrderOption {
 // ByQueueInitialStart orders the results by the queue_initial_start field.
 func ByQueueInitialStart(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueueInitialStart, opts...).ToFunc()
+}
+
+// ByQueueReviewAfterReuseFailure orders the results by the queue_review_after_reuse_failure field.
+func ByQueueReviewAfterReuseFailure(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueReviewAfterReuseFailure, opts...).ToFunc()
 }
 
 // ByQueueWorkflowRunID orders the results by the queue_workflow_run_id field.

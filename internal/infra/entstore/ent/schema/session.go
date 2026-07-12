@@ -34,6 +34,7 @@ func (Session) Fields() []ent.Field {
 		field.String("queue_kind").Default(""),
 		field.String("queue_priority").Default("medium"),
 		field.Bool("queue_initial_start").Optional().Nillable(),
+		field.Bool("queue_review_after_reuse_failure").Default(false),
 		field.String("queue_workflow_run_id").Default(""),
 		field.String("queue_node_run_id").Default(""),
 		field.String("queue_prompt").Default(""),

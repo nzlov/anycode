@@ -4190,16 +4190,19 @@ func (m *ProjectMutation) ResetEdge(name string) error {
 // PromptAppendMutation represents an operation that mutates the PromptAppend nodes in the graph.
 type PromptAppendMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *string
-	session_id    *string
-	body          *string
-	created_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*PromptAppend, error)
-	predicates    []predicate.PromptAppend
+	op                        Op
+	typ                       string
+	id                        *string
+	session_id                *string
+	body                      *string
+	status                    *string
+	dispatched_at             *time.Time
+	dispatched_process_run_id *string
+	created_at                *time.Time
+	clearedFields             map[string]struct{}
+	done                      bool
+	oldValue                  func(context.Context) (*PromptAppend, error)
+	predicates                []predicate.PromptAppend
 }
 
 var _ ent.Mutation = (*PromptAppendMutation)(nil)
@@ -4378,6 +4381,127 @@ func (m *PromptAppendMutation) ResetBody() {
 	m.body = nil
 }
 
+// SetStatus sets the "status" field.
+func (m *PromptAppendMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *PromptAppendMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *PromptAppendMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetDispatchedAt sets the "dispatched_at" field.
+func (m *PromptAppendMutation) SetDispatchedAt(t time.Time) {
+	m.dispatched_at = &t
+}
+
+// DispatchedAt returns the value of the "dispatched_at" field in the mutation.
+func (m *PromptAppendMutation) DispatchedAt() (r time.Time, exists bool) {
+	v := m.dispatched_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDispatchedAt returns the old "dispatched_at" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldDispatchedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDispatchedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDispatchedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDispatchedAt: %w", err)
+	}
+	return oldValue.DispatchedAt, nil
+}
+
+// ClearDispatchedAt clears the value of the "dispatched_at" field.
+func (m *PromptAppendMutation) ClearDispatchedAt() {
+	m.dispatched_at = nil
+	m.clearedFields[promptappend.FieldDispatchedAt] = struct{}{}
+}
+
+// DispatchedAtCleared returns if the "dispatched_at" field was cleared in this mutation.
+func (m *PromptAppendMutation) DispatchedAtCleared() bool {
+	_, ok := m.clearedFields[promptappend.FieldDispatchedAt]
+	return ok
+}
+
+// ResetDispatchedAt resets all changes to the "dispatched_at" field.
+func (m *PromptAppendMutation) ResetDispatchedAt() {
+	m.dispatched_at = nil
+	delete(m.clearedFields, promptappend.FieldDispatchedAt)
+}
+
+// SetDispatchedProcessRunID sets the "dispatched_process_run_id" field.
+func (m *PromptAppendMutation) SetDispatchedProcessRunID(s string) {
+	m.dispatched_process_run_id = &s
+}
+
+// DispatchedProcessRunID returns the value of the "dispatched_process_run_id" field in the mutation.
+func (m *PromptAppendMutation) DispatchedProcessRunID() (r string, exists bool) {
+	v := m.dispatched_process_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDispatchedProcessRunID returns the old "dispatched_process_run_id" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldDispatchedProcessRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDispatchedProcessRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDispatchedProcessRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDispatchedProcessRunID: %w", err)
+	}
+	return oldValue.DispatchedProcessRunID, nil
+}
+
+// ResetDispatchedProcessRunID resets all changes to the "dispatched_process_run_id" field.
+func (m *PromptAppendMutation) ResetDispatchedProcessRunID() {
+	m.dispatched_process_run_id = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *PromptAppendMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -4448,12 +4572,21 @@ func (m *PromptAppendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptAppendMutation) Fields() []string {
-	fields := make([]string, 0, 3)
+	fields := make([]string, 0, 6)
 	if m.session_id != nil {
 		fields = append(fields, promptappend.FieldSessionID)
 	}
 	if m.body != nil {
 		fields = append(fields, promptappend.FieldBody)
+	}
+	if m.status != nil {
+		fields = append(fields, promptappend.FieldStatus)
+	}
+	if m.dispatched_at != nil {
+		fields = append(fields, promptappend.FieldDispatchedAt)
+	}
+	if m.dispatched_process_run_id != nil {
+		fields = append(fields, promptappend.FieldDispatchedProcessRunID)
 	}
 	if m.created_at != nil {
 		fields = append(fields, promptappend.FieldCreatedAt)
@@ -4470,6 +4603,12 @@ func (m *PromptAppendMutation) Field(name string) (ent.Value, bool) {
 		return m.SessionID()
 	case promptappend.FieldBody:
 		return m.Body()
+	case promptappend.FieldStatus:
+		return m.Status()
+	case promptappend.FieldDispatchedAt:
+		return m.DispatchedAt()
+	case promptappend.FieldDispatchedProcessRunID:
+		return m.DispatchedProcessRunID()
 	case promptappend.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -4485,6 +4624,12 @@ func (m *PromptAppendMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldSessionID(ctx)
 	case promptappend.FieldBody:
 		return m.OldBody(ctx)
+	case promptappend.FieldStatus:
+		return m.OldStatus(ctx)
+	case promptappend.FieldDispatchedAt:
+		return m.OldDispatchedAt(ctx)
+	case promptappend.FieldDispatchedProcessRunID:
+		return m.OldDispatchedProcessRunID(ctx)
 	case promptappend.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -4509,6 +4654,27 @@ func (m *PromptAppendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBody(v)
+		return nil
+	case promptappend.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case promptappend.FieldDispatchedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDispatchedAt(v)
+		return nil
+	case promptappend.FieldDispatchedProcessRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDispatchedProcessRunID(v)
 		return nil
 	case promptappend.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -4546,7 +4712,11 @@ func (m *PromptAppendMutation) AddField(name string, value ent.Value) error {
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *PromptAppendMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(promptappend.FieldDispatchedAt) {
+		fields = append(fields, promptappend.FieldDispatchedAt)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -4559,6 +4729,11 @@ func (m *PromptAppendMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *PromptAppendMutation) ClearField(name string) error {
+	switch name {
+	case promptappend.FieldDispatchedAt:
+		m.ClearDispatchedAt()
+		return nil
+	}
 	return fmt.Errorf("unknown PromptAppend nullable field %s", name)
 }
 
@@ -4571,6 +4746,15 @@ func (m *PromptAppendMutation) ResetField(name string) error {
 		return nil
 	case promptappend.FieldBody:
 		m.ResetBody()
+		return nil
+	case promptappend.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case promptappend.FieldDispatchedAt:
+		m.ResetDispatchedAt()
+		return nil
+	case promptappend.FieldDispatchedProcessRunID:
+		m.ResetDispatchedProcessRunID()
 		return nil
 	case promptappend.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -5799,39 +5983,40 @@ func (m *QuickCommandMutation) ResetEdge(name string) error {
 // SessionMutation represents an operation that mutates the Session nodes in the graph.
 type SessionMutation struct {
 	config
-	op                            Op
-	typ                           string
-	id                            *string
-	project_id                    *string
-	requirement                   *string
-	mode                          *string
-	status                        *string
-	priority                      *string
-	close_reason                  *string
-	base_branch                   *string
-	worktree_path                 *string
-	worktree_base_commit          *string
-	codex_session_id              *string
-	codex_model                   *string
-	reasoning_effort              *string
-	permission_mode               *string
-	todo_list                     *session.TodoList
-	queued_at                     *time.Time
-	queue_kind                    *string
-	queue_priority                *string
-	queue_initial_start           *bool
-	queue_workflow_run_id         *string
-	queue_node_run_id             *string
-	queue_prompt                  *string
-	queue_resume_codex_session_id *string
-	last_run_at                   *time.Time
-	created_at                    *time.Time
-	updated_at                    *time.Time
-	closed_at                     *time.Time
-	clearedFields                 map[string]struct{}
-	done                          bool
-	oldValue                      func(context.Context) (*Session, error)
-	predicates                    []predicate.Session
+	op                               Op
+	typ                              string
+	id                               *string
+	project_id                       *string
+	requirement                      *string
+	mode                             *string
+	status                           *string
+	priority                         *string
+	close_reason                     *string
+	base_branch                      *string
+	worktree_path                    *string
+	worktree_base_commit             *string
+	codex_session_id                 *string
+	codex_model                      *string
+	reasoning_effort                 *string
+	permission_mode                  *string
+	todo_list                        *session.TodoList
+	queued_at                        *time.Time
+	queue_kind                       *string
+	queue_priority                   *string
+	queue_initial_start              *bool
+	queue_review_after_reuse_failure *bool
+	queue_workflow_run_id            *string
+	queue_node_run_id                *string
+	queue_prompt                     *string
+	queue_resume_codex_session_id    *string
+	last_run_at                      *time.Time
+	created_at                       *time.Time
+	updated_at                       *time.Time
+	closed_at                        *time.Time
+	clearedFields                    map[string]struct{}
+	done                             bool
+	oldValue                         func(context.Context) (*Session, error)
+	predicates                       []predicate.Session
 }
 
 var _ ent.Mutation = (*SessionMutation)(nil)
@@ -6638,6 +6823,42 @@ func (m *SessionMutation) ResetQueueInitialStart() {
 	delete(m.clearedFields, entsession.FieldQueueInitialStart)
 }
 
+// SetQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field.
+func (m *SessionMutation) SetQueueReviewAfterReuseFailure(b bool) {
+	m.queue_review_after_reuse_failure = &b
+}
+
+// QueueReviewAfterReuseFailure returns the value of the "queue_review_after_reuse_failure" field in the mutation.
+func (m *SessionMutation) QueueReviewAfterReuseFailure() (r bool, exists bool) {
+	v := m.queue_review_after_reuse_failure
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueReviewAfterReuseFailure returns the old "queue_review_after_reuse_failure" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueReviewAfterReuseFailure(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueReviewAfterReuseFailure is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueReviewAfterReuseFailure requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueReviewAfterReuseFailure: %w", err)
+	}
+	return oldValue.QueueReviewAfterReuseFailure, nil
+}
+
+// ResetQueueReviewAfterReuseFailure resets all changes to the "queue_review_after_reuse_failure" field.
+func (m *SessionMutation) ResetQueueReviewAfterReuseFailure() {
+	m.queue_review_after_reuse_failure = nil
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (m *SessionMutation) SetQueueWorkflowRunID(s string) {
 	m.queue_workflow_run_id = &s
@@ -6986,7 +7207,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 27)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -7040,6 +7261,9 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.queue_initial_start != nil {
 		fields = append(fields, entsession.FieldQueueInitialStart)
+	}
+	if m.queue_review_after_reuse_failure != nil {
+		fields = append(fields, entsession.FieldQueueReviewAfterReuseFailure)
 	}
 	if m.queue_workflow_run_id != nil {
 		fields = append(fields, entsession.FieldQueueWorkflowRunID)
@@ -7109,6 +7333,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.QueuePriority()
 	case entsession.FieldQueueInitialStart:
 		return m.QueueInitialStart()
+	case entsession.FieldQueueReviewAfterReuseFailure:
+		return m.QueueReviewAfterReuseFailure()
 	case entsession.FieldQueueWorkflowRunID:
 		return m.QueueWorkflowRunID()
 	case entsession.FieldQueueNodeRunID:
@@ -7170,6 +7396,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldQueuePriority(ctx)
 	case entsession.FieldQueueInitialStart:
 		return m.OldQueueInitialStart(ctx)
+	case entsession.FieldQueueReviewAfterReuseFailure:
+		return m.OldQueueReviewAfterReuseFailure(ctx)
 	case entsession.FieldQueueWorkflowRunID:
 		return m.OldQueueWorkflowRunID(ctx)
 	case entsession.FieldQueueNodeRunID:
@@ -7320,6 +7548,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueInitialStart(v)
+		return nil
+	case entsession.FieldQueueReviewAfterReuseFailure:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueReviewAfterReuseFailure(v)
 		return nil
 	case entsession.FieldQueueWorkflowRunID:
 		v, ok := value.(string)
@@ -7518,6 +7753,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldQueueInitialStart:
 		m.ResetQueueInitialStart()
+		return nil
+	case entsession.FieldQueueReviewAfterReuseFailure:
+		m.ResetQueueReviewAfterReuseFailure()
 		return nil
 	case entsession.FieldQueueWorkflowRunID:
 		m.ResetQueueWorkflowRunID()

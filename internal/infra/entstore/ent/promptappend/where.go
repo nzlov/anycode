@@ -74,6 +74,21 @@ func Body(v string) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldEQ(FieldBody, v))
 }
 
+// Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
+func Status(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEQ(FieldStatus, v))
+}
+
+// DispatchedAt applies equality check predicate on the "dispatched_at" field. It's identical to DispatchedAtEQ.
+func DispatchedAt(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEQ(FieldDispatchedAt, v))
+}
+
+// DispatchedProcessRunID applies equality check predicate on the "dispatched_process_run_id" field. It's identical to DispatchedProcessRunIDEQ.
+func DispatchedProcessRunID(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEQ(FieldDispatchedProcessRunID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldEQ(FieldCreatedAt, v))
@@ -207,6 +222,186 @@ func BodyEqualFold(v string) predicate.PromptAppend {
 // BodyContainsFold applies the ContainsFold predicate on the "body" field.
 func BodyContainsFold(v string) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldContainsFold(FieldBody, v))
+}
+
+// StatusEQ applies the EQ predicate on the "status" field.
+func StatusEQ(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEQ(FieldStatus, v))
+}
+
+// StatusNEQ applies the NEQ predicate on the "status" field.
+func StatusNEQ(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNEQ(FieldStatus, v))
+}
+
+// StatusIn applies the In predicate on the "status" field.
+func StatusIn(vs ...string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIn(FieldStatus, vs...))
+}
+
+// StatusNotIn applies the NotIn predicate on the "status" field.
+func StatusNotIn(vs ...string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotIn(FieldStatus, vs...))
+}
+
+// StatusGT applies the GT predicate on the "status" field.
+func StatusGT(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldGT(FieldStatus, v))
+}
+
+// StatusGTE applies the GTE predicate on the "status" field.
+func StatusGTE(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldGTE(FieldStatus, v))
+}
+
+// StatusLT applies the LT predicate on the "status" field.
+func StatusLT(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldLT(FieldStatus, v))
+}
+
+// StatusLTE applies the LTE predicate on the "status" field.
+func StatusLTE(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldLTE(FieldStatus, v))
+}
+
+// StatusContains applies the Contains predicate on the "status" field.
+func StatusContains(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldContains(FieldStatus, v))
+}
+
+// StatusHasPrefix applies the HasPrefix predicate on the "status" field.
+func StatusHasPrefix(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldHasPrefix(FieldStatus, v))
+}
+
+// StatusHasSuffix applies the HasSuffix predicate on the "status" field.
+func StatusHasSuffix(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldHasSuffix(FieldStatus, v))
+}
+
+// StatusEqualFold applies the EqualFold predicate on the "status" field.
+func StatusEqualFold(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEqualFold(FieldStatus, v))
+}
+
+// StatusContainsFold applies the ContainsFold predicate on the "status" field.
+func StatusContainsFold(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// DispatchedAtEQ applies the EQ predicate on the "dispatched_at" field.
+func DispatchedAtEQ(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEQ(FieldDispatchedAt, v))
+}
+
+// DispatchedAtNEQ applies the NEQ predicate on the "dispatched_at" field.
+func DispatchedAtNEQ(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNEQ(FieldDispatchedAt, v))
+}
+
+// DispatchedAtIn applies the In predicate on the "dispatched_at" field.
+func DispatchedAtIn(vs ...time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIn(FieldDispatchedAt, vs...))
+}
+
+// DispatchedAtNotIn applies the NotIn predicate on the "dispatched_at" field.
+func DispatchedAtNotIn(vs ...time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotIn(FieldDispatchedAt, vs...))
+}
+
+// DispatchedAtGT applies the GT predicate on the "dispatched_at" field.
+func DispatchedAtGT(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldGT(FieldDispatchedAt, v))
+}
+
+// DispatchedAtGTE applies the GTE predicate on the "dispatched_at" field.
+func DispatchedAtGTE(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldGTE(FieldDispatchedAt, v))
+}
+
+// DispatchedAtLT applies the LT predicate on the "dispatched_at" field.
+func DispatchedAtLT(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldLT(FieldDispatchedAt, v))
+}
+
+// DispatchedAtLTE applies the LTE predicate on the "dispatched_at" field.
+func DispatchedAtLTE(v time.Time) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldLTE(FieldDispatchedAt, v))
+}
+
+// DispatchedAtIsNil applies the IsNil predicate on the "dispatched_at" field.
+func DispatchedAtIsNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIsNull(FieldDispatchedAt))
+}
+
+// DispatchedAtNotNil applies the NotNil predicate on the "dispatched_at" field.
+func DispatchedAtNotNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotNull(FieldDispatchedAt))
+}
+
+// DispatchedProcessRunIDEQ applies the EQ predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDEQ(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEQ(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDNEQ applies the NEQ predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDNEQ(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNEQ(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDIn applies the In predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDIn(vs ...string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIn(FieldDispatchedProcessRunID, vs...))
+}
+
+// DispatchedProcessRunIDNotIn applies the NotIn predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDNotIn(vs ...string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotIn(FieldDispatchedProcessRunID, vs...))
+}
+
+// DispatchedProcessRunIDGT applies the GT predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDGT(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldGT(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDGTE applies the GTE predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDGTE(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldGTE(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDLT applies the LT predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDLT(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldLT(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDLTE applies the LTE predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDLTE(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldLTE(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDContains applies the Contains predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDContains(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldContains(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDHasPrefix applies the HasPrefix predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDHasPrefix(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldHasPrefix(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDHasSuffix applies the HasSuffix predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDHasSuffix(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldHasSuffix(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDEqualFold applies the EqualFold predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDEqualFold(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldEqualFold(FieldDispatchedProcessRunID, v))
+}
+
+// DispatchedProcessRunIDContainsFold applies the ContainsFold predicate on the "dispatched_process_run_id" field.
+func DispatchedProcessRunIDContainsFold(v string) predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldContainsFold(FieldDispatchedProcessRunID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

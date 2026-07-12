@@ -149,6 +149,11 @@ func QueueInitialStart(v bool) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueInitialStart, v))
 }
 
+// QueueReviewAfterReuseFailure applies equality check predicate on the "queue_review_after_reuse_failure" field. It's identical to QueueReviewAfterReuseFailureEQ.
+func QueueReviewAfterReuseFailure(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueReviewAfterReuseFailure, v))
+}
+
 // QueueWorkflowRunID applies equality check predicate on the "queue_workflow_run_id" field. It's identical to QueueWorkflowRunIDEQ.
 func QueueWorkflowRunID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueWorkflowRunID, v))
@@ -1252,6 +1257,16 @@ func QueueInitialStartIsNil() predicate.Session {
 // QueueInitialStartNotNil applies the NotNil predicate on the "queue_initial_start" field.
 func QueueInitialStartNotNil() predicate.Session {
 	return predicate.Session(sql.FieldNotNull(FieldQueueInitialStart))
+}
+
+// QueueReviewAfterReuseFailureEQ applies the EQ predicate on the "queue_review_after_reuse_failure" field.
+func QueueReviewAfterReuseFailureEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueReviewAfterReuseFailure, v))
+}
+
+// QueueReviewAfterReuseFailureNEQ applies the NEQ predicate on the "queue_review_after_reuse_failure" field.
+func QueueReviewAfterReuseFailureNEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldQueueReviewAfterReuseFailure, v))
 }
 
 // QueueWorkflowRunIDEQ applies the EQ predicate on the "queue_workflow_run_id" field.

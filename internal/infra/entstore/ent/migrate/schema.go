@@ -162,6 +162,9 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "body", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "dispatched_at", Type: field.TypeTime, Nullable: true},
+		{Name: "dispatched_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// PromptAppendsTable holds the schema information for the "prompt_appends" table.
@@ -173,7 +176,12 @@ var (
 			{
 				Name:    "promptappend_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[3]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[6]},
+			},
+			{
+				Name:    "promptappend_session_id_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[3], PromptAppendsColumns[6]},
 			},
 		},
 	}
@@ -240,6 +248,7 @@ var (
 		{Name: "queue_kind", Type: field.TypeString, Default: ""},
 		{Name: "queue_priority", Type: field.TypeString, Default: "medium"},
 		{Name: "queue_initial_start", Type: field.TypeBool, Nullable: true},
+		{Name: "queue_review_after_reuse_failure", Type: field.TypeBool, Default: false},
 		{Name: "queue_workflow_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
@@ -263,12 +272,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[25]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[26]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[23]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[24]},
 			},
 			{
 				Name:    "session_status",

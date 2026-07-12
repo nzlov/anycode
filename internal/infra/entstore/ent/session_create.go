@@ -249,6 +249,20 @@ func (_c *SessionCreate) SetNillableQueueInitialStart(v *bool) *SessionCreate {
 	return _c
 }
 
+// SetQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field.
+func (_c *SessionCreate) SetQueueReviewAfterReuseFailure(v bool) *SessionCreate {
+	_c.mutation.SetQueueReviewAfterReuseFailure(v)
+	return _c
+}
+
+// SetNillableQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueReviewAfterReuseFailure(v *bool) *SessionCreate {
+	if v != nil {
+		_c.SetQueueReviewAfterReuseFailure(*v)
+	}
+	return _c
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_c *SessionCreate) SetQueueWorkflowRunID(v string) *SessionCreate {
 	_c.mutation.SetQueueWorkflowRunID(v)
@@ -446,6 +460,10 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultQueuePriority
 		_c.mutation.SetQueuePriority(v)
 	}
+	if _, ok := _c.mutation.QueueReviewAfterReuseFailure(); !ok {
+		v := entsession.DefaultQueueReviewAfterReuseFailure
+		_c.mutation.SetQueueReviewAfterReuseFailure(v)
+	}
 	if _, ok := _c.mutation.QueueWorkflowRunID(); !ok {
 		v := entsession.DefaultQueueWorkflowRunID
 		_c.mutation.SetQueueWorkflowRunID(v)
@@ -530,6 +548,9 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.QueuePriority(); !ok {
 		return &ValidationError{Name: "queue_priority", err: errors.New(`ent: missing required field "Session.queue_priority"`)}
+	}
+	if _, ok := _c.mutation.QueueReviewAfterReuseFailure(); !ok {
+		return &ValidationError{Name: "queue_review_after_reuse_failure", err: errors.New(`ent: missing required field "Session.queue_review_after_reuse_failure"`)}
 	}
 	if _, ok := _c.mutation.QueueWorkflowRunID(); !ok {
 		return &ValidationError{Name: "queue_workflow_run_id", err: errors.New(`ent: missing required field "Session.queue_workflow_run_id"`)}
@@ -655,6 +676,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.QueueInitialStart(); ok {
 		_spec.SetField(entsession.FieldQueueInitialStart, field.TypeBool, value)
 		_node.QueueInitialStart = &value
+	}
+	if value, ok := _c.mutation.QueueReviewAfterReuseFailure(); ok {
+		_spec.SetField(entsession.FieldQueueReviewAfterReuseFailure, field.TypeBool, value)
+		_node.QueueReviewAfterReuseFailure = value
 	}
 	if value, ok := _c.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)

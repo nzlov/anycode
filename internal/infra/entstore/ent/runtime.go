@@ -171,8 +171,16 @@ func init() {
 	promptappendDescBody := promptappendFields[2].Descriptor()
 	// promptappend.DefaultBody holds the default value on creation for the body field.
 	promptappend.DefaultBody = promptappendDescBody.Default.(string)
+	// promptappendDescStatus is the schema descriptor for status field.
+	promptappendDescStatus := promptappendFields[3].Descriptor()
+	// promptappend.DefaultStatus holds the default value on creation for the status field.
+	promptappend.DefaultStatus = promptappendDescStatus.Default.(string)
+	// promptappendDescDispatchedProcessRunID is the schema descriptor for dispatched_process_run_id field.
+	promptappendDescDispatchedProcessRunID := promptappendFields[5].Descriptor()
+	// promptappend.DefaultDispatchedProcessRunID holds the default value on creation for the dispatched_process_run_id field.
+	promptappend.DefaultDispatchedProcessRunID = promptappendDescDispatchedProcessRunID.Default.(string)
 	// promptappendDescCreatedAt is the schema descriptor for created_at field.
-	promptappendDescCreatedAt := promptappendFields[3].Descriptor()
+	promptappendDescCreatedAt := promptappendFields[6].Descriptor()
 	// promptappend.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promptappend.DefaultCreatedAt = promptappendDescCreatedAt.Default.(func() time.Time)
 	questionbatchFields := schema.QuestionBatch{}.Fields()
@@ -269,28 +277,32 @@ func init() {
 	entsessionDescQueuePriority := entsessionFields[17].Descriptor()
 	// entsession.DefaultQueuePriority holds the default value on creation for the queue_priority field.
 	entsession.DefaultQueuePriority = entsessionDescQueuePriority.Default.(string)
+	// entsessionDescQueueReviewAfterReuseFailure is the schema descriptor for queue_review_after_reuse_failure field.
+	entsessionDescQueueReviewAfterReuseFailure := entsessionFields[19].Descriptor()
+	// entsession.DefaultQueueReviewAfterReuseFailure holds the default value on creation for the queue_review_after_reuse_failure field.
+	entsession.DefaultQueueReviewAfterReuseFailure = entsessionDescQueueReviewAfterReuseFailure.Default.(bool)
 	// entsessionDescQueueWorkflowRunID is the schema descriptor for queue_workflow_run_id field.
-	entsessionDescQueueWorkflowRunID := entsessionFields[19].Descriptor()
+	entsessionDescQueueWorkflowRunID := entsessionFields[20].Descriptor()
 	// entsession.DefaultQueueWorkflowRunID holds the default value on creation for the queue_workflow_run_id field.
 	entsession.DefaultQueueWorkflowRunID = entsessionDescQueueWorkflowRunID.Default.(string)
 	// entsessionDescQueueNodeRunID is the schema descriptor for queue_node_run_id field.
-	entsessionDescQueueNodeRunID := entsessionFields[20].Descriptor()
+	entsessionDescQueueNodeRunID := entsessionFields[21].Descriptor()
 	// entsession.DefaultQueueNodeRunID holds the default value on creation for the queue_node_run_id field.
 	entsession.DefaultQueueNodeRunID = entsessionDescQueueNodeRunID.Default.(string)
 	// entsessionDescQueuePrompt is the schema descriptor for queue_prompt field.
-	entsessionDescQueuePrompt := entsessionFields[21].Descriptor()
+	entsessionDescQueuePrompt := entsessionFields[22].Descriptor()
 	// entsession.DefaultQueuePrompt holds the default value on creation for the queue_prompt field.
 	entsession.DefaultQueuePrompt = entsessionDescQueuePrompt.Default.(string)
 	// entsessionDescQueueResumeCodexSessionID is the schema descriptor for queue_resume_codex_session_id field.
-	entsessionDescQueueResumeCodexSessionID := entsessionFields[22].Descriptor()
+	entsessionDescQueueResumeCodexSessionID := entsessionFields[23].Descriptor()
 	// entsession.DefaultQueueResumeCodexSessionID holds the default value on creation for the queue_resume_codex_session_id field.
 	entsession.DefaultQueueResumeCodexSessionID = entsessionDescQueueResumeCodexSessionID.Default.(string)
 	// entsessionDescCreatedAt is the schema descriptor for created_at field.
-	entsessionDescCreatedAt := entsessionFields[24].Descriptor()
+	entsessionDescCreatedAt := entsessionFields[25].Descriptor()
 	// entsession.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entsession.DefaultCreatedAt = entsessionDescCreatedAt.Default.(func() time.Time)
 	// entsessionDescUpdatedAt is the schema descriptor for updated_at field.
-	entsessionDescUpdatedAt := entsessionFields[25].Descriptor()
+	entsessionDescUpdatedAt := entsessionFields[26].Descriptor()
 	// entsession.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

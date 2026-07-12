@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -51,6 +52,54 @@ func (_u *PromptAppendUpdate) SetBody(v string) *PromptAppendUpdate {
 func (_u *PromptAppendUpdate) SetNillableBody(v *string) *PromptAppendUpdate {
 	if v != nil {
 		_u.SetBody(*v)
+	}
+	return _u
+}
+
+// SetStatus sets the "status" field.
+func (_u *PromptAppendUpdate) SetStatus(v string) *PromptAppendUpdate {
+	_u.mutation.SetStatus(v)
+	return _u
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_u *PromptAppendUpdate) SetNillableStatus(v *string) *PromptAppendUpdate {
+	if v != nil {
+		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetDispatchedAt sets the "dispatched_at" field.
+func (_u *PromptAppendUpdate) SetDispatchedAt(v time.Time) *PromptAppendUpdate {
+	_u.mutation.SetDispatchedAt(v)
+	return _u
+}
+
+// SetNillableDispatchedAt sets the "dispatched_at" field if the given value is not nil.
+func (_u *PromptAppendUpdate) SetNillableDispatchedAt(v *time.Time) *PromptAppendUpdate {
+	if v != nil {
+		_u.SetDispatchedAt(*v)
+	}
+	return _u
+}
+
+// ClearDispatchedAt clears the value of the "dispatched_at" field.
+func (_u *PromptAppendUpdate) ClearDispatchedAt() *PromptAppendUpdate {
+	_u.mutation.ClearDispatchedAt()
+	return _u
+}
+
+// SetDispatchedProcessRunID sets the "dispatched_process_run_id" field.
+func (_u *PromptAppendUpdate) SetDispatchedProcessRunID(v string) *PromptAppendUpdate {
+	_u.mutation.SetDispatchedProcessRunID(v)
+	return _u
+}
+
+// SetNillableDispatchedProcessRunID sets the "dispatched_process_run_id" field if the given value is not nil.
+func (_u *PromptAppendUpdate) SetNillableDispatchedProcessRunID(v *string) *PromptAppendUpdate {
+	if v != nil {
+		_u.SetDispatchedProcessRunID(*v)
 	}
 	return _u
 }
@@ -115,6 +164,18 @@ func (_u *PromptAppendUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Status(); ok {
+		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DispatchedAt(); ok {
+		_spec.SetField(promptappend.FieldDispatchedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DispatchedAtCleared() {
+		_spec.ClearField(promptappend.FieldDispatchedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DispatchedProcessRunID(); ok {
+		_spec.SetField(promptappend.FieldDispatchedProcessRunID, field.TypeString, value)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{promptappend.Label}
@@ -159,6 +220,54 @@ func (_u *PromptAppendUpdateOne) SetBody(v string) *PromptAppendUpdateOne {
 func (_u *PromptAppendUpdateOne) SetNillableBody(v *string) *PromptAppendUpdateOne {
 	if v != nil {
 		_u.SetBody(*v)
+	}
+	return _u
+}
+
+// SetStatus sets the "status" field.
+func (_u *PromptAppendUpdateOne) SetStatus(v string) *PromptAppendUpdateOne {
+	_u.mutation.SetStatus(v)
+	return _u
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_u *PromptAppendUpdateOne) SetNillableStatus(v *string) *PromptAppendUpdateOne {
+	if v != nil {
+		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetDispatchedAt sets the "dispatched_at" field.
+func (_u *PromptAppendUpdateOne) SetDispatchedAt(v time.Time) *PromptAppendUpdateOne {
+	_u.mutation.SetDispatchedAt(v)
+	return _u
+}
+
+// SetNillableDispatchedAt sets the "dispatched_at" field if the given value is not nil.
+func (_u *PromptAppendUpdateOne) SetNillableDispatchedAt(v *time.Time) *PromptAppendUpdateOne {
+	if v != nil {
+		_u.SetDispatchedAt(*v)
+	}
+	return _u
+}
+
+// ClearDispatchedAt clears the value of the "dispatched_at" field.
+func (_u *PromptAppendUpdateOne) ClearDispatchedAt() *PromptAppendUpdateOne {
+	_u.mutation.ClearDispatchedAt()
+	return _u
+}
+
+// SetDispatchedProcessRunID sets the "dispatched_process_run_id" field.
+func (_u *PromptAppendUpdateOne) SetDispatchedProcessRunID(v string) *PromptAppendUpdateOne {
+	_u.mutation.SetDispatchedProcessRunID(v)
+	return _u
+}
+
+// SetNillableDispatchedProcessRunID sets the "dispatched_process_run_id" field if the given value is not nil.
+func (_u *PromptAppendUpdateOne) SetNillableDispatchedProcessRunID(v *string) *PromptAppendUpdateOne {
+	if v != nil {
+		_u.SetDispatchedProcessRunID(*v)
 	}
 	return _u
 }
@@ -252,6 +361,18 @@ func (_u *PromptAppendUpdateOne) sqlSave(ctx context.Context) (_node *PromptAppe
 	}
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Status(); ok {
+		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DispatchedAt(); ok {
+		_spec.SetField(promptappend.FieldDispatchedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DispatchedAtCleared() {
+		_spec.ClearField(promptappend.FieldDispatchedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DispatchedProcessRunID(); ok {
+		_spec.SetField(promptappend.FieldDispatchedProcessRunID, field.TypeString, value)
 	}
 	_node = &PromptAppend{config: _u.config}
 	_spec.Assign = _node.assignValues
