@@ -446,6 +446,44 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 	}
 }
 
+func TestResumeInjectsUnixSocketPermissionProfileForStdioMCP(t *testing.T) {
+	dir := t.TempDir()
+	argsFile := filepath.Join(dir, "args")
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
+`)
+	t.Setenv("CODEX_ARGS_FILE", argsFile)
+
+	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp.sock", "secret")).Resume(context.Background(), process.CodexResumeInput{
+		ProcessRunID:   "process-run-mcp-profile-resume",
+		SessionID:      "session-1",
+		CodexSessionID: "codex-session-1",
+		Workdir:        dir,
+		PermissionMode: "workspace-write",
+		Prompt:         "continue with answer_user when needed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, argsFile)
+	args := strings.TrimSpace(readFile(t, argsFile))
+	for _, want := range []string{
+		`-c features.network_proxy.enabled=true`,
+		`-c default_permissions="anycode-mcp"`,
+		`-c permissions.anycode-mcp.extends=":workspace"`,
+		`-c permissions.anycode-mcp.network.enabled=true`,
+		`-c permissions.anycode-mcp.network.mode="limited"`,
+		`-c permissions.anycode-mcp.network.unix_sockets={"/tmp/anycode-1000/mcp.sock"="allow"}`,
+	} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args %q missing %q", args, want)
+		}
+	}
+	if strings.Contains(args, "--sandbox workspace-write") {
+		t.Fatalf("resume args should use default_permissions instead of --sandbox: %q", args)
+	}
+}
+
 func TestEventsParsesNestedMessageTypeAndInvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
