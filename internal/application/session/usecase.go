@@ -159,9 +159,11 @@ type WorkflowRunDTO struct {
 }
 
 const (
-	defaultPage     = 1
-	defaultPageSize = 20
-	maxPageSize     = 100
+	defaultPage              = 1
+	defaultPageSize          = 20
+	maxPageSize              = 100
+	processCleanupTimeout    = 5 * time.Second
+	processExitRetryMaxDelay = 30 * time.Second
 
 	maxSessionIDAttempts = 100
 )
@@ -194,6 +196,9 @@ type Service struct {
 	generateID          func() (domain.ID, error)
 	maxConcurrentAgents int
 	queueDrainScheduler func(*Service)
+	processExitDelay    func(int) time.Duration
+	lifecycleCtx        context.Context
+	lifecycleCancel     context.CancelFunc
 }
 
 type questionCoordinator interface {
@@ -286,6 +291,7 @@ func WithAutoQueueDrain() Option {
 }
 
 func New(repo domain.Repository, projects projectdomain.Repository, options ...Option) *Service {
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	service := &Service{
 		repo:                repo,
 		projects:            projects,
@@ -293,11 +299,20 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 		generateID:          generateID,
 		maxConcurrentAgents: 1,
 		queueDrainScheduler: func(*Service) {},
+		processExitDelay:    processExitRetryDelay,
+		lifecycleCtx:        lifecycleCtx,
+		lifecycleCancel:     lifecycleCancel,
 	}
 	for _, option := range options {
 		option(service)
 	}
 	return service
+}
+
+func (s *Service) Close() {
+	if s != nil && s.lifecycleCancel != nil {
+		s.lifecycleCancel()
+	}
 }
 
 func (s *Service) scheduleQueueDrain() {
@@ -317,11 +332,18 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 	}
 	now := s.now()
 	for _, session := range sessions {
+		recovered, err := s.recoverWorkflowProcessExit(ctx, session, now)
+		if err != nil {
+			return 0, fmt.Errorf("recover workflow process exit for session %s: %w", session.ID, err)
+		}
+		if recovered {
+			continue
+		}
 		previousStatus := session.Status
 		session.Status = domain.StatusStopped
 		session.UpdatedAt = now
 		clearQueue(&session)
-		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "session.recoverable", map[string]any{
+		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "service_restarted", "session.recoverable", map[string]any{
 			"reason":         "service_restarted",
 			"previousStatus": string(previousStatus),
 			"codexSessionId": session.CodexSessionID,
@@ -334,11 +356,18 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 		return 0, err
 	}
 	for _, session := range unresumableSessions {
+		recovered, err := s.recoverWorkflowProcessExit(ctx, session, now)
+		if err != nil {
+			return 0, fmt.Errorf("recover workflow process exit for session %s: %w", session.ID, err)
+		}
+		if recovered {
+			continue
+		}
 		previousStatus := session.Status
 		session.Status = domain.StatusResumeFailed
 		session.UpdatedAt = now
 		clearQueue(&session)
-		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "session.resume_failed", map[string]any{
+		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "service_restarted", "session.resume_failed", map[string]any{
 			"reason":         "service_restarted_without_codex_session_id",
 			"previousStatus": string(previousStatus),
 		}); err != nil {
@@ -346,6 +375,88 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 		}
 	}
 	return len(sessions) + len(unresumableSessions), nil
+}
+
+func (s *Service) recoverWorkflowProcessExit(ctx context.Context, session domain.Session, now time.Time) (bool, error) {
+	if session.Mode != domain.ModeWorkflow || s.workflows == nil || s.events == nil {
+		return false, nil
+	}
+	if s.processes != nil {
+		_, active, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+		if err != nil {
+			return false, err
+		}
+		if active {
+			return false, nil
+		}
+	}
+	input, ok, err := s.latestWorkflowProcessExitInput(ctx, session.ID)
+	if err != nil || !ok {
+		return false, err
+	}
+	advance, err := s.workflows.RecoverProcessExit(ctx, input)
+	if err != nil {
+		return true, err
+	}
+	if advance.Status == "failed" {
+		session.Status = domain.StatusFailed
+		session.UpdatedAt = now
+		clearQueue(&session)
+		return true, s.saveInterruptedSessionWithEvent(ctx, session, now, "workflow_process_failed", "workflow.failed", map[string]any{
+			"reason":        "workflow_process_failed",
+			"workflowRunId": string(advance.WorkflowRunID),
+		})
+	}
+	if advance.Status == "waiting_resume_action" {
+		return true, s.saveWorkflowExitResumeFailed(ctx, session, now, advance, false)
+	}
+	if workflowAdvanceHasExternalEffects(advance) {
+		if _, err := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
+			SessionID: session.ID,
+			Code:      "workflow_advance_interrupted",
+			Message:   "service restarted before workflow advance side effect was durably completed",
+		}); err != nil {
+			return true, err
+		}
+		return true, s.saveWorkflowExitResumeFailed(ctx, session, now, advance, true)
+	}
+	_, err = s.applyWorkflowAdvance(ctx, session, advance, workflowAdvanceOptions{})
+	return true, err
+}
+
+func (s *Service) saveWorkflowExitResumeFailed(ctx context.Context, session domain.Session, now time.Time, advance domain.WorkflowAdvance, markedWorkflow bool) error {
+	previousStatus := session.Status
+	session.Status = domain.StatusResumeFailed
+	session.CodexSessionID = ""
+	session.UpdatedAt = now
+	clearQueue(&session)
+	return s.saveInterruptedSessionWithEvent(ctx, session, now, "workflow_advance_interrupted", "session.resume_failed", map[string]any{
+		"reason":            "workflow_advance_interrupted",
+		"previousStatus":    string(previousStatus),
+		"workflowRunId":     string(advance.WorkflowRunID),
+		"nodeRunId":         stringValuePtr(advance.NodeRunID),
+		"workflowRunMarked": markedWorkflow,
+	})
+}
+
+func (s *Service) latestWorkflowProcessExitInput(ctx context.Context, sessionID domain.ID) (domain.WorkflowProcessExitInput, bool, error) {
+	eventSessionID := eventdomain.SessionID(sessionID)
+	events, err := s.events.List(ctx, eventdomain.Scope{SessionID: &eventSessionID})
+	if err != nil {
+		return domain.WorkflowProcessExitInput{}, false, err
+	}
+	for index := len(events) - 1; index >= 0; index-- {
+		event := events[index]
+		if event.Type != "workflow.exit_pending" || event.SessionID == nil || *event.SessionID != eventSessionID {
+			continue
+		}
+		input, err := workflowProcessExitInputFromPayload(event.Payload)
+		if err != nil {
+			return domain.WorkflowProcessExitInput{}, false, err
+		}
+		return input, true, nil
+	}
+	return domain.WorkflowProcessExitInput{}, false, nil
 }
 
 func (s *Service) listInterruptedWithoutCodexSession(ctx context.Context) ([]domain.Session, error) {
@@ -943,6 +1054,14 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
+	if session.Status == domain.StatusStopped {
+		cleanupCtx, cancel := detachedCleanupContext(ctx)
+		defer cancel()
+		if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
+	}
 	switch session.Status {
 	case domain.StatusQueued, domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping, domain.StatusResumeFailed:
 	default:
@@ -956,14 +1075,16 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return DTO{}, fmt.Errorf("find active process run: %w", err)
 	}
 	if !ok {
+		cleanupCtx, cancel := detachedCleanupContext(ctx)
+		defer cancel()
 		now := s.now()
 		session.Status = domain.StatusStopped
 		session.UpdatedAt = now
 		clearQueue(&session)
-		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "no_active_process"}); err != nil {
+		if err := s.saveSessionWithEvent(cleanupCtx, session, "session.stopped", map[string]any{"reason": "no_active_process"}); err != nil {
 			return DTO{}, err
 		}
-		if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
+		if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
 			return DTO{}, err
 		}
 		s.scheduleQueueDrain()
@@ -972,16 +1093,18 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	now := s.now()
 	session.Status = domain.StatusStopping
 	session.UpdatedAt = now
-	if err := s.saveSessionWithEvent(ctx, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
+	if err := s.markProcessStoppingWithSessionEvent(ctx, active.ID, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
 		return DTO{}, err
 	}
-	if err := s.codex.Stop(ctx, active.ID); err != nil {
+	cleanupCtx, cancel := detachedCleanupContext(ctx)
+	defer cancel()
+	if err := s.codex.Stop(cleanupCtx, active.ID); err != nil && !errors.Is(err, processdomain.ErrProcessNotFound) {
 		return DTO{}, fmt.Errorf("stop codex process: %w", err)
 	}
 	finishedAt := s.now()
 	session.Status = domain.StatusStopped
 	session.UpdatedAt = finishedAt
-	if err := s.markProcessExitedWithSessionEvents(ctx, active.ID, processdomain.ExitResult{
+	if err := s.markProcessExitedWithSessionEvents(cleanupCtx, active.ID, processdomain.ExitResult{
 		FailureReason: "stopped by user",
 		FinishedAt:    finishedAt,
 	}, session, true, []sessionEventInput{{
@@ -993,11 +1116,15 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	}}); err != nil {
 		return DTO{}, err
 	}
-	if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
+	if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
 		return DTO{}, err
 	}
 	s.scheduleQueueDrain()
 	return toDTO(session), nil
+}
+
+func detachedCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), processCleanupTimeout)
 }
 
 func (s *Service) StopProjectSessions(ctx context.Context, projectID domain.ProjectID) (int, error) {
@@ -1954,9 +2081,9 @@ func promptWithAttachments(prompt string, paths []string) string {
 
 func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions, workdir string) {
 	go func() {
-		defer s.releaseWorkdir(workdir, session.ID)
 		events, err := s.codex.Events(context.Background(), handle)
 		if err != nil {
+			s.releaseWorkdir(workdir, session.ID)
 			return
 		}
 		exitResult := processdomain.ExitResult{}
@@ -2008,78 +2135,193 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			}
 			_ = s.publishCodexEventWithSessionUpdates(context.Background(), eventSession, handle.ProcessRunID, event, saveEventSession, extraEvents...)
 		}
-		finishedAt := s.now()
-		exitResult.FinishedAt = finishedAt
-		_ = s.markProcessExitedWithSessionEvents(context.Background(), handle.ProcessRunID, exitResult, session, false, []sessionEventInput{
-			{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, exitResult)},
-		})
-		if s.sessionHasDifferentActiveRun(context.Background(), session.ID, handle.ProcessRunID) {
-			s.scheduleQueueDrain()
-			return
-		}
-		if current, err := s.repo.Find(context.Background(), session.ID); err == nil {
-			if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil {
-				switch current.Status {
-				case domain.StatusStopping, domain.StatusStopped, domain.StatusClosed:
-					s.scheduleQueueDrain()
-					return
-				}
-				if processExitFailed(exitResult) {
-					s.failWorkflowAfterProcessExit(current, handle, options, exitResult)
-					s.scheduleQueueDrain()
-					return
-				}
-				s.advanceWorkflowAfterProcessExit(current, handle, options, workflowResults)
-				s.scheduleQueueDrain()
-				return
-			}
-			switch current.Status {
-			case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
-				if processExitFailed(exitResult) && current.Status != domain.StatusStopping {
-					current.Status = domain.StatusFailed
-				} else {
-					current.Status = domain.StatusStopped
-				}
-				current.UpdatedAt = finishedAt
-				eventType := "session.stopped"
-				if current.Status == domain.StatusFailed {
-					eventType = "session.failed"
-				}
-				payload := processExitPayload(handle.ProcessRunID, exitResult)
-				payload["reason"] = "process_exited"
-				_ = s.saveSessionWithEvent(context.Background(), current, eventType, payload)
-			}
-		}
-		s.scheduleQueueDrain()
+		s.releaseWorkdir(workdir, session.ID)
+		s.handleCodexProcessExit(session, handle, options, exitResult, workflowResults)
 	}()
 }
 
-func (s *Service) failWorkflowAfterProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, result processdomain.ExitResult) {
-	if s.workflows == nil || options.nodeRunID == nil {
-		return
+func (s *Service) handleCodexProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, exitResult processdomain.ExitResult, workflowResults map[string]any) {
+	if exitResult.FinishedAt.IsZero() {
+		exitResult.FinishedAt = s.now()
 	}
-	nodeRunID := domain.NodeRunID(*options.nodeRunID)
-	message := result.FailureReason
-	if strings.TrimSpace(message) == "" {
-		message = "codex process exited unsuccessfully"
+	retryDelay := s.processExitDelay
+	if retryDelay == nil {
+		retryDelay = processExitRetryDelay
 	}
-	advance, err := s.workflows.FailNode(context.Background(), domain.WorkflowNodeFailInput{
-		WorkflowRunID: options.workflowRunID,
-		NodeRunID:     nodeRunID,
-		Code:          codexProcessFailureCode(result),
-		Message:       message,
-	})
-	if err != nil {
-		session.Status = domain.StatusFailed
-		session.UpdatedAt = s.now()
-		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
-			"workflowRunId": string(options.workflowRunID),
-			"nodeRunId":     string(nodeRunID),
-			"reason":        err.Error(),
+	retryCtx := s.lifecycleCtx
+	if retryCtx == nil {
+		retryCtx = context.Background()
+	}
+	processPersisted := false
+	continueWorkflow := false
+	transitionAttempted := false
+	var workflowAdvance *domain.WorkflowAdvance
+	var workflowTransitionErr error
+	var workflowApplyErr error
+	for attempt := 0; ; attempt++ {
+		if retryCtx.Err() != nil {
+			return
+		}
+		err := s.withSessionLock(retryCtx, session.ID, func(ctx context.Context) error {
+			if !processPersisted {
+				_, shouldContinue, err := s.persistCodexProcessExit(ctx, session, handle, options, exitResult, workflowResults)
+				if err != nil {
+					return err
+				}
+				processPersisted = true
+				continueWorkflow = shouldContinue
+			}
+			if !continueWorkflow {
+				return nil
+			}
+			current, err := s.repo.Find(ctx, session.ID)
+			if err != nil {
+				return fmt.Errorf("find workflow session after process exit: %w", err)
+			}
+			if !workflowProcessExitPending(current.Status) {
+				continueWorkflow = false
+				return nil
+			}
+			if !transitionAttempted {
+				transitionAttempted = true
+				advance, err := s.workflowAdvanceAfterProcessExit(ctx, handle, options, exitResult, workflowResults)
+				if err != nil {
+					workflowTransitionErr = err
+				} else {
+					workflowAdvance = &advance
+				}
+			}
+			if workflowTransitionErr != nil {
+				current.Status = domain.StatusFailed
+				current.UpdatedAt = s.now()
+				return s.saveSessionWithEvent(ctx, current, "workflow.failed", map[string]any{
+					"workflowRunId": string(options.workflowRunID),
+					"nodeRunId":     string(domain.NodeRunID(*options.nodeRunID)),
+					"reason":        workflowTransitionErr.Error(),
+				})
+			}
+			if workflowAdvance == nil {
+				return errors.New("workflow advance is missing after process exit")
+			}
+			if workflowApplyErr != nil {
+				current.Status = domain.StatusFailed
+				current.UpdatedAt = s.now()
+				return s.saveSessionWithEvent(ctx, current, "workflow.failed", map[string]any{
+					"workflowRunId": string(options.workflowRunID),
+					"nodeRunId":     string(domain.NodeRunID(*options.nodeRunID)),
+					"reason":        workflowApplyErr.Error(),
+				})
+			}
+			_, err = s.applyWorkflowAdvance(ctx, current, *workflowAdvance, workflowAdvanceOptions{})
+			if err == nil || !workflowAdvanceHasExternalEffects(*workflowAdvance) {
+				return err
+			}
+			workflowApplyErr = err
+			latest, findErr := s.repo.Find(ctx, session.ID)
+			if findErr != nil {
+				return fmt.Errorf("find workflow session after apply failure: %w", findErr)
+			}
+			if !workflowProcessExitPending(latest.Status) {
+				continueWorkflow = false
+				return nil
+			}
+			latest.Status = domain.StatusFailed
+			latest.UpdatedAt = s.now()
+			return s.saveSessionWithEvent(ctx, latest, "workflow.failed", map[string]any{
+				"workflowRunId": string(options.workflowRunID),
+				"nodeRunId":     string(domain.NodeRunID(*options.nodeRunID)),
+				"reason":        workflowApplyErr.Error(),
+			})
 		})
-		return
+		if err == nil {
+			break
+		}
+		timer := time.NewTimer(retryDelay(attempt))
+		select {
+		case <-retryCtx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
-	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance, workflowAdvanceOptions{})
+	s.scheduleQueueDrain()
+}
+
+func workflowProcessExitPending(status domain.Status) bool {
+	switch status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser:
+		return true
+	default:
+		return false
+	}
+}
+
+func workflowAdvanceHasExternalEffects(advance domain.WorkflowAdvance) bool {
+	return advance.Close || advance.Merge != nil || advance.Expr != nil
+}
+
+func processExitRetryDelay(attempt int) time.Duration {
+	delay := 100 * time.Millisecond
+	for index := 0; index < attempt && delay < processExitRetryMaxDelay; index++ {
+		delay *= 2
+		if delay > processExitRetryMaxDelay {
+			return processExitRetryMaxDelay
+		}
+	}
+	return delay
+}
+
+func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, exitResult processdomain.ExitResult, workflowResults map[string]any) (domain.Session, bool, error) {
+	current, err := s.repo.Find(ctx, session.ID)
+	if err != nil {
+		return domain.Session{}, false, fmt.Errorf("find session after process exit: %w", err)
+	}
+	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+	if err != nil {
+		return domain.Session{}, false, fmt.Errorf("find active process after exit: %w", err)
+	}
+	processEvent := sessionEventInput{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, exitResult)}
+	if ok && active.ID != handle.ProcessRunID {
+		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{processEvent})
+	}
+	if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil {
+		workflowExitInput := workflowProcessExitInput(handle, options, exitResult, workflowResults)
+		if err := s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{
+			processEvent,
+			{eventType: "workflow.exit_pending", payload: workflowProcessExitPayload(workflowExitInput)},
+		}); err != nil {
+			return domain.Session{}, false, err
+		}
+		switch current.Status {
+		case domain.StatusStopping, domain.StatusStopped, domain.StatusClosed:
+			return domain.Session{}, false, nil
+		default:
+			return current, true, nil
+		}
+	}
+	inputs := []sessionEventInput{processEvent}
+	switch current.Status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+		if processExitFailed(exitResult) && current.Status != domain.StatusStopping {
+			current.Status = domain.StatusFailed
+		} else {
+			current.Status = domain.StatusStopped
+		}
+		current.UpdatedAt = exitResult.FinishedAt
+		eventType := "session.stopped"
+		if current.Status == domain.StatusFailed {
+			eventType = "session.failed"
+		}
+		payload := processExitPayload(handle.ProcessRunID, exitResult)
+		payload["reason"] = "process_exited"
+		inputs = append(inputs, sessionEventInput{eventType: eventType, payload: payload})
+		if err := s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, true, inputs); err != nil {
+			return domain.Session{}, false, err
+		}
+		return domain.Session{}, false, nil
+	default:
+		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, inputs)
+	}
 }
 
 func exitResultFromEvent(event processdomain.CodexEvent) (processdomain.ExitResult, bool) {
@@ -2249,45 +2491,86 @@ func codexProcessFailureCode(result processdomain.ExitResult) string {
 	return "codex_process_failed"
 }
 
-func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, workflowResults map[string]any) {
-	if s.workflows == nil {
-		return
+func (s *Service) workflowAdvanceAfterProcessExit(ctx context.Context, handle processdomain.CodexHandle, options codexStartOptions, result processdomain.ExitResult, workflowResults map[string]any) (domain.WorkflowAdvance, error) {
+	if s.workflows == nil || options.nodeRunID == nil {
+		return domain.WorkflowAdvance{}, errors.New("workflow process exit is missing workflow state")
 	}
-	nodeRunID := domain.NodeRunID(*options.nodeRunID)
-	output := map[string]any{
-		"processRunId": string(handle.ProcessRunID),
-		"exit":         "completed",
-	}
-	if options.workflowJSONRetry {
-		output["jsonRetry"] = true
-	}
-	if workflowResults != nil {
-		output["results"] = workflowResults
-	}
-	advance, err := s.workflows.CompleteNode(context.Background(), domain.WorkflowNodeCompleteInput{
-		WorkflowRunID: options.workflowRunID,
-		NodeRunID:     nodeRunID,
-		Output:        output,
-	})
+	input := workflowProcessExitInput(handle, options, result, workflowResults)
+	advance, err := s.workflows.RecoverProcessExit(ctx, input)
 	if err != nil {
 		if appErr, ok := apperror.From(err); ok && appErr.Code == apperror.CodeWorkflowJSONRequired {
-			_ = s.workflows.MarkStartFailed(context.Background(), domain.WorkflowStartFailureInput{
+			nodeRunID := input.NodeRunID
+			_ = s.workflows.MarkStartFailed(ctx, domain.WorkflowStartFailureInput{
 				WorkflowRunID: options.workflowRunID,
 				NodeRunID:     &nodeRunID,
 				Code:          appErr.Code,
 				Message:       appErr.Error(),
 			})
 		}
-		session.Status = domain.StatusFailed
-		session.UpdatedAt = s.now()
-		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
-			"workflowRunId": string(options.workflowRunID),
-			"nodeRunId":     string(nodeRunID),
-			"reason":        err.Error(),
-		})
-		return
+		return domain.WorkflowAdvance{}, err
 	}
-	_, _ = s.applyWorkflowAdvance(context.Background(), session, advance, workflowAdvanceOptions{})
+	return advance, nil
+}
+
+func workflowProcessExitInput(handle processdomain.CodexHandle, options codexStartOptions, result processdomain.ExitResult, workflowResults map[string]any) domain.WorkflowProcessExitInput {
+	output := map[string]any{
+		"processRunId": string(handle.ProcessRunID),
+	}
+	input := domain.WorkflowProcessExitInput{
+		WorkflowRunID: options.workflowRunID,
+		NodeRunID:     domain.NodeRunID(*options.nodeRunID),
+		Output:        output,
+	}
+	if processExitFailed(result) {
+		message := strings.TrimSpace(result.FailureReason)
+		if message == "" {
+			message = "codex process exited unsuccessfully"
+		}
+		input.Failed = true
+		input.FailureCode = codexProcessFailureCode(result)
+		input.FailureMessage = message
+		output["exit"] = "failed"
+		return input
+	}
+	output["exit"] = "completed"
+	if options.workflowJSONRetry {
+		output["jsonRetry"] = true
+	}
+	if workflowResults != nil {
+		output["results"] = workflowResults
+	}
+	return input
+}
+
+func workflowProcessExitPayload(input domain.WorkflowProcessExitInput) map[string]any {
+	return map[string]any{
+		"workflowRunId":  string(input.WorkflowRunID),
+		"nodeRunId":      string(input.NodeRunID),
+		"failed":         input.Failed,
+		"failureCode":    input.FailureCode,
+		"failureMessage": input.FailureMessage,
+		"output":         copyPayload(input.Output),
+	}
+}
+
+func workflowProcessExitInputFromPayload(payload map[string]any) (domain.WorkflowProcessExitInput, error) {
+	workflowRunID, _ := payload["workflowRunId"].(string)
+	nodeRunID, _ := payload["nodeRunId"].(string)
+	if strings.TrimSpace(workflowRunID) == "" || strings.TrimSpace(nodeRunID) == "" {
+		return domain.WorkflowProcessExitInput{}, errors.New("workflow process exit checkpoint is missing workflow run or node run id")
+	}
+	failed, _ := payload["failed"].(bool)
+	failureCode, _ := payload["failureCode"].(string)
+	failureMessage, _ := payload["failureMessage"].(string)
+	output, _ := payload["output"].(map[string]any)
+	return domain.WorkflowProcessExitInput{
+		WorkflowRunID:  domain.WorkflowRunID(workflowRunID),
+		NodeRunID:      domain.NodeRunID(nodeRunID),
+		Failed:         failed,
+		FailureCode:    failureCode,
+		FailureMessage: failureMessage,
+		Output:         copyPayload(output),
+	}, nil
 }
 
 func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) (DTO, error) {
@@ -2775,17 +3058,6 @@ func mergeOutput(result gitdiffdomain.MergeResult) map[string]any {
 	}
 }
 
-func (s *Service) sessionHasDifferentActiveRun(ctx context.Context, sessionID domain.ID, runID processdomain.RunID) bool {
-	if s.processes == nil {
-		return false
-	}
-	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
-	if err != nil || !ok {
-		return false
-	}
-	return active.ID != runID
-}
-
 func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.Session, workflowRunID domain.WorkflowRunID, nodeRunID *domain.NodeRunID, code string, message string, output ...map[string]any) (DTO, error) {
 	if s.workflows == nil || nodeRunID == nil {
 		session.Status = domain.StatusFailed
@@ -3019,6 +3291,39 @@ func (s *Service) markProcessWaitingWithSessionEvent(ctx context.Context, runID 
 	return s.saveSessionWithEvent(ctx, session, eventType, payload)
 }
 
+func (s *Service) markProcessStoppingWithSessionEvent(ctx context.Context, runID processdomain.RunID, session domain.Session, eventType string, payload map[string]any) error {
+	if s.uow != nil {
+		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		if err != nil {
+			return err
+		}
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().MarkStopping(ctx, runID); err != nil {
+				return fmt.Errorf("mark process stopping: %w", err)
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if ok {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if ok {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.processes.MarkStopping(ctx, runID); err != nil {
+		return fmt.Errorf("mark process stopping: %w", err)
+	}
+	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+}
+
 func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session) error {
 	if s.uow != nil {
 		return s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
@@ -3140,13 +3445,13 @@ func (s *Service) saveSession(ctx context.Context, session domain.Session) error
 	return nil
 }
 
-func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session domain.Session, finishedAt time.Time, eventType string, payload map[string]any) error {
+func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session domain.Session, finishedAt time.Time, failureReason string, eventType string, payload map[string]any) error {
 	events, err := s.newSessionEvents(session, []sessionEventInput{{eventType: eventType, payload: payload}})
 	if err != nil {
 		return err
 	}
 	exitResult := processdomain.ExitResult{
-		FailureReason: "service_restarted",
+		FailureReason: failureReason,
 		FinishedAt:    finishedAt,
 	}
 	if s.uow != nil {

@@ -1090,6 +1090,7 @@ wait "$child"
 	if err := client.Stop(context.Background(), handle.ProcessRunID); err != nil {
 		t.Fatal(err)
 	}
+	waitForProcessExit(t, handle.PID)
 	childPID, err := strconv.Atoi(strings.TrimSpace(readFile(t, childPIDFile)))
 	if err != nil {
 		t.Fatal(err)
@@ -1097,6 +1098,22 @@ wait "$child"
 	waitForProcessExit(t, childPID)
 	if err := client.Stop(context.Background(), "missing"); !errors.Is(err, ErrProcessNotFound) {
 		t.Fatalf("missing stop error = %v", err)
+	}
+}
+
+func TestExitedProcessIsReapedWithoutStartingEventConsumer(t *testing.T) {
+	bin := fakeCodex(t, `#!/bin/sh
+exit 0
+`)
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-reaped"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	waitForProcessExit(t, handle.PID)
+	if err := client.Stop(context.Background(), handle.ProcessRunID); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -618,8 +618,7 @@ func (r *subscriptionResolver) SessionStateUpdates(ctx context.Context, sessionI
 				return
 			case eventDTO, ok := <-events:
 				if !ok {
-					events = nil
-					continue
+					return
 				}
 				if !sessionCardChangeEvent(eventDTO, nil) {
 					continue
@@ -651,42 +650,35 @@ func (r *subscriptionResolver) SessionStateUpdates(ctx context.Context, sessionI
 
 // SessionCardChanged is the resolver for the sessionCardChanged field.
 func (r *subscriptionResolver) SessionCardChanged(ctx context.Context, projectID *string) (<-chan *model.SessionCard, error) {
-	if r.UseCases.Events == nil {
-		return nil, missingUseCase("events")
-	}
-	if r.UseCases.Sessions == nil {
-		return nil, missingUseCase("sessions")
-	}
-	scope := eventdomain.Scope{}
-	if projectID != nil {
-		scope.ProjectID = *projectID
-	}
-	source, err := r.UseCases.Events.LiveSessionEvents(ctx, eventapp.LiveSessionEventsInput{Scope: scope})
+	return r.sessionCardChanges(ctx, projectID)
+}
+
+// SessionCardUpdates is the resolver for the sessionCardUpdates field.
+func (r *subscriptionResolver) SessionCardUpdates(ctx context.Context, projectID *string) (<-chan *model.SessionCardStreamItem, error) {
+	source, err := r.sessionCardChanges(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionCard)
+	out := make(chan *model.SessionCardStreamItem)
 	go func() {
 		defer close(out)
+		select {
+		case <-ctx.Done():
+			return
+		case out <- &model.SessionCardStreamItem{Ready: true}:
+		}
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case eventDTO, ok := <-source:
+			case card, ok := <-source:
 				if !ok {
 					return
 				}
-				if !sessionCardChangeEvent(eventDTO, projectID) || eventDTO.SessionID == nil {
-					continue
-				}
-				card, err := r.UseCases.Sessions.GetSessionCard(ctx, sessiondomain.ID(*eventDTO.SessionID))
-				if err != nil {
-					continue
-				}
 				select {
-				case out <- mapSessionCard(card):
 				case <-ctx.Done():
 					return
+				case out <- &model.SessionCardStreamItem{Card: card}:
 				}
 			}
 		}

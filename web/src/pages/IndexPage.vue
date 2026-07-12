@@ -337,7 +337,7 @@ async function loadOverviewSessions() {
   await Promise.all([loadLatestSessions(), loadHistorySessions()]);
 }
 
-function startOverviewLiveUpdates() {
+function startOverviewLiveUpdates(onSubscribed?: () => void) {
   liveStopped = false;
   cardSubscription?.unsubscribe();
   cardSubscription = subscribeSessionCardChanged(
@@ -348,6 +348,7 @@ function startOverviewLiveUpdates() {
       onClose: (close) => {
         void handleOverviewSubscriptionClose(close);
       },
+      onSubscribed: onSubscribed ?? refreshOverviewAfterSubscriptionReady,
     },
   );
 }
@@ -403,6 +404,10 @@ async function reconnectOverviewLiveUpdates() {
   if (!liveStopped) {
     startOverviewLiveUpdates();
   }
+}
+
+function refreshOverviewAfterSubscriptionReady() {
+  if (!liveStopped) void loadOverviewSessions();
 }
 
 function modeLabel(mode: SessionMode) {

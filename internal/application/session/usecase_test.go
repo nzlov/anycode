@@ -1597,17 +1597,12 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if repo.sessions["session-1"].Status == domain.StatusQueued {
-			if _, err := service.DrainQueuedSessions(ctx); err != nil {
-				t.Fatalf("DrainQueuedSessions() error = %v", err)
-			}
-		}
-		if len(processes.created) >= 2 {
-			break
-		}
-		time.Sleep(time.Millisecond)
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() initial error = %v", err)
+	}
+	waitForEventTypeAfter(t, events, "workflow.exit_pending", "session.queued")
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() next error = %v", err)
 	}
 	if len(processes.created) < 2 {
 		t.Fatalf("expected second process run, got %#v", processes.created)
@@ -1661,7 +1656,8 @@ func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testin
 		startHandle: processdomain.CodexHandle{PID: 123},
 		events:      closedEvents,
 	}
-	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(newFakeProcessRepository(), codex), WithEvents(&fakeEventStore{}))
+	events := &fakeEventStore{}
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(newFakeProcessRepository(), codex), WithEvents(events))
 	nextID := 0
 	service.generateID = func() (domain.ID, error) {
 		nextID++
@@ -1675,18 +1671,10 @@ func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testin
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSessionWithOptions() error = %v", err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if repo.sessions["session-1"].Status == domain.StatusQueued {
-			if _, err := service.DrainQueuedSessions(ctx); err != nil {
-				t.Fatalf("DrainQueuedSessions() error = %v", err)
-			}
-		}
-		if workflows.failedInput.Code == apperror.CodeWorkflowJSONRequired {
-			break
-		}
-		time.Sleep(time.Millisecond)
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
 	}
+	waitForEventTypeAfter(t, events, "workflow.exit_pending", "workflow.failed")
 	if workflows.failedInput.WorkflowRunID != "workflow-run-1" || workflows.failedInput.NodeRunID == nil || *workflows.failedInput.NodeRunID != "node-run-1" {
 		t.Fatalf("failed input = %#v", workflows.failedInput)
 	}
@@ -1739,6 +1727,7 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 		},
 	}
 	processes := newFakeProcessRepository()
+	events := &fakeEventStore{}
 	failedEvents := make(chan processdomain.CodexEvent, 1)
 	failedEvents <- processdomain.CodexEvent{Type: "process.exit", Payload: map[string]any{"exitCode": 7, "failureReason": "exit status 7"}}
 	close(failedEvents)
@@ -1746,7 +1735,7 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 		startHandle:  processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-1"},
 		eventStreams: []<-chan processdomain.CodexEvent{failedEvents},
 	}
-	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex), WithEvents(events))
 	nextID := 0
 	service.generateID = func() (domain.ID, error) {
 		nextID++
@@ -1764,17 +1753,12 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) {
-		if repo.sessions["session-1"].Status == domain.StatusQueued {
-			if _, err := service.DrainQueuedSessions(ctx); err != nil {
-				t.Fatalf("DrainQueuedSessions() error = %v", err)
-			}
-		}
-		if len(processes.created) >= 2 {
-			break
-		}
-		time.Sleep(time.Millisecond)
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() initial error = %v", err)
+	}
+	waitForEventTypeAfter(t, events, "workflow.exit_pending", "session.queued")
+	if _, err := service.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("DrainQueuedSessions() retry error = %v", err)
 	}
 	if len(processes.created) < 2 {
 		t.Fatalf("expected retry process run, got %#v", processes.created)
@@ -4336,7 +4320,8 @@ func TestStartSessionReplacesStaleCodexSessionIDFromThreadStarted(t *testing.T) 
 			}
 		},
 	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(&fakeEventStore{}), WithEventPublisher(publisher))
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithEventPublisher(publisher))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
 	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-codex", "event-process-exited", "event-stopped"}
 	service.generateID = func() (domain.ID, error) {
@@ -4351,16 +4336,6 @@ func TestStartSessionReplacesStaleCodexSessionIDFromThreadStarted(t *testing.T) 
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) && repo.sessions["session-1"].CodexSessionID != "codex-session-new" {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got := repo.sessions["session-1"].CodexSessionID; got != "codex-session-new" {
-		t.Fatalf("CodexSessionID = %q, want new thread id", got)
-	}
-	if processes.runningCodex != "codex-session-new" {
-		t.Fatalf("running codex session id = %q", processes.runningCodex)
-	}
 	select {
 	case ok := <-publishedAfterSave:
 		if !ok {
@@ -4368,6 +4343,13 @@ func TestStartSessionReplacesStaleCodexSessionIDFromThreadStarted(t *testing.T) 
 		}
 	case <-time.After(time.Second):
 		t.Fatal("thread.started event was not published")
+	}
+	waitForEventType(t, events, "session.stopped")
+	if got := repo.sessions["session-1"].CodexSessionID; got != "codex-session-new" {
+		t.Fatalf("CodexSessionID = %q, want new thread id", got)
+	}
+	if processes.runningCodex != "codex-session-new" {
+		t.Fatalf("running codex session id = %q", processes.runningCodex)
 	}
 }
 
@@ -5349,11 +5331,103 @@ func TestStopSessionStopsActiveProcessAndMarksStopped(t *testing.T) {
 	if codex.stoppedID != "process-run-1" {
 		t.Fatalf("stopped process id = %q", codex.stoppedID)
 	}
+	if processes.stoppingID != "process-run-1" {
+		t.Fatalf("stopping process id = %q", processes.stoppingID)
+	}
 	if processes.exitedID != "process-run-1" || processes.exitedResult.FailureReason != "stopped by user" {
 		t.Fatalf("exited process = %q %#v", processes.exitedID, processes.exitedResult)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusStopped {
 		t.Fatalf("saved session = %#v", repo.sessions["session-1"])
+	}
+}
+
+func TestStopSessionCompletesAfterRequestContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	publisher := &fakeEventPublisher{}
+	publisher.onPublish = func(event eventdomain.DomainEvent) {
+		if event.Type == "session.stopping" {
+			cancel()
+		}
+	}
+	codex := &fakeCodexProcess{}
+	codex.stopHook = func(stopCtx context.Context, _ processdomain.RunID) error {
+		if err := stopCtx.Err(); err != nil {
+			t.Fatalf("detached stop context error = %v", err)
+		}
+		return nil
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(&fakeEventStore{}), WithEventPublisher(publisher))
+
+	got, err := service.StopSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	if got.Status != domain.StatusStopped || repo.sessions["session-1"].Status != domain.StatusStopped {
+		t.Fatalf("session status = %q saved=%q", got.Status, repo.sessions["session-1"].Status)
+	}
+}
+
+func TestStopSessionReconcilesMissingLocalProcess(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusStopping,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusStopping}
+	processes.hasActive = true
+	codex := &fakeCodexProcess{stopErr: processdomain.ErrProcessNotFound}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+
+	got, err := service.StopSession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	if got.Status != domain.StatusStopped || processes.exitedID != "process-run-1" {
+		t.Fatalf("session status = %q exited process = %q", got.Status, processes.exitedID)
+	}
+}
+
+func TestStopSessionIsIdempotentAfterStopped(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusStopped}
+	service := New(repo, newFakeProjectRepository("project-1"))
+
+	got, err := service.StopSession(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	if got.Status != domain.StatusStopped {
+		t.Fatalf("session status = %q", got.Status)
+	}
+}
+
+func TestStopSessionRetriesPendingQuestionCleanupAfterStopped(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusStopped}
+	questions := &fakeQuestionCanceller{cancelErr: errors.New("cancel failed")}
+	service := New(repo, newFakeProjectRepository("project-1"), WithQuestions(questions))
+
+	if _, err := service.StopSession(context.Background(), "session-1"); err == nil {
+		t.Fatal("StopSession() error = nil, want pending question cleanup failure")
+	}
+	questions.cancelErr = nil
+	if _, err := service.StopSession(context.Background(), "session-1"); err != nil {
+		t.Fatalf("StopSession() retry error = %v", err)
+	}
+	if questions.cancelledSessionID != "session-1" || questions.cancelReason != "session stopped" {
+		t.Fatalf("cancelled questions = %q %q", questions.cancelledSessionID, questions.cancelReason)
 	}
 }
 
@@ -5738,24 +5812,6 @@ func TestStartSessionUsesUnitOfWorkForProcessLifecycleEvents(t *testing.T) {
 	}
 }
 
-func TestSessionHasDifferentActiveRun(t *testing.T) {
-	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{
-		ID:        "process-run-new",
-		SessionID: "session-1",
-		Status:    processdomain.StatusRunning,
-	}
-	processes.hasActive = true
-	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithProcesses(processes, nil))
-
-	if !service.sessionHasDifferentActiveRun(context.Background(), "session-1", "process-run-old") {
-		t.Fatal("expected different active run")
-	}
-	if service.sessionHasDifferentActiveRun(context.Background(), "session-1", "process-run-new") {
-		t.Fatal("expected same active run")
-	}
-}
-
 func TestResumeFailureUsesUnitOfWorkForProcessEventAndSessionEvents(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -5970,6 +6026,514 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 	gotEvents := events.snapshot()
 	if len(gotEvents) != 4 || gotEvents[0].Type != "session.recoverable" || gotEvents[0].Payload["previousStatus"] != "running" || gotEvents[3].Type != "session.resume_failed" {
 		t.Fatalf("events = %#v", gotEvents)
+	}
+}
+
+func TestMarkInterruptedSessionsRecoverableCompletesPendingWorkflowExit(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      domain.ModeWorkflow,
+		Status:    domain.StatusRunning,
+	}
+	repo.sessions[session.ID] = session
+	repo.listSessions = []domain.Session{session}
+	repo.listTotal = 1
+	eventSessionID := eventdomain.SessionID(session.ID)
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+		ID:        "event-1",
+		SessionID: &eventSessionID,
+		Type:      "workflow.exit_pending",
+		Payload: workflowProcessExitPayload(domain.WorkflowProcessExitInput{
+			WorkflowRunID: "workflow-run-1",
+			NodeRunID:     "node-run-1",
+			Output:        map[string]any{"processRunId": "process-run-1", "exit": "completed"},
+		}),
+	}}}
+	nextNodeRunID := domain.NodeRunID("node-run-2")
+	advance := domain.WorkflowAdvance{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     &nextNodeRunID,
+		CurrentNodeID: "verify",
+		RequiresCodex: true,
+		Prompt:        "verify",
+	}
+	workflows := &fakeWorkflowStarter{recoverAdvance: &advance}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), nil), WithEvents(events), WithWorkflows(workflows))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-2", nil }
+
+	count, err := service.MarkInterruptedSessionsRecoverable(ctx)
+	if err != nil {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("recoverable count = %d", count)
+	}
+	if got := repo.sessions[session.ID]; got.Status != domain.StatusQueued || got.Queue.WorkflowRunID != "workflow-run-1" || got.Queue.NodeRunID == nil || *got.Queue.NodeRunID != "node-run-2" {
+		t.Fatalf("recovered session = %#v", got)
+	}
+	if workflows.recoverInput.WorkflowRunID != "workflow-run-1" || workflows.recoverInput.NodeRunID != "node-run-1" {
+		t.Fatalf("recover input = %#v", workflows.recoverInput)
+	}
+	for _, event := range events.snapshot() {
+		if event.Type == "session.recoverable" {
+			t.Fatalf("pending workflow exit fell back to generic recovery: %#v", events.snapshot())
+		}
+	}
+}
+
+func TestMarkInterruptedSessionsRecoverableDefersPendingWorkflowSideEffect(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusRunning,
+		CodexSessionID: "codex-1",
+	}
+	repo.sessions[session.ID] = session
+	repo.interruptedSessions = []domain.Session{session}
+	eventSessionID := eventdomain.SessionID(session.ID)
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+		ID:        "event-1",
+		SessionID: &eventSessionID,
+		Type:      "workflow.exit_pending",
+		Payload: workflowProcessExitPayload(domain.WorkflowProcessExitInput{
+			WorkflowRunID: "workflow-run-1",
+			NodeRunID:     "node-run-1",
+			Output:        map[string]any{"processRunId": "process-run-1", "exit": "completed"},
+		}),
+	}}}
+	exprNodeRunID := domain.NodeRunID("node-run-expr")
+	advance := domain.WorkflowAdvance{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     &exprNodeRunID,
+		CurrentNodeID: "expr",
+		Expr:          &domain.WorkflowExpr{Script: `{status: "ready"}`},
+	}
+	workflows := &fakeWorkflowStarter{recoverAdvance: &advance}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), nil), WithEvents(events), WithWorkflows(workflows))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-2", nil }
+
+	if _, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() error = %v", err)
+	}
+	if got := repo.sessions[session.ID].Status; got != domain.StatusResumeFailed {
+		t.Fatalf("session status = %q", got)
+	}
+	if got := repo.sessions[session.ID].CodexSessionID; got != "" {
+		t.Fatalf("CodexSessionID = %q, want cleared", got)
+	}
+	if slices.Contains(availableActions(repo.sessions[session.ID]), "resume") {
+		t.Fatalf("available actions = %#v", availableActions(repo.sessions[session.ID]))
+	}
+	if _, err := service.ResumeSession(ctx, session.ID); err == nil || !strings.Contains(err.Error(), "without codex session id") {
+		t.Fatalf("ResumeSession() error = %v", err)
+	}
+	if workflows.resumeInput.SessionID != session.ID || workflows.resumeInput.Code != "workflow_advance_interrupted" {
+		t.Fatalf("resume failure input = %#v", workflows.resumeInput)
+	}
+	if workflows.completeCalls != 0 {
+		t.Fatalf("CompleteNode() calls = %d, want 0", workflows.completeCalls)
+	}
+}
+
+func TestMarkInterruptedSessionsRecoverableAppliesPersistedWorkflowFailure(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusRunning,
+		CodexSessionID: "codex-1",
+	}
+	repo.sessions[session.ID] = session
+	repo.interruptedSessions = []domain.Session{session}
+	eventSessionID := eventdomain.SessionID(session.ID)
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+		ID:        "event-1",
+		SessionID: &eventSessionID,
+		Type:      "workflow.exit_pending",
+		Payload: workflowProcessExitPayload(domain.WorkflowProcessExitInput{
+			WorkflowRunID: "workflow-run-1",
+			NodeRunID:     "node-run-1",
+			Output:        map[string]any{"processRunId": "process-run-1", "exit": "completed"},
+		}),
+	}}}
+	failedAdvance := domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Status: "failed"}
+	workflows := &fakeWorkflowStarter{recoverAdvance: &failedAdvance}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), nil), WithEvents(events), WithWorkflows(workflows))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-2", nil }
+
+	if _, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() error = %v", err)
+	}
+	if got := repo.sessions[session.ID].Status; got != domain.StatusFailed {
+		t.Fatalf("session status = %q", got)
+	}
+	if got := events.snapshot()[len(events.snapshot())-1].Type; got != "workflow.failed" {
+		t.Fatalf("last event type = %q", got)
+	}
+}
+
+func TestHandleCodexProcessExitRetriesOnlyFailedProcessRun(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	processes.markExitedFailures = 1
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{},
+		processdomain.ExitResult{},
+		nil,
+	)
+
+	if processes.markExitedCalls != 2 || processes.exitedID != "process-run-1" {
+		t.Fatalf("mark exited calls=%d id=%q", processes.markExitedCalls, processes.exitedID)
+	}
+	if got := repo.sessions["session-1"].Status; got != domain.StatusStopped {
+		t.Fatalf("session status = %q", got)
+	}
+	gotEvents := events.snapshot()
+	if len(gotEvents) != 2 || gotEvents[0].Type != "process.exited" || gotEvents[1].Type != "session.stopped" {
+		t.Fatalf("events = %#v", gotEvents)
+	}
+}
+
+func TestHandleCodexProcessExitStopsRetryingWhenServiceCloses(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	processes.markExitedFailures = 100
+	retryEntered := make(chan struct{})
+	var retryOnce sync.Once
+	processes.markExitedHook = func() {
+		retryOnce.Do(func() { close(retryEntered) })
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithEvents(&fakeEventStore{}))
+	service.processExitDelay = func(int) time.Duration { return time.Hour }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		service.handleCodexProcessExit(
+			repo.sessions["session-1"],
+			processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+			codexStartOptions{},
+			processdomain.ExitResult{},
+			nil,
+		)
+	}()
+	<-retryEntered
+	service.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleCodexProcessExit() did not stop after service close")
+	}
+}
+
+func TestWorkflowProcessExitRetriesApplyWithoutCompletingNodeAgain(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:          "session-1",
+		ProjectID:   "project-1",
+		Requirement: "continue workflow",
+		Mode:        domain.ModeWorkflow,
+		Status:      domain.StatusRunning,
+	}
+	failedBlockedSave := false
+	repo.saveHook = func(session domain.Session) error {
+		if session.Status == domain.StatusBlocked && !failedBlockedSave {
+			failedBlockedSave = true
+			return errors.New("save blocked session failed")
+		}
+		return nil
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	workflows := &fakeWorkflowStarter{advance: domain.WorkflowAdvance{
+		WorkflowRunID: "workflow-run-1",
+		Blocked:       true,
+		BlockedReason: "blocked",
+	}}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithEvents(events), WithWorkflows(workflows))
+	service.processExitDelay = func(int) time.Duration { return 0 }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	currentNodeRunID := processdomain.NodeRunID("node-run-1")
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+		processdomain.ExitResult{},
+		nil,
+	)
+
+	if workflows.completeCalls != 1 {
+		t.Fatalf("CompleteNode() calls = %d, want 1", workflows.completeCalls)
+	}
+	if got := repo.sessions["session-1"].Status; got != domain.StatusBlocked {
+		t.Fatalf("session status = %q", got)
+	}
+	var checkpoint *eventdomain.DomainEvent
+	for index := range events.events {
+		if events.events[index].Type == "workflow.exit_pending" {
+			checkpoint = &events.events[index]
+			break
+		}
+	}
+	if checkpoint == nil || checkpoint.Payload["workflowRunId"] != "workflow-run-1" || checkpoint.Payload["nodeRunId"] != "node-run-1" {
+		t.Fatalf("workflow exit checkpoint = %#v", checkpoint)
+	}
+}
+
+func TestWorkflowProcessExitRetriesFailureSaveWithoutCompletingNodeAgain(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning}
+	failedStatusSave := false
+	repo.saveHook = func(session domain.Session) error {
+		if session.Status == domain.StatusFailed && !failedStatusSave {
+			failedStatusSave = true
+			return errors.New("save failed session failed")
+		}
+		return nil
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	workflows := &fakeWorkflowStarter{completeErr: errors.New("complete node failed")}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithEvents(&fakeEventStore{}), WithWorkflows(workflows))
+	service.processExitDelay = func(int) time.Duration { return 0 }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	currentNodeRunID := processdomain.NodeRunID("node-run-1")
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+		processdomain.ExitResult{},
+		nil,
+	)
+
+	if workflows.completeCalls != 1 {
+		t.Fatalf("CompleteNode() calls = %d, want 1", workflows.completeCalls)
+	}
+	if got := repo.sessions["session-1"].Status; got != domain.StatusFailed {
+		t.Fatalf("session status = %q", got)
+	}
+}
+
+func TestWorkflowProcessExitDoesNotReplayExprAdvanceAfterSideEffectFailure(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning}
+	failedCompletedSave := false
+	repo.saveHook = func(session domain.Session) error {
+		if session.Status == domain.StatusCompleted && !failedCompletedSave {
+			failedCompletedSave = true
+			return errors.New("save completed session failed")
+		}
+		return nil
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	exprNodeRunID := domain.NodeRunID("node-run-expr")
+	workflows := &fakeWorkflowStarter{}
+	workflows.advance = domain.WorkflowAdvance{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     &exprNodeRunID,
+		Expr:          &domain.WorkflowExpr{Script: `{status: "ready"}`},
+	}
+	workflows.completeHook = func() {
+		if workflows.completeCalls == 2 {
+			workflows.advance = domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Completed: true}
+		}
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithEvents(&fakeEventStore{}), WithWorkflows(workflows))
+	service.processExitDelay = func(int) time.Duration { return 0 }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	currentNodeRunID := processdomain.NodeRunID("node-run-1")
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+		processdomain.ExitResult{},
+		nil,
+	)
+
+	if workflows.completeCalls != 2 {
+		t.Fatalf("CompleteNode() calls = %d, want 2", workflows.completeCalls)
+	}
+	if got := repo.sessions["session-1"].Status; got != domain.StatusFailed {
+		t.Fatalf("session status = %q", got)
+	}
+}
+
+func TestConsumeCodexEventsReleasesWorkdirBeforeExitPersistenceCompletes(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	retryEntered := make(chan struct{})
+	releaseRetry := make(chan struct{})
+	var retryOnce sync.Once
+	processes.markExitedHook = func() {
+		retryOnce.Do(func() {
+			close(retryEntered)
+			<-releaseRetry
+		})
+	}
+	eventSource := make(chan processdomain.CodexEvent)
+	close(eventSource)
+	events := &fakeEventStore{}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, &fakeCodexProcess{events: eventSource}),
+		WithEvents(events),
+	)
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	if !service.reserveWorkdir("/workspace/session-1", "session-1") {
+		t.Fatal("reserveWorkdir() = false")
+	}
+
+	service.consumeCodexEvents(
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		repo.sessions["session-1"],
+		codexStartOptions{},
+		"/workspace/session-1",
+	)
+	<-retryEntered
+	if !service.reserveWorkdir("/workspace/session-1", "session-2") {
+		t.Fatal("workdir remained reserved while exit persistence was retrying")
+	}
+	service.releaseWorkdir("/workspace/session-1", "session-2")
+	close(releaseRetry)
+	waitForEventType(t, events, "session.stopped")
+}
+
+func TestWorkflowProcessExitKeepsSessionLockThroughAdvance(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:          "session-1",
+		ProjectID:   "project-1",
+		Requirement: "continue workflow",
+		Mode:        domain.ModeWorkflow,
+		Status:      domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	completeEntered := make(chan struct{})
+	releaseComplete := make(chan struct{})
+	nextNodeRunID := domain.NodeRunID("node-run-2")
+	workflows := &fakeWorkflowStarter{
+		completeHook: func() {
+			close(completeEntered)
+			<-releaseComplete
+		},
+		advance: domain.WorkflowAdvance{
+			WorkflowRunID: "workflow-run-1",
+			NodeRunID:     &nextNodeRunID,
+			RequiresCodex: true,
+			Prompt:        "continue",
+		},
+	}
+	locker := &mutexSessionLocker{}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, &fakeCodexProcess{}),
+		WithEvents(&fakeEventStore{}),
+		WithWorkflows(workflows),
+		WithSessionLocker(locker),
+	)
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	currentNodeRunID := processdomain.NodeRunID("node-run-1")
+	exitDone := make(chan struct{})
+	go func() {
+		defer close(exitDone)
+		service.handleCodexProcessExit(
+			repo.sessions["session-1"],
+			processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+			codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+			processdomain.ExitResult{},
+			nil,
+		)
+	}()
+	<-completeEntered
+	stopDone := make(chan error, 1)
+	go func() {
+		_, err := service.StopSession(context.Background(), "session-1")
+		stopDone <- err
+	}()
+	select {
+	case err := <-stopDone:
+		t.Fatalf("StopSession() returned before workflow advance released: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseComplete)
+	if err := <-stopDone; err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	<-exitDone
+	if got := repo.sessions["session-1"].Status; got != domain.StatusStopped {
+		t.Fatalf("session status = %q", got)
 	}
 }
 
@@ -6394,6 +6958,11 @@ type fakeWorkflowStarter struct {
 	completeInput     domain.WorkflowNodeCompleteInput
 	advance           domain.WorkflowAdvance
 	completeErr       error
+	completeHook      func()
+	completeCalls     int
+	recoverInput      domain.WorkflowProcessExitInput
+	recoverAdvance    *domain.WorkflowAdvance
+	recoverErr        error
 	failInput         domain.WorkflowNodeFailInput
 	failAdvance       domain.WorkflowAdvance
 	failErr           error
@@ -6449,7 +7018,11 @@ func (s *fakeWorkflowStarter) RerunCurrentNodeForSession(_ context.Context, inpu
 }
 
 func (s *fakeWorkflowStarter) CompleteNode(_ context.Context, input domain.WorkflowNodeCompleteInput) (domain.WorkflowAdvance, error) {
+	s.completeCalls++
 	s.completeInput = input
+	if s.completeHook != nil {
+		s.completeHook()
+	}
 	if s.completeErr != nil {
 		return domain.WorkflowAdvance{}, s.completeErr
 	}
@@ -6464,6 +7037,30 @@ func (s *fakeWorkflowStarter) FailNode(_ context.Context, input domain.WorkflowN
 	return s.failAdvance, nil
 }
 
+func (s *fakeWorkflowStarter) RecoverProcessExit(ctx context.Context, input domain.WorkflowProcessExitInput) (domain.WorkflowAdvance, error) {
+	s.recoverInput = input
+	if s.recoverErr != nil {
+		return domain.WorkflowAdvance{}, s.recoverErr
+	}
+	if s.recoverAdvance != nil {
+		return *s.recoverAdvance, nil
+	}
+	if input.Failed {
+		return s.FailNode(ctx, domain.WorkflowNodeFailInput{
+			WorkflowRunID: input.WorkflowRunID,
+			NodeRunID:     input.NodeRunID,
+			Code:          input.FailureCode,
+			Message:       input.FailureMessage,
+			Output:        input.Output,
+		})
+	}
+	return s.CompleteNode(ctx, domain.WorkflowNodeCompleteInput{
+		WorkflowRunID: input.WorkflowRunID,
+		NodeRunID:     input.NodeRunID,
+		Output:        input.Output,
+	})
+}
+
 func (s *fakeWorkflowStarter) SubmitApprovalForSession(_ context.Context, input domain.WorkflowApprovalInput) (domain.WorkflowApprovalResult, error) {
 	s.approvalInput = input
 	if s.approvalErr != nil {
@@ -6473,15 +7070,19 @@ func (s *fakeWorkflowStarter) SubmitApprovalForSession(_ context.Context, input 
 }
 
 type fakeProcessRepository struct {
-	created      []processdomain.Run
-	active       processdomain.Run
-	hasActive    bool
-	activeCount  int
-	runningID    processdomain.RunID
-	runningPID   int
-	runningCodex string
-	exitedID     processdomain.RunID
-	exitedResult processdomain.ExitResult
+	created            []processdomain.Run
+	active             processdomain.Run
+	hasActive          bool
+	activeCount        int
+	runningID          processdomain.RunID
+	runningPID         int
+	runningCodex       string
+	stoppingID         processdomain.RunID
+	exitedID           processdomain.RunID
+	exitedResult       processdomain.ExitResult
+	markExitedCalls    int
+	markExitedFailures int
+	markExitedHook     func()
 }
 
 func newFakeProcessRepository() *fakeProcessRepository {
@@ -6531,7 +7132,23 @@ func (r *fakeProcessRepository) MarkRunning(_ context.Context, id processdomain.
 	return nil
 }
 
+func (r *fakeProcessRepository) MarkStopping(_ context.Context, id processdomain.RunID) error {
+	r.stoppingID = id
+	r.active.ID = id
+	r.active.Status = processdomain.StatusStopping
+	r.hasActive = true
+	return nil
+}
+
 func (r *fakeProcessRepository) MarkExited(_ context.Context, id processdomain.RunID, result processdomain.ExitResult) error {
+	r.markExitedCalls++
+	if r.markExitedHook != nil {
+		r.markExitedHook()
+	}
+	if r.markExitedFailures > 0 {
+		r.markExitedFailures--
+		return errors.New("mark process exited failed")
+	}
 	r.exitedID = id
 	r.exitedResult = result
 	if r.active.ID == id {
@@ -6586,6 +7203,7 @@ type fakeCodexProcess struct {
 	resumeErr    error
 	stoppedID    processdomain.RunID
 	stopErr      error
+	stopHook     func(context.Context, processdomain.RunID) error
 	eventsErr    error
 	events       <-chan processdomain.CodexEvent
 	eventStreams []<-chan processdomain.CodexEvent
@@ -6628,8 +7246,11 @@ func (p *fakeCodexProcess) Resume(_ context.Context, input processdomain.CodexRe
 	return handle, nil
 }
 
-func (p *fakeCodexProcess) Stop(_ context.Context, id processdomain.RunID) error {
+func (p *fakeCodexProcess) Stop(ctx context.Context, id processdomain.RunID) error {
 	p.stoppedID = id
+	if p.stopHook != nil {
+		return p.stopHook(ctx, id)
+	}
 	return p.stopErr
 }
 
@@ -6677,6 +7298,16 @@ func (u *fakeUnitOfWork) Do(ctx context.Context, fn func(context.Context, port.T
 
 type fakeSessionLocker struct {
 	ids []domain.ID
+}
+
+type mutexSessionLocker struct {
+	mu sync.Mutex
+}
+
+func (l *mutexSessionLocker) WithSessionLock(ctx context.Context, _ domain.ID, fn func(context.Context) error) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return fn(ctx)
 }
 
 func (l *fakeSessionLocker) WithSessionLock(ctx context.Context, id domain.ID, fn func(context.Context) error) error {
@@ -6814,6 +7445,25 @@ func waitForEventType(t *testing.T, store *fakeEventStore, eventType string) eve
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatalf("event type %q not found in %#v", eventType, store.snapshot())
+	return eventdomain.DomainEvent{}
+}
+
+func waitForEventTypeAfter(t *testing.T, store *fakeEventStore, afterType string, eventType string) eventdomain.DomainEvent {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		seenAfter := false
+		for _, event := range store.snapshot() {
+			if seenAfter && event.Type == eventType {
+				return event
+			}
+			if event.Type == afterType {
+				seenAfter = true
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("event %q after %q was not published: %#v", eventType, afterType, store.snapshot())
 	return eventdomain.DomainEvent{}
 }
 

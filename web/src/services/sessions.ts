@@ -579,19 +579,32 @@ export function subscribeSessionCardChanged(
     onData: (card: SessionCard) => void;
     onError?: (error: Error) => void;
     onClose?: (close: GraphQLSubscriptionClose) => void;
+    onSubscribed?: (() => void) | undefined;
   },
 ) {
   const options = {
     query: `
-      subscription SessionCardChanged($projectId: ID) {
-        sessionCardChanged(projectId: $projectId) {
-          ${sessionCardFields}
+      subscription SessionCardUpdates($projectId: ID) {
+        sessionCardUpdates(projectId: $projectId) {
+          ready
+          card {
+            ${sessionCardFields}
+          }
         }
       }
     `,
     variables: input.projectId ? { projectId: input.projectId } : {},
-    onData: (data: { sessionCardChanged: GraphQLSessionCard }) =>
-      handlers.onData(normalizeSessionCard(data.sessionCardChanged)),
+    onData: (data: {
+      sessionCardUpdates: { ready: boolean; card?: GraphQLSessionCard | null };
+    }) => {
+      if (data.sessionCardUpdates.ready) {
+        handlers.onSubscribed?.();
+        return;
+      }
+      if (data.sessionCardUpdates.card) {
+        handlers.onData(normalizeSessionCard(data.sessionCardUpdates.card));
+      }
+    },
   };
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
@@ -599,9 +612,10 @@ export function subscribeSessionCardChanged(
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
-  return graphqlSubscribe<{ sessionCardChanged: GraphQLSessionCard }, { projectId?: string }>(
-    options,
-  );
+  return graphqlSubscribe<
+    { sessionCardUpdates: { ready: boolean; card?: GraphQLSessionCard | null } },
+    { projectId?: string }
+  >(options);
 }
 
 export function subscribeSessionStateUpdates(

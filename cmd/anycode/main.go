@@ -70,6 +70,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("wire graphql usecases: %s", err.Error())
 	}
+	if closer, ok := useCases.Sessions.(interface{ Close() }); ok {
+		defer closer.Close()
+	}
 	stopMCP, err := startMCPUnixServer(cfg, useCases, mcpSocket)
 	if err != nil {
 		log.Fatalf("start mcp unix server: %s", err.Error())

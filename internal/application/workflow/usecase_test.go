@@ -481,6 +481,72 @@ func TestCompleteNodeAdvancesToCloseNode(t *testing.T) {
 	}
 }
 
+func TestRecoverProcessExitReturnsPersistedAdvanceWithoutCompletingNodeAgain(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Graph: domain.Graph{Nodes: []domain.Node{
+			{ID: "build", Type: "codex", Title: "Build"},
+			{ID: "verify", Type: "codex", Title: "Verify", Prompt: "Verify result"},
+		}},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunRunning,
+		CurrentNodeID:        "verify",
+		Context:              domain.Context{Values: map[string]any{"params": map[string]any{"artifact": "ready"}}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{
+		{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeSucceeded, Attempt: 1},
+		{ID: "node-run-2", WorkflowRunID: "workflow-run-1", NodeID: "verify", Status: domain.NodeRunning, Attempt: 1},
+	}
+	service := New(repo)
+
+	got, err := service.RecoverProcessExit(ctx, sessiondomain.WorkflowProcessExitInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        map[string]any{"results": map[string]any{"artifact": "ready"}},
+	})
+	if err != nil {
+		t.Fatalf("RecoverProcessExit() error = %v", err)
+	}
+	if !got.RequiresCodex || got.NodeRunID == nil || *got.NodeRunID != "node-run-2" || got.CurrentNodeID != "verify" {
+		t.Fatalf("RecoverProcessExit() = %#v", got)
+	}
+	if len(repo.nodeRuns) != 2 || repo.nodeRuns[0].Status != domain.NodeSucceeded {
+		t.Fatalf("node runs mutated during recovery: %#v", repo.nodeRuns)
+	}
+}
+
+func TestRecoverProcessExitReturnsPersistedFailedRun(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.runs = []domain.Run{{
+		ID:            "workflow-run-1",
+		SessionID:     "session-1",
+		Status:        domain.RunFailed,
+		CurrentNodeID: "build",
+		Context:       domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
+	service := New(repo)
+
+	got, err := service.RecoverProcessExit(ctx, sessiondomain.WorkflowProcessExitInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+	})
+	if err != nil {
+		t.Fatalf("RecoverProcessExit() error = %v", err)
+	}
+	if got.WorkflowRunID != "workflow-run-1" || got.Status != "failed" {
+		t.Fatalf("RecoverProcessExit() = %#v", got)
+	}
+}
+
 func TestCompleteNodeEvaluatesExprAndPassesResultsAsNextParams(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -1041,6 +1107,33 @@ func TestResumeCurrentNodeForSessionBindsExistingAttempt(t *testing.T) {
 	resume, ok := repo.runs[0].Context.Values["resume"].(map[string]any)
 	if !ok || resume["status"] != "retry_requested" {
 		t.Fatalf("resume context = %#v", repo.runs[0].Context.Values["resume"])
+	}
+}
+
+func TestResumeCurrentNodeForSessionRejectsNonCodexNode(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Graph: domain.Graph{Nodes: []domain.Node{{
+			ID: "merge", Type: "merge", Title: "Merge", Merge: &domain.MergeConfig{Strategy: "merge"},
+		}}},
+	}
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunWaitingResumeAction,
+		CurrentNodeID:        "merge",
+		Context:              domain.Context{Values: map[string]any{}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "merge", Status: domain.NodeFailed, Attempt: 1}}
+	service := New(repo)
+
+	_, err := service.ResumeCurrentNodeForSession(ctx, sessiondomain.WorkflowResumeCurrentNodeInput{SessionID: "session-1"})
+	if err == nil || !strings.Contains(err.Error(), "cannot resume a Codex process") {
+		t.Fatalf("ResumeCurrentNodeForSession() error = %v", err)
 	}
 }
 

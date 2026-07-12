@@ -49,6 +49,7 @@ type Subscription {
   sessionEvents(sessionId: ID!): SessionEventStreamItem!
   sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
+  sessionCardUpdates(projectId: ID): SessionCardStreamItem!
 }
 
 type PageInfo {
@@ -265,6 +266,11 @@ type SessionStateStreamItem {
   ready: Boolean!
   session: SessionDetail
   questionBatch: QuestionBatch
+}
+
+type SessionCardStreamItem {
+  ready: Boolean!
+  card: SessionCard
 }
 
 type EventScope {

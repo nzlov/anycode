@@ -29,11 +29,11 @@ type DTO struct {
 type Service struct {
 	mu          sync.Mutex
 	nextSubID   int64
-	subscribers map[int64]subscription
+	subscribers map[string]map[int64]*subscription
 }
 
 func New() *Service {
-	return &Service{subscribers: map[int64]subscription{}}
+	return &Service{subscribers: map[string]map[int64]*subscription{}}
 }
 
 func (s *Service) LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error) {
@@ -41,73 +41,126 @@ func (s *Service) LiveSessionEvents(ctx context.Context, input LiveSessionEvents
 		return nil, errors.New("event usecase: nil service")
 	}
 	out := make(chan DTO, 16)
-	id := s.subscribe(input.Scope, out, ctx.Done())
+	sub := s.subscribe(input.Scope, out, ctx.Done())
 	go func() {
 		<-ctx.Done()
-		s.unsubscribe(id)
+		s.removeSubscription(sub)
 	}()
 	return out, nil
 }
 
-func (s *Service) PublishAfterCommit(ctx context.Context, event domain.DomainEvent) error {
+func (s *Service) PublishAfterCommit(_ context.Context, event domain.DomainEvent) error {
 	if s == nil {
 		return errors.New("event usecase: nil service")
 	}
 	dto := toDTO(event)
 	for _, sub := range s.matchingSubscribers(event.Scope) {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case sub.ch <- dto:
-		case <-sub.done:
+		if !sub.trySend(dto) {
+			s.removeSubscription(sub)
 		}
 	}
 	return nil
 }
 
 type subscription struct {
-	scope domain.Scope
-	ch    chan DTO
-	done  <-chan struct{}
+	id     int64
+	key    string
+	ch     chan DTO
+	done   <-chan struct{}
+	mu     sync.Mutex
+	closed bool
 }
 
-func (s *Service) subscribe(scope domain.Scope, ch chan DTO, done <-chan struct{}) int64 {
+func (s *Service) subscribe(scope domain.Scope, ch chan DTO, done <-chan struct{}) *subscription {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextSubID++
-	id := s.nextSubID
-	s.subscribers[id] = subscription{scope: scope, ch: ch, done: done}
-	return id
+	key := subscriptionKey(scope)
+	sub := &subscription{id: s.nextSubID, key: key, ch: ch, done: done}
+	if s.subscribers[key] == nil {
+		s.subscribers[key] = map[int64]*subscription{}
+	}
+	s.subscribers[key][sub.id] = sub
+	return sub
 }
 
-func (s *Service) unsubscribe(id int64) {
+func (s *Service) removeSubscription(sub *subscription) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.subscribers, id)
+	bucket := s.subscribers[sub.key]
+	if bucket[sub.id] == sub {
+		delete(bucket, sub.id)
+		if len(bucket) == 0 {
+			delete(s.subscribers, sub.key)
+		}
+	}
+	s.mu.Unlock()
+	sub.close()
 }
 
-func (s *Service) matchingSubscribers(scope domain.Scope) []subscription {
+func (s *Service) matchingSubscribers(scope domain.Scope) []*subscription {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	subscribers := make([]subscription, 0, len(s.subscribers))
-	for _, sub := range s.subscribers {
-		if scopeMatches(sub.scope, scope) {
+	keys := eventKeys(scope)
+	count := 0
+	for _, key := range keys {
+		count += len(s.subscribers[key])
+	}
+	subscribers := make([]*subscription, 0, count)
+	for _, key := range keys {
+		for _, sub := range s.subscribers[key] {
 			subscribers = append(subscribers, sub)
 		}
 	}
 	return subscribers
 }
 
-func scopeMatches(filter domain.Scope, scope domain.Scope) bool {
-	if filter.ProjectID != "" && filter.ProjectID != scope.ProjectID {
+func (s *subscription) trySend(dto DTO) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
 		return false
 	}
-	if filter.SessionID != nil {
-		if scope.SessionID == nil || *filter.SessionID != *scope.SessionID {
-			return false
-		}
+	select {
+	case <-s.done:
+		return false
+	case s.ch <- dto:
+		return true
+	default:
+		return false
 	}
-	return true
+}
+
+func (s *subscription) close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
+	close(s.ch)
+}
+
+const globalSubscriptionKey = "global"
+
+func subscriptionKey(scope domain.Scope) string {
+	if scope.SessionID != nil {
+		return "session:" + string(*scope.SessionID)
+	}
+	if scope.ProjectID != "" {
+		return "project:" + scope.ProjectID
+	}
+	return globalSubscriptionKey
+}
+
+func eventKeys(scope domain.Scope) []string {
+	keys := []string{globalSubscriptionKey}
+	if scope.ProjectID != "" {
+		keys = append(keys, "project:"+scope.ProjectID)
+	}
+	if scope.SessionID != nil {
+		keys = append(keys, "session:"+string(*scope.SessionID))
+	}
+	return keys
 }
 
 func toDTO(event domain.DomainEvent) DTO {

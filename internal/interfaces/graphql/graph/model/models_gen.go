@@ -337,6 +337,11 @@ type SessionCardPage struct {
 	PageInfo *PageInfo      `json:"pageInfo"`
 }
 
+type SessionCardStreamItem struct {
+	Ready bool         `json:"ready"`
+	Card  *SessionCard `json:"card,omitempty"`
+}
+
 type SessionCommitHistory struct {
 	Commits   *CommitRecordPage `json:"commits"`
 	Available bool              `json:"available"`

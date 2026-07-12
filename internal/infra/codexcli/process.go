@@ -22,18 +22,22 @@ import (
 )
 
 var (
-	ErrProcessNotFound      = errors.New("codex process run is not active")
+	ErrProcessNotFound      = process.ErrProcessNotFound
 	errAmbiguousSessionLogs = errors.New("multiple active codex session logs")
 )
 
 type activeProcess struct {
-	cmd            *exec.Cmd
-	stdout         io.ReadCloser
-	stderr         *bytes.Buffer
-	home           string
-	workdir        string
-	codexSessionID string
-	baseline       map[string]int64
+	cmd              *exec.Cmd
+	stderr           *bytes.Buffer
+	home             string
+	workdir          string
+	codexSessionID   string
+	baseline         map[string]int64
+	stdoutSessionIDs <-chan string
+	done             chan struct{}
+	mu               sync.Mutex
+	exitResult       process.ExitResult
+	eventsStarted    bool
 }
 
 var processRegistry sync.Map
@@ -86,19 +90,23 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 		PID:            cmd.Process.Pid,
 		CodexSessionID: codexSessionID,
 	}
-	processRegistry.Store(runID, &activeProcess{
-		cmd:            cmd,
-		stdout:         stdout,
-		stderr:         &stderr,
-		home:           codexHome,
-		workdir:        workdir,
-		codexSessionID: codexSessionID,
-		baseline:       baseline,
-	})
+	stdoutSessionIDs := observeStdout(stdout)
+	active := &activeProcess{
+		cmd:              cmd,
+		stderr:           &stderr,
+		home:             codexHome,
+		workdir:          workdir,
+		codexSessionID:   codexSessionID,
+		baseline:         baseline,
+		stdoutSessionIDs: stdoutSessionIDs,
+		done:             make(chan struct{}),
+	}
+	processRegistry.Store(runID, active)
+	go active.wait()
 	return handle, nil
 }
 
-func (c *Client) Stop(_ context.Context, processRunID process.RunID) error {
+func (c *Client) Stop(ctx context.Context, processRunID process.RunID) error {
 	value, ok := processRegistry.Load(processRunID)
 	if !ok {
 		return ErrProcessNotFound
@@ -108,15 +116,33 @@ func (c *Client) Stop(_ context.Context, processRunID process.RunID) error {
 		processRegistry.Delete(processRunID)
 		return ErrProcessNotFound
 	}
-	processRegistry.Delete(processRunID)
+	if active.exited() {
+		active.cleanupWithoutEventConsumer(processRunID)
+		return nil
+	}
 	pid := active.cmd.Process.Pid
 	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
-	time.Sleep(500 * time.Millisecond)
+	exited, err := waitForProcessDone(ctx, active.done, 500*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	if exited {
+		active.cleanupWithoutEventConsumer(processRunID)
+		return nil
+	}
 	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
+	exited, err = waitForProcessDone(ctx, active.done, 2*time.Second)
+	if err != nil {
+		return err
+	}
+	if !exited {
+		return errors.New("codex process did not exit after SIGKILL")
+	}
+	active.cleanupWithoutEventConsumer(processRunID)
 	return nil
 }
 
@@ -126,30 +152,27 @@ func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan
 		return nil, ErrProcessNotFound
 	}
 	active := value.(*activeProcess)
+	if !active.startEvents() {
+		return nil, errors.New("codex process events already started")
+	}
 	events := make(chan process.CodexEvent, 16)
 	go func() {
 		defer close(events)
 		defer processRegistry.Delete(handle.ProcessRunID)
-		defer active.stdout.Close()
-
-		stdoutSessionIDs, drained := observeStdout(active.stdout)
 		exited := make(chan process.ExitResult, 1)
 		go func() {
-			<-drained
-			exited <- waitProcess(active.cmd, active.stderr)
+			exited <- active.waitResult()
 		}()
-		exitResult, readErr := tailSessionLog(ctx, active, events, exited, stdoutSessionIDs)
+		exitResult, readErr := tailSessionLog(ctx, active, events, exited, active.stdoutSessionIDs)
 		sendProcessExit(ctx, events, exitResult, readErr)
 	}()
 	return events, nil
 }
 
-func observeStdout(stdout io.Reader) (<-chan string, <-chan struct{}) {
+func observeStdout(stdout io.Reader) <-chan string {
 	sessionIDs := make(chan string, 1)
-	done := make(chan struct{})
 	go func() {
 		defer close(sessionIDs)
-		defer close(done)
 		reader := bufio.NewReader(stdout)
 		identified := false
 		for {
@@ -165,7 +188,68 @@ func observeStdout(stdout io.Reader) (<-chan string, <-chan struct{}) {
 			}
 		}
 	}()
-	return sessionIDs, done
+	return sessionIDs
+}
+
+func (a *activeProcess) wait() {
+	result := waitProcess(a.cmd, a.stderr)
+	a.mu.Lock()
+	a.exitResult = result
+	close(a.done)
+	a.mu.Unlock()
+}
+
+func (a *activeProcess) waitResult() process.ExitResult {
+	<-a.done
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.exitResult
+}
+
+func (a *activeProcess) exited() bool {
+	select {
+	case <-a.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *activeProcess) startEvents() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.eventsStarted {
+		return false
+	}
+	a.eventsStarted = true
+	return true
+}
+
+func (a *activeProcess) cleanupWithoutEventConsumer(runID process.RunID) {
+	a.mu.Lock()
+	eventsStarted := a.eventsStarted
+	a.mu.Unlock()
+	if !eventsStarted {
+		processRegistry.CompareAndDelete(runID, a)
+	}
+}
+
+func waitForProcessDone(ctx context.Context, done <-chan struct{}, timeout time.Duration) (bool, error) {
+	select {
+	case <-done:
+		return true, nil
+	default:
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-timer.C:
+		return false, nil
+	}
 }
 
 func stdoutSessionID(raw []byte) string {
