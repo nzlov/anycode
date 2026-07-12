@@ -17,11 +17,10 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
-	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -137,11 +136,16 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 			"query": `subscription($sessionId: ID!) {
 				sessionEvents(sessionId: $sessionId) {
 					ready
-					event {
-						id
-						sessionId
-						type
-						payload
+						event {
+							id
+							orderKey
+							phase
+							content {
+								__typename
+								... on SessionStatusContent {
+									code
+								}
+							}
 					}
 				}
 			}`,
@@ -168,14 +172,12 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 		t.Fatalf("sessionEvents ready item = %#v", readyData["sessionEvents"])
 	}
 
-	sessionID := eventdomain.SessionID("session-1")
 	timeline.ch <- timelineapp.DTO{
-		ID:        "event-1",
-		Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
-		SessionID: &sessionID,
-		Type:      "session.running",
-		Payload:   map[string]any{"status": "running"},
-		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		ID:         "event-1",
+		OrderKey:   "order-1",
+		Phase:      processdomain.CodexPhaseStandalone,
+		Content:    processdomain.CodexStatusContent{Code: "session.running", Level: "info"},
+		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
 	message := readSocketMessage(t, conn)
@@ -198,7 +200,8 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	if !ok || streamItem["ready"] != false {
 		t.Fatalf("sessionEvents stream item = %#v", streamItem)
 	}
-	if event["id"] != "event-1" || event["type"] != "session.running" || event["sessionId"] != "session-1" {
+	content, _ := event["content"].(map[string]any)
+	if event["id"] != "event-1" || event["orderKey"] != "order-1" || event["phase"] != "STANDALONE" || content["code"] != "session.running" {
 		t.Fatalf("session event = %#v", event)
 	}
 }
@@ -682,8 +685,8 @@ func (u *fakeEventUseCase) LiveSessionEvents(context.Context, eventapp.LiveSessi
 	return u.ch, nil
 }
 
-func (u *fakeTimelineUseCase) ListSessionEvents(context.Context, timelineapp.ListSessionEventsInput) (port.Page[timelineapp.DTO], error) {
-	return port.Page[timelineapp.DTO]{}, nil
+func (u *fakeTimelineUseCase) ListSessionEvents(context.Context, timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {
+	return timelineapp.Page{}, nil
 }
 
 func (u *fakeTimelineUseCase) SessionEvents(context.Context, timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {

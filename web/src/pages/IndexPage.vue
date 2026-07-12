@@ -157,6 +157,19 @@
                   <q-tooltip>回答待处理问题</q-tooltip>
                 </q-btn>
                 <q-btn
+                  v-if="card.status === 'queued' && card.availableActions.includes('stop')"
+                  flat
+                  dense
+                  class="lane-icon-btn app-icon-btn"
+                  color="negative"
+                  icon="cancel"
+                  aria-label="取消排队"
+                  :loading="cardActionLoading && activeActionSessionId === card.id"
+                  @click.stop="cancelQueuedCard(card)"
+                >
+                  <q-tooltip>取消排队</q-tooltip>
+                </q-btn>
+                <q-btn
                   v-if="cardAction(card)"
                   flat
                   dense
@@ -211,11 +224,11 @@ import {
 } from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
+import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
 import {
   closeSession,
+  executeSession,
   getPendingQuestionBatches,
-  resumeSession,
-  startSession,
   stopSession,
   subscribeSessionCardChanged,
   submitQuestionBatch,
@@ -431,25 +444,6 @@ function overviewCardClass(card: SessionCard) {
   return `overview-session-card--${card.status}`;
 }
 
-function statusLabel(status: SessionStatus) {
-  const labels: Record<SessionStatus, string> = {
-    created: '待运行',
-    queued: '排队中',
-    starting: '启动中',
-    running: '运行中',
-    waiting_user: '待回答',
-    waiting_approval: '待审批',
-    stopping: '停止中',
-    stopped: '已停止',
-    resume_failed: '恢复失败',
-    failed: '失败',
-    blocked: '阻塞',
-    completed: '已完成',
-    closed: '已关闭',
-  };
-  return labels[status];
-}
-
 function cardAction(card: SessionCard) {
   if (card.pendingQuestion || card.status === 'waiting_user' || card.status === 'closed') {
     return null;
@@ -460,14 +454,11 @@ function cardAction(card: SessionCard) {
   if (card.status === 'stopping') {
     return { icon: 'hourglass_top', color: 'warning', tooltip: '停止中', disabled: true };
   }
-  if (card.status === 'queued' && card.availableActions.includes('run')) {
+  if (card.status === 'queued' && card.availableActions.includes('execute')) {
     return { icon: 'play_arrow', color: 'positive', tooltip: '强制启动排队卡片', disabled: false };
   }
-  if (card.availableActions.includes('run')) {
-    return { icon: 'play_arrow', color: 'positive', tooltip: '强制运行', disabled: false };
-  }
-  if (card.availableActions.includes('resume')) {
-    return { icon: 'restart_alt', color: 'primary', tooltip: '恢复会话', disabled: false };
+  if (card.availableActions.includes('execute')) {
+    return { icon: 'play_arrow', color: 'positive', tooltip: '运行会话', disabled: false };
   }
   return null;
 }
@@ -480,12 +471,25 @@ async function runCardAction(card: SessionCard) {
   try {
     if (card.status === 'starting' || card.status === 'running') {
       await stopSession(card.id);
-    } else if (card.availableActions.includes('run')) {
-      await startSession(card.id, card.status === 'queued');
-    } else if (card.availableActions.includes('resume')) {
-      await resumeSession(card.id, card.status === 'queued');
+    } else if (card.availableActions.includes('execute')) {
+      await executeSession(card.id, card.status === 'queued');
     }
     await loadOverviewSessions();
+  } finally {
+    cardActionLoading.value = false;
+    activeActionSessionId.value = '';
+  }
+}
+
+async function cancelQueuedCard(card: SessionCard) {
+  if (card.status !== 'queued' || !card.availableActions.includes('stop')) return;
+  activeActionSessionId.value = card.id;
+  cardActionLoading.value = true;
+  try {
+    await stopSession(card.id);
+    await loadOverviewSessions();
+  } catch {
+    await loadOverviewSessions().catch(() => undefined);
   } finally {
     cardActionLoading.value = false;
     activeActionSessionId.value = '';

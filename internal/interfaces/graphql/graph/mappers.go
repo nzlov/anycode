@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"time"
+
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	"github.com/nzlov/anycode/internal/application/port"
@@ -10,7 +12,6 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/gitdiff"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
@@ -254,30 +255,135 @@ func mapAttachment(dto attachmentapp.AttachmentDTO) *model.Attachment {
 	}
 }
 
-func mapTimelineEventPage(page port.Page[timelineapp.DTO]) *model.SessionEventPage {
-	items := make([]*model.SessionEvent, 0, len(page.Items))
+func mapTimelineEventPage(page timelineapp.Page) *model.SessionTimelinePage {
+	items := make([]*model.SessionTimelineEvent, 0, len(page.Items))
 	for _, item := range page.Items {
 		items = append(items, mapTimelineEvent(item))
 	}
-	return &model.SessionEventPage{Items: items, PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor)}
-}
-
-func mapTimelineEvent(dto timelineapp.DTO) *model.SessionEvent {
-	return &model.SessionEvent{
-		ID:        string(dto.ID),
-		Scope:     mapEventScope(dto.Scope),
-		SessionID: stringPtr(dto.SessionID),
-		Type:      dto.Type,
-		Payload:   dto.Payload,
-		CreatedAt: dto.CreatedAt,
+	return &model.SessionTimelinePage{
+		Events:   items,
+		Usage:    mapTimelineUsage(page.Usage),
+		PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor),
 	}
 }
 
-func mapEventScope(scope eventdomain.Scope) *model.EventScope {
-	return &model.EventScope{
-		SessionID: stringPtr(scope.SessionID),
-		ProjectID: scope.ProjectID,
+func mapTimelineEvent(dto timelineapp.DTO) *model.SessionTimelineEvent {
+	correlationID := dto.CorrelationID
+	createdAt, _ := time.Parse(time.RFC3339Nano, dto.OccurredAt)
+	return &model.SessionTimelineEvent{
+		ID:            string(dto.ID),
+		OrderKey:      dto.OrderKey,
+		CorrelationID: optionalString(correlationID),
+		Phase:         mapTimelinePhase(dto.Phase),
+		OccurredAt:    createdAt,
+		Content:       mapTimelineContent(dto.Content),
 	}
+}
+
+func mapTimelineStreamItem(dto timelineapp.DTO) *model.SessionTimelineStreamItem {
+	if dto.Usage != nil {
+		return &model.SessionTimelineStreamItem{Usage: mapTimelineUsage(dto.Usage)}
+	}
+	return &model.SessionTimelineStreamItem{Event: mapTimelineEvent(dto)}
+}
+
+func mapTimelineContent(content processdomain.CodexEventContent) model.SessionTimelineContent {
+	switch value := content.(type) {
+	case processdomain.CodexMessageContent:
+		return &model.SessionTextMessageContent{
+			Role:   value.Role,
+			Text:   value.Text,
+			Format: mapTimelineTextFormat(value.Format),
+			Images: mapTimelineImages(value.Images),
+		}
+	case processdomain.CodexReasoningContent:
+		return &model.SessionReasoningContent{Text: value.Text}
+	case processdomain.CodexCommandContent:
+		return &model.SessionCommandContent{Command: value.Command, Output: value.Output, ExitCode: value.ExitCode, DurationMs: value.DurationMS}
+	case processdomain.CodexToolContent:
+		return &model.SessionToolContent{
+			QualifiedName: value.QualifiedName,
+			Category:      value.Category,
+			Input:         mapTimelineStructuredText(value.Input),
+			Output:        mapTimelineStructuredText(value.Output),
+			Images:        mapTimelineImages(value.Images),
+		}
+	case processdomain.CodexFileChangeContent:
+		changes := make([]*model.SessionTimelineFileChange, 0, len(value.Changes))
+		for _, change := range value.Changes {
+			changes = append(changes, &model.SessionTimelineFileChange{Kind: change.Kind, Path: change.Path, MovePath: change.MovePath, UnifiedDiff: change.UnifiedDiff})
+		}
+		return &model.SessionFileChangeContent{Changes: changes}
+	case processdomain.CodexStatusContent:
+		return &model.SessionStatusContent{Code: value.Code, Level: value.Level, Message: value.Message, Details: nonNilMap(value.Details)}
+	case processdomain.CodexUnknownContent:
+		return &model.SessionUnknownContent{RawType: value.RawType, Payload: nonNilMap(value.Payload)}
+	default:
+		return &model.SessionUnknownContent{RawType: "unsupported_content", Payload: map[string]any{}}
+	}
+}
+
+func mapTimelineStructuredText(value processdomain.CodexStructuredText) *model.SessionStructuredText {
+	return &model.SessionStructuredText{Format: mapTimelineTextFormat(value.Format), Text: value.Text}
+}
+
+func mapTimelineImages(values []processdomain.CodexImage) []*model.SessionTimelineImage {
+	items := make([]*model.SessionTimelineImage, 0, len(values))
+	for _, value := range values {
+		items = append(items, &model.SessionTimelineImage{Src: value.Source, Detail: value.Detail})
+	}
+	return items
+}
+
+func mapTimelineUsage(value *timelineapp.TokenUsageDTO) *model.SessionTokenUsage {
+	if value == nil {
+		return nil
+	}
+	return &model.SessionTokenUsage{
+		InputTokens:           value.InputTokens,
+		CachedInputTokens:     value.CachedInputTokens,
+		OutputTokens:          value.OutputTokens,
+		ReasoningOutputTokens: value.ReasoningOutputTokens,
+		TotalTokens:           value.TotalTokens,
+		ContextWindow:         value.ContextWindow,
+	}
+}
+
+func mapTimelinePhase(value processdomain.CodexPhase) model.SessionTimelineEventPhase {
+	switch value {
+	case processdomain.CodexPhaseStarted:
+		return model.SessionTimelineEventPhaseStarted
+	case processdomain.CodexPhaseProgress:
+		return model.SessionTimelineEventPhaseProgress
+	case processdomain.CodexPhaseCompleted:
+		return model.SessionTimelineEventPhaseCompleted
+	case processdomain.CodexPhaseFailed:
+		return model.SessionTimelineEventPhaseFailed
+	case processdomain.CodexPhaseCancelled:
+		return model.SessionTimelineEventPhaseCancelled
+	default:
+		return model.SessionTimelineEventPhaseStandalone
+	}
+}
+
+func mapTimelineTextFormat(value processdomain.CodexTextFormat) model.SessionTimelineTextFormat {
+	switch value {
+	case processdomain.CodexTextMarkdown:
+		return model.SessionTimelineTextFormatMarkdown
+	case processdomain.CodexTextJSON:
+		return model.SessionTimelineTextFormatJSON
+	case processdomain.CodexTextANSI:
+		return model.SessionTimelineTextFormatAnsi
+	default:
+		return model.SessionTimelineTextFormatPlain
+	}
+}
+
+func optionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func mapSessionDiff(dto diffapp.SessionDiffDTO) *model.SessionDiff {

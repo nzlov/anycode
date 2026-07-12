@@ -26,7 +26,14 @@
             </q-card-section>
 
             <div class="event-list">
-              <SessionEventMessage v-for="event in streamEntries" :key="event.id" :event="event" />
+              <div
+                v-for="event in streamEntries"
+                :key="event.id"
+                class="event-list__item"
+                :data-timeline-id="event.id"
+              >
+                <SessionEventMessage :event="event" />
+              </div>
             </div>
           </div>
         </q-card>
@@ -70,6 +77,19 @@
             :disabled="!session || appendUploading || appending || stopping || isClosed"
           >
             <template #actions>
+              <q-btn
+                v-if="canCancelQueue"
+                flat
+                class="app-icon-btn"
+                color="negative"
+                icon="cancel"
+                aria-label="取消排队"
+                :loading="stopping"
+                :disable="appending || executing || stopping || updatingConfig"
+                @click="stopSession"
+              >
+                <q-tooltip>取消排队</q-tooltip>
+              </q-btn>
               <q-btn
                 v-if="composerAction"
                 unelevated
@@ -421,14 +441,13 @@ import { getSessionDiffFiles, getSessionFileDiff } from '@/services/diff';
 import { expandDiffContext, initialDiffContext } from '@/services/diffViewerState';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffFile, FileDiff, SessionDiff } from '@/services/diff';
-import { mergeSessionEvents } from '@/services/sessionEventPresentation';
-import { sortSessionEvents } from '@/services/sessionEventTimeline';
-import type {
-  QuestionAnswerInput,
-  SessionEvent,
-  SessionMode,
-  SessionStatus,
-} from '@/services/sessions';
+import {
+  sessionStatusColor as statusColor,
+  sessionStatusLabel as statusLabel,
+} from '@/services/sessionStatusPresentation';
+import { reduceSessionTimelineEvents } from '@/services/sessionTimelineReducer';
+import type { QuestionAnswerInput, SessionMode } from '@/services/sessions';
+import type { SessionTimelineItem } from '@/services/sessionTimeline';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -463,13 +482,13 @@ let preservingOlderEventScroll = false;
 const {
   session,
   events,
+  tokenUsage,
   eventsPageInfo,
   pendingQuestionBatches,
   loading,
   loadingOlderEvents,
   appending,
-  starting,
-  resuming,
+  executing,
   stopping,
   closing,
   updatingConfig,
@@ -478,8 +497,7 @@ const {
   error: detailError,
   loadSessionDetail,
   appendDescription,
-  startSession,
-  resumeSession,
+  executeSession,
   stopSession,
   closeSession: closeSessionRequest,
   updateConfig,
@@ -490,9 +508,11 @@ const {
   stopLiveUpdates,
 } = useSessionDetail(sessionId);
 
-const canRun = computed(() => session.value?.availableActions.includes('run') ?? false);
-const canResume = computed(() => session.value?.availableActions.includes('resume') ?? false);
+const canExecute = computed(() => session.value?.availableActions.includes('execute') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
+const canCancelQueue = computed(
+  () => session.value?.status === 'queued' && session.value.availableActions.includes('stop'),
+);
 const isClosed = computed(() => session.value?.status === 'closed');
 const isWaitingForAnswer = computed(
   () =>
@@ -507,21 +527,10 @@ const composerConfigDirty = computed(() => {
     current.config.permissionMode !== composerPermission.value
   );
 });
-type StreamEntry = SessionEvent;
-
-const streamEntries = computed<StreamEntry[]>(() => {
-  const entries: StreamEntry[] = events.value.filter((event) => event.kind !== 'usage');
-  const sortedEntries = sortSessionEvents(entries);
-  return mergeSessionEvents(sortedEntries);
-});
-const latestTokenUsage = computed(() => {
-  const sortedEvents = sortSessionEvents(events.value);
-  for (let index = sortedEvents.length - 1; index >= 0; index -= 1) {
-    const event = sortedEvents[index];
-    if (event?.kind === 'usage' && event.usage) return event.usage;
-  }
-  return null;
-});
+const streamEntries = computed<SessionTimelineItem[]>(() =>
+  reduceSessionTimelineEvents(events.value),
+);
+const latestTokenUsage = computed(() => tokenUsage.value);
 const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;
@@ -542,7 +551,7 @@ const composerAction = computed(() => {
       color: 'negative',
       tooltip: '运行中，点击停止',
       loading: stopping.value,
-      disabled: appending.value || starting.value || resuming.value,
+      disabled: appending.value || executing.value,
       run: stopSession,
     };
   }
@@ -556,24 +565,14 @@ const composerAction = computed(() => {
       run: stopSession,
     };
   }
-  if (canRun.value) {
+  if (canExecute.value) {
     return {
       icon: 'play_arrow',
       color: 'positive',
-      tooltip: composerConfigDirty.value ? '应用配置并运行' : '强制运行',
-      loading: starting.value || updatingConfig.value,
-      disabled: appending.value || resuming.value || stopping.value || updatingConfig.value,
-      run: startWithComposerConfig,
-    };
-  }
-  if (canResume.value) {
-    return {
-      icon: 'restart_alt',
-      color: 'primary',
-      tooltip: composerConfigDirty.value ? '应用配置并恢复' : '恢复会话',
-      loading: resuming.value || updatingConfig.value,
-      disabled: appending.value || starting.value || stopping.value || updatingConfig.value,
-      run: resumeWithComposerConfig,
+      tooltip: composerConfigDirty.value ? '应用配置并运行' : '运行会话',
+      loading: executing.value || updatingConfig.value,
+      disabled: appending.value || executing.value || stopping.value || updatingConfig.value,
+      run: executeWithComposerConfig,
     };
   }
   if (composerConfigDirty.value) {
@@ -582,7 +581,7 @@ const composerAction = computed(() => {
       color: 'primary',
       tooltip: '应用模型和思考强度',
       loading: updatingConfig.value,
-      disabled: appending.value || starting.value || resuming.value || stopping.value,
+      disabled: appending.value || executing.value || stopping.value,
       run: saveComposerConfig,
     };
   }
@@ -592,7 +591,7 @@ const composerAction = computed(() => {
     tooltip: '已暂停',
     loading: false,
     disabled: true,
-    run: startSession,
+    run: executeSession,
   };
 });
 const workflowProgressIndeterminate = computed(() =>
@@ -647,44 +646,6 @@ function priorityLabel(priority: 'high' | 'medium' | 'low') {
     low: '低优先级',
   };
   return labels[priority];
-}
-
-function statusColor(value: SessionStatus) {
-  const colors: Record<SessionStatus, string> = {
-    created: 'blue-grey',
-    queued: 'warning',
-    starting: 'primary',
-    running: 'positive',
-    waiting_user: 'warning',
-    waiting_approval: 'warning',
-    stopping: 'warning',
-    stopped: 'blue-grey',
-    resume_failed: 'negative',
-    failed: 'negative',
-    blocked: 'negative',
-    completed: 'primary',
-    closed: 'grey',
-  };
-  return colors[value];
-}
-
-function statusLabel(value: SessionStatus) {
-  const labels: Record<SessionStatus, string> = {
-    created: '待运行',
-    queued: '排队中',
-    starting: '启动中',
-    running: '运行中',
-    waiting_user: '待回答',
-    waiting_approval: '待审批',
-    stopping: '停止中',
-    stopped: '已停止',
-    resume_failed: '恢复失败',
-    failed: '失败',
-    blocked: '阻塞',
-    completed: '已完成',
-    closed: '已关闭',
-  };
-  return labels[value];
 }
 
 function closeReasonLabel(value: string) {
@@ -841,14 +802,10 @@ async function sendAppend() {
   }
 }
 
-async function startWithComposerConfig() {
+async function executeWithComposerConfig() {
+  if (!canExecute.value) return;
   await saveComposerConfig();
-  await startSession();
-}
-
-async function resumeWithComposerConfig() {
-  await saveComposerConfig();
-  await resumeSession();
+  await executeSession();
 }
 
 async function saveComposerConfig() {
@@ -939,6 +896,7 @@ async function onEventScroll() {
   if (!body || body.scrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
     return;
   const previousHeight = body.scrollHeight;
+  const anchor = captureEventScrollAnchor(body);
   preservingOlderEventScroll = true;
   try {
     while (mounted && body.scrollHeight <= previousHeight) {
@@ -949,10 +907,38 @@ async function onEventScroll() {
       if (!eventsPageInfo.value.nextCursor || eventsPageInfo.value.nextCursor === requestedCursor)
         break;
     }
-    body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+    if (!restoreEventScrollAnchor(body, anchor)) {
+      body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+    }
   } finally {
     preservingOlderEventScroll = false;
   }
+}
+
+interface EventScrollAnchor {
+  id: string;
+  offsetTop: number;
+}
+
+function captureEventScrollAnchor(body: HTMLElement): EventScrollAnchor | null {
+  const bodyTop = body.getBoundingClientRect().top;
+  const item = [...body.querySelectorAll<HTMLElement>('[data-timeline-id]')].find(
+    (candidate) => candidate.getBoundingClientRect().bottom >= bodyTop,
+  );
+  const id = item?.dataset.timelineId;
+  if (!item || !id) return null;
+  return { id, offsetTop: item.getBoundingClientRect().top - bodyTop };
+}
+
+function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor | null) {
+  if (!anchor) return false;
+  const item = [...body.querySelectorAll<HTMLElement>('[data-timeline-id]')].find(
+    (candidate) => candidate.dataset.timelineId === anchor.id,
+  );
+  if (!item) return false;
+  const currentOffset = item.getBoundingClientRect().top - body.getBoundingClientRect().top;
+  body.scrollTop += currentOffset - anchor.offsetTop;
+  return true;
 }
 
 async function scrollEventsToBottom() {

@@ -165,12 +165,25 @@ func (r *mutationResolver) UpdateSessionConfig(ctx context.Context, input model.
 	return mapSession(dto), nil
 }
 
+// ExecuteSession is the resolver for the executeSession field.
+func (r *mutationResolver) ExecuteSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.ExecuteSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // StartSession is the resolver for the startSession field.
 func (r *mutationResolver) StartSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.StartSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
+	// GLUE: preserve the legacy mutation name until external clients migrate to executeSession.
+	dto, err := r.UseCases.Sessions.ExecuteSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +207,8 @@ func (r *mutationResolver) ResumeSession(ctx context.Context, id string, force *
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.ResumeSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
+	// GLUE: preserve the legacy mutation name until external clients migrate to executeSession.
+	dto, err := r.UseCases.Sessions.ExecuteSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +439,7 @@ func (r *queryResolver) Session(ctx context.Context, id string) (*model.SessionD
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
-func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionEventPage, error) {
+func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionTimelinePage, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
@@ -542,7 +556,7 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
-func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionEventStreamItem, error) {
+func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionTimelineStreamItem, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
@@ -553,13 +567,13 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionEventStreamItem)
+	out := make(chan *model.SessionTimelineStreamItem)
 	go func() {
 		defer close(out)
 		select {
 		case <-ctx.Done():
 			return
-		case out <- &model.SessionEventStreamItem{Ready: true}:
+		case out <- &model.SessionTimelineStreamItem{Ready: true}:
 		}
 		for {
 			select {
@@ -572,7 +586,7 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 				select {
 				case <-ctx.Done():
 					return
-				case out <- &model.SessionEventStreamItem{Event: mapTimelineEvent(eventDTO)}:
+				case out <- mapTimelineStreamItem(eventDTO):
 				}
 			}
 		}

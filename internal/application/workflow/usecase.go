@@ -504,6 +504,9 @@ func (s *Service) MarkResumeFailedForSession(ctx context.Context, input sessiond
 	if err != nil {
 		return sessiondomain.WorkflowRunSnapshot{}, err
 	}
+	if run.Status == domain.RunWaitingResumeAction {
+		return toSessionWorkflowRunSnapshot(run), nil
+	}
 	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowRunSnapshot{}, err

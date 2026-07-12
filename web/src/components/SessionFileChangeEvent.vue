@@ -8,8 +8,8 @@
     >
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="edit_note" size="16px" />
-      <span>{{ event.title }}</span>
-      <time>{{ event.time }}</time>
+      <span>{{ fileChangeLabel(content.changes) }}</span>
+      <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
     <div v-if="expanded" class="session-file-change__body">
       <DiffViewer v-if="diffFileChanges.length" :file-diffs="diffFileChanges" />
@@ -20,7 +20,7 @@
           class="session-file-change__item"
         >
           <div class="session-file-change__meta">
-            <span class="session-file-change__kind">{{ fileChangeKindText(change.kind) }}</span>
+            <span class="session-file-change__kind">{{ fileChangeKindLabel(change.kind) }}</span>
             <code>{{ change.path }}</code>
           </div>
           <div v-if="change.movePath" class="session-file-change__move">
@@ -29,9 +29,7 @@
           </div>
         </div>
       </div>
-      <pre v-if="diffFileChanges.length === 0 && plainFileChanges.length === 0">{{
-        event.body || '已记录文件修改'
-      }}</pre>
+      <pre v-if="diffFileChanges.length === 0 && plainFileChanges.length === 0">已记录文件修改</pre>
     </div>
   </article>
 </template>
@@ -41,15 +39,25 @@ import { computed, ref } from 'vue';
 
 import DiffViewer from '@/components/DiffViewer.vue';
 import { fileDiffFromUnifiedDiff } from '@/services/sessionFileChangeDiff';
-import type { FileChange, SessionEvent } from '@/services/sessions';
+import type {
+  SessionFileChangeContent,
+  SessionTimelineFileChange,
+  SessionTimelineItem,
+} from '@/services/sessionTimeline';
+import {
+  fileChangeKindLabel,
+  fileChangeLabel,
+  timelineTime,
+} from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionEvent;
+  event: SessionTimelineItem & { content: SessionFileChangeContent };
 }>();
 
 const expanded = ref(false);
+const content = computed(() => props.event.content);
 const fileChangePresentations = computed(() =>
-  (props.event.fileChanges ?? []).map((change) => ({
+  content.value.changes.map((change) => ({
     change,
     diff: change.unifiedDiff
       ? fileDiffFromUnifiedDiff(change.path, diffStatus(change.kind), change.unifiedDiff)
@@ -63,24 +71,11 @@ const plainFileChanges = computed(() =>
   fileChangePresentations.value.flatMap(({ change, diff }) => (diff ? [] : [change])),
 );
 
-function diffStatus(kind: FileChange['kind']) {
-  if (kind === 'add' || kind === 'create') return 'added';
-  if (kind === 'delete' || kind === 'remove') return 'deleted';
-  if (kind === 'rename') return 'renamed';
+function diffStatus(kind: SessionTimelineFileChange['kind']) {
+  if (kind === 'added') return 'added';
+  if (kind === 'deleted') return 'deleted';
+  if (kind === 'renamed') return 'renamed';
   return 'modified';
-}
-
-function fileChangeKindText(kind: string) {
-  const labels: Record<string, string> = {
-    add: '新增',
-    create: '新增',
-    delete: '删除',
-    remove: '删除',
-    update: '修改',
-    modify: '修改',
-    rename: '重命名',
-  };
-  return labels[kind] ?? kind;
 }
 </script>
 

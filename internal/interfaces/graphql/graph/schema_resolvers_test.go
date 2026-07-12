@@ -289,16 +289,14 @@ func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 
 func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	sessionID := "session-1"
-	projectID := "project-1"
 	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan timelineapp.DTO, 1)
 	source <- timelineapp.DTO{
-		ID:        "event-1",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
-		SessionID: &eventSessionID,
-		Type:      "process.output",
-		Payload:   map[string]any{"text": "hello"},
-		CreatedAt: "2026-07-02T01:02:03Z",
+		ID:         "event-1",
+		OrderKey:   "order-1",
+		Phase:      processdomain.CodexPhaseStandalone,
+		Content:    processdomain.CodexMessageContent{Role: "assistant", Text: "hello", Format: processdomain.CodexTextMarkdown},
+		OccurredAt: "2026-07-02T01:02:03Z",
 	}
 	close(source)
 
@@ -328,17 +326,12 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 		t.Fatal("SessionEvents() channel closed before event item")
 	}
 	event := got.Event
-	if got.Ready || event.ID != "event-1" || event.Type != "process.output" || event.CreatedAt != "2026-07-02T01:02:03Z" {
+	if got.Ready || event.ID != "event-1" || event.OrderKey != "order-1" || !event.OccurredAt.Equal(time.Date(2026, 7, 2, 1, 2, 3, 0, time.UTC)) {
 		t.Fatalf("SessionEvents() event = %#v", got)
 	}
-	if event.Scope == nil || event.Scope.SessionID == nil || *event.Scope.SessionID != sessionID || event.Scope.ProjectID != projectID {
-		t.Fatalf("SessionEvents() scope = %#v", event.Scope)
-	}
-	if event.SessionID == nil || *event.SessionID != sessionID {
-		t.Fatalf("SessionEvents() sessionID = %#v", event.SessionID)
-	}
-	if event.Payload["text"] != "hello" {
-		t.Fatalf("SessionEvents() payload = %#v", event.Payload)
+	content, ok := event.Content.(*model.SessionTextMessageContent)
+	if !ok || content.Role != "assistant" || content.Text != "hello" || content.Format != model.SessionTimelineTextFormatMarkdown {
+		t.Fatalf("SessionEvents() content = %#v", event.Content)
 	}
 	if _, ok := <-ch; ok {
 		t.Fatal("SessionEvents() channel stayed open after source closed")
@@ -449,7 +442,6 @@ func TestSubscriptionSessionCardUpdatesSendsReadyBeforeCards(t *testing.T) {
 
 func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 	sessionID := "session-1"
-	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan timelineapp.DTO, 1)
 	timeline := &fakeTimelineUseCase{sessionEvents: source}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
@@ -462,11 +454,11 @@ func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 		t.Fatalf("ready item = %#v", ready)
 	}
 	source <- timelineapp.DTO{
-		ID:        "event-1",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID},
-		SessionID: &eventSessionID,
-		Type:      "process.codex_event",
-		CreatedAt: "2026-07-02T01:02:03Z",
+		ID:         "event-1",
+		OrderKey:   "order-1",
+		Phase:      processdomain.CodexPhaseStandalone,
+		Content:    processdomain.CodexStatusContent{Code: "session.running", Level: "info"},
+		OccurredAt: "2026-07-02T01:02:03Z",
 	}
 	time.Sleep(10 * time.Millisecond)
 	cancel()
@@ -604,7 +596,7 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	now := time.Unix(30, 0).UTC()
 	sessions := &fakeSessionUseCase{
-		resumeResult: sessionapp.DTO{
+		executeResult: sessionapp.DTO{
 			ID:             "session-1",
 			ProjectID:      "project-1",
 			Requirement:    "resume work",
@@ -621,11 +613,68 @@ func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
-	if sessions.gotResumeID != "session-1" {
-		t.Fatalf("ResumeSession() id = %q", sessions.gotResumeID)
+	if sessions.gotExecuteID != "session-1" {
+		t.Fatalf("ResumeSession() id = %q", sessions.gotExecuteID)
 	}
 	if got.ID != "session-1" || got.Status != "running" || got.CodexSessionID != "codex-session-1" {
 		t.Fatalf("ResumeSession() = %#v", got)
+	}
+}
+
+func TestMutationStartSessionForwardsUnifiedExecutionUseCase(t *testing.T) {
+	now := time.Unix(30, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		executeResult: sessionapp.DTO{
+			ID:          "session-1",
+			ProjectID:   "project-1",
+			Requirement: "start work",
+			Mode:        "chat",
+			Status:      "queued",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+	force := true
+
+	got, err := resolver.StartSession(context.Background(), "session-1", &force)
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if sessions.gotExecuteID != "session-1" || !sessions.gotExecuteForce {
+		t.Fatalf("StartSession() input = id=%q force=%v", sessions.gotExecuteID, sessions.gotExecuteForce)
+	}
+	if got.ID != "session-1" || got.Status != "queued" {
+		t.Fatalf("StartSession() = %#v", got)
+	}
+}
+
+func TestMutationExecuteSessionForwardsUseCase(t *testing.T) {
+	now := time.Unix(31, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		executeResult: sessionapp.DTO{
+			ID:             "session-1",
+			ProjectID:      "project-1",
+			Requirement:    "continue work",
+			Mode:           "chat",
+			Status:         "queued",
+			CodexSessionID: "codex-session-1",
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+	force := true
+
+	got, err := resolver.ExecuteSession(context.Background(), "session-1", &force)
+	if err != nil {
+		t.Fatalf("ExecuteSession() error = %v", err)
+	}
+	if sessions.gotExecuteID != "session-1" || !sessions.gotExecuteForce {
+		t.Fatalf("ExecuteSession() input = id=%q force=%v", sessions.gotExecuteID, sessions.gotExecuteForce)
+	}
+	if got.ID != "session-1" || got.Status != "queued" || got.CodexSessionID != "codex-session-1" {
+		t.Fatalf("ExecuteSession() = %#v", got)
 	}
 }
 
@@ -1083,9 +1132,9 @@ func (f *fakeEventUseCase) LiveSessionEvents(_ context.Context, input eventapp.L
 	return f.liveSessionEvents, nil
 }
 
-func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (port.Page[timelineapp.DTO], error) {
+func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {
 	f.gotListSessionEventsInput = input
-	return port.Page[timelineapp.DTO]{}, nil
+	return timelineapp.Page{}, nil
 }
 
 func (f *fakeTimelineUseCase) SessionEvents(_ context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {
@@ -1136,11 +1185,25 @@ type fakeSessionUseCase struct {
 	getResult          sessionapp.DetailDTO
 	gotResumeID        sessiondomain.ID
 	resumeResult       sessionapp.DTO
+	gotExecuteID       sessiondomain.ID
+	gotExecuteForce    bool
+	executeResult      sessionapp.DTO
 	stopProjectID      sessiondomain.ProjectID
 	gotUpdateConfig    sessionapp.UpdateSessionConfigInput
 	updateConfigResult sessionapp.DTO
 	gotAppend          sessionapp.AppendPromptInput
 	appendResult       sessionapp.PromptAppendDTO
+}
+
+func (f *fakeSessionUseCase) ExecuteSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
+	f.gotExecuteID = id
+	return f.executeResult, f.err
+}
+
+func (f *fakeSessionUseCase) ExecuteSessionWithOptions(_ context.Context, id sessiondomain.ID, options sessionapp.StartSessionOptions) (sessionapp.DTO, error) {
+	f.gotExecuteID = id
+	f.gotExecuteForce = options.Force
+	return f.executeResult, f.err
 }
 
 func (f *fakeSessionUseCase) GetSession(_ context.Context, id sessiondomain.ID) (sessionapp.DetailDTO, error) {

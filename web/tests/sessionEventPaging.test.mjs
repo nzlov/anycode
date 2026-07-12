@@ -39,7 +39,10 @@ test('useSessionDetail loads older events with cursor input instead of page numb
 
   assert.ok(match?.groups?.body);
   assert.match(match.groups.body, /olderSessionEventCursor\(eventsPageInfo\.value\)/);
-  assert.match(match.groups.body, /getSessionEventPage\(sessionId, beforeEventId, eventPageSize\)/);
+  assert.match(
+    match.groups.body,
+    /getSessionTimelinePage\(sessionId, beforeEventId, eventPageSize\)/,
+  );
   assert.doesNotMatch(match.groups.body, /page\s*[,+)]/);
   assert.match(match.groups.body, /return result\.pageInfo\.nextCursor/);
 });

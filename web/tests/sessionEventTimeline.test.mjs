@@ -13,18 +13,15 @@ import {
 
 const newest = {
   id: 'event-3',
-  rawType: 'session.closed',
-  createdAt: '2026-07-08T01:36:09Z',
+  orderKey: '03',
 };
 const middle = {
   id: 'event-2',
-  rawType: 'process.codex_event',
-  createdAt: '2026-07-08T01:15:23Z',
+  orderKey: '02',
 };
 const older = {
   id: 'event-1',
-  rawType: 'process.codex_event',
-  createdAt: '2026-07-07T15:09:14Z',
+  orderKey: '01',
 };
 
 test('appendLiveEvent ignores duplicate history replay events', () => {
@@ -61,10 +58,9 @@ test('mergeSnapshotEvents preserves older pages and live events while replacing 
   assert.equal(next.find((event) => event.id === 'event-2').title, 'live');
 });
 
-test('mergeSnapshotEvents preserves loaded order across an equal-timestamp page boundary', () => {
-  const createdAt = '2026-07-08T01:15:23Z';
-  const started = { ...older, id: 'z-started', createdAt };
-  const completed = { ...middle, id: 'a-completed', createdAt };
+test('mergeSnapshotEvents preserves backend order keys across a page boundary', () => {
+  const started = { ...older, id: 'z-started', orderKey: '01' };
+  const completed = { ...middle, id: 'a-completed', orderKey: '02' };
 
   const next = mergeSnapshotEvents([completed], [started, completed], []);
 
@@ -113,12 +109,9 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
     false,
   );
   assert.equal(
-    await shouldReconnectCardStream(
-      { acknowledged: false, completedByServer: false },
-      async () => {
-        throw new Error('health check unavailable');
-      },
-    ),
+    await shouldReconnectCardStream({ acknowledged: false, completedByServer: false }, async () => {
+      throw new Error('health check unavailable');
+    }),
     true,
   );
   assert.equal(
@@ -131,9 +124,9 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
   assert.equal(validations, 1);
 });
 
-test('sortSessionEvents preserves transcript order for equal timestamps', () => {
-  const completed = { ...newest, id: 'a-completed', createdAt: middle.createdAt };
-  const started = { ...middle, id: 'z-started' };
+test('sortSessionEvents follows immutable backend order keys', () => {
+  const completed = { ...newest, id: 'a-completed', orderKey: '02' };
+  const started = { ...middle, id: 'z-started', orderKey: '01' };
 
   assert.deepEqual(
     sortSessionEvents([started, completed]).map((event) => event.id),

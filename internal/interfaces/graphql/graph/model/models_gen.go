@@ -3,8 +3,16 @@
 package model
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"strconv"
 	"time"
 )
+
+type SessionTimelineContent interface {
+	IsSessionTimelineContent()
+}
 
 type AppendPromptInput struct {
 	SessionID           string   `json:"sessionId"`
@@ -342,6 +350,15 @@ type SessionCardStreamItem struct {
 	Card  *SessionCard `json:"card,omitempty"`
 }
 
+type SessionCommandContent struct {
+	Command    string `json:"command"`
+	Output     string `json:"output"`
+	ExitCode   *int   `json:"exitCode,omitempty"`
+	DurationMs *int   `json:"durationMs,omitempty"`
+}
+
+func (SessionCommandContent) IsSessionTimelineContent() {}
+
 type SessionCommitHistory struct {
 	Commits   *CommitRecordPage `json:"commits"`
 	Available bool              `json:"available"`
@@ -407,30 +424,105 @@ type SessionDiffInput struct {
 	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
-type SessionEvent struct {
-	ID        string         `json:"id"`
-	Scope     *EventScope    `json:"scope"`
-	SessionID *string        `json:"sessionId,omitempty"`
-	Type      string         `json:"type"`
-	Payload   map[string]any `json:"payload"`
-	CreatedAt string         `json:"createdAt"`
+type SessionFileChangeContent struct {
+	Changes []*SessionTimelineFileChange `json:"changes"`
 }
 
-type SessionEventPage struct {
-	Items    []*SessionEvent `json:"items"`
-	PageInfo *PageInfo       `json:"pageInfo"`
+func (SessionFileChangeContent) IsSessionTimelineContent() {}
+
+type SessionReasoningContent struct {
+	Text string `json:"text"`
 }
 
-type SessionEventStreamItem struct {
-	Ready bool          `json:"ready"`
-	Event *SessionEvent `json:"event,omitempty"`
-}
+func (SessionReasoningContent) IsSessionTimelineContent() {}
 
 type SessionStateStreamItem struct {
 	Ready         bool           `json:"ready"`
 	Session       *SessionDetail `json:"session,omitempty"`
 	QuestionBatch *QuestionBatch `json:"questionBatch,omitempty"`
 }
+
+type SessionStatusContent struct {
+	Code    string         `json:"code"`
+	Level   string         `json:"level"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details"`
+}
+
+func (SessionStatusContent) IsSessionTimelineContent() {}
+
+type SessionStructuredText struct {
+	Format SessionTimelineTextFormat `json:"format"`
+	Text   string                    `json:"text"`
+}
+
+type SessionTextMessageContent struct {
+	Role   string                    `json:"role"`
+	Text   string                    `json:"text"`
+	Format SessionTimelineTextFormat `json:"format"`
+	Images []*SessionTimelineImage   `json:"images"`
+}
+
+func (SessionTextMessageContent) IsSessionTimelineContent() {}
+
+type SessionTimelineEvent struct {
+	ID            string                    `json:"id"`
+	OrderKey      string                    `json:"orderKey"`
+	CorrelationID *string                   `json:"correlationId,omitempty"`
+	Phase         SessionTimelineEventPhase `json:"phase"`
+	OccurredAt    time.Time                 `json:"occurredAt"`
+	Content       SessionTimelineContent    `json:"content"`
+}
+
+type SessionTimelineFileChange struct {
+	Kind        string `json:"kind"`
+	Path        string `json:"path"`
+	MovePath    string `json:"movePath"`
+	UnifiedDiff string `json:"unifiedDiff"`
+}
+
+type SessionTimelineImage struct {
+	Src    string `json:"src"`
+	Detail string `json:"detail"`
+}
+
+type SessionTimelinePage struct {
+	Events   []*SessionTimelineEvent `json:"events"`
+	Usage    *SessionTokenUsage      `json:"usage,omitempty"`
+	PageInfo *PageInfo               `json:"pageInfo"`
+}
+
+type SessionTimelineStreamItem struct {
+	Ready bool                  `json:"ready"`
+	Event *SessionTimelineEvent `json:"event,omitempty"`
+	Usage *SessionTokenUsage    `json:"usage,omitempty"`
+}
+
+type SessionTokenUsage struct {
+	InputTokens           int `json:"inputTokens"`
+	CachedInputTokens     int `json:"cachedInputTokens"`
+	OutputTokens          int `json:"outputTokens"`
+	ReasoningOutputTokens int `json:"reasoningOutputTokens"`
+	TotalTokens           int `json:"totalTokens"`
+	ContextWindow         int `json:"contextWindow"`
+}
+
+type SessionToolContent struct {
+	QualifiedName string                  `json:"qualifiedName"`
+	Category      string                  `json:"category"`
+	Input         *SessionStructuredText  `json:"input"`
+	Output        *SessionStructuredText  `json:"output"`
+	Images        []*SessionTimelineImage `json:"images"`
+}
+
+func (SessionToolContent) IsSessionTimelineContent() {}
+
+type SessionUnknownContent struct {
+	RawType string         `json:"rawType"`
+	Payload map[string]any `json:"payload"`
+}
+
+func (SessionUnknownContent) IsSessionTimelineContent() {}
 
 type SetDefaultWorkflowInput struct {
 	ProjectID  string `json:"projectId"`
@@ -585,4 +677,126 @@ type WorkflowRun struct {
 	Status        string         `json:"status"`
 	CurrentNodeID string         `json:"currentNodeId"`
 	Context       map[string]any `json:"context"`
+}
+
+type SessionTimelineEventPhase string
+
+const (
+	SessionTimelineEventPhaseStandalone SessionTimelineEventPhase = "STANDALONE"
+	SessionTimelineEventPhaseStarted    SessionTimelineEventPhase = "STARTED"
+	SessionTimelineEventPhaseProgress   SessionTimelineEventPhase = "PROGRESS"
+	SessionTimelineEventPhaseCompleted  SessionTimelineEventPhase = "COMPLETED"
+	SessionTimelineEventPhaseFailed     SessionTimelineEventPhase = "FAILED"
+	SessionTimelineEventPhaseCancelled  SessionTimelineEventPhase = "CANCELLED"
+)
+
+var AllSessionTimelineEventPhase = []SessionTimelineEventPhase{
+	SessionTimelineEventPhaseStandalone,
+	SessionTimelineEventPhaseStarted,
+	SessionTimelineEventPhaseProgress,
+	SessionTimelineEventPhaseCompleted,
+	SessionTimelineEventPhaseFailed,
+	SessionTimelineEventPhaseCancelled,
+}
+
+func (e SessionTimelineEventPhase) IsValid() bool {
+	switch e {
+	case SessionTimelineEventPhaseStandalone, SessionTimelineEventPhaseStarted, SessionTimelineEventPhaseProgress, SessionTimelineEventPhaseCompleted, SessionTimelineEventPhaseFailed, SessionTimelineEventPhaseCancelled:
+		return true
+	}
+	return false
+}
+
+func (e SessionTimelineEventPhase) String() string {
+	return string(e)
+}
+
+func (e *SessionTimelineEventPhase) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SessionTimelineEventPhase(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SessionTimelineEventPhase", str)
+	}
+	return nil
+}
+
+func (e SessionTimelineEventPhase) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SessionTimelineEventPhase) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SessionTimelineEventPhase) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type SessionTimelineTextFormat string
+
+const (
+	SessionTimelineTextFormatPlain    SessionTimelineTextFormat = "PLAIN"
+	SessionTimelineTextFormatMarkdown SessionTimelineTextFormat = "MARKDOWN"
+	SessionTimelineTextFormatJSON     SessionTimelineTextFormat = "JSON"
+	SessionTimelineTextFormatAnsi     SessionTimelineTextFormat = "ANSI"
+)
+
+var AllSessionTimelineTextFormat = []SessionTimelineTextFormat{
+	SessionTimelineTextFormatPlain,
+	SessionTimelineTextFormatMarkdown,
+	SessionTimelineTextFormatJSON,
+	SessionTimelineTextFormatAnsi,
+}
+
+func (e SessionTimelineTextFormat) IsValid() bool {
+	switch e {
+	case SessionTimelineTextFormatPlain, SessionTimelineTextFormatMarkdown, SessionTimelineTextFormatJSON, SessionTimelineTextFormatAnsi:
+		return true
+	}
+	return false
+}
+
+func (e SessionTimelineTextFormat) String() string {
+	return string(e)
+}
+
+func (e *SessionTimelineTextFormat) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SessionTimelineTextFormat(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SessionTimelineTextFormat", str)
+	}
+	return nil
+}
+
+func (e SessionTimelineTextFormat) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SessionTimelineTextFormat) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SessionTimelineTextFormat) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }

@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
+import Anser from 'anser';
+
+import { stripUnsupportedAnsiControls } from '../src/services/sessionTimelinePresentation.ts';
+
 test('session detail event stream uses transcript events instead of database prompts', () => {
   const source = readFileSync(
     new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
@@ -19,8 +23,8 @@ test('session detail event stream uses transcript events instead of database pro
 });
 
 test('session event presentation moves usage out of the event list into session info', () => {
-  const serviceSource = readFileSync(
-    new URL('../src/services/sessions.ts', import.meta.url),
+  const timelineSource = readFileSync(
+    new URL('../src/services/sessionTimeline.ts', import.meta.url),
     'utf8',
   );
   const componentSource = readFileSync(
@@ -32,23 +36,19 @@ test('session event presentation moves usage out of the event list into session 
     'utf8',
   );
 
-  assert.match(serviceSource, /itemType === 'user_message'/);
-  assert.match(serviceSource, /stringPayload\(item, 'call_id'\)[\s\S]*stringPayload\(item, 'id'\)/);
-  assert.match(serviceSource, /codexType === 'task\.started'/);
-  assert.match(serviceSource, /codexType === 'task\.completed'/);
-  assert.match(serviceSource, /codexType === 'turn\.aborted'/);
-  assert.match(serviceSource, /codexType === 'token_count'/);
+  assert.match(timelineSource, /\.\.\. on SessionTextMessageContent/);
+  assert.match(timelineSource, /\.\.\. on SessionCommandContent/);
+  assert.match(timelineSource, /\.\.\. on SessionToolContent/);
+  assert.match(timelineSource, /usage \{ \$\{tokenUsageFields\} \}/);
   assert.match(componentSource, /SessionToolEvent/);
   assert.match(componentSource, /SessionStatusEvent/);
   assert.doesNotMatch(componentSource, /SessionUsageEvent/);
-  assert.match(componentSource, /event\.images/);
-  assert.match(toolComponentSource, /SessionEventImages/);
+  assert.match(toolComponentSource, /content\.images/);
 
   const pageSource = readFileSync(
     new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
     'utf8',
   );
-  assert.match(pageSource, /event\.kind !== 'usage'/);
   assert.match(pageSource, /const latestTokenUsage = computed/);
   assert.match(pageSource, /Token 用量/);
   assert.match(pageSource, /latestTokenUsage\.totalTokens/);
@@ -57,6 +57,10 @@ test('session event presentation moves usage out of the event list into session 
 test('session detail buffers live events while loading the transcript snapshot', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+  const timelineSource = readFileSync(
+    new URL('../src/services/sessionTimeline.ts', import.meta.url),
     'utf8',
   );
   const sessionsSource = readFileSync(
@@ -76,8 +80,8 @@ test('session detail buffers live events while loading the transcript snapshot',
   assert.match(composableSource, /subscribeSessionStateUpdates\(sessionId/);
   assert.equal(composableSource.includes('subscribeSessionCardChanged'), false);
   assert.equal(composableSource.includes('subscribePendingQuestionBatches'), false);
-  assert.match(sessionsSource, /sessionEvents\(sessionId: \$sessionId\) \{\s*ready\s*event/s);
-  assert.match(sessionsSource, /data\.sessionEvents\.ready/);
+  assert.match(timelineSource, /sessionEvents\(sessionId: \$sessionId\) \{\s*ready\s*event/s);
+  assert.match(timelineSource, /data\.sessionEvents\.ready/);
   assert.match(
     sessionsSource,
     /sessionStateUpdates\(sessionId: \$sessionId\) \{\s*ready\s*session/s,
@@ -123,16 +127,16 @@ test('subscription schema exposes only session-scoped transcript and unified sta
     new URL('../../internal/interfaces/graphql/graph/schema.graphqls', import.meta.url),
     'utf8',
   );
-  const sessionsSource = readFileSync(
-    new URL('../src/services/sessions.ts', import.meta.url),
+  const timelineSource = readFileSync(
+    new URL('../src/services/sessionTimeline.ts', import.meta.url),
     'utf8',
   );
 
-  assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): SessionEventStreamItem!/);
+  assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): SessionTimelineStreamItem!/);
   assert.equal(schemaSource.includes('sessionStatusChanged'), false);
   assert.equal(schemaSource.includes('input SessionEventsInput'), false);
-  assert.match(sessionsSource, /subscription SessionEvents\(\$sessionId: ID!\)/);
-  assert.equal(sessionsSource.includes("codexType === 'process.exit'"), false);
+  assert.match(timelineSource, /subscription SessionEvents\(\$sessionId: ID!\)/);
+  assert.equal(timelineSource.includes("codexType === 'process.exit'"), false);
 });
 
 test('session detail uses exactly two logical subscriptions', () => {
@@ -142,7 +146,10 @@ test('session detail uses exactly two logical subscriptions', () => {
   );
 
   const calls = composableSource.match(/= subscribe[A-Z][A-Za-z]+\(/g) ?? [];
-  assert.deepEqual(calls.sort(), ['= subscribeSessionEvents(', '= subscribeSessionStateUpdates(']);
+  assert.deepEqual(calls.sort(), [
+    '= subscribeSessionStateUpdates(',
+    '= subscribeSessionTimeline(',
+  ]);
 });
 
 test('late session state readiness does not reload the Codex transcript', () => {
@@ -245,27 +252,126 @@ test('subscription refresh does not force a scrolled transcript back to the bott
 
 test('exec events render selectable command code separately from terminal output', () => {
   const componentSource = readFileSync(
-    new URL('../src/components/SessionToolEvent.vue', import.meta.url),
+    new URL('../src/components/SessionCommandEvent.vue', import.meta.url),
     'utf8',
   );
-  const terminalSource = readFileSync(
-    new URL('../src/components/SessionTerminalOutput.vue', import.meta.url),
+  const ansiSource = readFileSync(
+    new URL('../src/components/StaticAnsiOutput.vue', import.meta.url),
     'utf8',
   );
 
-  assert.match(componentSource, /<pre[^>]*class="tool-event__command"[^>]*>/);
-  assert.match(componentSource, /<code>\{\{ event\.execInput \}\}<\/code>/);
-  assert.doesNotMatch(componentSource, /<SessionTerminalOutput :body="event\.execInput/);
-  assert.match(componentSource, /<SessionTerminalOutput :body="event\.execOutput"/);
-  assert.match(
-    componentSource,
-    /<SessionTerminalOutput v-else-if="event\.body" :body="event\.body"/,
+  assert.match(componentSource, /<pre[^>]*class="command-event__command"[^>]*>/);
+  assert.match(componentSource, /<code>\{\{ content\.command \}\}<\/code>/);
+  assert.match(componentSource, /<StaticAnsiOutput :text="content\.output"/);
+  assert.doesNotMatch(componentSource, /SessionTerminalOutput/);
+  assert.match(ansiSource, /Anser\.ansiToJson/);
+  assert.match(ansiSource, /user-select:\s*text/);
+  assert.doesNotMatch(ansiSource, /contextmenu|cursorInactiveStyle|@pointerup/);
+});
+
+test('static ANSI rendering uses theme colors and preserves extended RGB colors', () => {
+  const ansiSource = readFileSync(
+    new URL('../src/components/StaticAnsiOutput.vue', import.meta.url),
+    'utf8',
   );
-  assert.match(terminalSource, /renderTerminal,\s*\{ flush: 'post' \}/);
-  assert.doesNotMatch(terminalSource, /nextTick\(renderTerminal\)/);
-  assert.match(terminalSource, /cursorInactiveStyle: 'none'/);
-  assert.match(terminalSource, /@pointerup="blurTerminal"/);
-  assert.match(terminalSource, /user-select:\s*text/);
+  const themeSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
+
+  assert.match(ansiSource, /value\.replaceAll\(' ', ''\)/);
+  assert.match(ansiSource, /themedColors\[normalized\] \?\? `rgb\(\$\{normalized\}\)`/);
+  assert.match(ansiSource, /var\(--ac-ansi-bright-cyan\)/);
+  assert.match(ansiSource, /segment\.decorations/);
+  assert.match(ansiSource, /decorations\.has\('bold'\)/);
+  const styled = Anser.ansiToJson('\x1b[1;3;4mstyled').find(
+    (segment) => segment.content === 'styled',
+  );
+  assert.deepEqual(styled?.decorations, ['bold', 'italic', 'underline']);
+  assert.match(themeSource, /:root[\s\S]*--ac-terminal-bg:[\s\S]*--ac-ansi-bright-white:/);
+  assert.match(themeSource, /:root[\s\S]*--ac-terminal-bg: #111827/);
+  assert.match(themeSource, /\.body--dark[\s\S]*--ac-terminal-bg:[\s\S]*--ac-ansi-bright-white:/);
+});
+
+test('static ANSI rendering removes unsupported OSC controls without losing visible text', () => {
+  const hyperlink = '\x1b]8;;https://example.com\x07link\x1b]8;;\x07';
+  const title = '\x1b]0;build output\x1b\\ready';
+  const unterminated = 'before\x1b]0;partial title';
+
+  assert.equal(stripUnsupportedAnsiControls(hyperlink), 'link');
+  assert.equal(stripUnsupportedAnsiControls(title), 'ready');
+  assert.equal(stripUnsupportedAnsiControls(unterminated), 'before');
+  assert.deepEqual(
+    Anser.ansiToJson(stripUnsupportedAnsiControls(hyperlink)).map((segment) => segment.content),
+    ['link'],
+  );
+});
+
+test('assistant markdown is parsed and sanitized at the rendering boundary', () => {
+  const markdownSource = readFileSync(
+    new URL('../src/components/MarkdownContent.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(markdownSource, /marked\.parse/);
+  assert.match(markdownSource, /DOMPurify\.sanitize/);
+  assert.match(markdownSource, /ALLOWED_TAGS:/);
+  assert.match(markdownSource, /ALLOWED_ATTR: \['href', 'title', 'src', 'alt'\]/);
+  assert.match(markdownSource, /:deep\(img\)[\s\S]*max-width: 100%;[\s\S]*height: auto;/);
+  assert.match(markdownSource, /:deep\(table\)[\s\S]*max-width: 100%;[\s\S]*overflow-x: auto;/);
+  const sanitizeConfig = markdownSource.slice(
+    markdownSource.indexOf('ALLOWED_TAGS:'),
+    markdownSource.indexOf('}),', markdownSource.indexOf('ALLOWED_TAGS:')),
+  );
+  assert.doesNotMatch(sanitizeConfig, /['"](?:class|id|style)['"]/);
+  assert.doesNotMatch(markdownSource, /replace\([^\n]+markdown|renderMarkdown/);
+});
+
+test('terminal phases and status details remain visible', () => {
+  const commandSource = readFileSync(
+    new URL('../src/components/SessionCommandEvent.vue', import.meta.url),
+    'utf8',
+  );
+  const toolSource = readFileSync(
+    new URL('../src/components/SessionToolEvent.vue', import.meta.url),
+    'utf8',
+  );
+  const statusSource = readFileSync(
+    new URL('../src/components/SessionStatusEvent.vue', import.meta.url),
+    'utf8',
+  );
+  const presentationSource = readFileSync(
+    new URL('../src/services/sessionTimelinePresentation.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(commandSource, /timelinePhaseIcon\(event\.phase\)/);
+  assert.match(toolSource, /timelinePhaseLabel\(event\.phase\)/);
+  assert.match(presentationSource, /failed: \{ icon: 'error_outline', color: 'negative'/);
+  assert.match(presentationSource, /cancelled: \{ icon: 'cancel', color: 'grey-7'/);
+  assert.match(statusSource, /Object\.keys\(content\.value\.details\)/);
+  assert.match(statusSource, /<StructuredContent v-if="expanded" :content="detailsContent"/);
+  assert.match(statusSource, /status-event--error/);
+});
+
+test('live usage is buffered while a transcript snapshot is loading', () => {
+  const source = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /let bufferedLiveUsage: SessionTokenUsage \| null = null/);
+  assert.match(source, /tokenUsage\.value = bufferedLiveUsage \?\? eventResult\.value\.usage/);
+  assert.match(source, /if \(bufferingLiveEvents\) \{\s*bufferedLiveUsage = usage;/s);
+});
+
+test('older timeline pages restore a stable visible event anchor', () => {
+  const source = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(source, /:data-timeline-id="event\.id"/);
+  assert.match(source, /const anchor = captureEventScrollAnchor\(body\)/);
+  assert.match(source, /restoreEventScrollAnchor\(body, anchor\)/);
+  assert.match(source, /candidate\.dataset\.timelineId === anchor\.id/);
 });
 
 test('older event loading crosses pages that add no visible height', () => {
@@ -352,7 +458,7 @@ test('session state remains independent from transcript snapshot failures', () =
   assert.doesNotMatch(composableSource, /getSessionDetail/);
   assert.match(
     composableSource,
-    /Promise\.allSettled\(\[\s*getSession\(sessionId\),\s*getSessionEventPage\(sessionId, '', eventPageSize\),?\s*\]\)/,
+    /Promise\.allSettled\(\[\s*getSession\(sessionId\),\s*getSessionTimelinePage\(sessionId, '', eventPageSize\),?\s*\]\)/,
   );
   assert.match(composableSource, /sessionResult\.status === 'fulfilled'/);
   assert.match(composableSource, /eventResult\.status === 'fulfilled'/);
