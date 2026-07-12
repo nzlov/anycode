@@ -105,7 +105,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
 
   function startLiveUpdates() {
     liveStopped = false;
-    openSubscription();
+    openSubscription(refreshAfterSubscriptionReady);
   }
 
   function stopLiveUpdates() {
@@ -122,7 +122,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     }
   }
 
-  function openSubscription() {
+  function openSubscription(onSubscribed?: () => void) {
     eventSubscription?.unsubscribe();
     eventSubscription = subscribeSessionCardChanged(
       projectId.value ? { projectId: projectId.value } : {},
@@ -136,6 +136,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
         onClose: (close) => {
           void handleSubscriptionClose(close);
         },
+        onSubscribed,
       },
     );
   }
@@ -160,7 +161,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
-    openSubscription();
+    openSubscription(refreshAfterSubscriptionReady);
   }
 
   function scheduleRefresh() {
@@ -183,8 +184,12 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     if (liveStopped) return;
     await loadSessions();
     if (!liveStopped) {
-      openSubscription();
+      openSubscription(refreshAfterSubscriptionReady);
     }
+  }
+
+  function refreshAfterSubscriptionReady() {
+    if (!liveStopped) void loadSessions();
   }
 
   return {

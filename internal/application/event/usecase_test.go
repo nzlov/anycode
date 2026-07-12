@@ -79,6 +79,61 @@ func TestLiveSessionEventsFiltersPublishedEventsByScope(t *testing.T) {
 	}
 }
 
+func TestPublishAfterCommitRoutesThroughKeyedScopeBuckets(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	otherSessionID := domain.SessionID("session-2")
+	service := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	global, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{})
+	if err != nil {
+		t.Fatalf("LiveSessionEvents() global error = %v", err)
+	}
+	project, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{
+		Scope: domain.Scope{ProjectID: "project-1"},
+	})
+	if err != nil {
+		t.Fatalf("LiveSessionEvents() project error = %v", err)
+	}
+	session, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{
+		Scope: domain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+	})
+	if err != nil {
+		t.Fatalf("LiveSessionEvents() session error = %v", err)
+	}
+	otherSession, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{
+		Scope: domain.Scope{SessionID: &otherSessionID},
+	})
+	if err != nil {
+		t.Fatalf("LiveSessionEvents() other session error = %v", err)
+	}
+
+	want := domain.DomainEvent{
+		ID:        "event-1",
+		Scope:     domain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+		SessionID: &sessionID,
+		Type:      "session.running",
+	}
+	if err := service.PublishAfterCommit(context.Background(), want); err != nil {
+		t.Fatalf("PublishAfterCommit() error = %v", err)
+	}
+	for name, ch := range map[string]<-chan DTO{
+		"global":  global,
+		"project": project,
+		"session": session,
+	} {
+		if got := <-ch; got.ID != want.ID {
+			t.Fatalf("%s subscriber event = %#v", name, got)
+		}
+	}
+	select {
+	case got := <-otherSession:
+		t.Fatalf("other session subscriber received event = %#v", got)
+	default:
+	}
+}
+
 func TestLiveSessionEventsEmptyScopeReceivesAllPublishedEvents(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	otherSessionID := domain.SessionID("session-2")
@@ -184,7 +239,7 @@ func TestPublishAfterCommitUnblocksWhenSubscriberContextCancels(t *testing.T) {
 	}
 }
 
-func TestPublishAfterCommitBackpressuresWhenSubscriberIsFull(t *testing.T) {
+func TestPublishAfterCommitDisconnectsSubscriberWhenMailboxIsFull(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	service := New()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -205,28 +260,25 @@ func TestPublishAfterCommitBackpressuresWhenSubscriberIsFull(t *testing.T) {
 			t.Fatalf("PublishAfterCommit() fill error = %v", err)
 		}
 	}
-	done := make(chan error, 1)
-	go func() {
-		done <- service.PublishAfterCommit(context.Background(), domain.DomainEvent{
-			ID:        "event-after-full",
-			Scope:     domain.Scope{SessionID: &sessionID},
-			SessionID: &sessionID,
-			Type:      "after_full",
-		})
-	}()
-	select {
-	case err := <-done:
-		t.Fatalf("PublishAfterCommit() finished before subscriber consumed: %v", err)
-	case <-time.After(50 * time.Millisecond):
+	started := time.Now()
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID:        "event-after-full",
+		Scope:     domain.Scope{SessionID: &sessionID},
+		SessionID: &sessionID,
+		Type:      "after_full",
+	}); err != nil {
+		t.Fatalf("PublishAfterCommit() error = %v", err)
 	}
-	<-ch
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("PublishAfterCommit() error = %v", err)
+	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+		t.Fatalf("PublishAfterCommit() blocked for %s", elapsed)
+	}
+	for i := 0; i < cap(ch); i++ {
+		if _, ok := <-ch; !ok {
+			t.Fatalf("subscriber closed after %d buffered events", i)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("PublishAfterCommit() stayed blocked after subscriber consumed")
+	}
+	if _, ok := <-ch; ok {
+		t.Fatal("slow subscriber remained open after mailbox overflow")
 	}
 }
 

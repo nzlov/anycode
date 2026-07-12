@@ -407,6 +407,39 @@ func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *tes
 	}
 }
 
+func TestSubscriptionSessionCardUpdatesSendsReadyBeforeCards(t *testing.T) {
+	sessionID := "session-1"
+	projectID := "project-1"
+	eventSessionID := eventdomain.SessionID(sessionID)
+	source := make(chan eventapp.DTO, 1)
+	source <- eventapp.DTO{
+		ID:        "card-change",
+		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
+		SessionID: &eventSessionID,
+		Type:      "session.running",
+	}
+	close(source)
+	events := &fakeEventUseCase{liveSessionEvents: source}
+	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{DTO: sessionapp.DTO{
+		ID:        sessiondomain.ID(sessionID),
+		ProjectID: sessiondomain.ProjectID(projectID),
+	}}}
+	resolver := NewResolver(UseCases{Events: events, Sessions: sessions}).Subscription()
+
+	ch, err := resolver.SessionCardUpdates(context.Background(), &projectID)
+	if err != nil {
+		t.Fatalf("SessionCardUpdates() error = %v", err)
+	}
+	ready := <-ch
+	if !ready.Ready || ready.Card != nil {
+		t.Fatalf("SessionCardUpdates() ready = %#v", ready)
+	}
+	item := <-ch
+	if item.Card == nil || item.Card.ID != sessionID {
+		t.Fatalf("SessionCardUpdates() card = %#v", item)
+	}
+}
+
 func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 	sessionID := "session-1"
 	source := make(chan timelineapp.DTO, 1)
@@ -768,6 +801,35 @@ func TestSubscriptionSessionStateUpdatesRegistersBothSourcesBeforeReady(t *testi
 	}
 	if questionUpdate.QuestionBatch.ID != "batch-1" || questionUpdate.Session.ID != sessionID {
 		t.Fatalf("question state item = %#v", questionUpdate)
+	}
+}
+
+func TestSubscriptionSessionStateUpdatesEndsWhenEventSourceCloses(t *testing.T) {
+	eventSource := make(chan eventapp.DTO)
+	questionSource := make(chan questionapp.BatchDTO)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resolver := NewResolver(UseCases{
+		Events:    &fakeEventUseCase{liveSessionEvents: eventSource},
+		Questions: &fakeQuestionUseCase{updateSource: questionSource},
+		Sessions:  &fakeSessionUseCase{},
+	}).Subscription()
+
+	ch, err := resolver.SessionStateUpdates(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("SessionStateUpdates() error = %v", err)
+	}
+	if ready := <-ch; !ready.Ready {
+		t.Fatalf("ready item = %#v", ready)
+	}
+	close(eventSource)
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("state subscription remained open after event source closed")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("state subscription did not close after event source closed")
 	}
 }
 

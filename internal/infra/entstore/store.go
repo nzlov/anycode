@@ -106,6 +106,33 @@ func (s *Store) Migrate(ctx context.Context) error {
 		WHERE queue_initial_start IS NULL`, string(session.StatusQueued), string(session.QueueKindStart)); err != nil {
 		return fmt.Errorf("backfill session queue initial start: %w", err)
 	}
+	// GLUE: Collapse duplicate legacy active runs before the database starts enforcing the lifecycle invariant.
+	if _, err := s.db.ExecContext(ctx, `UPDATE process_runs AS older
+		SET status = ?,
+			failure_reason = CASE WHEN failure_reason = '' THEN ? ELSE failure_reason END,
+			finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP)
+		WHERE status IN (?, ?, ?, ?)
+		AND EXISTS (
+			SELECT 1 FROM process_runs AS newer
+			WHERE newer.session_id = older.session_id
+			AND newer.status IN (?, ?, ?, ?)
+			AND (
+				newer.started_at > older.started_at OR
+				(newer.started_at = older.started_at AND newer.id > older.id)
+			)
+		)`,
+		string(process.StatusExited),
+		"superseded active process run during uniqueness migration",
+		string(process.StatusStarting), string(process.StatusRunning), string(process.StatusWaitingUser), string(process.StatusStopping),
+		string(process.StatusStarting), string(process.StatusRunning), string(process.StatusWaitingUser), string(process.StatusStopping),
+	); err != nil {
+		return fmt.Errorf("collapse duplicate active process runs: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS process_runs_one_active_per_session
+		ON process_runs(session_id)
+		WHERE status IN ('starting', 'running', 'waiting_user', 'stopping')`); err != nil {
+		return fmt.Errorf("create active process run uniqueness index: %w", err)
+	}
 	return nil
 }
 

@@ -112,6 +112,15 @@ func (r *ProcessRepository) MarkRunning(ctx context.Context, id process.RunID, p
 	return nil
 }
 
+func (r *ProcessRepository) MarkStopping(ctx context.Context, id process.RunID) error {
+	if err := r.client.ProcessRun.UpdateOneID(string(id)).
+		SetStatus(string(process.StatusStopping)).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("mark process stopping: %w", err)
+	}
+	return nil
+}
+
 func (r *ProcessRepository) MarkExited(ctx context.Context, id process.RunID, result process.ExitResult) error {
 	update := r.client.ProcessRun.UpdateOneID(string(id)).
 		SetStatus(string(process.StatusExited)).

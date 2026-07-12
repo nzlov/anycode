@@ -437,6 +437,15 @@ type WorkflowNodeCompleteInput struct {
 	Output        map[string]any
 }
 
+type WorkflowProcessExitInput struct {
+	WorkflowRunID  WorkflowRunID
+	NodeRunID      NodeRunID
+	Failed         bool
+	FailureCode    string
+	FailureMessage string
+	Output         map[string]any
+}
+
 type WorkflowApprovalInput struct {
 	WorkflowRunID WorkflowRunID
 	NodeID        string
@@ -491,5 +500,6 @@ type WorkflowStarter interface {
 	RerunCurrentNodeForSession(ctx context.Context, input WorkflowRerunCurrentNodeInput) (WorkflowAdvance, error)
 	CompleteNode(ctx context.Context, input WorkflowNodeCompleteInput) (WorkflowAdvance, error)
 	FailNode(ctx context.Context, input WorkflowNodeFailInput) (WorkflowAdvance, error)
+	RecoverProcessExit(ctx context.Context, input WorkflowProcessExitInput) (WorkflowAdvance, error)
 	SubmitApprovalForSession(ctx context.Context, input WorkflowApprovalInput) (WorkflowApprovalResult, error)
 }

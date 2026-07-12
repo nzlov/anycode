@@ -25,6 +25,7 @@ type UseCase interface {
 	StartForSession(ctx context.Context, input sessiondomain.WorkflowStartInput) (sessiondomain.WorkflowStart, error)
 	CompleteNode(ctx context.Context, input sessiondomain.WorkflowNodeCompleteInput) (sessiondomain.WorkflowAdvance, error)
 	FailNode(ctx context.Context, input sessiondomain.WorkflowNodeFailInput) (sessiondomain.WorkflowAdvance, error)
+	RecoverProcessExit(ctx context.Context, input sessiondomain.WorkflowProcessExitInput) (sessiondomain.WorkflowAdvance, error)
 	MarkResumeFailedForSession(ctx context.Context, input sessiondomain.WorkflowResumeFailureInput) (sessiondomain.WorkflowRunSnapshot, error)
 	ResumeCurrentNodeForSession(ctx context.Context, input sessiondomain.WorkflowResumeCurrentNodeInput) (sessiondomain.WorkflowAdvance, error)
 	RerunCurrentNodeForSession(ctx context.Context, input sessiondomain.WorkflowRerunCurrentNodeInput) (sessiondomain.WorkflowAdvance, error)
@@ -590,6 +591,9 @@ func (s *Service) ResumeCurrentNodeForSession(ctx context.Context, input session
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
+	if !isCodexNode(node) {
+		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow node %q cannot resume a Codex process", node.ID)
+	}
 	nodeRun, err := s.repo.FindLatestNodeRun(ctx, run.ID, run.CurrentNodeID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
@@ -738,6 +742,112 @@ func (s *Service) FailNode(ctx context.Context, input sessiondomain.WorkflowNode
 		Code:    strings.TrimSpace(input.Code),
 		Message: strings.TrimSpace(input.Message),
 	}, input.Output)
+}
+
+func (s *Service) RecoverProcessExit(ctx context.Context, input sessiondomain.WorkflowProcessExitInput) (sessiondomain.WorkflowAdvance, error) {
+	if s == nil {
+		return sessiondomain.WorkflowAdvance{}, errors.New("workflow usecase: nil service")
+	}
+	if s.repo == nil {
+		return sessiondomain.WorkflowAdvance{}, errors.New("workflow repository is required")
+	}
+	if input.WorkflowRunID == "" {
+		return sessiondomain.WorkflowAdvance{}, errors.New("workflow run id is required")
+	}
+	if input.NodeRunID == "" {
+		return sessiondomain.WorkflowAdvance{}, errors.New("node run id is required")
+	}
+	run, err := s.repo.FindRun(ctx, domain.RunID(input.WorkflowRunID))
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	if run.CurrentNodeID != "" {
+		nodeRun, findErr := s.repo.FindLatestNodeRun(ctx, run.ID, run.CurrentNodeID)
+		if findErr != nil {
+			return sessiondomain.WorkflowAdvance{}, findErr
+		}
+		if nodeRun.ID == domain.NodeRunID(input.NodeRunID) && (nodeRun.Status == domain.NodeRunning || nodeRun.Status == domain.NodeWaitingUser) {
+			if input.Failed {
+				return s.failNode(ctx, run, nodeRun.ID, domain.NodeFailure{
+					Code:    strings.TrimSpace(input.FailureCode),
+					Message: strings.TrimSpace(input.FailureMessage),
+				}, input.Output)
+			}
+			return s.completeNode(ctx, run, nodeRun.ID, input.Output)
+		}
+	}
+	return s.workflowAdvanceFromPersistedRun(ctx, run)
+}
+
+func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domain.Run) (sessiondomain.WorkflowAdvance, error) {
+	advance := sessiondomain.WorkflowAdvance{
+		WorkflowRunID: sessiondomain.WorkflowRunID(run.ID),
+		Status:        string(run.Status),
+	}
+	switch run.Status {
+	case domain.RunBlocked:
+		advance.Blocked = true
+		advance.BlockedReason, _ = run.Context.Values["blockedReason"].(string)
+		return advance, nil
+	case domain.RunCompleted:
+		if run.CurrentNodeID == "" {
+			advance.Completed = true
+			return advance, nil
+		}
+		definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+		if err != nil {
+			return sessiondomain.WorkflowAdvance{}, err
+		}
+		node, err := findNode(definition.Graph, run.CurrentNodeID)
+		if err != nil {
+			return sessiondomain.WorkflowAdvance{}, err
+		}
+		if isCloseNode(node) {
+			nodeRun, err := s.repo.FindLatestNodeRun(ctx, run.ID, run.CurrentNodeID)
+			if err != nil {
+				return sessiondomain.WorkflowAdvance{}, err
+			}
+			nodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
+			advance.NodeRunID = &nodeRunID
+			advance.CurrentNodeID = node.ID
+			advance.CurrentNodeTitle = node.Title
+			advance.Close = true
+			return advance, nil
+		}
+		advance.Completed = true
+		return advance, nil
+	case domain.RunWaitingResumeAction:
+		return advance, nil
+	case domain.RunFailed:
+		return advance, nil
+	case domain.RunRunning, domain.RunWaitingApproval:
+	default:
+		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run cannot recover process exit from status %q", run.Status)
+	}
+	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	node, err := findNode(definition.Graph, run.CurrentNodeID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	nodeRun, err := s.repo.FindLatestNodeRun(ctx, run.ID, run.CurrentNodeID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	nodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
+	advance.NodeRunID = &nodeRunID
+	advance.CurrentNodeID = node.ID
+	advance.CurrentNodeTitle = node.Title
+	advance.RequiresCodex = run.Status == domain.RunRunning
+	advance.Prompt = nodePrompt("", node, paramsFromContext(run.Context))
+	advance.Merge = mergeRequest(node)
+	advance.Expr = exprRequest(node, paramsFromContext(run.Context))
+	if advance.Merge != nil || advance.Expr != nil {
+		advance.RequiresCodex = false
+	}
+	return advance, nil
 }
 
 func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any) (sessiondomain.WorkflowAdvance, error) {

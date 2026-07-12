@@ -70,12 +70,13 @@ test('mergeSnapshotEvents preserves backend order keys across a page boundary', 
   );
 });
 
-test('shouldReconnectAfterClose stops confirmed auth failures and normal server completion', () => {
+test('shouldReconnectAfterClose reopens acknowledged long-lived subscriptions', () => {
   assert.equal(shouldReconnectAfterClose(true, false, false), true);
   assert.equal(shouldReconnectAfterClose(false, true, false), true);
   assert.equal(shouldReconnectAfterClose(false, undefined, false), true);
   assert.equal(shouldReconnectAfterClose(false, false, false), false);
-  assert.equal(shouldReconnectAfterClose(true, undefined, true), false);
+  assert.equal(shouldReconnectAfterClose(true, undefined, true), true);
+  assert.equal(shouldReconnectAfterClose(false, undefined, true), false);
 });
 
 test('card streams validate pre-ack closes before deciding whether to reconnect', async () => {
@@ -118,7 +119,7 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
       { acknowledged: true, completedByServer: true },
       validAccessKey,
     ),
-    false,
+    true,
   );
   assert.equal(validations, 1);
 });

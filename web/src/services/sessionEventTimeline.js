@@ -22,11 +22,12 @@ export function mergeSnapshotEvents(snapshotEvents, currentEvents, bufferedEvent
 }
 
 export function shouldReconnectAfterClose(acknowledged, accessKeyValid, completedByServer) {
-  return !completedByServer && (acknowledged || accessKeyValid !== false);
+  if (completedByServer) return acknowledged;
+  return acknowledged || accessKeyValid !== false;
 }
 
 export async function shouldReconnectCardStream(close, validateAccessKey) {
-  if (close.completedByServer) return false;
+  if (close.completedByServer) return close.acknowledged;
   if (close.acknowledged) return true;
   try {
     return (await validateAccessKey()) !== false;

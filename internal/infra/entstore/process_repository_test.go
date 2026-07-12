@@ -66,6 +66,19 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	if err := repo.MarkRunning(ctx, run.ID, 1234, "codex-session-1"); err != nil {
 		t.Fatalf("mark running: %v", err)
 	}
+	if err := repo.MarkStopping(ctx, run.ID); err != nil {
+		t.Fatalf("mark stopping: %v", err)
+	}
+	active, ok, err = repo.FindActiveBySession(ctx, run.SessionID)
+	if err != nil {
+		t.Fatalf("find stopping active: %v", err)
+	}
+	if !ok || active.Status != process.StatusStopping {
+		t.Fatalf("stopping run mismatch: ok=%v run=%#v", ok, active)
+	}
+	if err := repo.MarkRunning(ctx, run.ID, 1234, "codex-session-1"); err != nil {
+		t.Fatalf("restore running: %v", err)
+	}
 	active, ok, err = repo.FindActiveBySession(ctx, run.SessionID)
 	if err != nil {
 		t.Fatalf("find running active: %v", err)
@@ -122,6 +135,76 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("exited run should not be active: %#v", active)
+	}
+}
+
+func TestProcessRepositoryRejectsSecondActiveRunForSession(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	repo := store.Processes()
+	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-1", SessionID: "session-1", Status: process.StatusRunning}); err != nil {
+		t.Fatalf("create first run: %v", err)
+	}
+	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-2", SessionID: "session-1", Status: process.StatusStarting}); err == nil {
+		t.Fatal("second active process run was accepted")
+	}
+	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-exited", SessionID: "session-1", Status: process.StatusExited}); err != nil {
+		t.Fatalf("create terminal run: %v", err)
+	}
+}
+
+func TestMigrateCollapsesLegacyDuplicateActiveRuns(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("initial migrate: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DROP INDEX process_runs_one_active_per_session"); err != nil {
+		t.Fatalf("drop active run index: %v", err)
+	}
+
+	repo := store.Processes()
+	startedAt := time.Unix(1, 0).UTC()
+	for _, run := range []process.Run{
+		{ID: "process-run-old", SessionID: "session-1", Status: process.StatusRunning, StartedAt: startedAt},
+		{ID: "process-run-new", SessionID: "session-1", Status: process.StatusStarting, StartedAt: startedAt.Add(time.Second)},
+	} {
+		if err := repo.CreateRun(ctx, run); err != nil {
+			t.Fatalf("create legacy run %s: %v", run.ID, err)
+		}
+	}
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate legacy runs: %v", err)
+	}
+
+	active, ok, err := repo.FindActiveBySession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("find active: %v", err)
+	}
+	if !ok || active.ID != "process-run-new" {
+		t.Fatalf("active run = %#v ok=%v", active, ok)
+	}
+	old, err := store.client.ProcessRun.Get(ctx, "process-run-old")
+	if err != nil {
+		t.Fatalf("get old run: %v", err)
+	}
+	if old.Status != string(process.StatusExited) || old.FinishedAt == nil || old.FailureReason == "" {
+		t.Fatalf("old run was not collapsed: %#v", old)
+	}
+	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-third", SessionID: "session-1", Status: process.StatusRunning}); err == nil {
+		t.Fatal("active run uniqueness index was not recreated")
 	}
 }
 

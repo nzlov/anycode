@@ -345,6 +345,11 @@ type SessionCardPage struct {
 	PageInfo *PageInfo      `json:"pageInfo"`
 }
 
+type SessionCardStreamItem struct {
+	Ready bool         `json:"ready"`
+	Card  *SessionCard `json:"card,omitempty"`
+}
+
 type SessionCommandContent struct {
 	Command    string `json:"command"`
 	Output     string `json:"output"`

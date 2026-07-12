@@ -205,7 +205,7 @@ test('subscription close before acknowledgement still releases the snapshot gate
   assert.match(transportSource, /completedByServer: true/);
 });
 
-test('session detail does not reconnect or report auth failure after normal server completion', () => {
+test('session detail reopens acknowledged subscriptions completed by the server', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
@@ -214,6 +214,10 @@ test('session detail does not reconnect or report auth failure after normal serv
   assert.match(
     composableSource,
     /shouldReconnectAfterClose\(\s*close\.acknowledged,\s*accessKeyValid,\s*close\.completedByServer/s,
+  );
+  assert.match(
+    composableSource,
+    /if \(shouldReconnectAfterClose[\s\S]*?scheduleReconnect\(\);[\s\S]*?if \(close\.completedByServer\) return;/,
   );
   assert.match(composableSource, /if \(close\.completedByServer\) return;/);
 });
@@ -390,6 +394,10 @@ test('card subscriptions validate pre-ack closes before reconnecting', () => {
     new URL('../src/pages/IndexPage.vue', import.meta.url),
     'utf8',
   );
+  const sessionsServiceSource = readFileSync(
+    new URL('../src/services/sessions.ts', import.meta.url),
+    'utf8',
+  );
 
   assert.match(sessionsPageSource, /onClose: \(close\) =>[\s\S]*handleSubscriptionClose\(close\)/);
   assert.match(
@@ -404,6 +412,16 @@ test('card subscriptions validate pre-ack closes before reconnecting', () => {
     overviewSource,
     /shouldReconnectCardStream\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
   );
+  assert.match(
+    sessionsPageSource,
+    /async function reconnectFromSnapshot\(\)[\s\S]*await loadSessions\(\);[\s\S]*openSubscription\(refreshAfterSubscriptionReady\)/,
+  );
+  assert.match(
+    overviewSource,
+    /onSubscribed: onSubscribed \?\? refreshOverviewAfterSubscriptionReady/,
+  );
+  assert.match(sessionsServiceSource, /sessionCardUpdates[\s\S]*ready[\s\S]*card \{/);
+  assert.match(sessionsServiceSource, /handlers\.onSubscribed\?\.\(\)/);
 });
 
 test('session list loads freeze their scope and reject stale responses', () => {

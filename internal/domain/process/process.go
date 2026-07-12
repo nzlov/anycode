@@ -2,8 +2,11 @@ package process
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrProcessNotFound = errors.New("codex process run is not active")
 
 type RunID string
 type SessionID string
@@ -72,6 +75,7 @@ type Repository interface {
 	CountActive(ctx context.Context) (int, error)
 	MarkWaitingUser(ctx context.Context, id RunID) error
 	MarkRunning(ctx context.Context, id RunID, pid int, codexSessionID string) error
+	MarkStopping(ctx context.Context, id RunID) error
 	MarkExited(ctx context.Context, id RunID, result ExitResult) error
 }
 
