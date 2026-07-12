@@ -1078,7 +1078,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 		args = append(args, "-C", input.Workdir)
 	}
 	args = c.appendMCPArgs(args, input.SessionID)
-	args = c.appendConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode)
+	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, true)
 	for _, path := range input.ImagePaths {
 		if path != "" {
 			args = append(args, "-i", path)
@@ -1093,7 +1093,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
 	args = c.appendMCPArgs(args, input.SessionID)
-	args = appendResumeConfigArgs(args, input.Model, input.ReasoningEffort)
+	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, false)
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}
@@ -1103,12 +1103,23 @@ func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	return args
 }
 
-func appendResumeConfigArgs(args []string, model string, reasoningEffort string) []string {
+func (c *Client) appendRuntimeConfigArgs(args []string, model string, reasoningEffort string, permissionMode string, allowSandboxFlag bool) []string {
 	if model != "" {
 		args = append(args, "-m", model)
 	}
 	if reasoningEffort != "" {
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", reasoningEffort))
+	}
+	if permissionMode == "" {
+		return args
+	}
+	if c != nil && c.mcpStdioSocket != "" {
+		if profile, ok := mcpPermissionProfile(permissionMode); ok {
+			return appendMCPPermissionProfileArgs(args, profile, c.mcpStdioSocket)
+		}
+	}
+	if allowSandboxFlag {
+		args = append(args, "--sandbox", permissionMode)
 	}
 	return args
 }
@@ -1149,24 +1160,6 @@ func tomlStringArray(values []string) string {
 		quoted = append(quoted, strconv.Quote(value))
 	}
 	return "[" + strings.Join(quoted, ",") + "]"
-}
-
-func (c *Client) appendConfigArgs(args []string, model string, reasoningEffort string, permissionMode string) []string {
-	if model != "" {
-		args = append(args, "-m", model)
-	}
-	if reasoningEffort != "" {
-		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", reasoningEffort))
-	}
-	if permissionMode != "" {
-		if c != nil && c.mcpStdioSocket != "" {
-			if profile, ok := mcpPermissionProfile(permissionMode); ok {
-				return appendMCPPermissionProfileArgs(args, profile, c.mcpStdioSocket)
-			}
-		}
-		args = append(args, "--sandbox", permissionMode)
-	}
-	return args
 }
 
 func mcpPermissionProfile(permissionMode string) (string, bool) {
