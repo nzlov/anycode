@@ -43,12 +43,32 @@ type CodexEvent struct {
 	EventID       string
 	Type          string
 	Payload       map[string]any
+	PlanUpdate    *PlanUpdate
+	RealtimeOnly  bool
 	CorrelationID string
 	Phase         CodexPhase
 	Content       CodexEventContent
 	SourceOffset  int64
 	SourceIndex   int
 	CreatedAt     time.Time
+}
+
+type PlanItemStatus string
+
+const (
+	PlanItemPending    PlanItemStatus = "pending"
+	PlanItemInProgress PlanItemStatus = "in_progress"
+	PlanItemCompleted  PlanItemStatus = "completed"
+)
+
+type PlanUpdate struct {
+	EventID string
+	Items   []PlanItem
+}
+
+type PlanItem struct {
+	Step   string
+	Status PlanItemStatus
 }
 
 func CanonicalCodexEventID(codexSessionID string, eventID string) string {

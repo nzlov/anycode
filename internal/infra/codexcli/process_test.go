@@ -312,6 +312,7 @@ printf '\n' >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl"`},
 				t.Fatal(err)
 			}
 			if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"`+dir+`"}}
+{"timestamp":"2026-07-08T09:00:30Z","type":"response_item","payload":{"type":"function_call","call_id":"plan-old","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"old plan\",\"status\":\"completed\"}]}"}}
 {"timestamp":"2026-07-08T09:01:00Z","type":"response_item","payload":{"type":"message","id":"msg-old","role":"assistant","content":[{"type":"output_text","text":"old"}]}}`), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -344,6 +345,274 @@ EOF
 				t.Fatalf("resume replayed wrong event = %+v", got[0])
 			}
 		})
+	}
+}
+
+func TestResumeIgnoresStdoutPlansBeforeNewTurn(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-resume-plan.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-resume-plan","cwd":"`+dir+`"}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-resume-plan"}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"old-plan","type":"todo_list","items":[{"text":"Historical plan","status":"in_progress"}]}}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"old-plan","type":"todo_list","items":[{"text":"Historical plan","status":"completed"}]}}'
+printf '%s\n' '{"type":"turn.started","turn_id":"new-turn"}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"new-plan","type":"todo_list","items":[{"text":"Current plan","status":"in_progress"}]}}'
+sleep 0.2
+cat >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume-plan.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:02:00Z","type":"response_item","payload":{"type":"message","id":"msg-new","role":"assistant","content":[{"type":"output_text","text":"new"}]}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Resume(context.Background(), process.CodexResumeInput{
+		ProcessRunID:   "process-run-resume-plan",
+		SessionID:      "session-1",
+		CodexSessionID: "codex-session-resume-plan",
+		Workdir:        dir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plans []process.PlanUpdate
+	for event := range events {
+		if event.PlanUpdate != nil {
+			plans = append(plans, *event.PlanUpdate)
+		}
+	}
+	if len(plans) != 1 || len(plans[0].Items) != 1 || plans[0].Items[0].Step != "Current plan" {
+		t.Fatalf("resume stdout plans = %#v", plans)
+	}
+}
+
+func TestStdoutPlanUpdateParsesTypedItemsWithStableID(t *testing.T) {
+	raw := []byte(`{"type":"item.updated","item":{"id":"plan-1","type":"todo_list","items":[{"text":"Inspect stream","completed":true},{"text":"Persist TODO","completed":false}]}}`)
+	first, ok := stdoutPlanUpdate(raw)
+	if !ok || first.PlanUpdate == nil {
+		t.Fatalf("stdout plan update = %#v, %v", first, ok)
+	}
+	second, ok := stdoutPlanUpdate(raw)
+	if !ok || second.EventID != first.EventID || first.EventID == "" {
+		t.Fatalf("stable event ids = %q and %q", first.EventID, second.EventID)
+	}
+	if first.CorrelationID != "plan-1" || !first.RealtimeOnly || len(first.PlanUpdate.Items) != 2 {
+		t.Fatalf("parsed plan update = %#v", first)
+	}
+	transcript := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"different-call-id","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"},{\"step\":\"Persist TODO\",\"status\":\"in_progress\"}]}"}}`), "", "rollout-plan.jsonl", 10)
+	if len(transcript) != 1 || transcript[0].PlanUpdate == nil || transcript[0].PlanUpdate.EventID != first.PlanUpdate.EventID {
+		t.Fatalf("cross-source plan ids = %#v and %#v", first, transcript)
+	}
+	if transcript[0].EventID == transcript[0].PlanUpdate.EventID {
+		t.Fatalf("transcript event id was replaced by plan id: %#v", transcript[0])
+	}
+	if first.PlanUpdate.Items[0].Status != process.PlanItemCompleted || first.PlanUpdate.Items[1].Status != process.PlanItemPending {
+		t.Fatalf("plan statuses = %#v", first.PlanUpdate.Items)
+	}
+}
+
+func TestStdoutPlanUpdateRejectsTodoPayloadOnUnrelatedEvent(t *testing.T) {
+	raw := []byte(`{"type":"assistant_message","item":{"type":"todo_list","items":[{"text":"Do not persist","status":"completed"}]}}`)
+	if event, ok := stdoutPlanUpdate(raw); ok {
+		t.Fatalf("unrelated event parsed as plan update: %#v", event)
+	}
+}
+
+func TestEventsMergesStdoutAndSessionPlanUpdatesWithoutDuplicates(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan"}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"},{"text":"Persist TODO","status":"in_progress"}]}}'
+sleep 0.2
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-plan","cwd":"$PWD"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"session-plan-call","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"},{\"step\":\"Persist TODO\",\"status\":\"in_progress\"}]}"}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var planEvents []process.CodexEvent
+	var transcriptPlans []process.CodexEvent
+	var allEvents []process.CodexEvent
+	for event := range events {
+		allEvents = append(allEvents, event)
+		if event.PlanUpdate != nil {
+			planEvents = append(planEvents, event)
+		}
+		if content, ok := event.Content.(process.CodexToolContent); ok && content.QualifiedName == "update_plan" {
+			transcriptPlans = append(transcriptPlans, event)
+		}
+	}
+	if len(planEvents) != 1 {
+		t.Fatalf("plan event count = %d, want 1: %#v", len(planEvents), planEvents)
+	}
+	if len(planEvents[0].PlanUpdate.Items) != 2 || !planEvents[0].RealtimeOnly || planEvents[0].EventID == "" {
+		t.Fatalf("merged plan event = %#v", planEvents[0])
+	}
+	if len(allEvents) == 0 || allEvents[0].PlanUpdate == nil || !allEvents[0].RealtimeOnly {
+		t.Fatalf("stdout plan was not emitted before delayed transcript: %#v", allEvents)
+	}
+	if len(transcriptPlans) != 1 || transcriptPlans[0].RealtimeOnly || transcriptPlans[0].PlanUpdate != nil {
+		t.Fatalf("transcript plan events = %#v", transcriptPlans)
+	}
+}
+
+func TestEventsPreservesRepeatedPlanAfterIntermediateChange(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan-repeat"}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"}]}}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}'
+sleep 0.2
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan-repeat.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-plan-repeat","cwd":"$PWD"}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-repeat", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var statuses []process.PlanItemStatus
+	for event := range events {
+		if event.PlanUpdate != nil {
+			statuses = append(statuses, event.PlanUpdate.Items[0].Status)
+		}
+	}
+	want := []process.PlanItemStatus{process.PlanItemInProgress, process.PlanItemCompleted, process.PlanItemInProgress}
+	if !reflect.DeepEqual(statuses, want) {
+		t.Fatalf("plan statuses = %#v, want %#v", statuses, want)
+	}
+}
+
+func TestEventsDoesNotPairPlanAcrossInterveningDifferentSessionUpdate(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan-gap"}'
+printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}'
+sleep 0.2
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan-gap.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-plan-gap","cwd":"$PWD"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"session-plan-b","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"}]}"}}
+{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"session-plan-a","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"in_progress\"}]}"}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-gap", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var statuses []process.PlanItemStatus
+	for event := range events {
+		if event.PlanUpdate != nil {
+			statuses = append(statuses, event.PlanUpdate.Items[0].Status)
+		}
+	}
+	want := []process.PlanItemStatus{process.PlanItemInProgress, process.PlanItemCompleted, process.PlanItemInProgress}
+	if !reflect.DeepEqual(statuses, want) {
+		t.Fatalf("plan statuses = %#v, want %#v", statuses, want)
+	}
+}
+
+func TestTailSessionLogDrainsStdoutPlanWhileTranscriptHasBacklog(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-backlog.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var log strings.Builder
+	log.WriteString(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-backlog","cwd":"` + dir + `"}}` + "\n")
+	for index := 0; index < 200; index++ {
+		log.WriteString(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"message","id":"msg-` + strconv.Itoa(index) + `","role":"assistant","content":[{"type":"output_text","text":"message"}]}}` + "\n")
+	}
+	if err := os.WriteFile(sessionFile, []byte(log.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan, ok := stdoutPlanUpdate([]byte(`{"type":"item.updated","item":{"id":"plan-backlog","type":"todo_list","items":[{"text":"Realtime plan","status":"in_progress"}]}}`))
+	if !ok {
+		t.Fatal("stdout plan was not parsed")
+	}
+	stdoutPlans := make(chan process.CodexEvent, 1)
+	stdoutPlans <- plan
+	close(stdoutPlans)
+	sessionIDs := make(chan string)
+	close(sessionIDs)
+	exited := make(chan process.ExitResult, 1)
+	exited <- process.ExitResult{}
+	events := make(chan process.CodexEvent, 256)
+	active := &activeProcess{
+		home:           codexHome,
+		workdir:        dir,
+		codexSessionID: "codex-session-backlog",
+		baseline:       map[string]int64{},
+	}
+	if _, err := tailSessionLog(context.Background(), active, events, exited, sessionIDs, stdoutPlans); err != nil {
+		t.Fatal(err)
+	}
+	planIndex := -1
+	for index := 0; len(events) > 0; index++ {
+		if event := <-events; event.PlanUpdate != nil {
+			planIndex = index
+			break
+		}
+	}
+	if planIndex < 0 || planIndex > 2 {
+		t.Fatalf("realtime plan index = %d, want before transcript backlog", planIndex)
+	}
+}
+
+func TestObserveStdoutDoesNotBlockWhenPlanBufferIsFull(t *testing.T) {
+	var stdout strings.Builder
+	for index := 0; index < 100; index++ {
+		stdout.WriteString(`{"type":"item.updated","item":{"id":"plan","type":"todo_list","items":[{"text":"step-` + strconv.Itoa(index) + `","status":"in_progress"}]}}` + "\n")
+	}
+	_, plans := observeStdout(strings.NewReader(stdout.String()), false)
+	var got []process.CodexEvent
+	for event := range plans {
+		got = append(got, event)
+	}
+	if len(got) == 0 || got[len(got)-1].PlanUpdate.Items[0].Step != "step-99" {
+		t.Fatalf("buffered plans = %#v", got)
 	}
 }
 
