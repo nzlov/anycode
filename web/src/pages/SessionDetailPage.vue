@@ -26,7 +26,14 @@
             </q-card-section>
 
             <div class="event-list">
-              <SessionEventMessage v-for="event in streamEntries" :key="event.id" :event="event" />
+              <div
+                v-for="event in streamEntries"
+                :key="event.id"
+                class="event-list__item"
+                :data-timeline-id="event.id"
+              >
+                <SessionEventMessage :event="event" />
+              </div>
             </div>
           </div>
         </q-card>
@@ -434,13 +441,13 @@ import { getSessionDiffFiles, getSessionFileDiff } from '@/services/diff';
 import { expandDiffContext, initialDiffContext } from '@/services/diffViewerState';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffFile, FileDiff, SessionDiff } from '@/services/diff';
-import { mergeSessionEvents } from '@/services/sessionEventPresentation';
-import { sortSessionEvents } from '@/services/sessionEventTimeline';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
-import type { QuestionAnswerInput, SessionEvent, SessionMode } from '@/services/sessions';
+import { reduceSessionTimelineEvents } from '@/services/sessionTimelineReducer';
+import type { QuestionAnswerInput, SessionMode } from '@/services/sessions';
+import type { SessionTimelineItem } from '@/services/sessionTimeline';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -475,6 +482,7 @@ let preservingOlderEventScroll = false;
 const {
   session,
   events,
+  tokenUsage,
   eventsPageInfo,
   pendingQuestionBatches,
   loading,
@@ -519,21 +527,10 @@ const composerConfigDirty = computed(() => {
     current.config.permissionMode !== composerPermission.value
   );
 });
-type StreamEntry = SessionEvent;
-
-const streamEntries = computed<StreamEntry[]>(() => {
-  const entries: StreamEntry[] = events.value.filter((event) => event.kind !== 'usage');
-  const sortedEntries = sortSessionEvents(entries);
-  return mergeSessionEvents(sortedEntries);
-});
-const latestTokenUsage = computed(() => {
-  const sortedEvents = sortSessionEvents(events.value);
-  for (let index = sortedEvents.length - 1; index >= 0; index -= 1) {
-    const event = sortedEvents[index];
-    if (event?.kind === 'usage' && event.usage) return event.usage;
-  }
-  return null;
-});
+const streamEntries = computed<SessionTimelineItem[]>(() =>
+  reduceSessionTimelineEvents(events.value),
+);
+const latestTokenUsage = computed(() => tokenUsage.value);
 const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;
@@ -899,6 +896,7 @@ async function onEventScroll() {
   if (!body || body.scrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
     return;
   const previousHeight = body.scrollHeight;
+  const anchor = captureEventScrollAnchor(body);
   preservingOlderEventScroll = true;
   try {
     while (mounted && body.scrollHeight <= previousHeight) {
@@ -909,10 +907,38 @@ async function onEventScroll() {
       if (!eventsPageInfo.value.nextCursor || eventsPageInfo.value.nextCursor === requestedCursor)
         break;
     }
-    body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+    if (!restoreEventScrollAnchor(body, anchor)) {
+      body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
+    }
   } finally {
     preservingOlderEventScroll = false;
   }
+}
+
+interface EventScrollAnchor {
+  id: string;
+  offsetTop: number;
+}
+
+function captureEventScrollAnchor(body: HTMLElement): EventScrollAnchor | null {
+  const bodyTop = body.getBoundingClientRect().top;
+  const item = [...body.querySelectorAll<HTMLElement>('[data-timeline-id]')].find(
+    (candidate) => candidate.getBoundingClientRect().bottom >= bodyTop,
+  );
+  const id = item?.dataset.timelineId;
+  if (!item || !id) return null;
+  return { id, offsetTop: item.getBoundingClientRect().top - bodyTop };
+}
+
+function restoreEventScrollAnchor(body: HTMLElement, anchor: EventScrollAnchor | null) {
+  if (!anchor) return false;
+  const item = [...body.querySelectorAll<HTMLElement>('[data-timeline-id]')].find(
+    (candidate) => candidate.dataset.timelineId === anchor.id,
+  );
+  if (!item) return false;
+  const currentOffset = item.getBoundingClientRect().top - body.getBoundingClientRect().top;
+  body.scrollTop += currentOffset - anchor.offsetTop;
+  return true;
 }
 
 async function scrollEventsToBottom() {

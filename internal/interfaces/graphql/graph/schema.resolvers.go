@@ -439,7 +439,7 @@ func (r *queryResolver) Session(ctx context.Context, id string) (*model.SessionD
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
-func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionEventPage, error) {
+func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionTimelinePage, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
@@ -556,7 +556,7 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
-func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionEventStreamItem, error) {
+func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionTimelineStreamItem, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
@@ -567,13 +567,13 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionEventStreamItem)
+	out := make(chan *model.SessionTimelineStreamItem)
 	go func() {
 		defer close(out)
 		select {
 		case <-ctx.Done():
 			return
-		case out <- &model.SessionEventStreamItem{Ready: true}:
+		case out <- &model.SessionTimelineStreamItem{Ready: true}:
 		}
 		for {
 			select {
@@ -586,7 +586,7 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 				select {
 				case <-ctx.Done():
 					return
-				case out <- &model.SessionEventStreamItem{Event: mapTimelineEvent(eventDTO)}:
+				case out <- mapTimelineStreamItem(eventDTO):
 				}
 			}
 		}

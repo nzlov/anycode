@@ -13,8 +13,6 @@ import {
   closeSession as closeSessionRequest,
   getPendingQuestionBatches,
   getSession,
-  getSessionEventPage,
-  subscribeSessionEvents,
   subscribeSessionStateUpdates,
   executeSession as executeSessionRequest,
   submitQuestionBatch,
@@ -26,6 +24,11 @@ import {
   type SessionConfigInput,
   type SessionDetailData,
 } from '@/services/sessions';
+import {
+  getSessionTimelinePage,
+  subscribeSessionTimeline,
+  type SessionTokenUsage,
+} from '@/services/sessionTimeline';
 import {
   appendLiveEvent,
   createLatestRequestTracker,
@@ -41,6 +44,7 @@ const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, ne
 export function useSessionDetail(sessionId: string) {
   const session = ref<SessionDetailData['session'] | null>(null);
   const events = ref<SessionDetailData['events']>([]);
+  const tokenUsage = ref<SessionTokenUsage | null>(null);
   const eventsPageInfo = ref<PageInfo>({ ...emptyPageInfo });
   const loading = ref(false);
   const loadingOlderEvents = ref(false);
@@ -59,6 +63,7 @@ export function useSessionDetail(sessionId: string) {
   let stateSubscription: { unsubscribe: () => void } | null = null;
   let bufferingLiveEvents = false;
   let bufferedLiveEvents: SessionDetailData['events'] = [];
+  let bufferedLiveUsage: SessionTokenUsage | null = null;
   let releaseSubscriptionReadiness: (() => void) | null = null;
   let subscriptionGeneration = 0;
   const eventSnapshotRequests = createLatestRequestTracker();
@@ -70,12 +75,15 @@ export function useSessionDetail(sessionId: string) {
     const eventRequest = eventSnapshotRequests.next();
     const sessionRequest = sessionRequests.next();
     loading.value = true;
-    if (!liveStopped) bufferingLiveEvents = true;
+    if (!liveStopped && !bufferingLiveEvents) {
+      bufferingLiveEvents = true;
+      bufferedLiveUsage = null;
+    }
     error.value = '';
     try {
       const [sessionResult, eventResult] = await Promise.allSettled([
         getSession(sessionId),
-        getSessionEventPage(sessionId, '', eventPageSize),
+        getSessionTimelinePage(sessionId, '', eventPageSize),
       ]);
       if (sessionRequests.isCurrent(sessionRequest)) {
         if (sessionResult.status === 'fulfilled') {
@@ -96,6 +104,7 @@ export function useSessionDetail(sessionId: string) {
           );
           bufferedLiveEvents = [];
           eventsPageInfo.value = eventResult.value.pageInfo;
+          tokenUsage.value = bufferedLiveUsage ?? eventResult.value.usage;
         } else {
           error.value =
             eventResult.reason instanceof Error ? eventResult.reason.message : '加载会话事件失败';
@@ -105,6 +114,8 @@ export function useSessionDetail(sessionId: string) {
       if (eventSnapshotRequests.isCurrent(eventRequest)) {
         events.value = mergeSnapshotEvents([], events.value, bufferedLiveEvents);
         bufferedLiveEvents = [];
+        if (bufferedLiveUsage) tokenUsage.value = bufferedLiveUsage;
+        bufferedLiveUsage = null;
         bufferingLiveEvents = false;
         loading.value = false;
       }
@@ -229,7 +240,7 @@ export function useSessionDetail(sessionId: string) {
     loadingOlderEvents.value = true;
     error.value = '';
     try {
-      const result = await getSessionEventPage(sessionId, beforeEventId, eventPageSize);
+      const result = await getSessionTimelinePage(sessionId, beforeEventId, eventPageSize);
       events.value = prependOlderEvents(events.value, result.items);
       eventsPageInfo.value = result.pageInfo;
       return result.pageInfo.nextCursor || null;
@@ -258,6 +269,7 @@ export function useSessionDetail(sessionId: string) {
   async function startLiveUpdates() {
     liveStopped = false;
     bufferingLiveEvents = true;
+    bufferedLiveUsage = null;
     await waitForSubscriptionRegistration(openSubscriptions());
   }
 
@@ -276,6 +288,7 @@ export function useSessionDetail(sessionId: string) {
     stateSubscription = null;
     bufferingLiveEvents = false;
     bufferedLiveEvents = [];
+    bufferedLiveUsage = null;
   }
 
   function openSubscriptions() {
@@ -291,7 +304,7 @@ export function useSessionDetail(sessionId: string) {
       transcriptReady.release();
       stateReady.release();
     };
-    eventSubscription = subscribeSessionEvents(sessionId, {
+    eventSubscription = subscribeSessionTimeline(sessionId, {
       onSubscribed: transcriptReady.resolve,
       onData: (event) => {
         if (generation !== subscriptionGeneration) return;
@@ -301,6 +314,14 @@ export function useSessionDetail(sessionId: string) {
         }
         const nextEvents = appendLiveEvent(events.value, event);
         events.value = nextEvents;
+      },
+      onUsage: (usage) => {
+        if (generation !== subscriptionGeneration) return;
+        if (bufferingLiveEvents) {
+          bufferedLiveUsage = usage;
+          return;
+        }
+        tokenUsage.value = usage;
       },
       onError: (err) => {
         transcriptReady.release();
@@ -367,6 +388,7 @@ export function useSessionDetail(sessionId: string) {
   async function reconnectFromSnapshot() {
     if (liveStopped) return;
     bufferingLiveEvents = true;
+    bufferedLiveUsage = null;
     await waitForSubscriptionRegistration(openSubscriptions());
     if (liveStopped) return;
     await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
@@ -429,6 +451,7 @@ export function useSessionDetail(sessionId: string) {
   return {
     session,
     events,
+    tokenUsage,
     eventsPageInfo,
     pendingQuestionBatches,
     loading,

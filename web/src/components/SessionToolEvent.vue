@@ -7,23 +7,31 @@
       @click="expanded = !expanded"
     >
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
-      <q-icon :name="isExec ? 'terminal' : 'build'" size="16px" />
+      <q-icon name="build" size="16px" />
       <span>{{ displayTitle }}</span>
-      <time>{{ event.time }}</time>
+      <q-spinner v-if="event.phase === 'started' || event.phase === 'progress'" size="14px" />
+      <q-icon
+        v-else
+        :name="timelinePhaseIcon(event.phase)"
+        :color="timelinePhaseColor(event.phase)"
+        size="16px"
+      >
+        <q-tooltip>{{ timelinePhaseLabel(event.phase) }}</q-tooltip>
+      </q-icon>
+      <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
     <template v-if="expanded">
-      <div v-if="isExec" class="tool-event__exec">
-        <section v-if="event.execInput" class="tool-event__section">
-          <div class="tool-event__terminal-label">输入</div>
-          <pre class="tool-event__command"><code>{{ event.execInput }}</code></pre>
+      <div class="tool-event__content">
+        <section v-if="content.input.text" class="tool-event__section">
+          <div class="tool-event__label">输入</div>
+          <StructuredContent :content="content.input" />
         </section>
-        <section v-if="event.execOutput" class="tool-event__section">
-          <div class="tool-event__terminal-label">输出</div>
-          <SessionTerminalOutput :body="event.execOutput" />
+        <section v-if="content.output.text" class="tool-event__section">
+          <div class="tool-event__label">输出</div>
+          <StructuredContent :content="content.output" />
         </section>
+        <SessionEventImages :event-id="event.id" :images="content.images" label="工具输出图片" />
       </div>
-      <SessionTerminalOutput v-else-if="event.body" :body="event.body" />
-      <SessionEventImages :event-id="event.id" :images="event.images ?? []" label="工具输出图片" />
     </template>
   </div>
 </template>
@@ -32,22 +40,26 @@
 import { computed, ref } from 'vue';
 
 import SessionEventImages from '@/components/SessionEventImages.vue';
-import SessionTerminalOutput from '@/components/SessionTerminalOutput.vue';
-import type { SessionEvent } from '@/services/sessions';
+import StructuredContent from '@/components/StructuredContent.vue';
+import type { SessionTimelineItem, SessionToolContent } from '@/services/sessionTimeline';
+import {
+  timelinePhaseColor,
+  timelinePhaseIcon,
+  timelinePhaseLabel,
+  timelineTime,
+  toolLabel,
+} from '@/services/sessionTimelinePresentation';
 
-const props = defineProps<{ event: SessionEvent }>();
+const props = defineProps<{
+  event: SessionTimelineItem & { content: SessionToolContent };
+}>();
 const expanded = ref(false);
-const isExec = computed(
-  () => props.event.execInput !== undefined || props.event.execOutput !== undefined,
-);
-const displayTitle = computed(() => {
-  if (!props.event.command || props.event.title.startsWith('Shell ')) return props.event.title;
-  return `Shell ${props.event.title}`;
-});
+const content = computed(() => props.event.content);
+const displayTitle = computed(() => toolLabel(content.value));
 </script>
 
 <style scoped>
-.tool-event__exec {
+.tool-event__content {
   display: grid;
   gap: 8px;
   margin-top: 6px;
@@ -57,27 +69,10 @@ const displayTitle = computed(() => {
   min-width: 0;
 }
 
-.tool-event__terminal-label {
+.tool-event__label {
   color: var(--ac-text-muted);
   font-size: 12px;
   font-weight: 600;
-}
-
-.tool-event__command {
-  margin: 4px 0 0;
-  overflow-x: auto;
-  padding: 9px 10px;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface);
-  color: var(--ac-text);
-  cursor: text;
-  font-family: 'Fira Code', 'JetBrains Mono', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  tab-size: 2;
-  user-select: text;
-  white-space: pre;
 }
 
 .tool-event__header {

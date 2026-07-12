@@ -5,17 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/nzlov/anycode/internal/application/event"
-	"github.com/nzlov/anycode/internal/application/port"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type UseCase interface {
-	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (port.Page[DTO], error)
+	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (Page, error)
 	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
 }
 
@@ -45,15 +45,6 @@ type LiveEventSource interface {
 	LiveSessionEvents(ctx context.Context, input event.LiveSessionEventsInput) (<-chan event.DTO, error)
 }
 
-type DTO struct {
-	ID        eventdomain.ID
-	Scope     eventdomain.Scope
-	SessionID *eventdomain.SessionID
-	Type      string
-	Payload   map[string]any
-	CreatedAt string
-}
-
 const (
 	defaultLimit = 50
 	maxLimit     = 200
@@ -64,36 +55,49 @@ type Service struct {
 	sessions   SessionRepository
 	transcript CodexTranscriptSource
 	index      CodexSessionIndex
+	history    eventdomain.Store
 }
 
-func New(live LiveEventSource, sessions SessionRepository, transcript CodexTranscriptSource, index CodexSessionIndex) *Service {
-	return &Service{live: live, sessions: sessions, transcript: transcript, index: index}
+type Option func(*Service)
+
+func WithHistory(history eventdomain.Store) Option {
+	return func(service *Service) {
+		service.history = history
+	}
 }
 
-func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (port.Page[DTO], error) {
+func New(live LiveEventSource, sessions SessionRepository, transcript CodexTranscriptSource, index CodexSessionIndex, options ...Option) *Service {
+	service := &Service{live: live, sessions: sessions, transcript: transcript, index: index}
+	for _, option := range options {
+		option(service)
+	}
+	return service
+}
+
+func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (Page, error) {
 	if s == nil {
-		return port.Page[DTO]{}, errors.New("timeline usecase: nil service")
+		return Page{}, errors.New("timeline usecase: nil service")
 	}
 	if input.SessionID == "" {
-		return port.Page[DTO]{}, errors.New("session id is required")
+		return Page{}, errors.New("session id is required")
 	}
 	limit := normalizeLimit(input.Limit)
-	events, err := s.sessionHistoryEvents(ctx, input.SessionID)
+	events, usage, err := s.sessionHistoryEvents(ctx, input.SessionID)
 	if err != nil {
-		return port.Page[DTO]{}, fmt.Errorf("list session events: %w", err)
+		return Page{}, fmt.Errorf("list session events: %w", err)
 	}
 	pageEvents, total, hasMore := pageEventsBefore(events, input.BeforeEventID, limit)
-	items := toDTOs(pageEvents)
 	nextCursor := ""
-	if hasMore && len(items) > 0 {
-		nextCursor = string(items[0].ID)
+	if hasMore && len(pageEvents) > 0 {
+		nextCursor = string(pageEvents[0].ID)
 	}
-	return port.Page[DTO]{
-		Items:      items,
+	return Page{
+		Items:      pageEvents,
 		Page:       1,
 		PageSize:   limit,
 		Total:      total,
 		NextCursor: nextCursor,
+		Usage:      usage,
 	}, nil
 }
 
@@ -103,6 +107,10 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	}
 	if s.live == nil {
 		return nil, errors.New("live event source is required")
+	}
+	sourceGroups, err := s.codexSourceGroups(ctx, input.Scope)
+	if err != nil {
+		return nil, err
 	}
 	out := make(chan DTO, 16)
 	liveCtx, cancelLive := context.WithCancel(ctx)
@@ -122,15 +130,25 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 				if !ok {
 					return
 				}
-				if eventDTO.Type != "process.codex_event" {
-					continue
-				}
 				if _, ok := seen[eventdomain.ID(eventDTO.ID)]; ok {
 					continue
 				}
 				seen[eventdomain.ID(eventDTO.ID)] = struct{}{}
+				sourceGroup := 0
+				if eventDTO.Type == "process.codex_event" {
+					codexSessionID, _ := eventDTO.Payload["codexSessionId"].(string)
+					sourceGroup = sourceGroups[codexSessionID]
+					if sourceGroup == 0 && codexSessionID != "" {
+						sourceGroup = len(sourceGroups) + 1
+						sourceGroups[codexSessionID] = sourceGroup
+					}
+				}
+				item, ok := fromEventDTO(eventDTO, sourceGroup)
+				if !ok {
+					continue
+				}
 				select {
-				case out <- fromEventDTO(eventDTO):
+				case out <- item:
 				case <-ctx.Done():
 					return
 				}
@@ -142,46 +160,62 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	return out, nil
 }
 
-func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID) ([]eventdomain.DomainEvent, error) {
-	events, err := s.codexTranscriptEvents(ctx, sessionID)
-	if err != nil {
-		return nil, err
+func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID) ([]DTO, *TokenUsageDTO, error) {
+	if s.sessions == nil {
+		return nil, nil, nil
 	}
-	return events, nil
+	current, err := s.sessions.Find(ctx, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	events, usage, err := s.codexTranscriptEvents(ctx, current)
+	if err != nil {
+		return nil, nil, err
+	}
+	statuses, err := s.statusHistoryEvents(ctx, current)
+	if err != nil {
+		return nil, nil, err
+	}
+	events = append(events, statuses...)
+	sort.SliceStable(events, func(i, j int) bool {
+		return events[i].OrderKey < events[j].OrderKey
+	})
+	return events, usage, nil
 }
 
 type orderedTranscriptEvent struct {
-	event        eventdomain.DomainEvent
+	event        DTO
+	createdAt    time.Time
 	sessionIndex int
 	eventIndex   int
 }
 
-func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondomain.ID) ([]eventdomain.DomainEvent, error) {
-	if s.transcript == nil || s.sessions == nil {
-		return nil, nil
-	}
-	current, err := s.sessions.Find(ctx, sessionID)
-	if err != nil {
-		return nil, err
+func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondomain.Session) ([]DTO, *TokenUsageDTO, error) {
+	if s.transcript == nil {
+		return nil, nil, nil
 	}
 	codexSessionIDs, err := s.codexSessionIDs(ctx, current)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(codexSessionIDs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	sessionIDForEvent := eventdomain.SessionID(current.ID)
 	ordered := []orderedTranscriptEvent(nil)
+	var latestUsage *TokenUsageDTO
 	for sessionIndex, codexSessionID := range codexSessionIDs {
 		events, err := s.transcript.SessionEvents(ctx, processdomain.CodexTranscriptInput{
 			CodexSessionID: codexSessionID,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for index, event := range events {
-			if event.Type == "" {
+			if event.Type == "" || event.Content == nil {
+				continue
+			}
+			if usage, ok := event.Content.(processdomain.CodexUsageContent); ok {
+				latestUsage = usageDTO(usage)
 				continue
 			}
 			eventID := event.EventID
@@ -192,15 +226,17 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondo
 			if createdAt.IsZero() {
 				createdAt = current.UpdatedAt
 			}
+			canonicalID := processdomain.CanonicalCodexEventID(codexSessionID, eventID)
 			ordered = append(ordered, orderedTranscriptEvent{
-				event: eventdomain.DomainEvent{
-					ID:        eventdomain.ID(processdomain.CanonicalCodexEventID(codexSessionID, eventID)),
-					Scope:     eventdomain.Scope{ProjectID: string(current.ProjectID), SessionID: &sessionIDForEvent},
-					SessionID: &sessionIDForEvent,
-					Type:      "process.codex_event",
-					Payload:   codexSessionEventPayload(codexSessionID, event),
-					CreatedAt: createdAt,
+				event: DTO{
+					ID:            eventdomain.ID(canonicalID),
+					OrderKey:      timelineOrderKey(createdAt, sessionIndex+1, event.SourceOffset, event.SourceIndex, canonicalID),
+					CorrelationID: canonicalCorrelationID(codexSessionID, event.CorrelationID),
+					Phase:         normalizedPhase(event.Phase),
+					Content:       event.Content,
+					OccurredAt:    createdAt.UTC().Format(time.RFC3339Nano),
 				},
+				createdAt:    createdAt,
 				sessionIndex: sessionIndex,
 				eventIndex:   index,
 			})
@@ -209,17 +245,42 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, sessionID sessiondo
 	sort.SliceStable(ordered, func(i, j int) bool {
 		left := ordered[i]
 		right := ordered[j]
-		if !left.event.CreatedAt.Equal(right.event.CreatedAt) {
-			return left.event.CreatedAt.Before(right.event.CreatedAt)
+		if !left.createdAt.Equal(right.createdAt) {
+			return left.createdAt.Before(right.createdAt)
 		}
 		if left.sessionIndex != right.sessionIndex {
 			return left.sessionIndex < right.sessionIndex
 		}
 		return left.eventIndex < right.eventIndex
 	})
-	result := make([]eventdomain.DomainEvent, 0, len(ordered))
+	result := make([]DTO, 0, len(ordered))
 	for _, item := range ordered {
 		result = append(result, item.event)
+	}
+	return result, latestUsage, nil
+}
+
+func (s *Service) statusHistoryEvents(ctx context.Context, current sessiondomain.Session) ([]DTO, error) {
+	if s.history == nil {
+		return nil, nil
+	}
+	sessionID := eventdomain.SessionID(current.ID)
+	events, err := s.history.List(ctx, eventdomain.Scope{ProjectID: string(current.ProjectID), SessionID: &sessionID})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]DTO, 0, len(events))
+	for _, item := range events {
+		if !isVisibleStatusEvent(item.Type) {
+			continue
+		}
+		result = append(result, DTO{
+			ID:         item.ID,
+			OrderKey:   timelineOrderKey(item.CreatedAt, 0, 0, 0, string(item.ID)),
+			Phase:      processdomain.CodexPhaseStandalone,
+			Content:    statusContent(item.Type, item.Payload),
+			OccurredAt: item.CreatedAt.UTC().Format(time.RFC3339Nano),
+		})
 	}
 	return result, nil
 }
@@ -250,20 +311,26 @@ func (s *Service) codexSessionIDs(ctx context.Context, current sessiondomain.Ses
 	return ids, nil
 }
 
-func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEvent) map[string]any {
-	payload := make(map[string]any, len(event.Payload)+3)
-	for key, value := range event.Payload {
-		payload[key] = value
+func (s *Service) codexSourceGroups(ctx context.Context, scope eventdomain.Scope) (map[string]int, error) {
+	groups := map[string]int{}
+	if s.sessions == nil || scope.SessionID == nil {
+		return groups, nil
 	}
-	payload["codexType"] = event.Type
-	payload["codexSessionId"] = codexSessionID
-	if event.EventID != "" {
-		payload["codexEventId"] = event.EventID
+	current, err := s.sessions.Find(ctx, sessiondomain.ID(*scope.SessionID))
+	if err != nil {
+		return nil, err
 	}
-	return payload
+	ids, err := s.codexSessionIDs(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+	for index, id := range ids {
+		groups[id] = index + 1
+	}
+	return groups, nil
 }
 
-func pageEventsBefore(events []eventdomain.DomainEvent, before eventdomain.ID, limit int) ([]eventdomain.DomainEvent, int, bool) {
+func pageEventsBefore(events []DTO, before eventdomain.ID, limit int) ([]DTO, int, bool) {
 	end := len(events)
 	if before != "" {
 		end = -1
@@ -294,39 +361,73 @@ func normalizeLimit(limit int) int {
 	return limit
 }
 
-func toDTOs(events []eventdomain.DomainEvent) []DTO {
-	items := make([]DTO, 0, len(events))
-	for _, event := range events {
-		items = append(items, toDTO(event))
+func fromEventDTO(dto event.DTO, sourceGroup int) (DTO, bool) {
+	createdAt, _ := time.Parse(time.RFC3339Nano, dto.CreatedAt)
+	if dto.Type == "process.codex_event" {
+		content, ok := dto.Payload["codexContent"].(processdomain.CodexEventContent)
+		if !ok || content == nil {
+			return DTO{}, false
+		}
+		if usage, ok := content.(processdomain.CodexUsageContent); ok {
+			return DTO{Usage: usageDTO(usage)}, true
+		}
+		codexSessionID, _ := dto.Payload["codexSessionId"].(string)
+		correlationID, _ := dto.Payload["codexCorrelationId"].(string)
+		phase, _ := dto.Payload["codexPhase"].(string)
+		sourceOffset, _ := dto.Payload["codexSourceOffset"].(int64)
+		sourceIndex, _ := dto.Payload["codexSourceIndex"].(int)
+		return DTO{
+			ID:            dto.ID,
+			OrderKey:      timelineOrderKey(createdAt, sourceGroup, sourceOffset, sourceIndex, string(dto.ID)),
+			CorrelationID: canonicalCorrelationID(codexSessionID, correlationID),
+			Phase:         normalizedPhase(processdomain.CodexPhase(phase)),
+			Content:       content,
+			OccurredAt:    dto.CreatedAt,
+		}, true
 	}
-	return items
-}
-
-func toDTO(event eventdomain.DomainEvent) DTO {
+	if !isVisibleStatusEvent(dto.Type) {
+		return DTO{}, false
+	}
 	return DTO{
-		ID:        event.ID,
-		Scope:     event.Scope,
-		SessionID: event.SessionID,
-		Type:      event.Type,
-		Payload:   payloadOrEmpty(event.Payload),
-		CreatedAt: event.CreatedAt.UTC().Format(time.RFC3339Nano),
-	}
+		ID:         dto.ID,
+		OrderKey:   timelineOrderKey(createdAt, 0, 0, 0, string(dto.ID)),
+		Phase:      processdomain.CodexPhaseStandalone,
+		Content:    statusContent(dto.Type, dto.Payload),
+		OccurredAt: dto.CreatedAt,
+	}, true
 }
 
-func fromEventDTO(dto event.DTO) DTO {
-	return DTO{
-		ID:        dto.ID,
-		Scope:     dto.Scope,
-		SessionID: dto.SessionID,
-		Type:      dto.Type,
-		Payload:   payloadOrEmpty(dto.Payload),
-		CreatedAt: dto.CreatedAt,
+func canonicalCorrelationID(codexSessionID string, correlationID string) string {
+	if strings.TrimSpace(correlationID) == "" {
+		return ""
 	}
+	return "codex:" + codexSessionID + ":" + correlationID
 }
 
-func payloadOrEmpty(payload map[string]any) map[string]any {
-	if payload == nil {
-		return map[string]any{}
+func normalizedPhase(phase processdomain.CodexPhase) processdomain.CodexPhase {
+	if phase == "" {
+		return processdomain.CodexPhaseStandalone
 	}
-	return payload
+	return phase
+}
+
+func isVisibleStatusEvent(eventType string) bool {
+	return strings.HasPrefix(eventType, "session.") || strings.HasPrefix(eventType, "workflow.") || eventType == "process.exited"
+}
+
+func statusContent(code string, payload map[string]any) processdomain.CodexStatusContent {
+	level := "info"
+	if strings.Contains(code, "failed") || strings.Contains(code, "blocked") {
+		level = "error"
+	} else if strings.Contains(code, "waiting") || strings.Contains(code, "stopping") {
+		level = "warning"
+	}
+	message := ""
+	for _, key := range []string{"message", "reason", "failureReason", "blockedReason"} {
+		if value, ok := payload[key].(string); ok && value != "" {
+			message = value
+			break
+		}
+	}
+	return processdomain.CodexStatusContent{Code: code, Level: level, Message: message, Details: payload}
 }

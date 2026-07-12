@@ -37,10 +37,15 @@ type Run struct {
 }
 
 type CodexEvent struct {
-	EventID   string
-	Type      string
-	Payload   map[string]any
-	CreatedAt time.Time
+	EventID       string
+	Type          string
+	Payload       map[string]any
+	CorrelationID string
+	Phase         CodexPhase
+	Content       CodexEventContent
+	SourceOffset  int64
+	SourceIndex   int
+	CreatedAt     time.Time
 }
 
 func CanonicalCodexEventID(codexSessionID string, eventID string) string {

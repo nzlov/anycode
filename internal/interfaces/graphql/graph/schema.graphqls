@@ -12,7 +12,7 @@ type Query {
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
   session(id: ID!): SessionDetail!
-  sessionEvents(input: ListSessionEventsInput!): SessionEventPage!
+  sessionEvents(input: ListSessionEventsInput!): SessionTimelinePage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
@@ -47,7 +47,7 @@ type Mutation {
 }
 
 type Subscription {
-  sessionEvents(sessionId: ID!): SessionEventStreamItem!
+  sessionEvents(sessionId: ID!): SessionTimelineStreamItem!
   sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
 }
@@ -243,23 +243,118 @@ type PromptAppend {
   createdAt: Time!
 }
 
-type SessionEventPage {
-  items: [SessionEvent!]!
+type SessionTimelinePage {
+  events: [SessionTimelineEvent!]!
+  usage: SessionTokenUsage
   pageInfo: PageInfo!
 }
 
-type SessionEvent {
+type SessionTimelineEvent {
   id: ID!
-  scope: EventScope!
-  sessionId: ID
-  type: String!
-  payload: JSON!
-  createdAt: String!
+  orderKey: String!
+  correlationId: ID
+  phase: SessionTimelineEventPhase!
+  occurredAt: Time!
+  content: SessionTimelineContent!
 }
 
-type SessionEventStreamItem {
+enum SessionTimelineEventPhase {
+  STANDALONE
+  STARTED
+  PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SessionTimelineTextFormat {
+  PLAIN
+  MARKDOWN
+  JSON
+  ANSI
+}
+
+union SessionTimelineContent =
+    SessionTextMessageContent
+  | SessionReasoningContent
+  | SessionCommandContent
+  | SessionToolContent
+  | SessionFileChangeContent
+  | SessionStatusContent
+  | SessionUnknownContent
+
+type SessionTimelineImage {
+  src: String!
+  detail: String!
+}
+
+type SessionStructuredText {
+  format: SessionTimelineTextFormat!
+  text: String!
+}
+
+type SessionTextMessageContent {
+  role: String!
+  text: String!
+  format: SessionTimelineTextFormat!
+  images: [SessionTimelineImage!]!
+}
+
+type SessionReasoningContent {
+  text: String!
+}
+
+type SessionCommandContent {
+  command: String!
+  output: String!
+  exitCode: Int
+  durationMs: Int
+}
+
+type SessionToolContent {
+  qualifiedName: String!
+  category: String!
+  input: SessionStructuredText!
+  output: SessionStructuredText!
+  images: [SessionTimelineImage!]!
+}
+
+type SessionTimelineFileChange {
+  kind: String!
+  path: String!
+  movePath: String!
+  unifiedDiff: String!
+}
+
+type SessionFileChangeContent {
+  changes: [SessionTimelineFileChange!]!
+}
+
+type SessionStatusContent {
+  code: String!
+  level: String!
+  message: String!
+  details: JSON!
+}
+
+type SessionUnknownContent {
+  rawType: String!
+  payload: JSON!
+}
+
+type SessionTokenUsage {
+  inputTokens: Int!
+  cachedInputTokens: Int!
+  outputTokens: Int!
+  reasoningOutputTokens: Int!
+  totalTokens: Int!
+  contextWindow: Int!
+}
+
+type SessionTimelineStreamItem {
   ready: Boolean!
-  event: SessionEvent
+  event: SessionTimelineEvent
+  usage: SessionTokenUsage
 }
 
 type SessionStateStreamItem {
