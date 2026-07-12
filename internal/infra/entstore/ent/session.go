@@ -55,6 +55,8 @@ type Session struct {
 	QueuePriority string `json:"queue_priority,omitempty"`
 	// QueueInitialStart holds the value of the "queue_initial_start" field.
 	QueueInitialStart *bool `json:"queue_initial_start,omitempty"`
+	// QueueReviewAfterReuseFailure holds the value of the "queue_review_after_reuse_failure" field.
+	QueueReviewAfterReuseFailure bool `json:"queue_review_after_reuse_failure,omitempty"`
 	// QueueWorkflowRunID holds the value of the "queue_workflow_run_id" field.
 	QueueWorkflowRunID string `json:"queue_workflow_run_id,omitempty"`
 	// QueueNodeRunID holds the value of the "queue_node_run_id" field.
@@ -81,7 +83,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case entsession.FieldTodoList:
 			values[i] = new([]byte)
-		case entsession.FieldQueueInitialStart:
+		case entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
 		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
@@ -220,6 +222,12 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.QueueInitialStart = new(bool)
 				*_m.QueueInitialStart = value.Bool
+			}
+		case entsession.FieldQueueReviewAfterReuseFailure:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_review_after_reuse_failure", values[i])
+			} else if value.Valid {
+				_m.QueueReviewAfterReuseFailure = value.Bool
 			}
 		case entsession.FieldQueueWorkflowRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -366,6 +374,9 @@ func (_m *Session) String() string {
 		builder.WriteString("queue_initial_start=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("queue_review_after_reuse_failure=")
+	builder.WriteString(fmt.Sprintf("%v", _m.QueueReviewAfterReuseFailure))
 	builder.WriteString(", ")
 	builder.WriteString("queue_workflow_run_id=")
 	builder.WriteString(_m.QueueWorkflowRunID)

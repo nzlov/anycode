@@ -175,7 +175,10 @@ const (
 var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not wired")
 
 var errStaleAnswerUserQueue = errors.New("answer_user queue has no active process")
-var errWorkdirBusy = errors.New("session workdir already has an active process")
+var (
+	errWorkdirBusy           = errors.New("session workdir already has an active process")
+	errProcessCleanupPending = errors.New("codex process may still be running")
+)
 var errWorkflowResumeStateNotPersisted = errors.New("workflow resume failure state was not persisted")
 var fallbackEventSequence atomic.Uint64
 
@@ -1313,6 +1316,8 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 		if options.prompt == "" {
 			options.prompt = advance.Prompt
 		}
+	} else if err := s.requirePendingChatResume(ctx, session.ID); err != nil {
+		return DTO{}, err
 	}
 	if startOptions.Force {
 		return s.startCodex(ctx, session, options, true)
@@ -1407,6 +1412,7 @@ type codexStartOptions struct {
 	workflowRunID           domain.WorkflowRunID
 	nodeRunID               *processdomain.NodeRunID
 	prompt                  string
+	promptAppendIDs         []string
 	workflowJSONRetry       bool
 	reviewAfterReuseFailure bool
 	initialStart            bool
@@ -1451,6 +1457,11 @@ func (s *Service) enqueueCodex(ctx context.Context, session domain.Session, opti
 }
 
 func (s *Service) startCodexNow(ctx context.Context, session domain.Session, options codexStartOptions, workdir string) (DTO, error) {
+	resolved, err := s.resolveCodexInput(ctx, session, options)
+	if err != nil {
+		return DTO{}, err
+	}
+	options = resolved
 	runIDValue, err := s.generateID()
 	if err != nil {
 		return DTO{}, fmt.Errorf("generate process run id: %w", err)
@@ -1467,7 +1478,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 	if err := transitionSession(&session, domain.StatusStarting, now); err != nil {
 		return DTO{}, err
 	}
-	if err := s.createProcessRunWithSessionEvent(ctx, run, session, "session.starting", map[string]any{"processRunId": string(runID)}); err != nil {
+	if err := s.createProcessRunWithSessionEvent(ctx, run, session, options.promptAppendIDs, "session.starting", map[string]any{"processRunId": string(runID)}); err != nil {
 		return DTO{}, err
 	}
 
@@ -1507,27 +1518,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 			return DTO{}, saveErr
 		}
 		s.scheduleQueueDrain()
-		var workflowResumeStateErr error
-		if options.resumeCodexSessionID != "" && session.Mode == domain.ModeWorkflow && s.workflows != nil {
-			if run, markErr := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
-				SessionID: session.ID,
-				Code:      processEventType,
-				Message:   err.Error(),
-			}); markErr == nil {
-				s.appendSessionEvent(ctx, session, "workflow.waiting_resume_action", map[string]any{
-					"workflowRunId": string(run.ID),
-					"currentNodeId": run.CurrentNodeID,
-				})
-			} else {
-				workflowResumeStateErr = errors.Join(
-					errWorkflowResumeStateNotPersisted,
-					fmt.Errorf("mark workflow resume failed: %w", markErr),
-				)
-				s.appendSessionEvent(ctx, session, "workflow.resume_action_failed", map[string]any{
-					"reason": markErr.Error(),
-				})
-			}
-		}
+		workflowResumeStateErr := s.markWorkflowResumeFailed(ctx, session, options, processEventType, err.Error())
 		code := apperror.CodeCodexStartFailed
 		if options.resumeCodexSessionID != "" {
 			code = apperror.CodeResumeFailed
@@ -1552,10 +1543,71 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		"pid":            handle.PID,
 		"codexSessionId": handle.CodexSessionID,
 	}); err != nil {
-		return DTO{}, err
+		cleanupErr := s.cleanupStartedCodexAfterPersistenceFailure(ctx, session.ID, handle, options, err)
+		return DTO{}, errors.Join(err, cleanupErr)
 	}
 	s.consumeCodexEvents(handle, session, options, workdir)
 	return toDTO(session), nil
+}
+
+func (s *Service) cleanupStartedCodexAfterPersistenceFailure(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, options codexStartOptions, persistenceErr error) error {
+	cleanupCtx, cancel := detachedCleanupContext(ctx)
+	defer cancel()
+	stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
+	if errors.Is(stopErr, processdomain.ErrProcessNotFound) {
+		stopErr = nil
+	}
+	if stopErr != nil {
+		return errors.Join(errProcessCleanupPending, fmt.Errorf("stop codex after running persistence failure: %w", stopErr))
+	}
+	current, findErr := s.repo.Find(cleanupCtx, sessionID)
+	if findErr != nil {
+		return errors.Join(stopErr, fmt.Errorf("find session after running persistence failure: %w", findErr))
+	}
+	status := domain.StatusFailed
+	eventType := "session.failed"
+	if options.resumeCodexSessionID != "" {
+		status = domain.StatusResumeFailed
+		eventType = "session.resume_failed"
+	}
+	if err := transitionSession(&current, status, s.now()); err != nil {
+		return errors.Join(stopErr, err)
+	}
+	result := processdomain.ExitResult{
+		FailureReason: "persist running process: " + persistenceErr.Error(),
+		FinishedAt:    s.now(),
+	}
+	persistErr := s.markProcessExitedWithSessionEvents(cleanupCtx, handle.ProcessRunID, result, current, true, []sessionEventInput{
+		{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, result)},
+		{eventType: eventType, payload: map[string]any{
+			"processRunId": string(handle.ProcessRunID),
+			"reason":       result.FailureReason,
+		}},
+	})
+	if persistErr != nil {
+		return persistErr
+	}
+	return s.markWorkflowResumeFailed(cleanupCtx, current, options, "resume_failed", result.FailureReason)
+}
+
+func (s *Service) markWorkflowResumeFailed(ctx context.Context, session domain.Session, options codexStartOptions, code string, message string) error {
+	if options.resumeCodexSessionID == "" || session.Mode != domain.ModeWorkflow || s.workflows == nil {
+		return nil
+	}
+	run, err := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
+		SessionID: session.ID,
+		Code:      code,
+		Message:   message,
+	})
+	if err != nil {
+		s.appendSessionEvent(ctx, session, "workflow.resume_action_failed", map[string]any{"reason": err.Error()})
+		return errors.Join(errWorkflowResumeStateNotPersisted, fmt.Errorf("mark workflow resume failed: %w", err))
+	}
+	s.appendSessionEvent(ctx, session, "workflow.waiting_resume_action", map[string]any{
+		"workflowRunId": string(run.ID),
+		"currentNodeId": run.CurrentNodeID,
+	})
+	return nil
 }
 
 func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session domain.Session, options codexStartOptions) (DTO, error) {
@@ -1567,7 +1619,7 @@ func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session 
 		return DTO{}, errWorkdirBusy
 	}
 	dto, err := s.startCodexNow(ctx, session, options, workdir)
-	if err != nil {
+	if err != nil && !errors.Is(err, errProcessCleanupPending) {
 		s.releaseWorkdir(workdir, session.ID)
 	}
 	return dto, err
@@ -1630,37 +1682,42 @@ func (s *Service) queueCodex(ctx context.Context, session domain.Session, option
 }
 
 func (s *Service) queueCodexSession(ctx context.Context, session domain.Session, options codexStartOptions, priority domain.QueuePriority, kind domain.QueueKind) (domain.Session, error) {
+	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, priority, kind)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	if err := s.saveSessionAndEvent(ctx, queued, event, hasEvent); err != nil {
+		return domain.Session{}, err
+	}
+	return queued, nil
+}
+
+func (s *Service) prepareQueuedSession(session domain.Session, options codexStartOptions, priority domain.QueuePriority, kind domain.QueueKind) (domain.Session, eventdomain.DomainEvent, bool, error) {
 	now := s.now()
-	prompt := strings.TrimSpace(options.prompt)
-	if kind == domain.QueueKindStart {
-		var err error
-		prompt, err = s.rebuiltSessionPrompt(ctx, session, prompt, options.reviewAfterReuseFailure)
-		if err != nil {
-			return domain.Session{}, err
-		}
-	}
 	if err := session.QueueExecution(domain.QueueIntent{
-		Kind:                 kind,
-		Priority:             normalizeQueuePriority(priority),
-		InitialStart:         options.initialStart,
-		WorkflowRunID:        options.workflowRunID,
-		NodeRunID:            queueNodeRunID(options.nodeRunID),
-		Prompt:               prompt,
-		ResumeCodexSessionID: options.resumeCodexSessionID,
+		Kind:                    kind,
+		Priority:                normalizeQueuePriority(priority),
+		InitialStart:            options.initialStart,
+		ReviewAfterReuseFailure: options.reviewAfterReuseFailure,
+		WorkflowRunID:           options.workflowRunID,
+		NodeRunID:               queueNodeRunID(options.nodeRunID),
+		Prompt:                  strings.TrimSpace(options.prompt),
+		ResumeCodexSessionID:    options.resumeCodexSessionID,
 	}, now); err != nil {
-		return domain.Session{}, fmt.Errorf("queue session %s: %w", session.ID, err)
+		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("queue session %s: %w", session.ID, err)
 	}
-	if err := s.saveSessionWithEvent(ctx, session, "session.queued", map[string]any{
+	event, hasEvent, err := s.newSessionEvent(session, "session.queued", map[string]any{
 		"priority":            string(session.Queue.Priority),
 		"sessionPriority":     string(normalizePriority(session.Priority)),
 		"queueKind":           string(session.Queue.Kind),
 		"workflowRunId":       string(session.Queue.WorkflowRunID),
 		"nodeRunId":           stringValuePtr(session.Queue.NodeRunID),
 		"maxConcurrentAgents": s.maxConcurrentAgents,
-	}); err != nil {
-		return domain.Session{}, err
+	})
+	if err != nil {
+		return domain.Session{}, eventdomain.DomainEvent{}, false, err
 	}
-	return session, nil
+	return session, event, hasEvent, nil
 }
 
 func (s *Service) startQueuedSession(ctx context.Context, session domain.Session, force bool) (DTO, error) {
@@ -1759,6 +1816,9 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 				if errors.Is(err, errWorkdirBusy) {
 					atCapacity = true
 					return nil
+				}
+				if errors.Is(err, errProcessCleanupPending) {
+					return err
 				}
 				saved, findErr := s.repo.Find(ctx, current.ID)
 				if findErr != nil {
@@ -2000,12 +2060,13 @@ func queueKindForStartOptions(options codexStartOptions) domain.QueueKind {
 func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 	nodeRunID := queueProcessNodeRunID(session.Queue.NodeRunID)
 	return codexStartOptions{
-		resumeCodexSessionID: session.Queue.ResumeCodexSessionID,
-		workflowRunID:        session.Queue.WorkflowRunID,
-		nodeRunID:            nodeRunID,
-		prompt:               session.Queue.Prompt,
-		workflowJSONRetry:    isWorkflowJSONRetryPrompt(session.Queue.Prompt),
-		initialStart:         session.Queue.InitialStart,
+		resumeCodexSessionID:    session.Queue.ResumeCodexSessionID,
+		workflowRunID:           session.Queue.WorkflowRunID,
+		nodeRunID:               nodeRunID,
+		prompt:                  session.Queue.Prompt,
+		reviewAfterReuseFailure: session.Queue.ReviewAfterReuseFailure,
+		workflowJSONRetry:       isWorkflowJSONRetryPrompt(session.Queue.Prompt),
+		initialStart:            session.Queue.InitialStart,
 	}
 }
 
@@ -2047,13 +2108,6 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	prompt := strings.TrimSpace(options.prompt)
-	if prompt == "" && options.resumeCodexSessionID == "" {
-		var err error
-		prompt, err = s.rebuiltSessionPrompt(ctx, session, prompt, options.reviewAfterReuseFailure)
-		if err != nil {
-			return processdomain.CodexHandle{}, err
-		}
-	}
 	if options.initialStart {
 		prompt = promptWithSessionGuidance(prompt, session)
 	}
@@ -2082,6 +2136,82 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	})
 }
 
+func (s *Service) requirePendingChatResume(ctx context.Context, sessionID domain.ID) error {
+	pending, err := s.repo.ListPendingPromptAppends(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("list pending prompt appends: %w", err)
+	}
+	if len(pending) == 0 {
+		return pendingPromptRequiredError(sessionID)
+	}
+	return nil
+}
+
+func pendingPromptRequiredError(sessionID domain.ID) error {
+	return apperror.New(apperror.CodePendingPromptRequired, apperror.CategoryValidationError, "没有待执行的追加描述，请先输入追加描述").
+		WithDetails(map[string]any{"sessionId": string(sessionID)})
+}
+
+func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session, options codexStartOptions) (codexStartOptions, error) {
+	appends, err := s.repo.ListPromptAppends(ctx, session.ID)
+	if err != nil {
+		return codexStartOptions{}, fmt.Errorf("list prompt appends: %w", err)
+	}
+	pendingPrompt, pendingIDs, err := s.pendingPromptInput(ctx, session.ID, appends)
+	if err != nil {
+		return codexStartOptions{}, err
+	}
+	prompt := strings.TrimSpace(options.prompt)
+	if options.resumeCodexSessionID != "" {
+		if session.Mode != domain.ModeWorkflow && len(pendingIDs) == 0 {
+			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
+		}
+		prompt = joinPromptParts(prompt, pendingPrompt)
+	} else if session.Mode != domain.ModeWorkflow || options.reviewAfterReuseFailure {
+		prompt = rebuiltSessionPrompt(session, prompt, options.reviewAfterReuseFailure, appends)
+	} else {
+		prompt = joinPromptParts(prompt, pendingPrompt)
+	}
+	if strings.TrimSpace(prompt) == "" && !options.initialStart {
+		return codexStartOptions{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "Codex 执行提示不能为空")
+	}
+	options.prompt = prompt
+	options.promptAppendIDs = pendingIDs
+	return options, nil
+}
+
+func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) (string, []string, error) {
+	parts := make([]string, 0, len(appends))
+	ids := make([]string, 0, len(appends))
+	for _, promptAppend := range appends {
+		if promptAppend.Status != domain.PromptAppendPending {
+			continue
+		}
+		body := strings.TrimSpace(promptAppend.Body)
+		if body == "" {
+			continue
+		}
+		attachments, err := s.listPromptAppendAttachments(ctx, sessionID, promptAppend.ID)
+		if err != nil {
+			return "", nil, err
+		}
+		paths, _ := attachmentPathsFromAttachments(attachments)
+		parts = append(parts, promptWithAttachments(body, paths))
+		ids = append(ids, promptAppend.ID)
+	}
+	return strings.Join(parts, "\n\n"), ids, nil
+}
+
+func joinPromptParts(parts ...string) string {
+	nonEmpty := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); part != "" {
+			nonEmpty = append(nonEmpty, part)
+		}
+	}
+	return strings.Join(nonEmpty, "\n\n")
+}
+
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
 const answerUserPromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。"
 const worktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
@@ -2105,13 +2235,9 @@ func promptWithAnswerUserGuidance(prompt string) string {
 	return prompt + "\n\n" + answerUserPromptGuidance
 }
 
-func (s *Service) rebuiltSessionPrompt(ctx context.Context, session domain.Session, nodePrompt string, reviewAfterReuseFailure bool) (string, error) {
+func rebuiltSessionPrompt(session domain.Session, nodePrompt string, reviewAfterReuseFailure bool, appends []domain.PromptAppend) string {
 	original := strings.TrimSpace(session.Requirement)
 	nodePrompt = strings.TrimSpace(nodePrompt)
-	appends, err := s.repo.ListPromptAppends(ctx, session.ID)
-	if err != nil {
-		return "", fmt.Errorf("list prompt appends: %w", err)
-	}
 	bodies := make([]string, 0, len(appends))
 	for _, promptAppend := range appends {
 		body := strings.TrimSpace(promptAppend.Body)
@@ -2122,9 +2248,9 @@ func (s *Service) rebuiltSessionPrompt(ctx context.Context, session domain.Sessi
 	}
 	if len(bodies) == 0 && !reviewAfterReuseFailure {
 		if nodePrompt != "" {
-			return nodePrompt, nil
+			return nodePrompt
 		}
-		return original, nil
+		return original
 	}
 	parts := []string{rebuiltPromptNotice}
 	if original != "" {
@@ -2136,7 +2262,7 @@ func (s *Service) rebuiltSessionPrompt(ctx context.Context, session domain.Sessi
 	if nodePrompt != "" {
 		parts = append(parts, "当前流程节点提示词：\n"+nodePrompt)
 	}
-	return strings.Join(parts, "\n\n"), nil
+	return strings.Join(parts, "\n\n")
 }
 
 func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID) ([]string, []string, error) {
@@ -2183,7 +2309,21 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 	go func() {
 		events, err := s.codex.Events(context.Background(), handle)
 		if err != nil {
+			cleanupCtx, cancel := detachedCleanupContext(context.Background())
+			stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
+			cancel()
+			if errors.Is(stopErr, processdomain.ErrProcessNotFound) {
+				stopErr = nil
+			}
+			if stopErr != nil {
+				log.Printf("stop codex after event stream failure: session=%s process_run=%s error=%v", session.ID, handle.ProcessRunID, stopErr)
+				return
+			}
 			s.releaseWorkdir(workdir, session.ID)
+			s.handleCodexProcessExit(session, handle, options, processdomain.ExitResult{
+				FailureReason: fmt.Sprintf("consume codex events: %v", err),
+				FinishedAt:    s.now(),
+			}, nil)
 			return
 		}
 		exitResult := processdomain.ExitResult{}
@@ -2198,48 +2338,62 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if event.Type == "process.exit" {
 				continue
 			}
-			eventSession := session
-			saveEventSession := false
-			extraEvents := []sessionEventInput(nil)
-			if todoList, ok := todoListFromCodexEvent(event); ok {
-				if current, err := s.repo.Find(context.Background(), session.ID); err == nil {
-					if !slices.Equal(current.TodoList.Items, todoList.Items) {
-						current.TodoList = todoList
-						current.UpdatedAt = s.now()
-						eventSession = current
-						session = current
-						saveEventSession = true
-						extraEvents = append(extraEvents, sessionEventInput{
-							eventType: "session.todo_list_updated",
-							payload: map[string]any{
-								"completed": todoList.Completed(),
-								"total":     todoList.Total(),
-							},
-						})
-					}
-				}
-			}
-			if codexSessionID := codexSessionIDFromEvent(event); codexSessionID != "" {
-				current := eventSession
-				if !saveEventSession {
-					if latest, err := s.repo.Find(context.Background(), session.ID); err == nil {
-						current = latest
-					}
-				}
-				if current.CodexSessionID != codexSessionID {
-					current.CodexSessionID = codexSessionID
-					current.UpdatedAt = s.now()
-					if err := s.saveProcessRunningSession(context.Background(), handle.ProcessRunID, handle.PID, codexSessionID, current); err == nil {
-						session = current
-						eventSession = current
-					}
-				}
-			}
-			_ = s.publishCodexEventWithSessionUpdates(context.Background(), eventSession, handle.ProcessRunID, event, saveEventSession, extraEvents...)
+			_ = s.withSessionLock(context.Background(), session.ID, func(ctx context.Context) error {
+				return s.persistCodexEvent(ctx, session.ID, handle, event)
+			})
 		}
 		s.releaseWorkdir(workdir, session.ID)
 		s.handleCodexProcessExit(session, handle, options, exitResult, workflowResults)
 	}()
+}
+
+func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) error {
+	current, err := s.repo.Find(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("find session for codex event: %w", err)
+	}
+	activeRun := false
+	if s.processes != nil {
+		active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
+		if err != nil {
+			return fmt.Errorf("find active process for codex event: %w", err)
+		}
+		activeRun = ok && active.ID == handle.ProcessRunID
+	}
+	saveSession := false
+	extraEvents := []sessionEventInput(nil)
+	if activeRun && codexEventCanUpdateSession(current.Status) {
+		if todoList, ok := todoListFromCodexEvent(event); ok && !slices.Equal(current.TodoList.Items, todoList.Items) {
+			current.TodoList = todoList
+			current.UpdatedAt = s.now()
+			saveSession = true
+			extraEvents = append(extraEvents, sessionEventInput{
+				eventType: "session.todo_list_updated",
+				payload: map[string]any{
+					"completed": todoList.Completed(),
+					"total":     todoList.Total(),
+				},
+			})
+		}
+		if codexSessionID := codexSessionIDFromEvent(event); codexSessionID != "" && current.CodexSessionID != codexSessionID {
+			current.CodexSessionID = codexSessionID
+			current.UpdatedAt = s.now()
+			if err := s.saveProcessRunningSession(ctx, handle.ProcessRunID, handle.PID, codexSessionID, current); err != nil {
+				return err
+			}
+			saveSession = false
+		}
+	}
+	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, extraEvents...)
+}
+
+func codexEventCanUpdateSession(status domain.Status) bool {
+	switch status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) handleCodexProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, exitResult processdomain.ExitResult, workflowResults map[string]any) {
@@ -2409,13 +2563,19 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
 		nextStatus := domain.StatusStopped
 		if processExitFailed(exitResult) && current.Status != domain.StatusStopping {
-			nextStatus = domain.StatusFailed
+			if options.resumeCodexSessionID != "" {
+				nextStatus = domain.StatusResumeFailed
+			} else {
+				nextStatus = domain.StatusFailed
+			}
 		}
 		if err := transitionSession(&current, nextStatus, exitResult.FinishedAt); err != nil {
 			return domain.Session{}, false, err
 		}
 		eventType := "session.stopped"
-		if current.Status == domain.StatusFailed {
+		if current.Status == domain.StatusResumeFailed {
+			eventType = "session.resume_failed"
+		} else if current.Status == domain.StatusFailed {
 			eventType = "session.failed"
 		}
 		payload := processExitPayload(handle.ProcessRunID, exitResult)
@@ -3338,7 +3498,7 @@ func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEv
 	return payload
 }
 
-func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run processdomain.Run, session domain.Session, eventType string, payload map[string]any) error {
+func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run processdomain.Run, session domain.Session, promptAppendIDs []string, eventType string, payload map[string]any) error {
 	if s.uow != nil {
 		event, ok, err := s.newSessionEvent(session, eventType, payload)
 		if err != nil {
@@ -3350,6 +3510,9 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run proc
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
+			}
+			if err := tx.Sessions().MarkPromptAppendsInflight(ctx, promptAppendIDs, string(run.ID)); err != nil {
+				return err
 			}
 			if ok {
 				if err := tx.Events().Append(ctx, event); err != nil {
@@ -3368,7 +3531,17 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run proc
 	if err := s.processes.CreateRun(ctx, run); err != nil {
 		return fmt.Errorf("create process run: %w", err)
 	}
-	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+	if err := s.repo.MarkPromptAppendsInflight(ctx, promptAppendIDs, string(run.ID)); err != nil {
+		_ = s.processes.MarkExited(ctx, run.ID, processdomain.ExitResult{FailureReason: err.Error(), FinishedAt: s.now()})
+		return err
+	}
+	if err := s.saveSessionWithEvent(ctx, session, eventType, payload); err != nil {
+		result := processdomain.ExitResult{FailureReason: err.Error(), FinishedAt: s.now()}
+		_ = s.processes.MarkExited(ctx, run.ID, result)
+		_ = s.repo.ReleasePromptAppends(ctx, string(run.ID))
+		return err
+	}
+	return nil
 }
 
 func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session, eventType string, payload map[string]any) error {
@@ -3501,6 +3674,9 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 			if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
 				return fmt.Errorf("mark process exited: %w", err)
 			}
+			if err := settlePromptAppends(ctx, tx.Sessions(), runID, result); err != nil {
+				return err
+			}
 			if saveSession {
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return fmt.Errorf("save session: %w", err)
@@ -3523,6 +3699,9 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 	if err := s.processes.MarkExited(ctx, runID, result); err != nil {
 		return fmt.Errorf("mark process exited: %w", err)
 	}
+	if err := settlePromptAppends(ctx, s.repo, runID, result); err != nil {
+		return err
+	}
 	if saveSession {
 		if err := s.repo.Save(ctx, session); err != nil {
 			return fmt.Errorf("save session: %w", err)
@@ -3535,6 +3714,13 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 		s.publishSessionEvent(ctx, event)
 	}
 	return nil
+}
+
+func settlePromptAppends(ctx context.Context, repo domain.Repository, runID processdomain.RunID, result processdomain.ExitResult) error {
+	if processExitFailed(result) {
+		return repo.ReleasePromptAppends(ctx, string(runID))
+	}
+	return repo.CompletePromptAppends(ctx, string(runID), result.FinishedAt)
 }
 
 func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Session, eventType string, payload map[string]any) error {
@@ -3606,7 +3792,11 @@ func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session d
 	}
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := markInterruptedProcessExited(ctx, tx.Processes(), session, exitResult); err != nil {
+			runID, err := markInterruptedProcessExited(ctx, tx.Processes(), session, exitResult)
+			if err != nil {
+				return err
+			}
+			if err := tx.Sessions().ReleasePromptAppends(ctx, string(runID)); err != nil {
 				return err
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
@@ -3626,7 +3816,11 @@ func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session d
 		}
 		return nil
 	}
-	if err := markInterruptedProcessExited(ctx, s.processes, session, exitResult); err != nil {
+	runID, err := markInterruptedProcessExited(ctx, s.processes, session, exitResult)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.ReleasePromptAppends(ctx, string(runID)); err != nil {
 		return err
 	}
 	if err := s.repo.Save(ctx, session); err != nil {
@@ -3641,21 +3835,21 @@ func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session d
 	return nil
 }
 
-func markInterruptedProcessExited(ctx context.Context, processes processdomain.Repository, session domain.Session, result processdomain.ExitResult) error {
+func markInterruptedProcessExited(ctx context.Context, processes processdomain.Repository, session domain.Session, result processdomain.ExitResult) (processdomain.RunID, error) {
 	if processes == nil {
-		return nil
+		return "", nil
 	}
 	active, ok, err := processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
 	if err != nil {
-		return fmt.Errorf("find interrupted process run: %w", err)
+		return "", fmt.Errorf("find interrupted process run: %w", err)
 	}
 	if !ok {
-		return nil
+		return "", nil
 	}
 	if err := processes.MarkExited(ctx, active.ID, result); err != nil {
-		return fmt.Errorf("mark interrupted process exited: %w", err)
+		return "", fmt.Errorf("mark interrupted process exited: %w", err)
 	}
-	return nil
+	return active.ID, nil
 }
 
 func (s *Service) newSessionEvents(session domain.Session, inputs []sessionEventInput) ([]eventdomain.DomainEvent, error) {
@@ -3944,7 +4138,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		var archivedAttachments []domain.SessionAttachment
 		appendSaved := false
 		defer func() {
-			if err == nil {
+			if err == nil || appendSaved {
 				return
 			}
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -3972,8 +4166,23 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			ID:          string(id),
 			SessionID:   input.SessionID,
 			Body:        body,
+			Status:      domain.PromptAppendPending,
 			CreatedAt:   s.now(),
 			Attachments: archivedAttachments,
+		}
+		if session.Mode == domain.ModeChat && session.Status == domain.StatusStopped {
+			options := codexStartOptions{}
+			kind := domain.QueueKindStart
+			if codexSessionID := strings.TrimSpace(session.CodexSessionID); codexSessionID != "" {
+				options.resumeCodexSessionID = codexSessionID
+				kind = domain.QueueKindResume
+			}
+			_, appendSaved, err = s.appendPromptAndQueue(ctx, session, append, options, queuePriorityForSession(session), kind)
+			if err != nil {
+				return err
+			}
+			s.scheduleQueueDrain()
+			return nil
 		}
 		if err := s.repo.AppendPrompt(ctx, append); err != nil {
 			return fmt.Errorf("append prompt: %w", err)
@@ -3983,13 +4192,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			return nil
 		}
 		if canReuseCodexSessionAfterAppend(session) {
-			newAttachments, err := s.listPromptAppendAttachments(ctx, input.SessionID, append.ID)
-			if err != nil {
-				return err
-			}
-			newAttachmentPaths, _ := attachmentPathsFromAttachments(newAttachments)
-			prompt := promptWithAttachments(body, newAttachmentPaths)
-			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{prompt: prompt, resumeCodexSessionID: session.CodexSessionID}); err != nil {
+			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{resumeCodexSessionID: session.CodexSessionID}); err != nil {
 				return fmt.Errorf("resume session after prompt append: %w", err)
 			}
 			return nil
@@ -4003,6 +4206,42 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	return toPromptAppendDTO(append), nil
+}
+
+func (s *Service) appendPromptAndQueue(ctx context.Context, session domain.Session, promptAppend domain.PromptAppend, options codexStartOptions, priority domain.QueuePriority, kind domain.QueueKind) (domain.Session, bool, error) {
+	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, priority, kind)
+	if err != nil {
+		return domain.Session{}, false, err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Sessions().AppendPrompt(ctx, promptAppend); err != nil {
+				return fmt.Errorf("append prompt: %w", err)
+			}
+			if err := tx.Sessions().Save(ctx, queued); err != nil {
+				return fmt.Errorf("save queued session: %w", err)
+			}
+			if hasEvent {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return domain.Session{}, false, err
+		}
+		if hasEvent {
+			s.publishSessionEvent(ctx, event)
+		}
+		return queued, true, nil
+	}
+	if err := s.repo.AppendPrompt(ctx, promptAppend); err != nil {
+		return domain.Session{}, false, fmt.Errorf("append prompt: %w", err)
+	}
+	if err := s.saveSessionAndEvent(ctx, queued, event, hasEvent); err != nil {
+		return domain.Session{}, true, err
+	}
+	return queued, true, nil
 }
 
 func canAutoStartAfterAppend(session domain.Session) bool {

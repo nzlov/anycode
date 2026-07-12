@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	domainsession "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
@@ -59,6 +60,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetQueueKind(string(s.Queue.Kind)).
 			SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 			SetQueueInitialStart(s.Queue.InitialStart).
+			SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
 			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 			SetQueuePrompt(s.Queue.Prompt).
 			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
@@ -118,6 +120,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueueKind(string(s.Queue.Kind)).
 		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 		SetQueueInitialStart(s.Queue.InitialStart).
+		SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
 		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 		SetQueuePrompt(s.Queue.Prompt).
 		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
@@ -253,7 +256,12 @@ func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsessi
 	create := r.client.PromptAppend.Create().
 		SetID(append.ID).
 		SetSessionID(string(append.SessionID)).
-		SetBody(append.Body)
+		SetBody(append.Body).
+		SetStatus(string(append.Status)).
+		SetDispatchedProcessRunID(append.DispatchedProcessRunID)
+	if append.DispatchedAt != nil {
+		create.SetDispatchedAt(*append.DispatchedAt)
+	}
 	if !append.CreatedAt.IsZero() {
 		create.SetCreatedAt(append.CreatedAt)
 	}
@@ -278,16 +286,89 @@ func (r *SessionRepository) ListPromptAppends(ctx context.Context, sessionID dom
 	if err != nil {
 		return nil, fmt.Errorf("list prompt appends: %w", err)
 	}
+	return promptAppendsFromRows(rows), nil
+}
+
+func (r *SessionRepository) ListPendingPromptAppends(ctx context.Context, sessionID domainsession.ID) ([]domainsession.PromptAppend, error) {
+	rows, err := r.client.PromptAppend.Query().
+		Where(
+			entpromptappend.SessionIDEQ(string(sessionID)),
+			entpromptappend.StatusEQ(string(domainsession.PromptAppendPending)),
+		).
+		Order(ent.Asc(entpromptappend.FieldCreatedAt), ent.Asc(entpromptappend.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pending prompt appends: %w", err)
+	}
+	return promptAppendsFromRows(rows), nil
+}
+
+func (r *SessionRepository) MarkPromptAppendsInflight(ctx context.Context, ids []string, processRunID string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if _, err := r.client.PromptAppend.Update().
+		Where(
+			entpromptappend.IDIn(ids...),
+			entpromptappend.StatusEQ(string(domainsession.PromptAppendPending)),
+		).
+		SetStatus(string(domainsession.PromptAppendInflight)).
+		SetDispatchedProcessRunID(processRunID).
+		Save(ctx); err != nil {
+		return fmt.Errorf("mark prompt appends inflight: %w", err)
+	}
+	return nil
+}
+
+func (r *SessionRepository) CompletePromptAppends(ctx context.Context, processRunID string, dispatchedAt time.Time) error {
+	if strings.TrimSpace(processRunID) == "" {
+		return nil
+	}
+	if _, err := r.client.PromptAppend.Update().
+		Where(
+			entpromptappend.StatusEQ(string(domainsession.PromptAppendInflight)),
+			entpromptappend.DispatchedProcessRunIDEQ(processRunID),
+		).
+		SetStatus(string(domainsession.PromptAppendDispatched)).
+		SetDispatchedAt(dispatchedAt).
+		Save(ctx); err != nil {
+		return fmt.Errorf("complete prompt appends: %w", err)
+	}
+	return nil
+}
+
+func (r *SessionRepository) ReleasePromptAppends(ctx context.Context, processRunID string) error {
+	if strings.TrimSpace(processRunID) == "" {
+		return nil
+	}
+	if _, err := r.client.PromptAppend.Update().
+		Where(
+			entpromptappend.StatusEQ(string(domainsession.PromptAppendInflight)),
+			entpromptappend.DispatchedProcessRunIDEQ(processRunID),
+		).
+		SetStatus(string(domainsession.PromptAppendPending)).
+		ClearDispatchedAt().
+		SetDispatchedProcessRunID("").
+		Save(ctx); err != nil {
+		return fmt.Errorf("release prompt appends: %w", err)
+	}
+	return nil
+}
+
+func promptAppendsFromRows(rows []*ent.PromptAppend) []domainsession.PromptAppend {
 	appends := make([]domainsession.PromptAppend, 0, len(rows))
 	for _, row := range rows {
 		appends = append(appends, domainsession.PromptAppend{
-			ID:        row.ID,
-			SessionID: domainsession.ID(row.SessionID),
-			Body:      row.Body,
-			CreatedAt: row.CreatedAt,
+			ID:                     row.ID,
+			SessionID:              domainsession.ID(row.SessionID),
+			Body:                   row.Body,
+			Status:                 domainsession.PromptAppendStatus(row.Status),
+			DispatchedAt:           row.DispatchedAt,
+			DispatchedProcessRunID: row.DispatchedProcessRunID,
+			CreatedAt:              row.CreatedAt,
 		})
 	}
-	return appends, nil
+	return appends
 }
 
 func (r *SessionRepository) AddMergeRecord(ctx context.Context, record domainsession.MergeRecord) error {
@@ -472,13 +553,14 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		TodoList: row.TodoList,
 		QueuedAt: row.QueuedAt,
 		Queue: domainsession.QueueIntent{
-			Kind:                 domainsession.QueueKind(row.QueueKind),
-			Priority:             normalizeQueuePriority(domainsession.QueuePriority(row.QueuePriority)),
-			InitialStart:         queueInitialStart(row),
-			WorkflowRunID:        domainsession.WorkflowRunID(row.QueueWorkflowRunID),
-			NodeRunID:            queueNodeRunID,
-			Prompt:               row.QueuePrompt,
-			ResumeCodexSessionID: row.QueueResumeCodexSessionID,
+			Kind:                    domainsession.QueueKind(row.QueueKind),
+			Priority:                normalizeQueuePriority(domainsession.QueuePriority(row.QueuePriority)),
+			InitialStart:            queueInitialStart(row),
+			ReviewAfterReuseFailure: row.QueueReviewAfterReuseFailure,
+			WorkflowRunID:           domainsession.WorkflowRunID(row.QueueWorkflowRunID),
+			NodeRunID:               queueNodeRunID,
+			Prompt:                  row.QueuePrompt,
+			ResumeCodexSessionID:    row.QueueResumeCodexSessionID,
 		},
 		LastRunAt: row.LastRunAt,
 		CreatedAt: row.CreatedAt,

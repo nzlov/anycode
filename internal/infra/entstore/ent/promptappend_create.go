@@ -40,6 +40,48 @@ func (_c *PromptAppendCreate) SetNillableBody(v *string) *PromptAppendCreate {
 	return _c
 }
 
+// SetStatus sets the "status" field.
+func (_c *PromptAppendCreate) SetStatus(v string) *PromptAppendCreate {
+	_c.mutation.SetStatus(v)
+	return _c
+}
+
+// SetNillableStatus sets the "status" field if the given value is not nil.
+func (_c *PromptAppendCreate) SetNillableStatus(v *string) *PromptAppendCreate {
+	if v != nil {
+		_c.SetStatus(*v)
+	}
+	return _c
+}
+
+// SetDispatchedAt sets the "dispatched_at" field.
+func (_c *PromptAppendCreate) SetDispatchedAt(v time.Time) *PromptAppendCreate {
+	_c.mutation.SetDispatchedAt(v)
+	return _c
+}
+
+// SetNillableDispatchedAt sets the "dispatched_at" field if the given value is not nil.
+func (_c *PromptAppendCreate) SetNillableDispatchedAt(v *time.Time) *PromptAppendCreate {
+	if v != nil {
+		_c.SetDispatchedAt(*v)
+	}
+	return _c
+}
+
+// SetDispatchedProcessRunID sets the "dispatched_process_run_id" field.
+func (_c *PromptAppendCreate) SetDispatchedProcessRunID(v string) *PromptAppendCreate {
+	_c.mutation.SetDispatchedProcessRunID(v)
+	return _c
+}
+
+// SetNillableDispatchedProcessRunID sets the "dispatched_process_run_id" field if the given value is not nil.
+func (_c *PromptAppendCreate) SetNillableDispatchedProcessRunID(v *string) *PromptAppendCreate {
+	if v != nil {
+		_c.SetDispatchedProcessRunID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *PromptAppendCreate) SetCreatedAt(v time.Time) *PromptAppendCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -99,6 +141,14 @@ func (_c *PromptAppendCreate) defaults() {
 		v := promptappend.DefaultBody
 		_c.mutation.SetBody(v)
 	}
+	if _, ok := _c.mutation.Status(); !ok {
+		v := promptappend.DefaultStatus
+		_c.mutation.SetStatus(v)
+	}
+	if _, ok := _c.mutation.DispatchedProcessRunID(); !ok {
+		v := promptappend.DefaultDispatchedProcessRunID
+		_c.mutation.SetDispatchedProcessRunID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := promptappend.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -117,6 +167,12 @@ func (_c *PromptAppendCreate) check() error {
 	}
 	if _, ok := _c.mutation.Body(); !ok {
 		return &ValidationError{Name: "body", err: errors.New(`ent: missing required field "PromptAppend.body"`)}
+	}
+	if _, ok := _c.mutation.Status(); !ok {
+		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "PromptAppend.status"`)}
+	}
+	if _, ok := _c.mutation.DispatchedProcessRunID(); !ok {
+		return &ValidationError{Name: "dispatched_process_run_id", err: errors.New(`ent: missing required field "PromptAppend.dispatched_process_run_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "PromptAppend.created_at"`)}
@@ -163,6 +219,18 @@ func (_c *PromptAppendCreate) createSpec() (*PromptAppend, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
 		_node.Body = value
+	}
+	if value, ok := _c.mutation.Status(); ok {
+		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)
+		_node.Status = value
+	}
+	if value, ok := _c.mutation.DispatchedAt(); ok {
+		_spec.SetField(promptappend.FieldDispatchedAt, field.TypeTime, value)
+		_node.DispatchedAt = &value
+	}
+	if value, ok := _c.mutation.DispatchedProcessRunID(); ok {
+		_spec.SetField(promptappend.FieldDispatchedProcessRunID, field.TypeString, value)
+		_node.DispatchedProcessRunID = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(promptappend.FieldCreatedAt, field.TypeTime, value)

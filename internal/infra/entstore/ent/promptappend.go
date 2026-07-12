@@ -21,6 +21,12 @@ type PromptAppend struct {
 	SessionID string `json:"session_id,omitempty"`
 	// Body holds the value of the "body" field.
 	Body string `json:"body,omitempty"`
+	// Status holds the value of the "status" field.
+	Status string `json:"status,omitempty"`
+	// DispatchedAt holds the value of the "dispatched_at" field.
+	DispatchedAt *time.Time `json:"dispatched_at,omitempty"`
+	// DispatchedProcessRunID holds the value of the "dispatched_process_run_id" field.
+	DispatchedProcessRunID string `json:"dispatched_process_run_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -31,9 +37,9 @@ func (*PromptAppend) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case promptappend.FieldID, promptappend.FieldSessionID, promptappend.FieldBody:
+		case promptappend.FieldID, promptappend.FieldSessionID, promptappend.FieldBody, promptappend.FieldStatus, promptappend.FieldDispatchedProcessRunID:
 			values[i] = new(sql.NullString)
-		case promptappend.FieldCreatedAt:
+		case promptappend.FieldDispatchedAt, promptappend.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -67,6 +73,25 @@ func (_m *PromptAppend) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field body", values[i])
 			} else if value.Valid {
 				_m.Body = value.String
+			}
+		case promptappend.FieldStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field status", values[i])
+			} else if value.Valid {
+				_m.Status = value.String
+			}
+		case promptappend.FieldDispatchedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field dispatched_at", values[i])
+			} else if value.Valid {
+				_m.DispatchedAt = new(time.Time)
+				*_m.DispatchedAt = value.Time
+			}
+		case promptappend.FieldDispatchedProcessRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field dispatched_process_run_id", values[i])
+			} else if value.Valid {
+				_m.DispatchedProcessRunID = value.String
 			}
 		case promptappend.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -115,6 +140,17 @@ func (_m *PromptAppend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("body=")
 	builder.WriteString(_m.Body)
+	builder.WriteString(", ")
+	builder.WriteString("status=")
+	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	if v := _m.DispatchedAt; v != nil {
+		builder.WriteString("dispatched_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("dispatched_process_run_id=")
+	builder.WriteString(_m.DispatchedProcessRunID)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

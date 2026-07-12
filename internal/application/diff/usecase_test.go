@@ -809,6 +809,20 @@ func (r *fakeSessionRepository) ListPromptAppends(context.Context, sessiondomain
 	return nil, nil
 }
 
+func (r *fakeSessionRepository) ListPendingPromptAppends(context.Context, sessiondomain.ID) ([]sessiondomain.PromptAppend, error) {
+	return nil, nil
+}
+
+func (r *fakeSessionRepository) MarkPromptAppendsInflight(context.Context, []string, string) error {
+	return nil
+}
+func (r *fakeSessionRepository) CompletePromptAppends(context.Context, string, time.Time) error {
+	return nil
+}
+func (r *fakeSessionRepository) ReleasePromptAppends(context.Context, string) error {
+	return nil
+}
+
 func (r *fakeSessionRepository) ListPromptAppendAttachments(context.Context, sessiondomain.ID, string) ([]sessiondomain.SessionAttachment, error) {
 	return nil, nil
 }

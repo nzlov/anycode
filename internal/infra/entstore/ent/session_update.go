@@ -305,6 +305,20 @@ func (_u *SessionUpdate) ClearQueueInitialStart() *SessionUpdate {
 	return _u
 }
 
+// SetQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field.
+func (_u *SessionUpdate) SetQueueReviewAfterReuseFailure(v bool) *SessionUpdate {
+	_u.mutation.SetQueueReviewAfterReuseFailure(v)
+	return _u
+}
+
+// SetNillableQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueReviewAfterReuseFailure(v *bool) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueReviewAfterReuseFailure(*v)
+	}
+	return _u
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_u *SessionUpdate) SetQueueWorkflowRunID(v string) *SessionUpdate {
 	_u.mutation.SetQueueWorkflowRunID(v)
@@ -545,6 +559,9 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.QueueInitialStartCleared() {
 		_spec.ClearField(entsession.FieldQueueInitialStart, field.TypeBool)
+	}
+	if value, ok := _u.mutation.QueueReviewAfterReuseFailure(); ok {
+		_spec.SetField(entsession.FieldQueueReviewAfterReuseFailure, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
@@ -869,6 +886,20 @@ func (_u *SessionUpdateOne) ClearQueueInitialStart() *SessionUpdateOne {
 	return _u
 }
 
+// SetQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field.
+func (_u *SessionUpdateOne) SetQueueReviewAfterReuseFailure(v bool) *SessionUpdateOne {
+	_u.mutation.SetQueueReviewAfterReuseFailure(v)
+	return _u
+}
+
+// SetNillableQueueReviewAfterReuseFailure sets the "queue_review_after_reuse_failure" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueReviewAfterReuseFailure(v *bool) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueReviewAfterReuseFailure(*v)
+	}
+	return _u
+}
+
 // SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
 func (_u *SessionUpdateOne) SetQueueWorkflowRunID(v string) *SessionUpdateOne {
 	_u.mutation.SetQueueWorkflowRunID(v)
@@ -1139,6 +1170,9 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if _u.mutation.QueueInitialStartCleared() {
 		_spec.ClearField(entsession.FieldQueueInitialStart, field.TypeBool)
+	}
+	if value, ok := _u.mutation.QueueReviewAfterReuseFailure(); ok {
+		_spec.SetField(entsession.FieldQueueReviewAfterReuseFailure, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
 		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
