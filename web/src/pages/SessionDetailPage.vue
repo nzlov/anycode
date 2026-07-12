@@ -445,6 +445,7 @@ import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
+import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceSessionTimelineEvents } from '@/services/sessionTimelineReducer';
 import type { QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { SessionTimelineItem } from '@/services/sessionTimeline';
@@ -655,10 +656,6 @@ function closeReasonLabel(value: string) {
     workflow_closed: '流程关闭',
   };
   return labels[value] ?? value;
-}
-
-function formatTokenCount(value: number) {
-  return value.toLocaleString();
 }
 
 async function loadChangeList() {
