@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -2362,7 +2363,7 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 	saveSession := false
 	extraEvents := []sessionEventInput(nil)
 	if activeRun && codexEventCanUpdateSession(current.Status) {
-		if todoList, ok := todoListFromCodexEvent(event); ok {
+		if todoList, ok := todoListFromCodexEvent(event); ok && !slices.Equal(current.TodoList.Items, todoList.Items) {
 			current.TodoList = todoList
 			current.UpdatedAt = s.now()
 			saveSession = true
@@ -3393,7 +3394,7 @@ type sessionEventInput struct {
 
 func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, extraInputs ...sessionEventInput) error {
 	var codexEvent eventdomain.DomainEvent
-	publishCodexEvent := s.publisher != nil
+	publishCodexEvent := s.publisher != nil && !event.RealtimeOnly
 	if publishCodexEvent {
 		var err error
 		codexEvent, err = s.newCodexSessionEvent(session, processRunID, event)
@@ -3930,151 +3931,20 @@ func copyPayload(input map[string]any) map[string]any {
 }
 
 func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bool) {
-	if isTodoListPlanEventType(event.Type) {
-		return todoListFromPayload(event.Payload)
-	}
-	if isTodoListItemEventType(event.Type) {
-		return todoListFromTodoListItemPayload(event.Payload)
-	}
-	return todoListFromUpdatePlanToolPayload(event.Payload)
-}
-
-func isTodoListPlanEventType(eventType string) bool {
-	switch strings.ToLower(strings.TrimSpace(eventType)) {
-	case "plan_update", "turn/plan/updated", "turn.plan.updated", "plan.updated":
-		return true
-	default:
-		return false
-	}
-}
-
-func isTodoListItemEventType(eventType string) bool {
-	switch strings.ToLower(strings.TrimSpace(eventType)) {
-	case "item.started", "item.updated":
-		return true
-	default:
-		return false
-	}
-}
-
-func todoListFromUpdatePlanToolPayload(payload map[string]any) (domain.TodoList, bool) {
-	if payload == nil {
+	if event.PlanUpdate == nil {
 		return domain.TodoList{}, false
 	}
-	if isUpdatePlanToolName(payload) {
-		if list, ok := todoListFromToolArguments(payload); ok {
-			return list, true
-		}
-	}
-	for _, key := range []string{"item", "msg", "message", "params"} {
-		if nested, ok := payload[key].(map[string]any); ok {
-			if list, found := todoListFromUpdatePlanToolPayload(nested); found {
-				return list, true
-			}
-		}
-	}
-	return domain.TodoList{}, false
-}
-
-func isUpdatePlanToolName(payload map[string]any) bool {
-	name := firstNonEmptyString(payload, "name", "tool", "tool_name", "toolName", "function_name", "functionName")
-	if function, ok := payload["function"].(map[string]any); ok && name == "" {
-		name = firstNonEmptyString(function, "name")
-	}
-	name = strings.ToLower(strings.TrimSpace(name))
-	return name == "update_plan" || strings.HasSuffix(name, ".update_plan")
-}
-
-func todoListFromToolArguments(payload map[string]any) (domain.TodoList, bool) {
-	for _, key := range []string{"arguments", "input"} {
-		switch value := payload[key].(type) {
-		case string:
-			var nested map[string]any
-			if err := json.Unmarshal([]byte(value), &nested); err == nil {
-				if list, found := todoListFromPayload(nested); found {
-					return list, true
-				}
-			}
-		case map[string]any:
-			if list, found := todoListFromPayload(value); found {
-				return list, true
-			}
-		}
-	}
-	return todoListFromPayload(payload)
-}
-
-func todoListFromTodoListItemPayload(payload map[string]any) (domain.TodoList, bool) {
-	if payload == nil {
-		return domain.TodoList{}, false
-	}
-	item := payload
-	if nested, ok := payload["item"].(map[string]any); ok {
-		item = nested
-	}
-	if strings.ToLower(strings.TrimSpace(stringFromMap(item, "type"))) != "todo_list" {
-		return domain.TodoList{}, false
-	}
-	return todoListFromPayload(item)
-}
-
-func todoListFromPayload(payload map[string]any) (domain.TodoList, bool) {
-	if payload == nil {
-		return domain.TodoList{}, false
-	}
-	for _, key := range []string{"plan", "todoList", "todo_list", "todos", "items"} {
-		if items, ok := payload[key].([]any); ok {
-			return todoListFromItems(items), true
-		}
-	}
-	for _, key := range []string{"item", "msg", "message", "params"} {
-		if nested, ok := payload[key].(map[string]any); ok {
-			if list, found := todoListFromPayload(nested); found {
-				return list, true
-			}
-		}
-	}
-	return domain.TodoList{}, false
-}
-
-func todoListFromItems(items []any) domain.TodoList {
-	list := domain.TodoList{Items: make([]domain.TodoItem, 0, len(items))}
-	for _, item := range items {
-		typed, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		text := firstNonEmptyString(typed, "step", "text", "title", "content")
-		if text == "" {
+	list := domain.TodoList{Items: make([]domain.TodoItem, 0, len(event.PlanUpdate.Items))}
+	for _, item := range event.PlanUpdate.Items {
+		if strings.TrimSpace(item.Step) == "" {
 			continue
 		}
 		list.Items = append(list.Items, domain.TodoItem{
-			Text:      text,
-			Completed: todoItemCompleted(typed),
+			Text:      item.Step,
+			Completed: item.Status == processdomain.PlanItemCompleted,
 		})
 	}
-	return list
-}
-
-func firstNonEmptyString(input map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value := stringFromMap(input, key); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func todoItemCompleted(item map[string]any) bool {
-	if completed, ok := item["completed"].(bool); ok {
-		return completed
-	}
-	switch strings.ToLower(stringFromMap(item, "status")) {
-	case "complete", "completed", "done", "success", "succeeded":
-		return true
-	default:
-		return false
-	}
+	return list, true
 }
 
 func codexSessionIDFromEvent(event processdomain.CodexEvent) string {

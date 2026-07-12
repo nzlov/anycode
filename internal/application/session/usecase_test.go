@@ -4558,13 +4558,11 @@ func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
 	source := make(chan processdomain.CodexEvent, 1)
 	source <- processdomain.CodexEvent{
 		EventID: "codex-event-plan",
-		Type:    "plan_update",
-		Payload: map[string]any{
-			"plan": []any{
-				map[string]any{"step": "梳理需求", "status": "completed"},
-				map[string]any{"step": "实现卡片展示", "status": "in_progress"},
-			},
-		},
+		Type:    "plan.updated",
+		PlanUpdate: &processdomain.PlanUpdate{Items: []processdomain.PlanItem{
+			{Step: "梳理需求", Status: processdomain.PlanItemCompleted},
+			{Step: "实现卡片展示", Status: processdomain.PlanItemInProgress},
+		}},
 	}
 	close(source)
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
@@ -4599,6 +4597,109 @@ func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
 	}
 }
 
+func TestStartSessionIgnoresDuplicateTypedPlanUpdate(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+	}
+	update := &processdomain.PlanUpdate{Items: []processdomain.PlanItem{
+		{Step: "Persist TODO", Status: processdomain.PlanItemInProgress},
+	}}
+	source := make(chan processdomain.CodexEvent, 2)
+	source <- processdomain.CodexEvent{EventID: "plan-1", Type: "item.updated", PlanUpdate: update, RealtimeOnly: true}
+	source <- processdomain.CodexEvent{EventID: "plan-1", Type: "item.updated", PlanUpdate: update, RealtimeOnly: true}
+	close(source)
+	events := &fakeEventStore{}
+	publisher := &fakeEventPublisher{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), &fakeCodexProcess{
+		startHandle: processdomain.CodexHandle{PID: 1234},
+		events:      source,
+	}), WithEvents(events), WithEventPublisher(publisher))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-todo", "event-exited", "event-stopped"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	waitForEventType(t, events, "process.exited")
+	count := 0
+	for _, event := range events.snapshot() {
+		if event.Type == "session.todo_list_updated" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("todo list event count = %d, want 1: %#v", count, events.snapshot())
+	}
+	for _, event := range publisher.snapshot() {
+		if event.Type == "process.codex_event" {
+			t.Fatalf("realtime-only plan was published as transcript: %#v", publisher.snapshot())
+		}
+	}
+}
+
+func TestStartSessionIgnoresPlanUpdateMatchingPersistedTodoList(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+		TodoList: domain.TodoList{Items: []domain.TodoItem{
+			{Text: "Persist TODO", Completed: false},
+		}},
+	}
+	source := make(chan processdomain.CodexEvent, 1)
+	source <- processdomain.CodexEvent{
+		EventID: "plan-resume",
+		Type:    "item.started",
+		PlanUpdate: &processdomain.PlanUpdate{Items: []processdomain.PlanItem{
+			{Step: "Persist TODO", Status: processdomain.PlanItemInProgress},
+		}},
+		Content: processdomain.CodexToolContent{QualifiedName: "update_plan"},
+	}
+	close(source)
+	events := &fakeEventStore{}
+	publisher := &fakeEventPublisher{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), &fakeCodexProcess{
+		startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"},
+		events:      source,
+	}), WithEvents(events), WithEventPublisher(publisher))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-exited", "event-stopped"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	waitForEventType(t, events, "process.exited")
+	for _, event := range events.snapshot() {
+		if event.Type == "session.todo_list_updated" {
+			t.Fatalf("matching persisted TODO was published again: %#v", events.snapshot())
+		}
+	}
+	got := waitForPublishedEventType(t, publisher, "process.codex_event")
+	if got.Payload["codexType"] != "item.started" {
+		t.Fatalf("matching TODO transcript event = %#v", got)
+	}
+}
+
 func TestStartSessionUpdatesTodoListFromStartedAndUpdatedItems(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -4614,35 +4715,21 @@ func TestStartSessionUpdatesTodoListFromStartedAndUpdatedItems(t *testing.T) {
 	source <- processdomain.CodexEvent{
 		EventID: "codex-event-todo-started",
 		Type:    "item.started",
-		Payload: map[string]any{
-			"type": "item.started",
-			"item": map[string]any{
-				"id":   "item_3",
-				"type": "todo_list",
-				"items": []any{
-					map[string]any{"text": "Explore project context for Git/worktree creation", "completed": false},
-					map[string]any{"text": "Clarify intended conflict policy", "completed": false},
-					map[string]any{"text": "Compare approaches and recommend design", "completed": false},
-				},
-			},
-		},
+		PlanUpdate: &processdomain.PlanUpdate{Items: []processdomain.PlanItem{
+			{Step: "Explore project context for Git/worktree creation", Status: processdomain.PlanItemPending},
+			{Step: "Clarify intended conflict policy", Status: processdomain.PlanItemPending},
+			{Step: "Compare approaches and recommend design", Status: processdomain.PlanItemPending},
+		}},
 	}
 	source <- processdomain.CodexEvent{
 		EventID: "codex-event-todo-updated",
 		Type:    "item.updated",
-		Payload: map[string]any{
-			"type": "item.updated",
-			"item": map[string]any{
-				"id":   "item_3",
-				"type": "todo_list",
-				"items": []any{
-					map[string]any{"text": "Explore project context for Git/worktree creation", "completed": true},
-					map[string]any{"text": "Clarify intended conflict policy", "completed": false},
-					map[string]any{"text": "Compare approaches and recommend design", "completed": false},
-					map[string]any{"text": "Implement chosen design", "completed": false},
-				},
-			},
-		},
+		PlanUpdate: &processdomain.PlanUpdate{Items: []processdomain.PlanItem{
+			{Step: "Explore project context for Git/worktree creation", Status: processdomain.PlanItemCompleted},
+			{Step: "Clarify intended conflict policy", Status: processdomain.PlanItemPending},
+			{Step: "Compare approaches and recommend design", Status: processdomain.PlanItemPending},
+			{Step: "Implement chosen design", Status: processdomain.PlanItemPending},
+		}},
 	}
 	close(source)
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
@@ -4704,83 +4791,16 @@ func TestStartSessionUpdatesTodoListFromStartedAndUpdatedItems(t *testing.T) {
 	}
 }
 
-func TestTodoListFromCodexEventParsesPlanUpdateShapes(t *testing.T) {
-	tests := []struct {
-		name  string
-		event processdomain.CodexEvent
-	}{
-		{
-			name: "params plan",
-			event: processdomain.CodexEvent{
-				Type: "turn/plan/updated",
-				Payload: map[string]any{
-					"params": map[string]any{
-						"plan": []any{
-							map[string]any{"step": "梳理事件流", "status": "completed"},
-							map[string]any{"step": "落库 TODO", "status": "in_progress"},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "tool call arguments",
-			event: processdomain.CodexEvent{
-				Type: "function_call",
-				Payload: map[string]any{
-					"item": map[string]any{
-						"name":      "update_plan",
-						"arguments": `{"plan":[{"step":"解析 arguments","status":"done"},{"step":"刷新卡片","status":"pending"}]}`,
-					},
-				},
-			},
-		},
-		{
-			name: "updated todo list item",
-			event: processdomain.CodexEvent{
-				Type: "item.updated",
-				Payload: map[string]any{
-					"type": "item.updated",
-					"item": map[string]any{
-						"id":   "item_5",
-						"type": "todo_list",
-						"items": []any{
-							map[string]any{"text": "定位事件解析", "status": "completed"},
-							map[string]any{"text": "刷新卡片列表", "status": "pending"},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "started todo list item",
-			event: processdomain.CodexEvent{
-				Type: "item.started",
-				Payload: map[string]any{
-					"type": "item.started",
-					"item": map[string]any{
-						"id":   "item_3",
-						"type": "todo_list",
-						"items": []any{
-							map[string]any{"text": "Explore project context for Git/worktree creation", "completed": false},
-							map[string]any{"text": "Clarify intended conflict policy", "completed": true},
-						},
-					},
-				},
-			},
-		},
+func TestTodoListFromCodexEventMapsTypedPlanUpdate(t *testing.T) {
+	got, ok := todoListFromCodexEvent(processdomain.CodexEvent{PlanUpdate: &processdomain.PlanUpdate{Items: []processdomain.PlanItem{
+		{Step: "梳理事件流", Status: processdomain.PlanItemCompleted},
+		{Step: "落库 TODO", Status: processdomain.PlanItemInProgress},
+	}}})
+	if !ok {
+		t.Fatal("todoListFromCodexEvent() did not find typed plan")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := todoListFromCodexEvent(tt.event)
-			if !ok {
-				t.Fatal("todoListFromCodexEvent() did not find plan")
-			}
-			if got.Total() != 2 || got.Completed() != 1 {
-				t.Fatalf("todo list counts = %d/%d, want 1/2: %#v", got.Completed(), got.Total(), got)
-			}
-		})
+	if got.Total() != 2 || got.Completed() != 1 {
+		t.Fatalf("todo list counts = %d/%d, want 1/2: %#v", got.Completed(), got.Total(), got)
 	}
 }
 
@@ -4838,13 +4858,9 @@ func TestStartSessionClearsTodoListFromEmptyPlanUpdateEvent(t *testing.T) {
 	processes := newFakeProcessRepository()
 	source := make(chan processdomain.CodexEvent, 1)
 	source <- processdomain.CodexEvent{
-		EventID: "codex-event-empty-plan",
-		Type:    "turn/plan/updated",
-		Payload: map[string]any{
-			"params": map[string]any{
-				"plan": []any{},
-			},
-		},
+		EventID:    "codex-event-empty-plan",
+		Type:       "plan.updated",
+		PlanUpdate: &processdomain.PlanUpdate{Items: []processdomain.PlanItem{}},
 	}
 	close(source)
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}

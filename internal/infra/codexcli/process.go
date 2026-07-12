@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,17 +28,18 @@ var (
 )
 
 type activeProcess struct {
-	cmd              *exec.Cmd
-	stderr           *bytes.Buffer
-	home             string
-	workdir          string
-	codexSessionID   string
-	baseline         map[string]int64
-	stdoutSessionIDs <-chan string
-	done             chan struct{}
-	mu               sync.Mutex
-	exitResult       process.ExitResult
-	eventsStarted    bool
+	cmd               *exec.Cmd
+	stderr            *bytes.Buffer
+	home              string
+	workdir           string
+	codexSessionID    string
+	baseline          map[string]int64
+	stdoutSessionIDs  <-chan string
+	stdoutPlanUpdates <-chan process.CodexEvent
+	done              chan struct{}
+	mu                sync.Mutex
+	exitResult        process.ExitResult
+	eventsStarted     bool
 }
 
 var processRegistry sync.Map
@@ -90,16 +92,17 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 		PID:            cmd.Process.Pid,
 		CodexSessionID: codexSessionID,
 	}
-	stdoutSessionIDs := observeStdout(stdout)
+	stdoutSessionIDs, stdoutPlanUpdates := observeStdout(stdout, codexSessionID != "")
 	active := &activeProcess{
-		cmd:              cmd,
-		stderr:           &stderr,
-		home:             codexHome,
-		workdir:          workdir,
-		codexSessionID:   codexSessionID,
-		baseline:         baseline,
-		stdoutSessionIDs: stdoutSessionIDs,
-		done:             make(chan struct{}),
+		cmd:               cmd,
+		stderr:            &stderr,
+		home:              codexHome,
+		workdir:           workdir,
+		codexSessionID:    codexSessionID,
+		baseline:          baseline,
+		stdoutSessionIDs:  stdoutSessionIDs,
+		stdoutPlanUpdates: stdoutPlanUpdates,
+		done:              make(chan struct{}),
 	}
 	processRegistry.Store(runID, active)
 	go active.wait()
@@ -163,24 +166,36 @@ func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan
 		go func() {
 			exited <- active.waitResult()
 		}()
-		exitResult, readErr := tailSessionLog(ctx, active, events, exited, active.stdoutSessionIDs)
+		exitResult, readErr := tailSessionLog(ctx, active, events, exited, active.stdoutSessionIDs, active.stdoutPlanUpdates)
 		sendProcessExit(ctx, events, exitResult, readErr)
 	}()
 	return events, nil
 }
 
-func observeStdout(stdout io.Reader) <-chan string {
+func observeStdout(stdout io.Reader, waitForTurn bool) (<-chan string, <-chan process.CodexEvent) {
 	sessionIDs := make(chan string, 1)
+	planUpdates := make(chan process.CodexEvent, 64)
 	go func() {
 		defer close(sessionIDs)
+		defer close(planUpdates)
 		reader := bufio.NewReader(stdout)
 		identified := false
+		turnStarted := !waitForTurn
 		for {
 			line, err := reader.ReadBytes('\n')
-			if !identified && len(line) > 0 {
-				if sessionID := stdoutSessionID(bytes.TrimSpace(line)); sessionID != "" {
+			raw := bytes.TrimSpace(line)
+			if !identified && len(raw) > 0 {
+				if sessionID := stdoutSessionID(raw); sessionID != "" {
 					sessionIDs <- sessionID
 					identified = true
+				}
+			}
+			if stdoutEventType(raw) == "turn.started" {
+				turnStarted = true
+			}
+			if turnStarted && len(raw) > 0 {
+				if event, ok := stdoutPlanUpdate(raw); ok {
+					sendLatestPlanUpdate(planUpdates, event)
 				}
 			}
 			if err != nil {
@@ -188,7 +203,31 @@ func observeStdout(stdout io.Reader) <-chan string {
 			}
 		}
 	}()
-	return sessionIDs
+	return sessionIDs, planUpdates
+}
+
+func stdoutEventType(raw []byte) string {
+	var event map[string]any
+	if json.Unmarshal(raw, &event) != nil {
+		return ""
+	}
+	return stringValue(event, "type")
+}
+
+func sendLatestPlanUpdate(updates chan process.CodexEvent, event process.CodexEvent) {
+	select {
+	case updates <- event:
+		return
+	default:
+	}
+	select {
+	case <-updates:
+	default:
+	}
+	select {
+	case updates <- event:
+	default:
+	}
 }
 
 func (a *activeProcess) wait() {
@@ -260,8 +299,198 @@ func stdoutSessionID(raw []byte) string {
 	return stringValue(event, "thread_id", "session_id")
 }
 
-func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult, stdoutSessionIDs <-chan string) (process.ExitResult, error) {
-	path, err := waitForActiveSessionLog(ctx, active, stdoutSessionIDs)
+func stdoutPlanUpdate(raw []byte) (process.CodexEvent, bool) {
+	var payload map[string]any
+	if json.Unmarshal(raw, &payload) != nil {
+		return process.CodexEvent{}, false
+	}
+	eventType := stringValue(payload, "type")
+	update, correlationID, ok := planUpdateFromEvent(eventType, payload)
+	if !ok {
+		return process.CodexEvent{}, false
+	}
+	update.EventID = stablePlanUpdateEventID(update)
+	event := process.CodexEvent{
+		Type:          eventType,
+		Payload:       payload,
+		PlanUpdate:    &update,
+		RealtimeOnly:  true,
+		CorrelationID: correlationID,
+		EventID:       update.EventID,
+		CreatedAt:     parseSessionTimestamp(stringValue(payload, "timestamp")),
+	}
+	applyCodexSemantic(&event)
+	return event, true
+}
+
+func planUpdateFromEvent(eventType string, payload map[string]any) (process.PlanUpdate, string, bool) {
+	normalizedType := strings.ToLower(strings.TrimSpace(eventType))
+	if normalizedType == "plan_update" || normalizedType == "turn/plan/updated" || normalizedType == "turn.plan.updated" || normalizedType == "plan.updated" {
+		if update, ok := planUpdateFromPayload(payload); ok {
+			return update, planUpdateCorrelationID(payload), true
+		}
+	}
+	item := mapValue(payload["item"])
+	if (normalizedType == "item.started" || normalizedType == "item.updated") && strings.EqualFold(strings.TrimSpace(stringValue(item, "type")), "todo_list") {
+		if update, ok := planUpdateFromPayload(item); ok {
+			return update, planUpdateCorrelationID(payload), true
+		}
+	}
+	if update, correlationID, ok := planUpdateFromToolPayload(payload); ok {
+		return update, correlationID, true
+	}
+	return process.PlanUpdate{}, "", false
+}
+
+func planUpdateFromToolPayload(payload map[string]any) (process.PlanUpdate, string, bool) {
+	if isUpdatePlanTool(payload) {
+		for _, key := range []string{"arguments", "input"} {
+			switch value := payload[key].(type) {
+			case string:
+				var arguments map[string]any
+				if json.Unmarshal([]byte(value), &arguments) == nil {
+					if update, ok := planUpdateFromPayload(arguments); ok {
+						return update, planUpdateCorrelationID(payload), true
+					}
+				}
+			case map[string]any:
+				if update, ok := planUpdateFromPayload(value); ok {
+					return update, planUpdateCorrelationID(payload), true
+				}
+			}
+		}
+		if update, ok := planUpdateFromPayload(payload); ok {
+			return update, planUpdateCorrelationID(payload), true
+		}
+	}
+	for _, key := range []string{"item", "msg", "message", "params"} {
+		if nested, ok := payload[key].(map[string]any); ok {
+			if update, correlationID, found := planUpdateFromToolPayload(nested); found {
+				if correlationID == "" {
+					correlationID = planUpdateCorrelationID(payload)
+				}
+				return update, correlationID, true
+			}
+		}
+	}
+	return process.PlanUpdate{}, "", false
+}
+
+func isUpdatePlanTool(payload map[string]any) bool {
+	name := stringValue(payload, "name", "tool", "tool_name", "toolName", "function_name", "functionName")
+	if name == "" {
+		name = stringValue(mapValue(payload["function"]), "name")
+	}
+	name = strings.ToLower(strings.TrimSpace(name))
+	return name == "update_plan" || strings.HasSuffix(name, ".update_plan")
+}
+
+func planUpdateFromPayload(payload map[string]any) (process.PlanUpdate, bool) {
+	for _, key := range []string{"plan", "todoList", "todo_list", "todos", "items"} {
+		if items, ok := payload[key].([]any); ok {
+			return planUpdateFromItems(items), true
+		}
+	}
+	for _, key := range []string{"item", "msg", "message", "params"} {
+		if nested, ok := payload[key].(map[string]any); ok {
+			if update, found := planUpdateFromPayload(nested); found {
+				return update, true
+			}
+		}
+	}
+	return process.PlanUpdate{}, false
+}
+
+func planUpdateFromItems(items []any) process.PlanUpdate {
+	update := process.PlanUpdate{Items: make([]process.PlanItem, 0, len(items))}
+	for _, value := range items {
+		item := mapValue(value)
+		step := strings.TrimSpace(stringValue(item, "step", "text", "title", "content"))
+		if step == "" {
+			continue
+		}
+		update.Items = append(update.Items, process.PlanItem{
+			Step:   step,
+			Status: planItemStatus(item),
+		})
+	}
+	return update
+}
+
+func planItemStatus(item map[string]any) process.PlanItemStatus {
+	if completed, ok := item["completed"].(bool); ok {
+		if completed {
+			return process.PlanItemCompleted
+		}
+		return process.PlanItemPending
+	}
+	switch strings.ToLower(strings.TrimSpace(stringValue(item, "status"))) {
+	case "complete", "completed", "done", "success", "succeeded":
+		return process.PlanItemCompleted
+	case "in_progress", "in-progress", "progress", "running", "started":
+		return process.PlanItemInProgress
+	default:
+		return process.PlanItemPending
+	}
+}
+
+func planUpdateCorrelationID(payload map[string]any) string {
+	item := mapValue(payload["item"])
+	return firstString(
+		item["call_id"], item["callId"], item["id"], item["item_id"], item["itemId"],
+		payload["call_id"], payload["callId"], payload["id"], payload["item_id"], payload["itemId"],
+	)
+}
+
+func stablePlanUpdateEventID(update process.PlanUpdate) string {
+	type planItemIdentity struct {
+		Step      string
+		Completed bool
+	}
+	identity := make([]planItemIdentity, 0, len(update.Items))
+	for _, item := range update.Items {
+		identity = append(identity, planItemIdentity{
+			Step:      item.Step,
+			Completed: item.Status == process.PlanItemCompleted,
+		})
+	}
+	encoded, _ := json.Marshal(identity)
+	digest := sha256.Sum256(encoded)
+	return fmt.Sprintf("plan:%x", digest[:16])
+}
+
+func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult, stdoutSessionIDs <-chan string, stdoutPlanUpdates <-chan process.CodexEvent) (process.ExitResult, error) {
+	unmatchedStdoutPlans := []string(nil)
+	unmatchedSessionPlans := []string(nil)
+	emit := func(event process.CodexEvent) error {
+		if event.PlanUpdate != nil {
+			planEventID := event.PlanUpdate.EventID
+			if event.RealtimeOnly {
+				var matched bool
+				unmatchedSessionPlans, matched = consumePlanMatch(unmatchedSessionPlans, planEventID)
+				if matched {
+					return nil
+				}
+				unmatchedStdoutPlans = append(unmatchedStdoutPlans, planEventID)
+			} else {
+				var matched bool
+				unmatchedStdoutPlans, matched = consumePlanMatch(unmatchedStdoutPlans, planEventID)
+				if matched {
+					event.PlanUpdate = nil
+				} else {
+					unmatchedSessionPlans = append(unmatchedSessionPlans, planEventID)
+				}
+			}
+		}
+		select {
+		case events <- event:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	path, remainingStdoutPlans, err := waitForActiveSessionLog(ctx, active, stdoutSessionIDs, stdoutPlanUpdates, emit)
+	stdoutPlanUpdates = remainingStdoutPlans
 	if err != nil {
 		return failUnreadableProcess(active, exited, err), err
 	}
@@ -293,6 +522,23 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	processExited := false
 	var pending []byte
 	var pendingOffset int64
+	drainStdoutPlans := func() error {
+		for stdoutPlanUpdates != nil {
+			select {
+			case event, ok := <-stdoutPlanUpdates:
+				if !ok {
+					stdoutPlanUpdates = nil
+					continue
+				}
+				if err := emit(event); err != nil {
+					return err
+				}
+			default:
+				return nil
+			}
+		}
+		return nil
+	}
 	for {
 		line, err := reader.ReadBytes('\n')
 		if skipLeadingLineTerminator && len(line) > 0 {
@@ -323,16 +569,20 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 			parsed := parseSessionLogLine(raw, sessionCWD, sourceID, pendingOffset)
 			semanticState.apply(parsed)
 			for _, event := range parsed {
-				select {
-				case events <- event:
-				case <-ctx.Done():
+				if err := emit(event); err != nil {
 					if !processExited {
 						exitResult = waitForExit(exited)
 					}
-					return exitResult, ctx.Err()
+					return exitResult, err
 				}
 			}
 			pending = nil
+		}
+		if err := drainStdoutPlans(); err != nil {
+			if !processExited {
+				exitResult = waitForExit(exited)
+			}
+			return exitResult, err
 		}
 		if err == nil {
 			continue
@@ -344,17 +594,49 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 			return exitResult, fmt.Errorf("read codex session log: %w", err)
 		}
 		if processExited {
+			for stdoutPlanUpdates != nil {
+				select {
+				case event, ok := <-stdoutPlanUpdates:
+					if !ok {
+						stdoutPlanUpdates = nil
+						continue
+					}
+					if err := emit(event); err != nil {
+						return exitResult, err
+					}
+				case <-ctx.Done():
+					return exitResult, ctx.Err()
+				}
+			}
 			return exitResult, nil
 		}
 		select {
 		case <-ctx.Done():
 			exitResult = waitForExit(exited)
 			return exitResult, ctx.Err()
+		case event, ok := <-stdoutPlanUpdates:
+			if !ok {
+				stdoutPlanUpdates = nil
+				continue
+			}
+			if err := emit(event); err != nil {
+				exitResult = waitForExit(exited)
+				return exitResult, err
+			}
 		case exitResult = <-exited:
 			processExited = true
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
+}
+
+func consumePlanMatch(pending []string, eventID string) ([]string, bool) {
+	for index, candidate := range pending {
+		if candidate == eventID {
+			return pending[index+1:], true
+		}
+	}
+	return pending[:0], false
 }
 
 func primeCodexSemanticState(path string, limit int64, sessionCWD string, sourceID string, state *codexSemanticState) (string, int64, bool, error) {
@@ -430,7 +712,7 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
-func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutSessionIDs <-chan string) (string, error) {
+func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutSessionIDs <-chan string, stdoutPlanUpdates <-chan process.CodexEvent, emit func(process.CodexEvent) error) (string, <-chan process.CodexEvent, error) {
 	deadline := time.Now().Add(5 * time.Second)
 	var last string
 	allowWorkdirFallback := active.codexSessionID != ""
@@ -438,24 +720,24 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutS
 		if active.codexSessionID != "" || allowWorkdirFallback {
 			path, err := activeSessionLog(active)
 			if err == nil && path != "" {
-				return path, nil
+				return path, stdoutPlanUpdates, nil
 			}
 			if err != nil {
 				if errors.Is(err, errAmbiguousSessionLogs) {
-					return "", fmt.Errorf("find codex session log: %w", err)
+					return "", stdoutPlanUpdates, fmt.Errorf("find codex session log: %w", err)
 				}
 				last = err.Error()
 			}
 		}
 		if time.Now().After(deadline) {
 			if last != "" {
-				return "", fmt.Errorf("find codex session log: %s", last)
+				return "", stdoutPlanUpdates, fmt.Errorf("find codex session log: %s", last)
 			}
-			return "", errors.New("codex session log was not created")
+			return "", stdoutPlanUpdates, errors.New("codex session log was not created")
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", stdoutPlanUpdates, ctx.Err()
 		case sessionID, ok := <-stdoutSessionIDs:
 			if !ok {
 				allowWorkdirFallback = true
@@ -464,6 +746,14 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutS
 			}
 			if sessionID != "" {
 				active.codexSessionID = sessionID
+			}
+		case event, ok := <-stdoutPlanUpdates:
+			if !ok {
+				stdoutPlanUpdates = nil
+				continue
+			}
+			if err := emit(event); err != nil {
+				return "", stdoutPlanUpdates, err
 			}
 		case <-time.After(50 * time.Millisecond):
 		}
@@ -921,6 +1211,13 @@ func applyCodexSemantic(event *process.CodexEvent) {
 		itemType = stringValue(item, "type")
 	}
 	event.CorrelationID = codexCorrelationID(item, event.Payload)
+	if update, correlationID, ok := planUpdateFromEvent(event.Type, event.Payload); ok {
+		update.EventID = stablePlanUpdateEventID(update)
+		event.PlanUpdate = &update
+		if correlationID != "" {
+			event.CorrelationID = correlationID
+		}
+	}
 
 	if event.Type == "token_count" {
 		event.Content = codexUsageContent(event.Payload)
