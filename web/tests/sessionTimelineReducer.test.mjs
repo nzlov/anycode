@@ -142,3 +142,21 @@ test('standalone events never merge even when their content is identical', () =>
     ['message-a', 'message-b'],
   );
 });
+
+test('proxied event content is copied into a plain timeline item', () => {
+  const event = messageEvent('message-a', '01', 'proxied');
+  const images = new Proxy([{ src: '/preview/image-a', detail: 'auto' }], {});
+  event.content = new Proxy({ ...event.content, images }, {});
+
+  const [item] = reduceSessionTimelineEvents([event]);
+
+  assert.deepEqual(item.content, {
+    __typename: 'SessionTextMessageContent',
+    role: 'assistant',
+    text: 'proxied',
+    format: 'markdown',
+    images: [{ src: '/preview/image-a', detail: 'auto' }],
+  });
+  assert.notEqual(item.content, event.content);
+  assert.notEqual(item.content.images, event.content.images);
+});
