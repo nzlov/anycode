@@ -165,12 +165,25 @@ func (r *mutationResolver) UpdateSessionConfig(ctx context.Context, input model.
 	return mapSession(dto), nil
 }
 
+// ExecuteSession is the resolver for the executeSession field.
+func (r *mutationResolver) ExecuteSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.ExecuteSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // StartSession is the resolver for the startSession field.
 func (r *mutationResolver) StartSession(ctx context.Context, id string, force *bool) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.StartSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
+	// GLUE: preserve the legacy mutation name until external clients migrate to executeSession.
+	dto, err := r.UseCases.Sessions.ExecuteSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +207,8 @@ func (r *mutationResolver) ResumeSession(ctx context.Context, id string, force *
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.ResumeSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
+	// GLUE: preserve the legacy mutation name until external clients migrate to executeSession.
+	dto, err := r.UseCases.Sessions.ExecuteSessionWithOptions(ctx, sessiondomain.ID(id), sessionapp.StartSessionOptions{Force: boolValue(force)})
 	if err != nil {
 		return nil, err
 	}

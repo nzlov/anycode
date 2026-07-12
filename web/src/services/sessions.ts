@@ -9,6 +9,7 @@ import {
   codexMessageImages,
   compactEventPayload,
 } from '@/services/sessionEventPresentation';
+import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
 
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
@@ -760,24 +761,11 @@ export async function updateSessionConfig(sessionId: string, config: SessionConf
   };
 }
 
-export async function startSession(sessionId: string, force = false) {
-  return graphqlFetch<{ startSession: GraphQLSession }, { id: string; force: boolean }>({
+export async function executeSession(sessionId: string, force = false) {
+  return graphqlFetch<{ executeSession: GraphQLSession }, { id: string; force: boolean }>({
     query: `
-      mutation StartSession($id: ID!, $force: Boolean) {
-        startSession(id: $id, force: $force) {
-          ${sessionFields}
-        }
-      }
-    `,
-    variables: { id: sessionId, force },
-  });
-}
-
-export async function resumeSession(sessionId: string, force = false) {
-  return graphqlFetch<{ resumeSession: GraphQLSession }, { id: string; force: boolean }>({
-    query: `
-      mutation ResumeSession($id: ID!, $force: Boolean) {
-        resumeSession(id: $id, force: $force) {
+      mutation ExecuteSession($id: ID!, $force: Boolean) {
+        executeSession(id: $id, force: $force) {
           ${sessionFields}
         }
       }
@@ -1299,22 +1287,7 @@ function eventTitle(type: string) {
 }
 
 function statusNode(status: SessionStatus) {
-  const labels: Record<SessionStatus, string> = {
-    created: '待运行',
-    queued: '排队中',
-    starting: '启动中',
-    running: '运行中',
-    waiting_user: '待回答',
-    waiting_approval: '待审批',
-    stopping: '停止中',
-    stopped: '已停止',
-    resume_failed: '恢复失败',
-    failed: '失败',
-    blocked: '阻塞',
-    completed: '已完成',
-    closed: '已关闭',
-  };
-  return labels[status];
+  return sessionStatusLabel(status);
 }
 
 function workflowEventTitle(type: string) {

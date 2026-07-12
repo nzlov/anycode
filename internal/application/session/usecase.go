@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/expr-lang/expr"
@@ -28,6 +29,8 @@ import (
 type UseCase interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error)
 	MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error)
+	ExecuteSession(ctx context.Context, id domain.ID) (DTO, error)
+	ExecuteSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error)
 	StartSession(ctx context.Context, id domain.ID) (DTO, error)
 	StartSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error)
 	SetSessionPriority(ctx context.Context, input SetSessionPriorityInput) (DTO, error)
@@ -170,6 +173,8 @@ var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not w
 
 var errStaleAnswerUserQueue = errors.New("answer_user queue has no active process")
 var errWorkdirBusy = errors.New("session workdir already has an active process")
+var errWorkflowResumeStateNotPersisted = errors.New("workflow resume failure state was not persisted")
+var fallbackEventSequence atomic.Uint64
 
 type Service struct {
 	repo                domain.Repository
@@ -318,9 +323,9 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 	now := s.now()
 	for _, session := range sessions {
 		previousStatus := session.Status
-		session.Status = domain.StatusStopped
-		session.UpdatedAt = now
-		clearQueue(&session)
+		if err := transitionSession(&session, domain.StatusStopped, now); err != nil {
+			return 0, err
+		}
 		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "session.recoverable", map[string]any{
 			"reason":         "service_restarted",
 			"previousStatus": string(previousStatus),
@@ -335,9 +340,9 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 	}
 	for _, session := range unresumableSessions {
 		previousStatus := session.Status
-		session.Status = domain.StatusResumeFailed
-		session.UpdatedAt = now
-		clearQueue(&session)
+		if err := transitionSession(&session, domain.StatusResumeFailed, now); err != nil {
+			return 0, err
+		}
 		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "session.resume_failed", map[string]any{
 			"reason":         "service_restarted_without_codex_session_id",
 			"previousStatus": string(previousStatus),
@@ -493,8 +498,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		createdPath, err := s.worktrees.Create(ctx, project.Path.Value, input.ProjectID, id, baseBranch)
 		if err != nil {
 			failedAt := s.now()
-			session.Status = domain.StatusFailed
-			session.UpdatedAt = failedAt
+			if transitionErr := transitionSession(&session, domain.StatusFailed, failedAt); transitionErr != nil {
+				return DTO{}, transitionErr
+			}
 			_ = s.repo.Save(ctx, session)
 			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "create session worktree failed").WithDetails(map[string]any{
 				"projectId":  string(input.ProjectID),
@@ -534,8 +540,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	if _, err := s.archiveStagedAttachments(ctx, id, domain.AttachmentSourceRequirement, string(id), stagedAttachments); err != nil {
 		failedAt := s.now()
-		session.Status = domain.StatusFailed
-		session.UpdatedAt = failedAt
+		if transitionErr := transitionSession(&session, domain.StatusFailed, failedAt); transitionErr != nil {
+			return DTO{}, transitionErr
+		}
 		_ = s.repo.Save(ctx, session)
 		if createdWorktree {
 			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
@@ -548,8 +555,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID))
 		if startErr != nil {
 			failedAt := s.now()
-			session.Status = domain.StatusFailed
-			session.UpdatedAt = failedAt
+			if transitionErr := transitionSession(&session, domain.StatusFailed, failedAt); transitionErr != nil {
+				return DTO{}, transitionErr
+			}
 			_ = s.repo.Save(ctx, session)
 			if createdWorktree {
 				if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
@@ -622,6 +630,40 @@ func (s *Service) StartSession(ctx context.Context, id domain.ID) (DTO, error) {
 	return s.StartSessionWithOptions(ctx, id, StartSessionOptions{})
 }
 
+func (s *Service) ExecuteSession(ctx context.Context, id domain.ID) (DTO, error) {
+	return s.ExecuteSessionWithOptions(ctx, id, StartSessionOptions{})
+}
+
+func (s *Service) ExecuteSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
+		var err error
+		dto, err = s.executeSession(ctx, id, options)
+		return err
+	})
+	return dto, err
+}
+
+func (s *Service) executeSession(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	session, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find session: %w", err)
+	}
+	if session.Status == domain.StatusQueued {
+		if !options.Force {
+			return toDTO(session), nil
+		}
+		return s.startQueuedSession(ctx, session, true)
+	}
+	if canResume(session) {
+		return s.resumeLoadedSession(ctx, session, options)
+	}
+	return s.startLoadedSession(ctx, session, options)
+}
+
 func (s *Service) StartSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error) {
 	var dto DTO
 	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
@@ -640,6 +682,10 @@ func (s *Service) startSession(ctx context.Context, id domain.ID, startOptions S
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
+	return s.startLoadedSession(ctx, session, startOptions)
+}
+
+func (s *Service) startLoadedSession(ctx context.Context, session domain.Session, startOptions StartSessionOptions) (DTO, error) {
 	if session.Mode == domain.ModeWorkflow {
 		switch session.Status {
 		case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusWaitingApproval, domain.StatusStopping:
@@ -741,8 +787,9 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 		})
 	}
 	if !start.RequiresCodex {
-		session.Status = domain.StatusWaitingApproval
-		session.UpdatedAt = s.now()
+		if err := transitionSession(&session, domain.StatusWaitingApproval, s.now()); err != nil {
+			return DTO{}, err
+		}
 		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
 			"workflowRunId": string(start.WorkflowRunID),
 			"nodeRunId":     stringValuePtr(start.NodeRunID),
@@ -945,6 +992,9 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
+	if session.Status == domain.StatusQueued && session.Queue.Kind != domain.QueueKindAnswerUser {
+		return s.stopSessionWithoutActiveProcess(ctx, session, "queue_cancelled", false)
+	}
 	if s.processes == nil || s.codex == nil {
 		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
 	}
@@ -953,22 +1003,16 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return DTO{}, fmt.Errorf("find active process run: %w", err)
 	}
 	if !ok {
-		now := s.now()
-		session.Status = domain.StatusStopped
-		session.UpdatedAt = now
-		clearQueue(&session)
-		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "no_active_process"}); err != nil {
-			return DTO{}, err
+		stopReason := "no_active_process"
+		if session.Status == domain.StatusQueued {
+			stopReason = "queue_cancelled"
 		}
-		if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
-			return DTO{}, err
-		}
-		s.scheduleQueueDrain()
-		return toDTO(session), nil
+		return s.stopSessionWithoutActiveProcess(ctx, session, stopReason, true)
 	}
 	now := s.now()
-	session.Status = domain.StatusStopping
-	session.UpdatedAt = now
+	if err := transitionSession(&session, domain.StatusStopping, now); err != nil {
+		return DTO{}, err
+	}
 	if err := s.saveSessionWithEvent(ctx, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
 		return DTO{}, err
 	}
@@ -976,8 +1020,9 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return DTO{}, fmt.Errorf("stop codex process: %w", err)
 	}
 	finishedAt := s.now()
-	session.Status = domain.StatusStopped
-	session.UpdatedAt = finishedAt
+	if err := transitionSession(&session, domain.StatusStopped, finishedAt); err != nil {
+		return DTO{}, err
+	}
 	if err := s.markProcessExitedWithSessionEvents(ctx, active.ID, processdomain.ExitResult{
 		FailureReason: "stopped by user",
 		FinishedAt:    finishedAt,
@@ -990,10 +1035,26 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	}}); err != nil {
 		return DTO{}, err
 	}
+	s.scheduleQueueDrain()
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
 		return DTO{}, err
 	}
+	return toDTO(session), nil
+}
+
+func (s *Service) stopSessionWithoutActiveProcess(ctx context.Context, session domain.Session, reason string, cancelQuestions bool) (DTO, error) {
+	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+		return DTO{}, err
+	}
+	if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": reason}); err != nil {
+		return DTO{}, err
+	}
 	s.scheduleQueueDrain()
+	if cancelQuestions {
+		if err := s.cancelPendingQuestions(ctx, session.ID, "session stopped"); err != nil {
+			return DTO{}, err
+		}
+	}
 	return toDTO(session), nil
 }
 
@@ -1071,6 +1132,10 @@ func (s *Service) resumeSession(ctx context.Context, id domain.ID, startOptions 
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
+	return s.resumeLoadedSession(ctx, session, startOptions)
+}
+
+func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Session, startOptions StartSessionOptions) (DTO, error) {
 	switch session.Status {
 	case domain.StatusStopped, domain.StatusResumeFailed:
 	case domain.StatusQueued:
@@ -1096,6 +1161,15 @@ func (s *Service) resumeSession(ctx context.Context, id domain.ID, startOptions 
 	if session.Mode == domain.ModeWorkflow {
 		if s.workflows == nil {
 			return DTO{}, errors.New("session workflow starter is required for workflow mode")
+		}
+		if session.Status == domain.StatusResumeFailed {
+			if _, err := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
+				SessionID: session.ID,
+				Code:      "resume_failed",
+				Message:   "reconcile workflow before retrying codex resume",
+			}); err != nil {
+				return DTO{}, fmt.Errorf("reconcile workflow resume failure: %w", err)
+			}
 		}
 		advance, err := s.workflows.ResumeCurrentNodeForSession(ctx, domain.WorkflowResumeCurrentNodeInput{
 			SessionID: session.ID,
@@ -1148,8 +1222,9 @@ func (s *Service) markWaitingUser(ctx context.Context, id domain.ID) (DTO, error
 			return DTO{}, fmt.Errorf("find active process run: %w", err)
 		}
 	}
-	session.Status = domain.StatusWaitingUser
-	session.UpdatedAt = s.now()
+	if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
+		return DTO{}, err
+	}
 	if hasActive {
 		if err := s.markProcessWaitingWithSessionEvent(ctx, active.ID, session, "session.waiting_user", nil); err != nil {
 			return DTO{}, err
@@ -1258,10 +1333,9 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		Status:    processdomain.StatusStarting,
 		StartedAt: now,
 	}
-	clearQueue(&session)
-	session.Status = domain.StatusStarting
-	session.LastRunAt = &now
-	session.UpdatedAt = now
+	if err := transitionSession(&session, domain.StatusStarting, now); err != nil {
+		return DTO{}, err
+	}
 	if err := s.createProcessRunWithSessionEvent(ctx, run, session, "session.starting", map[string]any{"processRunId": string(runID)}); err != nil {
 		return DTO{}, err
 	}
@@ -1277,8 +1351,9 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 			sessionEventType = "session.resume_failed"
 			status = domain.StatusResumeFailed
 		}
-		session.Status = status
-		session.UpdatedAt = failedAt
+		if transitionErr := transitionSession(&session, status, failedAt); transitionErr != nil {
+			return DTO{}, transitionErr
+		}
 		if saveErr := s.markProcessExitedWithSessionEvents(ctx, runID, processdomain.ExitResult{
 			FailureReason: err.Error(),
 			FinishedAt:    failedAt,
@@ -1301,6 +1376,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 			return DTO{}, saveErr
 		}
 		s.scheduleQueueDrain()
+		var workflowResumeStateErr error
 		if options.resumeCodexSessionID != "" && session.Mode == domain.ModeWorkflow && s.workflows != nil {
 			if run, markErr := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
 				SessionID: session.ID,
@@ -1312,6 +1388,10 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 					"currentNodeId": run.CurrentNodeID,
 				})
 			} else {
+				workflowResumeStateErr = errors.Join(
+					errWorkflowResumeStateNotPersisted,
+					fmt.Errorf("mark workflow resume failed: %w", markErr),
+				)
 				s.appendSessionEvent(ctx, session, "workflow.resume_action_failed", map[string]any{
 					"reason": markErr.Error(),
 				})
@@ -1321,16 +1401,21 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		if options.resumeCodexSessionID != "" {
 			code = apperror.CodeResumeFailed
 		}
-		return DTO{}, apperror.Wrap(err, code, apperror.CategoryCodexError, "start codex process failed").WithDetails(map[string]any{
+		startErr := apperror.Wrap(err, code, apperror.CategoryCodexError, "start codex process failed").WithDetails(map[string]any{
 			"processRunId": string(runID),
 			"sessionId":    string(session.ID),
 		}).WithRetryable(options.resumeCodexSessionID != "")
+		if workflowResumeStateErr != nil {
+			return DTO{}, errors.Join(startErr, workflowResumeStateErr)
+		}
+		return DTO{}, startErr
 	}
-	session.Status = domain.StatusRunning
+	if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
+		return DTO{}, err
+	}
 	if handle.CodexSessionID != "" {
 		session.CodexSessionID = handle.CodexSessionID
 	}
-	session.UpdatedAt = s.now()
 	if err := s.markProcessRunningWithSessionEvent(ctx, runID, handle.PID, handle.CodexSessionID, session, "session.running", map[string]any{
 		"processRunId":   string(runID),
 		"pid":            handle.PID,
@@ -1423,17 +1508,15 @@ func (s *Service) queueCodexSession(ctx context.Context, session domain.Session,
 			return domain.Session{}, err
 		}
 	}
-	session.Status = domain.StatusQueued
-	session.LastRunAt = &now
-	session.UpdatedAt = now
-	session.QueuedAt = &now
-	session.Queue = domain.QueueIntent{
+	if err := session.QueueExecution(domain.QueueIntent{
 		Kind:                 kind,
 		Priority:             normalizeQueuePriority(priority),
 		WorkflowRunID:        options.workflowRunID,
 		NodeRunID:            queueNodeRunID(options.nodeRunID),
 		Prompt:               prompt,
 		ResumeCodexSessionID: options.resumeCodexSessionID,
+	}, now); err != nil {
+		return domain.Session{}, fmt.Errorf("queue session %s: %w", session.ID, err)
 	}
 	if err := s.saveSessionWithEvent(ctx, session, "session.queued", map[string]any{
 		"priority":            string(session.Queue.Priority),
@@ -1545,16 +1628,23 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 					atCapacity = true
 					return nil
 				}
-				if current.Mode == domain.ModeWorkflow && current.Queue.WorkflowRunID != "" && current.Queue.NodeRunID != nil {
-					if _, failErr := s.handleWorkflowNodeFailure(ctx, current, current.Queue.WorkflowRunID, current.Queue.NodeRunID, "codex_start_failed", err.Error()); failErr != nil {
-						return failErr
+				saved, findErr := s.repo.Find(ctx, current.ID)
+				if findErr != nil {
+					return fmt.Errorf("find failed queued session: %w", findErr)
+				}
+				if saved.Status == domain.StatusResumeFailed {
+					if errors.Is(err, errWorkflowResumeStateNotPersisted) {
+						return err
 					}
 					launched = true
 					return nil
 				}
-				saved, findErr := s.repo.Find(ctx, current.ID)
-				if findErr != nil {
-					return fmt.Errorf("find failed queued session: %w", findErr)
+				if current.Mode == domain.ModeWorkflow && current.Queue.WorkflowRunID != "" && current.Queue.NodeRunID != nil {
+					if _, failErr := s.handleWorkflowNodeFailure(ctx, saved, current.Queue.WorkflowRunID, current.Queue.NodeRunID, "codex_start_failed", err.Error()); failErr != nil {
+						return failErr
+					}
+					launched = true
+					return nil
 				}
 				if saved.Status == domain.StatusFailed || saved.Status == domain.StatusResumeFailed {
 					launched = true
@@ -1594,9 +1684,9 @@ func (s *Service) releaseQueuedAnswerUser(ctx context.Context, session domain.Se
 	if active.PID != nil {
 		pid = *active.PID
 	}
-	clearQueue(&session)
-	session.Status = domain.StatusRunning
-	session.UpdatedAt = s.now()
+	if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
+		return domain.Session{}, err
+	}
 	if err := s.markProcessRunningWithSessionEvent(ctx, active.ID, pid, active.CodexSessionID, session, "session.running", map[string]any{
 		"processRunId": string(active.ID),
 		"reason":       "user_answered",
@@ -1607,9 +1697,9 @@ func (s *Service) releaseQueuedAnswerUser(ctx context.Context, session domain.Se
 }
 
 func (s *Service) stopStaleQueuedAnswerUser(ctx context.Context, session domain.Session) (domain.Session, error) {
-	clearQueue(&session)
-	session.Status = domain.StatusStopped
-	session.UpdatedAt = s.now()
+	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+		return domain.Session{}, err
+	}
 	if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "stale_answer_user_queue"}); err != nil {
 		return domain.Session{}, err
 	}
@@ -1802,9 +1892,11 @@ func queueProcessNodeRunID(id *domain.NodeRunID) *processdomain.NodeRunID {
 	return &value
 }
 
-func clearQueue(session *domain.Session) {
-	session.QueuedAt = nil
-	session.Queue = domain.QueueIntent{}
+func transitionSession(session *domain.Session, next domain.Status, now time.Time) error {
+	if err := session.TransitionTo(next, now); err != nil {
+		return fmt.Errorf("transition session %s: %w", session.ID, err)
+	}
+	return nil
 }
 
 func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string) (processdomain.CodexHandle, error) {
@@ -2026,12 +2118,14 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			}
 			switch current.Status {
 			case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+				nextStatus := domain.StatusStopped
 				if processExitFailed(exitResult) && current.Status != domain.StatusStopping {
-					current.Status = domain.StatusFailed
-				} else {
-					current.Status = domain.StatusStopped
+					nextStatus = domain.StatusFailed
 				}
-				current.UpdatedAt = finishedAt
+				if err := transitionSession(&current, nextStatus, finishedAt); err != nil {
+					log.Printf("transition session %s after process exit: %v", current.ID, err)
+					break
+				}
 				eventType := "session.stopped"
 				if current.Status == domain.StatusFailed {
 					eventType = "session.failed"
@@ -2061,8 +2155,10 @@ func (s *Service) failWorkflowAfterProcessExit(session domain.Session, handle pr
 		Message:       message,
 	})
 	if err != nil {
-		session.Status = domain.StatusFailed
-		session.UpdatedAt = s.now()
+		if transitionErr := transitionSession(&session, domain.StatusFailed, s.now()); transitionErr != nil {
+			log.Printf("transition workflow session %s after node failure: %v", session.ID, transitionErr)
+			return
+		}
 		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
 			"workflowRunId": string(options.workflowRunID),
 			"nodeRunId":     string(nodeRunID),
@@ -2269,8 +2365,10 @@ func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle
 				Message:       appErr.Error(),
 			})
 		}
-		session.Status = domain.StatusFailed
-		session.UpdatedAt = s.now()
+		if transitionErr := transitionSession(&session, domain.StatusFailed, s.now()); transitionErr != nil {
+			log.Printf("transition workflow session %s after completion failure: %v", session.ID, transitionErr)
+			return
+		}
 		_ = s.saveSessionWithEvent(context.Background(), session, "workflow.failed", map[string]any{
 			"workflowRunId": string(options.workflowRunID),
 			"nodeRunId":     string(nodeRunID),
@@ -2284,8 +2382,9 @@ func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle
 func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) (DTO, error) {
 	switch {
 	case advance.Blocked:
-		session.Status = domain.StatusBlocked
-		session.UpdatedAt = s.now()
+		if err := transitionSession(&session, domain.StatusBlocked, s.now()); err != nil {
+			return DTO{}, err
+		}
 		if err := s.saveSessionWithEvent(ctx, session, "session.blocked", map[string]any{
 			"workflowRunId": string(advance.WorkflowRunID),
 			"reason":        advance.BlockedReason,
@@ -2296,8 +2395,9 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 	case advance.Close:
 		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
 	case advance.Completed:
-		session.Status = domain.StatusCompleted
-		session.UpdatedAt = s.now()
+		if err := transitionSession(&session, domain.StatusCompleted, s.now()); err != nil {
+			return DTO{}, err
+		}
 		if err := s.saveSessionWithEvent(ctx, session, "session.completed", map[string]any{
 			"workflowRunId": string(advance.WorkflowRunID),
 		}); err != nil {
@@ -2309,8 +2409,9 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 	case advance.Expr != nil:
 		return s.executeWorkflowExpr(ctx, session, advance)
 	case !advance.RequiresCodex:
-		session.Status = domain.StatusWaitingApproval
-		session.UpdatedAt = s.now()
+		if err := transitionSession(&session, domain.StatusWaitingApproval, s.now()); err != nil {
+			return DTO{}, err
+		}
 		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
 			"workflowRunId":    string(advance.WorkflowRunID),
 			"nodeRunId":        stringValuePtr(advance.NodeRunID),
@@ -2556,8 +2657,9 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 	if err != nil {
 		return DTO{}, fmt.Errorf("create merge failure question: %w", err)
 	}
-	session.Status = domain.StatusWaitingUser
-	session.UpdatedAt = s.now()
+	if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
+		return DTO{}, err
+	}
 	if err := s.repo.Save(ctx, session); err != nil {
 		if cancelErr := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(session.ID), "merge failure question abandoned"); cancelErr != nil {
 			return DTO{}, fmt.Errorf("save session: %w; cancel merge failure question: %v", err, cancelErr)
@@ -2770,12 +2872,44 @@ func (s *Service) sessionHasDifferentActiveRun(ctx context.Context, sessionID do
 
 func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.Session, workflowRunID domain.WorkflowRunID, nodeRunID *domain.NodeRunID, code string, message string, output ...map[string]any) (DTO, error) {
 	if s.workflows == nil || nodeRunID == nil {
-		session.Status = domain.StatusFailed
-		session.UpdatedAt = s.now()
+		if err := transitionSession(&session, domain.StatusFailed, s.now()); err != nil {
+			return DTO{}, err
+		}
 		if err := s.repo.Save(ctx, session); err != nil {
 			return DTO{}, fmt.Errorf("save session: %w", err)
 		}
 		return toDTO(session), nil
+	}
+	if session.Status == domain.StatusQueued || session.Status == domain.StatusStarting {
+		wasStarting := session.Status == domain.StatusStarting
+		if err := transitionSession(&session, domain.StatusFailed, s.now()); err != nil {
+			return DTO{}, err
+		}
+		failureEvent := sessionEventInput{eventType: "session.failed", payload: map[string]any{
+			"code":   code,
+			"reason": message,
+		}}
+		failurePersisted := false
+		if wasStarting && s.processes != nil {
+			active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+			if err != nil {
+				return DTO{}, fmt.Errorf("find active process after workflow start failure: %w", err)
+			}
+			if ok {
+				if err := s.markProcessExitedWithSessionEvents(ctx, active.ID, processdomain.ExitResult{
+					FailureReason: message,
+					FinishedAt:    s.now(),
+				}, session, true, []sessionEventInput{failureEvent}); err != nil {
+					return DTO{}, err
+				}
+				failurePersisted = true
+			}
+		}
+		if !failurePersisted {
+			if err := s.saveSessionWithEvent(ctx, session, failureEvent.eventType, failureEvent.payload); err != nil {
+				return DTO{}, err
+			}
+		}
 	}
 	advance, err := s.workflows.FailNode(ctx, domain.WorkflowNodeFailInput{
 		WorkflowRunID: workflowRunID,
@@ -3073,12 +3207,16 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	if err != nil {
 		return err
 	}
+	return s.saveSessionAndEvent(ctx, session, event, ok)
+}
+
+func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if ok {
+			if hasEvent {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -3087,7 +3225,7 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 		}); err != nil {
 			return err
 		}
-		if ok {
+		if hasEvent {
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
@@ -3095,7 +3233,7 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	if err := s.repo.Save(ctx, session); err != nil {
 		return fmt.Errorf("save session: %w", err)
 	}
-	if ok {
+	if hasEvent {
 		if err := s.events.Append(ctx, event); err != nil {
 			return err
 		}
@@ -3215,7 +3353,15 @@ func (s *Service) newSessionEvent(session domain.Session, eventType string, payl
 	}
 	id, err := s.generateID()
 	if err != nil {
-		return eventdomain.DomainEvent{}, false, err
+		id = fallbackSessionEventID(session.ID)
+	}
+	event, ok := s.newSessionEventWithID(session, eventType, payload, id)
+	return event, ok, nil
+}
+
+func (s *Service) newSessionEventWithID(session domain.Session, eventType string, payload map[string]any, id domain.ID) (eventdomain.DomainEvent, bool) {
+	if s.events == nil {
+		return eventdomain.DomainEvent{}, false
 	}
 	sessionID := eventdomain.SessionID(session.ID)
 	eventPayload := copyPayload(payload)
@@ -3230,7 +3376,11 @@ func (s *Service) newSessionEvent(session domain.Session, eventType string, payl
 		Type:      eventType,
 		Payload:   eventPayload,
 		CreatedAt: s.now(),
-	}, true, nil
+	}, true
+}
+
+func fallbackSessionEventID(sessionID domain.ID) domain.ID {
+	return domain.ID(fmt.Sprintf("fallback-%d-%d-%s", time.Now().UnixNano(), fallbackEventSequence.Add(1), sessionID))
 }
 
 func (s *Service) publishSessionEvent(ctx context.Context, event eventdomain.DomainEvent) {
@@ -3462,9 +3612,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	}
 	if session.Status == domain.StatusWaitingUser || session.Queue.Kind == domain.QueueKindAnswerUser {
 		now := s.now()
-		session.Status = domain.StatusStopped
-		session.UpdatedAt = now
-		clearQueue(&session)
+		if err := transitionSession(&session, domain.StatusStopped, now); err != nil {
+			return DTO{}, err
+		}
 		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "closing_without_active_process"}); err != nil {
 			return DTO{}, err
 		}
@@ -3514,11 +3664,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		session.WorktreePath = ""
 	}
 	now := s.now()
-	session.Status = domain.StatusClosed
-	session.CloseReason = &reason
-	session.ClosedAt = &now
-	session.UpdatedAt = now
-	clearQueue(&session)
+	if err := session.Close(reason, now); err != nil {
+		return DTO{}, fmt.Errorf("close session %s: %w", session.ID, err)
+	}
 	if err := s.saveSessionWithEvent(ctx, session, "session.closed", closedPayload); err != nil {
 		return DTO{}, err
 	}
@@ -4018,13 +4166,9 @@ func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {
 func availableActions(session domain.Session) []string {
 	switch session.Status {
 	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
-		actions := []string{"run", "close"}
-		if canResume(session) {
-			actions = []string{"run", "resume", "close"}
-		}
-		return actions
+		return []string{"execute", "close"}
 	case domain.StatusQueued:
-		return []string{"run", "stop", "close"}
+		return []string{"execute", "stop", "close"}
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
 		return []string{"stop"}
 	case domain.StatusWaitingApproval:
@@ -4032,11 +4176,7 @@ func availableActions(session domain.Session) []string {
 	case domain.StatusBlocked:
 		return []string{"close"}
 	case domain.StatusResumeFailed:
-		actions := []string{"run", "stop", "close"}
-		if canResume(session) {
-			actions = []string{"run", "resume", "stop", "close"}
-		}
-		return actions
+		return []string{"execute", "stop", "close"}
 	case domain.StatusClosed:
 		return []string{}
 	default:
