@@ -2896,6 +2896,11 @@ func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEv
 	payload := processEventPayload(event)
 	payload["codexType"] = event.Type
 	payload["codexSessionId"] = codexSessionID
+	payload["codexCorrelationId"] = event.CorrelationID
+	payload["codexPhase"] = string(event.Phase)
+	payload["codexContent"] = event.Content
+	payload["codexSourceOffset"] = event.SourceOffset
+	payload["codexSourceIndex"] = event.SourceIndex
 	if event.EventID != "" {
 		payload["codexEventId"] = event.EventID
 	}

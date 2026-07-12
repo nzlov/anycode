@@ -1,27 +1,33 @@
-import type { SessionEvent } from '@/services/sessions';
+import type { SessionTimelineEvent } from '@/services/sessionTimeline';
 
-export function appendLiveEvent(events: SessionEvent[], event: SessionEvent): SessionEvent[];
+export function appendLiveEvent(
+  events: SessionTimelineEvent[],
+  event: SessionTimelineEvent,
+): SessionTimelineEvent[];
 export function prependOlderEvents(
-  events: SessionEvent[],
-  olderEvents: SessionEvent[],
-): SessionEvent[];
+  events: SessionTimelineEvent[],
+  olderEvents: SessionTimelineEvent[],
+): SessionTimelineEvent[];
 export function mergeSnapshotEvents(
-  snapshotEvents: SessionEvent[],
-  currentEvents: SessionEvent[],
-  bufferedEvents: SessionEvent[],
-): SessionEvent[];
+  snapshotEvents: SessionTimelineEvent[],
+  currentEvents: SessionTimelineEvent[],
+  bufferedEvents: SessionTimelineEvent[],
+): SessionTimelineEvent[];
 export function shouldReconnectAfterClose(
   acknowledged: boolean,
   accessKeyValid: boolean | undefined,
   completedByServer: boolean,
 ): boolean;
-export function shouldReconnectCardStream(close: {
-  acknowledged: boolean;
-  completedByServer: boolean;
-}, validateAccessKey: () => Promise<boolean>): Promise<boolean>;
+export function shouldReconnectCardStream(
+  close: {
+    acknowledged: boolean;
+    completedByServer: boolean;
+  },
+  validateAccessKey: () => Promise<boolean>,
+): Promise<boolean>;
 export function createLatestRequestTracker(): {
   next(): number;
   isCurrent(requestGeneration: number): boolean;
   invalidate(): void;
 };
-export function sortSessionEvents(events: SessionEvent[]): SessionEvent[];
+export function sortSessionEvents(events: SessionTimelineEvent[]): SessionTimelineEvent[];

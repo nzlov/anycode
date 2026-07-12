@@ -52,7 +52,5 @@ export function createLatestRequestTracker() {
 }
 
 export function sortSessionEvents(events) {
-  return [...events].sort(
-    (left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt),
-  );
+  return [...events].sort((left, right) => left.orderKey.localeCompare(right.orderKey));
 }

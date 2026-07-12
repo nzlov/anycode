@@ -289,16 +289,14 @@ func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 
 func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 	sessionID := "session-1"
-	projectID := "project-1"
 	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan timelineapp.DTO, 1)
 	source <- timelineapp.DTO{
-		ID:        "event-1",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
-		SessionID: &eventSessionID,
-		Type:      "process.output",
-		Payload:   map[string]any{"text": "hello"},
-		CreatedAt: "2026-07-02T01:02:03Z",
+		ID:         "event-1",
+		OrderKey:   "order-1",
+		Phase:      processdomain.CodexPhaseStandalone,
+		Content:    processdomain.CodexMessageContent{Role: "assistant", Text: "hello", Format: processdomain.CodexTextMarkdown},
+		OccurredAt: "2026-07-02T01:02:03Z",
 	}
 	close(source)
 
@@ -328,17 +326,12 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 		t.Fatal("SessionEvents() channel closed before event item")
 	}
 	event := got.Event
-	if got.Ready || event.ID != "event-1" || event.Type != "process.output" || event.CreatedAt != "2026-07-02T01:02:03Z" {
+	if got.Ready || event.ID != "event-1" || event.OrderKey != "order-1" || !event.OccurredAt.Equal(time.Date(2026, 7, 2, 1, 2, 3, 0, time.UTC)) {
 		t.Fatalf("SessionEvents() event = %#v", got)
 	}
-	if event.Scope == nil || event.Scope.SessionID == nil || *event.Scope.SessionID != sessionID || event.Scope.ProjectID != projectID {
-		t.Fatalf("SessionEvents() scope = %#v", event.Scope)
-	}
-	if event.SessionID == nil || *event.SessionID != sessionID {
-		t.Fatalf("SessionEvents() sessionID = %#v", event.SessionID)
-	}
-	if event.Payload["text"] != "hello" {
-		t.Fatalf("SessionEvents() payload = %#v", event.Payload)
+	content, ok := event.Content.(*model.SessionTextMessageContent)
+	if !ok || content.Role != "assistant" || content.Text != "hello" || content.Format != model.SessionTimelineTextFormatMarkdown {
+		t.Fatalf("SessionEvents() content = %#v", event.Content)
 	}
 	if _, ok := <-ch; ok {
 		t.Fatal("SessionEvents() channel stayed open after source closed")
@@ -416,7 +409,6 @@ func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *tes
 
 func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 	sessionID := "session-1"
-	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan timelineapp.DTO, 1)
 	timeline := &fakeTimelineUseCase{sessionEvents: source}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
@@ -429,11 +421,11 @@ func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 		t.Fatalf("ready item = %#v", ready)
 	}
 	source <- timelineapp.DTO{
-		ID:        "event-1",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID},
-		SessionID: &eventSessionID,
-		Type:      "process.codex_event",
-		CreatedAt: "2026-07-02T01:02:03Z",
+		ID:         "event-1",
+		OrderKey:   "order-1",
+		Phase:      processdomain.CodexPhaseStandalone,
+		Content:    processdomain.CodexStatusContent{Code: "session.running", Level: "info"},
+		OccurredAt: "2026-07-02T01:02:03Z",
 	}
 	time.Sleep(10 * time.Millisecond)
 	cancel()
@@ -1021,9 +1013,9 @@ func (f *fakeEventUseCase) LiveSessionEvents(_ context.Context, input eventapp.L
 	return f.liveSessionEvents, nil
 }
 
-func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (port.Page[timelineapp.DTO], error) {
+func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {
 	f.gotListSessionEventsInput = input
-	return port.Page[timelineapp.DTO]{}, nil
+	return timelineapp.Page{}, nil
 }
 
 func (f *fakeTimelineUseCase) SessionEvents(_ context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {

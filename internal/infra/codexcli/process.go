@@ -187,15 +187,23 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 		return failUnreadableProcess(active, exited, err), err
 	}
 	defer file.Close()
+	sessionCWD := active.workdir
+	sourceID := filepath.Base(path)
+	semanticState := newCodexSemanticState()
+	skipLeadingLineTerminator := false
 	if offset := active.baseline[path]; offset > 0 {
-		if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		var resumeOffset int64
+		sessionCWD, resumeOffset, skipLeadingLineTerminator, err = primeCodexSemanticState(path, offset, sessionCWD, sourceID, semanticState)
+		if err != nil {
+			err = fmt.Errorf("prime codex session state: %w", err)
+			return failUnreadableProcess(active, exited, err), err
+		}
+		if _, err := file.Seek(resumeOffset, io.SeekStart); err != nil {
 			err = fmt.Errorf("seek codex session log: %w", err)
 			return failUnreadableProcess(active, exited, err), err
 		}
 	}
 	reader := bufio.NewReader(file)
-	sessionCWD := active.workdir
-	sourceID := filepath.Base(path)
 	offset, _ := file.Seek(0, io.SeekCurrent)
 	var exitResult process.ExitResult
 	processExited := false
@@ -203,6 +211,18 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	var pendingOffset int64
 	for {
 		line, err := reader.ReadBytes('\n')
+		if skipLeadingLineTerminator && len(line) > 0 {
+			if bytes.Equal(line, []byte("\n")) || bytes.Equal(line, []byte("\r\n")) {
+				offset += int64(len(line))
+				skipLeadingLineTerminator = false
+				continue
+			}
+			if errors.Is(err, io.EOF) && bytes.Equal(line, []byte("\r")) {
+				offset++
+				continue
+			}
+			skipLeadingLineTerminator = false
+		}
 		if len(line) > 0 {
 			if len(pending) == 0 {
 				pendingOffset = offset
@@ -216,7 +236,9 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 			if cwd := sessionCWDFromMeta(raw); cwd != "" {
 				sessionCWD = cwd
 			}
-			for _, event := range parseSessionLogLine(raw, sessionCWD, sourceID, pendingOffset) {
+			parsed := parseSessionLogLine(raw, sessionCWD, sourceID, pendingOffset)
+			semanticState.apply(parsed)
+			for _, event := range parsed {
 				select {
 				case events <- event:
 				case <-ctx.Done():
@@ -249,6 +271,49 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
+}
+
+func primeCodexSemanticState(path string, limit int64, sessionCWD string, sourceID string, state *codexSemanticState) (string, int64, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return sessionCWD, 0, false, err
+	}
+	defer file.Close()
+	reader := bufio.NewReader(io.LimitReader(file, limit))
+	var offset int64
+	resumeOffset := limit
+	skipLeadingLineTerminator := false
+	for offset < limit {
+		line, readErr := reader.ReadBytes('\n')
+		if len(line) == 0 {
+			if readErr == nil {
+				continue
+			}
+			break
+		}
+		lineOffset := offset
+		offset += int64(len(line))
+		if offset > limit {
+			break
+		}
+		raw := bytes.TrimRight(line, "\r\n")
+		if errors.Is(readErr, io.EOF) && !json.Valid(raw) {
+			resumeOffset = lineOffset
+		} else {
+			if errors.Is(readErr, io.EOF) {
+				skipLeadingLineTerminator = true
+			}
+			if cwd := sessionCWDFromMeta(raw); cwd != "" {
+				sessionCWD = cwd
+			}
+			parsed := parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)
+			state.apply(parsed)
+		}
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return sessionCWD, 0, false, readErr
+		}
+	}
+	return sessionCWD, resumeOffset, skipLeadingLineTerminator, nil
 }
 
 func failUnreadableProcess(active *activeProcess, exited <-chan process.ExitResult, err error) process.ExitResult {
@@ -445,6 +510,7 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 	events := []process.CodexEvent(nil)
 	sessionCWD := input.Workdir
 	sourceID := filepath.Base(path)
+	semanticState := newCodexSemanticState()
 	var offset int64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -460,7 +526,9 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 				if cwd := sessionCWDFromMeta(raw); cwd != "" {
 					sessionCWD = cwd
 				}
-				events = append(events, parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)...)
+				parsed := parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)
+				semanticState.apply(parsed)
+				events = append(events, parsed...)
 			}
 		}
 		if err == nil {
@@ -613,8 +681,10 @@ func sendProcessExit(ctx context.Context, events chan<- process.CodexEvent, resu
 			payload["failureReason"] = readErr.Error()
 		}
 	}
+	event := process.CodexEvent{Type: "process.exit", Payload: payload}
+	applyCodexSemantic(&event)
 	select {
-	case events <- process.CodexEvent{Type: "process.exit", Payload: payload}:
+	case events <- event:
 	case <-ctx.Done():
 	}
 }
@@ -626,11 +696,11 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 		Payload   map[string]any `json:"payload"`
 	}
 	if err := json.Unmarshal(raw, &record); err != nil {
-		return []process.CodexEvent{{
+		return finalizeCodexEvents([]process.CodexEvent{{
 			EventID: sourceEventID("invalid_json", sourceID, offset),
 			Type:    "invalid_json",
 			Payload: map[string]any{"error": err.Error(), "byteCount": len(raw)},
-		}}
+		}}, sourceID, offset)
 	}
 	payload := payloadOrEmpty(record.Payload)
 	_, hadEncryptedContent := payload["encrypted_content"]
@@ -681,12 +751,408 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 			CreatedAt: createdAt,
 		}}
 	}
+	return finalizeCodexEvents(events, sourceID, offset)
+}
+
+func finalizeCodexEvents(events []process.CodexEvent, sourceID string, offset int64) []process.CodexEvent {
 	for index := range events {
 		if events[index].EventID == "" {
 			events[index].EventID = sourceEventID(events[index].Type, sourceID, offset)
 		}
+		events[index].SourceOffset = offset
+		events[index].SourceIndex = index
+		applyCodexSemantic(&events[index])
 	}
 	return events
+}
+
+type codexSemanticState struct {
+	commands       map[string]process.CodexCommandContent
+	lastOccurredAt time.Time
+}
+
+func newCodexSemanticState() *codexSemanticState {
+	return &codexSemanticState{commands: map[string]process.CodexCommandContent{}}
+}
+
+func (s *codexSemanticState) apply(events []process.CodexEvent) {
+	if s == nil {
+		return
+	}
+	for index := range events {
+		event := &events[index]
+		if event.CreatedAt.IsZero() {
+			if s.lastOccurredAt.IsZero() {
+				event.CreatedAt = time.Unix(0, event.SourceOffset+int64(event.SourceIndex)+1).UTC()
+			} else {
+				event.CreatedAt = s.lastOccurredAt
+			}
+		}
+		s.lastOccurredAt = event.CreatedAt
+		if event.CorrelationID == "" {
+			continue
+		}
+		if command, ok := event.Content.(process.CodexCommandContent); ok {
+			if previous, exists := s.commands[event.CorrelationID]; exists && command.Command == "" {
+				command.Command = previous.Command
+			}
+			event.Content = command
+			if event.Phase == process.CodexPhaseStarted || event.Phase == process.CodexPhaseProgress {
+				s.commands[event.CorrelationID] = command
+			} else {
+				delete(s.commands, event.CorrelationID)
+			}
+			continue
+		}
+		if tool, ok := event.Content.(process.CodexToolContent); ok && isTerminalCodexPhase(event.Phase) {
+			if command, exists := s.commands[event.CorrelationID]; exists {
+				item := mapValue(event.Payload["item"])
+				normalized := mapValue(event.Payload["normalizedItem"])
+				command.Output = normalizeANSIText(tool.Output.Text)
+				command.ExitCode = intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"])
+				command.DurationMS = intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])
+				if command.ExitCode != nil && *command.ExitCode != 0 && event.Phase == process.CodexPhaseCompleted {
+					event.Phase = process.CodexPhaseFailed
+				}
+				event.Content = command
+				delete(s.commands, event.CorrelationID)
+			}
+		}
+	}
+}
+
+func isTerminalCodexPhase(phase process.CodexPhase) bool {
+	return phase == process.CodexPhaseCompleted || phase == process.CodexPhaseFailed || phase == process.CodexPhaseCancelled
+}
+
+func applyCodexSemantic(event *process.CodexEvent) {
+	if event == nil {
+		return
+	}
+	event.Phase = process.CodexPhaseStandalone
+	item := mapValue(event.Payload["item"])
+	normalized := mapValue(event.Payload["normalizedItem"])
+	itemType := stringValue(normalized, "type")
+	if itemType == "" {
+		itemType = stringValue(item, "type")
+	}
+	event.CorrelationID = codexCorrelationID(item, event.Payload)
+
+	if event.Type == "token_count" {
+		event.Content = codexUsageContent(event.Payload)
+		return
+	}
+	if event.Type == "item.started" || event.Type == "item.completed" {
+		applyCodexItemSemantic(event, itemType, item, normalized)
+		return
+	}
+	if event.Type == "mcp_tool_call_end" {
+		event.Phase = mcpToolPhase(event.Payload["result"])
+		invocation := mapValue(event.Payload["invocation"])
+		event.Content = process.CodexToolContent{
+			QualifiedName: qualifiedInvocationName(invocation),
+			Category:      "mcp",
+			Output: process.CodexStructuredText{
+				Format: process.CodexTextJSON,
+				Text:   jsonText(event.Payload["result"]),
+			},
+		}
+		return
+	}
+	if isCodexStatusType(event.Type) {
+		event.Content = codexStatusContent(event.Type, event.Payload)
+		return
+	}
+	event.Content = process.CodexUnknownContent{RawType: event.Type, Payload: cloneMap(event.Payload)}
+}
+
+func applyCodexItemSemantic(event *process.CodexEvent, itemType string, item map[string]any, normalized map[string]any) {
+	phase := codexItemPhase(event.Type, stringValue(normalized, "status"))
+	output := firstString(normalized["output"], item["aggregated_output"], item["output"], item["text"])
+	command := normalizeDisplayCommand(firstString(normalized["command"], item["command"]))
+	name := firstString(normalized["qualifiedName"], item["name"])
+	input := firstString(normalized["input"], item["input"])
+
+	switch itemType {
+	case "agent_message", "assistant_message":
+		event.Phase = process.CodexPhaseStandalone
+		event.Content = process.CodexMessageContent{Role: "assistant", Text: output, Format: process.CodexTextMarkdown, Images: codexImages(item)}
+	case "user_message":
+		event.Phase = process.CodexPhaseStandalone
+		event.Content = process.CodexMessageContent{Role: "user", Text: output, Format: process.CodexTextPlain, Images: codexImages(item)}
+	case "reasoning":
+		event.Phase = process.CodexPhaseStandalone
+		event.Content = process.CodexReasoningContent{Text: output}
+	case "command_execution":
+		event.Phase = phase
+		content := process.CodexCommandContent{Command: command, Output: normalizeANSIText(output), ExitCode: intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"]), DurationMS: intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])}
+		if content.ExitCode != nil && *content.ExitCode != 0 && event.Phase == process.CodexPhaseCompleted {
+			event.Phase = process.CodexPhaseFailed
+		}
+		event.Content = content
+	case "file_change":
+		event.Phase = process.CodexPhaseStandalone
+		event.Content = process.CodexFileChangeContent{Changes: codexFileChanges(normalized["changes"])}
+	case "tool_call", "tool_result", "custom_tool_call", "tool_search", "web_search", "mcp_tool_call":
+		event.Phase = phase
+		event.Content = process.CodexToolContent{
+			QualifiedName: name,
+			Category:      codexToolCategory(itemType, name),
+			Input:         structuredText(input, process.CodexTextPlain),
+			Output:        structuredText(output, process.CodexTextPlain),
+			Images:        codexImages(item),
+		}
+	default:
+		event.Phase = phase
+		event.Content = process.CodexUnknownContent{RawType: itemType, Payload: cloneMap(event.Payload)}
+	}
+}
+
+func codexItemPhase(eventType string, status string) process.CodexPhase {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed", "error":
+		return process.CodexPhaseFailed
+	case "cancelled", "canceled", "aborted":
+		return process.CodexPhaseCancelled
+	case "progress", "running":
+		return process.CodexPhaseProgress
+	case "in_progress", "started":
+		return process.CodexPhaseStarted
+	case "completed", "complete", "success", "succeeded":
+		return process.CodexPhaseCompleted
+	}
+	if eventType == "item.started" {
+		return process.CodexPhaseStarted
+	}
+	return process.CodexPhaseCompleted
+}
+
+func mcpToolPhase(value any) process.CodexPhase {
+	result := mapValue(value)
+	if result["Err"] != nil || result["err"] != nil {
+		return process.CodexPhaseFailed
+	}
+	ok := mapValue(result["Ok"])
+	if isError, _ := ok["isError"].(bool); isError {
+		return process.CodexPhaseFailed
+	}
+	return process.CodexPhaseCompleted
+}
+
+func codexCorrelationID(item map[string]any, payload map[string]any) string {
+	return firstString(
+		item["call_id"], item["callId"], item["id"], item["item_id"], item["itemId"],
+		payload["call_id"], payload["callId"], payload["id"], payload["item_id"], payload["itemId"],
+	)
+}
+
+func codexToolCategory(itemType string, name string) string {
+	switch itemType {
+	case "web_search":
+		return "web_search"
+	case "tool_search":
+		return "tool_search"
+	case "custom_tool_call":
+		return "custom"
+	case "mcp_tool_call":
+		return "mcp"
+	}
+	if strings.HasPrefix(name, "mcp__") || strings.Contains(name, ".mcp__") {
+		return "mcp"
+	}
+	return "generic"
+}
+
+func codexImages(item map[string]any) []process.CodexImage {
+	images := []process.CodexImage(nil)
+	for _, field := range []string{"content", "output"} {
+		parts, ok := item[field].([]any)
+		if !ok {
+			continue
+		}
+		for _, part := range parts {
+			entry := mapValue(part)
+			if stringValue(entry, "type") != "input_image" {
+				continue
+			}
+			source := stringValue(entry, "image_url")
+			if source == "" {
+				continue
+			}
+			images = append(images, process.CodexImage{Source: source, Detail: stringValue(entry, "detail")})
+		}
+	}
+	return images
+}
+
+func codexFileChanges(value any) []process.CodexFileChange {
+	entries, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	changes := make([]process.CodexFileChange, 0, len(entries))
+	for _, value := range entries {
+		entry := mapValue(value)
+		path := stringValue(entry, "path")
+		if path == "" {
+			continue
+		}
+		changes = append(changes, process.CodexFileChange{
+			Kind:        normalizeFileChangeKind(stringValue(entry, "kind")),
+			Path:        path,
+			MovePath:    stringValue(entry, "movePath", "move_path"),
+			UnifiedDiff: stringValue(entry, "unifiedDiff", "unified_diff"),
+		})
+	}
+	return changes
+}
+
+func normalizeFileChangeKind(kind string) string {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "add", "added", "create", "created":
+		return "added"
+	case "delete", "deleted", "remove", "removed":
+		return "deleted"
+	case "rename", "renamed", "move", "moved":
+		return "renamed"
+	default:
+		return "modified"
+	}
+}
+
+func codexUsageContent(payload map[string]any) process.CodexUsageContent {
+	info := mapValue(payload["info"])
+	total := mapValue(info["total_token_usage"])
+	return process.CodexUsageContent{
+		InputTokens:           intValue(total["input_tokens"]),
+		CachedInputTokens:     intValue(total["cached_input_tokens"]),
+		OutputTokens:          intValue(total["output_tokens"]),
+		ReasoningOutputTokens: intValue(total["reasoning_output_tokens"]),
+		TotalTokens:           intValue(total["total_tokens"]),
+		ContextWindow:         intValue(info["model_context_window"]),
+	}
+}
+
+func isCodexStatusType(eventType string) bool {
+	switch eventType {
+	case "thread.started", "task.started", "task.completed", "turn.started", "turn.completed", "turn.aborted", "context.compacted", "turn.context", "world.state", "process.exit", "error", "invalid_json":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexStatusContent(code string, payload map[string]any) process.CodexStatusContent {
+	level := "info"
+	if code == "error" || code == "invalid_json" || (code == "process.exit" && intValue(payload["exitCode"]) != 0) {
+		level = "error"
+	} else if code == "turn.aborted" || code == "context.compacted" {
+		level = "warning"
+	}
+	return process.CodexStatusContent{
+		Code:    code,
+		Level:   level,
+		Message: firstString(payload["message"], payload["reason"], payload["failureReason"]),
+		Details: cloneMap(payload),
+	}
+}
+
+func structuredText(text string, fallback process.CodexTextFormat) process.CodexStructuredText {
+	if text == "" {
+		return process.CodexStructuredText{Format: fallback}
+	}
+	format := fallback
+	if json.Valid([]byte(text)) {
+		format = process.CodexTextJSON
+	}
+	return process.CodexStructuredText{Format: format, Text: text}
+}
+
+func normalizeANSIText(value string) string {
+	return strings.ReplaceAll(value, "␛[", "\x1b[")
+}
+
+func normalizeDisplayCommand(value string) string {
+	command := strings.TrimSpace(value)
+	for _, prefix := range []string{"/bin/bash -lc ", "bash -lc ", "/bin/sh -lc ", "sh -lc ", "/bin/zsh -lc ", "zsh -lc "} {
+		if strings.HasPrefix(command, prefix) {
+			return unquoteShellArgument(strings.TrimSpace(strings.TrimPrefix(command, prefix)))
+		}
+	}
+	return command
+}
+
+func unquoteShellArgument(value string) string {
+	if len(value) < 2 || value[0] != value[len(value)-1] || (value[0] != '\'' && value[0] != '"') {
+		return value
+	}
+	inner := value[1 : len(value)-1]
+	if value[0] == '\'' {
+		return strings.ReplaceAll(inner, `'\''`, `'`)
+	}
+	replacer := strings.NewReplacer(`\"`, `"`, `\\`, `\`, `\$`, `$`, "\\`", "`")
+	return replacer.Replace(inner)
+}
+
+func qualifiedInvocationName(invocation map[string]any) string {
+	server := stringValue(invocation, "server")
+	tool := stringValue(invocation, "tool")
+	if server == "" {
+		return tool
+	}
+	if tool == "" {
+		return server
+	}
+	return server + "." + tool
+}
+
+func intPointer(values ...any) *int {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case int:
+			result := typed
+			return &result
+		case int64:
+			result := int(typed)
+			return &result
+		case float64:
+			result := int(typed)
+			return &result
+		}
+	}
+	return nil
+}
+
+func intValue(value any) int {
+	if result := intPointer(value); result != nil {
+		return *result
+	}
+	return 0
+}
+
+func firstString(values ...any) string {
+	for _, value := range values {
+		if text, ok := value.(string); ok && text != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func mapValue(value any) map[string]any {
+	result, _ := value.(map[string]any)
+	if result == nil {
+		return map[string]any{}
+	}
+	return result
+}
+
+func cloneMap(value map[string]any) map[string]any {
+	result := make(map[string]any, len(value))
+	for key, item := range value {
+		result[key] = item
+	}
+	return result
 }
 
 func sessionCWDFromMeta(raw []byte) string {
@@ -733,8 +1199,13 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		}}
 	case "function_call_output":
 		callID := stringValue(payload, "call_id")
-		normalized := normalizedItem("tool_result", "completed")
+		normalized := normalizedItem("tool_result", stringValue(payload, "status"))
+		if normalized["status"] == "" {
+			normalized["status"] = "completed"
+		}
 		normalized["output"] = textFromValue(payload["output"])
+		normalized["exitCode"] = firstValue(payload["exit_code"], payload["exitCode"])
+		normalized["durationMs"] = firstValue(payload["duration_ms"], payload["durationMs"])
 		return []process.CodexEvent{{
 			EventID:   eventID(timestamp, "item.completed", callID),
 			Type:      "item.completed",
@@ -743,10 +1214,13 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		}}
 	case "custom_tool_call":
 		callID := stringValue(payload, "call_id")
+		normalized := normalizedItem("custom_tool_call", "in_progress")
+		normalized["qualifiedName"] = stringValue(payload, "name")
+		normalized["input"] = stringOrJSON(payload["input"])
 		return []process.CodexEvent{{
 			EventID:   eventID(timestamp, "item.started", callID),
 			Type:      "item.started",
-			Payload:   itemEventPayload(payload, normalizedItem("custom_tool_call", "in_progress")),
+			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
 	case "custom_tool_call_output":
@@ -841,6 +1315,24 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 
 func normalizedItem(itemType string, status string) map[string]any {
 	return map[string]any{"type": itemType, "status": status}
+}
+
+func hasAnyKey(value map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		if _, ok := value[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func firstValue(values ...any) any {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func itemEventPayload(item map[string]any, normalized map[string]any) map[string]any {

@@ -76,6 +76,10 @@ EOF
 	if got[2].Type != "item.completed" {
 		t.Fatalf("command result event = %+v", got[2])
 	}
+	commandResult, ok := got[2].Content.(process.CodexCommandContent)
+	if !ok || commandResult.Command != "go test ./..." || commandResult.Output != "ok" {
+		t.Fatalf("typed command result = %#v", got[2].Content)
+	}
 	resultItem, ok := got[2].Payload["item"].(map[string]any)
 	resultNormalized := eventNormalizedItem(t, got[2])
 	if !ok || resultNormalized["type"] != "tool_result" || resultItem["call_id"] != "call-command" {
@@ -103,6 +107,150 @@ EOF
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {
 		t.Fatalf("pwd = %q, want %q", gotDir, dir)
+	}
+}
+
+func TestCodexSemanticStateKeepsMissingTimestampInSourceOrder(t *testing.T) {
+	state := newCodexSemanticState()
+	previous := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 10)
+	missing := parseSessionLogLine([]byte(`{"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 20)
+	next := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 30)
+	state.apply(previous)
+	state.apply(missing)
+	state.apply(next)
+	if !missing[0].CreatedAt.Equal(previous[0].CreatedAt) {
+		t.Fatalf("missing timestamp = %s, want previous %s", missing[0].CreatedAt, previous[0].CreatedAt)
+	}
+	if !missing[0].CreatedAt.Before(next[0].CreatedAt) || missing[0].SourceOffset <= previous[0].SourceOffset {
+		t.Fatalf("source order = previous %#v, missing %#v, next %#v", previous[0], missing[0], next[0])
+	}
+}
+
+func TestPrimeCodexSemanticStateCorrelatesCommandAcrossResumeBaseline(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout-resume-command.jsonl")
+	prefix := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"/workspace/project"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec_command","arguments":"{\"cmd\":\"go test ./...\"}"}}
+`
+	if err := os.WriteFile(path, []byte(prefix), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	state := newCodexSemanticState()
+	_, resumeOffset, skipLeadingLineTerminator, err := primeCodexSemanticState(path, int64(len(prefix)), "/workspace/project", filepath.Base(path), state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resumeOffset != int64(len(prefix)) {
+		t.Fatalf("resume offset = %d, want %d", resumeOffset, len(prefix))
+	}
+	if skipLeadingLineTerminator {
+		t.Fatal("newline-terminated prefix must not skip a future line terminator")
+	}
+	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"ok"}}`), "/workspace/project", filepath.Base(path), int64(len(prefix)))
+	state.apply(completed)
+	command, ok := completed[0].Content.(process.CodexCommandContent)
+	if !ok || command.Command != "go test ./..." || command.Output != "ok" {
+		t.Fatalf("resumed command completion = %#v", completed[0].Content)
+	}
+}
+
+func TestPrimeCodexSemanticStateResumesAtIncompleteLineStart(t *testing.T) {
+	prefix := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"/workspace/project"}}
+`
+	started := `{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec_command","arguments":"{\"cmd\":\"go test ./...\"}"}}
+`
+	completed := `{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"ok"}}
+`
+	full := prefix + started + completed
+	tests := []struct {
+		name                   string
+		baselineLength         int
+		wantResumeOffset       int64
+		wantSkipLineTerminator bool
+		wantResumedEventCount  int
+	}{
+		{
+			name:                  "partial JSON body",
+			baselineLength:        strings.Index(started, "test"),
+			wantResumeOffset:      int64(len(prefix)),
+			wantResumedEventCount: 2,
+		},
+		{
+			name:                   "complete JSON without newline",
+			baselineLength:         len(strings.TrimSuffix(started, "\n")),
+			wantResumeOffset:       int64(len(prefix) + len(strings.TrimSuffix(started, "\n"))),
+			wantSkipLineTerminator: true,
+			wantResumedEventCount:  1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "rollout-resume-partial.jsonl")
+			baseline := int64(len(prefix) + test.baselineLength)
+			if err := os.WriteFile(path, []byte(full), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			state := newCodexSemanticState()
+			_, resumeOffset, skipLeadingLineTerminator, err := primeCodexSemanticState(path, baseline, "/workspace/project", filepath.Base(path), state)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resumeOffset != test.wantResumeOffset {
+				t.Fatalf("resume offset = %d, want %d", resumeOffset, test.wantResumeOffset)
+			}
+			if skipLeadingLineTerminator != test.wantSkipLineTerminator {
+				t.Fatalf("skip line terminator = %t, want %t", skipLeadingLineTerminator, test.wantSkipLineTerminator)
+			}
+
+			tail := full[resumeOffset:]
+			if skipLeadingLineTerminator {
+				tail = strings.TrimPrefix(tail, "\n")
+			}
+			lines := strings.Split(strings.TrimSuffix(tail, "\n"), "\n")
+			lineOffset := resumeOffset
+			var resumed []process.CodexEvent
+			for _, line := range lines {
+				parsed := parseSessionLogLine([]byte(line), "/workspace/project", filepath.Base(path), lineOffset)
+				state.apply(parsed)
+				resumed = append(resumed, parsed...)
+				lineOffset += int64(len(line) + 1)
+			}
+			if len(resumed) != test.wantResumedEventCount {
+				t.Fatalf("resumed events = %d, want %d", len(resumed), test.wantResumedEventCount)
+			}
+			command, ok := resumed[len(resumed)-1].Content.(process.CodexCommandContent)
+			if !ok || command.Command != "go test ./..." || command.Output != "ok" {
+				t.Fatalf("resumed command completion = %#v", resumed[len(resumed)-1].Content)
+			}
+			for _, event := range resumed {
+				if event.Type == "invalid_json" {
+					t.Fatalf("resumed partial line emitted invalid JSON: %#v", resumed)
+				}
+			}
+		})
+	}
+}
+
+func TestCodexSemanticStateUsesStartedTypeForTimedResults(t *testing.T) {
+	state := newCodexSemanticState()
+	commandStarted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec_command","arguments":"{\"cmd\":\"go test ./...\"}"}}`), "/workspace/project", "rollout.jsonl", 0)
+	commandCompleted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"failed","exit_code":7,"duration_ms":125}}`), "/workspace/project", "rollout.jsonl", 1)
+	state.apply(commandStarted)
+	state.apply(commandCompleted)
+	command, ok := commandCompleted[0].Content.(process.CodexCommandContent)
+	if !ok || command.Command != "go test ./..." || command.ExitCode == nil || *command.ExitCode != 7 || command.DurationMS == nil || *command.DurationMS != 125 || commandCompleted[0].Phase != process.CodexPhaseFailed {
+		t.Fatalf("correlated command result = %#v, phase %q", commandCompleted[0].Content, commandCompleted[0].Phase)
+	}
+
+	toolStarted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-tool","name":"answer_user","arguments":"{\"questions\":[]}"}}`), "/workspace/project", "rollout.jsonl", 2)
+	toolCompleted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-tool","output":"answered","duration_ms":25}}`), "/workspace/project", "rollout.jsonl", 3)
+	state.apply(toolStarted)
+	state.apply(toolCompleted)
+	tool, ok := toolCompleted[0].Content.(process.CodexToolContent)
+	if !ok || tool.Output.Text != "answered" {
+		t.Fatalf("timed tool result = %#v", toolCompleted[0].Content)
 	}
 }
 
@@ -146,43 +294,56 @@ pwd > "$CODEX_PWD_FILE"
 }
 
 func TestResumeStreamsOnlyNewSessionLogEvents(t *testing.T) {
-	dir := t.TempDir()
-	codexHome := t.TempDir()
-	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-resume.jsonl")
-	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name            string
+		writeTerminator string
+	}{
+		{name: "LF", writeTerminator: `printf '\n' >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl"`},
+		{name: "split CRLF", writeTerminator: `printf '\r' >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl"
+sleep 0.15
+printf '\n' >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl"`},
 	}
-	if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"`+dir+`"}}
-{"timestamp":"2026-07-08T09:01:00Z","type":"response_item","payload":{"type":"message","id":"msg-old","role":"assistant","content":[{"type":"output_text","text":"old"}]}}
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	bin := fakeCodex(t, `#!/bin/sh
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			codexHome := t.TempDir()
+			sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-resume.jsonl")
+			if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"`+dir+`"}}
+{"timestamp":"2026-07-08T09:01:00Z","type":"response_item","payload":{"type":"message","id":"msg-old","role":"assistant","content":[{"type":"output_text","text":"old"}]}}`), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			bin := fakeCodex(t, `#!/bin/sh
 sleep 0.2
+`+test.writeTerminator+`
 cat >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:02:00Z","type":"response_item","payload":{"type":"message","id":"msg-new","role":"assistant","content":[{"type":"output_text","text":"new"}]}}
 EOF
 `)
-	t.Setenv("CODEX_HOME", codexHome)
+			t.Setenv("CODEX_HOME", codexHome)
 
-	handle, err := New(bin).Resume(context.Background(), process.CodexResumeInput{
-		ProcessRunID:   "process-run-resume",
-		SessionID:      "session-1",
-		CodexSessionID: "codex-session-1",
-		Workdir:        dir,
-		Prompt:         "continue",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	events, err := New(bin).Events(context.Background(), handle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := collectEvents(t, events, 1)
-	_, ok := got[0].Payload["item"].(map[string]any)
-	if !ok || eventNormalizedItem(t, got[0])["output"] != "new" {
-		t.Fatalf("resume replayed wrong event = %+v", got[0])
+			handle, err := New(bin).Resume(context.Background(), process.CodexResumeInput{
+				ProcessRunID:   "process-run-resume",
+				SessionID:      "session-1",
+				CodexSessionID: "codex-session-1",
+				Workdir:        dir,
+				Prompt:         "continue",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			events, err := New(bin).Events(context.Background(), handle)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := collectEvents(t, events, 1)
+			_, ok := got[0].Payload["item"].(map[string]any)
+			if !ok || eventNormalizedItem(t, got[0])["output"] != "new" {
+				t.Fatalf("resume replayed wrong event = %+v", got[0])
+			}
+		})
 	}
 }
 
@@ -744,6 +905,127 @@ func TestParseSessionLogLineFiltersEncryptedReasoning(t *testing.T) {
 	}
 	if got := stringValue(eventNormalizedItem(t, readable[0]), "output"); got != "visible summary" {
 		t.Fatalf("readable reasoning output = %q", got)
+	}
+}
+
+func TestParseSessionLogLineBuildsTypedTimelineEvents(t *testing.T) {
+	tests := []struct {
+		name        string
+		raw         string
+		wantPhase   process.CodexPhase
+		wantID      string
+		assertValue func(*testing.T, process.CodexEventContent)
+	}{
+		{
+			name:      "command started",
+			raw:       `{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec","arguments":"{\"cmd\":\"/bin/bash -lc 'npm test'\"}"}}`,
+			wantPhase: process.CodexPhaseStarted,
+			wantID:    "call-shell",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				command, ok := content.(process.CodexCommandContent)
+				if !ok || command.Command != "npm test" {
+					t.Fatalf("command content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "tool completed",
+			raw:       `{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"ok"}}`,
+			wantPhase: process.CodexPhaseCompleted,
+			wantID:    "call-shell",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				tool, ok := content.(process.CodexToolContent)
+				if !ok || tool.Output.Text != "ok" {
+					t.Fatalf("tool result content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "uncorrelated result with command metadata remains tool",
+			raw:       `{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"failed","exit_code":7,"duration_ms":125}}`,
+			wantPhase: process.CodexPhaseCompleted,
+			wantID:    "call-shell",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				tool, ok := content.(process.CodexToolContent)
+				if !ok || tool.Output.Text != "failed" {
+					t.Fatalf("tool result content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "web search cancelled",
+			raw:       `{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"web_search_call","id":"search-1","status":"cancelled","action":{"type":"search","query":"AnyCode"}}}`,
+			wantPhase: process.CodexPhaseCancelled,
+			wantID:    "search-1",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				if _, ok := content.(process.CodexToolContent); !ok {
+					t.Fatalf("web search content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "mcp tool failed",
+			raw:       `{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"mcp_tool_call_end","call_id":"call-mcp","invocation":{"server":"browser","tool":"open"},"result":{"Ok":{"isError":true}}}}`,
+			wantPhase: process.CodexPhaseFailed,
+			wantID:    "call-mcp",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				if _, ok := content.(process.CodexToolContent); !ok {
+					t.Fatalf("mcp content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "assistant message",
+			raw:       `{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"message","id":"message-1","role":"assistant","content":[{"type":"output_text","text":"**done**"}]}}`,
+			wantPhase: process.CodexPhaseStandalone,
+			wantID:    "message-1",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				message, ok := content.(process.CodexMessageContent)
+				if !ok || message.Role != "assistant" || message.Format != process.CodexTextMarkdown || message.Text != "**done**" {
+					t.Fatalf("message content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "file change",
+			raw:       `{"timestamp":"2026-07-08T09:00:03Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"call-patch","status":"completed","changes":{"/workspace/project/a.txt":{"type":"create","unified_diff":"@@ -0,0 +1 @@\\n+hello"}}}}`,
+			wantPhase: process.CodexPhaseStandalone,
+			wantID:    "call-patch",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				change, ok := content.(process.CodexFileChangeContent)
+				if !ok || len(change.Changes) != 1 || change.Changes[0].Kind != "added" || change.Changes[0].Path != "a.txt" {
+					t.Fatalf("file change content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "usage",
+			raw:       `{"timestamp":"2026-07-08T09:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"total_tokens":42},"model_context_window":200000}}}`,
+			wantPhase: process.CodexPhaseStandalone,
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				usage, ok := content.(process.CodexUsageContent)
+				if !ok || usage.InputTokens != 10 || usage.TotalTokens != 42 || usage.ContextWindow != 200000 {
+					t.Fatalf("usage content = %#v", content)
+				}
+			},
+		},
+	}
+
+	for index, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			events := parseSessionLogLine([]byte(test.raw), "/workspace/project", "rollout.jsonl", int64(index+100))
+			if len(events) != 1 {
+				t.Fatalf("events = %#v", events)
+			}
+			event := events[0]
+			if event.Phase != test.wantPhase || event.CorrelationID != test.wantID {
+				t.Fatalf("event phase/id = %q/%q, want %q/%q", event.Phase, event.CorrelationID, test.wantPhase, test.wantID)
+			}
+			if event.SourceOffset != int64(index+100) || event.SourceIndex != 0 {
+				t.Fatalf("event source order = %d/%d", event.SourceOffset, event.SourceIndex)
+			}
+			test.assertValue(t, event.Content)
+		})
 	}
 }
 
