@@ -144,6 +144,11 @@ func QueuePriority(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueuePriority, v))
 }
 
+// QueueInitialStart applies equality check predicate on the "queue_initial_start" field. It's identical to QueueInitialStartEQ.
+func QueueInitialStart(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueInitialStart, v))
+}
+
 // QueueWorkflowRunID applies equality check predicate on the "queue_workflow_run_id" field. It's identical to QueueWorkflowRunIDEQ.
 func QueueWorkflowRunID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueWorkflowRunID, v))
@@ -1227,6 +1232,26 @@ func QueuePriorityEqualFold(v string) predicate.Session {
 // QueuePriorityContainsFold applies the ContainsFold predicate on the "queue_priority" field.
 func QueuePriorityContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldQueuePriority, v))
+}
+
+// QueueInitialStartEQ applies the EQ predicate on the "queue_initial_start" field.
+func QueueInitialStartEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueInitialStart, v))
+}
+
+// QueueInitialStartNEQ applies the NEQ predicate on the "queue_initial_start" field.
+func QueueInitialStartNEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldQueueInitialStart, v))
+}
+
+// QueueInitialStartIsNil applies the IsNil predicate on the "queue_initial_start" field.
+func QueueInitialStartIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldQueueInitialStart))
+}
+
+// QueueInitialStartNotNil applies the NotNil predicate on the "queue_initial_start" field.
+func QueueInitialStartNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldQueueInitialStart))
 }
 
 // QueueWorkflowRunIDEQ applies the EQ predicate on the "queue_workflow_run_id" field.

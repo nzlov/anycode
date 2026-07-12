@@ -92,7 +92,21 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return errors.New("entstore: nil store")
 	}
-	return s.client.Schema.Create(ctx)
+	if err := s.client.Schema.Create(ctx); err != nil {
+		return err
+	}
+	// GLUE: Backfill queues written before queue_initial_start; remove after legacy databases no longer need upgrading.
+	if _, err := s.db.ExecContext(ctx, `UPDATE sessions
+		SET queue_initial_start = CASE
+			WHEN status = ? AND queue_kind = ? AND NOT EXISTS (
+				SELECT 1 FROM process_runs WHERE process_runs.session_id = sessions.id
+			) THEN 1
+			ELSE 0
+		END
+		WHERE queue_initial_start IS NULL`, string(session.StatusQueued), string(session.QueueKindStart)); err != nil {
+		return fmt.Errorf("backfill session queue initial start: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) Projects() *ProjectRepository {

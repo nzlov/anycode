@@ -58,6 +58,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetTodoList(s.TodoList).
 			SetQueueKind(string(s.Queue.Kind)).
 			SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
+			SetQueueInitialStart(s.Queue.InitialStart).
 			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 			SetQueuePrompt(s.Queue.Prompt).
 			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
@@ -116,6 +117,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetTodoList(s.TodoList).
 		SetQueueKind(string(s.Queue.Kind)).
 		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
+		SetQueueInitialStart(s.Queue.InitialStart).
 		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 		SetQueuePrompt(s.Queue.Prompt).
 		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
@@ -472,6 +474,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		Queue: domainsession.QueueIntent{
 			Kind:                 domainsession.QueueKind(row.QueueKind),
 			Priority:             normalizeQueuePriority(domainsession.QueuePriority(row.QueuePriority)),
+			InitialStart:         queueInitialStart(row),
 			WorkflowRunID:        domainsession.WorkflowRunID(row.QueueWorkflowRunID),
 			NodeRunID:            queueNodeRunID,
 			Prompt:               row.QueuePrompt,
@@ -482,6 +485,10 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		UpdatedAt: row.UpdatedAt,
 		ClosedAt:  row.ClosedAt,
 	}
+}
+
+func queueInitialStart(row *ent.Session) bool {
+	return row.QueueInitialStart != nil && *row.QueueInitialStart
 }
 
 func normalizePriority(priority domainsession.Priority) domainsession.Priority {

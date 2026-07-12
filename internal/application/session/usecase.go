@@ -545,7 +545,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		return DTO{}, err
 	}
 	if mode == domain.ModeWorkflow {
-		dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID))
+		dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), true)
 		if startErr != nil {
 			failedAt := s.now()
 			session.Status = domain.StatusFailed
@@ -560,7 +560,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		}
 		return dto, nil
 	}
-	return s.enqueueCodex(ctx, session, codexStartOptions{}, queuePriorityForSession(session))
+	return s.enqueueCodex(ctx, session, codexStartOptions{initialStart: true}, queuePriorityForSession(session))
 }
 
 func (s *Service) initializeWorktree(ctx context.Context, session domain.Session, script string) error {
@@ -662,7 +662,7 @@ func (s *Service) startSession(ctx context.Context, id domain.ID, startOptions S
 		if project.DefaultWorkflowID == nil || strings.TrimSpace(string(*project.DefaultWorkflowID)) == "" {
 			return DTO{}, apperror.New(apperror.CodeWorkflowBlocked, apperror.CategoryWorkflowError, "project default workflow is required for workflow mode").WithUserAction("configure_project_workflow")
 		}
-		return s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID))
+		return s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), session.Status == domain.StatusCreated)
 	}
 	switch session.Status {
 	case domain.StatusQueued:
@@ -676,7 +676,7 @@ func (s *Service) startSession(ctx context.Context, id domain.ID, startOptions S
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
-	options := codexStartOptions{}
+	options := codexStartOptions{initialStart: session.Status == domain.StatusCreated}
 	if session.Status == domain.StatusResumeFailed {
 		options.reviewAfterReuseFailure = true
 	}
@@ -702,9 +702,10 @@ func (s *Service) rerunWorkflowCurrentNode(ctx context.Context, session domain.S
 
 type workflowAdvanceOptions struct {
 	forceNewCodexSession bool
+	initialStart         bool
 }
 
-func (s *Service) startWorkflowSession(ctx context.Context, session domain.Session, workflowDefinitionID domain.WorkflowDefinitionID) (DTO, error) {
+func (s *Service) startWorkflowSession(ctx context.Context, session domain.Session, workflowDefinitionID domain.WorkflowDefinitionID, initialStart bool) (DTO, error) {
 	if s.workflows == nil {
 		return DTO{}, errors.New("session workflow starter is required for workflow mode")
 	}
@@ -738,10 +739,11 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 			CurrentNodeTitle: start.CurrentNodeTitle,
 			Status:           start.Status,
 			Expr:             start.Expr,
-		})
+		}, workflowAdvanceOptions{initialStart: initialStart})
 	}
 	if !start.RequiresCodex {
 		session.Status = domain.StatusWaitingApproval
+		session.Queue = domain.QueueIntent{InitialStart: initialStart}
 		session.UpdatedAt = s.now()
 		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
 			"workflowRunId": string(start.WorkflowRunID),
@@ -756,6 +758,7 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 		nodeRunID:         workflowNodeRunID(start.NodeRunID),
 		prompt:            start.Prompt,
 		workflowJSONRetry: start.RequireJSONRetry,
+		initialStart:      initialStart,
 	}, queuePriorityForSession(session))
 	if err != nil {
 		return s.handleWorkflowNodeFailure(ctx, session, start.WorkflowRunID, start.NodeRunID, "codex_start_failed", err.Error())
@@ -1204,6 +1207,7 @@ type codexStartOptions struct {
 	prompt                  string
 	workflowJSONRetry       bool
 	reviewAfterReuseFailure bool
+	initialStart            bool
 }
 
 func (s *Service) startCodex(ctx context.Context, session domain.Session, options codexStartOptions, force bool) (DTO, error) {
@@ -1430,6 +1434,7 @@ func (s *Service) queueCodexSession(ctx context.Context, session domain.Session,
 	session.Queue = domain.QueueIntent{
 		Kind:                 kind,
 		Priority:             normalizeQueuePriority(priority),
+		InitialStart:         options.initialStart,
 		WorkflowRunID:        options.workflowRunID,
 		NodeRunID:            queueNodeRunID(options.nodeRunID),
 		Prompt:               prompt,
@@ -1546,6 +1551,7 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 					return nil
 				}
 				if current.Mode == domain.ModeWorkflow && current.Queue.WorkflowRunID != "" && current.Queue.NodeRunID != nil {
+					current.Queue.InitialStart = false
 					if _, failErr := s.handleWorkflowNodeFailure(ctx, current, current.Queue.WorkflowRunID, current.Queue.NodeRunID, "codex_start_failed", err.Error()); failErr != nil {
 						return failErr
 					}
@@ -1783,6 +1789,7 @@ func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 		nodeRunID:            nodeRunID,
 		prompt:               session.Queue.Prompt,
 		workflowJSONRetry:    isWorkflowJSONRetryPrompt(session.Queue.Prompt),
+		initialStart:         session.Queue.InitialStart,
 	}
 }
 
@@ -1820,7 +1827,9 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			return processdomain.CodexHandle{}, err
 		}
 	}
-	prompt = promptWithSessionGuidance(prompt, session)
+	if options.initialStart {
+		prompt = promptWithSessionGuidance(prompt, session)
+	}
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
@@ -2282,6 +2291,10 @@ func (s *Service) advanceWorkflowAfterProcessExit(session domain.Session, handle
 }
 
 func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) (DTO, error) {
+	initialStart := advanceOptions.initialStart || session.Queue.InitialStart
+	if session.Queue.Kind == "" {
+		session.Queue = domain.QueueIntent{}
+	}
 	switch {
 	case advance.Blocked:
 		session.Status = domain.StatusBlocked
@@ -2307,9 +2320,13 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 	case advance.Merge != nil:
 		return s.executeWorkflowMerge(ctx, session, advance)
 	case advance.Expr != nil:
-		return s.executeWorkflowExpr(ctx, session, advance)
+		return s.executeWorkflowExpr(ctx, session, advance, workflowAdvanceOptions{
+			forceNewCodexSession: advanceOptions.forceNewCodexSession,
+			initialStart:         initialStart,
+		})
 	case !advance.RequiresCodex:
 		session.Status = domain.StatusWaitingApproval
+		session.Queue = domain.QueueIntent{InitialStart: initialStart}
 		session.UpdatedAt = s.now()
 		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
 			"workflowRunId":    string(advance.WorkflowRunID),
@@ -2327,6 +2344,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 			prompt:                  advance.Prompt,
 			workflowJSONRetry:       advance.RequireJSONRetry,
 			reviewAfterReuseFailure: advanceOptions.forceNewCodexSession,
+			initialStart:            initialStart,
 		}
 		if session.CodexSessionID != "" && !advanceOptions.forceNewCodexSession {
 			options.resumeCodexSessionID = session.CodexSessionID
@@ -2339,7 +2357,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 	}
 }
 
-func (s *Service) executeWorkflowExpr(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) (DTO, error) {
+func (s *Service) executeWorkflowExpr(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) (DTO, error) {
 	if s.workflows == nil {
 		return DTO{}, errors.New("session workflow starter is required for workflow mode")
 	}
@@ -2361,7 +2379,7 @@ func (s *Service) executeWorkflowExpr(ctx context.Context, session domain.Sessio
 	if err != nil {
 		return DTO{}, err
 	}
-	return s.applyWorkflowAdvance(ctx, session, next, workflowAdvanceOptions{})
+	return s.applyWorkflowAdvance(ctx, session, next, advanceOptions)
 }
 
 func runWorkflowExpr(script string, params map[string]any) (map[string]any, error) {
