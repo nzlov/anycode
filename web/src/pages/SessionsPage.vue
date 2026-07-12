@@ -56,6 +56,19 @@
         <template #body-cell-actions="props">
           <q-td :props="props">
             <q-btn
+              v-if="props.row.status === 'queued' && props.row.availableActions.includes('stop')"
+              flat
+              round
+              dense
+              icon="cancel"
+              color="negative"
+              aria-label="取消排队"
+              :loading="cancellingSessionId === props.row.id"
+              @click="cancelQueuedSession(props.row)"
+            >
+              <q-tooltip>取消排队</q-tooltip>
+            </q-btn>
+            <q-btn
               flat
               round
               dense
@@ -90,7 +103,11 @@ import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import { useSessionsPage } from '@/composables/useSessionsPage';
-import type { SessionCard, SessionStatus } from '@/services/sessions';
+import {
+  sessionStatusColor as statusColor,
+  sessionStatusLabel as statusLabel,
+} from '@/services/sessionStatusPresentation';
+import { stopSession, type SessionCard, type SessionStatus } from '@/services/sessions';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -143,6 +160,7 @@ const routeStatus = computed<SessionStatus | 'all'>(() => {
     : 'all';
 });
 const status = ref<SessionStatus | 'all'>(routeStatus.value);
+const cancellingSessionId = ref('');
 scope.value = status.value === 'all' ? '' : status.value;
 
 const columns = [
@@ -224,44 +242,6 @@ onUnmounted(() => {
   stopLiveUpdates();
 });
 
-function statusColor(value: SessionStatus) {
-  const colors: Record<SessionStatus, string> = {
-    created: 'blue-grey',
-    queued: 'warning',
-    starting: 'primary',
-    running: 'positive',
-    waiting_user: 'warning',
-    waiting_approval: 'warning',
-    stopping: 'warning',
-    stopped: 'blue-grey',
-    resume_failed: 'negative',
-    failed: 'negative',
-    blocked: 'negative',
-    completed: 'primary',
-    closed: 'grey',
-  };
-  return colors[value];
-}
-
-function statusLabel(value: SessionStatus) {
-  const labels: Record<SessionStatus, string> = {
-    created: '待运行',
-    queued: '排队中',
-    starting: '启动中',
-    running: '运行中',
-    waiting_user: '待回答',
-    waiting_approval: '待审批',
-    stopping: '停止中',
-    stopped: '已停止',
-    resume_failed: '恢复失败',
-    failed: '失败',
-    blocked: '阻塞',
-    completed: '已完成',
-    closed: '已关闭',
-  };
-  return labels[value];
-}
-
 function onTableRequest(props: {
   pagination: {
     page: number;
@@ -272,6 +252,19 @@ function onTableRequest(props: {
 }) {
   pagination.value = props.pagination;
   void loadSessions();
+}
+
+async function cancelQueuedSession(session: SessionCard) {
+  if (session.status !== 'queued' || !session.availableActions.includes('stop')) return;
+  cancellingSessionId.value = session.id;
+  try {
+    await stopSession(session.id);
+    await loadSessions();
+  } catch {
+    await loadSessions().catch(() => undefined);
+  } finally {
+    cancellingSessionId.value = '';
+  }
 }
 
 function sortValue(sortBy?: string | null, descending = true) {

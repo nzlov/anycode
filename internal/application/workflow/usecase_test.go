@@ -1000,6 +1000,45 @@ func TestMarkResumeFailedForSessionKeepsCurrentNodeAndWaitsForAction(t *testing.
 	}
 }
 
+func TestMarkResumeFailedForSessionIsIdempotentWhileWaitingForAction(t *testing.T) {
+	ctx := context.Background()
+	finishedAt := time.Unix(8, 0).UTC()
+	repo := newFakeRepository()
+	repo.runs = []domain.Run{{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               domain.RunWaitingResumeAction,
+		CurrentNodeID:        "build",
+		Context:              domain.Context{Values: map[string]any{"resume": map[string]any{"status": "failed"}}},
+	}}
+	repo.nodeRuns = []domain.NodeRun{{
+		ID:            "node-run-1",
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Status:        domain.NodeFailed,
+		Attempt:       1,
+		FinishedAt:    &finishedAt,
+	}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
+
+	got, err := service.MarkResumeFailedForSession(ctx, sessiondomain.WorkflowResumeFailureInput{
+		SessionID: "session-1",
+		Code:      "resume_failed",
+		Message:   "resume unavailable",
+	})
+	if err != nil {
+		t.Fatalf("MarkResumeFailedForSession() error = %v", err)
+	}
+	if got.Status != string(domain.RunWaitingResumeAction) {
+		t.Fatalf("MarkResumeFailedForSession() = %#v", got)
+	}
+	if repo.nodeRuns[0].FinishedAt == nil || !repo.nodeRuns[0].FinishedAt.Equal(finishedAt) {
+		t.Fatalf("node run was rewritten: %#v", repo.nodeRuns[0])
+	}
+}
+
 func TestResumeCurrentNodeForSessionBindsExistingAttempt(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

@@ -571,7 +571,7 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	now := time.Unix(30, 0).UTC()
 	sessions := &fakeSessionUseCase{
-		resumeResult: sessionapp.DTO{
+		executeResult: sessionapp.DTO{
 			ID:             "session-1",
 			ProjectID:      "project-1",
 			Requirement:    "resume work",
@@ -588,11 +588,68 @@ func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
-	if sessions.gotResumeID != "session-1" {
-		t.Fatalf("ResumeSession() id = %q", sessions.gotResumeID)
+	if sessions.gotExecuteID != "session-1" {
+		t.Fatalf("ResumeSession() id = %q", sessions.gotExecuteID)
 	}
 	if got.ID != "session-1" || got.Status != "running" || got.CodexSessionID != "codex-session-1" {
 		t.Fatalf("ResumeSession() = %#v", got)
+	}
+}
+
+func TestMutationStartSessionForwardsUnifiedExecutionUseCase(t *testing.T) {
+	now := time.Unix(30, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		executeResult: sessionapp.DTO{
+			ID:          "session-1",
+			ProjectID:   "project-1",
+			Requirement: "start work",
+			Mode:        "chat",
+			Status:      "queued",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+	force := true
+
+	got, err := resolver.StartSession(context.Background(), "session-1", &force)
+	if err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	if sessions.gotExecuteID != "session-1" || !sessions.gotExecuteForce {
+		t.Fatalf("StartSession() input = id=%q force=%v", sessions.gotExecuteID, sessions.gotExecuteForce)
+	}
+	if got.ID != "session-1" || got.Status != "queued" {
+		t.Fatalf("StartSession() = %#v", got)
+	}
+}
+
+func TestMutationExecuteSessionForwardsUseCase(t *testing.T) {
+	now := time.Unix(31, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		executeResult: sessionapp.DTO{
+			ID:             "session-1",
+			ProjectID:      "project-1",
+			Requirement:    "continue work",
+			Mode:           "chat",
+			Status:         "queued",
+			CodexSessionID: "codex-session-1",
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+	force := true
+
+	got, err := resolver.ExecuteSession(context.Background(), "session-1", &force)
+	if err != nil {
+		t.Fatalf("ExecuteSession() error = %v", err)
+	}
+	if sessions.gotExecuteID != "session-1" || !sessions.gotExecuteForce {
+		t.Fatalf("ExecuteSession() input = id=%q force=%v", sessions.gotExecuteID, sessions.gotExecuteForce)
+	}
+	if got.ID != "session-1" || got.Status != "queued" || got.CodexSessionID != "codex-session-1" {
+		t.Fatalf("ExecuteSession() = %#v", got)
 	}
 }
 
@@ -1074,11 +1131,25 @@ type fakeSessionUseCase struct {
 	getResult          sessionapp.DetailDTO
 	gotResumeID        sessiondomain.ID
 	resumeResult       sessionapp.DTO
+	gotExecuteID       sessiondomain.ID
+	gotExecuteForce    bool
+	executeResult      sessionapp.DTO
 	stopProjectID      sessiondomain.ProjectID
 	gotUpdateConfig    sessionapp.UpdateSessionConfigInput
 	updateConfigResult sessionapp.DTO
 	gotAppend          sessionapp.AppendPromptInput
 	appendResult       sessionapp.PromptAppendDTO
+}
+
+func (f *fakeSessionUseCase) ExecuteSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
+	f.gotExecuteID = id
+	return f.executeResult, f.err
+}
+
+func (f *fakeSessionUseCase) ExecuteSessionWithOptions(_ context.Context, id sessiondomain.ID, options sessionapp.StartSessionOptions) (sessionapp.DTO, error) {
+	f.gotExecuteID = id
+	f.gotExecuteForce = options.Force
+	return f.executeResult, f.err
 }
 
 func (f *fakeSessionUseCase) GetSession(_ context.Context, id sessiondomain.ID) (sessionapp.DetailDTO, error) {

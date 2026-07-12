@@ -3,11 +3,16 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 )
 
-var ErrSessionAlreadyExists = errors.New("session already exists")
+var (
+	ErrSessionAlreadyExists    = errors.New("session already exists")
+	ErrInvalidStatusTransition = errors.New("invalid session status transition")
+	ErrInvalidQueueIntent      = errors.New("invalid session queue intent")
+)
 
 type ID string
 type ProjectID string
@@ -113,6 +118,96 @@ type QueueIntent struct {
 	NodeRunID            *NodeRunID
 	Prompt               string
 	ResumeCodexSessionID string
+}
+
+func (s *Session) QueueExecution(intent QueueIntent, now time.Time) error {
+	if !validQueueKind(intent.Kind) || !validQueuePriority(intent.Priority) {
+		return fmt.Errorf("%w: kind=%q priority=%q", ErrInvalidQueueIntent, intent.Kind, intent.Priority)
+	}
+	if !canTransition(s.Status, StatusQueued) {
+		return invalidTransition(s.Status, StatusQueued)
+	}
+	s.Status = StatusQueued
+	s.Queue = intent
+	s.QueuedAt = timePtr(now)
+	s.LastRunAt = timePtr(now)
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s *Session) TransitionTo(next Status, now time.Time) error {
+	if next == StatusQueued {
+		return fmt.Errorf("%w: use QueueExecution", ErrInvalidQueueIntent)
+	}
+	if !canTransition(s.Status, next) {
+		return invalidTransition(s.Status, next)
+	}
+	s.Status = next
+	s.UpdatedAt = now
+	if next == StatusStarting {
+		s.LastRunAt = timePtr(now)
+	}
+	s.clearQueue()
+	return nil
+}
+
+func (s *Session) Close(reason CloseReason, now time.Time) error {
+	if err := s.TransitionTo(StatusClosed, now); err != nil {
+		return err
+	}
+	s.CloseReason = &reason
+	s.ClosedAt = timePtr(now)
+	return nil
+}
+
+func (s *Session) clearQueue() {
+	s.QueuedAt = nil
+	s.Queue = QueueIntent{}
+}
+
+var allowedStatusTransitions = map[Status][]Status{
+	StatusCreated:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusQueued:          {StatusStarting, StatusRunning, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusClosed},
+	StatusStarting:        {StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
+	StatusRunning:         {StatusQueued, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusWaitingUser:     {StatusQueued, StatusRunning, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusWaitingApproval: {StatusQueued, StatusStarting, StatusRunning, StatusWaitingUser, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusStopping:        {StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
+	StatusStopped:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusResumeFailed:    {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusFailed:          {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusBlocked:         {StatusClosed},
+	StatusCompleted:       {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusClosed},
+	StatusClosed:          {},
+}
+
+func canTransition(current Status, next Status) bool {
+	if current == next {
+		return true
+	}
+	for _, candidate := range allowedStatusTransitions[current] {
+		if candidate == next {
+			return true
+		}
+	}
+	return false
+}
+
+func validQueueKind(kind QueueKind) bool {
+	return kind == QueueKindStart || kind == QueueKindResume || kind == QueueKindAnswerUser
+}
+
+func validQueuePriority(priority QueuePriority) bool {
+	return priority == QueuePriorityImmediate || priority == QueuePriorityHigh || priority == QueuePriorityMedium || priority == QueuePriorityLow
+}
+
+func invalidTransition(current Status, next Status) error {
+	return fmt.Errorf("%w: %s -> %s", ErrInvalidStatusTransition, current, next)
+}
+
+func timePtr(value time.Time) *time.Time {
+	copy := value
+	return &copy
 }
 
 type Config struct {

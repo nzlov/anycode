@@ -155,6 +155,7 @@ type ComplexityRoot struct {
 		DeleteQuickCommand         func(childComplexity int, id string) int
 		DeleteSessionAttachment    func(childComplexity int, id string) int
 		DeleteStagedAttachment     func(childComplexity int, id string) int
+		ExecuteSession             func(childComplexity int, id string, force *bool) int
 		RemoveProject              func(childComplexity int, id string) int
 		ResumeSession              func(childComplexity int, id string, force *bool) int
 		SaveWorkflowDefinition     func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
@@ -470,6 +471,7 @@ type MutationResolver interface {
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
 	SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error)
 	UpdateSessionConfig(ctx context.Context, input model.UpdateSessionConfigInput) (*model.Session, error)
+	ExecuteSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	StartSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	StopSession(ctx context.Context, id string) (*model.Session, error)
 	ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error)
@@ -977,6 +979,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DeleteStagedAttachment(childComplexity, args["id"].(string)), true
+	case "Mutation.executeSession":
+		if e.ComplexityRoot.Mutation.ExecuteSession == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_executeSession_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ExecuteSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
 	case "Mutation.removeProject":
 		if e.ComplexityRoot.Mutation.RemoveProject == nil {
 			break
@@ -2528,6 +2541,7 @@ type Mutation {
   createSession(input: CreateSessionInput!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
   updateSessionConfig(input: UpdateSessionConfigInput!): Session!
+  executeSession(id: ID!, force: Boolean): Session!
   startSession(id: ID!, force: Boolean): Session!
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
@@ -3218,6 +3232,22 @@ func (ec *executionContext) field_Mutation_deleteStagedAttachment_args(ctx conte
 		return nil, err
 	}
 	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_executeSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "force", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["force"] = arg1
 	return args, nil
 }
 
@@ -5878,6 +5908,79 @@ func (ec *executionContext) fieldContext_Mutation_updateSessionConfig(ctx contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateSessionConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_executeSession(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_executeSession,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ExecuteSession(ctx, fc.Args["id"].(string), fc.Args["force"].(*bool))
+		},
+		nil,
+		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_executeSession(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Session_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_Session_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_Session_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Session_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_Session_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_Session_config(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_Session_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_Session_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_executeSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -16881,6 +16984,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateSessionConfig":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateSessionConfig(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "executeSession":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_executeSession(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++

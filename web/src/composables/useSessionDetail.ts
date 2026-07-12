@@ -16,8 +16,7 @@ import {
   getSessionEventPage,
   subscribeSessionEvents,
   subscribeSessionStateUpdates,
-  resumeSession as resumeSessionRequest,
-  startSession as startSessionRequest,
+  executeSession as executeSessionRequest,
   submitQuestionBatch,
   type QuestionAnswerInput,
   type QuestionBatch,
@@ -46,8 +45,7 @@ export function useSessionDetail(sessionId: string) {
   const loading = ref(false);
   const loadingOlderEvents = ref(false);
   const appending = ref(false);
-  const starting = ref(false);
-  const resuming = ref(false);
+  const executing = ref(false);
   const stopping = ref(false);
   const closing = ref(false);
   const updatingConfig = ref(false);
@@ -177,31 +175,17 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function startSession() {
-    starting.value = true;
+  async function executeSession() {
+    executing.value = true;
     error.value = '';
     try {
-      await startSessionRequest(sessionId, session.value?.status === 'queued');
+      await executeSessionRequest(sessionId, session.value?.status === 'queued');
       await loadSessionDetail();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '运行会话失败';
       throw err;
     } finally {
-      starting.value = false;
-    }
-  }
-
-  async function resumeSession() {
-    resuming.value = true;
-    error.value = '';
-    try {
-      await resumeSessionRequest(sessionId, session.value?.status === 'queued');
-      await loadSessionDetail();
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : '恢复会话失败';
-      throw err;
-    } finally {
-      resuming.value = false;
+      executing.value = false;
     }
   }
 
@@ -450,8 +434,7 @@ export function useSessionDetail(sessionId: string) {
     loading,
     loadingOlderEvents,
     appending,
-    starting,
-    resuming,
+    executing,
     stopping,
     closing,
     updatingConfig,
@@ -460,8 +443,7 @@ export function useSessionDetail(sessionId: string) {
     error,
     loadSessionDetail,
     appendDescription,
-    startSession,
-    resumeSession,
+    executeSession,
     stopSession,
     closeSession,
     updateConfig,
