@@ -54,6 +54,33 @@ test('session event presentation moves usage out of the event list into session 
   assert.match(pageSource, /latestTokenUsage\.totalTokens/);
 });
 
+test('session text messages fold runtime context and AnyCode guidance', () => {
+  const componentSource = readFileSync(
+    new URL('../src/components/SessionTextMessage.vue', import.meta.url),
+    'utf8',
+  );
+  const presentationSource = readFileSync(
+    new URL('../src/services/sessionTimelinePresentation.ts', import.meta.url),
+    'utf8',
+  );
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(componentSource, /sessionTextPresentation/);
+  assert.match(componentSource, /knownUserPrompts/);
+  assert.match(componentSource, /workflowPrompt/);
+  assert.match(componentSource, /presentation\.foldedLabel/);
+  assert.match(componentSource, /:aria-expanded="expanded"/);
+  assert.match(presentationSource, /# AGENTS\.md instructions for/);
+  assert.match(presentationSource, /<environment_context>/);
+  assert.match(presentationSource, /AnyCode 附加说明/);
+  assert.match(pageSource, /const knownUserPrompts = computed/);
+  assert.match(pageSource, /:known-user-prompts="knownUserPrompts"/);
+  assert.match(pageSource, /:workflow-prompt="session\?\.mode === 'workflow'"/);
+});
+
 test('session detail buffers live events while loading the transcript snapshot', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),

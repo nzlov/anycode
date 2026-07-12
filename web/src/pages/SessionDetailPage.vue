@@ -32,7 +32,11 @@
                 class="event-list__item"
                 :data-timeline-id="event.id"
               >
-                <SessionEventMessage :event="event" />
+                <SessionEventMessage
+                  :event="event"
+                  :known-user-prompts="knownUserPrompts"
+                  :workflow-prompt="session?.mode === 'workflow'"
+                />
               </div>
             </div>
           </div>
@@ -509,6 +513,15 @@ const {
   stopLiveUpdates,
 } = useSessionDetail(sessionId);
 
+// GLUE: Persisted prompt text disambiguates user-authored copies of injected guidance.
+// Remove this projection when timeline messages expose their user/injected provenance.
+const knownUserPrompts = computed(() => {
+  const current = session.value;
+  if (!current) return [];
+  return [current.summary, ...current.promptAppends.map((prompt) => prompt.body)]
+    .map((prompt) => prompt.trim())
+    .filter(Boolean);
+});
 const canExecute = computed(() => session.value?.availableActions.includes('execute') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
 const canCancelQueue = computed(
