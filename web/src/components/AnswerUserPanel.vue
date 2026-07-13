@@ -210,6 +210,16 @@ function submit() {
 <style scoped>
 .answer-panel {
   position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.answer-panel > .q-tab-panels {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .empty-state {
@@ -299,7 +309,7 @@ function submit() {
   padding: 12px 36px 22px;
 }
 
-@media (max-width: 699px) {
+@media (max-width: 599.98px) {
   .question-tabs {
     margin: 12px 16px 0;
   }

@@ -221,7 +221,7 @@
     />
 
     <q-dialog v-model="approvalDialog" :maximized="$q.screen.lt.sm">
-      <q-card class="forward-approval-dialog">
+      <q-card class="forward-approval-dialog app-content-dialog">
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
             <q-tab name="output" icon="smart_toy" label="模型输出" />

@@ -6,7 +6,7 @@
     aria-label="项目设置"
     @update:model-value="emitModel"
   >
-    <q-card class="project-settings-dialog">
+    <q-card class="project-settings-dialog app-content-dialog">
       <q-card-section class="row items-center q-pb-sm">
         <div>
           <div class="text-subtitle1 text-weight-bold">项目设置</div>
