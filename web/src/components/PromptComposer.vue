@@ -108,8 +108,8 @@
       <slot name="actions" />
     </div>
 
-    <q-dialog v-model="previewOpen">
-      <q-card class="attachment-preview-card">
+    <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.sm">
+      <q-card class="attachment-preview-card app-content-dialog">
         <q-card-section class="row items-center q-pb-sm">
           <div class="text-subtitle2 text-weight-bold ellipsis">{{ previewName }}</div>
           <q-space />

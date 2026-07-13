@@ -1,11 +1,11 @@
 <template>
   <q-dialog
     :model-value="modelValue"
-    :maximized="$q.screen.width <= 699"
+    :maximized="$q.screen.lt.sm"
     persistent
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <q-card class="answer-dialog">
+    <q-card class="answer-dialog app-content-dialog">
       <q-card-section class="dialog-header">
         <div>
           <div class="text-subtitle1 text-weight-bold">待回答问题</div>
@@ -18,6 +18,7 @@
       <q-separator />
 
       <AnswerUserPanel
+        class="answer-dialog__body"
         :batches="batches"
         :loading="loading"
         :submitting="submitting"
@@ -49,8 +50,15 @@ const emit = defineEmits<{
 
 <style scoped>
 .answer-dialog {
-  width: min(880px, 92vw);
-  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.answer-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .dialog-header {
@@ -58,15 +66,5 @@ const emit = defineEmits<{
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-}
-
-@media (max-width: 699px) {
-  .answer-dialog {
-    width: 100vw;
-    max-width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
 }
 </style>

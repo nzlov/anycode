@@ -411,8 +411,12 @@
       </aside>
     </div>
 
-    <q-dialog v-model="promptEditDialogOpen" :persistent="promptEditSaving">
-      <q-card class="prompt-edit-dialog" aria-label="编辑追加提示">
+    <q-dialog
+      v-model="promptEditDialogOpen"
+      :maximized="$q.screen.lt.sm"
+      :persistent="promptEditSaving"
+    >
+      <q-card class="prompt-edit-dialog app-content-dialog" aria-label="编辑追加提示">
         <q-card-section class="prompt-edit-dialog__header">
           <div class="text-subtitle1 text-weight-bold">编辑追加提示</div>
           <q-btn
@@ -478,8 +482,8 @@
       </q-card>
     </q-dialog>
 
-    <q-dialog v-model="fileDiffDialog">
-      <q-card class="file-diff-dialog">
+    <q-dialog v-model="fileDiffDialog" :maximized="$q.screen.lt.sm">
+      <q-card class="file-diff-dialog app-content-dialog">
         <q-card-section class="diff-dialog-header">
           <div class="file-title">
             <q-icon
@@ -1331,8 +1335,9 @@ async function scrollEventsToBottom() {
 }
 
 .prompt-edit-dialog {
-  width: min(560px, 92vw);
-  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .prompt-edit-dialog__header {
@@ -1349,7 +1354,8 @@ async function scrollEventsToBottom() {
 }
 
 .prompt-edit-dialog__body {
-  max-height: 70vh;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 
@@ -1361,15 +1367,14 @@ async function scrollEventsToBottom() {
 }
 
 .file-diff-dialog {
-  width: min(1100px, 92vw);
-  max-width: 92vw;
-  max-height: 86vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .diff-dialog-header {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1386,6 +1391,12 @@ async function scrollEventsToBottom() {
 .file-title span {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.file-diff-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 @media (max-width: 1023.98px) {
@@ -1426,11 +1437,4 @@ async function scrollEventsToBottom() {
   }
 }
 
-@media (max-width: 699px) {
-  .file-diff-dialog {
-    width: 100vw;
-    max-width: 100vw;
-    max-height: 100vh;
-  }
-}
 </style>

@@ -41,6 +41,7 @@ test('prompt runtime controls have one shared component owner', () => {
 test('new session dialog uses Quasar mobile maximization and one scrolling body', () => {
   assert.match(newSessionSource, /:maximized="\$q\.screen\.lt\.sm"/);
   assert.match(newSessionSource, /const \$q = useQuasar\(\)/);
+  assert.match(newSessionSource, /class="new-session-dialog app-content-dialog"/);
   assert.match(
     stylesSource,
     /\.new-session-dialog\s*{[^}]*display:\s*flex[^}]*flex-direction:\s*column/s,
@@ -48,16 +49,18 @@ test('new session dialog uses Quasar mobile maximization and one scrolling body'
   assert.match(stylesSource, /\.new-session-body\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(
     smallStyles,
-    /\.new-session-dialog\s*{[^}]*width:\s*100vw\s*!important[^}]*height:\s*100dvh/s,
+    /\.app-content-dialog\s*{[^}]*width:\s*100vw\s*!important[^}]*height:\s*100dvh/s,
   );
 });
 
 test('answer user dialog uses Quasar mobile maximization without viewport clipping', () => {
-  assert.match(answerUserSource, /:maximized="\$q\.screen\.width <= 699"/);
+  assert.match(answerUserSource, /:maximized="\$q\.screen\.lt\.sm"/);
+  assert.match(answerUserSource, /class="answer-dialog app-content-dialog"/);
   assert.match(
-    answerUserSource,
-    /@media \(max-width: 699px\)[\s\S]*?\.answer-dialog\s*{[^}]*height:\s*100dvh[^}]*max-height:\s*100dvh/s,
+    smallStyles,
+    /\.app-content-dialog\s*{[^}]*height:\s*100dvh\s*!important[^}]*max-height:\s*100dvh\s*!important/s,
   );
+  assert.doesNotMatch(answerUserSource, /@media \(max-width:\s*699px\)/);
 });
 
 test('headless approval fixture includes the required workflow node position', () => {

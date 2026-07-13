@@ -6,7 +6,7 @@
     @update:model-value="emitModel"
   >
     <q-card
-      class="new-session-dialog"
+      class="new-session-dialog app-content-dialog"
       :inert="branchesLoading"
       :aria-busy="branchesLoading"
     >

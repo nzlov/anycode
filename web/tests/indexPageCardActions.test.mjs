@@ -133,12 +133,12 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /submitWorkflowApproval\(/);
   assert.doesNotMatch(overviewSource, /approvalRejectPrompt|recentModelOutput/);
   assert.match(
-    stylesSource,
-    /\.forward-approval-dialog\s*{[^}]*width:\s*min\(960px, calc\(100vw - 32px\)\);/s,
+    overviewSource,
+    /class="forward-approval-dialog app-content-dialog"/,
   );
   assert.match(
     stylesSource,
-    /\.forward-approval-dialog\s*{[^}]*max-width:\s*calc\(100vw - 32px\) !important;/s,
+    /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important[^}]*max-width:\s*90vw\s*!important/s,
   );
   assert.match(sessionsSource, /pendingApproval\s*\{/);
   assert.match(sessionsSource, /workflowRunId/);
