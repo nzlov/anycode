@@ -539,6 +539,14 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 		}
 		return nil
 	}
+	flushTranscriptMessages := func(projected []process.CodexEvent) error {
+		for _, event := range projected {
+			if err := emit(event); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	for {
 		line, err := reader.ReadBytes('\n')
 		if skipLeadingLineTerminator && len(line) > 0 {
@@ -584,6 +592,12 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 			}
 			return exitResult, err
 		}
+		if err := flushTranscriptMessages(projector.flushExpiredPending(time.Now())); err != nil {
+			if !processExited {
+				exitResult = waitForExit(exited)
+			}
+			return exitResult, err
+		}
 		if err == nil {
 			continue
 		}
@@ -608,6 +622,9 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 					return exitResult, ctx.Err()
 				}
 			}
+			if err := flushTranscriptMessages(projector.flushPending()); err != nil {
+				return exitResult, err
+			}
 			return exitResult, nil
 		}
 		select {
@@ -626,6 +643,12 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 		case exitResult = <-exited:
 			processExited = true
 		case <-time.After(50 * time.Millisecond):
+		}
+		if err := flushTranscriptMessages(projector.flushExpiredPending(time.Now())); err != nil {
+			if !processExited {
+				exitResult = waitForExit(exited)
+			}
+			return exitResult, err
 		}
 	}
 }
@@ -673,7 +696,7 @@ func primeCodexTranscriptProjector(path string, limit int64, sessionCWD string, 
 				sessionCWD = cwd
 			}
 			parsed := parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)
-			projector.project(parsed)
+			projector.prime(parsed)
 		}
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			return sessionCWD, 0, false, readErr
@@ -913,6 +936,7 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 		}
 		return nil, fmt.Errorf("read codex session log: %w", err)
 	}
+	events = append(events, projector.flushPending()...)
 	return events, nil
 }
 
@@ -1150,38 +1174,98 @@ func finalizeCodexEvents(events []process.CodexEvent, sourceID string, offset in
 }
 
 type codexTranscriptProjector struct {
-	commands       map[string]process.CodexCommandContent
-	recentMessages map[string]time.Time
-	visibility     standardTranscriptVisibility
-	lastOccurred   time.Time
+	commands        map[string]process.CodexCommandContent
+	recentCanonical []transcriptCanonicalMessage
+	pendingMessages []pendingTranscriptMessage
+	bufferedEvents  []process.CodexEvent
+	visibility      standardTranscriptVisibility
+	lastOccurred    time.Time
+}
+
+const transcriptMessageMirrorWindow = 100 * time.Millisecond
+
+type transcriptCanonicalMessage struct {
+	signature  string
+	occurredAt time.Time
+}
+
+type pendingTranscriptMessage struct {
+	event      process.CodexEvent
+	signature  string
+	historical bool
+	pendingAt  time.Time
 }
 
 func newCodexTranscriptProjector() *codexTranscriptProjector {
 	return &codexTranscriptProjector{
-		commands:       map[string]process.CodexCommandContent{},
-		recentMessages: map[string]time.Time{},
-		visibility:     newStandardTranscriptVisibility(),
+		commands:   map[string]process.CodexCommandContent{},
+		visibility: newStandardTranscriptVisibility(),
 	}
 }
 
 func (p *codexTranscriptProjector) project(events []process.CodexEvent) []process.CodexEvent {
+	return p.projectEvents(events, false)
+}
+
+func (p *codexTranscriptProjector) prime(events []process.CodexEvent) {
+	p.projectEvents(events, true)
+}
+
+func (p *codexTranscriptProjector) projectEvents(events []process.CodexEvent, historical bool) []process.CodexEvent {
 	if p == nil {
+		if historical {
+			return nil
+		}
 		return events
 	}
-	filtered := events[:0]
+	projected := make([]process.CodexEvent, 0, len(events))
 	for index := range events {
 		event := &events[index]
 		p.fillOccurredAt(event)
 		p.mergeCommandState(event)
-		if p.duplicateRecentMessage(*event) {
+		p.pruneCanonicalMessages(event.CreatedAt)
+		projected = append(projected, p.expirePendingMessages(event.CreatedAt)...)
+		visible := p.visibility.visible(*event)
+		if !visible {
 			continue
 		}
-		if !p.visibility.visible(*event) {
+		canonicalSignature, canonical := canonicalMessageSignature(*event)
+		if canonical {
+			if pending, matched := p.consumePendingMessage(canonicalSignature, event.CreatedAt); matched {
+				if !historical && !pending.historical {
+					p.removeBufferedEvent(pending.event.EventID)
+					p.bufferedEvents = append(p.bufferedEvents, *event)
+				}
+				projected = append(projected, p.releaseReadyBuffered()...)
+				continue
+			}
+			p.recentCanonical = append(p.recentCanonical, transcriptCanonicalMessage{
+				signature:  canonicalSignature,
+				occurredAt: event.CreatedAt,
+			})
+			projected = append(projected, p.queueVisibleEvent(*event, historical)...)
 			continue
 		}
-		filtered = append(filtered, *event)
+		if signature, mirror := eventMessageMirrorSignature(*event); mirror {
+			if p.consumeCanonicalMessage(signature, event.CreatedAt) {
+				continue
+			}
+			pendingAt := time.Time{}
+			if !historical {
+				pendingAt = time.Now()
+			}
+			p.pendingMessages = append(p.pendingMessages, pendingTranscriptMessage{
+				event:      *event,
+				signature:  signature,
+				historical: historical,
+				pendingAt:  pendingAt,
+			})
+			projected = append(projected, p.queueVisibleEvent(*event, historical)...)
+			continue
+		}
+		projected = append(projected, p.queueVisibleEvent(*event, historical)...)
 	}
-	return filtered
+	return projected
 }
 
 func (p *codexTranscriptProjector) fillOccurredAt(event *process.CodexEvent) {
@@ -1227,20 +1311,154 @@ func (p *codexTranscriptProjector) mergeCommandState(event *process.CodexEvent) 
 	}
 }
 
-func (p *codexTranscriptProjector) duplicateRecentMessage(event process.CodexEvent) bool {
-	message, ok := event.Content.(process.CodexMessageContent)
-	if !ok || message.Text == "" {
-		return false
+func (p *codexTranscriptProjector) flushExpiredPending(now time.Time) []process.CodexEvent {
+	if p == nil || len(p.pendingMessages) == 0 {
+		return nil
 	}
-	signature := message.Role + "\x00" + message.Text
-	if previous, exists := p.recentMessages[signature]; exists && eventMessageMirrorCandidate(event) {
-		delta := event.CreatedAt.Sub(previous)
-		if delta >= 0 && delta <= 2*time.Second {
-			return true
+	pending := p.pendingMessages[:0]
+	for _, message := range p.pendingMessages {
+		if message.historical || message.pendingAt.IsZero() || now.Sub(message.pendingAt) < transcriptMessageMirrorWindow {
+			pending = append(pending, message)
 		}
 	}
-	p.recentMessages[signature] = event.CreatedAt
+	p.pendingMessages = pending
+	return p.releaseReadyBuffered()
+}
+
+func (p *codexTranscriptProjector) flushPending() []process.CodexEvent {
+	if p == nil {
+		return nil
+	}
+	p.pendingMessages = nil
+	buffered := p.bufferedEvents
+	p.bufferedEvents = nil
+	return buffered
+}
+
+func (p *codexTranscriptProjector) expirePendingMessages(occurredAt time.Time) []process.CodexEvent {
+	pending := p.pendingMessages[:0]
+	for _, message := range p.pendingMessages {
+		if occurredAt.Sub(message.event.CreatedAt) <= transcriptMessageMirrorWindow {
+			pending = append(pending, message)
+		}
+	}
+	p.pendingMessages = pending
+	return p.releaseReadyBuffered()
+}
+
+func (p *codexTranscriptProjector) consumePendingMessage(signature string, occurredAt time.Time) (pendingTranscriptMessage, bool) {
+	matchedIndex := -1
+	matchedDelta := time.Duration(0)
+	for index, pending := range p.pendingMessages {
+		if pending.signature != signature {
+			continue
+		}
+		delta := occurredAt.Sub(pending.event.CreatedAt)
+		if delta < 0 || delta > transcriptMessageMirrorWindow {
+			continue
+		}
+		if matchedIndex == -1 || delta < matchedDelta {
+			matchedIndex = index
+			matchedDelta = delta
+		}
+	}
+	if matchedIndex == -1 {
+		return pendingTranscriptMessage{}, false
+	}
+	matched := p.pendingMessages[matchedIndex]
+	p.pendingMessages = append(p.pendingMessages[:matchedIndex], p.pendingMessages[matchedIndex+1:]...)
+	return matched, true
+}
+
+func (p *codexTranscriptProjector) queueVisibleEvent(event process.CodexEvent, historical bool) []process.CodexEvent {
+	if historical {
+		return nil
+	}
+	p.bufferedEvents = append(p.bufferedEvents, event)
+	return p.releaseReadyBuffered()
+}
+
+func (p *codexTranscriptProjector) releaseReadyBuffered() []process.CodexEvent {
+	if len(p.bufferedEvents) == 0 {
+		return nil
+	}
+	pendingEventIDs := make(map[string]struct{}, len(p.pendingMessages))
+	for _, pending := range p.pendingMessages {
+		if !pending.historical {
+			pendingEventIDs[pending.event.EventID] = struct{}{}
+		}
+	}
+	releaseCount := len(p.bufferedEvents)
+	for index, event := range p.bufferedEvents {
+		if _, pending := pendingEventIDs[event.EventID]; pending {
+			releaseCount = index
+			break
+		}
+	}
+	if releaseCount == 0 {
+		return nil
+	}
+	ready := append([]process.CodexEvent(nil), p.bufferedEvents[:releaseCount]...)
+	p.bufferedEvents = append(p.bufferedEvents[:0], p.bufferedEvents[releaseCount:]...)
+	return ready
+}
+
+func (p *codexTranscriptProjector) removeBufferedEvent(eventID string) {
+	for index, event := range p.bufferedEvents {
+		if event.EventID == eventID {
+			p.bufferedEvents = append(p.bufferedEvents[:index], p.bufferedEvents[index+1:]...)
+			return
+		}
+	}
+}
+
+func (p *codexTranscriptProjector) consumeCanonicalMessage(signature string, occurredAt time.Time) bool {
+	for index, canonical := range p.recentCanonical {
+		if canonical.signature != signature {
+			continue
+		}
+		delta := occurredAt.Sub(canonical.occurredAt)
+		if delta < 0 || delta > transcriptMessageMirrorWindow {
+			continue
+		}
+		p.recentCanonical = append(p.recentCanonical[:index], p.recentCanonical[index+1:]...)
+		return true
+	}
 	return false
+}
+
+func (p *codexTranscriptProjector) pruneCanonicalMessages(occurredAt time.Time) {
+	recent := p.recentCanonical[:0]
+	for _, canonical := range p.recentCanonical {
+		delta := occurredAt.Sub(canonical.occurredAt)
+		if delta < 0 || delta <= transcriptMessageMirrorWindow {
+			recent = append(recent, canonical)
+		}
+	}
+	p.recentCanonical = recent
+}
+
+func messageSignature(event process.CodexEvent) (string, bool) {
+	message, ok := event.Content.(process.CodexMessageContent)
+	if !ok || message.Text == "" {
+		return "", false
+	}
+	return message.Role + "\x00" + message.Text, true
+}
+
+func eventMessageMirrorSignature(event process.CodexEvent) (string, bool) {
+	if !eventMessageMirrorCandidate(event) {
+		return "", false
+	}
+	return messageSignature(event)
+}
+
+func canonicalMessageSignature(event process.CodexEvent) (string, bool) {
+	item := mapValue(event.Payload["item"])
+	if event.Type != "item.completed" || stringValue(item, "type") != "message" || stringValue(item, "role") != "assistant" {
+		return "", false
+	}
+	return messageSignature(event)
 }
 
 func eventMessageMirrorCandidate(event process.CodexEvent) bool {

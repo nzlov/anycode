@@ -154,6 +154,109 @@ func TestPrimeCodexTranscriptProjectorCorrelatesCommandAcrossResumeBaseline(t *t
 	}
 }
 
+func TestPrimeCodexTranscriptProjectorDoesNotReplayMessageMirrorAcrossResumeBaseline(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout-resume-message.jsonl")
+	prefix := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"/workspace/project"}}
+`
+	mirror := `{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"working"}}
+`
+	canonical := `{"timestamp":"2026-07-08T09:00:01.022Z","type":"response_item","payload":{"type":"message","id":"msg-1","role":"assistant","content":[{"type":"output_text","text":"working"}]}}
+`
+	full := prefix + mirror + canonical
+	if err := os.WriteFile(path, []byte(full), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name      string
+		baseline  int64
+		wantCount int
+	}{
+		{name: "before mirror", baseline: int64(len(prefix)), wantCount: 1},
+		{name: "after mirror", baseline: int64(len(prefix + mirror)), wantCount: 0},
+		{name: "after canonical", baseline: int64(len(full)), wantCount: 0},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			projector := newCodexTranscriptProjector()
+			_, resumeOffset, skipLeadingLineTerminator, err := primeCodexTranscriptProjector(path, test.baseline, "/workspace/project", filepath.Base(path), projector)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if skipLeadingLineTerminator {
+				t.Fatal("newline-terminated baseline must not skip a future line terminator")
+			}
+
+			var resumed []process.CodexEvent
+			tail := strings.TrimSuffix(full[resumeOffset:], "\n")
+			lineOffset := resumeOffset
+			if tail != "" {
+				for _, line := range strings.Split(tail, "\n") {
+					parsed := parseSessionLogLine([]byte(line), "/workspace/project", filepath.Base(path), lineOffset)
+					resumed = append(resumed, projector.project(parsed)...)
+					lineOffset += int64(len(line) + 1)
+				}
+			}
+			resumed = append(resumed, projector.flushPending()...)
+			if len(resumed) != test.wantCount {
+				t.Fatalf("resumed events = %d, want %d: %#v", len(resumed), test.wantCount, resumed)
+			}
+			if test.wantCount == 1 && !strings.Contains(resumed[0].EventID, "msg-1") {
+				t.Fatalf("resumed event id = %q, want canonical message", resumed[0].EventID)
+			}
+		})
+	}
+}
+
+func TestPrimedMessageMirrorDoesNotDelayNewCanonicalMessagePastWindow(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	historicalMirror := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"old"}}`), "/workspace/project", "rollout.jsonl", 0)
+	newCanonical := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01.022Z","type":"response_item","payload":{"type":"message","id":"msg-new","role":"assistant","content":[{"type":"output_text","text":"new"}]}}`), "/workspace/project", "rollout.jsonl", 1)
+	projector.prime(historicalMirror)
+	got := projector.project(newCanonical)
+	if len(got) != 1 || !strings.Contains(got[0].EventID, "msg-new") {
+		t.Fatalf("new canonical after primed mirror = %#v", got)
+	}
+}
+
+func TestCodexTranscriptProjectorKeepsMirrorPendingAcrossInterleavedEvent(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	lines := []string{
+		`{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"working"}}`,
+		`{"timestamp":"2026-07-08T09:00:01.010Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}}`,
+		`{"timestamp":"2026-07-08T09:00:01.022Z","type":"response_item","payload":{"type":"message","id":"msg-working","role":"assistant","content":[{"type":"output_text","text":"working"}]}}`,
+	}
+	var got []process.CodexEvent
+	for index, line := range lines {
+		parsed := parseSessionLogLine([]byte(line), "/workspace/project", "rollout.jsonl", int64(index))
+		got = append(got, projector.project(parsed)...)
+	}
+	got = append(got, projector.flushPending()...)
+	if len(got) != 2 || got[0].Type != "token_count" || !strings.Contains(got[1].EventID, "msg-working") {
+		t.Fatalf("interleaved mirror events = %#v", got)
+	}
+}
+
+func TestCodexTranscriptProjectorCorrelatesMultiplePendingMirrors(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	lines := []string{
+		`{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"first"}}`,
+		`{"timestamp":"2026-07-08T09:00:01.010Z","type":"event_msg","payload":{"type":"agent_message","message":"second"}}`,
+		`{"timestamp":"2026-07-08T09:00:01.020Z","type":"response_item","payload":{"type":"message","id":"msg-first","role":"assistant","content":[{"type":"output_text","text":"first"}]}}`,
+		`{"timestamp":"2026-07-08T09:00:01.030Z","type":"response_item","payload":{"type":"message","id":"msg-second","role":"assistant","content":[{"type":"output_text","text":"second"}]}}`,
+	}
+	var got []process.CodexEvent
+	for index, line := range lines {
+		parsed := parseSessionLogLine([]byte(line), "/workspace/project", "rollout.jsonl", int64(index))
+		got = append(got, projector.project(parsed)...)
+	}
+	got = append(got, projector.flushPending()...)
+	if len(got) != 2 || !strings.Contains(got[0].EventID, "msg-first") || !strings.Contains(got[1].EventID, "msg-second") {
+		t.Fatalf("multiple pending mirror events = %#v", got)
+	}
+}
+
 func TestPrimeCodexTranscriptProjectorResumesAtIncompleteLineStart(t *testing.T) {
 	prefix := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"/workspace/project"}}
 `
@@ -601,6 +704,104 @@ func TestTailSessionLogDrainsStdoutPlanWhileTranscriptHasBacklog(t *testing.T) {
 	}
 }
 
+func TestEventsDeduplicatesMessageMirrorBeforeCanonicalMessage(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-mirror-first"}'
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-first.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-mirror-first","cwd":"$PWD"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"working"}}
+EOF
+sleep 0.02
+cat >> "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-first.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:01.022Z","type":"response_item","payload":{"type":"message","id":"msg-1","role":"assistant","content":[{"type":"output_text","text":"working"}]}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-mirror-first", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := collectEvents(t, events, 3)
+	if got[0].Type != "thread.started" || !strings.Contains(got[1].EventID, "msg-1") || got[2].Type != "process.exit" {
+		t.Fatalf("live mirror events = %#v", got)
+	}
+}
+
+func TestEventsFlushesUnmatchedMessageMirrorWhileProcessIsRunning(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	exitMarker := filepath.Join(dir, "exiting")
+	bin := fakeCodex(t, `#!/bin/sh
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-mirror-running"}'
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-running.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-mirror-running","cwd":"$PWD"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"legacy output"}}
+EOF
+sleep 0.4
+touch "$CODEX_EXIT_MARKER"
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("CODEX_EXIT_MARKER", exitMarker)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-mirror-running", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := collectEvents(t, events, 2)
+	if message, ok := got[1].Content.(process.CodexMessageContent); got[0].Type != "thread.started" || !ok || message.Text != "legacy output" {
+		t.Fatalf("bounded mirror events = %#v", got)
+	}
+	if _, err := os.Stat(exitMarker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("mirror was not flushed before process exit marker: %v", err)
+	}
+	if exit := collectEvents(t, events, 1)[0]; exit.Type != "process.exit" {
+		t.Fatalf("final event = %#v", exit)
+	}
+}
+
+func TestEventsFlushesUnmatchedMessageMirrorOnProcessExit(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-mirror-exit"}'
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-exit.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-mirror-exit","cwd":"$PWD"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"legacy output"}}
+EOF
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-mirror-exit", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := collectEvents(t, events, 3)
+	if message, ok := got[1].Content.(process.CodexMessageContent); got[0].Type != "thread.started" || !ok || message.Text != "legacy output" || got[2].Type != "process.exit" {
+		t.Fatalf("exit mirror events = %#v", got)
+	}
+}
+
 func TestObserveStdoutDoesNotBlockWhenPlanBufferIsFull(t *testing.T) {
 	var stdout strings.Builder
 	for index := 0; index < 100; index++ {
@@ -1028,6 +1229,34 @@ func TestSessionEventsUsesResponseItemMessagesAndIgnoresEventMessageMirrors(t *t
 	}
 }
 
+func TestSessionEventsUsesResponseItemMessageWhenEventMessageMirrorArrivesFirst(t *testing.T) {
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-agent-message-mirror-first.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-agent-message-mirror-first","cwd":"/workspace/project"}}
+{"timestamp":"2026-07-08T09:01:00Z","type":"event_msg","payload":{"type":"agent_message","message":"working"}}
+{"timestamp":"2026-07-08T09:01:00.022Z","type":"response_item","payload":{"type":"message","id":"msg-1","role":"assistant","content":[{"type":"output_text","text":"working"}]}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-agent-message-mirror-first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("events len = %d, want 2: %#v", len(got), got)
+	}
+	if !strings.Contains(got[1].EventID, "msg-1") {
+		t.Fatalf("assistant message event id = %q, want response_item id", got[1].EventID)
+	}
+	if message, ok := got[1].Content.(process.CodexMessageContent); !ok || message.Role != "assistant" || message.Text != "working" {
+		t.Fatalf("assistant message content = %#v", got[1].Content)
+	}
+}
+
 func TestSessionEventsKeepsEventMessageAgentMessageWhenNoCanonicalMessageExists(t *testing.T) {
 	codexHome := t.TempDir()
 	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-event-agent-message.jsonl")
@@ -1080,6 +1309,9 @@ func TestSessionEventsKeepsRepeatedCanonicalAssistantMessages(t *testing.T) {
 		message, ok := got[index].Content.(process.CodexMessageContent)
 		if !ok || message.Role != "assistant" || message.Text != "ok" {
 			t.Fatalf("assistant message %d content = %#v", index, got[index].Content)
+		}
+		if !strings.Contains(got[index].EventID, "msg-"+strconv.Itoa(index)) {
+			t.Fatalf("assistant message %d event id = %q", index, got[index].EventID)
 		}
 	}
 }
