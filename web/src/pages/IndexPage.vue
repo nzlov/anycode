@@ -25,9 +25,11 @@
           tabindex="0"
           class="overview-session-card cursor-pointer"
           :class="overviewCardClass(card)"
-          @click="$router.push(`/sessions/${card.id}`)"
-          @keyup.enter.self="$router.push(`/sessions/${card.id}`)"
-          @keyup.space.self.prevent="$router.push(`/sessions/${card.id}`)"
+          @click="openSessionCard(card.id)"
+          @touchend="releaseCardContextMenuTouch(card.id)"
+          @touchcancel="clearCardClickSuppression(card.id)"
+          @keyup.enter.self="openSessionCard(card.id)"
+          @keyup.space.self.prevent="openSessionCard(card.id)"
         >
           <q-card-section class="overview-session-card__body">
             <div class="overview-card-chips">
@@ -84,6 +86,8 @@
                 :label="`${card.todoList.completed}/${card.todoList.total}`"
                 aria-label="查看 TODO List"
                 @click.stop
+                @contextmenu.stop
+                @touchstart.stop
                 @keyup.enter.stop
                 @keyup.space.stop
               >
@@ -110,7 +114,7 @@
                 </q-menu>
               </q-btn>
 
-              <div class="overview-card-actions">
+              <div class="overview-card-actions" @contextmenu.stop @touchstart.stop>
                 <q-btn
                   v-if="card.filesChanged > 0"
                   flat
@@ -177,50 +181,45 @@
                 >
                   <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
                 </q-btn>
-                <q-btn
-                  flat
-                  dense
-                  class="lane-icon-btn app-icon-btn"
-                  icon="more_vert"
-                  aria-label="卡片操作"
-                  @click.stop
-                >
-                  <q-menu anchor="top right" self="bottom right" @click.stop>
-                    <q-list dense class="overview-card-menu app-touch-list">
-                      <q-item-label header>优先级</q-item-label>
-                      <q-item
-                        v-for="priority in priorities"
-                        :key="priority"
-                        v-close-popup
-                        clickable
-                        :active="card.priority === priority"
-                        :disable="card.status === 'closed'"
-                        @click.stop="setCardPriority(card, priority)"
-                      >
-                        <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
-                        <q-item-section v-if="card.priority === priority" side>
-                          <q-icon name="check" color="primary" />
-                        </q-item-section>
-                      </q-item>
-                      <q-separator />
-                      <q-item
-                        v-close-popup
-                        clickable
-                        class="text-negative"
-                        :disable="!card.availableActions.includes('close')"
-                        @click.stop="closeCard(card)"
-                      >
-                        <q-item-section avatar>
-                          <q-icon name="close" />
-                        </q-item-section>
-                        <q-item-section>关闭卡片</q-item-section>
-                      </q-item>
-                    </q-list>
-                  </q-menu>
-                </q-btn>
               </div>
             </div>
           </q-card-section>
+          <q-menu
+            context-menu
+            @before-show="handleCardContextMenuBeforeShow(card.id, $event)"
+            @click.stop
+          >
+            <q-list dense class="overview-card-menu app-touch-list">
+              <q-item-label header>优先级</q-item-label>
+              <q-item
+                v-for="priority in priorities"
+                :key="priority"
+                v-close-popup
+                clickable
+                :active="card.priority === priority"
+                :disable="card.status === 'closed'"
+                @click.stop="setCardPriority(card, priority)"
+              >
+                <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
+                <q-item-section v-if="card.priority === priority" side>
+                  <q-icon name="check" color="primary" />
+                </q-item-section>
+              </q-item>
+              <q-separator />
+              <q-item
+                v-close-popup
+                clickable
+                class="text-negative"
+                :disable="!card.availableActions.includes('close')"
+                @click.stop="closeCard(card)"
+              >
+                <q-item-section avatar>
+                  <q-icon name="close" />
+                </q-item-section>
+                <q-item-section>关闭卡片</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
         </q-card>
 
         <router-link v-if="section.showMore" class="overview-more-card" :to="sessionsRoute">
@@ -318,7 +317,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import SessionDiffPreview from '@/components/SessionDiffPreview.vue';
@@ -364,6 +363,7 @@ import {
 } from '@/services/sessions';
 
 const route = useRoute();
+const router = useRouter();
 const $q = useQuasar();
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
@@ -475,6 +475,9 @@ let cardReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let cardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let liveStopped = true;
 let diffDialogRequestGeneration = 0;
+// GLUE: suppress Quasar's synthetic post-long-press click; remove when QMenu consumes it upstream.
+let suppressedCardClickId = '';
+let cardClickSuppressionTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface ApprovalContext {
   workflowRunId: string;
@@ -500,6 +503,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange);
+  clearCardClickSuppression();
   diffSummaryController.stop();
   stopOverviewLiveUpdates();
 });
@@ -638,6 +642,34 @@ function statusChipClass(status: SessionStatus) {
 
 function overviewCardClass(card: SessionCard) {
   return `overview-session-card--${card.status}`;
+}
+
+function openSessionCard(sessionId: string) {
+  if (suppressedCardClickId === sessionId) {
+    clearCardClickSuppression(sessionId);
+    return;
+  }
+  void router.push(`/sessions/${sessionId}`);
+}
+
+function handleCardContextMenuBeforeShow(sessionId: string, event: Event) {
+  if (event.type !== 'touchstart') return;
+  clearCardClickSuppression();
+  suppressedCardClickId = sessionId;
+}
+
+function releaseCardContextMenuTouch(sessionId: string) {
+  if (suppressedCardClickId !== sessionId) return;
+  cardClickSuppressionTimer = setTimeout(() => clearCardClickSuppression(sessionId), 500);
+}
+
+function clearCardClickSuppression(sessionId?: string) {
+  if (sessionId && suppressedCardClickId !== sessionId) return;
+  suppressedCardClickId = '';
+  if (cardClickSuppressionTimer) {
+    clearTimeout(cardClickSuppressionTimer);
+    cardClickSuppressionTimer = null;
+  }
 }
 
 function cardAction(card: SessionCard) {
