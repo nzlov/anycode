@@ -1,8 +1,8 @@
 import type {
-  SessionStatusContent,
-  SessionTimelinePhase,
-  SessionTimelineFileChange,
-  SessionToolContent,
+  TranscriptStatusContent,
+  TranscriptPhase,
+  TranscriptFileChange,
+  TranscriptToolContent,
 } from '@/services/sessionTimeline';
 
 const statusLabels: Record<string, string> = {
@@ -39,24 +39,24 @@ export function timelineTime(value: string) {
   );
 }
 
-export function statusLabel(content: SessionStatusContent) {
+export function statusLabel(content: TranscriptStatusContent) {
   return statusLabels[content.code] ?? content.code.replaceAll('.', ' ');
 }
 
-export function statusIcon(content: SessionStatusContent) {
+export function statusIcon(content: TranscriptStatusContent) {
   if (content.level === 'error') return 'error_outline';
   if (content.level === 'warning') return 'warning_amber';
   return 'info_outline';
 }
 
-export function statusColor(content: SessionStatusContent) {
+export function statusColor(content: TranscriptStatusContent) {
   if (content.level === 'error') return 'negative';
   if (content.level === 'warning') return 'warning';
   return 'blue-grey';
 }
 
 const phasePresentation: Record<
-  SessionTimelinePhase,
+  TranscriptPhase,
   { icon: string; color: string; label: string }
 > = {
   standalone: { icon: 'info_outline', color: 'blue-grey', label: '独立事件' },
@@ -67,19 +67,19 @@ const phasePresentation: Record<
   cancelled: { icon: 'cancel', color: 'grey-7', label: '已取消' },
 };
 
-export function timelinePhaseIcon(phase: SessionTimelinePhase) {
+export function timelinePhaseIcon(phase: TranscriptPhase) {
   return phasePresentation[phase].icon;
 }
 
-export function timelinePhaseColor(phase: SessionTimelinePhase) {
+export function timelinePhaseColor(phase: TranscriptPhase) {
   return phasePresentation[phase].color;
 }
 
-export function timelinePhaseLabel(phase: SessionTimelinePhase) {
+export function timelinePhaseLabel(phase: TranscriptPhase) {
   return phasePresentation[phase].label;
 }
 
-export function toolLabel(content: SessionToolContent) {
+export function toolLabel(content: TranscriptToolContent) {
   if (content.qualifiedName) return content.qualifiedName;
   const labels: Record<string, string> = {
     web_search: '网页搜索',
@@ -91,7 +91,7 @@ export function toolLabel(content: SessionToolContent) {
   return labels[content.category] ?? '工具调用';
 }
 
-export function fileChangeLabel(changes: SessionTimelineFileChange[]) {
+export function fileChangeLabel(changes: TranscriptFileChange[]) {
   if (changes.length === 0) return '修改文件';
   if (changes.length === 1) return `修改文件 ${changes[0]?.path ?? ''}`.trim();
   return `修改 ${changes.length} 个文件`;

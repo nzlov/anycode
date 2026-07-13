@@ -14,11 +14,11 @@
 import { ref } from 'vue';
 
 import MarkdownContent from '@/components/MarkdownContent.vue';
-import type { SessionReasoningContent, SessionTimelineItem } from '@/services/sessionTimeline';
+import type { TranscriptReasoningContent, TranscriptItem } from '@/services/sessionTimeline';
 import { timelineTime } from '@/services/sessionTimelinePresentation';
 
 defineProps<{
-  event: SessionTimelineItem & { content: SessionReasoningContent };
+  event: TranscriptItem & { content: TranscriptReasoningContent };
 }>();
 const expanded = ref(false);
 </script>

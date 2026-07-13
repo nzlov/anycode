@@ -52,6 +52,6 @@ export function createLatestRequestTracker() {
   };
 }
 
-export function sortSessionEvents(events) {
+export function sortTranscriptEvents(events) {
   return [...events].sort((left, right) => left.orderKey.localeCompare(right.orderKey));
 }

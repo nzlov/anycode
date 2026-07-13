@@ -110,14 +110,14 @@ EOF
 	}
 }
 
-func TestCodexSemanticStateKeepsMissingTimestampInSourceOrder(t *testing.T) {
-	state := newCodexSemanticState()
+func TestCodexTranscriptProjectorKeepsMissingTimestampInSourceOrder(t *testing.T) {
+	projector := newCodexTranscriptProjector()
 	previous := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 10)
 	missing := parseSessionLogLine([]byte(`{"type":"event_msg","payload":{"type":"turn_aborted","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 20)
 	next := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 30)
-	state.apply(previous)
-	state.apply(missing)
-	state.apply(next)
+	projector.project(previous)
+	projector.project(missing)
+	projector.project(next)
 	if !missing[0].CreatedAt.Equal(previous[0].CreatedAt) {
 		t.Fatalf("missing timestamp = %s, want previous %s", missing[0].CreatedAt, previous[0].CreatedAt)
 	}
@@ -126,7 +126,7 @@ func TestCodexSemanticStateKeepsMissingTimestampInSourceOrder(t *testing.T) {
 	}
 }
 
-func TestPrimeCodexSemanticStateCorrelatesCommandAcrossResumeBaseline(t *testing.T) {
+func TestPrimeCodexTranscriptProjectorCorrelatesCommandAcrossResumeBaseline(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "rollout-resume-command.jsonl")
 	prefix := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"/workspace/project"}}
@@ -135,8 +135,8 @@ func TestPrimeCodexSemanticStateCorrelatesCommandAcrossResumeBaseline(t *testing
 	if err := os.WriteFile(path, []byte(prefix), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	state := newCodexSemanticState()
-	_, resumeOffset, skipLeadingLineTerminator, err := primeCodexSemanticState(path, int64(len(prefix)), "/workspace/project", filepath.Base(path), state)
+	projector := newCodexTranscriptProjector()
+	_, resumeOffset, skipLeadingLineTerminator, err := primeCodexTranscriptProjector(path, int64(len(prefix)), "/workspace/project", filepath.Base(path), projector)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,14 +147,14 @@ func TestPrimeCodexSemanticStateCorrelatesCommandAcrossResumeBaseline(t *testing
 		t.Fatal("newline-terminated prefix must not skip a future line terminator")
 	}
 	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"ok"}}`), "/workspace/project", filepath.Base(path), int64(len(prefix)))
-	state.apply(completed)
+	projector.project(completed)
 	command, ok := completed[0].Content.(process.CodexCommandContent)
 	if !ok || command.Command != "go test ./..." || command.Output != "ok" {
 		t.Fatalf("resumed command completion = %#v", completed[0].Content)
 	}
 }
 
-func TestPrimeCodexSemanticStateResumesAtIncompleteLineStart(t *testing.T) {
+func TestPrimeCodexTranscriptProjectorResumesAtIncompleteLineStart(t *testing.T) {
 	prefix := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-1","cwd":"/workspace/project"}}
 `
 	started := `{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec_command","arguments":"{\"cmd\":\"go test ./...\"}"}}
@@ -192,8 +192,8 @@ func TestPrimeCodexSemanticStateResumesAtIncompleteLineStart(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			state := newCodexSemanticState()
-			_, resumeOffset, skipLeadingLineTerminator, err := primeCodexSemanticState(path, baseline, "/workspace/project", filepath.Base(path), state)
+			projector := newCodexTranscriptProjector()
+			_, resumeOffset, skipLeadingLineTerminator, err := primeCodexTranscriptProjector(path, baseline, "/workspace/project", filepath.Base(path), projector)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -213,7 +213,7 @@ func TestPrimeCodexSemanticStateResumesAtIncompleteLineStart(t *testing.T) {
 			var resumed []process.CodexEvent
 			for _, line := range lines {
 				parsed := parseSessionLogLine([]byte(line), "/workspace/project", filepath.Base(path), lineOffset)
-				state.apply(parsed)
+				parsed = projector.project(parsed)
 				resumed = append(resumed, parsed...)
 				lineOffset += int64(len(line) + 1)
 			}
@@ -233,12 +233,12 @@ func TestPrimeCodexSemanticStateResumesAtIncompleteLineStart(t *testing.T) {
 	}
 }
 
-func TestCodexSemanticStateUsesStartedTypeForTimedResults(t *testing.T) {
-	state := newCodexSemanticState()
+func TestCodexTranscriptProjectorUsesStartedTypeForTimedResults(t *testing.T) {
+	projector := newCodexTranscriptProjector()
 	commandStarted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec_command","arguments":"{\"cmd\":\"go test ./...\"}"}}`), "/workspace/project", "rollout.jsonl", 0)
 	commandCompleted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"failed","exit_code":7,"duration_ms":125}}`), "/workspace/project", "rollout.jsonl", 1)
-	state.apply(commandStarted)
-	state.apply(commandCompleted)
+	projector.project(commandStarted)
+	projector.project(commandCompleted)
 	command, ok := commandCompleted[0].Content.(process.CodexCommandContent)
 	if !ok || command.Command != "go test ./..." || command.ExitCode == nil || *command.ExitCode != 7 || command.DurationMS == nil || *command.DurationMS != 125 || commandCompleted[0].Phase != process.CodexPhaseFailed {
 		t.Fatalf("correlated command result = %#v, phase %q", commandCompleted[0].Content, commandCompleted[0].Phase)
@@ -246,8 +246,8 @@ func TestCodexSemanticStateUsesStartedTypeForTimedResults(t *testing.T) {
 
 	toolStarted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-tool","name":"answer_user","arguments":"{\"questions\":[]}"}}`), "/workspace/project", "rollout.jsonl", 2)
 	toolCompleted := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-tool","output":"answered","duration_ms":25}}`), "/workspace/project", "rollout.jsonl", 3)
-	state.apply(toolStarted)
-	state.apply(toolCompleted)
+	projector.project(toolStarted)
+	projector.project(toolCompleted)
 	tool, ok := toolCompleted[0].Content.(process.CodexToolContent)
 	if !ok || tool.Output.Text != "answered" {
 		t.Fatalf("timed tool result = %#v", toolCompleted[0].Content)
@@ -1028,6 +1028,62 @@ func TestSessionEventsUsesResponseItemMessagesAndIgnoresEventMessageMirrors(t *t
 	}
 }
 
+func TestSessionEventsKeepsEventMessageAgentMessageWhenNoCanonicalMessageExists(t *testing.T) {
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-event-agent-message.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-event-agent-message","cwd":"/workspace/project"}}
+{"timestamp":"2026-07-08T09:01:00Z","type":"event_msg","payload":{"type":"agent_message","message":"普通助手输出"}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-event-agent-message"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("events len = %d, want 2: %#v", len(got), got)
+	}
+	message, ok := got[1].Content.(process.CodexMessageContent)
+	if !ok || message.Role != "assistant" || message.Text != "普通助手输出" {
+		t.Fatalf("event_msg agent message content = %#v", got[1].Content)
+	}
+	if eventNormalizedItem(t, got[1])["type"] != "agent_message" {
+		t.Fatalf("event_msg agent message normalized item = %#v", eventNormalizedItem(t, got[1]))
+	}
+}
+
+func TestSessionEventsKeepsRepeatedCanonicalAssistantMessages(t *testing.T) {
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-repeated-agent-messages.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionFile, []byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-repeated-agent-messages","cwd":"/workspace/project"}}
+{"timestamp":"2026-07-08T09:01:00Z","type":"response_item","payload":{"type":"message","id":"msg-1","role":"assistant","content":[{"type":"output_text","text":"ok"}]}}
+{"timestamp":"2026-07-08T09:01:01Z","type":"response_item","payload":{"type":"message","id":"msg-2","role":"assistant","content":[{"type":"output_text","text":"ok"}]}}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-repeated-agent-messages"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("events len = %d, want 3: %#v", len(got), got)
+	}
+	for index := 1; index <= 2; index++ {
+		message, ok := got[index].Content.(process.CodexMessageContent)
+		if !ok || message.Role != "assistant" || message.Text != "ok" {
+			t.Fatalf("assistant message %d content = %#v", index, got[index].Content)
+		}
+	}
+}
+
 func TestSessionEventsPreservesStructuredCustomToolOutput(t *testing.T) {
 	codexHome := t.TempDir()
 	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-custom-output.jsonl")
@@ -1120,6 +1176,11 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 {"timestamp":"2026-07-08T09:10:00Z","type":"compacted","payload":{"message":"summary"}}
 {"timestamp":"2026-07-08T09:11:00Z","type":"turn_context","payload":{"turn_id":"turn-2","cwd":"/workspace/project"}}
 {"timestamp":"2026-07-08T09:12:00Z","type":"world_state","payload":{"full":true,"state":{"agents_md":{"text":"huge"}}}}
+{"timestamp":"2026-07-08T09:13:00Z","type":"agent_message","payload":{"message":"top-level assistant note","phase":"commentary"}}
+{"timestamp":"2026-07-08T09:14:00Z","type":"response_item","payload":{"type":"agent_message","id":"sub-agent-message","author":"/root/review","content":[{"type":"input_text","text":"sub-agent assistant note"}]}}
+{"timestamp":"2026-07-08T09:15:00Z","type":"inter_agent_communication_metadata","payload":{"trigger_turn":true}}
+{"timestamp":"2026-07-08T09:16:00Z","type":"event_msg","payload":{"type":"sub_agent_activity","event_id":"call-sub","agent_path":"/root/review","kind":"started"}}
+{"timestamp":"2026-07-08T09:17:00Z","type":"event_msg","payload":{"type":"thread_settings_applied","cwd":"/workspace/project","thread_settings":{"model":"codex-auto-review"}}}
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1144,19 +1205,22 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 		"item.completed",
 		"item.started",
 		"item.completed",
-		"item.started",
-		"item.completed",
 		"item.completed",
 		"mcp_tool_call_end",
 		"turn.aborted",
 		"context.compacted",
 		"turn.context",
 		"world.state",
+		"item.completed",
+		"item.completed",
+		"inter_agent_communication_metadata",
+		"sub_agent_activity",
+		"thread_settings_applied",
 	}
 	if !reflect.DeepEqual(types, wantTypes) {
 		t.Fatalf("types = %#v, want %#v", types, wantTypes)
 	}
-	wantItemTypes := []string{"tool_call", "tool_result", "custom_tool_call", "custom_tool_call", "tool_search", "tool_search", "web_search"}
+	wantItemTypes := []string{"tool_call", "tool_result", "tool_search", "tool_search", "web_search", "agent_message", "agent_message"}
 	if !reflect.DeepEqual(itemTypes, wantItemTypes) {
 		t.Fatalf("item types = %#v, want %#v", itemTypes, wantItemTypes)
 	}
@@ -1166,10 +1230,9 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 		field      string
 	}{
 		{eventIndex: 3, id: "fc-browser", field: "arguments"},
-		{eventIndex: 5, id: "ct-patch", field: "input"},
-		{eventIndex: 7, id: "ts-call", field: "arguments"},
-		{eventIndex: 8, id: "ts-output", field: "tools"},
-		{eventIndex: 9, id: "ws-call", field: "action"},
+		{eventIndex: 5, id: "ts-call", field: "arguments"},
+		{eventIndex: 6, id: "ts-output", field: "tools"},
+		{eventIndex: 7, id: "ws-call", field: "action"},
 	} {
 		item := got[want.eventIndex].Payload["item"].(map[string]any)
 		if item["id"] != want.id || item[want.field] == nil || item["internal_chat_message_metadata_passthrough"] == nil {
@@ -1181,15 +1244,47 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 	if functionItem["type"] != "function_call" || functionItem["name"] != "browser_resize" || functionNormalized["type"] != "tool_call" || functionNormalized["qualifiedName"] != "mcp__playwright.browser_resize" {
 		t.Fatalf("function item = %#v", functionItem)
 	}
-	if got[10].Payload["invocation"] == nil || got[10].Payload["result"] == nil {
-		t.Fatalf("mcp tool end payload = %#v", got[10].Payload)
+	for _, event := range got {
+		item := mapValue(event.Payload["item"])
+		if item["name"] == "apply_patch" || item["call_id"] == "call-patch" {
+			t.Fatalf("apply_patch event was not filtered: %#v", event)
+		}
 	}
-	if got[12].Payload["message"] != "summary" {
-		t.Fatalf("compacted payload = %#v", got[12].Payload)
+	if got[8].Payload["invocation"] == nil || got[8].Payload["result"] == nil {
+		t.Fatalf("mcp tool end payload = %#v", got[8].Payload)
 	}
-	world := got[len(got)-1].Payload
+	if got[10].Payload["message"] != "summary" {
+		t.Fatalf("compacted payload = %#v", got[10].Payload)
+	}
+	world := got[12].Payload
 	if world["state"] == nil || world["full"] != true {
 		t.Fatalf("world state payload = %#v", world)
+	}
+	message, ok := got[13].Content.(process.CodexMessageContent)
+	if !ok || message.Role != "assistant" || message.Text != "top-level assistant note" {
+		t.Fatalf("agent message content = %#v", got[13].Content)
+	}
+	message, ok = got[14].Content.(process.CodexMessageContent)
+	if !ok || message.Role != "assistant" || message.Text != "sub-agent assistant note" {
+		t.Fatalf("response agent message content = %#v", got[14].Content)
+	}
+	for _, index := range []int{15, 16, 17} {
+		if _, ok := got[index].Content.(process.CodexStatusContent); !ok {
+			t.Fatalf("status event %d content = %#v", index, got[index].Content)
+		}
+	}
+	standardTypes := map[string]struct{}{
+		"agent_message":                      {},
+		"inter_agent_communication_metadata": {},
+		"sub_agent_activity":                 {},
+		"thread_settings_applied":            {},
+	}
+	for _, event := range got {
+		if unknown, ok := event.Content.(process.CodexUnknownContent); ok {
+			if _, exists := standardTypes[unknown.RawType]; exists {
+				t.Fatalf("standard event fell back to unknown: %#v", event)
+			}
+		}
 	}
 }
 

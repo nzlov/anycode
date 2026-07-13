@@ -1,18 +1,18 @@
-import type { SessionTimelineEvent } from '@/services/sessionTimeline';
+import type { TranscriptEvent } from '@/services/sessionTimeline';
 
 export function appendLiveEvent(
-  events: SessionTimelineEvent[],
-  event: SessionTimelineEvent,
-): SessionTimelineEvent[];
+  events: TranscriptEvent[],
+  event: TranscriptEvent,
+): TranscriptEvent[];
 export function prependOlderEvents(
-  events: SessionTimelineEvent[],
-  olderEvents: SessionTimelineEvent[],
-): SessionTimelineEvent[];
+  events: TranscriptEvent[],
+  olderEvents: TranscriptEvent[],
+): TranscriptEvent[];
 export function mergeSnapshotEvents(
-  snapshotEvents: SessionTimelineEvent[],
-  currentEvents: SessionTimelineEvent[],
-  bufferedEvents: SessionTimelineEvent[],
-): SessionTimelineEvent[];
+  snapshotEvents: TranscriptEvent[],
+  currentEvents: TranscriptEvent[],
+  bufferedEvents: TranscriptEvent[],
+): TranscriptEvent[];
 export function shouldReconnectAfterClose(
   acknowledged: boolean,
   accessKeyValid: boolean | undefined,
@@ -30,4 +30,4 @@ export function createLatestRequestTracker(): {
   isCurrent(requestGeneration: number): boolean;
   invalidate(): void;
 };
-export function sortSessionEvents(events: SessionTimelineEvent[]): SessionTimelineEvent[];
+export function sortTranscriptEvents(events: TranscriptEvent[]): TranscriptEvent[];

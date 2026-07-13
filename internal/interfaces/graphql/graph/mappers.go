@@ -255,91 +255,91 @@ func mapAttachment(dto attachmentapp.AttachmentDTO) *model.Attachment {
 	}
 }
 
-func mapTimelineEventPage(page timelineapp.Page) *model.SessionTimelinePage {
-	items := make([]*model.SessionTimelineEvent, 0, len(page.Items))
+func mapTranscriptPage(page timelineapp.Page) *model.TranscriptPage {
+	items := make([]*model.TranscriptEvent, 0, len(page.Items))
 	for _, item := range page.Items {
-		items = append(items, mapTimelineEvent(item))
+		items = append(items, mapTranscriptEvent(item))
 	}
-	return &model.SessionTimelinePage{
+	return &model.TranscriptPage{
 		Events:   items,
-		Usage:    mapTimelineUsage(page.Usage),
+		Usage:    mapTranscriptUsage(page.Usage),
 		PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor),
 	}
 }
 
-func mapTimelineEvent(dto timelineapp.DTO) *model.SessionTimelineEvent {
+func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 	correlationID := dto.CorrelationID
 	createdAt, _ := time.Parse(time.RFC3339Nano, dto.OccurredAt)
-	return &model.SessionTimelineEvent{
+	return &model.TranscriptEvent{
 		ID:            string(dto.ID),
 		OrderKey:      dto.OrderKey,
 		CorrelationID: optionalString(correlationID),
-		Phase:         mapTimelinePhase(dto.Phase),
+		Phase:         mapTranscriptPhase(dto.Phase),
 		OccurredAt:    createdAt,
-		Content:       mapTimelineContent(dto.Content),
+		Content:       mapTranscriptContent(dto.Content),
 	}
 }
 
-func mapTimelineStreamItem(dto timelineapp.DTO) *model.SessionTimelineStreamItem {
+func mapTranscriptStreamItem(dto timelineapp.DTO) *model.TranscriptStreamItem {
 	if dto.Usage != nil {
-		return &model.SessionTimelineStreamItem{Usage: mapTimelineUsage(dto.Usage)}
+		return &model.TranscriptStreamItem{Usage: mapTranscriptUsage(dto.Usage)}
 	}
-	return &model.SessionTimelineStreamItem{Event: mapTimelineEvent(dto)}
+	return &model.TranscriptStreamItem{Event: mapTranscriptEvent(dto)}
 }
 
-func mapTimelineContent(content processdomain.CodexEventContent) model.SessionTimelineContent {
+func mapTranscriptContent(content processdomain.CodexEventContent) model.TranscriptContent {
 	switch value := content.(type) {
 	case processdomain.CodexMessageContent:
-		return &model.SessionTextMessageContent{
+		return &model.TranscriptMessageContent{
 			Role:   value.Role,
 			Text:   value.Text,
-			Format: mapTimelineTextFormat(value.Format),
-			Images: mapTimelineImages(value.Images),
+			Format: mapTranscriptTextFormat(value.Format),
+			Images: mapTranscriptImages(value.Images),
 		}
 	case processdomain.CodexReasoningContent:
-		return &model.SessionReasoningContent{Text: value.Text}
+		return &model.TranscriptReasoningContent{Text: value.Text}
 	case processdomain.CodexCommandContent:
-		return &model.SessionCommandContent{Command: value.Command, Output: value.Output, ExitCode: value.ExitCode, DurationMs: value.DurationMS}
+		return &model.TranscriptCommandContent{Command: value.Command, Output: value.Output, ExitCode: value.ExitCode, DurationMs: value.DurationMS}
 	case processdomain.CodexToolContent:
-		return &model.SessionToolContent{
+		return &model.TranscriptToolContent{
 			QualifiedName: value.QualifiedName,
 			Category:      value.Category,
-			Input:         mapTimelineStructuredText(value.Input),
-			Output:        mapTimelineStructuredText(value.Output),
-			Images:        mapTimelineImages(value.Images),
+			Input:         mapTranscriptStructuredText(value.Input),
+			Output:        mapTranscriptStructuredText(value.Output),
+			Images:        mapTranscriptImages(value.Images),
 		}
 	case processdomain.CodexFileChangeContent:
-		changes := make([]*model.SessionTimelineFileChange, 0, len(value.Changes))
+		changes := make([]*model.TranscriptFileChange, 0, len(value.Changes))
 		for _, change := range value.Changes {
-			changes = append(changes, &model.SessionTimelineFileChange{Kind: change.Kind, Path: change.Path, MovePath: change.MovePath, UnifiedDiff: change.UnifiedDiff})
+			changes = append(changes, &model.TranscriptFileChange{Kind: change.Kind, Path: change.Path, MovePath: change.MovePath, UnifiedDiff: change.UnifiedDiff})
 		}
-		return &model.SessionFileChangeContent{Changes: changes}
+		return &model.TranscriptFileChangeContent{Changes: changes}
 	case processdomain.CodexStatusContent:
-		return &model.SessionStatusContent{Code: value.Code, Level: value.Level, Message: value.Message, Details: nonNilMap(value.Details)}
+		return &model.TranscriptStatusContent{Code: value.Code, Level: value.Level, Message: value.Message, Details: nonNilMap(value.Details)}
 	case processdomain.CodexUnknownContent:
-		return &model.SessionUnknownContent{RawType: value.RawType, Payload: nonNilMap(value.Payload)}
+		return &model.TranscriptUnknownContent{RawType: value.RawType, Payload: nonNilMap(value.Payload)}
 	default:
-		return &model.SessionUnknownContent{RawType: "unsupported_content", Payload: map[string]any{}}
+		return &model.TranscriptUnknownContent{RawType: "unsupported_content", Payload: map[string]any{}}
 	}
 }
 
-func mapTimelineStructuredText(value processdomain.CodexStructuredText) *model.SessionStructuredText {
-	return &model.SessionStructuredText{Format: mapTimelineTextFormat(value.Format), Text: value.Text}
+func mapTranscriptStructuredText(value processdomain.CodexStructuredText) *model.TranscriptStructuredText {
+	return &model.TranscriptStructuredText{Format: mapTranscriptTextFormat(value.Format), Text: value.Text}
 }
 
-func mapTimelineImages(values []processdomain.CodexImage) []*model.SessionTimelineImage {
-	items := make([]*model.SessionTimelineImage, 0, len(values))
+func mapTranscriptImages(values []processdomain.CodexImage) []*model.TranscriptImage {
+	items := make([]*model.TranscriptImage, 0, len(values))
 	for _, value := range values {
-		items = append(items, &model.SessionTimelineImage{Src: value.Source, Detail: value.Detail})
+		items = append(items, &model.TranscriptImage{Src: value.Source, Detail: value.Detail})
 	}
 	return items
 }
 
-func mapTimelineUsage(value *timelineapp.TokenUsageDTO) *model.SessionTokenUsage {
+func mapTranscriptUsage(value *timelineapp.TokenUsageDTO) *model.TranscriptTokenUsage {
 	if value == nil {
 		return nil
 	}
-	return &model.SessionTokenUsage{
+	return &model.TranscriptTokenUsage{
 		InputTokens:           value.InputTokens,
 		CachedInputTokens:     value.CachedInputTokens,
 		OutputTokens:          value.OutputTokens,
@@ -349,33 +349,33 @@ func mapTimelineUsage(value *timelineapp.TokenUsageDTO) *model.SessionTokenUsage
 	}
 }
 
-func mapTimelinePhase(value processdomain.CodexPhase) model.SessionTimelineEventPhase {
+func mapTranscriptPhase(value processdomain.CodexPhase) model.TranscriptEventPhase {
 	switch value {
 	case processdomain.CodexPhaseStarted:
-		return model.SessionTimelineEventPhaseStarted
+		return model.TranscriptEventPhaseStarted
 	case processdomain.CodexPhaseProgress:
-		return model.SessionTimelineEventPhaseProgress
+		return model.TranscriptEventPhaseProgress
 	case processdomain.CodexPhaseCompleted:
-		return model.SessionTimelineEventPhaseCompleted
+		return model.TranscriptEventPhaseCompleted
 	case processdomain.CodexPhaseFailed:
-		return model.SessionTimelineEventPhaseFailed
+		return model.TranscriptEventPhaseFailed
 	case processdomain.CodexPhaseCancelled:
-		return model.SessionTimelineEventPhaseCancelled
+		return model.TranscriptEventPhaseCancelled
 	default:
-		return model.SessionTimelineEventPhaseStandalone
+		return model.TranscriptEventPhaseStandalone
 	}
 }
 
-func mapTimelineTextFormat(value processdomain.CodexTextFormat) model.SessionTimelineTextFormat {
+func mapTranscriptTextFormat(value processdomain.CodexTextFormat) model.TranscriptTextFormat {
 	switch value {
 	case processdomain.CodexTextMarkdown:
-		return model.SessionTimelineTextFormatMarkdown
+		return model.TranscriptTextFormatMarkdown
 	case processdomain.CodexTextJSON:
-		return model.SessionTimelineTextFormatJSON
+		return model.TranscriptTextFormatJSON
 	case processdomain.CodexTextANSI:
-		return model.SessionTimelineTextFormatAnsi
+		return model.TranscriptTextFormatAnsi
 	default:
-		return model.SessionTimelineTextFormatPlain
+		return model.TranscriptTextFormatPlain
 	}
 }
 

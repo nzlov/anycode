@@ -36,10 +36,10 @@ test('session event presentation moves usage out of the event list into session 
     'utf8',
   );
 
-  assert.match(timelineSource, /\.\.\. on SessionTextMessageContent/);
-  assert.match(timelineSource, /\.\.\. on SessionCommandContent/);
-  assert.match(timelineSource, /\.\.\. on SessionToolContent/);
-  assert.match(timelineSource, /usage \{ \$\{tokenUsageFields\} \}/);
+  assert.match(timelineSource, /\.\.\. on TranscriptMessageContent/);
+  assert.match(timelineSource, /\.\.\. on TranscriptCommandContent/);
+  assert.match(timelineSource, /\.\.\. on TranscriptToolContent/);
+  assert.match(timelineSource, /usage \{ \$\{transcriptUsageFields\} \}/);
   assert.match(componentSource, /SessionToolEvent/);
   assert.match(componentSource, /SessionStatusEvent/);
   assert.doesNotMatch(componentSource, /SessionUsageEvent/);
@@ -107,8 +107,8 @@ test('session detail buffers live events while loading the transcript snapshot',
   assert.match(composableSource, /subscribeSessionStateUpdates\(sessionId/);
   assert.equal(composableSource.includes('subscribeSessionCardChanged'), false);
   assert.equal(composableSource.includes('subscribePendingQuestionBatches'), false);
-  assert.match(timelineSource, /sessionEvents\(sessionId: \$sessionId\) \{\s*ready\s*event/s);
-  assert.match(timelineSource, /data\.sessionEvents\.ready/);
+  assert.match(timelineSource, /sessionTranscript\(sessionId: \$sessionId\) \{\s*ready\s*event/s);
+  assert.match(timelineSource, /data\.sessionTranscript\.ready/);
   assert.match(
     sessionsSource,
     /sessionStateUpdates\(sessionId: \$sessionId\) \{\s*ready\s*session/s,
@@ -159,10 +159,11 @@ test('subscription schema exposes only session-scoped transcript and unified sta
     'utf8',
   );
 
-  assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): SessionTimelineStreamItem!/);
+  assert.match(schemaSource, /sessionTranscript\(sessionId: ID!\): TranscriptStreamItem!/);
   assert.equal(schemaSource.includes('sessionStatusChanged'), false);
-  assert.equal(schemaSource.includes('input SessionEventsInput'), false);
-  assert.match(timelineSource, /subscription SessionEvents\(\$sessionId: ID!\)/);
+  assert.equal(schemaSource.includes('input SessionTranscriptInput'), false);
+  assert.match(schemaSource, /input ListTranscriptEventsInput/);
+  assert.match(timelineSource, /subscription SessionTranscript\(\$sessionId: ID!\)/);
   assert.equal(timelineSource.includes("codexType === 'process.exit'"), false);
 });
 
@@ -175,7 +176,7 @@ test('session detail uses exactly two logical subscriptions', () => {
   const calls = composableSource.match(/= subscribe[A-Z][A-Za-z]+\(/g) ?? [];
   assert.deepEqual(calls.sort(), [
     '= subscribeSessionStateUpdates(',
-    '= subscribeSessionTimeline(',
+    '= subscribeSessionTranscript(',
   ]);
 });
 
@@ -384,7 +385,7 @@ test('live usage is buffered while a transcript snapshot is loading', () => {
     'utf8',
   );
 
-  assert.match(source, /let bufferedLiveUsage: SessionTokenUsage \| null = null/);
+  assert.match(source, /let bufferedLiveUsage: TranscriptTokenUsage \| null = null/);
   assert.match(source, /tokenUsage\.value = bufferedLiveUsage \?\? eventResult\.value\.usage/);
   assert.match(source, /if \(bufferingLiveEvents\) \{\s*bufferedLiveUsage = usage;/s);
 });
@@ -485,7 +486,7 @@ test('session state remains independent from transcript snapshot failures', () =
   assert.doesNotMatch(composableSource, /getSessionDetail/);
   assert.match(
     composableSource,
-    /Promise\.allSettled\(\[\s*getSession\(sessionId\),\s*getSessionTimelinePage\(sessionId, '', eventPageSize\),?\s*\]\)/,
+    /Promise\.allSettled\(\[\s*getSession\(sessionId\),\s*getSessionTranscriptPage\(sessionId, '', eventPageSize\),?\s*\]\)/,
   );
   assert.match(composableSource, /sessionResult\.status === 'fulfilled'/);
   assert.match(composableSource, /eventResult\.status === 'fulfilled'/);

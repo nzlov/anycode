@@ -1,19 +1,19 @@
-export interface SessionEventPageInput {
+export interface TranscriptPageInput {
   sessionId: string;
   beforeEventId?: string;
   limit: number;
 }
 
-export interface SessionEventPageInfo {
+export interface TranscriptPageInfo {
   nextCursor: string;
 }
 
-export function latestSessionEventPageInput(
+export function latestTranscriptPageInput(
   sessionId: string,
   beforeEventId: string,
   limit: number,
-): SessionEventPageInput {
-  const input: SessionEventPageInput = {
+): TranscriptPageInput {
+  const input: TranscriptPageInput = {
     sessionId,
     limit,
   };
@@ -23,6 +23,6 @@ export function latestSessionEventPageInput(
   return input;
 }
 
-export function olderSessionEventCursor(pageInfo: SessionEventPageInfo): string | null {
+export function olderTranscriptCursor(pageInfo: TranscriptPageInfo): string | null {
   return pageInfo.nextCursor || null;
 }

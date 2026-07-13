@@ -450,9 +450,9 @@ import {
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
 import { formatTokenCount } from '@/services/sessionTimelinePresentation';
-import { reduceSessionTimelineEvents } from '@/services/sessionTimelineReducer';
+import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import type { QuestionAnswerInput, SessionMode } from '@/services/sessions';
-import type { SessionTimelineItem } from '@/services/sessionTimeline';
+import type { TranscriptItem } from '@/services/sessionTimeline';
 
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
@@ -541,8 +541,8 @@ const composerConfigDirty = computed(() => {
     current.config.permissionMode !== composerPermission.value
   );
 });
-const streamEntries = computed<SessionTimelineItem[]>(() =>
-  reduceSessionTimelineEvents(events.value),
+const streamEntries = computed<TranscriptItem[]>(() =>
+  reduceTranscriptEvents(events.value),
 );
 const latestTokenUsage = computed(() => tokenUsage.value);
 const composerAction = computed(() => {

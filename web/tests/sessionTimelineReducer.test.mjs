@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { reduceSessionTimelineEvents } from '../src/services/sessionTimelineReducer.js';
+import { reduceTranscriptEvents } from '../src/services/sessionTimelineReducer.js';
 
 function commandEvent(id, orderKey, correlationId, phase, content = {}) {
   return {
@@ -11,7 +11,7 @@ function commandEvent(id, orderKey, correlationId, phase, content = {}) {
     phase,
     occurredAt: `2026-07-12T00:00:${orderKey}Z`,
     content: {
-      __typename: 'SessionCommandContent',
+      __typename: 'TranscriptCommandContent',
       command: '',
       output: '',
       exitCode: null,
@@ -29,7 +29,7 @@ function toolResult(id, orderKey, correlationId, output) {
     phase: 'completed',
     occurredAt: `2026-07-12T00:00:${orderKey}Z`,
     content: {
-      __typename: 'SessionToolContent',
+      __typename: 'TranscriptToolContent',
       qualifiedName: '',
       category: 'generic',
       input: { format: 'plain', text: '' },
@@ -47,7 +47,7 @@ function messageEvent(id, orderKey, text) {
     phase: 'standalone',
     occurredAt: `2026-07-12T00:00:${orderKey}Z`,
     content: {
-      __typename: 'SessionTextMessageContent',
+      __typename: 'TranscriptMessageContent',
       role: 'assistant',
       text,
       format: 'markdown',
@@ -57,7 +57,7 @@ function messageEvent(id, orderKey, text) {
 }
 
 test('completed updates the started item without changing normal message order', () => {
-  const items = reduceSessionTimelineEvents([
+  const items = reduceTranscriptEvents([
     commandEvent('start-a', '01', 'call-a', 'started', { command: 'npm test' }),
     messageEvent('message-b', '02', 'working'),
     commandEvent('complete-a', '03', 'call-a', 'completed', { output: 'passed' }),
@@ -74,7 +74,7 @@ test('completed updates the started item without changing normal message order',
 });
 
 test('interleaved operations merge only by correlation id', () => {
-  const items = reduceSessionTimelineEvents([
+  const items = reduceTranscriptEvents([
     commandEvent('start-a', '01', 'call-a', 'started', { command: 'same command' }),
     commandEvent('start-b', '02', 'call-b', 'started', { command: 'same command' }),
     commandEvent('complete-b', '03', 'call-b', 'completed', { output: 'b output' }),
@@ -91,7 +91,7 @@ test('interleaved operations merge only by correlation id', () => {
 });
 
 test('completed without a loaded start remains visible', () => {
-  const items = reduceSessionTimelineEvents([toolResult('complete-a', '03', 'call-a', 'output')]);
+  const items = reduceTranscriptEvents([toolResult('complete-a', '03', 'call-a', 'output')]);
 
   assert.equal(items.length, 1);
   assert.equal(items[0].id, 'call-a');
@@ -104,7 +104,7 @@ test('loading an older start later anchors the merged item at the start', () => 
   });
   const start = commandEvent('start-a', '01', 'call-a', 'started', { command: 'go test ./...' });
 
-  const items = reduceSessionTimelineEvents([completed, start]);
+  const items = reduceTranscriptEvents([completed, start]);
 
   assert.equal(items.length, 1);
   assert.equal(items[0].id, 'call-a');
@@ -114,7 +114,7 @@ test('loading an older start later anchors the merged item at the start', () => 
 });
 
 test('typed command completion keeps exit metadata and terminal phase', () => {
-  const items = reduceSessionTimelineEvents([
+  const items = reduceTranscriptEvents([
     commandEvent('start-a', '01', 'call-a', 'started', { command: 'exit 7' }),
     commandEvent('complete-a', '02', 'call-a', 'failed', {
       output: 'failed',
@@ -132,7 +132,7 @@ test('typed command completion keeps exit metadata and terminal phase', () => {
 });
 
 test('standalone events never merge even when their content is identical', () => {
-  const items = reduceSessionTimelineEvents([
+  const items = reduceTranscriptEvents([
     messageEvent('message-a', '01', 'same'),
     messageEvent('message-b', '02', 'same'),
   ]);
@@ -148,10 +148,10 @@ test('proxied event content is copied into a plain timeline item', () => {
   const images = new Proxy([{ src: '/preview/image-a', detail: 'auto' }], {});
   event.content = new Proxy({ ...event.content, images }, {});
 
-  const [item] = reduceSessionTimelineEvents([event]);
+  const [item] = reduceTranscriptEvents([event]);
 
   assert.deepEqual(item.content, {
-    __typename: 'SessionTextMessageContent',
+    __typename: 'TranscriptMessageContent',
     role: 'assistant',
     text: 'proxied',
     format: 'markdown',

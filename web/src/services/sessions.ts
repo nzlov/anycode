@@ -4,7 +4,7 @@ import {
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
 import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
-import type { SessionTimelineEvent } from '@/services/sessionTimeline';
+import type { TranscriptEvent } from '@/services/sessionTimeline';
 
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
@@ -147,7 +147,7 @@ export interface SessionPage {
 
 export interface SessionDetailData {
   session: SessionDetail;
-  events: SessionTimelineEvent[];
+  events: TranscriptEvent[];
   eventsPageInfo: PageInfo;
 }
 

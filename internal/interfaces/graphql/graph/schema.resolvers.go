@@ -438,8 +438,8 @@ func (r *queryResolver) Session(ctx context.Context, id string) (*model.SessionD
 	return mapSessionDetail(dto), nil
 }
 
-// SessionEvents is the resolver for the sessionEvents field.
-func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionTimelinePage, error) {
+// SessionTranscript is the resolver for the sessionTranscript field.
+func (r *queryResolver) SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
@@ -451,7 +451,7 @@ func (r *queryResolver) SessionEvents(ctx context.Context, input model.ListSessi
 	if err != nil {
 		return nil, err
 	}
-	return mapTimelineEventPage(dto), nil
+	return mapTranscriptPage(dto), nil
 }
 
 // SessionDiff is the resolver for the sessionDiff field.
@@ -555,8 +555,8 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 	return batches, nil
 }
 
-// SessionEvents is the resolver for the sessionEvents field.
-func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionTimelineStreamItem, error) {
+// SessionTranscript is the resolver for the sessionTranscript field.
+func (r *subscriptionResolver) SessionTranscript(ctx context.Context, sessionID string) (<-chan *model.TranscriptStreamItem, error) {
 	if r.UseCases.Timeline == nil {
 		return nil, missingUseCase("timeline")
 	}
@@ -567,13 +567,13 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionTimelineStreamItem)
+	out := make(chan *model.TranscriptStreamItem)
 	go func() {
 		defer close(out)
 		select {
 		case <-ctx.Done():
 			return
-		case out <- &model.SessionTimelineStreamItem{Ready: true}:
+		case out <- &model.TranscriptStreamItem{Ready: true}:
 		}
 		for {
 			select {
@@ -586,7 +586,7 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 				select {
 				case <-ctx.Done():
 					return
-				case out <- mapTimelineStreamItem(eventDTO):
+				case out <- mapTranscriptStreamItem(eventDTO):
 				}
 			}
 		}

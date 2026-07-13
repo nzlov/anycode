@@ -502,11 +502,11 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	defer file.Close()
 	sessionCWD := active.workdir
 	sourceID := filepath.Base(path)
-	semanticState := newCodexSemanticState()
+	projector := newCodexTranscriptProjector()
 	skipLeadingLineTerminator := false
 	if offset := active.baseline[path]; offset > 0 {
 		var resumeOffset int64
-		sessionCWD, resumeOffset, skipLeadingLineTerminator, err = primeCodexSemanticState(path, offset, sessionCWD, sourceID, semanticState)
+		sessionCWD, resumeOffset, skipLeadingLineTerminator, err = primeCodexTranscriptProjector(path, offset, sessionCWD, sourceID, projector)
 		if err != nil {
 			err = fmt.Errorf("prime codex session state: %w", err)
 			return failUnreadableProcess(active, exited, err), err
@@ -567,7 +567,7 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 				sessionCWD = cwd
 			}
 			parsed := parseSessionLogLine(raw, sessionCWD, sourceID, pendingOffset)
-			semanticState.apply(parsed)
+			parsed = projector.project(parsed)
 			for _, event := range parsed {
 				if err := emit(event); err != nil {
 					if !processExited {
@@ -639,7 +639,7 @@ func consumePlanMatch(pending []string, eventID string) ([]string, bool) {
 	return pending[:0], false
 }
 
-func primeCodexSemanticState(path string, limit int64, sessionCWD string, sourceID string, state *codexSemanticState) (string, int64, bool, error) {
+func primeCodexTranscriptProjector(path string, limit int64, sessionCWD string, sourceID string, projector *codexTranscriptProjector) (string, int64, bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return sessionCWD, 0, false, err
@@ -673,7 +673,7 @@ func primeCodexSemanticState(path string, limit int64, sessionCWD string, source
 				sessionCWD = cwd
 			}
 			parsed := parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)
-			state.apply(parsed)
+			projector.project(parsed)
 		}
 		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			return sessionCWD, 0, false, readErr
@@ -884,7 +884,7 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 	events := []process.CodexEvent(nil)
 	sessionCWD := input.Workdir
 	sourceID := filepath.Base(path)
-	semanticState := newCodexSemanticState()
+	projector := newCodexTranscriptProjector()
 	var offset int64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -901,7 +901,7 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 					sessionCWD = cwd
 				}
 				parsed := parseSessionLogLine(raw, sessionCWD, sourceID, lineOffset)
-				semanticState.apply(parsed)
+				parsed = projector.project(parsed)
 				events = append(events, parsed...)
 			}
 		}
@@ -1097,6 +1097,15 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 		events = codexEventsFromResponseItem(record.Timestamp, payload, createdAt)
 	case "event_msg":
 		events = codexEventsFromEventMessage(record.Timestamp, payload, createdAt, sessionCWD)
+	case "agent_message":
+		normalized := normalizedItem("agent_message", "completed")
+		normalized["output"] = firstString(payload["message"], payload["text"], payload["output"], messageText(payload))
+		events = []process.CodexEvent{{
+			EventID:   eventID(record.Timestamp, "item.completed", stringValue(payload, "id", "event_id")),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
 	case "compacted":
 		events = []process.CodexEvent{{
 			Type:      "context.compacted",
@@ -1140,63 +1149,150 @@ func finalizeCodexEvents(events []process.CodexEvent, sourceID string, offset in
 	return events
 }
 
-type codexSemanticState struct {
+type codexTranscriptProjector struct {
 	commands       map[string]process.CodexCommandContent
-	lastOccurredAt time.Time
+	recentMessages map[string]time.Time
+	visibility     standardTranscriptVisibility
+	lastOccurred   time.Time
 }
 
-func newCodexSemanticState() *codexSemanticState {
-	return &codexSemanticState{commands: map[string]process.CodexCommandContent{}}
-}
-
-func (s *codexSemanticState) apply(events []process.CodexEvent) {
-	if s == nil {
-		return
+func newCodexTranscriptProjector() *codexTranscriptProjector {
+	return &codexTranscriptProjector{
+		commands:       map[string]process.CodexCommandContent{},
+		recentMessages: map[string]time.Time{},
+		visibility:     newStandardTranscriptVisibility(),
 	}
+}
+
+func (p *codexTranscriptProjector) project(events []process.CodexEvent) []process.CodexEvent {
+	if p == nil {
+		return events
+	}
+	filtered := events[:0]
 	for index := range events {
 		event := &events[index]
-		if event.CreatedAt.IsZero() {
-			if s.lastOccurredAt.IsZero() {
-				event.CreatedAt = time.Unix(0, event.SourceOffset+int64(event.SourceIndex)+1).UTC()
-			} else {
-				event.CreatedAt = s.lastOccurredAt
-			}
-		}
-		s.lastOccurredAt = event.CreatedAt
-		if event.CorrelationID == "" {
+		p.fillOccurredAt(event)
+		p.mergeCommandState(event)
+		if p.duplicateRecentMessage(*event) {
 			continue
 		}
-		if command, ok := event.Content.(process.CodexCommandContent); ok {
-			if previous, exists := s.commands[event.CorrelationID]; exists && command.Command == "" {
-				command.Command = previous.Command
-			}
-			event.Content = command
-			if event.Phase == process.CodexPhaseStarted || event.Phase == process.CodexPhaseProgress {
-				s.commands[event.CorrelationID] = command
-			} else {
-				delete(s.commands, event.CorrelationID)
-			}
+		if !p.visibility.visible(*event) {
 			continue
 		}
-		if tool, ok := event.Content.(process.CodexToolContent); ok && isTerminalCodexPhase(event.Phase) {
-			if command, exists := s.commands[event.CorrelationID]; exists {
-				item := mapValue(event.Payload["item"])
-				normalized := mapValue(event.Payload["normalizedItem"])
-				command.Output = normalizeANSIText(tool.Output.Text)
-				command.ExitCode = intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"])
-				command.DurationMS = intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])
-				if command.ExitCode != nil && *command.ExitCode != 0 && event.Phase == process.CodexPhaseCompleted {
-					event.Phase = process.CodexPhaseFailed
-				}
-				event.Content = command
-				delete(s.commands, event.CorrelationID)
-			}
+		filtered = append(filtered, *event)
+	}
+	return filtered
+}
+
+func (p *codexTranscriptProjector) fillOccurredAt(event *process.CodexEvent) {
+	if event.CreatedAt.IsZero() {
+		if p.lastOccurred.IsZero() {
+			event.CreatedAt = time.Unix(0, event.SourceOffset+int64(event.SourceIndex)+1).UTC()
+		} else {
+			event.CreatedAt = p.lastOccurred
 		}
 	}
+	p.lastOccurred = event.CreatedAt
+}
+
+func (p *codexTranscriptProjector) mergeCommandState(event *process.CodexEvent) {
+	if event.CorrelationID == "" {
+		return
+	}
+	if command, ok := event.Content.(process.CodexCommandContent); ok {
+		if previous, exists := p.commands[event.CorrelationID]; exists && command.Command == "" {
+			command.Command = previous.Command
+		}
+		event.Content = command
+		if event.Phase == process.CodexPhaseStarted || event.Phase == process.CodexPhaseProgress {
+			p.commands[event.CorrelationID] = command
+		} else {
+			delete(p.commands, event.CorrelationID)
+		}
+		return
+	}
+	if tool, ok := event.Content.(process.CodexToolContent); ok && isTerminalCodexPhase(event.Phase) {
+		if command, exists := p.commands[event.CorrelationID]; exists {
+			item := mapValue(event.Payload["item"])
+			normalized := mapValue(event.Payload["normalizedItem"])
+			command.Output = normalizeANSIText(tool.Output.Text)
+			command.ExitCode = intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"])
+			command.DurationMS = intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])
+			if command.ExitCode != nil && *command.ExitCode != 0 && event.Phase == process.CodexPhaseCompleted {
+				event.Phase = process.CodexPhaseFailed
+			}
+			event.Content = command
+			delete(p.commands, event.CorrelationID)
+		}
+	}
+}
+
+func (p *codexTranscriptProjector) duplicateRecentMessage(event process.CodexEvent) bool {
+	message, ok := event.Content.(process.CodexMessageContent)
+	if !ok || message.Text == "" {
+		return false
+	}
+	signature := message.Role + "\x00" + message.Text
+	if previous, exists := p.recentMessages[signature]; exists && eventMessageMirrorCandidate(event) {
+		delta := event.CreatedAt.Sub(previous)
+		if delta >= 0 && delta <= 2*time.Second {
+			return true
+		}
+	}
+	p.recentMessages[signature] = event.CreatedAt
+	return false
+}
+
+func eventMessageMirrorCandidate(event process.CodexEvent) bool {
+	item := mapValue(event.Payload["item"])
+	normalized := mapValue(event.Payload["normalizedItem"])
+	return event.Type == "item.completed" &&
+		stringValue(normalized, "type") == "agent_message" &&
+		stringValue(item, "type") == "agent_message" &&
+		stringValue(item, "message") != ""
 }
 
 func isTerminalCodexPhase(phase process.CodexPhase) bool {
 	return phase == process.CodexPhaseCompleted || phase == process.CodexPhaseFailed || phase == process.CodexPhaseCancelled
+}
+
+type standardTranscriptVisibility struct {
+	hiddenToolCalls map[string]struct{}
+}
+
+func newStandardTranscriptVisibility() standardTranscriptVisibility {
+	return standardTranscriptVisibility{hiddenToolCalls: map[string]struct{}{}}
+}
+
+func (v standardTranscriptVisibility) visible(event process.CodexEvent) bool {
+	if event.CorrelationID == "" {
+		return true
+	}
+	tool, ok := event.Content.(process.CodexToolContent)
+	if !ok {
+		return true
+	}
+	if isInternalTranscriptTool(tool.QualifiedName) {
+		if event.Phase == process.CodexPhaseStarted || event.Phase == process.CodexPhaseProgress {
+			v.hiddenToolCalls[event.CorrelationID] = struct{}{}
+		}
+		if isTerminalCodexPhase(event.Phase) {
+			delete(v.hiddenToolCalls, event.CorrelationID)
+		}
+		return false
+	}
+	if _, ok := v.hiddenToolCalls[event.CorrelationID]; ok {
+		if isTerminalCodexPhase(event.Phase) {
+			delete(v.hiddenToolCalls, event.CorrelationID)
+		}
+		return false
+	}
+	return true
+}
+
+func isInternalTranscriptTool(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	return normalized == "apply_patch" || strings.HasSuffix(normalized, ".apply_patch")
 }
 
 func applyCodexSemantic(event *process.CodexEvent) {
@@ -1416,7 +1512,7 @@ func codexUsageContent(payload map[string]any) process.CodexUsageContent {
 
 func isCodexStatusType(eventType string) bool {
 	switch eventType {
-	case "thread.started", "task.started", "task.completed", "turn.started", "turn.completed", "turn.aborted", "context.compacted", "turn.context", "world.state", "process.exit", "error", "invalid_json":
+	case "thread.started", "task.started", "task.completed", "turn.started", "turn.completed", "turn.aborted", "context.compacted", "turn.context", "world.state", "process.exit", "error", "invalid_json", "inter_agent_communication_metadata", "sub_agent_activity", "thread_settings_applied":
 		return true
 	default:
 		return false
@@ -1427,13 +1523,24 @@ func codexStatusContent(code string, payload map[string]any) process.CodexStatus
 	level := "info"
 	if code == "error" || code == "invalid_json" || (code == "process.exit" && intValue(payload["exitCode"]) != 0) {
 		level = "error"
-	} else if code == "turn.aborted" || code == "context.compacted" {
+	} else if code == "turn.aborted" || code == "context.compacted" || (code == "sub_agent_activity" && stringValue(payload, "kind") == "interrupted") {
 		level = "warning"
+	}
+	message := firstString(payload["message"], payload["reason"], payload["failureReason"])
+	if message == "" {
+		switch code {
+		case "inter_agent_communication_metadata":
+			message = "Inter-agent communication metadata"
+		case "sub_agent_activity":
+			message = strings.TrimSpace("Sub-agent " + firstString(payload["kind"]) + " " + firstString(payload["agent_path"]))
+		case "thread_settings_applied":
+			message = "Thread settings applied"
+		}
 	}
 	return process.CodexStatusContent{
 		Code:    code,
 		Level:   level,
-		Message: firstString(payload["message"], payload["reason"], payload["failureReason"]),
+		Message: message,
 		Details: cloneMap(payload),
 	}
 }
@@ -1654,6 +1761,19 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
+	case "agent_message", "assistant_message", "user_message":
+		normalizedType := itemType
+		if normalizedType == "assistant_message" {
+			normalizedType = "agent_message"
+		}
+		normalized := normalizedItem(normalizedType, "completed")
+		normalized["output"] = firstString(payload["message"], payload["text"], payload["output"], messageText(payload))
+		return []process.CodexEvent{{
+			EventID:   eventID(timestamp, "item.completed", stringValue(payload, "id", "event_id")),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
 	case "message":
 		itemType := ""
 		switch stringValue(payload, "role") {
@@ -1740,7 +1860,15 @@ func codexEventsFromEventMessage(timestamp string, payload map[string]any, creat
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
-	case "user_message", "agent_message", "context_compacted", "web_search_end":
+	case "agent_message":
+		normalized := normalizedItem("agent_message", "completed")
+		normalized["output"] = firstString(payload["message"], payload["text"], payload["output"], messageText(payload))
+		return []process.CodexEvent{{
+			Type:      "item.completed",
+			Payload:   itemEventPayload(payload, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "user_message", "context_compacted", "web_search_end":
 		// Richer canonical records are emitted as response_item or compacted entries.
 		return nil
 	case "task_started":

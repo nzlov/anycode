@@ -7,7 +7,7 @@ import {
   type GraphQLSubscriptionClose,
   verifyGraphQLAccessKey,
 } from '@/services/graphqlClient';
-import { olderSessionEventCursor } from '@/services/sessionEventPaging';
+import { olderTranscriptCursor } from '@/services/sessionEventPaging';
 import {
   appendPrompt,
   closeSession as closeSessionRequest,
@@ -25,9 +25,9 @@ import {
   type SessionDetailData,
 } from '@/services/sessions';
 import {
-  getSessionTimelinePage,
-  subscribeSessionTimeline,
-  type SessionTokenUsage,
+  getSessionTranscriptPage,
+  subscribeSessionTranscript,
+  type TranscriptTokenUsage,
 } from '@/services/sessionTimeline';
 import {
   appendLiveEvent,
@@ -44,7 +44,7 @@ const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, ne
 export function useSessionDetail(sessionId: string) {
   const session = ref<SessionDetailData['session'] | null>(null);
   const events = ref<SessionDetailData['events']>([]);
-  const tokenUsage = ref<SessionTokenUsage | null>(null);
+  const tokenUsage = ref<TranscriptTokenUsage | null>(null);
   const eventsPageInfo = ref<PageInfo>({ ...emptyPageInfo });
   const loading = ref(false);
   const loadingOlderEvents = ref(false);
@@ -63,7 +63,7 @@ export function useSessionDetail(sessionId: string) {
   let stateSubscription: { unsubscribe: () => void } | null = null;
   let bufferingLiveEvents = false;
   let bufferedLiveEvents: SessionDetailData['events'] = [];
-  let bufferedLiveUsage: SessionTokenUsage | null = null;
+  let bufferedLiveUsage: TranscriptTokenUsage | null = null;
   let releaseSubscriptionReadiness: (() => void) | null = null;
   let subscriptionGeneration = 0;
   const eventSnapshotRequests = createLatestRequestTracker();
@@ -83,7 +83,7 @@ export function useSessionDetail(sessionId: string) {
     try {
       const [sessionResult, eventResult] = await Promise.allSettled([
         getSession(sessionId),
-        getSessionTimelinePage(sessionId, '', eventPageSize),
+        getSessionTranscriptPage(sessionId, '', eventPageSize),
       ]);
       if (sessionRequests.isCurrent(sessionRequest)) {
         if (sessionResult.status === 'fulfilled') {
@@ -235,12 +235,12 @@ export function useSessionDetail(sessionId: string) {
   }
 
   async function loadOlderEvents(): Promise<string | null> {
-    const beforeEventId = olderSessionEventCursor(eventsPageInfo.value);
+    const beforeEventId = olderTranscriptCursor(eventsPageInfo.value);
     if (loadingOlderEvents.value || beforeEventId === null) return null;
     loadingOlderEvents.value = true;
     error.value = '';
     try {
-      const result = await getSessionTimelinePage(sessionId, beforeEventId, eventPageSize);
+      const result = await getSessionTranscriptPage(sessionId, beforeEventId, eventPageSize);
       events.value = prependOlderEvents(events.value, result.items);
       eventsPageInfo.value = result.pageInfo;
       return result.pageInfo.nextCursor || null;
@@ -304,7 +304,7 @@ export function useSessionDetail(sessionId: string) {
       transcriptReady.release();
       stateReady.release();
     };
-    eventSubscription = subscribeSessionTimeline(sessionId, {
+    eventSubscription = subscribeSessionTranscript(sessionId, {
       onSubscribed: transcriptReady.resolve,
       onData: (event) => {
         if (generation !== subscriptionGeneration) return;

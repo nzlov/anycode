@@ -1,23 +1,23 @@
-export function reduceSessionTimelineEvents(events) {
-  const orderedEvents = [...events].sort(compareTimelineEvents);
+export function reduceTranscriptEvents(events) {
+  const orderedEvents = [...events].sort(compareTranscriptEvents);
   const items = [];
   const correlated = new Map();
 
   for (const event of orderedEvents) {
     if (!event.correlationId || event.phase === 'standalone') {
-      items.push(toTimelineItem(event));
+      items.push(toTranscriptItem(event));
       continue;
     }
 
     const existing = correlated.get(event.correlationId);
     if (!existing) {
-      const item = toTimelineItem(event, event.correlationId);
+      const item = toTranscriptItem(event, event.correlationId);
       correlated.set(event.correlationId, item);
       items.push(item);
       continue;
     }
 
-    existing.content = mergeTimelineContent(existing.content, event.content);
+    existing.content = mergeTranscriptContent(existing.content, event.content);
     existing.phase = event.phase;
     existing.sourceEventIds.push(event.id);
     if (event.phase === 'started' && event.orderKey < existing.orderKey) {
@@ -26,10 +26,10 @@ export function reduceSessionTimelineEvents(events) {
     }
   }
 
-  return items.sort(compareTimelineEvents);
+  return items.sort(compareTranscriptEvents);
 }
 
-function toTimelineItem(event, id = event.id) {
+function toTranscriptItem(event, id = event.id) {
   return {
     ...event,
     id,
@@ -38,14 +38,14 @@ function toTimelineItem(event, id = event.id) {
   };
 }
 
-function mergeTimelineContent(current, incoming) {
-  if (current.__typename === 'SessionCommandContent') {
-    if (incoming.__typename === 'SessionCommandContent') {
+function mergeTranscriptContent(current, incoming) {
+  if (current.__typename === 'TranscriptCommandContent') {
+    if (incoming.__typename === 'TranscriptCommandContent') {
       return mergeDefined(current, incoming);
     }
   }
 
-  if (current.__typename === 'SessionToolContent' && incoming.__typename === 'SessionToolContent') {
+  if (current.__typename === 'TranscriptToolContent' && incoming.__typename === 'TranscriptToolContent') {
     return {
       ...current,
       qualifiedName: incoming.qualifiedName || current.qualifiedName,
@@ -89,6 +89,6 @@ function cloneContent(content) {
   );
 }
 
-function compareTimelineEvents(left, right) {
+function compareTranscriptEvents(left, right) {
   return left.orderKey.localeCompare(right.orderKey);
 }

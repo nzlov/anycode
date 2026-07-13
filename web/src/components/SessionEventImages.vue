@@ -19,12 +19,12 @@
 </template>
 
 <script setup lang="ts">
-import type { SessionTimelineImage } from '@/services/sessionTimeline';
+import type { TranscriptImage } from '@/services/sessionTimeline';
 
 withDefaults(
   defineProps<{
     eventId: string;
-    images?: SessionTimelineImage[];
+    images?: TranscriptImage[];
     label?: string;
   }>(),
   {
