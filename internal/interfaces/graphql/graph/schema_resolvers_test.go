@@ -536,6 +536,7 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 
 func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	beforeEventID := "event-40"
+	messageRole := "assistant"
 	limit := 50
 	timeline := &fakeTimelineUseCase{}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Query()
@@ -543,6 +544,7 @@ func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	_, err := resolver.SessionTranscript(context.Background(), model.ListTranscriptEventsInput{
 		SessionID:     "session-1",
 		BeforeEventID: &beforeEventID,
+		MessageRole:   &messageRole,
 		Limit:         &limit,
 	})
 	if err != nil {
@@ -552,6 +554,7 @@ func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	want := timelineapp.ListSessionEventsInput{
 		SessionID:     "session-1",
 		BeforeEventID: eventdomain.ID(beforeEventID),
+		MessageRole:   messageRole,
 		Limit:         limit,
 	}
 	if !reflect.DeepEqual(timeline.gotListSessionEventsInput, want) {

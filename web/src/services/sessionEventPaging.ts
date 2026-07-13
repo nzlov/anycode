@@ -1,6 +1,7 @@
 export interface TranscriptPageInput {
   sessionId: string;
   beforeEventId?: string;
+  messageRole?: string;
   limit: number;
 }
 
@@ -12,6 +13,7 @@ export function latestTranscriptPageInput(
   sessionId: string,
   beforeEventId: string,
   limit: number,
+  messageRole = '',
 ): TranscriptPageInput {
   const input: TranscriptPageInput = {
     sessionId,
@@ -19,6 +21,9 @@ export function latestTranscriptPageInput(
   };
   if (beforeEventId) {
     input.beforeEventId = beforeEventId;
+  }
+  if (messageRole) {
+    input.messageRole = messageRole;
   }
   return input;
 }

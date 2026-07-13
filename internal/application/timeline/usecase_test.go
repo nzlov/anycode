@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -206,6 +207,85 @@ func TestListSessionEventsPreservesCodexSessionOrderForEqualSourcePositions(t *t
 	want := []eventdomain.ID{"codex:z-old:event", "codex:a-new:event"}
 	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, want) {
 		t.Fatalf("items = %#v, want %#v", gotIDs, want)
+	}
+}
+
+func TestListSessionEventsFiltersMessageRoleBeforePaging(t *testing.T) {
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {
+			ID:             "session-1",
+			ProjectID:      "project-1",
+			CodexSessionID: "codex-session-1",
+		},
+	}}
+	events := make([]process.CodexEvent, 0, 24)
+	for index := 1; index <= 12; index++ {
+		createdAt := time.Unix(int64(index*2), 0).UTC()
+		events = append(events,
+			process.CodexEvent{
+				EventID:   fmt.Sprintf("assistant-%02d", index),
+				Type:      "item.completed",
+				Content:   process.CodexMessageContent{Role: "assistant", Text: fmt.Sprintf("answer %d", index)},
+				CreatedAt: createdAt,
+			},
+			process.CodexEvent{
+				EventID:   fmt.Sprintf("user-%02d", index),
+				Type:      "item.completed",
+				Content:   process.CodexMessageContent{Role: "user", Text: fmt.Sprintf("question %d", index)},
+				CreatedAt: createdAt.Add(time.Second),
+			},
+		)
+	}
+	service := New(&fakeLiveSource{}, sessions, &fakeTranscriptSource{events: events}, nil)
+
+	latest, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
+		SessionID:   "session-1",
+		Limit:       10,
+		MessageRole: "assistant",
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() error = %v", err)
+	}
+	wantLatest := make([]eventdomain.ID, 0, 10)
+	for index := 3; index <= 12; index++ {
+		wantLatest = append(wantLatest, eventdomain.ID(fmt.Sprintf("codex:codex-session-1:assistant-%02d", index)))
+	}
+	if gotIDs := dtoIDs(latest.Items); !reflect.DeepEqual(gotIDs, wantLatest) {
+		t.Fatalf("latest items = %#v, want %#v", gotIDs, wantLatest)
+	}
+	if latest.Total != 12 || latest.NextCursor != "codex:codex-session-1:assistant-03" {
+		t.Fatalf("latest page metadata = total %d, next cursor %q", latest.Total, latest.NextCursor)
+	}
+
+	older, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
+		SessionID:     "session-1",
+		BeforeEventID: "codex:codex-session-1:assistant-03",
+		Limit:         10,
+		MessageRole:   "assistant",
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents(before) error = %v", err)
+	}
+	wantOlder := []eventdomain.ID{
+		"codex:codex-session-1:assistant-01",
+		"codex:codex-session-1:assistant-02",
+	}
+	if gotIDs := dtoIDs(older.Items); !reflect.DeepEqual(gotIDs, wantOlder) {
+		t.Fatalf("older items = %#v, want %#v", gotIDs, wantOlder)
+	}
+	if older.Total != 12 || older.NextCursor != "" {
+		t.Fatalf("older page metadata = total %d, next cursor %q", older.Total, older.NextCursor)
+	}
+
+	unfiltered, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
+		SessionID: "session-1",
+		Limit:     10,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents(unfiltered) error = %v", err)
+	}
+	if unfiltered.Total != 24 || len(unfiltered.Items) != 10 {
+		t.Fatalf("unfiltered page metadata = total %d, items %d", unfiltered.Total, len(unfiltered.Items))
 	}
 }
 

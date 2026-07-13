@@ -186,6 +186,7 @@ type ListSessionsInput struct {
 type ListTranscriptEventsInput struct {
 	SessionID     string  `json:"sessionId"`
 	BeforeEventID *string `json:"beforeEventId,omitempty"`
+	MessageRole   *string `json:"messageRole,omitempty"`
 	Limit         *int    `json:"limit,omitempty"`
 }
 

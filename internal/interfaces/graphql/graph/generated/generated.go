@@ -3526,6 +3526,7 @@ input UpdatePromptAppendInput {
 input ListTranscriptEventsInput {
   sessionId: ID!
   beforeEventId: ID
+  messageRole: String
   limit: Int
 }
 
@@ -17186,7 +17187,7 @@ func (ec *executionContext) unmarshalInputListTranscriptEventsInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "beforeEventId", "limit"}
+	fieldsInOrder := [...]string{"sessionId", "beforeEventId", "messageRole", "limit"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17207,6 +17208,13 @@ func (ec *executionContext) unmarshalInputListTranscriptEventsInput(ctx context.
 				return it, err
 			}
 			it.BeforeEventID = data
+		case "messageRole":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("messageRole"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MessageRole = data
 		case "limit":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)

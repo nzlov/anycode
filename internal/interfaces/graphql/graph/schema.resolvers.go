@@ -462,6 +462,7 @@ func (r *queryResolver) SessionTranscript(ctx context.Context, input model.ListT
 	dto, err := r.UseCases.Timeline.ListSessionEvents(ctx, timelineapp.ListSessionEventsInput{
 		SessionID:     sessiondomain.ID(input.SessionID),
 		BeforeEventID: eventdomain.ID(stringValue(input.BeforeEventID, "")),
+		MessageRole:   stringValue(input.MessageRole, ""),
 		Limit:         intValue(input.Limit, 0),
 	})
 	if err != nil {
