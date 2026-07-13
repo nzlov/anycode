@@ -8,20 +8,33 @@
       class="diff-file-card"
     >
       <q-card-section class="diff-file-header">
-        <div class="file-title">
+        <div
+          class="file-title"
+          :class="{ 'file-title--collapsible': collapsible }"
+          :role="collapsible ? 'button' : undefined"
+          :tabindex="collapsible ? 0 : undefined"
+          :aria-expanded="collapsible ? !isCollapsed(fileDiff.file.path) : undefined"
+          @click="toggleCollapse(fileDiff.file.path)"
+          @keydown.enter.prevent="toggleCollapse(fileDiff.file.path)"
+          @keydown.space.prevent="toggleCollapse(fileDiff.file.path)"
+        >
+          <q-icon
+            v-if="collapsible"
+            :name="isCollapsed(fileDiff.file.path) ? 'chevron_right' : 'expand_more'"
+          />
           <q-icon :name="fileIcon(fileDiff.file.status)" :color="fileColor(fileDiff.file.status)" />
           <slot name="file-title" :file="fileDiff.file">
             <span>{{ fileDiff.file.path }}</span>
           </slot>
         </div>
-        <div class="row items-center q-gutter-sm">
+        <div class="row items-center q-gutter-sm" @click.stop @keydown.stop>
           <q-badge outline color="positive" :label="`+${fileDiff.file.additions}`" />
           <q-badge outline color="negative" :label="`-${fileDiff.file.deletions}`" />
           <q-badge outline :color="fileColor(fileDiff.file.status)" :label="fileDiff.file.status" />
         </div>
       </q-card-section>
-      <q-separator />
-      <q-card-section class="diff-code">
+      <q-separator v-if="!isCollapsed(fileDiff.file.path)" />
+      <q-card-section v-if="!isCollapsed(fileDiff.file.path)" class="diff-code">
         <template v-for="hunk in fileDiff.hunks" :key="`${fileDiff.file.path}:${hunk.id}`">
           <div v-if="hunk.canExpandBefore" class="diff-expand-row">
             <q-btn
@@ -62,13 +75,30 @@
 <script setup lang="ts">
 import type { DiffFile, DiffLineKind, FileDiff } from '@/services/diff';
 
-defineProps<{
-  fileDiffs: FileDiff[];
+const props = withDefaults(
+  defineProps<{
+    fileDiffs: FileDiff[];
+    collapsible?: boolean;
+    collapsedPaths?: string[];
+  }>(),
+  {
+    collapsible: false,
+    collapsedPaths: () => [],
+  },
+);
+
+const emit = defineEmits<{
+  expand: [filePath: string, direction: 'before' | 'after'];
+  'toggle-collapse': [filePath: string];
 }>();
 
-defineEmits<{
-  expand: [filePath: string, direction: 'before' | 'after'];
-}>();
+function isCollapsed(filePath: string) {
+  return props.collapsible && props.collapsedPaths.includes(filePath);
+}
+
+function toggleCollapse(filePath: string) {
+  if (props.collapsible) emit('toggle-collapse', filePath);
+}
 
 function fileIcon(status: DiffFile['status']) {
   if (status === 'added') return 'add_circle';
@@ -116,10 +146,21 @@ function lineClass(kind: DiffLineKind) {
 }
 
 .file-title {
+  flex: 1 1 auto;
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.file-title--collapsible {
+  cursor: pointer;
+}
+
+.file-title--collapsible:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--q-primary);
+  outline-offset: 3px;
 }
 
 .file-title span {

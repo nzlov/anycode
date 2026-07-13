@@ -5,6 +5,16 @@ export type DiffMode = 'single' | 'all';
 export type DiffLineKind = 'context' | 'add' | 'delete' | 'header';
 export type SessionDiffSummaryState = 'changed' | 'clean' | 'unavailable' | 'error';
 
+export type DiffWorkspaceTarget =
+  { kind: 'session'; sessionId: string } | { kind: 'branch'; projectId: string; branch: string };
+
+export interface DiffWorkspaceState {
+  mode: DiffMode;
+  filePath: string;
+  page: number;
+  pageSize: number;
+}
+
 export interface SessionDiffSummary {
   sessionId: string;
   state: SessionDiffSummaryState;

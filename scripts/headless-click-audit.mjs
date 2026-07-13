@@ -243,12 +243,103 @@ try {
     await waitForText('当前分支变更');
     await waitForText(auditData.diffFile);
     await clickText('单个文件');
-    await clickText(auditData.diffFile);
     await waitForRouteIncludes('mode=single');
+    await waitForRouteIncludes('filePath=');
+    await clickText(auditData.diffFile);
     await clickText('全部 Diff');
     await waitForRouteIncludes('mode=all');
+    await waitForRouteExcludes('filePath=');
+    await selectDiffPageSize(10);
+    await waitForRouteIncludes('pageSize=10');
+    await waitForRouteIncludes('page=1');
+    await clickDiffPage(2);
+    await waitForRouteIncludes('page=2');
     await clickDiffRefreshButton();
+    await waitForRouteIncludes('page=2');
+    await waitForCondition(
+      `document.querySelector('.diff-file-card .file-title--collapsible')?.getAttribute('aria-expanded') === 'true'`,
+      'diff file starts expanded',
+    );
+    await clickFirstDiffFileTitle();
+    await waitForFirstDiffFileExpanded(false);
+    await clickAria('展开当前页全部文件');
+    await waitForFirstDiffFileExpanded(true);
+    await clickAria('折叠当前页全部文件');
+    await waitForAllDiffFilesExpanded(false);
+    await clickAria('展开当前页全部文件');
+    await waitForAllDiffFilesExpanded(true);
+    await toggleFirstDiffFileWithKey('Enter');
+    await waitForFirstDiffFileExpanded(false);
+    await toggleFirstDiffFileWithKey('Space');
+    await waitForFirstDiffFileExpanded(true);
     await screenshot('04-diff-buttons.png');
+  });
+
+  await test('总揽卡片 Diff 位于 TODO 后方并复用可重置工作区弹窗', async () => {
+    await navigate('/');
+    await waitForText(auditData.marker);
+    await waitForOverviewDiffButton(auditData.marker);
+    await waitForCondition(
+      `(() => {
+        const card = Array.from(document.querySelectorAll('.overview-session-card'))
+          .find((element) => element.innerText.includes(${JSON.stringify(auditData.marker)}));
+        const group = card?.querySelector('.overview-card-secondary-actions');
+        const todo = group?.querySelector('.overview-todo-btn');
+        const diff = group?.querySelector('.overview-diff-btn');
+        return !todo || Boolean(diff && todo.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING);
+      })()`,
+      'overview TODO and Diff order',
+    );
+    await clickOverviewDiffButton(auditData.marker);
+    await waitForVisibleSelector('.overview-diff-dialog');
+    await waitForText(auditData.diffFile);
+    await waitForFirstDiffFileExpanded(true);
+    await clickFirstDiffFileTitle();
+    await waitForFirstDiffFileExpanded(false);
+    await closeVisibleDialog();
+    await waitForNoDialog();
+    await waitForOverviewDiffButton(auditData.marker);
+    await clickOverviewDiffButton(auditData.marker);
+    await waitForVisibleSelector('.overview-diff-dialog');
+    await waitForFirstDiffFileExpanded(true);
+    await waitForCondition(
+      `!location.href.includes('/sessions/${auditData.session.id}')`,
+      'overview diff dialog does not navigate to session detail',
+    );
+    await screenshot('04b-overview-diff-dialog.png');
+  });
+
+  await test('Diff 完整页与卡片弹窗在桌面、平板和手机无横向溢出', async () => {
+    const viewports = [
+      [1440, 900, 'desktop'],
+      [900, 900, 'tablet'],
+      [390, 844, 'mobile'],
+    ];
+    for (const [width, height, label] of viewports) {
+      await setViewport(width, height);
+      await navigate(`/#/diff?sessionId=${auditData.session.id}&mode=all&page=1&pageSize=10`);
+      await waitForText(auditData.diffFile);
+      await waitForDiffIdle();
+      await assertNoHorizontalOverflow('.diff-page');
+      await waitForCondition(
+        width >= 1024
+          ? `getComputedStyle(document.querySelector('.diff-workspace__layout')).gridTemplateColumns.split(' ').length > 1`
+          : `getComputedStyle(document.querySelector('.diff-workspace__layout')).gridTemplateColumns.split(' ').length === 1`,
+        `${label} diff workspace columns`,
+      );
+      await screenshot(`04c-diff-${label}.png`);
+
+      await navigate('/');
+      await waitForText(auditData.marker);
+      await waitForOverviewDiffButton(auditData.marker);
+      await clickOverviewDiffButton(auditData.marker);
+      await waitForVisibleSelector('.overview-diff-dialog');
+      await waitForText(auditData.diffFile);
+      await waitForDiffIdle();
+      await assertNoHorizontalOverflow('.overview-diff-dialog');
+      await screenshot(`04d-overview-diff-${label}.png`);
+      await closeVisibleDialog();
+    }
   });
 
   await test('会话表格打开卡片按钮可进入详情', async () => {
@@ -469,7 +560,7 @@ async function createDiffAuditSession(project) {
   `, { id: session.id });
   const detail = detailData.session;
   assert(detail.worktreePath, 'Fresh audit session did not create a worktree.');
-  writeContainerFile(`${detail.worktreePath}/click-audit-${stamp}.txt`, `click audit diff ${stamp}\n`);
+  writeContainerDiffFixtures(detail.worktreePath);
   await startSessionRequest(detail.id);
   const status = await waitForSessionStatus(detail.id, new Set(['starting', 'running', 'stopped', 'failed', 'completed']), 20_000);
   if (status === 'starting' || status === 'running') {
@@ -511,7 +602,7 @@ function ensureDirectoryAuditWorkspace() {
   return name;
 }
 
-function writeContainerFile(path, body) {
+function writeContainerDiffFixtures(worktreePath) {
   const result = spawnSync('docker', [
     'compose',
     '-f',
@@ -521,17 +612,17 @@ function writeContainerFile(path, body) {
     'anycode',
     'sh',
     '-c',
-    'cat > "$1"',
+    'mkdir -p "$1/click-audit-files"; i=1; while [ "$i" -le 12 ]; do printf "click audit diff %s %s\\n" "$2" "$i" > "$1/click-audit-files/file-$i.txt"; i=$((i + 1)); done',
     'sh',
-    path,
+    worktreePath,
+    stamp,
   ], {
     cwd: process.cwd(),
     env: { ...process.env, ANYCODE_ACCESS_KEY: accessKey },
-    input: body,
     encoding: 'utf8',
   });
   if (result.status !== 0) {
-    throw new Error(`write container file failed: ${result.stderr || result.stdout}`);
+    throw new Error(`write container diff fixtures failed: ${result.stderr || result.stdout}`);
   }
 }
 
@@ -883,6 +974,16 @@ async function waitForRouteIncludes(fragment, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for route to include ${fragment}; current ${await currentRoute()}`);
 }
 
+async function waitForRouteExcludes(fragment, timeoutMs = 10_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const route = await currentRoute();
+    if (!route.includes(fragment)) return;
+    await sleep(250);
+  }
+  throw new Error(`Timed out waiting for route to exclude ${fragment}; current ${await currentRoute()}`);
+}
+
 async function currentRoute() {
   return evaluate('location.href');
 }
@@ -960,13 +1061,160 @@ async function clickDiffRefreshButton() {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
     };
-    const button = Array.from(document.querySelectorAll('.diff-files .files-header button')).find(visible);
+    const button = Array.from(document.querySelectorAll('[aria-label="刷新 Diff"]')).find(visible);
     if (!button) return false;
     button.click();
     return true;
   })()`);
   assert(clicked, 'diff refresh button not found');
+  await waitForDiffIdle();
+}
+
+async function waitForDiffIdle() {
+  await waitForCondition(
+    `(() => {
+      const refresh = document.querySelector('[aria-label="刷新 Diff"]');
+      const overlays = Array.from(document.querySelectorAll('.q-inner-loading'));
+      return !refresh?.classList.contains('q-btn--loading') && !overlays.some((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+    })()`,
+    'diff workspace idle',
+  );
+}
+
+async function selectDiffPageSize(pageSize) {
+  await waitForCondition(
+    `document.querySelectorAll('.diff-file-card').length === 12 &&
+      !document.querySelector('.diff-workspace__page-size')?.classList.contains('q-field--disabled')`,
+    'diff page size selector enabled',
+  );
+  const opened = await evaluate(`(() => {
+    const field = document.querySelector('.diff-workspace__page-size');
+    if (!field) return false;
+    (field.querySelector('.q-field__control') || field).click();
+    return true;
+  })()`);
+  assert(opened, 'diff page size selector not found');
+  await sleep(250);
+  const selected = await evaluate(`(() => {
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const option = Array.from(document.querySelectorAll('[role="option"]'))
+      .find((element) => visible(element) && element.textContent.trim() === ${JSON.stringify(String(pageSize))});
+    if (!option) return false;
+    option.click();
+    return true;
+  })()`);
+  assert(selected, `diff page size option not found: ${pageSize}`);
   await sleep(500);
+}
+
+async function clickDiffPage(pageNumber) {
+  await waitForCondition(
+    `document.querySelectorAll('.app-pagination .q-btn').length > 0`,
+    'diff pagination visible',
+  );
+  const clicked = await evaluate(`(() => {
+    const button = Array.from(document.querySelectorAll('.app-pagination .q-btn'))
+      .find((element) => element.textContent.trim() === ${JSON.stringify(String(pageNumber))});
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(clicked, `diff page button not found: ${pageNumber}`);
+  await sleep(500);
+}
+
+async function clickFirstDiffFileTitle() {
+  const clicked = await evaluate(`(() => {
+    const title = document.querySelector('.diff-file-card .file-title--collapsible');
+    if (!title) return false;
+    title.click();
+    return true;
+  })()`);
+  assert(clicked, 'collapsible diff file title not found');
+  await sleep(250);
+}
+
+async function toggleFirstDiffFileWithKey(key) {
+  const focused = await evaluate(`(() => {
+    const title = document.querySelector('.diff-file-card .file-title--collapsible');
+    if (!title) return false;
+    title.focus();
+    return document.activeElement === title;
+  })()`);
+  assert(focused, 'collapsible diff file title could not receive focus');
+  const isSpace = key === 'Space';
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: isSpace ? ' ' : 'Enter',
+    code: isSpace ? 'Space' : 'Enter',
+    windowsVirtualKeyCode: isSpace ? 32 : 13,
+  });
+  await page.send('Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: isSpace ? ' ' : 'Enter',
+    code: isSpace ? 'Space' : 'Enter',
+    windowsVirtualKeyCode: isSpace ? 32 : 13,
+  });
+  await sleep(250);
+}
+
+async function waitForFirstDiffFileExpanded(expected) {
+  await waitForCondition(
+    `document.querySelector('.diff-file-card .file-title--collapsible')?.getAttribute('aria-expanded') === ${JSON.stringify(String(expected))}`,
+    `first diff file expanded ${expected}`,
+  );
+}
+
+async function waitForAllDiffFilesExpanded(expected) {
+  await waitForCondition(
+    `(() => {
+      const titles = Array.from(document.querySelectorAll('.diff-file-card .file-title--collapsible'));
+      return titles.length > 0 && titles.every((title) => title.getAttribute('aria-expanded') === ${JSON.stringify(String(expected))});
+    })()`,
+    `all diff files expanded ${expected}`,
+  );
+}
+
+async function waitForOverviewDiffButton(marker, timeoutMs = 20_000) {
+  await waitForCondition(
+    `Array.from(document.querySelectorAll('.overview-session-card'))
+      .some((card) => card.innerText.includes(${JSON.stringify(marker)}) && card.querySelector('.overview-diff-btn'))`,
+    `overview diff button for ${marker}`,
+    timeoutMs,
+  );
+}
+
+async function clickOverviewDiffButton(marker) {
+  const clicked = await evaluate(`(() => {
+    const card = Array.from(document.querySelectorAll('.overview-session-card'))
+      .find((element) => element.innerText.includes(${JSON.stringify(marker)}));
+    const button = card?.querySelector('.overview-diff-btn');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(clicked, `overview diff button not found: ${marker}`);
+  await sleep(500);
+}
+
+async function assertNoHorizontalOverflow(selector) {
+  const metrics = await evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) return null;
+    return {
+      elementOverflow: element.scrollWidth - element.clientWidth,
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  })()`);
+  assert(metrics, `overflow target not found: ${selector}`);
+  assert(metrics.elementOverflow <= 1, `${selector} horizontal overflow: ${metrics.elementOverflow}px`);
+  assert(metrics.pageOverflow <= 1, `page horizontal overflow: ${metrics.pageOverflow}px`);
 }
 
 async function clickDetailChangesRefreshButton() {

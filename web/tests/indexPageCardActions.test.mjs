@@ -143,10 +143,7 @@ test('overview waiting approval dialog shows model output and diff before submit
   );
   assert.match(overviewSource, /submitWorkflowApproval\(/);
   assert.doesNotMatch(overviewSource, /approvalRejectPrompt|recentModelOutput/);
-  assert.match(
-    overviewSource,
-    /class="forward-approval-dialog app-content-dialog"/,
-  );
+  assert.match(overviewSource, /class="forward-approval-dialog app-content-dialog"/);
   assert.match(
     stylesSource,
     /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important[^}]*max-width:\s*90vw\s*!important/s,
@@ -175,6 +172,22 @@ test('overview cards expose batch-backed diff previews without triggering card n
     new URL('../src/components/SessionDiffPreview.vue', import.meta.url),
     'utf8',
   );
+  const workspaceSource = readFileSync(
+    new URL('../src/components/DiffWorkspace.vue', import.meta.url),
+    'utf8',
+  );
+  const diffPageSource = readFileSync(
+    new URL('../src/pages/DiffPage.vue', import.meta.url),
+    'utf8',
+  );
+  const detailSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+  const fileChangeSource = readFileSync(
+    new URL('../src/components/SessionFileChangeEvent.vue', import.meta.url),
+    'utf8',
+  );
   const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
 
   assert.match(overviewSource, /v-if="card\.filesChanged > 0"/);
@@ -185,18 +198,43 @@ test('overview cards expose batch-backed diff previews without triggering card n
   assert.match(overviewSource, /@keyup\.enter\.stop/);
   assert.match(overviewSource, /@keyup\.space\.stop/);
   assert.match(overviewSource, /getSessionDiffSummaries/);
-  assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId: card\.id, mode: 'all'/);
-  assert.match(overviewSource, /pageSize: 20/);
   assert.match(
     overviewSource,
     /<q-dialog[\s\S]*?v-model="diffDialog"[\s\S]*?:maximized="\$q\.screen\.lt\.sm"/,
   );
-  assert.match(overviewSource, /<SessionDiffPreview[\s\S]*:file-diffs="diffDialogDiffs"/);
+  assert.match(overviewSource, /<DiffWorkspace[\s\S]*:target="diffDialogTarget"/);
+  assert.match(overviewSource, /v-model="diffDialogWorkspaceState"/);
+  assert.match(overviewSource, /aria-label="打开完整 Diff 页面"/);
+  assert.match(
+    overviewSource,
+    /class="overview-card-secondary-actions"[\s\S]*overview-todo-btn[\s\S]*overview-diff-btn[\s\S]*class="overview-card-actions"/,
+  );
+  assert.doesNotMatch(
+    overviewSource,
+    /diffDialogDiffs|diffDialogLoading|diffDialogRequestGeneration/,
+  );
   assert.match(previewSource, /<DiffViewer :file-diffs="fileDiffs"/);
   assert.match(previewSource, /当前会话没有可用 Diff/);
   assert.match(previewSource, /当前会话没有变更/);
   assert.match(previewSource, /label="完整 Diff"/);
+  assert.match(workspaceSource, /class="diff-workspace"/);
+  assert.match(workspaceSource, /<AppPagination/);
+  assert.match(workspaceSource, /<DiffViewer/);
+  assert.match(workspaceSource, /getSessionAllDiff/);
+  assert.match(workspaceSource, /getBranchAllDiff/);
+  assert.match(workspaceSource, /aria-label="展开当前页全部文件"/);
+  assert.match(workspaceSource, /aria-label="折叠当前页全部文件"/);
+  assert.match(workspaceSource, /GLUE: branch Diff paths encode their source session/);
+  assert.doesNotMatch(workspaceSource, /sessionPrefixTargetKey/);
+  assert.match(diffPageSource, /<DiffWorkspace/);
+  assert.doesNotMatch(diffPageSource, /class="diff-layout"/);
+  assert.doesNotMatch(diffPageSource, /<AppPagination|<DiffViewer/);
+  assert.doesNotMatch(diffPageSource, /getSessionAllDiff|getBranchAllDiff/);
+  assert.doesNotMatch(stylesSource, /\.diff-layout/);
+  for (const source of [previewSource, detailSource, fileChangeSource]) {
+    assert.doesNotMatch(source, /collapsible|collapsed-paths|toggle-collapse/);
+  }
   assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
   assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);
-  assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*auto/s);
+  assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*hidden/s);
 });
