@@ -12,13 +12,19 @@ import (
 )
 
 var _ question.Repository = (*QuestionRepository)(nil)
+var _ question.AgentRepository = (*QuestionRepository)(nil)
 
 type QuestionRepository struct {
 	client *ent.Client
+	inTx   bool
 }
 
 func NewQuestionRepository(client *ent.Client) *QuestionRepository {
 	return &QuestionRepository{client: client}
+}
+
+func newQuestionRepositoryInTx(client *ent.Client) *QuestionRepository {
+	return &QuestionRepository{client: client, inTx: true}
 }
 
 func (r *QuestionRepository) CreateBatch(ctx context.Context, batch question.Batch) error {
@@ -30,16 +36,25 @@ func (r *QuestionRepository) CreateBatch(ctx context.Context, batch question.Bat
 		SetID(string(batch.ID)).
 		SetSessionID(string(batch.SessionID)).
 		SetStatus(string(batch.Status)).
-		SetDeliveryStatus(string(normalizeQuestionDelivery(batch.Delivery))).
+		SetDeliveryStatus(string(normalizeDeliveryStatus(batch.DeliveryStatus))).
 		SetQuestions(questions)
 	if batch.WorkflowRunID != nil {
 		create.SetWorkflowRunID(string(*batch.WorkflowRunID))
+	}
+	if batch.OriginProcessRunID != nil {
+		create.SetOriginProcessRunID(string(*batch.OriginProcessRunID))
+	}
+	if batch.DeliveryProcessRunID != nil {
+		create.SetDeliveryProcessRunID(string(*batch.DeliveryProcessRunID))
 	}
 	if !batch.CreatedAt.IsZero() {
 		create.SetCreatedAt(batch.CreatedAt)
 	}
 	if batch.AnsweredAt != nil {
 		create.SetAnsweredAt(*batch.AnsweredAt)
+	}
+	if batch.DeliveredAt != nil {
+		create.SetDeliveredAt(*batch.DeliveredAt)
 	}
 	if err := create.Exec(ctx); err != nil {
 		return fmt.Errorf("create question batch: %w", err)
@@ -92,22 +107,293 @@ func (r *QuestionRepository) FindLatestBySession(ctx context.Context, sessionID 
 	return batch, err == nil, err
 }
 
-func (r *QuestionRepository) SetDeliveryStatus(ctx context.Context, id question.BatchID, status question.DeliveryStatus) (question.Batch, bool, error) {
+func (r *QuestionRepository) CancelPendingBatch(ctx context.Context, id question.BatchID, reason string) (question.Batch, bool, error) {
 	row, err := r.client.QuestionBatch.Get(ctx, string(id))
 	if err != nil {
-		return question.Batch{}, false, fmt.Errorf("find question batch for delivery update: %w", err)
+		return question.Batch{}, false, fmt.Errorf("find question batch for cancel: %w", err)
 	}
-	status = normalizeQuestionDelivery(status)
-	if question.DeliveryStatus(row.DeliveryStatus) == status {
-		batch, err := toDomainQuestionBatch(row)
-		return batch, false, err
-	}
-	row, err = row.Update().SetDeliveryStatus(string(status)).Save(ctx)
+	batch, err := toDomainQuestionBatch(row)
 	if err != nil {
-		return question.Batch{}, false, fmt.Errorf("update question delivery status: %w", err)
+		return question.Batch{}, false, err
+	}
+	if batch.Status != question.BatchPending {
+		return batch, false, nil
+	}
+	updated, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.StatusEQ(string(question.BatchPending)),
+		).
+		SetStatus(string(question.BatchCancelled)).
+		SetCancelReason(reason).
+		Save(ctx)
+	if err != nil {
+		return question.Batch{}, false, fmt.Errorf("cancel question batch: %w", err)
+	}
+	if updated == 0 {
+		current, err := r.FindBatch(ctx, id)
+		if err != nil {
+			return question.Batch{}, false, err
+		}
+		return current, false, nil
+	}
+	batch.Status = question.BatchCancelled
+	return batch, true, nil
+}
+
+func (r *QuestionRepository) FindPendingByOriginProcessRun(ctx context.Context, processRunID question.ProcessRunID) (question.Batch, bool, error) {
+	row, err := r.client.QuestionBatch.Query().
+		Where(
+			entquestionbatch.OriginProcessRunIDEQ(string(processRunID)),
+			entquestionbatch.StatusEQ(string(question.BatchPending)),
+		).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return question.Batch{}, false, nil
+		}
+		return question.Batch{}, false, fmt.Errorf("find pending question batch by process run: %w", err)
 	}
 	batch, err := toDomainQuestionBatch(row)
 	return batch, err == nil, err
+}
+
+func (r *QuestionRepository) FindAwaitingDeliveryBySession(ctx context.Context, sessionID question.SessionID) (question.Batch, bool, error) {
+	row, err := r.client.QuestionBatch.Query().
+		Where(
+			entquestionbatch.SessionIDEQ(string(sessionID)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryAwaitingResume)),
+		).
+		Order(ent.Asc(entquestionbatch.FieldAnsweredAt), ent.Asc(entquestionbatch.FieldID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return question.Batch{}, false, nil
+		}
+		return question.Batch{}, false, fmt.Errorf("find awaiting question delivery: %w", err)
+	}
+	batch, err := toDomainQuestionBatch(row)
+	return batch, err == nil, err
+}
+
+func (r *QuestionRepository) ListAgentBatchesForRecovery(ctx context.Context) ([]question.Batch, error) {
+	rows, err := r.client.QuestionBatch.Query().
+		Where(entquestionbatch.Or(
+			entquestionbatch.StatusEQ(string(question.BatchPending)),
+			entquestionbatch.And(
+				entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+				entquestionbatch.DeliveryStatusIn(string(question.DeliveryAwaitingResume), string(question.DeliveryInflight)),
+			),
+		)).
+		Order(ent.Asc(entquestionbatch.FieldCreatedAt), ent.Asc(entquestionbatch.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list question batches for recovery: %w", err)
+	}
+	batches := make([]question.Batch, 0, len(rows))
+	for _, row := range rows {
+		batch, err := toDomainQuestionBatch(row)
+		if err != nil {
+			return nil, err
+		}
+		batches = append(batches, batch)
+	}
+	return batches, nil
+}
+
+func (r *QuestionRepository) SetOriginProcessRun(ctx context.Context, id question.BatchID, processRunID question.ProcessRunID) error {
+	updated, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.OriginProcessRunIDEQ(""),
+		).
+		SetOriginProcessRunID(string(processRunID)).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("set question origin process run: %w", err)
+	}
+	if updated == 0 {
+		row, err := r.client.QuestionBatch.Get(ctx, string(id))
+		if err != nil {
+			return fmt.Errorf("find question batch after origin update: %w", err)
+		}
+		if row.OriginProcessRunID != string(processRunID) {
+			return fmt.Errorf("question batch %s already has a different origin process run", id)
+		}
+	}
+	return nil
+}
+
+func (r *QuestionRepository) MarkDeliveryAwaitingResume(ctx context.Context, id question.BatchID) error {
+	updated, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusIn(string(question.DeliveryNone), string(question.DeliveryAwaitingResume)),
+		).
+		SetDeliveryStatus(string(question.DeliveryAwaitingResume)).
+		SetDeliveryProcessRunID("").
+		ClearDeliveredAt().
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("mark question delivery awaiting resume: %w", err)
+	}
+	if updated == 0 {
+		return fmt.Errorf("question batch %s cannot await resume", id)
+	}
+	return nil
+}
+
+func (r *QuestionRepository) MarkDeliveryInflight(ctx context.Context, id question.BatchID, processRunID question.ProcessRunID) error {
+	updated, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryAwaitingResume)),
+		).
+		SetDeliveryStatus(string(question.DeliveryInflight)).
+		SetDeliveryProcessRunID(string(processRunID)).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("mark question delivery inflight: %w", err)
+	}
+	if updated == 0 {
+		row, err := r.client.QuestionBatch.Get(ctx, string(id))
+		if err != nil {
+			return fmt.Errorf("find question batch after inflight update: %w", err)
+		}
+		if row.DeliveryStatus != string(question.DeliveryInflight) || row.DeliveryProcessRunID != string(processRunID) {
+			return fmt.Errorf("question batch %s cannot start delivery", id)
+		}
+	}
+	return nil
+}
+
+func (r *QuestionRepository) MarkDeliveryDeliveredByProcessRun(ctx context.Context, processRunID question.ProcessRunID, deliveredAt time.Time) ([]question.Batch, error) {
+	rows, err := r.client.QuestionBatch.Query().
+		Where(
+			entquestionbatch.DeliveryProcessRunIDEQ(string(processRunID)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list inflight question deliveries: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if _, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.DeliveryProcessRunIDEQ(string(processRunID)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+		).
+		SetDeliveryStatus(string(question.DeliveryDelivered)).
+		SetDeliveredAt(deliveredAt).
+		Save(ctx); err != nil {
+		return nil, fmt.Errorf("mark question delivery delivered: %w", err)
+	}
+	batches := make([]question.Batch, 0, len(rows))
+	for _, row := range rows {
+		batch, err := toDomainQuestionBatch(row)
+		if err != nil {
+			return nil, err
+		}
+		batch.DeliveryStatus = question.DeliveryDelivered
+		batch.DeliveredAt = &deliveredAt
+		batches = append(batches, batch)
+	}
+	return batches, nil
+}
+
+func (r *QuestionRepository) ResetDeliveryAwaitingResume(ctx context.Context, id question.BatchID) error {
+	if _, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+		).
+		SetDeliveryStatus(string(question.DeliveryAwaitingResume)).
+		SetDeliveryProcessRunID("").
+		Save(ctx); err != nil {
+		return fmt.Errorf("reset question delivery awaiting resume: %w", err)
+	}
+	return nil
+}
+
+func (r *QuestionRepository) ResetDeliveryAwaitingResumeByProcessRun(ctx context.Context, processRunID question.ProcessRunID) ([]question.Batch, error) {
+	rows, err := r.client.QuestionBatch.Query().
+		Where(
+			entquestionbatch.DeliveryProcessRunIDEQ(string(processRunID)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list inflight question deliveries for reset: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if _, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.DeliveryProcessRunIDEQ(string(processRunID)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+		).
+		SetDeliveryStatus(string(question.DeliveryAwaitingResume)).
+		SetDeliveryProcessRunID("").
+		Save(ctx); err != nil {
+		return nil, fmt.Errorf("reset question deliveries awaiting resume: %w", err)
+	}
+	batches := make([]question.Batch, 0, len(rows))
+	for _, row := range rows {
+		batch, err := toDomainQuestionBatch(row)
+		if err != nil {
+			return nil, err
+		}
+		batch.DeliveryStatus = question.DeliveryAwaitingResume
+		batch.DeliveryProcessRunID = nil
+		batches = append(batches, batch)
+	}
+	return batches, nil
+}
+
+func (r *QuestionRepository) CancelUndeliveredBySession(ctx context.Context, sessionID question.SessionID) ([]question.Batch, error) {
+	rows, err := r.client.QuestionBatch.Query().
+		Where(
+			entquestionbatch.SessionIDEQ(string(sessionID)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusIn(string(question.DeliveryAwaitingResume), string(question.DeliveryInflight)),
+		).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list undelivered question answers: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	if _, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.SessionIDEQ(string(sessionID)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusIn(string(question.DeliveryAwaitingResume), string(question.DeliveryInflight)),
+		).
+		SetDeliveryStatus(string(question.DeliveryNone)).
+		SetDeliveryProcessRunID("").
+		ClearDeliveredAt().
+		Save(ctx); err != nil {
+		return nil, fmt.Errorf("cancel undelivered question answers: %w", err)
+	}
+	batches := make([]question.Batch, 0, len(rows))
+	for _, row := range rows {
+		batch, err := toDomainQuestionBatch(row)
+		if err != nil {
+			return nil, err
+		}
+		batch.DeliveryStatus = question.DeliveryNone
+		batch.DeliveryProcessRunID = nil
+		batch.DeliveredAt = nil
+		batches = append(batches, batch)
+	}
+	return batches, nil
 }
 
 func (r *QuestionRepository) SubmitAnswers(ctx context.Context, id question.BatchID, answers []question.Answer) (question.Batch, bool, error) {
@@ -158,11 +444,25 @@ func (r *QuestionRepository) SubmitAnswers(ctx context.Context, id question.Batc
 }
 
 func (r *QuestionRepository) CancelPendingBySession(ctx context.Context, sessionID question.SessionID, reason string) ([]question.Batch, error) {
+	if r.inTx {
+		return cancelPendingQuestionBatches(ctx, r.client, sessionID, reason)
+	}
 	tx, err := r.client.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin cancel question batches: %w", err)
 	}
-	rows, err := tx.QuestionBatch.Query().
+	cancelled, err := cancelPendingQuestionBatches(ctx, tx.Client(), sessionID, reason)
+	if err != nil {
+		return nil, rollbackQuestionTx(tx, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit cancelled question batches: %w", err)
+	}
+	return cancelled, nil
+}
+
+func cancelPendingQuestionBatches(ctx context.Context, client *ent.Client, sessionID question.SessionID, reason string) ([]question.Batch, error) {
+	rows, err := client.QuestionBatch.Query().
 		Where(
 			entquestionbatch.SessionIDEQ(string(sessionID)),
 			entquestionbatch.StatusEQ(string(question.BatchPending)),
@@ -170,11 +470,11 @@ func (r *QuestionRepository) CancelPendingBySession(ctx context.Context, session
 		Order(ent.Asc(entquestionbatch.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {
-		return nil, rollbackQuestionTx(tx, fmt.Errorf("list pending question batches for cancel: %w", err))
+		return nil, fmt.Errorf("list pending question batches for cancel: %w", err)
 	}
 	cancelled := make([]question.Batch, 0, len(rows))
 	for _, row := range rows {
-		updated, err := tx.QuestionBatch.Update().
+		updated, err := client.QuestionBatch.Update().
 			Where(
 				entquestionbatch.IDEQ(row.ID),
 				entquestionbatch.StatusEQ(string(question.BatchPending)),
@@ -183,20 +483,17 @@ func (r *QuestionRepository) CancelPendingBySession(ctx context.Context, session
 			SetCancelReason(reason).
 			Save(ctx)
 		if err != nil {
-			return nil, rollbackQuestionTx(tx, fmt.Errorf("cancel question batch %s: %w", row.ID, err))
+			return nil, fmt.Errorf("cancel question batch %s: %w", row.ID, err)
 		}
 		if updated == 0 {
 			continue
 		}
 		batch, err := toDomainQuestionBatch(row)
 		if err != nil {
-			return nil, rollbackQuestionTx(tx, err)
+			return nil, err
 		}
 		batch.Status = question.BatchCancelled
 		cancelled = append(cancelled, batch)
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit cancelled question batches: %w", err)
 	}
 	return cancelled, nil
 }
@@ -218,24 +515,37 @@ func toDomainQuestionBatch(row *ent.QuestionBatch) (question.Batch, error) {
 		value := question.WorkflowRunID(*row.WorkflowRunID)
 		workflowRunID = &value
 	}
+	var originProcessRunID *question.ProcessRunID
+	if row.OriginProcessRunID != "" {
+		value := question.ProcessRunID(row.OriginProcessRunID)
+		originProcessRunID = &value
+	}
+	var deliveryProcessRunID *question.ProcessRunID
+	if row.DeliveryProcessRunID != "" {
+		value := question.ProcessRunID(row.DeliveryProcessRunID)
+		deliveryProcessRunID = &value
+	}
 	return question.Batch{
-		ID:            question.BatchID(row.ID),
-		SessionID:     question.SessionID(row.SessionID),
-		WorkflowRunID: workflowRunID,
-		Status:        question.BatchStatus(row.Status),
-		Delivery:      normalizeQuestionDelivery(question.DeliveryStatus(row.DeliveryStatus)),
-		Questions:     questions,
-		CreatedAt:     row.CreatedAt,
-		AnsweredAt:    row.AnsweredAt,
+		ID:                   question.BatchID(row.ID),
+		SessionID:            question.SessionID(row.SessionID),
+		WorkflowRunID:        workflowRunID,
+		OriginProcessRunID:   originProcessRunID,
+		Status:               question.BatchStatus(row.Status),
+		DeliveryStatus:       normalizeDeliveryStatus(question.DeliveryStatus(row.DeliveryStatus)),
+		DeliveryProcessRunID: deliveryProcessRunID,
+		Questions:            questions,
+		CreatedAt:            row.CreatedAt,
+		AnsweredAt:           row.AnsweredAt,
+		DeliveredAt:          row.DeliveredAt,
 	}, nil
 }
 
-func normalizeQuestionDelivery(status question.DeliveryStatus) question.DeliveryStatus {
+func normalizeDeliveryStatus(status question.DeliveryStatus) question.DeliveryStatus {
 	switch status {
-	case question.DeliveryRecoveryRequired, question.DeliveryRecoveryQueued, question.DeliveryDelivered:
+	case question.DeliveryAwaitingResume, question.DeliveryInflight, question.DeliveryDelivered:
 		return status
 	default:
-		return question.DeliveryPending
+		return question.DeliveryNone
 	}
 }
 

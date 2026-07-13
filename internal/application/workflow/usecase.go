@@ -598,42 +598,8 @@ func (s *Service) MarkResumeFailedForSession(ctx context.Context, input sessiond
 			"message":       strings.TrimSpace(input.Message),
 		},
 	}
-	if strings.TrimSpace(run.CurrentNodeID) == "" {
-		if err := s.saveWorkflowMutation(ctx, definition, run, eventInput, func(ctx context.Context, repo domain.Repository) error {
-			return repo.UpdateRunState(ctx, run)
-		}); err != nil {
-			return sessiondomain.WorkflowRunSnapshot{}, err
-		}
-		return toSessionWorkflowRunSnapshot(run), nil
-	}
-	nodeRun, err := s.repo.FindLatestNodeRun(ctx, run.ID, run.CurrentNodeID)
-	if err != nil {
-		if updateErr := s.saveWorkflowMutation(ctx, definition, run, eventInput, func(ctx context.Context, repo domain.Repository) error {
-			return repo.UpdateRunState(ctx, run)
-		}); updateErr != nil {
-			return sessiondomain.WorkflowRunSnapshot{}, updateErr
-		}
-		return toSessionWorkflowRunSnapshot(run), nil
-	}
-	now := s.now()
-	failedNodeRun := domain.NodeRun{
-		ID:            nodeRun.ID,
-		WorkflowRunID: nodeRun.WorkflowRunID,
-		NodeID:        nodeRun.NodeID,
-		Status:        domain.NodeFailed,
-		Attempt:       nodeRun.Attempt,
-		ProcessRunID:  nodeRun.ProcessRunID,
-		StartedAt:     nodeRun.StartedAt,
-		FinishedAt:    &now,
-		Output: map[string]any{
-			"failure": map[string]any{
-				"code":    strings.TrimSpace(input.Code),
-				"message": strings.TrimSpace(input.Message),
-			},
-		},
-	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, eventInput, func(ctx context.Context, repo domain.Repository) error {
-		return repo.CompleteNodeAndAdvance(ctx, failedNodeRun, run, nil)
+		return repo.UpdateRunState(ctx, run)
 	}); err != nil {
 		return sessiondomain.WorkflowRunSnapshot{}, err
 	}

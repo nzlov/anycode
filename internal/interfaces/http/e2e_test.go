@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +23,9 @@ import (
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
+	questiondomain "github.com/nzlov/anycode/internal/domain/question"
+	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/infra/entstore"
 	"github.com/nzlov/anycode/internal/infra/filestore"
@@ -45,7 +50,7 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 
 	fileStore := filestore.New(dataDir)
 	attachments := attachmentapp.New(store.Attachments(), fileStore)
-	questions := questionapp.New(store.Questions(), questionapp.NewMemoryAnswerWaiter())
+	questions := questionapp.New(store.Questions())
 	events := eventapp.New()
 	workflows := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(store.Events()), workflowapp.WithEventPublisher(events))
 	codex := &smokeCodexProcess{events: make(chan processdomain.CodexEvent)}
@@ -180,6 +185,15 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	if pending.Status != "pending" || pending.OptionID != "continue" {
 		t.Fatalf("pending batch = %#v", pending)
 	}
+	select {
+	case rec := <-mcpDone:
+		if rec.Code != http.StatusOK {
+			t.Fatalf("mcp answer_user status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+		}
+		smokeAssertMCPSuspended(t, rec.Body.Bytes(), pending.ID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("mcp answer_user did not finish durable suspension")
+	}
 
 	answeredStatus := smokeGraphQL[string](t, handler, `mutation($input: SubmitQuestionBatchInput!) {
 		submitQuestionBatch(input: $input) { id status questions { id selectedOptionId status } }
@@ -194,24 +208,432 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 		t.Fatalf("submitQuestionBatch status = %q, want answered", answeredStatus)
 	}
 
-	select {
-	case rec := <-mcpDone:
-		if rec.Code != http.StatusOK {
-			t.Fatalf("mcp answer_user status = %d, want 200; body: %s", rec.Code, rec.Body.String())
-		}
-		smokeAssertMCPAnswer(t, rec.Body.Bytes(), pending.ID)
-	case <-time.After(2 * time.Second):
-		t.Fatal("mcp answer_user did not resume after GraphQL submitQuestionBatch")
+	if _, err := sessions.DrainQueuedSessions(ctx); err != nil {
+		t.Fatalf("drain answer resume queue: %v", err)
+	}
+	if codex.resumeInput.CodexSessionID != "codex-smoke-session" || !strings.Contains(codex.resumeInput.Prompt, pending.ID) {
+		t.Fatalf("codex Resume input = %#v", codex.resumeInput)
 	}
 
-	stopped := smokeGraphQL[string](t, handler, `mutation($id: ID!) {
-		stopSession(id: $id) { id status }
-	}`, map[string]any{"id": sessionID}, "stopSession.status")
-	if stopped != "stopped" {
-		t.Fatalf("stopSession status = %q, want stopped", stopped)
-	}
 	if codex.stoppedRunID == "" {
 		t.Fatal("codex Stop was not called")
+	}
+}
+
+func TestAnswerUserStopFailureRestoresRunningLifecycle(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusRunning, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pid := 1234
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-1", SessionID: "session-1", Status: processdomain.StatusRunning, PID: &pid, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	questions := questionapp.New(store.Questions())
+	service := sessionapp.New(
+		store.Sessions(),
+		store.Projects(),
+		sessionapp.WithProcesses(store.Processes(), &retryCodexProcess{stopErr: errors.New("stop unavailable")}),
+		sessionapp.WithEvents(store.Events()),
+		sessionapp.WithQuestions(questions),
+		sessionapp.WithUnitOfWork(store),
+		sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()),
+	)
+
+	_, err = service.RequestUserAnswer(ctx, sessionapp.RequestUserAnswerInput{
+		SessionID: "session-1",
+		Questions: []questiondomain.Question{{Title: "Continue?", Type: "choice", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "stop unavailable") {
+		t.Fatalf("RequestUserAnswer() error = %v", err)
+	}
+	session, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || session.Status != sessiondomain.StatusRunning {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	run, err := store.Processes().FindRun(ctx, "process-1")
+	if err != nil || run.Status != processdomain.StatusRunning || run.PID == nil || *run.PID != pid || run.CodexSessionID != "codex-1" {
+		t.Fatalf("process = %#v, %v", run, err)
+	}
+	pending, err := store.Questions().ListPendingBySession(ctx, "session-1")
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("pending batches = %#v, %v", pending, err)
+	}
+	rows, err := store.Client().QuestionBatch.Query().All(ctx)
+	if err != nil || len(rows) != 1 || rows[0].Status != string(questiondomain.BatchCancelled) {
+		t.Fatalf("question rows = %#v, %v", rows, err)
+	}
+}
+
+func TestRestartKeepsPendingAnswerUserSuspended(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusWaitingUser, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-1", SessionID: "session-1", Status: processdomain.StatusWaitingUser, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	origin := questiondomain.ProcessRunID("process-1")
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", OriginProcessRunID: &origin, Status: questiondomain.BatchPending, DeliveryStatus: questiondomain.DeliveryNone,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "pending"}}, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), &smokeCodexProcess{}), sessionapp.WithEvents(store.Events()), sessionapp.WithUnitOfWork(store))
+	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
+	}
+	session, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || session.Status != sessiondomain.StatusWaitingUser {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	run, err := store.Processes().FindRun(ctx, "process-1")
+	if err != nil || run.Status != processdomain.StatusExited {
+		t.Fatalf("process = %#v, %v", run, err)
+	}
+}
+
+func TestRestartRecoversLegacyAnswerUserOriginFromHistory(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusStopped, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-1", SessionID: "session-1", Status: processdomain.StatusExited, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", Status: questiondomain.BatchPending, DeliveryStatus: questiondomain.DeliveryNone,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "pending"}}, CreatedAt: now.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), &smokeCodexProcess{}), sessionapp.WithEvents(store.Events()), sessionapp.WithUnitOfWork(store))
+	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
+	}
+	session, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || session.Status != sessiondomain.StatusWaitingUser {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	batch, err := store.Questions().FindBatch(ctx, "batch-1")
+	if err != nil || batch.Status != questiondomain.BatchPending || batch.OriginProcessRunID == nil || *batch.OriginProcessRunID != "process-1" {
+		t.Fatalf("batch = %#v, %v", batch, err)
+	}
+}
+
+func TestRestartCancelsUnrecoverableLegacyAnswerUserBatch(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusWaitingUser, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", Status: questiondomain.BatchPending, DeliveryStatus: questiondomain.DeliveryNone,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "pending"}}, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), &smokeCodexProcess{}), sessionapp.WithEvents(store.Events()), sessionapp.WithUnitOfWork(store))
+	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
+	}
+	session, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || session.Status != sessiondomain.StatusResumeFailed {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	batch, err := store.Questions().FindBatch(ctx, "batch-1")
+	if err != nil || batch.Status != questiondomain.BatchCancelled {
+		t.Fatalf("batch = %#v, %v", batch, err)
+	}
+}
+
+func TestRestartClosesStoppedAnswerUserProcess(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusStopping, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-1", SessionID: "session-1", Status: processdomain.StatusStopping, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	origin := questiondomain.ProcessRunID("process-1")
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", OriginProcessRunID: &origin, Status: questiondomain.BatchPending, DeliveryStatus: questiondomain.DeliveryNone,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "pending"}}, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), &smokeCodexProcess{}), sessionapp.WithEvents(store.Events()), sessionapp.WithUnitOfWork(store))
+	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
+	}
+	session, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || session.Status != sessiondomain.StatusStopped {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	run, err := store.Processes().FindRun(ctx, "process-1")
+	if err != nil || run.Status != processdomain.StatusExited {
+		t.Fatalf("process = %#v, %v", run, err)
+	}
+	batch, err := store.Questions().FindBatch(ctx, "batch-1")
+	if err != nil || batch.Status != questiondomain.BatchCancelled {
+		t.Fatalf("batch = %#v, %v", batch, err)
+	}
+}
+
+func TestRestartRequeuesInflightAnswerDelivery(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusRunning, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-origin", SessionID: "session-1", Status: processdomain.StatusExited, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	origin := questiondomain.ProcessRunID("process-origin")
+	delivery := questiondomain.ProcessRunID("process-delivery")
+	selected := questiondomain.OptionID("continue")
+	answeredAt := now.Add(time.Minute)
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", OriginProcessRunID: &origin, Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryInflight, DeliveryProcessRunID: &delivery,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "answered", SelectedOptionID: &selected, Options: []questiondomain.Option{{ID: selected, Label: "Continue"}}}}, CreatedAt: now, AnsweredAt: &answeredAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-delivery", SessionID: "session-1", Status: processdomain.StatusRunning, CodexSessionID: "codex-1", ResumeOf: func() *processdomain.RunID { id := processdomain.RunID("process-origin"); return &id }(), StartedAt: answeredAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Sessions().AppendPrompt(ctx, sessiondomain.PromptAppend{
+		ID: "append-1", SessionID: "session-1", Body: "keep this context", Status: sessiondomain.PromptAppendInflight, DispatchedProcessRunID: "process-delivery", CreatedAt: answeredAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), &smokeCodexProcess{}), sessionapp.WithEvents(store.Events()), sessionapp.WithUnitOfWork(store))
+	if _, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil {
+		t.Fatal(err)
+	}
+	session, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Status != sessiondomain.StatusQueued || session.Queue.Kind != sessiondomain.QueueKindAnswerUser || session.Queue.ResumeOfProcessRunID != "process-origin" || session.Queue.AnswerBatchID != "batch-1" {
+		t.Fatalf("session queue = %#v", session)
+	}
+	batch, err := store.Questions().FindBatch(ctx, "batch-1")
+	if err != nil || batch.DeliveryStatus != questiondomain.DeliveryAwaitingResume || batch.DeliveryProcessRunID != nil {
+		t.Fatalf("batch = %#v, %v", batch, err)
+	}
+	appends, err := store.Sessions().ListPendingPromptAppends(ctx, "session-1")
+	if err != nil || len(appends) != 1 || appends[0].ID != "append-1" || appends[0].DispatchedProcessRunID != "" {
+		t.Fatalf("pending prompt appends = %#v, %v", appends, err)
+	}
+}
+
+func TestAnswerDeliveryResumeFailureCanRetrySameBatch(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeChat, Status: sessiondomain.StatusResumeFailed, WorktreePath: t.TempDir(), CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-origin", SessionID: "session-1", Status: processdomain.StatusExited, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	origin := questiondomain.ProcessRunID("process-origin")
+	selected := questiondomain.OptionID("continue")
+	answeredAt := now.Add(time.Minute)
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", OriginProcessRunID: &origin, Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryAwaitingResume,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "answered", SelectedOptionID: &selected, Options: []questiondomain.Option{{ID: selected, Label: "Continue"}}}}, CreatedAt: now, AnsweredAt: &answeredAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	codex := &retryCodexProcess{failResume: true}
+	questions := questionapp.New(store.Questions())
+	service := sessionapp.New(
+		store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), codex), sessionapp.WithEvents(store.Events()), sessionapp.WithQuestions(questions), sessionapp.WithUnitOfWork(store),
+	)
+	if _, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil {
+		t.Fatal(err)
+	}
+	recoveredSession, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || recoveredSession.Status != sessiondomain.StatusResumeFailed {
+		t.Fatalf("resume failure should wait for user action after restart: %#v, %v", recoveredSession, err)
+	}
+	if _, err := service.ResumeSessionWithOptions(ctx, "session-1", sessionapp.StartSessionOptions{Force: true}); err == nil {
+		t.Fatal("first answer delivery resume should fail")
+	}
+	batch, err := store.Questions().FindBatch(ctx, "batch-1")
+	if err != nil || batch.DeliveryStatus != questiondomain.DeliveryAwaitingResume {
+		t.Fatalf("batch after failed resume = %#v, %v", batch, err)
+	}
+	codex.failResume = false
+	if _, err := service.ResumeSessionWithOptions(ctx, "session-1", sessionapp.StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("retry answer delivery: %v", err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		batch, err = store.Questions().FindBatch(ctx, "batch-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if batch.DeliveryStatus == questiondomain.DeliveryDelivered {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("answer delivery was not confirmed: %#v", batch)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if codex.resumeInput.CodexSessionID != "codex-1" || !strings.Contains(codex.resumeInput.Prompt, "batch-1") {
+		t.Fatalf("resume input = %#v", codex.resumeInput)
+	}
+}
+
+func TestRestartReconcilesWorkflowAnswerResumeFailure(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, sessiondomain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: sessiondomain.ModeWorkflow, Status: sessiondomain.StatusResumeFailed, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	definition := workflowdomain.Definition{
+		ID: "workflow-1", ProjectID: "project-1", Name: "workflow", Version: 1, Active: true,
+		Graph: workflowdomain.Graph{Nodes: []workflowdomain.Node{{ID: "node-1", Type: "codex", Title: "Run"}}}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Workflows().SaveDefinition(ctx, definition); err != nil {
+		t.Fatal(err)
+	}
+	processRunID := workflowdomain.ProcessRunID("process-origin")
+	if err := store.Workflows().CreateInitialRun(ctx, workflowdomain.Run{
+		ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: definition.ID, Status: workflowdomain.RunRunning, CurrentNodeID: "node-1", Context: workflowdomain.Context{Values: map[string]any{}}, StartedAt: &now,
+	}, workflowdomain.NodeRun{
+		ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "node-1", Status: workflowdomain.NodeWaitingUser, Attempt: 1, ProcessRunID: &processRunID, StartedAt: &now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	nodeRunID := processdomain.NodeRunID("node-run-1")
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{
+		ID: "process-origin", SessionID: "session-1", NodeRunID: &nodeRunID, Status: processdomain.StatusExited, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	origin := questiondomain.ProcessRunID("process-origin")
+	workflowRunID := questiondomain.WorkflowRunID("workflow-run-1")
+	selected := questiondomain.OptionID("continue")
+	answeredAt := now.Add(time.Minute)
+	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", WorkflowRunID: &workflowRunID, OriginProcessRunID: &origin, Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryAwaitingResume,
+		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "answered", SelectedOptionID: &selected, Options: []questiondomain.Option{{ID: selected, Label: "Continue"}}}}, CreatedAt: now, AnsweredAt: &answeredAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(store.Events()))
+	service := sessionapp.New(
+		store.Sessions(), store.Projects(), sessionapp.WithProcesses(store.Processes(), &smokeCodexProcess{}), sessionapp.WithEvents(store.Events()), sessionapp.WithWorkflows(workflowService), sessionapp.WithUnitOfWork(store),
+	)
+	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
+		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
+	}
+	run, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	if err != nil || run.Status != workflowdomain.RunWaitingResumeAction {
+		t.Fatalf("workflow run = %#v, %v", run, err)
 	}
 }
 
@@ -250,7 +672,7 @@ func smokeWaitPendingBatch(t *testing.T, handler http.Handler, sessionID string)
 	return smokePendingBatch{}
 }
 
-func smokeAssertMCPAnswer(t *testing.T, body []byte, batchID string) {
+func smokeAssertMCPSuspended(t *testing.T, body []byte, batchID string) {
 	t.Helper()
 	var response struct {
 		Result struct {
@@ -267,13 +689,13 @@ func smokeAssertMCPAnswer(t *testing.T, body []byte, batchID string) {
 	}
 	var payload struct {
 		BatchID string `json:"batchId"`
-		Answers []any  `json:"answers"`
+		Status  string `json:"status"`
 	}
 	if err := json.Unmarshal([]byte(response.Result.Content[0].Text), &payload); err != nil {
 		t.Fatalf("decode mcp content text: %v; text=%s", err, response.Result.Content[0].Text)
 	}
-	if payload.BatchID != batchID || len(payload.Answers) != 1 {
-		t.Fatalf("mcp answer payload = %#v, want batch %q with one answer", payload, batchID)
+	if payload.BatchID != batchID || payload.Status != "suspended" {
+		t.Fatalf("mcp suspension payload = %#v, want batch %q", payload, batchID)
 	}
 }
 
@@ -442,9 +864,44 @@ func smokePath(t *testing.T, data map[string]any, path string) any {
 
 type smokeCodexProcess struct {
 	startInput   processdomain.CodexStartInput
+	resumeInput  processdomain.CodexResumeInput
 	events       chan processdomain.CodexEvent
 	stoppedRunID processdomain.RunID
 	stopOnce     sync.Once
+}
+
+type retryCodexProcess struct {
+	failResume  bool
+	stopErr     error
+	resumeInput processdomain.CodexResumeInput
+	events      chan processdomain.CodexEvent
+}
+
+func (p *retryCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
+	return processdomain.CodexCapabilities{SupportsExec: true, SupportsResume: true}, nil
+}
+
+func (p *retryCodexProcess) Start(context.Context, processdomain.CodexStartInput) (processdomain.CodexHandle, error) {
+	return processdomain.CodexHandle{}, errors.New("unexpected start")
+}
+
+func (p *retryCodexProcess) Resume(_ context.Context, input processdomain.CodexResumeInput) (processdomain.CodexHandle, error) {
+	p.resumeInput = input
+	if p.failResume {
+		return processdomain.CodexHandle{}, errors.New("resume unavailable")
+	}
+	p.events = make(chan processdomain.CodexEvent, 1)
+	p.events <- processdomain.CodexEvent{Type: "task.started", EventID: "answer-delivered", CreatedAt: time.Now().UTC()}
+	close(p.events)
+	return processdomain.CodexHandle{ProcessRunID: input.ProcessRunID, PID: 4321, CodexSessionID: input.CodexSessionID}, nil
+}
+
+func (p *retryCodexProcess) Stop(context.Context, processdomain.RunID) error {
+	return p.stopErr
+}
+
+func (p *retryCodexProcess) Events(context.Context, processdomain.CodexHandle) (<-chan processdomain.CodexEvent, error) {
+	return p.events, nil
 }
 
 func (p *smokeCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
@@ -457,6 +914,7 @@ func (p *smokeCodexProcess) Start(_ context.Context, input processdomain.CodexSt
 }
 
 func (p *smokeCodexProcess) Resume(_ context.Context, input processdomain.CodexResumeInput) (processdomain.CodexHandle, error) {
+	p.resumeInput = input
 	return processdomain.CodexHandle{ProcessRunID: input.ProcessRunID, PID: 1234, CodexSessionID: input.CodexSessionID}, nil
 }
 

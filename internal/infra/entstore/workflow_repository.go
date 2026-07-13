@@ -115,6 +115,49 @@ func (r *WorkflowRepository) FindLatestNodeRun(ctx context.Context, runID workfl
 	return toDomainNodeRun(row), nil
 }
 
+func (r *WorkflowRepository) MarkNodeWaitingUser(ctx context.Context, runID workflow.RunID, nodeRunID workflow.NodeRunID) error {
+	updated, err := r.client.NodeRun.Update().
+		Where(
+			entnoderun.IDEQ(string(nodeRunID)),
+			entnoderun.WorkflowRunIDEQ(string(runID)),
+			entnoderun.StatusEQ(string(workflow.NodeRunning)),
+		).
+		SetStatus(string(workflow.NodeWaitingUser)).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("mark workflow node waiting user: %w", err)
+	}
+	if updated == 0 {
+		row, err := r.client.NodeRun.Get(ctx, string(nodeRunID))
+		if err != nil {
+			return fmt.Errorf("find workflow node after waiting transition: %w", err)
+		}
+		if row.WorkflowRunID != string(runID) || row.Status != string(workflow.NodeWaitingUser) {
+			return fmt.Errorf("workflow node %s cannot wait for user from status %q", nodeRunID, row.Status)
+		}
+	}
+	return nil
+}
+
+func (r *WorkflowRepository) MarkNodeRunning(ctx context.Context, runID workflow.RunID, nodeRunID workflow.NodeRunID, processRunID workflow.ProcessRunID) error {
+	updated, err := r.client.NodeRun.Update().
+		Where(
+			entnoderun.IDEQ(string(nodeRunID)),
+			entnoderun.WorkflowRunIDEQ(string(runID)),
+			entnoderun.StatusIn(string(workflow.NodeWaitingUser), string(workflow.NodeRunning)),
+		).
+		SetStatus(string(workflow.NodeRunning)).
+		SetProcessRunID(string(processRunID)).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("mark workflow node running: %w", err)
+	}
+	if updated == 0 {
+		return fmt.Errorf("workflow node %s cannot resume", nodeRunID)
+	}
+	return nil
+}
+
 func (r *WorkflowRepository) ActivateDefinition(ctx context.Context, id workflow.DefinitionID) error {
 	definition, err := r.client.WorkflowDefinition.Get(ctx, string(id))
 	if err != nil {

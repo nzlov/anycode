@@ -119,7 +119,8 @@ type QueueIntent struct {
 	NodeRunID               *NodeRunID
 	Prompt                  string
 	ResumeCodexSessionID    string
-	RecoveryBatchID         string
+	ResumeOfProcessRunID    string
+	AnswerBatchID           string
 }
 
 func (s *Session) QueueExecution(intent QueueIntent, now time.Time) error {

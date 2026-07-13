@@ -333,16 +333,30 @@ func (_c *SessionCreate) SetNillableQueueResumeCodexSessionID(v *string) *Sessio
 	return _c
 }
 
-// SetQueueRecoveryBatchID sets the "queue_recovery_batch_id" field.
-func (_c *SessionCreate) SetQueueRecoveryBatchID(v string) *SessionCreate {
-	_c.mutation.SetQueueRecoveryBatchID(v)
+// SetQueueResumeOfProcessRunID sets the "queue_resume_of_process_run_id" field.
+func (_c *SessionCreate) SetQueueResumeOfProcessRunID(v string) *SessionCreate {
+	_c.mutation.SetQueueResumeOfProcessRunID(v)
 	return _c
 }
 
-// SetNillableQueueRecoveryBatchID sets the "queue_recovery_batch_id" field if the given value is not nil.
-func (_c *SessionCreate) SetNillableQueueRecoveryBatchID(v *string) *SessionCreate {
+// SetNillableQueueResumeOfProcessRunID sets the "queue_resume_of_process_run_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueResumeOfProcessRunID(v *string) *SessionCreate {
 	if v != nil {
-		_c.SetQueueRecoveryBatchID(*v)
+		_c.SetQueueResumeOfProcessRunID(*v)
+	}
+	return _c
+}
+
+// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
+func (_c *SessionCreate) SetQueueAnswerBatchID(v string) *SessionCreate {
+	_c.mutation.SetQueueAnswerBatchID(v)
+	return _c
+}
+
+// SetNillableQueueAnswerBatchID sets the "queue_answer_batch_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueAnswerBatchID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueueAnswerBatchID(*v)
 	}
 	return _c
 }
@@ -512,9 +526,13 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultQueueResumeCodexSessionID
 		_c.mutation.SetQueueResumeCodexSessionID(v)
 	}
-	if _, ok := _c.mutation.QueueRecoveryBatchID(); !ok {
-		v := entsession.DefaultQueueRecoveryBatchID
-		_c.mutation.SetQueueRecoveryBatchID(v)
+	if _, ok := _c.mutation.QueueResumeOfProcessRunID(); !ok {
+		v := entsession.DefaultQueueResumeOfProcessRunID
+		_c.mutation.SetQueueResumeOfProcessRunID(v)
+	}
+	if _, ok := _c.mutation.QueueAnswerBatchID(); !ok {
+		v := entsession.DefaultQueueAnswerBatchID
+		_c.mutation.SetQueueAnswerBatchID(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := entsession.DefaultCreatedAt()
@@ -603,8 +621,11 @@ func (_c *SessionCreate) check() error {
 	if _, ok := _c.mutation.QueueResumeCodexSessionID(); !ok {
 		return &ValidationError{Name: "queue_resume_codex_session_id", err: errors.New(`ent: missing required field "Session.queue_resume_codex_session_id"`)}
 	}
-	if _, ok := _c.mutation.QueueRecoveryBatchID(); !ok {
-		return &ValidationError{Name: "queue_recovery_batch_id", err: errors.New(`ent: missing required field "Session.queue_recovery_batch_id"`)}
+	if _, ok := _c.mutation.QueueResumeOfProcessRunID(); !ok {
+		return &ValidationError{Name: "queue_resume_of_process_run_id", err: errors.New(`ent: missing required field "Session.queue_resume_of_process_run_id"`)}
+	}
+	if _, ok := _c.mutation.QueueAnswerBatchID(); !ok {
+		return &ValidationError{Name: "queue_answer_batch_id", err: errors.New(`ent: missing required field "Session.queue_answer_batch_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Session.created_at"`)}
@@ -743,9 +764,13 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 		_spec.SetField(entsession.FieldQueueResumeCodexSessionID, field.TypeString, value)
 		_node.QueueResumeCodexSessionID = value
 	}
-	if value, ok := _c.mutation.QueueRecoveryBatchID(); ok {
-		_spec.SetField(entsession.FieldQueueRecoveryBatchID, field.TypeString, value)
-		_node.QueueRecoveryBatchID = value
+	if value, ok := _c.mutation.QueueResumeOfProcessRunID(); ok {
+		_spec.SetField(entsession.FieldQueueResumeOfProcessRunID, field.TypeString, value)
+		_node.QueueResumeOfProcessRunID = value
+	}
+	if value, ok := _c.mutation.QueueAnswerBatchID(); ok {
+		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
+		_node.QueueAnswerBatchID = value
 	}
 	if value, ok := _c.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)

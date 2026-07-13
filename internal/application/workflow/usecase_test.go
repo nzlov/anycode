@@ -1104,7 +1104,7 @@ func TestMarkResumeFailedForSessionKeepsCurrentNodeAndWaitsForAction(t *testing.
 	if repo.runs[0].Status != domain.RunWaitingResumeAction || repo.runs[0].CurrentNodeID != "build" {
 		t.Fatalf("run = %#v", repo.runs[0])
 	}
-	if repo.nodeRuns[0].Status != domain.NodeFailed || repo.nodeRuns[0].FinishedAt == nil {
+	if repo.nodeRuns[0].Status != domain.NodeRunning || repo.nodeRuns[0].FinishedAt != nil {
 		t.Fatalf("node run = %#v", repo.nodeRuns[0])
 	}
 	resume, ok := repo.runs[0].Context.Values["resume"].(map[string]any)

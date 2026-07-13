@@ -74,6 +74,11 @@ func WorkflowRunID(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldWorkflowRunID, v))
 }
 
+// OriginProcessRunID applies equality check predicate on the "origin_process_run_id" field. It's identical to OriginProcessRunIDEQ.
+func OriginProcessRunID(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldOriginProcessRunID, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldStatus, v))
@@ -82,6 +87,11 @@ func Status(v string) predicate.QuestionBatch {
 // DeliveryStatus applies equality check predicate on the "delivery_status" field. It's identical to DeliveryStatusEQ.
 func DeliveryStatus(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveryStatus, v))
+}
+
+// DeliveryProcessRunID applies equality check predicate on the "delivery_process_run_id" field. It's identical to DeliveryProcessRunIDEQ.
+func DeliveryProcessRunID(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveryProcessRunID, v))
 }
 
 // CancelReason applies equality check predicate on the "cancel_reason" field. It's identical to CancelReasonEQ.
@@ -97,6 +107,11 @@ func CreatedAt(v time.Time) predicate.QuestionBatch {
 // AnsweredAt applies equality check predicate on the "answered_at" field. It's identical to AnsweredAtEQ.
 func AnsweredAt(v time.Time) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldAnsweredAt, v))
+}
+
+// DeliveredAt applies equality check predicate on the "delivered_at" field. It's identical to DeliveredAtEQ.
+func DeliveredAt(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveredAt, v))
 }
 
 // SessionIDEQ applies the EQ predicate on the "session_id" field.
@@ -239,6 +254,71 @@ func WorkflowRunIDContainsFold(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldContainsFold(FieldWorkflowRunID, v))
 }
 
+// OriginProcessRunIDEQ applies the EQ predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDEQ(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDNEQ applies the NEQ predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDNEQ(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNEQ(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDIn applies the In predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDIn(vs ...string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldIn(FieldOriginProcessRunID, vs...))
+}
+
+// OriginProcessRunIDNotIn applies the NotIn predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDNotIn(vs ...string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNotIn(FieldOriginProcessRunID, vs...))
+}
+
+// OriginProcessRunIDGT applies the GT predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDGT(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGT(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDGTE applies the GTE predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDGTE(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGTE(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDLT applies the LT predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDLT(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLT(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDLTE applies the LTE predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDLTE(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLTE(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDContains applies the Contains predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDContains(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldContains(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDHasPrefix applies the HasPrefix predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDHasPrefix(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldHasPrefix(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDHasSuffix applies the HasSuffix predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDHasSuffix(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldHasSuffix(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDEqualFold applies the EqualFold predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDEqualFold(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEqualFold(FieldOriginProcessRunID, v))
+}
+
+// OriginProcessRunIDContainsFold applies the ContainsFold predicate on the "origin_process_run_id" field.
+func OriginProcessRunIDContainsFold(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldContainsFold(FieldOriginProcessRunID, v))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldStatus, v))
@@ -367,6 +447,71 @@ func DeliveryStatusEqualFold(v string) predicate.QuestionBatch {
 // DeliveryStatusContainsFold applies the ContainsFold predicate on the "delivery_status" field.
 func DeliveryStatusContainsFold(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldContainsFold(FieldDeliveryStatus, v))
+}
+
+// DeliveryProcessRunIDEQ applies the EQ predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDEQ(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDNEQ applies the NEQ predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDNEQ(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNEQ(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDIn applies the In predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDIn(vs ...string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldIn(FieldDeliveryProcessRunID, vs...))
+}
+
+// DeliveryProcessRunIDNotIn applies the NotIn predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDNotIn(vs ...string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNotIn(FieldDeliveryProcessRunID, vs...))
+}
+
+// DeliveryProcessRunIDGT applies the GT predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDGT(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGT(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDGTE applies the GTE predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDGTE(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGTE(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDLT applies the LT predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDLT(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLT(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDLTE applies the LTE predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDLTE(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLTE(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDContains applies the Contains predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDContains(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldContains(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDHasPrefix applies the HasPrefix predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDHasPrefix(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldHasPrefix(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDHasSuffix applies the HasSuffix predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDHasSuffix(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldHasSuffix(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDEqualFold applies the EqualFold predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDEqualFold(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEqualFold(FieldDeliveryProcessRunID, v))
+}
+
+// DeliveryProcessRunIDContainsFold applies the ContainsFold predicate on the "delivery_process_run_id" field.
+func DeliveryProcessRunIDContainsFold(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldContainsFold(FieldDeliveryProcessRunID, v))
 }
 
 // CancelReasonEQ applies the EQ predicate on the "cancel_reason" field.
@@ -522,6 +667,56 @@ func AnsweredAtIsNil() predicate.QuestionBatch {
 // AnsweredAtNotNil applies the NotNil predicate on the "answered_at" field.
 func AnsweredAtNotNil() predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldNotNull(FieldAnsweredAt))
+}
+
+// DeliveredAtEQ applies the EQ predicate on the "delivered_at" field.
+func DeliveredAtEQ(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveredAt, v))
+}
+
+// DeliveredAtNEQ applies the NEQ predicate on the "delivered_at" field.
+func DeliveredAtNEQ(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNEQ(FieldDeliveredAt, v))
+}
+
+// DeliveredAtIn applies the In predicate on the "delivered_at" field.
+func DeliveredAtIn(vs ...time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldIn(FieldDeliveredAt, vs...))
+}
+
+// DeliveredAtNotIn applies the NotIn predicate on the "delivered_at" field.
+func DeliveredAtNotIn(vs ...time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNotIn(FieldDeliveredAt, vs...))
+}
+
+// DeliveredAtGT applies the GT predicate on the "delivered_at" field.
+func DeliveredAtGT(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGT(FieldDeliveredAt, v))
+}
+
+// DeliveredAtGTE applies the GTE predicate on the "delivered_at" field.
+func DeliveredAtGTE(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGTE(FieldDeliveredAt, v))
+}
+
+// DeliveredAtLT applies the LT predicate on the "delivered_at" field.
+func DeliveredAtLT(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLT(FieldDeliveredAt, v))
+}
+
+// DeliveredAtLTE applies the LTE predicate on the "delivered_at" field.
+func DeliveredAtLTE(v time.Time) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLTE(FieldDeliveredAt, v))
+}
+
+// DeliveredAtIsNil applies the IsNil predicate on the "delivered_at" field.
+func DeliveredAtIsNil() predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldIsNull(FieldDeliveredAt))
+}
+
+// DeliveredAtNotNil applies the NotNil predicate on the "delivered_at" field.
+func DeliveredAtNotNil() predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNotNull(FieldDeliveredAt))
 }
 
 // And groups predicates with the AND operator between them.

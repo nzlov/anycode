@@ -171,3 +171,8 @@ type Repository interface {
 	MarkRunFailed(ctx context.Context, runID RunID, nodeRunID NodeRunID, failure NodeFailure, finishedAt time.Time) error
 	UpdateRunContext(ctx context.Context, id RunID, context Context) error
 }
+
+type NodeExecutionRepository interface {
+	MarkNodeWaitingUser(ctx context.Context, runID RunID, nodeRunID NodeRunID) error
+	MarkNodeRunning(ctx context.Context, runID RunID, nodeRunID NodeRunID, processRunID ProcessRunID) error
+}

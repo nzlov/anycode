@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/question"
 )
 
@@ -27,12 +28,15 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	createdAt := time.Date(2026, 7, 2, 9, 0, 0, 0, time.UTC)
 	optionID := question.OptionID("option-1")
 	workflowRunID := question.WorkflowRunID("workflow-run-1")
+	originProcessRunID := question.ProcessRunID("process-run-1")
 	batch := question.Batch{
-		ID:            question.BatchID("batch-1"),
-		SessionID:     question.SessionID("session-1"),
-		WorkflowRunID: &workflowRunID,
-		Status:        question.BatchPending,
-		CreatedAt:     createdAt,
+		ID:                 question.BatchID("batch-1"),
+		SessionID:          question.SessionID("session-1"),
+		WorkflowRunID:      &workflowRunID,
+		OriginProcessRunID: &originProcessRunID,
+		Status:             question.BatchPending,
+		DeliveryStatus:     question.DeliveryNone,
+		CreatedAt:          createdAt,
 		Questions: []question.Question{
 			{
 				ID:          question.QuestionID("question-1"),
@@ -66,11 +70,11 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	if found.ID != batch.ID || found.SessionID != batch.SessionID || found.Status != question.BatchPending || !found.CreatedAt.Equal(createdAt) {
 		t.Fatalf("found batch mismatch: %#v", found)
 	}
-	if found.Delivery != question.DeliveryPending {
-		t.Fatalf("found delivery = %q", found.Delivery)
-	}
 	if found.WorkflowRunID == nil || *found.WorkflowRunID != workflowRunID {
 		t.Fatalf("workflow run id mismatch: %#v", found.WorkflowRunID)
+	}
+	if found.OriginProcessRunID == nil || *found.OriginProcessRunID != originProcessRunID || found.DeliveryStatus != question.DeliveryNone {
+		t.Fatalf("agent delivery fields mismatch: %#v", found)
 	}
 	if len(found.Questions) != 1 || found.Questions[0].ID != "question-1" || len(found.Questions[0].Options) != 1 {
 		t.Fatalf("found questions mismatch: %#v", found.Questions)
@@ -85,14 +89,6 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	if len(pending) != 1 || pending[0].ID != batch.ID {
 		t.Fatalf("pending batches = %#v", pending)
 	}
-	updatedDelivery, changed, err := repo.SetDeliveryStatus(ctx, batch.ID, question.DeliveryRecoveryRequired)
-	if err != nil || !changed || updatedDelivery.Delivery != question.DeliveryRecoveryRequired {
-		t.Fatalf("set recovery required = %#v changed=%v error=%v", updatedDelivery, changed, err)
-	}
-	latest, ok, err := repo.FindLatestBySession(ctx, batch.SessionID)
-	if err != nil || !ok || latest.ID != batch.ID || latest.Delivery != question.DeliveryRecoveryRequired {
-		t.Fatalf("latest recovery batch = %#v ok=%v error=%v", latest, ok, err)
-	}
 
 	persisted, transitioned, err := repo.SubmitAnswers(ctx, batch.ID, []question.Answer{
 		{
@@ -106,18 +102,31 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit answers: %v", err)
 	}
-	if !transitioned || persisted.Status != question.BatchAnswered || persisted.Delivery != question.DeliveryRecoveryRequired {
+	if !transitioned || persisted.Status != question.BatchAnswered {
 		t.Fatalf("submit transition = %#v %t", persisted, transitioned)
 	}
-	if delivered, changed, err := repo.SetDeliveryStatus(ctx, batch.ID, question.DeliveryDelivered); err != nil || !changed || delivered.Delivery != question.DeliveryDelivered {
-		t.Fatalf("set delivered = %#v changed=%v error=%v", delivered, changed, err)
+	if err := repo.MarkDeliveryAwaitingResume(ctx, batch.ID); err != nil {
+		t.Fatalf("mark delivery awaiting resume: %v", err)
+	}
+	awaiting, ok, err := repo.FindAwaitingDeliveryBySession(ctx, batch.SessionID)
+	if err != nil || !ok || awaiting.ID != batch.ID {
+		t.Fatalf("awaiting delivery = %#v, %t, %v", awaiting, ok, err)
+	}
+	deliveryProcessRunID := question.ProcessRunID("process-run-2")
+	if err := repo.MarkDeliveryInflight(ctx, batch.ID, deliveryProcessRunID); err != nil {
+		t.Fatalf("mark delivery inflight: %v", err)
+	}
+	deliveredAt := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	delivered, err := repo.MarkDeliveryDeliveredByProcessRun(ctx, deliveryProcessRunID, deliveredAt)
+	if err != nil || len(delivered) != 1 || delivered[0].DeliveryStatus != question.DeliveryDelivered {
+		t.Fatalf("delivered batches = %#v, %v", delivered, err)
 	}
 
 	answered, err := repo.FindBatch(ctx, batch.ID)
 	if err != nil {
 		t.Fatalf("find answered batch: %v", err)
 	}
-	if answered.Status != question.BatchAnswered || answered.AnsweredAt == nil {
+	if answered.Status != question.BatchAnswered || answered.AnsweredAt == nil || answered.DeliveryStatus != question.DeliveryDelivered || answered.DeliveredAt == nil {
 		t.Fatalf("answered batch status mismatch: %#v", answered)
 	}
 	if len(answered.Questions) != 1 {
@@ -197,5 +206,38 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	}
 	if answeredAgain.Status != question.BatchAnswered {
 		t.Fatalf("answered batch should not be cancelled: %#v", answeredAgain)
+	}
+}
+
+func TestMigrateBackfillsPendingQuestionOriginFromUniqueActiveProcess(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Processes().CreateRun(ctx, process.Run{
+		ID: "process-run-1", SessionID: "session-1", Status: process.StatusWaitingUser, CodexSessionID: "codex-1", StartedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Questions().CreateBatch(ctx, question.Batch{
+		ID: "batch-1", SessionID: "session-1", Status: question.BatchPending, DeliveryStatus: question.DeliveryNone, CreatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Questions().FindBatch(ctx, "batch-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OriginProcessRunID == nil || *got.OriginProcessRunID != "process-run-1" {
+		t.Fatalf("origin process run = %#v", got.OriginProcessRunID)
 	}
 }

@@ -3567,6 +3567,34 @@ func TestAppendPromptQueuesStoppedChatInOneUnitOfWork(t *testing.T) {
 	}
 }
 
+func TestAnswerDeliveryWorkdirContentionKeepsAnswerQueueKind(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusResumeFailed,
+		WorktreePath: "/workspace/shared", Priority: domain.PriorityMedium,
+	}
+	repo.sessions[session.ID] = session
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), &fakeCodexProcess{}))
+	if !service.reserveWorkdir(session.WorktreePath, "session-2") {
+		t.Fatal("reserve shared workdir for competing session")
+	}
+
+	queued, err := service.startCodex(ctx, session, codexStartOptions{
+		resumeCodexSessionID: "codex-session-1",
+		resumeOfProcessRunID: "process-run-1",
+		answerBatchID:        "batch-1",
+		prompt:               "deliver answer",
+	}, true)
+	if err != nil {
+		t.Fatalf("startCodex() error = %v", err)
+	}
+	saved := repo.sessions[session.ID]
+	if queued.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindAnswerUser || saved.Queue.Priority != domain.QueuePriorityHigh || saved.Queue.AnswerBatchID != "batch-1" {
+		t.Fatalf("answer delivery queue = %#v", saved)
+	}
+}
+
 func TestAppendPromptRejectsClosedSession(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -5971,53 +5999,6 @@ func TestForceStartQueuedSessionBypassesAgentLimit(t *testing.T) {
 	}
 }
 
-func TestForceStartQueuedAnswerUserReleasesWaitingProcess(t *testing.T) {
-	ctx := context.Background()
-	queuedAt := time.Unix(41, 0).UTC()
-	pid := 1234
-	repo := newFakeRepository()
-	repo.sessions["session-1"] = domain.Session{
-		ID:        "session-1",
-		ProjectID: "project-1",
-		Status:    domain.StatusQueued,
-		QueuedAt:  &queuedAt,
-		Queue: domain.QueueIntent{
-			Kind:     domain.QueueKindAnswerUser,
-			Priority: domain.QueuePriorityImmediate,
-		},
-	}
-	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{
-		ID:             "process-run-1",
-		SessionID:      "session-1",
-		Status:         processdomain.StatusWaitingUser,
-		PID:            &pid,
-		CodexSessionID: "codex-session-1",
-	}
-	processes.hasActive = true
-	codex := &fakeCodexProcess{}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1))
-	service.now = func() time.Time { return time.Unix(43, 0).UTC() }
-
-	got, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
-	if err != nil {
-		t.Fatalf("StartSessionWithOptions() error = %v", err)
-	}
-	if got.Status != domain.StatusRunning {
-		t.Fatalf("StartSessionWithOptions() status = %q", got.Status)
-	}
-	if codex.startCalled {
-		t.Fatal("queued answer_user force start should release the existing process instead of starting codex")
-	}
-	if processes.runningID != "process-run-1" || processes.runningCodex != "codex-session-1" {
-		t.Fatalf("process running = %q %q", processes.runningID, processes.runningCodex)
-	}
-	saved := repo.sessions["session-1"]
-	if saved.Queue.Kind != "" || saved.QueuedAt != nil {
-		t.Fatalf("released answer_user should clear queue: %#v", saved)
-	}
-}
-
 func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
 	ctx := context.Background()
 	lowQueuedAt := time.Unix(40, 0).UTC()
@@ -6107,54 +6088,6 @@ func TestDrainQueuedSessionsSkipsSessionStoppedAfterSelection(t *testing.T) {
 	}
 	if repo.sessions["session-1"].Status != domain.StatusStopped {
 		t.Fatalf("session status = %q, want stopped", repo.sessions["session-1"].Status)
-	}
-}
-
-func TestDrainQueuedSessionsStopsStaleAnswerUserAndContinues(t *testing.T) {
-	ctx := context.Background()
-	answerQueuedAt := time.Unix(40, 0).UTC()
-	startQueuedAt := time.Unix(41, 0).UTC()
-	repo := newFakeRepository()
-	repo.sessions["answer-session"] = domain.Session{
-		ID:        "answer-session",
-		ProjectID: "project-1",
-		Status:    domain.StatusQueued,
-		QueuedAt:  &answerQueuedAt,
-		Queue: domain.QueueIntent{
-			Kind:     domain.QueueKindAnswerUser,
-			Priority: domain.QueuePriorityImmediate,
-		},
-	}
-	repo.sessions["start-session"] = domain.Session{
-		ID:           "start-session",
-		ProjectID:    "project-1",
-		Requirement:  "implement session",
-		Status:       domain.StatusQueued,
-		WorktreePath: "/workspace/start-session",
-		QueuedAt:     &startQueuedAt,
-		Queue:        domain.QueueIntent{Kind: domain.QueueKindStart, Prompt: "implement session"},
-	}
-	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithSessionLocker(NewMemorySessionLocker()))
-	service.now = func() time.Time { return time.Unix(44, 0).UTC() }
-	service.generateID = func() (domain.ID, error) { return "process-run-start", nil }
-
-	started, err := service.DrainQueuedSessions(ctx)
-	if err != nil {
-		t.Fatalf("DrainQueuedSessions() error = %v", err)
-	}
-	if started != 2 {
-		t.Fatalf("DrainQueuedSessions() = %d, want 2", started)
-	}
-	if got := repo.sessions["answer-session"]; got.Status != domain.StatusStopped || got.Queue.Kind != "" || got.QueuedAt != nil {
-		t.Fatalf("stale answer_user session = %#v", got)
-	}
-	if got := repo.sessions["start-session"]; got.Status != domain.StatusRunning {
-		t.Fatalf("start session status = %q", got.Status)
-	}
-	if !codex.startCalled || codex.startInput.SessionID != "start-session" {
-		t.Fatalf("codex start input = %#v", codex.startInput)
 	}
 }
 
@@ -7771,168 +7704,6 @@ func TestStopSessionUsesUnitOfWorkForProcessExitAndStoppedEvent(t *testing.T) {
 	}
 }
 
-func TestMarkWaitingUserAndRunningAfterUserWait(t *testing.T) {
-	ctx := context.Background()
-	repo := newFakeRepository()
-	repo.sessions["session-1"] = domain.Session{
-		ID:        "session-1",
-		ProjectID: "project-1",
-		Status:    domain.StatusRunning,
-	}
-	events := &fakeEventStore{}
-	pid := 1234
-	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{
-		ID:             "process-run-1",
-		SessionID:      "session-1",
-		Status:         processdomain.StatusRunning,
-		PID:            &pid,
-		CodexSessionID: "codex-session-1",
-	}
-	processes.hasActive = true
-	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(processes, nil))
-	service.now = func() time.Time { return time.Unix(44, 0).UTC() }
-	ids := []domain.ID{"event-waiting", "event-queued", "event-running"}
-	service.generateID = func() (domain.ID, error) {
-		id := ids[0]
-		ids = ids[1:]
-		return id, nil
-	}
-
-	waiting, err := service.MarkWaitingUser(ctx, "session-1")
-	if err != nil {
-		t.Fatalf("MarkWaitingUser() error = %v", err)
-	}
-	if waiting.Status != domain.StatusWaitingUser || repo.sessions["session-1"].Status != domain.StatusWaitingUser {
-		t.Fatalf("waiting status = %q saved=%q", waiting.Status, repo.sessions["session-1"].Status)
-	}
-	running, err := service.MarkRunningAfterUserWait(ctx, "session-1")
-	if err != nil {
-		t.Fatalf("MarkRunningAfterUserWait() error = %v", err)
-	}
-	if running.Status != domain.StatusRunning || repo.sessions["session-1"].Status != domain.StatusRunning {
-		t.Fatalf("running status = %q saved=%q", running.Status, repo.sessions["session-1"].Status)
-	}
-	if repo.sessions["session-1"].QueuedAt != nil || repo.sessions["session-1"].Queue.Kind != "" {
-		t.Fatalf("answer_user queue was not cleared: %#v", repo.sessions["session-1"])
-	}
-	got := events.snapshot()
-	if len(got) != 3 || got[0].Type != "session.waiting_user" || got[1].Type != "session.queued" || got[2].Type != "session.running" {
-		t.Fatalf("events = %#v", got)
-	}
-}
-
-func TestMarkWaitingUserUsesUnitOfWorkForProcessAndSession(t *testing.T) {
-	ctx := context.Background()
-	repo := newFakeRepository()
-	repo.sessions["session-1"] = domain.Session{
-		ID:        "session-1",
-		ProjectID: "project-1",
-		Status:    domain.StatusRunning,
-	}
-	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
-	processes.hasActive = true
-	txRepo := repo
-	txProcesses := newFakeProcessRepository()
-	txEvents := &fakeEventStore{}
-	publisher := &fakeEventPublisher{}
-	uow := &fakeUnitOfWork{
-		tx: fakeTx{
-			sessions:  txRepo,
-			processes: txProcesses,
-			events:    txEvents,
-		},
-		publisher: publisher,
-	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(&fakeEventStore{}), WithEventPublisher(publisher), WithUnitOfWork(uow), WithProcesses(processes, nil))
-	service.now = func() time.Time { return time.Unix(44, 0).UTC() }
-	service.generateID = func() (domain.ID, error) { return "event-waiting", nil }
-
-	got, err := service.MarkWaitingUser(ctx, "session-1")
-	if err != nil {
-		t.Fatalf("MarkWaitingUser() error = %v", err)
-	}
-	if got.Status != domain.StatusWaitingUser {
-		t.Fatalf("status = %q", got.Status)
-	}
-	if !uow.called || uow.publishedDuringCall {
-		t.Fatalf("uow called=%v publishedDuringCall=%v", uow.called, uow.publishedDuringCall)
-	}
-	if txProcesses.active.Status != processdomain.StatusWaitingUser || txProcesses.active.ID != "process-run-1" {
-		t.Fatalf("tx process = %#v", txProcesses.active)
-	}
-	if txRepo.sessions["session-1"].Status != domain.StatusWaitingUser {
-		t.Fatalf("tx saved session = %#v", txRepo.sessions["session-1"])
-	}
-	if events := txEvents.snapshot(); len(events) != 1 || events[0].Type != "session.waiting_user" {
-		t.Fatalf("tx events = %#v", events)
-	}
-}
-
-func TestSessionStatusEventPublishesAfterUnitOfWorkReturns(t *testing.T) {
-	ctx := context.Background()
-	repo := newFakeRepository()
-	repo.sessions["session-1"] = domain.Session{
-		ID:        "session-1",
-		ProjectID: "project-1",
-		Status:    domain.StatusWaitingUser,
-	}
-	pid := 1234
-	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{
-		ID:             "process-run-1",
-		SessionID:      "session-1",
-		Status:         processdomain.StatusWaitingUser,
-		PID:            &pid,
-		CodexSessionID: "codex-session-1",
-	}
-	processes.hasActive = true
-	txRepo := repo
-	txProcesses := newFakeProcessRepository()
-	txEvents := &fakeEventStore{}
-	publisher := &fakeEventPublisher{}
-	uow := &fakeUnitOfWork{
-		tx: fakeTx{
-			sessions:  txRepo,
-			processes: txProcesses,
-			events:    txEvents,
-		},
-		publisher: publisher,
-	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(&fakeEventStore{}), WithEventPublisher(publisher), WithUnitOfWork(uow), WithProcesses(processes, nil))
-	service.now = func() time.Time { return time.Unix(44, 0).UTC() }
-	ids := []domain.ID{"event-queued", "event-running"}
-	service.generateID = func() (domain.ID, error) {
-		id := ids[0]
-		ids = ids[1:]
-		return id, nil
-	}
-
-	got, err := service.MarkRunningAfterUserWait(ctx, "session-1")
-	if err != nil {
-		t.Fatalf("MarkRunningAfterUserWait() error = %v", err)
-	}
-	if got.Status != domain.StatusRunning {
-		t.Fatalf("status = %q", got.Status)
-	}
-	if !uow.called || uow.publishedDuringCall {
-		t.Fatalf("uow called=%v publishedDuringCall=%v", uow.called, uow.publishedDuringCall)
-	}
-	if txRepo.sessions["session-1"].Status != domain.StatusRunning {
-		t.Fatalf("tx saved session = %#v", txRepo.sessions["session-1"])
-	}
-	if txProcesses.active.Status != processdomain.StatusRunning || txProcesses.active.ID != "process-run-1" {
-		t.Fatalf("tx process = %#v", txProcesses.active)
-	}
-	if events := txEvents.snapshot(); len(events) != 2 || events[0].Type != "session.queued" || events[1].Type != "session.running" {
-		t.Fatalf("tx events = %#v", events)
-	}
-	if published := publisher.snapshot(); len(published) != 2 || published[0].ID != "event-queued" || published[1].ID != "event-running" {
-		t.Fatalf("published events = %#v", published)
-	}
-}
-
 func TestLifecycleActionsUseSessionLocker(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -9389,6 +9160,18 @@ func (r *fakeProcessRepository) HasAnyBySession(_ context.Context, sessionID pro
 		}
 	}
 	return false, nil
+}
+
+func (r *fakeProcessRepository) FindRun(_ context.Context, id processdomain.RunID) (processdomain.Run, error) {
+	if r.active.ID == id {
+		return r.active, nil
+	}
+	for _, run := range r.created {
+		if run.ID == id {
+			return run, nil
+		}
+	}
+	return processdomain.Run{}, errors.New("process run not found")
 }
 
 func (r *fakeProcessRepository) FindActiveBySession(_ context.Context, sessionID processdomain.SessionID) (processdomain.Run, bool, error) {

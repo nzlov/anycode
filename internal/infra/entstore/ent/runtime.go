@@ -189,28 +189,36 @@ func init() {
 	questionbatchDescSessionID := questionbatchFields[1].Descriptor()
 	// questionbatch.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
 	questionbatch.SessionIDValidator = questionbatchDescSessionID.Validators[0].(func(string) error)
+	// questionbatchDescOriginProcessRunID is the schema descriptor for origin_process_run_id field.
+	questionbatchDescOriginProcessRunID := questionbatchFields[3].Descriptor()
+	// questionbatch.DefaultOriginProcessRunID holds the default value on creation for the origin_process_run_id field.
+	questionbatch.DefaultOriginProcessRunID = questionbatchDescOriginProcessRunID.Default.(string)
 	// questionbatchDescStatus is the schema descriptor for status field.
-	questionbatchDescStatus := questionbatchFields[3].Descriptor()
+	questionbatchDescStatus := questionbatchFields[4].Descriptor()
 	// questionbatch.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	questionbatch.StatusValidator = questionbatchDescStatus.Validators[0].(func(string) error)
 	// questionbatchDescDeliveryStatus is the schema descriptor for delivery_status field.
-	questionbatchDescDeliveryStatus := questionbatchFields[4].Descriptor()
+	questionbatchDescDeliveryStatus := questionbatchFields[5].Descriptor()
 	// questionbatch.DefaultDeliveryStatus holds the default value on creation for the delivery_status field.
 	questionbatch.DefaultDeliveryStatus = questionbatchDescDeliveryStatus.Default.(string)
+	// questionbatchDescDeliveryProcessRunID is the schema descriptor for delivery_process_run_id field.
+	questionbatchDescDeliveryProcessRunID := questionbatchFields[6].Descriptor()
+	// questionbatch.DefaultDeliveryProcessRunID holds the default value on creation for the delivery_process_run_id field.
+	questionbatch.DefaultDeliveryProcessRunID = questionbatchDescDeliveryProcessRunID.Default.(string)
 	// questionbatchDescQuestions is the schema descriptor for questions field.
-	questionbatchDescQuestions := questionbatchFields[5].Descriptor()
+	questionbatchDescQuestions := questionbatchFields[7].Descriptor()
 	// questionbatch.DefaultQuestions holds the default value on creation for the questions field.
 	questionbatch.DefaultQuestions = questionbatchDescQuestions.Default.([]map[string]interface{})
 	// questionbatchDescAnswers is the schema descriptor for answers field.
-	questionbatchDescAnswers := questionbatchFields[6].Descriptor()
+	questionbatchDescAnswers := questionbatchFields[8].Descriptor()
 	// questionbatch.DefaultAnswers holds the default value on creation for the answers field.
 	questionbatch.DefaultAnswers = questionbatchDescAnswers.Default.([]map[string]interface{})
 	// questionbatchDescCancelReason is the schema descriptor for cancel_reason field.
-	questionbatchDescCancelReason := questionbatchFields[7].Descriptor()
+	questionbatchDescCancelReason := questionbatchFields[9].Descriptor()
 	// questionbatch.DefaultCancelReason holds the default value on creation for the cancel_reason field.
 	questionbatch.DefaultCancelReason = questionbatchDescCancelReason.Default.(string)
 	// questionbatchDescCreatedAt is the schema descriptor for created_at field.
-	questionbatchDescCreatedAt := questionbatchFields[8].Descriptor()
+	questionbatchDescCreatedAt := questionbatchFields[10].Descriptor()
 	// questionbatch.DefaultCreatedAt holds the default value on creation for the created_at field.
 	questionbatch.DefaultCreatedAt = questionbatchDescCreatedAt.Default.(func() time.Time)
 	quickcommandFields := schema.QuickCommand{}.Fields()
@@ -305,16 +313,20 @@ func init() {
 	entsessionDescQueueResumeCodexSessionID := entsessionFields[24].Descriptor()
 	// entsession.DefaultQueueResumeCodexSessionID holds the default value on creation for the queue_resume_codex_session_id field.
 	entsession.DefaultQueueResumeCodexSessionID = entsessionDescQueueResumeCodexSessionID.Default.(string)
-	// entsessionDescQueueRecoveryBatchID is the schema descriptor for queue_recovery_batch_id field.
-	entsessionDescQueueRecoveryBatchID := entsessionFields[25].Descriptor()
-	// entsession.DefaultQueueRecoveryBatchID holds the default value on creation for the queue_recovery_batch_id field.
-	entsession.DefaultQueueRecoveryBatchID = entsessionDescQueueRecoveryBatchID.Default.(string)
+	// entsessionDescQueueResumeOfProcessRunID is the schema descriptor for queue_resume_of_process_run_id field.
+	entsessionDescQueueResumeOfProcessRunID := entsessionFields[25].Descriptor()
+	// entsession.DefaultQueueResumeOfProcessRunID holds the default value on creation for the queue_resume_of_process_run_id field.
+	entsession.DefaultQueueResumeOfProcessRunID = entsessionDescQueueResumeOfProcessRunID.Default.(string)
+	// entsessionDescQueueAnswerBatchID is the schema descriptor for queue_answer_batch_id field.
+	entsessionDescQueueAnswerBatchID := entsessionFields[26].Descriptor()
+	// entsession.DefaultQueueAnswerBatchID holds the default value on creation for the queue_answer_batch_id field.
+	entsession.DefaultQueueAnswerBatchID = entsessionDescQueueAnswerBatchID.Default.(string)
 	// entsessionDescCreatedAt is the schema descriptor for created_at field.
-	entsessionDescCreatedAt := entsessionFields[27].Descriptor()
+	entsessionDescCreatedAt := entsessionFields[28].Descriptor()
 	// entsession.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entsession.DefaultCreatedAt = entsessionDescCreatedAt.Default.(func() time.Time)
 	// entsessionDescUpdatedAt is the schema descriptor for updated_at field.
-	entsessionDescUpdatedAt := entsessionFields[28].Descriptor()
+	entsessionDescUpdatedAt := entsessionFields[29].Descriptor()
 	// entsession.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

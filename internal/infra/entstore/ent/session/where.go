@@ -179,9 +179,14 @@ func QueueResumeCodexSessionID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueResumeCodexSessionID, v))
 }
 
-// QueueRecoveryBatchID applies equality check predicate on the "queue_recovery_batch_id" field. It's identical to QueueRecoveryBatchIDEQ.
-func QueueRecoveryBatchID(v string) predicate.Session {
-	return predicate.Session(sql.FieldEQ(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunID applies equality check predicate on the "queue_resume_of_process_run_id" field. It's identical to QueueResumeOfProcessRunIDEQ.
+func QueueResumeOfProcessRunID(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueResumeOfProcessRunID, v))
+}
+
+// QueueAnswerBatchID applies equality check predicate on the "queue_answer_batch_id" field. It's identical to QueueAnswerBatchIDEQ.
+func QueueAnswerBatchID(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueAnswerBatchID, v))
 }
 
 // LastRunAt applies equality check predicate on the "last_run_at" field. It's identical to LastRunAtEQ.
@@ -1549,69 +1554,134 @@ func QueueResumeCodexSessionIDContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldQueueResumeCodexSessionID, v))
 }
 
-// QueueRecoveryBatchIDEQ applies the EQ predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDEQ(v string) predicate.Session {
-	return predicate.Session(sql.FieldEQ(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDEQ applies the EQ predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDNEQ applies the NEQ predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDNEQ(v string) predicate.Session {
-	return predicate.Session(sql.FieldNEQ(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDNEQ applies the NEQ predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDIn applies the In predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDIn(vs ...string) predicate.Session {
-	return predicate.Session(sql.FieldIn(FieldQueueRecoveryBatchID, vs...))
+// QueueResumeOfProcessRunIDIn applies the In predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldQueueResumeOfProcessRunID, vs...))
 }
 
-// QueueRecoveryBatchIDNotIn applies the NotIn predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDNotIn(vs ...string) predicate.Session {
-	return predicate.Session(sql.FieldNotIn(FieldQueueRecoveryBatchID, vs...))
+// QueueResumeOfProcessRunIDNotIn applies the NotIn predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldQueueResumeOfProcessRunID, vs...))
 }
 
-// QueueRecoveryBatchIDGT applies the GT predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDGT(v string) predicate.Session {
-	return predicate.Session(sql.FieldGT(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDGT applies the GT predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDGTE applies the GTE predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDGTE(v string) predicate.Session {
-	return predicate.Session(sql.FieldGTE(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDGTE applies the GTE predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDLT applies the LT predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDLT(v string) predicate.Session {
-	return predicate.Session(sql.FieldLT(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDLT applies the LT predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDLTE applies the LTE predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDLTE(v string) predicate.Session {
-	return predicate.Session(sql.FieldLTE(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDLTE applies the LTE predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDContains applies the Contains predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDContains(v string) predicate.Session {
-	return predicate.Session(sql.FieldContains(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDContains applies the Contains predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDHasPrefix applies the HasPrefix predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDHasPrefix(v string) predicate.Session {
-	return predicate.Session(sql.FieldHasPrefix(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDHasPrefix applies the HasPrefix predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDHasSuffix applies the HasSuffix predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDHasSuffix(v string) predicate.Session {
-	return predicate.Session(sql.FieldHasSuffix(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDHasSuffix applies the HasSuffix predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDEqualFold applies the EqualFold predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDEqualFold(v string) predicate.Session {
-	return predicate.Session(sql.FieldEqualFold(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDEqualFold applies the EqualFold predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueRecoveryBatchIDContainsFold applies the ContainsFold predicate on the "queue_recovery_batch_id" field.
-func QueueRecoveryBatchIDContainsFold(v string) predicate.Session {
-	return predicate.Session(sql.FieldContainsFold(FieldQueueRecoveryBatchID, v))
+// QueueResumeOfProcessRunIDContainsFold applies the ContainsFold predicate on the "queue_resume_of_process_run_id" field.
+func QueueResumeOfProcessRunIDContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldQueueResumeOfProcessRunID, v))
+}
+
+// QueueAnswerBatchIDEQ applies the EQ predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDNEQ applies the NEQ predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDIn applies the In predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldQueueAnswerBatchID, vs...))
+}
+
+// QueueAnswerBatchIDNotIn applies the NotIn predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldQueueAnswerBatchID, vs...))
+}
+
+// QueueAnswerBatchIDGT applies the GT predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDGTE applies the GTE predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDLT applies the LT predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDLTE applies the LTE predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDContains applies the Contains predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDHasPrefix applies the HasPrefix predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDHasSuffix applies the HasSuffix predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDEqualFold applies the EqualFold predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldQueueAnswerBatchID, v))
+}
+
+// QueueAnswerBatchIDContainsFold applies the ContainsFold predicate on the "queue_answer_batch_id" field.
+func QueueAnswerBatchIDContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldQueueAnswerBatchID, v))
 }
 
 // LastRunAtEQ applies the EQ predicate on the "last_run_at" field.

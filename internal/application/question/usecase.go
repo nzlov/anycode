@@ -17,7 +17,6 @@ import (
 
 type UseCase interface {
 	CreateBatch(ctx context.Context, input CreateBatchInput) (BatchDTO, error)
-	Wait(ctx context.Context, id domain.BatchID) ([]domain.Answer, error)
 	SubmitBatch(ctx context.Context, input SubmitBatchInput) (BatchDTO, error)
 	GetBatch(ctx context.Context, id domain.BatchID) (BatchDTO, error)
 	ListPendingBySession(ctx context.Context, sessionID domain.SessionID) ([]BatchDTO, error)
@@ -26,9 +25,10 @@ type UseCase interface {
 }
 
 type CreateBatchInput struct {
-	SessionID     domain.SessionID
-	WorkflowRunID *domain.WorkflowRunID
-	Questions     []domain.Question
+	SessionID          domain.SessionID
+	WorkflowRunID      *domain.WorkflowRunID
+	OriginProcessRunID *domain.ProcessRunID
+	Questions          []domain.Question
 }
 
 type SubmitBatchInput struct {
@@ -37,34 +37,28 @@ type SubmitBatchInput struct {
 }
 
 type BatchDTO struct {
-	ID            domain.BatchID
-	SessionID     domain.SessionID
-	WorkflowRunID *domain.WorkflowRunID
-	Status        domain.BatchStatus
-	Delivery      domain.DeliveryStatus
-	Questions     []domain.Question
+	ID                   domain.BatchID
+	SessionID            domain.SessionID
+	WorkflowRunID        *domain.WorkflowRunID
+	OriginProcessRunID   *domain.ProcessRunID
+	Status               domain.BatchStatus
+	DeliveryStatus       domain.DeliveryStatus
+	DeliveryProcessRunID *domain.ProcessRunID
+	Questions            []domain.Question
 }
 
 type Service struct {
-	repo           domain.Repository
-	policy         domain.Policy
-	waiter         domain.AnswerWaiter
-	now            func() time.Time
-	generateID     func() (string, error)
-	broker         *pendingBroker
-	waitDeliveries sync.Map
+	repo       domain.Repository
+	policy     domain.Policy
+	now        func() time.Time
+	generateID func() (string, error)
+	broker     *pendingBroker
 }
 
-type waitDelivery struct {
-	mu           sync.Mutex
-	resumeFailed bool
-}
-
-func New(repo domain.Repository, waiter domain.AnswerWaiter) *Service {
+func New(repo domain.Repository) *Service {
 	return &Service{
 		repo:       repo,
 		policy:     domain.DefaultPolicy{},
-		waiter:     waiter,
 		now:        time.Now,
 		generateID: generateID,
 		broker:     newPendingBroker(),
@@ -101,13 +95,14 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 		questions[i].BatchID = domain.BatchID(batchID)
 	}
 	batch := domain.Batch{
-		ID:            domain.BatchID(batchID),
-		SessionID:     input.SessionID,
-		WorkflowRunID: input.WorkflowRunID,
-		Status:        domain.BatchPending,
-		Delivery:      domain.DeliveryPending,
-		Questions:     questions,
-		CreatedAt:     s.now(),
+		ID:                 domain.BatchID(batchID),
+		SessionID:          input.SessionID,
+		WorkflowRunID:      input.WorkflowRunID,
+		OriginProcessRunID: input.OriginProcessRunID,
+		Status:             domain.BatchPending,
+		DeliveryStatus:     domain.DeliveryNone,
+		Questions:          questions,
+		CreatedAt:          s.now(),
 	}
 	if err := s.repo.CreateBatch(ctx, batch); err != nil {
 		return BatchDTO{}, fmt.Errorf("create question batch: %w", err)
@@ -115,48 +110,6 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 	dto := toDTO(batch)
 	s.publish(dto)
 	return dto, nil
-}
-
-func (s *Service) Wait(ctx context.Context, id domain.BatchID) ([]domain.Answer, error) {
-	if s == nil {
-		return nil, errors.New("question usecase: nil service")
-	}
-	if s.waiter == nil {
-		return nil, errors.New("question answer waiter is required")
-	}
-	if s.repo == nil {
-		return nil, errors.New("question repository is required")
-	}
-	delivery := s.ensureWaitDelivery(id)
-	if err := s.waiter.Prepare(ctx, id); err != nil {
-		s.removeWaitDelivery(id, delivery)
-		return nil, fmt.Errorf("prepare question answer waiter: %w", err)
-	}
-	defer func() {
-		s.waiter.Forget(id)
-		s.removeWaitDelivery(id, delivery)
-	}()
-	batch, err := s.repo.FindBatch(ctx, id)
-	if err != nil {
-		return nil, fmt.Errorf("find question batch before wait: %w", err)
-	}
-	switch batch.Status {
-	case domain.BatchAnswered:
-		return answersFromBatch(batch), nil
-	case domain.BatchCancelled:
-		return nil, apperror.Wrap(ErrWaitCancelled, apperror.CodeAnswerUserCancelled, apperror.CategoryUserActionRequired, "answer_user wait was cancelled")
-	case domain.BatchPending:
-	default:
-		return nil, fmt.Errorf("question batch %s cannot wait in status %s", id, batch.Status)
-	}
-	answers, err := s.waiter.Wait(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrWaitCancelled) {
-			return nil, apperror.Wrap(err, apperror.CodeAnswerUserCancelled, apperror.CategoryUserActionRequired, "answer_user wait was cancelled")
-		}
-		return nil, fmt.Errorf("wait for question answers: %w", err)
-	}
-	return answers, nil
 }
 
 func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (BatchDTO, error) {
@@ -169,11 +122,6 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 	if s.policy == nil {
 		return BatchDTO{}, errors.New("question policy is required")
 	}
-	delivery := s.loadWaitDelivery(input.BatchID)
-	if delivery != nil {
-		delivery.mu.Lock()
-		defer delivery.mu.Unlock()
-	}
 	batch, err := s.repo.FindBatch(ctx, input.BatchID)
 	if err != nil {
 		return BatchDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "question batch not found").WithDetails(map[string]any{"batchId": string(input.BatchID)})
@@ -182,10 +130,7 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 		if err := ensureAnswersMatchAnsweredBatch(batch, input.Answers); err != nil {
 			return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
 		}
-		if delivery == nil || !delivery.resumeFailed {
-			return toDTO(batch), nil
-		}
-		return s.completeAnsweredBatch(ctx, batch, input.Answers, delivery)
+		return toDTO(batch), nil
 	}
 	if err := s.policy.CanSubmit(batch, input.Answers); err != nil {
 		return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers are invalid").WithDetails(map[string]any{"batchId": string(input.BatchID)})
@@ -194,44 +139,16 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 	if err != nil {
 		return BatchDTO{}, fmt.Errorf("submit question answers: %w", err)
 	}
-	if delivery == nil {
-		delivery = s.loadWaitDelivery(input.BatchID)
-		if delivery != nil {
-			delivery.mu.Lock()
-			defer delivery.mu.Unlock()
-		}
-	}
 	if !transitioned {
 		if persisted.Status == domain.BatchAnswered {
 			if err := ensureAnswersMatchAnsweredBatch(persisted, input.Answers); err != nil {
 				return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
 			}
-			if delivery == nil || !delivery.resumeFailed {
-				return toDTO(persisted), nil
-			}
-			return s.completeAnsweredBatch(ctx, persisted, input.Answers, delivery)
+			return toDTO(persisted), nil
 		}
 		return BatchDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question batch is no longer pending").WithDetails(map[string]any{"batchId": string(input.BatchID), "status": string(persisted.Status)})
 	}
-	return s.completeAnsweredBatch(ctx, persisted, input.Answers, delivery)
-}
-
-func (s *Service) completeAnsweredBatch(ctx context.Context, batch domain.Batch, answers []domain.Answer, delivery *waitDelivery) (BatchDTO, error) {
-	if delivery != nil {
-		if err := s.waiter.Resume(ctx, batch.ID, answers); err != nil {
-			delivery.resumeFailed = true
-			return BatchDTO{}, fmt.Errorf("resume question waiter: %w", err)
-		}
-		delivery.resumeFailed = false
-		if repo, ok := s.repo.(domain.RecoveryRepository); ok {
-			persisted, _, err := repo.SetDeliveryStatus(ctx, batch.ID, domain.DeliveryDelivered)
-			if err != nil {
-				return BatchDTO{}, fmt.Errorf("mark question answers delivered: %w", err)
-			}
-			batch = persisted
-		}
-	}
-	dto := toDTO(batch)
+	dto := toDTO(persisted)
 	s.publish(dto)
 	return dto, nil
 }
@@ -328,64 +245,34 @@ func (s *Service) CancelPendingBySession(ctx context.Context, sessionID domain.S
 	}
 	for _, batch := range cancelled {
 		s.publish(toDTO(batch))
-		delivery := s.loadWaitDelivery(batch.ID)
-		if delivery != nil {
-			delivery.mu.Lock()
-			if err := s.waiter.Cancel(ctx, batch.ID, reason); err != nil {
-				delivery.mu.Unlock()
-				return fmt.Errorf("cancel question waiter: %w", err)
-			}
-			s.waiter.Forget(batch.ID)
-			s.removeWaitDelivery(batch.ID, delivery)
-			delivery.mu.Unlock()
+	}
+	if repo, ok := s.repo.(domain.AgentRepository); ok {
+		undelivered, err := repo.CancelUndeliveredBySession(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("cancel undelivered question answers: %w", err)
+		}
+		for _, batch := range undelivered {
+			s.publish(toDTO(batch))
 		}
 	}
 	return nil
 }
 
-func answersFromBatch(batch domain.Batch) []domain.Answer {
-	answers := make([]domain.Answer, 0, len(batch.Questions))
-	for _, question := range batch.Questions {
-		answers = append(answers, domain.Answer{
-			QuestionID:       question.ID,
-			SelectedOptionID: question.SelectedOptionID,
-			CustomAnswer:     question.CustomAnswer,
-			Payload:          question.Answer,
-		})
-	}
-	return answers
-}
-
-func (s *Service) ensureWaitDelivery(id domain.BatchID) *waitDelivery {
-	if delivery := s.loadWaitDelivery(id); delivery != nil {
-		return delivery
-	}
-	delivery := &waitDelivery{}
-	actual, _ := s.waitDeliveries.LoadOrStore(id, delivery)
-	return actual.(*waitDelivery)
-}
-
-func (s *Service) loadWaitDelivery(id domain.BatchID) *waitDelivery {
-	value, ok := s.waitDeliveries.Load(id)
-	if !ok {
-		return nil
-	}
-	return value.(*waitDelivery)
-}
-
-func (s *Service) removeWaitDelivery(id domain.BatchID, delivery *waitDelivery) {
-	s.waitDeliveries.CompareAndDelete(id, delivery)
-}
-
 func toDTO(batch domain.Batch) BatchDTO {
 	return BatchDTO{
-		ID:            batch.ID,
-		SessionID:     batch.SessionID,
-		WorkflowRunID: batch.WorkflowRunID,
-		Status:        batch.Status,
-		Delivery:      batch.Delivery,
-		Questions:     append([]domain.Question(nil), batch.Questions...),
+		ID:                   batch.ID,
+		SessionID:            batch.SessionID,
+		WorkflowRunID:        batch.WorkflowRunID,
+		OriginProcessRunID:   batch.OriginProcessRunID,
+		Status:               batch.Status,
+		DeliveryStatus:       batch.DeliveryStatus,
+		DeliveryProcessRunID: batch.DeliveryProcessRunID,
+		Questions:            append([]domain.Question(nil), batch.Questions...),
 	}
+}
+
+func (s *Service) PublishBatch(batch BatchDTO) {
+	s.publish(batch)
 }
 
 func generateID() (string, error) {

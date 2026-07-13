@@ -17,10 +17,14 @@ const (
 	FieldSessionID = "session_id"
 	// FieldWorkflowRunID holds the string denoting the workflow_run_id field in the database.
 	FieldWorkflowRunID = "workflow_run_id"
+	// FieldOriginProcessRunID holds the string denoting the origin_process_run_id field in the database.
+	FieldOriginProcessRunID = "origin_process_run_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldDeliveryStatus holds the string denoting the delivery_status field in the database.
 	FieldDeliveryStatus = "delivery_status"
+	// FieldDeliveryProcessRunID holds the string denoting the delivery_process_run_id field in the database.
+	FieldDeliveryProcessRunID = "delivery_process_run_id"
 	// FieldQuestions holds the string denoting the questions field in the database.
 	FieldQuestions = "questions"
 	// FieldAnswers holds the string denoting the answers field in the database.
@@ -31,6 +35,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldAnsweredAt holds the string denoting the answered_at field in the database.
 	FieldAnsweredAt = "answered_at"
+	// FieldDeliveredAt holds the string denoting the delivered_at field in the database.
+	FieldDeliveredAt = "delivered_at"
 	// Table holds the table name of the questionbatch in the database.
 	Table = "question_batches"
 )
@@ -40,13 +46,16 @@ var Columns = []string{
 	FieldID,
 	FieldSessionID,
 	FieldWorkflowRunID,
+	FieldOriginProcessRunID,
 	FieldStatus,
 	FieldDeliveryStatus,
+	FieldDeliveryProcessRunID,
 	FieldQuestions,
 	FieldAnswers,
 	FieldCancelReason,
 	FieldCreatedAt,
 	FieldAnsweredAt,
+	FieldDeliveredAt,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -62,10 +71,14 @@ func ValidColumn(column string) bool {
 var (
 	// SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
 	SessionIDValidator func(string) error
+	// DefaultOriginProcessRunID holds the default value on creation for the "origin_process_run_id" field.
+	DefaultOriginProcessRunID string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
 	// DefaultDeliveryStatus holds the default value on creation for the "delivery_status" field.
 	DefaultDeliveryStatus string
+	// DefaultDeliveryProcessRunID holds the default value on creation for the "delivery_process_run_id" field.
+	DefaultDeliveryProcessRunID string
 	// DefaultQuestions holds the default value on creation for the "questions" field.
 	DefaultQuestions []map[string]interface{}
 	// DefaultAnswers holds the default value on creation for the "answers" field.
@@ -94,6 +107,11 @@ func ByWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorkflowRunID, opts...).ToFunc()
 }
 
+// ByOriginProcessRunID orders the results by the origin_process_run_id field.
+func ByOriginProcessRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOriginProcessRunID, opts...).ToFunc()
+}
+
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
@@ -102,6 +120,11 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByDeliveryStatus orders the results by the delivery_status field.
 func ByDeliveryStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldDeliveryStatus, opts...).ToFunc()
+}
+
+// ByDeliveryProcessRunID orders the results by the delivery_process_run_id field.
+func ByDeliveryProcessRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDeliveryProcessRunID, opts...).ToFunc()
 }
 
 // ByCancelReason orders the results by the cancel_reason field.
@@ -117,4 +140,9 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByAnsweredAt orders the results by the answered_at field.
 func ByAnsweredAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAnsweredAt, opts...).ToFunc()
+}
+
+// ByDeliveredAt orders the results by the delivered_at field.
+func ByDeliveredAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDeliveredAt, opts...).ToFunc()
 }

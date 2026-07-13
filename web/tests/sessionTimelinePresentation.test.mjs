@@ -4,7 +4,14 @@ import { test } from 'node:test';
 import {
   formatTokenCount,
   sessionTextPresentation,
+  statusLabel,
 } from '../src/services/sessionTimelinePresentation.ts';
+
+test('statusLabel describes durable answer_user suspension events', () => {
+  assert.equal(statusLabel({ code: 'process.suspended_for_user', level: 'info' }), '已挂起等待回答');
+  assert.equal(statusLabel({ code: 'session.answer_resume_queued', level: 'info' }), '答案已提交，等待恢复');
+  assert.equal(statusLabel({ code: 'question.cancelled', level: 'info' }), '待回答问题已取消');
+});
 
 test('formatTokenCount converts token counts to compact decimal units', () => {
   assert.equal(formatTokenCount(999), '999');

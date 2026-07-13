@@ -67,8 +67,10 @@ type Session struct {
 	QueuePrompt string `json:"queue_prompt,omitempty"`
 	// QueueResumeCodexSessionID holds the value of the "queue_resume_codex_session_id" field.
 	QueueResumeCodexSessionID string `json:"queue_resume_codex_session_id,omitempty"`
-	// QueueRecoveryBatchID holds the value of the "queue_recovery_batch_id" field.
-	QueueRecoveryBatchID string `json:"queue_recovery_batch_id,omitempty"`
+	// QueueResumeOfProcessRunID holds the value of the "queue_resume_of_process_run_id" field.
+	QueueResumeOfProcessRunID string `json:"queue_resume_of_process_run_id,omitempty"`
+	// QueueAnswerBatchID holds the value of the "queue_answer_batch_id" field.
+	QueueAnswerBatchID string `json:"queue_answer_batch_id,omitempty"`
 	// LastRunAt holds the value of the "last_run_at" field.
 	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -89,7 +91,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueRecoveryBatchID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -263,11 +265,17 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.QueueResumeCodexSessionID = value.String
 			}
-		case entsession.FieldQueueRecoveryBatchID:
+		case entsession.FieldQueueResumeOfProcessRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field queue_recovery_batch_id", values[i])
+				return fmt.Errorf("unexpected type %T for field queue_resume_of_process_run_id", values[i])
 			} else if value.Valid {
-				_m.QueueRecoveryBatchID = value.String
+				_m.QueueResumeOfProcessRunID = value.String
+			}
+		case entsession.FieldQueueAnswerBatchID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field queue_answer_batch_id", values[i])
+			} else if value.Valid {
+				_m.QueueAnswerBatchID = value.String
 			}
 		case entsession.FieldLastRunAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -409,8 +417,11 @@ func (_m *Session) String() string {
 	builder.WriteString("queue_resume_codex_session_id=")
 	builder.WriteString(_m.QueueResumeCodexSessionID)
 	builder.WriteString(", ")
-	builder.WriteString("queue_recovery_batch_id=")
-	builder.WriteString(_m.QueueRecoveryBatchID)
+	builder.WriteString("queue_resume_of_process_run_id=")
+	builder.WriteString(_m.QueueResumeOfProcessRunID)
+	builder.WriteString(", ")
+	builder.WriteString("queue_answer_batch_id=")
+	builder.WriteString(_m.QueueAnswerBatchID)
 	builder.WriteString(", ")
 	if v := _m.LastRunAt; v != nil {
 		builder.WriteString("last_run_at=")

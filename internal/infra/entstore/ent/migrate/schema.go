@@ -190,13 +190,16 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "workflow_run_id", Type: field.TypeString, Nullable: true},
+		{Name: "origin_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "status", Type: field.TypeString},
-		{Name: "delivery_status", Type: field.TypeString, Default: "pending"},
+		{Name: "delivery_status", Type: field.TypeString, Default: "none"},
+		{Name: "delivery_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "questions", Type: field.TypeJSON},
 		{Name: "answers", Type: field.TypeJSON},
 		{Name: "cancel_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "answered_at", Type: field.TypeTime, Nullable: true},
+		{Name: "delivered_at", Type: field.TypeTime, Nullable: true},
 	}
 	// QuestionBatchesTable holds the schema information for the "question_batches" table.
 	QuestionBatchesTable = &schema.Table{
@@ -207,12 +210,27 @@ var (
 			{
 				Name:    "questionbatch_session_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[3]},
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[4]},
 			},
 			{
 				Name:    "questionbatch_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[8]},
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[10]},
+			},
+			{
+				Name:    "questionbatch_origin_process_run_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{QuestionBatchesColumns[3], QuestionBatchesColumns[4]},
+			},
+			{
+				Name:    "questionbatch_session_id_delivery_status",
+				Unique:  false,
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[5]},
+			},
+			{
+				Name:    "questionbatch_delivery_process_run_id",
+				Unique:  false,
+				Columns: []*schema.Column{QuestionBatchesColumns[6]},
 			},
 		},
 	}
@@ -255,7 +273,8 @@ var (
 		{Name: "queue_node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_codex_session_id", Type: field.TypeString, Default: ""},
-		{Name: "queue_recovery_batch_id", Type: field.TypeString, Default: ""},
+		{Name: "queue_resume_of_process_run_id", Type: field.TypeString, Default: ""},
+		{Name: "queue_answer_batch_id", Type: field.TypeString, Default: ""},
 		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -275,12 +294,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[28]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[29]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[26]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[27]},
 			},
 			{
 				Name:    "session_status",
