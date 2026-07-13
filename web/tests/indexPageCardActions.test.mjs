@@ -11,11 +11,24 @@ test('overview cards rely on the card click target instead of a duplicate detail
   assert.equal(source.includes('打开卡片详情'), false);
 });
 
-test('overview card actions expose an explicit menu instead of a context-only menu', () => {
+test('overview card actions use a context menu without a visible trigger', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
 
-  assert.match(source, /aria-label="卡片操作"/);
-  assert.doesNotMatch(source, /<q-menu\s+context-menu/);
+  assert.doesNotMatch(source, /aria-label="卡片操作"/);
+  assert.doesNotMatch(source, /icon="more_vert"/);
+  assert.match(source, /<q-menu\s+context-menu/);
+  assert.match(
+    source,
+    /class="overview-todo-btn app-command-btn"[\s\S]*?@contextmenu\.stop[\s\S]*?@touchstart\.stop/,
+  );
+  assert.match(
+    source,
+    /class="overview-card-actions"[\s\S]*?@contextmenu\.stop[\s\S]*?@touchstart\.stop/,
+  );
+  assert.match(source, /@click="openSessionCard\(card\.id\)"/);
+  assert.match(source, /@touchend="releaseCardContextMenuTouch\(card\.id\)"/);
+  assert.match(source, /@before-show="handleCardContextMenuBeforeShow\(card\.id, \$event\)"/);
+  assert.match(source, /GLUE: suppress Quasar's synthetic post-long-press click/);
   assert.match(source, /@keyup\.enter\.self=/);
   assert.match(source, /@keyup\.space\.self\.prevent=/);
 });
