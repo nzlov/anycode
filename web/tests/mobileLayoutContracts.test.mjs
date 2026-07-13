@@ -125,10 +125,8 @@ test('mobile overview keeps the compact two-column metadata shape', () => {
     /\.overview-card-meta-grid\s*{[^}]*grid-template-columns:\s*1fr/s,
   );
   assert.match(baseStyles, /\.page-shell\.workbench-page\s*{[^}]*padding-bottom:\s*88px/s);
-  assert.match(
-    mobileStyles,
-    /\.overview-card-footer\s*{[^}]*flex-wrap:\s*wrap[^}]*padding-right:\s*56px/s,
-  );
+  assert.match(mobileStyles, /\.overview-card-footer\s*{[^}]*flex-wrap:\s*wrap/s);
+  assert.doesNotMatch(mobileStyles, /\.overview-card-footer\s*{[^}]*padding-right:/s);
   assert.match(mobileStyles, /\.overview-card-actions\s*{[^}]*flex-wrap:\s*wrap/s);
 });
 
