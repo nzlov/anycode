@@ -425,6 +425,12 @@ type SessionDiffInput struct {
 	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
+type SessionDiffSummary struct {
+	SessionID    string                  `json:"sessionId"`
+	State        SessionDiffSummaryState `json:"state"`
+	FilesChanged int                     `json:"filesChanged"`
+}
+
 type SessionStateStreamItem struct {
 	Ready         bool           `json:"ready"`
 	Session       *SessionDetail `json:"session,omitempty"`
@@ -693,6 +699,65 @@ type WorkflowRun struct {
 	Status        string         `json:"status"`
 	CurrentNodeID string         `json:"currentNodeId"`
 	Context       map[string]any `json:"context"`
+}
+
+type SessionDiffSummaryState string
+
+const (
+	SessionDiffSummaryStateChanged     SessionDiffSummaryState = "changed"
+	SessionDiffSummaryStateClean       SessionDiffSummaryState = "clean"
+	SessionDiffSummaryStateUnavailable SessionDiffSummaryState = "unavailable"
+	SessionDiffSummaryStateError       SessionDiffSummaryState = "error"
+)
+
+var AllSessionDiffSummaryState = []SessionDiffSummaryState{
+	SessionDiffSummaryStateChanged,
+	SessionDiffSummaryStateClean,
+	SessionDiffSummaryStateUnavailable,
+	SessionDiffSummaryStateError,
+}
+
+func (e SessionDiffSummaryState) IsValid() bool {
+	switch e {
+	case SessionDiffSummaryStateChanged, SessionDiffSummaryStateClean, SessionDiffSummaryStateUnavailable, SessionDiffSummaryStateError:
+		return true
+	}
+	return false
+}
+
+func (e SessionDiffSummaryState) String() string {
+	return string(e)
+}
+
+func (e *SessionDiffSummaryState) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SessionDiffSummaryState(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SessionDiffSummaryState", str)
+	}
+	return nil
+}
+
+func (e SessionDiffSummaryState) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *SessionDiffSummaryState) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e SessionDiffSummaryState) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 type TranscriptEventPhase string

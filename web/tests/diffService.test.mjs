@@ -20,6 +20,17 @@ test('getSessionDiffFiles only requests file list data', () => {
   assert.doesNotMatch(body, /allDiff\s*\{/);
 });
 
+test('getSessionDiffSummaries requests one normalized batch', () => {
+  const body = functionBody('getSessionDiffSummaries');
+
+  assert.match(body, /sessionDiffSummaries\(sessionIds: \$sessionIds\)/);
+  assert.match(body, /sessionId/);
+  assert.match(body, /state/);
+  assert.match(body, /filesChanged/);
+  assert.doesNotMatch(body, /Promise\.all/);
+  assert.doesNotMatch(body, /sessionDiff\(input:/);
+});
+
 test('getSessionFileDiff requests selected file content with context controls', () => {
   const body = functionBody('getSessionFileDiff');
 

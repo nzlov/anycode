@@ -3,7 +3,9 @@ package diff
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +14,101 @@ import (
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
+
+func TestGetSessionDiffSummariesReturnsDeduplicatedIsolatedStates(t *testing.T) {
+	ctx := context.Background()
+	diffPort := &fakeDiffPort{
+		filesByWorktreePath: map[string][]gitdiff.DiffFile{
+			"/worktrees/changed": {{Path: "a.go", Status: "modified"}},
+			"/worktrees/clean":   {},
+		},
+		changedFileErrors: map[string]error{
+			"/worktrees/error": errors.New("git diff failed"),
+		},
+	}
+	service := New(
+		&fakeSessionRepository{sessions: []sessiondomain.Session{
+			{ID: "changed", ProjectID: "git-project", WorktreePath: "/worktrees/changed", WorktreeBaseCommit: "base"},
+			{ID: "clean", ProjectID: "git-project", WorktreePath: "/worktrees/clean", WorktreeBaseCommit: "base"},
+			{ID: "unavailable", ProjectID: "plain-project"},
+			{ID: "error", ProjectID: "git-project", WorktreePath: "/worktrees/error", WorktreeBaseCommit: "base"},
+		}},
+		&fakeProjectRepository{projects: map[projectdomain.ID]projectdomain.Project{
+			"git-project":   {ID: "git-project", IsGit: true},
+			"plain-project": {ID: "plain-project", IsGit: false},
+		}},
+		diffPort,
+	)
+
+	got, err := service.GetSessionDiffSummaries(ctx, SessionDiffSummariesInput{
+		SessionIDs: []sessiondomain.ID{"changed", "clean", "changed", "unavailable", "error", "missing"},
+	})
+	if err != nil {
+		t.Fatalf("GetSessionDiffSummaries() error = %v", err)
+	}
+	want := []SessionDiffSummaryDTO{
+		{SessionID: "changed", State: SessionDiffSummaryChanged, FilesChanged: 1},
+		{SessionID: "clean", State: SessionDiffSummaryClean, FilesChanged: 0},
+		{SessionID: "unavailable", State: SessionDiffSummaryUnavailable, FilesChanged: 0},
+		{SessionID: "error", State: SessionDiffSummaryError, FilesChanged: 0},
+		{SessionID: "missing", State: SessionDiffSummaryError, FilesChanged: 0},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("GetSessionDiffSummaries() = %#v, want %#v", got, want)
+	}
+	if calls := diffPort.changedFileCallCount("/worktrees/changed"); calls != 1 {
+		t.Fatalf("ChangedFiles changed calls = %d, want 1", calls)
+	}
+}
+
+func TestGetSessionDiffSummariesBoundsConcurrency(t *testing.T) {
+	const total = summaryConcurrency + 3
+	sessions := make([]sessiondomain.Session, 0, total)
+	ids := make([]sessiondomain.ID, 0, total)
+	for index := range total {
+		id := sessiondomain.ID(fmt.Sprintf("session-%d", index))
+		ids = append(ids, id)
+		sessions = append(sessions, sessiondomain.Session{
+			ID:                 id,
+			ProjectID:          "project-1",
+			WorktreePath:       fmt.Sprintf("/worktrees/%s", id),
+			WorktreeBaseCommit: "base",
+		})
+	}
+	started := make(chan string, total)
+	release := make(chan struct{})
+	diffPort := &fakeDiffPort{changedFilesStarted: started, changedFilesRelease: release}
+	service := New(
+		&fakeSessionRepository{sessions: sessions},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
+		diffPort,
+	)
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.GetSessionDiffSummaries(context.Background(), SessionDiffSummariesInput{SessionIDs: ids})
+		done <- err
+	}()
+
+	for range summaryConcurrency {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for bounded workers to start")
+		}
+	}
+	select {
+	case path := <-started:
+		t.Fatalf("ChangedFiles exceeded concurrency bound with %q", path)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("GetSessionDiffSummaries() error = %v", err)
+	}
+	if diffPort.maxChangedFilesInFlight != summaryConcurrency {
+		t.Fatalf("max ChangedFiles concurrency = %d, want %d", diffPort.maxChangedFilesInFlight, summaryConcurrency)
+	}
+}
 
 func TestGetSessionDiffReturnsUnavailableForNonGitProject(t *testing.T) {
 	ctx := context.Background()
@@ -748,10 +845,15 @@ func (r *fakeSessionRepository) Create(context.Context, sessiondomain.Session) e
 func (r *fakeSessionRepository) Save(context.Context, sessiondomain.Session) error { return nil }
 
 func (r *fakeSessionRepository) Find(_ context.Context, id sessiondomain.ID) (sessiondomain.Session, error) {
-	if r.session.ID != id {
-		return sessiondomain.Session{}, errors.New("session not found")
+	if r.session.ID == id {
+		return r.session, nil
 	}
-	return r.session, nil
+	for _, item := range r.sessions {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return sessiondomain.Session{}, errors.New("session not found")
 }
 
 func (r *fakeSessionRepository) ListCards(_ context.Context, query sessiondomain.ListQuery) ([]sessiondomain.Session, int, error) {
@@ -840,16 +942,20 @@ func (r *fakeSessionRepository) LatestSuccessfulMergeRecord(context.Context, ses
 }
 
 type fakeProjectRepository struct {
-	project projectdomain.Project
+	project  projectdomain.Project
+	projects map[projectdomain.ID]projectdomain.Project
 }
 
 func (r *fakeProjectRepository) Save(context.Context, projectdomain.Project) error { return nil }
 
 func (r *fakeProjectRepository) Find(_ context.Context, id projectdomain.ID) (projectdomain.Project, error) {
-	if r.project.ID != id {
-		return projectdomain.Project{}, errors.New("project not found")
+	if r.project.ID == id {
+		return r.project, nil
 	}
-	return r.project, nil
+	if project, ok := r.projects[id]; ok {
+		return project, nil
+	}
+	return projectdomain.Project{}, errors.New("project not found")
 }
 
 func (r *fakeProjectRepository) FindByPath(context.Context, string) (projectdomain.Project, bool, error) {
@@ -869,30 +975,36 @@ func (r *fakeProjectRepository) UpdateDefaultWorkflow(context.Context, projectdo
 }
 
 type fakeDiffPort struct {
-	resolveConfigured      bool
-	resolveFound           bool
-	resolvedInput          gitdiff.DiffInput
-	resolveErr             error
-	lastResolveInput       gitdiff.ResolveSessionDiffInput
-	currentBranch          string
-	files                  []gitdiff.DiffFile
-	filesByWorktreePath    map[string][]gitdiff.DiffFile
-	fileDiffs              map[string]gitdiff.FileDiff
-	rangeDiff              gitdiff.SessionDiff
-	commits                []gitdiff.CommitRecord
-	fileDiffCalls          []string
-	changedFileCalls       []string
-	lastWorktreePath       string
-	lastBaseRef            string
-	lastHeadRef            string
-	lastRangeRepoPath      string
-	lastRangeBaseRef       string
-	lastRangeHeadRef       string
-	lastCommitWorktreePath string
-	lastCommitBaseRef      string
-	lastCommitHeadRef      string
-	lastContextBefore      int
-	lastContextAfter       int
+	mu                      sync.Mutex
+	resolveConfigured       bool
+	resolveFound            bool
+	resolvedInput           gitdiff.DiffInput
+	resolveErr              error
+	lastResolveInput        gitdiff.ResolveSessionDiffInput
+	currentBranch           string
+	files                   []gitdiff.DiffFile
+	filesByWorktreePath     map[string][]gitdiff.DiffFile
+	changedFileErrors       map[string]error
+	changedFilesStarted     chan string
+	changedFilesRelease     chan struct{}
+	changedFilesInFlight    int
+	maxChangedFilesInFlight int
+	fileDiffs               map[string]gitdiff.FileDiff
+	rangeDiff               gitdiff.SessionDiff
+	commits                 []gitdiff.CommitRecord
+	fileDiffCalls           []string
+	changedFileCalls        []string
+	lastWorktreePath        string
+	lastBaseRef             string
+	lastHeadRef             string
+	lastRangeRepoPath       string
+	lastRangeBaseRef        string
+	lastRangeHeadRef        string
+	lastCommitWorktreePath  string
+	lastCommitBaseRef       string
+	lastCommitHeadRef       string
+	lastContextBefore       int
+	lastContextAfter        int
 }
 
 func (p *fakeDiffPort) CurrentBranch(context.Context, string) (string, error) {
@@ -903,7 +1015,9 @@ func (p *fakeDiffPort) CurrentBranch(context.Context, string) (string, error) {
 }
 
 func (p *fakeDiffPort) ResolveSessionDiffSource(_ context.Context, input gitdiff.ResolveSessionDiffInput) (gitdiff.DiffInput, bool, error) {
+	p.mu.Lock()
 	p.lastResolveInput = input
+	p.mu.Unlock()
 	if p.resolveConfigured {
 		return p.resolvedInput, p.resolveFound, p.resolveErr
 	}
@@ -917,14 +1031,48 @@ func (p *fakeDiffPort) ResolveSessionDiffSource(_ context.Context, input gitdiff
 }
 
 func (p *fakeDiffPort) ChangedFiles(_ context.Context, input gitdiff.DiffInput) ([]gitdiff.DiffFile, error) {
+	p.mu.Lock()
 	p.lastWorktreePath = input.WorktreePath
 	p.lastBaseRef = input.BaseRef
 	p.lastHeadRef = input.HeadRef
 	p.changedFileCalls = append(p.changedFileCalls, input.WorktreePath)
+	p.changedFilesInFlight++
+	if p.changedFilesInFlight > p.maxChangedFilesInFlight {
+		p.maxChangedFilesInFlight = p.changedFilesInFlight
+	}
+	started := p.changedFilesStarted
+	release := p.changedFilesRelease
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		p.changedFilesInFlight--
+		p.mu.Unlock()
+	}()
+	if started != nil {
+		started <- input.WorktreePath
+	}
+	if release != nil {
+		<-release
+	}
+	if err := p.changedFileErrors[input.WorktreePath]; err != nil {
+		return nil, err
+	}
 	if p.filesByWorktreePath != nil {
 		return p.filesByWorktreePath[input.WorktreePath], nil
 	}
 	return p.files, nil
+}
+
+func (p *fakeDiffPort) changedFileCallCount(path string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	count := 0
+	for _, call := range p.changedFileCalls {
+		if call == path {
+			count++
+		}
+	}
+	return count
 }
 
 func (p *fakeDiffPort) FileDiff(_ context.Context, input gitdiff.FileDiffInput) (gitdiff.FileDiff, error) {

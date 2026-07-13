@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/application/port"
@@ -15,6 +16,7 @@ import (
 
 type UseCase interface {
 	GetSessionDiff(ctx context.Context, input SessionDiffInput) (SessionDiffDTO, error)
+	GetSessionDiffSummaries(ctx context.Context, input SessionDiffSummariesInput) ([]SessionDiffSummaryDTO, error)
 	GetBranchDiff(ctx context.Context, input BranchDiffInput) (SessionDiffDTO, error)
 	GetCommitHistory(ctx context.Context, input CommitHistoryInput) (CommitHistoryDTO, error)
 }
@@ -44,6 +46,25 @@ type BranchDiffInput struct {
 	ContextAfter    int
 }
 
+type SessionDiffSummariesInput struct {
+	SessionIDs []session.ID
+}
+
+type SessionDiffSummaryState string
+
+const (
+	SessionDiffSummaryChanged     SessionDiffSummaryState = "changed"
+	SessionDiffSummaryClean       SessionDiffSummaryState = "clean"
+	SessionDiffSummaryUnavailable SessionDiffSummaryState = "unavailable"
+	SessionDiffSummaryError       SessionDiffSummaryState = "error"
+)
+
+type SessionDiffSummaryDTO struct {
+	SessionID    session.ID
+	State        SessionDiffSummaryState
+	FilesChanged int
+}
+
 type SessionDiffDTO struct {
 	Mode      string
 	FilePath  string
@@ -65,11 +86,12 @@ type CommitHistoryDTO struct {
 }
 
 const (
-	defaultPage     = 1
-	defaultPageSize = 20
-	maxPageSize     = 100
-	modeSingle      = "single"
-	modeAll         = "all"
+	defaultPage        = 1
+	defaultPageSize    = 20
+	maxPageSize        = 100
+	modeSingle         = "single"
+	modeAll            = "all"
+	summaryConcurrency = 8
 )
 
 type Service struct {
@@ -176,6 +198,83 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 		dto.FileDiff = &fileDiff
 	}
 	return dto, nil
+}
+
+func (s *Service) GetSessionDiffSummaries(ctx context.Context, input SessionDiffSummariesInput) ([]SessionDiffSummaryDTO, error) {
+	if s == nil {
+		return nil, errors.New("diff usecase: nil service")
+	}
+	ids := uniqueSessionIDs(input.SessionIDs)
+	if len(ids) == 0 {
+		return []SessionDiffSummaryDTO{}, nil
+	}
+
+	type summaryJob struct {
+		index     int
+		sessionID session.ID
+	}
+	jobs := make(chan summaryJob)
+	results := make([]SessionDiffSummaryDTO, len(ids))
+	workerCount := min(summaryConcurrency, len(ids))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for job := range jobs {
+				results[job.index] = s.getSessionDiffSummary(ctx, job.sessionID)
+			}
+		}()
+	}
+
+	interrupted := false
+sendJobs:
+	for index, sessionID := range ids {
+		select {
+		case jobs <- summaryJob{index: index, sessionID: sessionID}:
+		case <-ctx.Done():
+			interrupted = true
+			break sendJobs
+		}
+	}
+	close(jobs)
+	workers.Wait()
+	if interrupted || ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return results, nil
+}
+
+func (s *Service) getSessionDiffSummary(ctx context.Context, sessionID session.ID) SessionDiffSummaryDTO {
+	summary := SessionDiffSummaryDTO{SessionID: sessionID, State: SessionDiffSummaryError}
+	dto, err := s.GetSessionDiff(ctx, SessionDiffInput{SessionID: sessionID, Page: 1, PageSize: 1})
+	if err != nil {
+		return summary
+	}
+	if !dto.Available {
+		summary.State = SessionDiffSummaryUnavailable
+		return summary
+	}
+	if dto.Files.Total == 0 {
+		summary.State = SessionDiffSummaryClean
+		return summary
+	}
+	summary.State = SessionDiffSummaryChanged
+	summary.FilesChanged = dto.Files.Total
+	return summary
+}
+
+func uniqueSessionIDs(input []session.ID) []session.ID {
+	seen := make(map[session.ID]struct{}, len(input))
+	result := make([]session.ID, 0, len(input))
+	for _, sessionID := range input {
+		if _, ok := seen[sessionID]; ok {
+			continue
+		}
+		seen[sessionID] = struct{}{}
+		result = append(result, sessionID)
+	}
+	return result
 }
 
 func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (SessionDiffDTO, error) {
