@@ -18,6 +18,7 @@ func (QuestionBatch) Fields() []ent.Field {
 		field.String("session_id").NotEmpty(),
 		field.String("workflow_run_id").Optional().Nillable(),
 		field.String("status").NotEmpty(),
+		field.String("delivery_status").Default("pending"),
 		field.JSON("questions", []map[string]any{}).Default([]map[string]any{}),
 		field.JSON("answers", []map[string]any{}).Default([]map[string]any{}),
 		field.Text("cancel_reason").Default(""),

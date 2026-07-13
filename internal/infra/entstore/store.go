@@ -156,7 +156,7 @@ func (s *Store) Processes() *ProcessRepository {
 	return NewProcessRepository(s.client)
 }
 
-func (s *Store) Questions() question.Repository {
+func (s *Store) Questions() *QuestionRepository {
 	return NewQuestionRepository(s.client)
 }
 

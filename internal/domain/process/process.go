@@ -6,7 +6,10 @@ import (
 	"time"
 )
 
-var ErrProcessNotFound = errors.New("codex process run is not active")
+var (
+	ErrProcessNotFound            = errors.New("codex process run is not active")
+	ErrProcessOwnershipUnverified = errors.New("codex process ownership could not be verified")
+)
 
 type RunID string
 type SessionID string
@@ -100,6 +103,11 @@ type Repository interface {
 	MarkExited(ctx context.Context, id RunID, result ExitResult) error
 }
 
+type HistoryRepository interface {
+	Repository
+	FindLatestBySession(ctx context.Context, sessionID SessionID) (Run, bool, error)
+}
+
 type CodexStartInput struct {
 	ProcessRunID    RunID
 	SessionID       SessionID
@@ -127,6 +135,15 @@ type CodexHandle struct {
 	ProcessRunID   RunID
 	PID            int
 	CodexSessionID string
+}
+
+type DetachedProcess struct {
+	ProcessRunID RunID
+	PID          int
+}
+
+type DetachedProcessController interface {
+	StopDetached(ctx context.Context, process DetachedProcess) error
 }
 
 type CodexCapabilities struct {

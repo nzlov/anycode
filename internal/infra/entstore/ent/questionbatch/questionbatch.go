@@ -19,6 +19,8 @@ const (
 	FieldWorkflowRunID = "workflow_run_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldDeliveryStatus holds the string denoting the delivery_status field in the database.
+	FieldDeliveryStatus = "delivery_status"
 	// FieldQuestions holds the string denoting the questions field in the database.
 	FieldQuestions = "questions"
 	// FieldAnswers holds the string denoting the answers field in the database.
@@ -39,6 +41,7 @@ var Columns = []string{
 	FieldSessionID,
 	FieldWorkflowRunID,
 	FieldStatus,
+	FieldDeliveryStatus,
 	FieldQuestions,
 	FieldAnswers,
 	FieldCancelReason,
@@ -61,6 +64,8 @@ var (
 	SessionIDValidator func(string) error
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	StatusValidator func(string) error
+	// DefaultDeliveryStatus holds the default value on creation for the "delivery_status" field.
+	DefaultDeliveryStatus string
 	// DefaultQuestions holds the default value on creation for the "questions" field.
 	DefaultQuestions []map[string]interface{}
 	// DefaultAnswers holds the default value on creation for the "answers" field.
@@ -92,6 +97,11 @@ func ByWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// ByDeliveryStatus orders the results by the delivery_status field.
+func ByDeliveryStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDeliveryStatus, opts...).ToFunc()
 }
 
 // ByCancelReason orders the results by the cancel_reason field.

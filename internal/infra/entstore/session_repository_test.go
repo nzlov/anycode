@@ -47,8 +47,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			{Text: "实现卡片展示", Completed: false},
 		}},
 		Queue: session.QueueIntent{
-			Kind:         session.QueueKindStart,
-			InitialStart: true,
+			Kind:            session.QueueKindStart,
+			InitialStart:    true,
+			RecoveryBatchID: "batch-1",
 		},
 		LastRunAt: &now,
 		CreatedAt: now.Add(-10 * time.Minute),
@@ -65,6 +66,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	assertSessionEqual(t, found, input)
 	if !found.Queue.InitialStart {
 		t.Fatalf("queue initial start = false, want true: %#v", found.Queue)
+	}
+	if found.Queue.RecoveryBatchID != "batch-1" {
+		t.Fatalf("queue recovery batch id = %q", found.Queue.RecoveryBatchID)
 	}
 
 	updatedAt := now.Add(time.Minute)

@@ -79,6 +79,11 @@ func Status(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldStatus, v))
 }
 
+// DeliveryStatus applies equality check predicate on the "delivery_status" field. It's identical to DeliveryStatusEQ.
+func DeliveryStatus(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveryStatus, v))
+}
+
 // CancelReason applies equality check predicate on the "cancel_reason" field. It's identical to CancelReasonEQ.
 func CancelReason(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldCancelReason, v))
@@ -297,6 +302,71 @@ func StatusEqualFold(v string) predicate.QuestionBatch {
 // StatusContainsFold applies the ContainsFold predicate on the "status" field.
 func StatusContainsFold(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldContainsFold(FieldStatus, v))
+}
+
+// DeliveryStatusEQ applies the EQ predicate on the "delivery_status" field.
+func DeliveryStatusEQ(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEQ(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusNEQ applies the NEQ predicate on the "delivery_status" field.
+func DeliveryStatusNEQ(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNEQ(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusIn applies the In predicate on the "delivery_status" field.
+func DeliveryStatusIn(vs ...string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldIn(FieldDeliveryStatus, vs...))
+}
+
+// DeliveryStatusNotIn applies the NotIn predicate on the "delivery_status" field.
+func DeliveryStatusNotIn(vs ...string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldNotIn(FieldDeliveryStatus, vs...))
+}
+
+// DeliveryStatusGT applies the GT predicate on the "delivery_status" field.
+func DeliveryStatusGT(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGT(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusGTE applies the GTE predicate on the "delivery_status" field.
+func DeliveryStatusGTE(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldGTE(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusLT applies the LT predicate on the "delivery_status" field.
+func DeliveryStatusLT(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLT(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusLTE applies the LTE predicate on the "delivery_status" field.
+func DeliveryStatusLTE(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldLTE(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusContains applies the Contains predicate on the "delivery_status" field.
+func DeliveryStatusContains(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldContains(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusHasPrefix applies the HasPrefix predicate on the "delivery_status" field.
+func DeliveryStatusHasPrefix(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldHasPrefix(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusHasSuffix applies the HasSuffix predicate on the "delivery_status" field.
+func DeliveryStatusHasSuffix(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldHasSuffix(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusEqualFold applies the EqualFold predicate on the "delivery_status" field.
+func DeliveryStatusEqualFold(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldEqualFold(FieldDeliveryStatus, v))
+}
+
+// DeliveryStatusContainsFold applies the ContainsFold predicate on the "delivery_status" field.
+func DeliveryStatusContainsFold(v string) predicate.QuestionBatch {
+	return predicate.QuestionBatch(sql.FieldContainsFold(FieldDeliveryStatus, v))
 }
 
 // CancelReasonEQ applies the EQ predicate on the "cancel_reason" field.

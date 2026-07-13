@@ -191,6 +191,7 @@ var (
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "workflow_run_id", Type: field.TypeString, Nullable: true},
 		{Name: "status", Type: field.TypeString},
+		{Name: "delivery_status", Type: field.TypeString, Default: "pending"},
 		{Name: "questions", Type: field.TypeJSON},
 		{Name: "answers", Type: field.TypeJSON},
 		{Name: "cancel_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
@@ -211,7 +212,7 @@ var (
 			{
 				Name:    "questionbatch_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[7]},
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[8]},
 			},
 		},
 	}
@@ -253,6 +254,7 @@ var (
 		{Name: "queue_node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_codex_session_id", Type: field.TypeString, Default: ""},
+		{Name: "queue_recovery_batch_id", Type: field.TypeString, Default: ""},
 		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -272,12 +274,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[26]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[27]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[24]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[25]},
 			},
 			{
 				Name:    "session_status",

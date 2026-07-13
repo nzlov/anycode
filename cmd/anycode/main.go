@@ -79,7 +79,7 @@ func main() {
 	}
 	defer stopMCP()
 
-	if err := recoverAndDrainSessions(ctx, useCases.Sessions); err != nil {
+	if err := reconcileInterruptedSessions(ctx, useCases.Sessions); err != nil {
 		log.Fatalf("recover sessions: %s", err.Error())
 	}
 
@@ -89,8 +89,17 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	listener, err := net.Listen("tcp", cfg.HTTPAddr)
+	if err != nil {
+		log.Fatalf("listen on %s: %s", cfg.HTTPAddr, err.Error())
+	}
 	log.Printf("anycode listening on %s", cfg.HTTPAddr)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	go func() {
+		if err := drainQueuedSessions(context.Background(), useCases.Sessions); err != nil {
+			log.Printf("drain queued sessions: %s", err.Error())
+		}
+	}()
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("anycode stopped: %s", err.Error())
 	}
 }
@@ -127,10 +136,11 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes, timelineapp.WithHistory(events))
 	questionWaiter := questionapp.NewMemoryAnswerWaiter()
-	questionService := questionapp.New(store.Questions(), questionWaiter)
+	questions := store.Questions()
+	questionService := questionapp.New(questions, questionWaiter)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithQuestionRecovery(questions), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
 	return graph.UseCases{
 		Projects:    projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
 		Sessions:    sessionService,
@@ -145,14 +155,23 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	}, nil
 }
 
-func recoverAndDrainSessions(ctx context.Context, sessions sessionapp.UseCase) error {
-	recoverableCount, err := sessions.MarkInterruptedSessionsRecoverable(ctx)
+type recoverySessionUseCase interface {
+	RecoverInterruptedSessions(ctx context.Context) (int, error)
+	DrainQueuedSessions(ctx context.Context) (int, error)
+}
+
+func reconcileInterruptedSessions(ctx context.Context, sessions recoverySessionUseCase) error {
+	recoverableCount, err := sessions.RecoverInterruptedSessions(ctx)
 	if err != nil {
 		return err
 	}
 	if recoverableCount > 0 {
-		log.Printf("marked interrupted codex sessions recoverable: count=%d", recoverableCount)
+		log.Printf("reconciled interrupted codex sessions: count=%d", recoverableCount)
 	}
+	return nil
+}
+
+func drainQueuedSessions(ctx context.Context, sessions recoverySessionUseCase) error {
 	drainedCount, err := sessions.DrainQueuedSessions(ctx)
 	if err != nil {
 		return err

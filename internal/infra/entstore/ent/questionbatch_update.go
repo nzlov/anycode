@@ -77,6 +77,20 @@ func (_u *QuestionBatchUpdate) SetNillableStatus(v *string) *QuestionBatchUpdate
 	return _u
 }
 
+// SetDeliveryStatus sets the "delivery_status" field.
+func (_u *QuestionBatchUpdate) SetDeliveryStatus(v string) *QuestionBatchUpdate {
+	_u.mutation.SetDeliveryStatus(v)
+	return _u
+}
+
+// SetNillableDeliveryStatus sets the "delivery_status" field if the given value is not nil.
+func (_u *QuestionBatchUpdate) SetNillableDeliveryStatus(v *string) *QuestionBatchUpdate {
+	if v != nil {
+		_u.SetDeliveryStatus(*v)
+	}
+	return _u
+}
+
 // SetQuestions sets the "questions" field.
 func (_u *QuestionBatchUpdate) SetQuestions(v []map[string]interface{}) *QuestionBatchUpdate {
 	_u.mutation.SetQuestions(v)
@@ -206,6 +220,9 @@ func (_u *QuestionBatchUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(questionbatch.FieldStatus, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.DeliveryStatus(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryStatus, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Questions(); ok {
 		_spec.SetField(questionbatch.FieldQuestions, field.TypeJSON, value)
 	}
@@ -295,6 +312,20 @@ func (_u *QuestionBatchUpdateOne) SetStatus(v string) *QuestionBatchUpdateOne {
 func (_u *QuestionBatchUpdateOne) SetNillableStatus(v *string) *QuestionBatchUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetDeliveryStatus sets the "delivery_status" field.
+func (_u *QuestionBatchUpdateOne) SetDeliveryStatus(v string) *QuestionBatchUpdateOne {
+	_u.mutation.SetDeliveryStatus(v)
+	return _u
+}
+
+// SetNillableDeliveryStatus sets the "delivery_status" field if the given value is not nil.
+func (_u *QuestionBatchUpdateOne) SetNillableDeliveryStatus(v *string) *QuestionBatchUpdateOne {
+	if v != nil {
+		_u.SetDeliveryStatus(*v)
 	}
 	return _u
 }
@@ -457,6 +488,9 @@ func (_u *QuestionBatchUpdateOne) sqlSave(ctx context.Context) (_node *QuestionB
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(questionbatch.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeliveryStatus(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Questions(); ok {
 		_spec.SetField(questionbatch.FieldQuestions, field.TypeJSON, value)

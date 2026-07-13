@@ -22,6 +22,7 @@ type Client struct {
 	mcpStdioCommand string
 	mcpStdioSocket  string
 	mcpAuthToken    string
+	detached        detachedProcessOps
 }
 
 type Option func(*Client)
@@ -78,7 +79,7 @@ func New(bin string, options ...Option) *Client {
 	if bin == "" {
 		bin = defaultBin
 	}
-	client := &Client{bin: bin}
+	client := &Client{bin: bin, detached: defaultDetachedProcessOps()}
 	for _, option := range options {
 		option(client)
 	}

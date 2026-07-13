@@ -24,6 +24,8 @@ type QuestionBatch struct {
 	WorkflowRunID *string `json:"workflow_run_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// DeliveryStatus holds the value of the "delivery_status" field.
+	DeliveryStatus string `json:"delivery_status,omitempty"`
 	// Questions holds the value of the "questions" field.
 	Questions []map[string]interface{} `json:"questions,omitempty"`
 	// Answers holds the value of the "answers" field.
@@ -44,7 +46,7 @@ func (*QuestionBatch) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case questionbatch.FieldQuestions, questionbatch.FieldAnswers:
 			values[i] = new([]byte)
-		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldWorkflowRunID, questionbatch.FieldStatus, questionbatch.FieldCancelReason:
+		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldWorkflowRunID, questionbatch.FieldStatus, questionbatch.FieldDeliveryStatus, questionbatch.FieldCancelReason:
 			values[i] = new(sql.NullString)
 		case questionbatch.FieldCreatedAt, questionbatch.FieldAnsweredAt:
 			values[i] = new(sql.NullTime)
@@ -87,6 +89,12 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case questionbatch.FieldDeliveryStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field delivery_status", values[i])
+			} else if value.Valid {
+				_m.DeliveryStatus = value.String
 			}
 		case questionbatch.FieldQuestions:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -169,6 +177,9 @@ func (_m *QuestionBatch) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("delivery_status=")
+	builder.WriteString(_m.DeliveryStatus)
 	builder.WriteString(", ")
 	builder.WriteString("questions=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Questions))

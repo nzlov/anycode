@@ -2017,6 +2017,124 @@ wait "$child"
 	}
 }
 
+func TestStartInjectsProcessRunOwnerToken(t *testing.T) {
+	dir := t.TempDir()
+	ownerFile := filepath.Join(dir, "owner")
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s' "$ANYCODE_PROCESS_RUN_ID" > "$CODEX_OWNER_FILE"
+sleep 30
+`)
+	t.Setenv("CODEX_OWNER_FILE", ownerFile)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-owner-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Stop(context.Background(), handle.ProcessRunID) })
+	waitForFile(t, ownerFile)
+	if got := strings.TrimSpace(readFile(t, ownerFile)); got != "process-owner-1" {
+		t.Fatalf("owner token = %q", got)
+	}
+}
+
+func TestStopDetachedRequiresMatchingOwnerToken(t *testing.T) {
+	client := New("codex")
+	signals := []syscall.Signal{}
+	client.detached = detachedProcessOps{
+		groupAlive: func(int) (bool, error) { return true, nil },
+		groupOwnedBy: func(_ int, runID process.RunID) (bool, error) {
+			return runID == "process-detached-1", nil
+		},
+		signalGroup: func(_ int, signal syscall.Signal) error {
+			signals = append(signals, signal)
+			return nil
+		},
+		waitExit: func(context.Context, int, time.Duration) (bool, error) { return true, nil },
+	}
+
+	err := client.StopDetached(context.Background(), process.DetachedProcess{
+		ProcessRunID: "another-run",
+		PID:          1234,
+	})
+	if !errors.Is(err, process.ErrProcessOwnershipUnverified) {
+		t.Fatalf("mismatched StopDetached() error = %v", err)
+	}
+	if len(signals) != 0 {
+		t.Fatalf("mismatched process signals = %#v", signals)
+	}
+
+	if err := client.StopDetached(context.Background(), process.DetachedProcess{
+		ProcessRunID: "process-detached-1",
+		PID:          1234,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(signals, []syscall.Signal{syscall.SIGTERM}) {
+		t.Fatalf("matching process signals = %#v", signals)
+	}
+}
+
+func TestStopDetachedEscalatesToKillAndTreatsExitedGroupAsSuccess(t *testing.T) {
+	client := New("codex")
+	signals := []syscall.Signal{}
+	waits := 0
+	client.detached = detachedProcessOps{
+		groupAlive:   func(int) (bool, error) { return true, nil },
+		groupOwnedBy: func(int, process.RunID) (bool, error) { return true, nil },
+		signalGroup: func(_ int, signal syscall.Signal) error {
+			signals = append(signals, signal)
+			return nil
+		},
+		waitExit: func(context.Context, int, time.Duration) (bool, error) {
+			waits++
+			return waits == 2, nil
+		},
+	}
+	if err := client.StopDetached(context.Background(), process.DetachedProcess{ProcessRunID: "process-1", PID: 1234}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(signals, []syscall.Signal{syscall.SIGTERM, syscall.SIGKILL}) {
+		t.Fatalf("signals = %#v", signals)
+	}
+
+	client.detached.groupAlive = func(int) (bool, error) { return false, nil }
+	signals = nil
+	if err := client.StopDetached(context.Background(), process.DetachedProcess{ProcessRunID: "process-1", PID: 1234}); err != nil {
+		t.Fatal(err)
+	}
+	if len(signals) != 0 {
+		t.Fatalf("exited group signals = %#v", signals)
+	}
+}
+
+func TestStopDetachedTreatsExitDuringOwnershipCheckAsSuccess(t *testing.T) {
+	client := New("codex")
+	aliveChecks := 0
+	client.detached = detachedProcessOps{
+		groupAlive: func(int) (bool, error) {
+			aliveChecks++
+			return aliveChecks == 1, nil
+		},
+		groupOwnedBy: func(int, process.RunID) (bool, error) { return false, nil },
+		signalGroup: func(int, syscall.Signal) error {
+			t.Fatal("exited process group must not be signalled")
+			return nil
+		},
+		waitExit: func(context.Context, int, time.Duration) (bool, error) {
+			t.Fatal("exited process group must not be waited")
+			return false, nil
+		},
+	}
+
+	if err := client.StopDetached(context.Background(), process.DetachedProcess{ProcessRunID: "process-1", PID: 1234}); err != nil {
+		t.Fatal(err)
+	}
+	if aliveChecks != 2 {
+		t.Fatalf("alive checks = %d, want 2", aliveChecks)
+	}
+}
+
 func TestExitedProcessIsReapedWithoutStartingEventConsumer(t *testing.T) {
 	bin := fakeCodex(t, `#!/bin/sh
 exit 0

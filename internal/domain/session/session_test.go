@@ -22,6 +22,47 @@ func TestQueueExecutionOwnsQueueState(t *testing.T) {
 	}
 }
 
+func TestInterruptedStartingSessionCanReturnToResumeQueue(t *testing.T) {
+	now := time.Unix(25, 0).UTC()
+	session := Session{Status: StatusStarting}
+	intent := QueueIntent{Kind: QueueKindResume, Priority: QueuePriorityMedium, ResumeCodexSessionID: "codex-1"}
+
+	if err := session.QueueExecution(intent, now); err != nil {
+		t.Fatalf("QueueExecution() error = %v", err)
+	}
+	if session.Status != StatusQueued || session.Queue != intent {
+		t.Fatalf("queued interrupted session = %#v", session)
+	}
+}
+
+func TestInterruptedAnswerQueueCanReturnToWaitingUser(t *testing.T) {
+	now := time.Unix(26, 0).UTC()
+	session := Session{
+		Status:   StatusQueued,
+		Queue:    QueueIntent{Kind: QueueKindAnswerUser, Priority: QueuePriorityImmediate},
+		QueuedAt: timePtr(time.Unix(25, 0).UTC()),
+	}
+
+	if err := session.TransitionTo(StatusWaitingUser, now); err != nil {
+		t.Fatalf("TransitionTo() error = %v", err)
+	}
+	if session.Status != StatusWaitingUser || session.Queue.Kind != "" || session.QueuedAt != nil {
+		t.Fatalf("restored waiting-user session = %#v", session)
+	}
+}
+
+func TestRegularQueueCannotTransitionToWaitingUser(t *testing.T) {
+	session := Session{
+		Status: StatusQueued,
+		Queue:  QueueIntent{Kind: QueueKindStart, Priority: QueuePriorityMedium},
+	}
+
+	err := session.TransitionTo(StatusWaitingUser, time.Unix(27, 0).UTC())
+	if !errors.Is(err, ErrInvalidStatusTransition) {
+		t.Fatalf("TransitionTo() error = %v", err)
+	}
+}
+
 func TestTransitionClearsQueueWhenExecutionLeavesQueue(t *testing.T) {
 	now := time.Unix(30, 0).UTC()
 	queuedAt := time.Unix(20, 0).UTC()

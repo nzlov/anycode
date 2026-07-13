@@ -91,9 +91,43 @@ func TestEnsureCodexReadyRequiresModelOptions(t *testing.T) {
 	}
 }
 
+func TestStartupReconcilesBeforeQueueDrain(t *testing.T) {
+	sessions := &fakeRecoverySessions{recoverCount: 2, drainCount: 1}
+	if err := reconcileInterruptedSessions(context.Background(), sessions); err != nil {
+		t.Fatalf("reconcileInterruptedSessions() error = %v", err)
+	}
+	if strings.Join(sessions.calls, ",") != "recover" {
+		t.Fatalf("reconcile calls = %#v", sessions.calls)
+	}
+	if err := drainQueuedSessions(context.Background(), sessions); err != nil {
+		t.Fatalf("drainQueuedSessions() error = %v", err)
+	}
+	if strings.Join(sessions.calls, ",") != "recover,drain" {
+		t.Fatalf("startup calls = %#v", sessions.calls)
+	}
+}
+
 type fakeCodexProber struct {
 	capabilities processdomain.CodexCapabilities
 	err          error
+}
+
+type fakeRecoverySessions struct {
+	calls        []string
+	recoverCount int
+	drainCount   int
+	recoverErr   error
+	drainErr     error
+}
+
+func (s *fakeRecoverySessions) RecoverInterruptedSessions(context.Context) (int, error) {
+	s.calls = append(s.calls, "recover")
+	return s.recoverCount, s.recoverErr
+}
+
+func (s *fakeRecoverySessions) DrainQueuedSessions(context.Context) (int, error) {
+	s.calls = append(s.calls, "drain")
+	return s.drainCount, s.drainErr
 }
 
 func (p fakeCodexProber) Probe(context.Context) (processdomain.CodexCapabilities, error) {

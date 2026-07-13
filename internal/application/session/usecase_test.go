@@ -4532,8 +4532,9 @@ func TestCloseFailureAfterStopDoesNotRedeliverAcknowledgedPrompt(t *testing.T) {
 	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning, PID: &pid}
 	processes.hasActive = true
 	stream := make(chan processdomain.CodexEvent, 1)
+	resumedStream := make(chan processdomain.CodexEvent)
 	codex := &fakeCodexProcess{
-		events:       stream,
+		eventStreams: []<-chan processdomain.CodexEvent{stream, resumedStream},
 		resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"},
 	}
 	events := &fakeEventStore{}
@@ -4556,6 +4557,10 @@ func TestCloseFailureAfterStopDoesNotRedeliverAcknowledgedPrompt(t *testing.T) {
 		codexStartOptions{},
 		"/workspace/session-1",
 	)
+	consumerDone, ok := service.processConsumerDone("process-run-1")
+	if !ok {
+		t.Fatal("process consumer was not registered")
+	}
 
 	closeDone := make(chan error, 1)
 	go func() {
@@ -4567,6 +4572,11 @@ func TestCloseFailureAfterStopDoesNotRedeliverAcknowledgedPrompt(t *testing.T) {
 	close(stream)
 	if err := <-closeDone; err == nil {
 		t.Fatal("CloseSession() error = nil, want missing worktree manager error")
+	}
+	select {
+	case <-consumerDone:
+	case <-time.After(time.Second):
+		t.Fatal("process consumer did not finish")
 	}
 	if got := repo.sessions["session-1"].Status; got != domain.StatusStopped {
 		t.Fatalf("session status = %q", got)
@@ -4580,8 +4590,18 @@ func TestCloseFailureAfterStopDoesNotRedeliverAcknowledgedPrompt(t *testing.T) {
 	if started, err := service.DrainQueuedSessions(ctx); err != nil || started != 1 {
 		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
 	}
+	resumedConsumerDone, ok := service.processConsumerDone(codex.resumeInput.ProcessRunID)
+	if !ok {
+		t.Fatal("resumed process consumer was not registered")
+	}
 	if codex.resumeInput.Prompt != "new instruction" {
 		t.Fatalf("resume prompt = %q", codex.resumeInput.Prompt)
+	}
+	close(resumedStream)
+	select {
+	case <-resumedConsumerDone:
+	case <-time.After(time.Second):
+		t.Fatal("resumed process consumer did not finish")
 	}
 }
 
@@ -6913,7 +6933,7 @@ func TestInterruptedSessionRecoveryReleasesInflightPrompt(t *testing.T) {
 		DispatchedProcessRunID: "process-run-1",
 	}}
 	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning, PID: intPointer(1234)}
 	processes.hasActive = true
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithEvents(&fakeEventStore{}))
 	service.generateID = func() (domain.ID, error) { return "event-1", nil }
@@ -6921,7 +6941,7 @@ func TestInterruptedSessionRecoveryReleasesInflightPrompt(t *testing.T) {
 	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
 		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
 	}
-	if got := repo.sessions["session-1"].Status; got != domain.StatusStopped {
+	if got := repo.sessions["session-1"].Status; got != domain.StatusQueued {
 		t.Fatalf("session status = %q", got)
 	}
 	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendPending || promptAppend.DispatchedProcessRunID != "" {
@@ -7421,7 +7441,7 @@ func TestStopSessionReconcilesMissingLocalProcess(t *testing.T) {
 		Status:    domain.StatusStopping,
 	}
 	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusStopping}
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusStopping, PID: intPointer(1234)}
 	processes.hasActive = true
 	codex := &fakeCodexProcess{stopErr: processdomain.ErrProcessNotFound}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
@@ -8030,66 +8050,25 @@ func TestAvailableActionsByStatus(t *testing.T) {
 	}
 }
 
-func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) {
+func TestMarkInterruptedSessionsRecoverableDelegatesToRecoveryCoordinator(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
-	queuedAt := time.Unix(4, 0).UTC()
-	repo.interruptedSessions = []domain.Session{
-		{
-			ID:             "session-1",
-			ProjectID:      "project-1",
-			Status:         domain.StatusRunning,
-			CodexSessionID: "codex-1",
-			UpdatedAt:      time.Unix(1, 0).UTC(),
-		},
-		{
-			ID:             "session-2",
-			ProjectID:      "project-1",
-			Status:         domain.StatusWaitingUser,
-			CodexSessionID: "codex-2",
-			UpdatedAt:      time.Unix(2, 0).UTC(),
-		},
-		{
-			ID:             "session-4",
-			ProjectID:      "project-1",
-			Status:         domain.StatusQueued,
-			CodexSessionID: "codex-4",
-			Queue:          domain.QueueIntent{Kind: domain.QueueKindAnswerUser},
-			QueuedAt:       &queuedAt,
-			UpdatedAt:      time.Unix(4, 0).UTC(),
-		},
+	running := domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning, CodexSessionID: "codex-1"}
+	stopping := domain.Session{ID: "session-2", ProjectID: "project-1", Status: domain.StatusStopping, CodexSessionID: "codex-2"}
+	missingID := domain.Session{ID: "session-3", ProjectID: "project-1", Status: domain.StatusRunning}
+	for _, session := range []domain.Session{running, stopping, missingID} {
+		repo.sessions[session.ID] = session
 	}
-	repo.listSessions = []domain.Session{
-		{
-			ID:        "session-3",
-			ProjectID: "project-1",
-			Status:    domain.StatusRunning,
-			UpdatedAt: time.Unix(3, 0).UTC(),
-		},
-		{
-			ID:        "session-5",
-			ProjectID: "project-1",
-			Status:    domain.StatusWaitingUser,
-			UpdatedAt: time.Unix(5, 0).UTC(),
-		},
-		{
-			ID:        "session-6",
-			ProjectID: "project-1",
-			Status:    domain.StatusStopping,
-			UpdatedAt: time.Unix(6, 0).UTC(),
-		},
-	}
-	repo.listTotal = 3
+	repo.interruptedSessions = []domain.Session{running, stopping}
+	repo.listSessions = []domain.Session{missingID}
+	repo.listTotal = 1
 	events := &fakeEventStore{}
 	processes := newFakeProcessRepository()
-	processes.active = processdomain.Run{
-		ID:        "process-1",
-		SessionID: "session-1",
-		Status:    processdomain.StatusRunning,
-		StartedAt: time.Unix(10, 0).UTC(),
+	processes.activeBySession = map[processdomain.SessionID]processdomain.Run{
+		"session-1": {ID: "process-1", SessionID: "session-1", Status: processdomain.StatusRunning, PID: intPointer(101)},
+		"session-2": {ID: "process-2", SessionID: "session-2", Status: processdomain.StatusStopping, PID: intPointer(102)},
 	}
-	processes.hasActive = true
-	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(processes, nil))
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(processes, &fakeCodexProcess{}))
 	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
 	nextID := 0
 	service.generateID = func() (domain.ID, error) {
@@ -8101,35 +8080,17 @@ func TestMarkInterruptedSessionsRecoverableStopsResumableSessions(t *testing.T) 
 	if err != nil {
 		t.Fatalf("MarkInterruptedSessionsRecoverable() error = %v", err)
 	}
-	if count != 6 {
+	if count != 3 {
 		t.Fatalf("recoverable count = %d", count)
 	}
-	for _, id := range []domain.ID{"session-1", "session-2", "session-4"} {
-		got := repo.sessions[id]
-		if got.Status != domain.StatusStopped {
-			t.Fatalf("session %s status = %q", id, got.Status)
-		}
-		if got.UpdatedAt != time.Unix(100, 0).UTC() {
-			t.Fatalf("session %s updatedAt = %s", id, got.UpdatedAt)
-		}
-		if !slices.Contains(availableActions(got), "execute") {
-			t.Fatalf("session %s actions = %#v", id, availableActions(got))
-		}
+	if got := repo.sessions["session-1"]; got.Status != domain.StatusQueued || got.Queue.Kind != domain.QueueKindResume {
+		t.Fatalf("running session recovery = %#v", got)
 	}
-	if got := repo.sessions["session-4"]; got.Queue.Kind != "" || got.QueuedAt != nil {
-		t.Fatalf("session-4 queue was not cleared: %#v", got)
+	if got := repo.sessions["session-2"]; got.Status != domain.StatusStopped {
+		t.Fatalf("stopping session recovery = %#v", got)
 	}
-	for _, id := range []domain.ID{"session-3", "session-5", "session-6"} {
-		if got := repo.sessions[id]; got.Status != domain.StatusResumeFailed {
-			t.Fatalf("session %s status = %q", id, got.Status)
-		}
-	}
-	if processes.exitedID != "process-1" || processes.exitedResult.FailureReason != "service_restarted" || !processes.exitedResult.FinishedAt.Equal(time.Unix(100, 0).UTC()) {
-		t.Fatalf("interrupted process exit = %q %#v", processes.exitedID, processes.exitedResult)
-	}
-	gotEvents := events.snapshot()
-	if len(gotEvents) != 6 || gotEvents[0].Type != "session.recoverable" || gotEvents[0].Payload["previousStatus"] != "running" || gotEvents[3].Type != "session.resume_failed" || gotEvents[5].Type != "session.resume_failed" {
-		t.Fatalf("events = %#v", gotEvents)
+	if got := repo.sessions["session-3"]; got.Status != domain.StatusResumeFailed {
+		t.Fatalf("missing Codex session recovery = %#v", got)
 	}
 }
 
@@ -9254,8 +9215,10 @@ func (s *fakeWorkflowStarter) SubmitApprovalForSessionWithRepositories(ctx conte
 }
 
 type fakeProcessRepository struct {
+	mu                 sync.RWMutex
 	created            []processdomain.Run
 	active             processdomain.Run
+	activeBySession    map[processdomain.SessionID]processdomain.Run
 	hasActive          bool
 	activeCount        int
 	runningID          processdomain.RunID
@@ -9274,6 +9237,8 @@ func newFakeProcessRepository() *fakeProcessRepository {
 }
 
 func (r *fakeProcessRepository) CreateRun(_ context.Context, run processdomain.Run) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.created = append(r.created, run)
 	r.active = run
 	r.hasActive = true
@@ -9281,6 +9246,8 @@ func (r *fakeProcessRepository) CreateRun(_ context.Context, run processdomain.R
 }
 
 func (r *fakeProcessRepository) HasAnyBySession(_ context.Context, sessionID processdomain.SessionID) (bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, run := range r.created {
 		if run.SessionID == sessionID {
 			return true, nil
@@ -9290,23 +9257,58 @@ func (r *fakeProcessRepository) HasAnyBySession(_ context.Context, sessionID pro
 }
 
 func (r *fakeProcessRepository) FindActiveBySession(_ context.Context, sessionID processdomain.SessionID) (processdomain.Run, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if active, ok := r.activeBySession[sessionID]; ok {
+		return active, true, nil
+	}
 	if r.hasActive && r.active.SessionID == sessionID {
 		return r.active, true, nil
 	}
 	return processdomain.Run{}, false, nil
 }
 
+func (r *fakeProcessRepository) FindLatestBySession(_ context.Context, sessionID processdomain.SessionID) (processdomain.Run, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if active, ok := r.activeBySession[sessionID]; ok {
+		return active, true, nil
+	}
+	for index := len(r.created) - 1; index >= 0; index-- {
+		if r.created[index].SessionID == sessionID {
+			return r.created[index], true, nil
+		}
+	}
+	if r.active.SessionID == sessionID && r.active.ID != "" {
+		return r.active, true, nil
+	}
+	return processdomain.Run{}, false, nil
+}
+
 func (r *fakeProcessRepository) CountActive(context.Context) (int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if r.activeCount > 0 {
 		return r.activeCount, nil
 	}
 	if r.hasActive && (r.active.Status == processdomain.StatusStarting || r.active.Status == processdomain.StatusRunning) {
 		return 1, nil
 	}
+	count := 0
+	for _, active := range r.activeBySession {
+		if active.Status == processdomain.StatusStarting || active.Status == processdomain.StatusRunning {
+			count++
+		}
+	}
+	if count > 0 {
+		return count, nil
+	}
 	return 0, nil
 }
 
 func (r *fakeProcessRepository) MarkWaitingUser(_ context.Context, id processdomain.RunID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.active.ID = id
 	r.active.Status = processdomain.StatusWaitingUser
 	r.hasActive = true
@@ -9314,6 +9316,8 @@ func (r *fakeProcessRepository) MarkWaitingUser(_ context.Context, id processdom
 }
 
 func (r *fakeProcessRepository) MarkRunning(_ context.Context, id processdomain.RunID, pid int, codexSessionID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.runningID = id
 	r.runningPID = pid
 	r.runningCodex = codexSessionID
@@ -9326,6 +9330,8 @@ func (r *fakeProcessRepository) MarkRunning(_ context.Context, id processdomain.
 }
 
 func (r *fakeProcessRepository) MarkStopping(_ context.Context, id processdomain.RunID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.stoppingID = id
 	r.active.ID = id
 	r.active.Status = processdomain.StatusStopping
@@ -9334,18 +9340,32 @@ func (r *fakeProcessRepository) MarkStopping(_ context.Context, id processdomain
 }
 
 func (r *fakeProcessRepository) MarkExited(_ context.Context, id processdomain.RunID, result processdomain.ExitResult) error {
+	r.mu.Lock()
 	r.markExitedCalls++
-	if r.markExitedHook != nil {
-		r.markExitedHook()
-	}
+	hook := r.markExitedHook
+	failed := false
 	if r.markExitedFailures > 0 {
 		r.markExitedFailures--
+		failed = true
+	}
+	r.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	if failed {
 		return errors.New("mark process exited failed")
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.exitedID = id
 	r.exitedResult = result
 	if r.active.ID == id {
 		r.hasActive = false
+	}
+	for sessionID, active := range r.activeBySession {
+		if active.ID == id {
+			delete(r.activeBySession, sessionID)
+		}
 	}
 	return nil
 }
@@ -9383,24 +9403,26 @@ func (c *fakeQuestionCanceller) CancelPendingBySession(_ context.Context, sessio
 }
 
 type fakeCodexProcess struct {
-	startCalled  bool
-	startInput   processdomain.CodexStartInput
-	startInputs  []processdomain.CodexStartInput
-	startHandle  processdomain.CodexHandle
-	startHandles []processdomain.CodexHandle
-	startErr     error
-	startErrs    []error
-	resumeCalled bool
-	resumeInput  processdomain.CodexResumeInput
-	resumeHandle processdomain.CodexHandle
-	resumeErr    error
-	stoppedID    processdomain.RunID
-	stopErr      error
-	stopHook     func(context.Context, processdomain.RunID) error
-	eventsCalled bool
-	eventsErr    error
-	events       <-chan processdomain.CodexEvent
-	eventStreams []<-chan processdomain.CodexEvent
+	startCalled   bool
+	startInput    processdomain.CodexStartInput
+	startInputs   []processdomain.CodexStartInput
+	startHandle   processdomain.CodexHandle
+	startHandles  []processdomain.CodexHandle
+	startErr      error
+	startErrs     []error
+	resumeCalled  bool
+	resumeInput   processdomain.CodexResumeInput
+	resumeHandle  processdomain.CodexHandle
+	resumeErr     error
+	stoppedID     processdomain.RunID
+	stopErr       error
+	stopHook      func(context.Context, processdomain.RunID) error
+	detachedStops []processdomain.DetachedProcess
+	detachedErr   error
+	eventsCalled  bool
+	eventsErr     error
+	events        <-chan processdomain.CodexEvent
+	eventStreams  []<-chan processdomain.CodexEvent
 }
 
 func (p *fakeCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
@@ -9446,6 +9468,11 @@ func (p *fakeCodexProcess) Stop(ctx context.Context, id processdomain.RunID) err
 		return p.stopHook(ctx, id)
 	}
 	return p.stopErr
+}
+
+func (p *fakeCodexProcess) StopDetached(_ context.Context, detached processdomain.DetachedProcess) error {
+	p.detachedStops = append(p.detachedStops, detached)
+	return p.detachedErr
 }
 
 func (p *fakeCodexProcess) Events(context.Context, processdomain.CodexHandle) (<-chan processdomain.CodexEvent, error) {
