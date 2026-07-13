@@ -73,12 +73,14 @@
         :model="model"
         :effort="effort"
         :permission="permission"
+        :fast="fast"
         :model-options="modelOptions"
         :disabled="disabled"
         :readonly-config="readonlyConfig"
         @update:model="emit('update:model', $event)"
         @update:effort="emit('update:effort', $event)"
         @update:permission="emit('update:permission', $event)"
+        @update:fast="emit('update:fast', $event)"
       />
       <q-btn
         v-else
@@ -95,12 +97,14 @@
             :model="model"
             :effort="effort"
             :permission="permission"
+            :fast="fast"
             :model-options="modelOptions"
             :disabled="disabled"
             :readonly-config="readonlyConfig"
             @update:model="emit('update:model', $event)"
             @update:effort="emit('update:effort', $event)"
             @update:permission="emit('update:permission', $event)"
+            @update:fast="emit('update:fast', $event)"
           />
         </q-menu>
       </q-btn>
@@ -160,6 +164,7 @@ const props = withDefaults(
     model: string;
     effort: string;
     permission: string;
+    fast: boolean;
     title?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -185,6 +190,7 @@ const emit = defineEmits<{
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];
+  'update:fast': [value: boolean];
 }>();
 
 const $q = useQuasar();

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -596,6 +597,37 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestQueryLastSessionConfigReturnsNullableProjectConfig(t *testing.T) {
+	sessions := &fakeSessionUseCase{
+		lastConfigResult: &sessionapp.ConfigDTO{
+			CodexModel:      "gpt-5.4",
+			ReasoningEffort: "high",
+			PermissionMode:  "workspace-write",
+			FastMode:        true,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Query()
+
+	got, err := resolver.LastSessionConfig(context.Background(), "project-1")
+	if err != nil {
+		t.Fatalf("LastSessionConfig() error = %v", err)
+	}
+	if sessions.gotLastConfigProjectID != "project-1" || got == nil || got.CodexModel != "gpt-5.4" || !got.FastMode {
+		t.Fatalf("LastSessionConfig() = %#v, project = %q", got, sessions.gotLastConfigProjectID)
+	}
+
+	sessions.lastConfigResult = nil
+	got, err = resolver.LastSessionConfig(context.Background(), "project-1")
+	if err != nil || got != nil {
+		t.Fatalf("LastSessionConfig() without history = %#v, %v", got, err)
+	}
+
+	sessions.err = errors.New("repository failed")
+	if _, err := resolver.LastSessionConfig(context.Background(), "project-1"); err == nil || !strings.Contains(err.Error(), "repository failed") {
+		t.Fatalf("LastSessionConfig() error = %v", err)
+	}
+}
+
 func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	now := time.Unix(30, 0).UTC()
 	sessions := &fakeSessionUseCase{
@@ -683,6 +715,7 @@ func TestMutationExecuteSessionForwardsUseCase(t *testing.T) {
 
 func TestMutationUpdateSessionConfigForwardsUseCase(t *testing.T) {
 	now := time.Unix(32, 0).UTC()
+	fastMode := true
 	sessions := &fakeSessionUseCase{
 		updateConfigResult: sessionapp.DTO{
 			ID:          "session-1",
@@ -694,6 +727,7 @@ func TestMutationUpdateSessionConfigForwardsUseCase(t *testing.T) {
 				CodexModel:      "gpt-5.4-mini",
 				ReasoningEffort: "high",
 				PermissionMode:  "workspace-write",
+				FastMode:        true,
 			},
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -707,6 +741,7 @@ func TestMutationUpdateSessionConfigForwardsUseCase(t *testing.T) {
 			CodexModel:      strPtr("gpt-5.4-mini"),
 			ReasoningEffort: strPtr("high"),
 			PermissionMode:  strPtr("workspace-write"),
+			FastMode:        &fastMode,
 		},
 	})
 	if err != nil {
@@ -715,11 +750,69 @@ func TestMutationUpdateSessionConfigForwardsUseCase(t *testing.T) {
 	if sessions.gotUpdateConfig.SessionID != "session-1" {
 		t.Fatalf("UpdateSessionConfig() input = %#v", sessions.gotUpdateConfig)
 	}
-	if sessions.gotUpdateConfig.Config.CodexModel != "gpt-5.4-mini" || sessions.gotUpdateConfig.Config.ReasoningEffort != "high" || sessions.gotUpdateConfig.Config.PermissionMode != "workspace-write" {
+	if sessions.gotUpdateConfig.Config.CodexModel != "gpt-5.4-mini" || sessions.gotUpdateConfig.Config.ReasoningEffort != "high" || sessions.gotUpdateConfig.Config.PermissionMode != "workspace-write" || sessions.gotUpdateConfig.Config.FastMode == nil || !*sessions.gotUpdateConfig.Config.FastMode {
 		t.Fatalf("UpdateSessionConfig() config = %#v", sessions.gotUpdateConfig.Config)
 	}
-	if got.ID != "session-1" || got.Config.CodexModel != "gpt-5.4-mini" {
+	if got.ID != "session-1" || got.Config.CodexModel != "gpt-5.4-mini" || !got.Config.FastMode {
 		t.Fatalf("UpdateSessionConfig() = %#v", got)
+	}
+
+	_, err = resolver.UpdateSessionConfig(context.Background(), model.UpdateSessionConfigInput{
+		SessionID: "session-1",
+		Config: &model.SessionConfigInput{
+			CodexModel:      strPtr("gpt-5.4-mini"),
+			ReasoningEffort: strPtr("high"),
+			PermissionMode:  strPtr("workspace-write"),
+		},
+	})
+	if err != nil || sessions.gotUpdateConfig.Config.FastMode != nil {
+		t.Fatalf("UpdateSessionConfig() omitted FastMode = %#v, %v", sessions.gotUpdateConfig.Config.FastMode, err)
+	}
+}
+
+func TestMutationCreateSessionPreservesNullableFastMode(t *testing.T) {
+	now := time.Unix(33, 0).UTC()
+	fastMode := false
+	sessions := &fakeSessionUseCase{
+		createResult: sessionapp.DTO{
+			ID:          "session-1",
+			ProjectID:   "project-1",
+			Requirement: "implement fast mode",
+			Mode:        "chat",
+			Status:      "queued",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	_, err := resolver.CreateSession(context.Background(), model.CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement fast mode",
+		Mode:        "chat",
+		Config: &model.SessionConfigInput{
+			CodexModel:      strPtr("gpt-5.4"),
+			ReasoningEffort: strPtr("high"),
+			PermissionMode:  strPtr("workspace-write"),
+			FastMode:        &fastMode,
+		},
+	})
+	if err != nil || sessions.gotCreate.Config.FastMode == nil || *sessions.gotCreate.Config.FastMode {
+		t.Fatalf("CreateSession() explicit false = %#v, %v", sessions.gotCreate.Config.FastMode, err)
+	}
+
+	_, err = resolver.CreateSession(context.Background(), model.CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement fast mode",
+		Mode:        "chat",
+		Config: &model.SessionConfigInput{
+			CodexModel:      strPtr("gpt-5.4"),
+			ReasoningEffort: strPtr("high"),
+			PermissionMode:  strPtr("workspace-write"),
+		},
+	})
+	if err != nil || sessions.gotCreate.Config.FastMode != nil {
+		t.Fatalf("CreateSession() omitted FastMode = %#v, %v", sessions.gotCreate.Config.FastMode, err)
 	}
 }
 
@@ -1237,25 +1330,34 @@ func (f *fakeQuestionUseCase) QuestionBatchUpdates(_ context.Context, sessionID 
 
 type fakeSessionUseCase struct {
 	sessionapp.UseCase
-	gotAnswered        questionapp.BatchDTO
-	answeredCalls      int
-	err                error
-	gotGetCardID       sessiondomain.ID
-	getCardResult      sessionapp.CardDTO
-	gotGetID           sessiondomain.ID
-	getResult          sessionapp.DetailDTO
-	gotResumeID        sessiondomain.ID
-	resumeResult       sessionapp.DTO
-	gotExecuteID       sessiondomain.ID
-	gotExecuteForce    bool
-	executeResult      sessionapp.DTO
-	stopProjectID      sessiondomain.ProjectID
-	gotUpdateConfig    sessionapp.UpdateSessionConfigInput
-	updateConfigResult sessionapp.DTO
-	gotAppend          sessionapp.AppendPromptInput
-	appendResult       sessionapp.PromptAppendDTO
-	gotUpdateAppend    sessionapp.UpdatePromptAppendInput
-	updateAppendResult sessionapp.PromptAppendDTO
+	gotAnswered            questionapp.BatchDTO
+	answeredCalls          int
+	err                    error
+	gotGetCardID           sessiondomain.ID
+	getCardResult          sessionapp.CardDTO
+	gotGetID               sessiondomain.ID
+	getResult              sessionapp.DetailDTO
+	gotLastConfigProjectID sessiondomain.ProjectID
+	lastConfigResult       *sessionapp.ConfigDTO
+	gotCreate              sessionapp.CreateSessionInput
+	createResult           sessionapp.DTO
+	gotResumeID            sessiondomain.ID
+	resumeResult           sessionapp.DTO
+	gotExecuteID           sessiondomain.ID
+	gotExecuteForce        bool
+	executeResult          sessionapp.DTO
+	stopProjectID          sessiondomain.ProjectID
+	gotUpdateConfig        sessionapp.UpdateSessionConfigInput
+	updateConfigResult     sessionapp.DTO
+	gotAppend              sessionapp.AppendPromptInput
+	appendResult           sessionapp.PromptAppendDTO
+	gotUpdateAppend        sessionapp.UpdatePromptAppendInput
+	updateAppendResult     sessionapp.PromptAppendDTO
+}
+
+func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.CreateSessionInput) (sessionapp.DTO, error) {
+	f.gotCreate = input
+	return f.createResult, f.err
 }
 
 func (f *fakeSessionUseCase) ExecuteSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
@@ -1272,6 +1374,11 @@ func (f *fakeSessionUseCase) ExecuteSessionWithOptions(_ context.Context, id ses
 func (f *fakeSessionUseCase) GetSession(_ context.Context, id sessiondomain.ID) (sessionapp.DetailDTO, error) {
 	f.gotGetID = id
 	return f.getResult, f.err
+}
+
+func (f *fakeSessionUseCase) LastSessionConfigForProject(_ context.Context, projectID sessiondomain.ProjectID) (*sessionapp.ConfigDTO, error) {
+	f.gotLastConfigProjectID = projectID
+	return f.lastConfigResult, f.err
 }
 
 func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batch questionapp.BatchDTO) error {

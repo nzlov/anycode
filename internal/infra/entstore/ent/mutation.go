@@ -5999,6 +5999,7 @@ type SessionMutation struct {
 	codex_model                      *string
 	reasoning_effort                 *string
 	permission_mode                  *string
+	fast_mode                        *bool
 	todo_list                        *session.TodoList
 	queued_at                        *time.Time
 	queue_kind                       *string
@@ -6604,6 +6605,42 @@ func (m *SessionMutation) ResetPermissionMode() {
 	m.permission_mode = nil
 }
 
+// SetFastMode sets the "fast_mode" field.
+func (m *SessionMutation) SetFastMode(b bool) {
+	m.fast_mode = &b
+}
+
+// FastMode returns the value of the "fast_mode" field in the mutation.
+func (m *SessionMutation) FastMode() (r bool, exists bool) {
+	v := m.fast_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFastMode returns the old "fast_mode" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldFastMode(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFastMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFastMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFastMode: %w", err)
+	}
+	return oldValue.FastMode, nil
+}
+
+// ResetFastMode resets all changes to the "fast_mode" field.
+func (m *SessionMutation) ResetFastMode() {
+	m.fast_mode = nil
+}
+
 // SetTodoList sets the "todo_list" field.
 func (m *SessionMutation) SetTodoList(sl session.TodoList) {
 	m.todo_list = &sl
@@ -7207,7 +7244,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 27)
+	fields := make([]string, 0, 28)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -7246,6 +7283,9 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.permission_mode != nil {
 		fields = append(fields, entsession.FieldPermissionMode)
+	}
+	if m.fast_mode != nil {
+		fields = append(fields, entsession.FieldFastMode)
 	}
 	if m.todo_list != nil {
 		fields = append(fields, entsession.FieldTodoList)
@@ -7323,6 +7363,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.ReasoningEffort()
 	case entsession.FieldPermissionMode:
 		return m.PermissionMode()
+	case entsession.FieldFastMode:
+		return m.FastMode()
 	case entsession.FieldTodoList:
 		return m.TodoList()
 	case entsession.FieldQueuedAt:
@@ -7386,6 +7428,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldReasoningEffort(ctx)
 	case entsession.FieldPermissionMode:
 		return m.OldPermissionMode(ctx)
+	case entsession.FieldFastMode:
+		return m.OldFastMode(ctx)
 	case entsession.FieldTodoList:
 		return m.OldTodoList(ctx)
 	case entsession.FieldQueuedAt:
@@ -7513,6 +7557,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPermissionMode(v)
+		return nil
+	case entsession.FieldFastMode:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFastMode(v)
 		return nil
 	case entsession.FieldTodoList:
 		v, ok := value.(session.TodoList)
@@ -7738,6 +7789,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldPermissionMode:
 		m.ResetPermissionMode()
+		return nil
+	case entsession.FieldFastMode:
+		m.ResetFastMode()
 		return nil
 	case entsession.FieldTodoList:
 		m.ResetTodoList()

@@ -108,6 +108,7 @@ type CodexStartInput struct {
 	Model           string
 	ReasoningEffort string
 	PermissionMode  string
+	FastMode        bool
 	AttachmentPaths []string
 	ImagePaths      []string
 }
@@ -121,6 +122,7 @@ type CodexResumeInput struct {
 	Model           string
 	ReasoningEffort string
 	PermissionMode  string
+	FastMode        bool
 }
 
 type CodexHandle struct {

@@ -29,6 +29,7 @@ func (Session) Fields() []ent.Field {
 		field.String("codex_model").Default(""),
 		field.String("reasoning_effort").Default(""),
 		field.String("permission_mode").Default(""),
+		field.Bool("fast_mode").Default(false),
 		field.JSON("todo_list", domainsession.TodoList{}).Optional(),
 		field.Time("queued_at").Optional().Nillable(),
 		field.String("queue_kind").Default(""),

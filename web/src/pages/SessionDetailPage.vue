@@ -81,6 +81,7 @@
             v-model:model="composerModel"
             v-model:effort="composerEffort"
             v-model:permission="composerPermission"
+            v-model:fast="composerFast"
             compact
             :show-badge="false"
             title="追加描述"
@@ -554,6 +555,7 @@ const promptEditError = ref('');
 const composerModel = ref('');
 const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
+const composerFast = ref(false);
 const composerConfigReady = ref(false);
 const detailView = ref<'session' | 'info' | 'changes'>('session');
 // GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.
@@ -640,7 +642,8 @@ const composerConfigDirty = computed(() => {
   return (
     current.config.codexModel !== composerModel.value ||
     current.config.reasoningEffort !== composerEffort.value ||
-    current.config.permissionMode !== composerPermission.value
+    current.config.permissionMode !== composerPermission.value ||
+    current.config.fastMode !== composerFast.value
   );
 });
 const canSavePromptAppendEdit = computed(() => {
@@ -954,6 +957,7 @@ async function saveComposerConfig() {
     codexModel: composerModel.value,
     reasoningEffort: composerEffort.value,
     permissionMode: composerPermission.value,
+    fastMode: composerFast.value,
   };
   await updateConfig(config);
 }
@@ -1007,6 +1011,7 @@ watch(
     composerModel.value = value.config.codexModel;
     composerEffort.value = value.config.reasoningEffort;
     composerPermission.value = normalizePermissionMode(value.config.permissionMode);
+    composerFast.value = value.config.fastMode;
     composerConfigReady.value = true;
   },
   { immediate: true },

@@ -65,11 +65,7 @@ export interface SessionTodoItem {
 }
 
 export interface SessionDetail extends SessionCard {
-  config: {
-    codexModel: string;
-    reasoningEffort: string;
-    permissionMode: string;
-  };
+  config: SessionConfig;
   closeReason?: string | null;
   promptAppends: PromptAppend[];
   availableActions: string[];
@@ -180,15 +176,19 @@ export interface CreateSessionInput {
     codexModel?: string;
     reasoningEffort?: string;
     permissionMode?: string;
+    fastMode?: boolean;
   };
   stagedAttachmentIds?: string[];
 }
 
-export interface SessionConfigInput {
+export interface SessionConfig {
   codexModel: string;
   reasoningEffort: string;
   permissionMode: string;
+  fastMode: boolean;
 }
+
+export type SessionConfigInput = SessionConfig;
 
 interface GraphQLPageInfo {
   page: number;
@@ -248,11 +248,7 @@ interface GraphQLSessionDetail {
   worktreeBranch: string;
   currentNodeTitle: string;
   pendingApproval?: GraphQLPendingApproval | null;
-  config: {
-    codexModel: string;
-    reasoningEffort: string;
-    permissionMode: string;
-  };
+  config: SessionConfig;
   promptAppends?: GraphQLPromptAppend[];
   availableActions?: string[];
   canResume: boolean;
@@ -289,11 +285,7 @@ interface GraphQLSession {
   priority: string;
   baseBranch: string;
   worktreeBranch: string;
-  config: {
-    codexModel: string;
-    reasoningEffort: string;
-    permissionMode: string;
-  };
+  config: SessionConfig;
   availableActions?: string[];
   lastRunAt: string | null;
   createdAt: string;
@@ -367,6 +359,7 @@ const sessionDetailFields = `
     codexModel
     reasoningEffort
     permissionMode
+    fastMode
   }
   promptAppends {
     id
@@ -404,6 +397,7 @@ const sessionFields = `
     codexModel
     reasoningEffort
     permissionMode
+    fastMode
   }
   availableActions
   lastRunAt
@@ -475,6 +469,27 @@ export async function getSession(sessionId: string): Promise<SessionDetail> {
     variables: { id: sessionId },
   });
   return normalizeSessionDetail(data.session);
+}
+
+export async function getLastSessionConfig(projectId: string): Promise<SessionConfig | null> {
+  const data = await graphqlFetch<
+    { lastSessionConfig: SessionConfig | null },
+    { projectId: string }
+  >({
+    query: `
+      query LastSessionConfig($projectId: ID!) {
+        lastSessionConfig(projectId: $projectId) {
+          codexModel
+          reasoningEffort
+          permissionMode
+          fastMode
+        }
+      }
+    `,
+    variables: { projectId },
+    notify: false,
+  });
+  return data.lastSessionConfig;
 }
 
 export function subscribeSessionCardChanged(

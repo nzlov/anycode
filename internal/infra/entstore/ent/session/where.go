@@ -129,6 +129,11 @@ func PermissionMode(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldPermissionMode, v))
 }
 
+// FastMode applies equality check predicate on the "fast_mode" field. It's identical to FastModeEQ.
+func FastMode(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldFastMode, v))
+}
+
 // QueuedAt applies equality check predicate on the "queued_at" field. It's identical to QueuedAtEQ.
 func QueuedAt(v time.Time) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueuedAt, v))
@@ -1047,6 +1052,16 @@ func PermissionModeEqualFold(v string) predicate.Session {
 // PermissionModeContainsFold applies the ContainsFold predicate on the "permission_mode" field.
 func PermissionModeContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldPermissionMode, v))
+}
+
+// FastModeEQ applies the EQ predicate on the "fast_mode" field.
+func FastModeEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldFastMode, v))
+}
+
+// FastModeNEQ applies the NEQ predicate on the "fast_mode" field.
+func FastModeNEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldFastMode, v))
 }
 
 // TodoListIsNil applies the IsNil predicate on the "todo_list" field.
