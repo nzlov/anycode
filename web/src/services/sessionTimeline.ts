@@ -3,103 +3,103 @@ import {
   graphqlSubscribe,
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
-import { latestSessionEventPageInput } from '@/services/sessionEventPaging';
+import { latestTranscriptPageInput } from '@/services/sessionEventPaging';
 import type { PageInfo } from '@/services/sessions';
 
-export type SessionTimelinePhase =
+export type TranscriptPhase =
   'standalone' | 'started' | 'progress' | 'completed' | 'failed' | 'cancelled';
 
-export type SessionTimelineTextFormat = 'plain' | 'markdown' | 'json' | 'ansi';
+export type TranscriptTextFormat = 'plain' | 'markdown' | 'json' | 'ansi';
 
-export interface SessionTimelineImage {
+export interface TranscriptImage {
   src: string;
   detail: string;
 }
 
-export interface SessionStructuredText {
-  format: SessionTimelineTextFormat;
+export interface TranscriptStructuredText {
+  format: TranscriptTextFormat;
   text: string;
 }
 
-export interface SessionTextMessageContent {
-  __typename: 'SessionTextMessageContent';
+export interface TranscriptMessageContent {
+  __typename: 'TranscriptMessageContent';
   role: string;
   text: string;
-  format: SessionTimelineTextFormat;
-  images: SessionTimelineImage[];
+  format: TranscriptTextFormat;
+  images: TranscriptImage[];
 }
 
-export interface SessionReasoningContent {
-  __typename: 'SessionReasoningContent';
+export interface TranscriptReasoningContent {
+  __typename: 'TranscriptReasoningContent';
   text: string;
 }
 
-export interface SessionCommandContent {
-  __typename: 'SessionCommandContent';
+export interface TranscriptCommandContent {
+  __typename: 'TranscriptCommandContent';
   command: string;
   output: string;
   exitCode: number | null;
   durationMs: number | null;
 }
 
-export interface SessionToolContent {
-  __typename: 'SessionToolContent';
+export interface TranscriptToolContent {
+  __typename: 'TranscriptToolContent';
   qualifiedName: string;
   category: string;
-  input: SessionStructuredText;
-  output: SessionStructuredText;
-  images: SessionTimelineImage[];
+  input: TranscriptStructuredText;
+  output: TranscriptStructuredText;
+  images: TranscriptImage[];
 }
 
-export interface SessionTimelineFileChange {
+export interface TranscriptFileChange {
   kind: string;
   path: string;
   movePath: string;
   unifiedDiff: string;
 }
 
-export interface SessionFileChangeContent {
-  __typename: 'SessionFileChangeContent';
-  changes: SessionTimelineFileChange[];
+export interface TranscriptFileChangeContent {
+  __typename: 'TranscriptFileChangeContent';
+  changes: TranscriptFileChange[];
 }
 
-export interface SessionStatusContent {
-  __typename: 'SessionStatusContent';
+export interface TranscriptStatusContent {
+  __typename: 'TranscriptStatusContent';
   code: string;
   level: string;
   message: string;
   details: Record<string, unknown>;
 }
 
-export interface SessionUnknownContent {
-  __typename: 'SessionUnknownContent';
+export interface TranscriptUnknownContent {
+  __typename: 'TranscriptUnknownContent';
   rawType: string;
   payload: Record<string, unknown>;
 }
 
-export type SessionTimelineContent =
-  | SessionTextMessageContent
-  | SessionReasoningContent
-  | SessionCommandContent
-  | SessionToolContent
-  | SessionFileChangeContent
-  | SessionStatusContent
-  | SessionUnknownContent;
+export type TranscriptContent =
+  | TranscriptMessageContent
+  | TranscriptReasoningContent
+  | TranscriptCommandContent
+  | TranscriptToolContent
+  | TranscriptFileChangeContent
+  | TranscriptStatusContent
+  | TranscriptUnknownContent;
 
-export interface SessionTimelineEvent {
+export interface TranscriptEvent {
   id: string;
   orderKey: string;
   correlationId: string;
-  phase: SessionTimelinePhase;
+  phase: TranscriptPhase;
   occurredAt: string;
-  content: SessionTimelineContent;
+  content: TranscriptContent;
 }
 
-export interface SessionTimelineItem extends SessionTimelineEvent {
+export interface TranscriptItem extends TranscriptEvent {
   sourceEventIds: string[];
 }
 
-export interface SessionTokenUsage {
+export interface TranscriptTokenUsage {
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
@@ -108,18 +108,18 @@ export interface SessionTokenUsage {
   contextWindow: number;
 }
 
-interface GraphQLTimelineEvent extends Omit<SessionTimelineEvent, 'phase' | 'content'> {
+interface GraphQLTranscriptEvent extends Omit<TranscriptEvent, 'phase' | 'content'> {
   phase: string;
-  content: SessionTimelineContent;
+  content: TranscriptContent;
 }
 
-interface GraphQLTimelineStreamItem {
+interface GraphQLTranscriptStreamItem {
   ready: boolean;
-  event?: GraphQLTimelineEvent | null;
-  usage?: SessionTokenUsage | null;
+  event?: GraphQLTranscriptEvent | null;
+  usage?: TranscriptTokenUsage | null;
 }
 
-const timelineEventFields = `
+const transcriptEventFields = `
   id
   orderKey
   correlationId
@@ -127,30 +127,30 @@ const timelineEventFields = `
   occurredAt
   content {
     __typename
-    ... on SessionTextMessageContent {
+    ... on TranscriptMessageContent {
       role
       text
       format
       images { src detail }
     }
-    ... on SessionReasoningContent { text }
-    ... on SessionCommandContent { command output exitCode durationMs }
-    ... on SessionToolContent {
+    ... on TranscriptReasoningContent { text }
+    ... on TranscriptCommandContent { command output exitCode durationMs }
+    ... on TranscriptToolContent {
       qualifiedName
       category
       input { format text }
       output { format text }
       images { src detail }
     }
-    ... on SessionFileChangeContent {
+    ... on TranscriptFileChangeContent {
       changes { kind path movePath unifiedDiff }
     }
-    ... on SessionStatusContent { code level message details }
-    ... on SessionUnknownContent { rawType payload }
+    ... on TranscriptStatusContent { code level message details }
+    ... on TranscriptUnknownContent { rawType payload }
   }
 `;
 
-const tokenUsageFields = `
+const transcriptUsageFields = `
   inputTokens
   cachedInputTokens
   outputTokens
@@ -159,44 +159,44 @@ const tokenUsageFields = `
   contextWindow
 `;
 
-export async function getSessionTimelinePage(
+export async function getSessionTranscriptPage(
   sessionId: string,
   beforeEventId: string,
   limit: number,
 ) {
   const data = await graphqlFetch<
     {
-      sessionEvents: {
-        events: GraphQLTimelineEvent[];
-        usage?: SessionTokenUsage | null;
+      sessionTranscript: {
+        events: GraphQLTranscriptEvent[];
+        usage?: TranscriptTokenUsage | null;
         pageInfo: PageInfo;
       };
     },
     { input: { sessionId: string; beforeEventId?: string; limit: number } }
   >({
     query: `
-      query SessionEvents($input: ListSessionEventsInput!) {
-        sessionEvents(input: $input) {
-          events { ${timelineEventFields} }
-          usage { ${tokenUsageFields} }
+      query SessionTranscript($input: ListTranscriptEventsInput!) {
+        sessionTranscript(input: $input) {
+          events { ${transcriptEventFields} }
+          usage { ${transcriptUsageFields} }
           pageInfo { page pageSize total nextCursor }
         }
       }
     `,
-    variables: { input: latestSessionEventPageInput(sessionId, beforeEventId, limit) },
+    variables: { input: latestTranscriptPageInput(sessionId, beforeEventId, limit) },
   });
   return {
-    items: data.sessionEvents.events.map(normalizeTimelineEvent),
-    usage: data.sessionEvents.usage ?? null,
-    pageInfo: data.sessionEvents.pageInfo,
+    items: data.sessionTranscript.events.map(normalizeTranscriptEvent),
+    usage: data.sessionTranscript.usage ?? null,
+    pageInfo: data.sessionTranscript.pageInfo,
   };
 }
 
-export function subscribeSessionTimeline(
+export function subscribeSessionTranscript(
   sessionId: string,
   handlers: {
-    onData: (event: SessionTimelineEvent) => void;
-    onUsage?: (usage: SessionTokenUsage) => void;
+    onData: (event: TranscriptEvent) => void;
+    onUsage?: (usage: TranscriptTokenUsage) => void;
     onError?: (error: Error) => void;
     onClose?: (close: GraphQLSubscriptionClose) => void;
     onSubscribed?: () => void;
@@ -204,58 +204,58 @@ export function subscribeSessionTimeline(
 ) {
   const options = {
     query: `
-      subscription SessionEvents($sessionId: ID!) {
-        sessionEvents(sessionId: $sessionId) {
+      subscription SessionTranscript($sessionId: ID!) {
+        sessionTranscript(sessionId: $sessionId) {
           ready
-          event { ${timelineEventFields} }
-          usage { ${tokenUsageFields} }
+          event { ${transcriptEventFields} }
+          usage { ${transcriptUsageFields} }
         }
       }
     `,
     variables: { sessionId },
-    onData: (data: { sessionEvents: GraphQLTimelineStreamItem }) => {
-      if (data.sessionEvents.ready) {
+    onData: (data: { sessionTranscript: GraphQLTranscriptStreamItem }) => {
+      if (data.sessionTranscript.ready) {
         handlers.onSubscribed?.();
         return;
       }
-      if (data.sessionEvents.event) {
-        handlers.onData(normalizeTimelineEvent(data.sessionEvents.event));
+      if (data.sessionTranscript.event) {
+        handlers.onData(normalizeTranscriptEvent(data.sessionTranscript.event));
       }
-      if (data.sessionEvents.usage) {
-        handlers.onUsage?.(data.sessionEvents.usage);
+      if (data.sessionTranscript.usage) {
+        handlers.onUsage?.(data.sessionTranscript.usage);
       }
     },
   };
   if (handlers.onError) Object.assign(options, { onError: handlers.onError });
   if (handlers.onClose) Object.assign(options, { onClose: handlers.onClose });
-  return graphqlSubscribe<{ sessionEvents: GraphQLTimelineStreamItem }, { sessionId: string }>(
+  return graphqlSubscribe<{ sessionTranscript: GraphQLTranscriptStreamItem }, { sessionId: string }>(
     options,
   );
 }
 
-function normalizeTimelineEvent(event: GraphQLTimelineEvent): SessionTimelineEvent {
+function normalizeTranscriptEvent(event: GraphQLTranscriptEvent): TranscriptEvent {
   return {
     ...event,
     correlationId: event.correlationId ?? '',
-    phase: event.phase.toLowerCase() as SessionTimelinePhase,
+    phase: event.phase.toLowerCase() as TranscriptPhase,
     content: normalizeContent(event.content),
   };
 }
 
-function normalizeContent(content: SessionTimelineContent): SessionTimelineContent {
-  if (content.__typename === 'SessionTextMessageContent') {
-    return { ...content, format: normalizeTextFormat(content.format) };
+function normalizeContent(content: TranscriptContent): TranscriptContent {
+  if (content.__typename === 'TranscriptMessageContent') {
+    return { ...content, format: normalizeTranscriptTextFormat(content.format) };
   }
-  if (content.__typename === 'SessionToolContent') {
+  if (content.__typename === 'TranscriptToolContent') {
     return {
       ...content,
-      input: { ...content.input, format: normalizeTextFormat(content.input.format) },
-      output: { ...content.output, format: normalizeTextFormat(content.output.format) },
+      input: { ...content.input, format: normalizeTranscriptTextFormat(content.input.format) },
+      output: { ...content.output, format: normalizeTranscriptTextFormat(content.output.format) },
     };
   }
   return content;
 }
 
-function normalizeTextFormat(value: string): SessionTimelineTextFormat {
-  return value.toLowerCase() as SessionTimelineTextFormat;
+function normalizeTranscriptTextFormat(value: string): TranscriptTextFormat {
+  return value.toLowerCase() as TranscriptTextFormat;
 }

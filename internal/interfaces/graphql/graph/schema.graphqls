@@ -12,7 +12,7 @@ type Query {
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
   session(id: ID!): SessionDetail!
-  sessionEvents(input: ListSessionEventsInput!): SessionTimelinePage!
+  sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
@@ -47,7 +47,7 @@ type Mutation {
 }
 
 type Subscription {
-  sessionEvents(sessionId: ID!): SessionTimelineStreamItem!
+  sessionTranscript(sessionId: ID!): TranscriptStreamItem!
   sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
   sessionCardUpdates(projectId: ID): SessionCardStreamItem!
@@ -253,22 +253,22 @@ type PromptAppend {
   createdAt: Time!
 }
 
-type SessionTimelinePage {
-  events: [SessionTimelineEvent!]!
-  usage: SessionTokenUsage
+type TranscriptPage {
+  events: [TranscriptEvent!]!
+  usage: TranscriptTokenUsage
   pageInfo: PageInfo!
 }
 
-type SessionTimelineEvent {
+type TranscriptEvent {
   id: ID!
   orderKey: String!
   correlationId: ID
-  phase: SessionTimelineEventPhase!
+  phase: TranscriptEventPhase!
   occurredAt: Time!
-  content: SessionTimelineContent!
+  content: TranscriptContent!
 }
 
-enum SessionTimelineEventPhase {
+enum TranscriptEventPhase {
   STANDALONE
   STARTED
   PROGRESS
@@ -277,82 +277,82 @@ enum SessionTimelineEventPhase {
   CANCELLED
 }
 
-enum SessionTimelineTextFormat {
+enum TranscriptTextFormat {
   PLAIN
   MARKDOWN
   JSON
   ANSI
 }
 
-union SessionTimelineContent =
-    SessionTextMessageContent
-  | SessionReasoningContent
-  | SessionCommandContent
-  | SessionToolContent
-  | SessionFileChangeContent
-  | SessionStatusContent
-  | SessionUnknownContent
+union TranscriptContent =
+    TranscriptMessageContent
+  | TranscriptReasoningContent
+  | TranscriptCommandContent
+  | TranscriptToolContent
+  | TranscriptFileChangeContent
+  | TranscriptStatusContent
+  | TranscriptUnknownContent
 
-type SessionTimelineImage {
+type TranscriptImage {
   src: String!
   detail: String!
 }
 
-type SessionStructuredText {
-  format: SessionTimelineTextFormat!
+type TranscriptStructuredText {
+  format: TranscriptTextFormat!
   text: String!
 }
 
-type SessionTextMessageContent {
+type TranscriptMessageContent {
   role: String!
   text: String!
-  format: SessionTimelineTextFormat!
-  images: [SessionTimelineImage!]!
+  format: TranscriptTextFormat!
+  images: [TranscriptImage!]!
 }
 
-type SessionReasoningContent {
+type TranscriptReasoningContent {
   text: String!
 }
 
-type SessionCommandContent {
+type TranscriptCommandContent {
   command: String!
   output: String!
   exitCode: Int
   durationMs: Int
 }
 
-type SessionToolContent {
+type TranscriptToolContent {
   qualifiedName: String!
   category: String!
-  input: SessionStructuredText!
-  output: SessionStructuredText!
-  images: [SessionTimelineImage!]!
+  input: TranscriptStructuredText!
+  output: TranscriptStructuredText!
+  images: [TranscriptImage!]!
 }
 
-type SessionTimelineFileChange {
+type TranscriptFileChange {
   kind: String!
   path: String!
   movePath: String!
   unifiedDiff: String!
 }
 
-type SessionFileChangeContent {
-  changes: [SessionTimelineFileChange!]!
+type TranscriptFileChangeContent {
+  changes: [TranscriptFileChange!]!
 }
 
-type SessionStatusContent {
+type TranscriptStatusContent {
   code: String!
   level: String!
   message: String!
   details: JSON!
 }
 
-type SessionUnknownContent {
+type TranscriptUnknownContent {
   rawType: String!
   payload: JSON!
 }
 
-type SessionTokenUsage {
+type TranscriptTokenUsage {
   inputTokens: Int!
   cachedInputTokens: Int!
   outputTokens: Int!
@@ -361,10 +361,10 @@ type SessionTokenUsage {
   contextWindow: Int!
 }
 
-type SessionTimelineStreamItem {
+type TranscriptStreamItem {
   ready: Boolean!
-  event: SessionTimelineEvent
-  usage: SessionTokenUsage
+  event: TranscriptEvent
+  usage: TranscriptTokenUsage
 }
 
 type SessionStateStreamItem {
@@ -612,7 +612,7 @@ input AppendPromptInput {
   stagedAttachmentIds: [ID!]
 }
 
-input ListSessionEventsInput {
+input ListTranscriptEventsInput {
   sessionId: ID!
   beforeEventId: ID
   limit: Int

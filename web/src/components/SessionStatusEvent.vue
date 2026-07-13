@@ -29,9 +29,9 @@ import { computed, ref } from 'vue';
 
 import StructuredContent from '@/components/StructuredContent.vue';
 import type {
-  SessionStatusContent,
-  SessionStructuredText,
-  SessionTimelineItem,
+  TranscriptStatusContent,
+  TranscriptStructuredText,
+  TranscriptItem,
 } from '@/services/sessionTimeline';
 import {
   statusColor,
@@ -41,12 +41,12 @@ import {
 } from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionTimelineItem & { content: SessionStatusContent };
+  event: TranscriptItem & { content: TranscriptStatusContent };
 }>();
 const content = computed(() => props.event.content);
 const expanded = ref(false);
 const hasDetails = computed(() => Object.keys(content.value.details).length > 0);
-const detailsContent = computed<SessionStructuredText>(() => ({
+const detailsContent = computed<TranscriptStructuredText>(() => ({
   format: 'json',
   text: JSON.stringify(content.value.details),
 }));

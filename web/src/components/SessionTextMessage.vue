@@ -36,11 +36,11 @@ import { computed, ref } from 'vue';
 
 import MarkdownContent from '@/components/MarkdownContent.vue';
 import SessionEventImages from '@/components/SessionEventImages.vue';
-import type { SessionTextMessageContent, SessionTimelineItem } from '@/services/sessionTimeline';
+import type { TranscriptMessageContent, TranscriptItem } from '@/services/sessionTimeline';
 import { sessionTextPresentation, timelineTime } from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionTimelineItem & { content: SessionTextMessageContent };
+  event: TranscriptItem & { content: TranscriptMessageContent };
   knownUserPrompts: readonly string[];
   workflowPrompt: boolean;
 }>();

@@ -13,11 +13,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import type { SessionTimelineItem, SessionUnknownContent } from '@/services/sessionTimeline';
+import type { TranscriptItem, TranscriptUnknownContent } from '@/services/sessionTimeline';
 import { timelineTime } from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionTimelineItem & { content: SessionUnknownContent };
+  event: TranscriptItem & { content: TranscriptUnknownContent };
 }>();
 const expanded = ref(false);
 const formattedPayload = computed(() => JSON.stringify(props.event.content.payload, null, 2));

@@ -1,3 +1,3 @@
-import type { SessionTimelineEvent, SessionTimelineItem } from '@/services/sessionTimeline';
+import type { TranscriptEvent, TranscriptItem } from '@/services/sessionTimeline';
 
-export function reduceSessionTimelineEvents(events: SessionTimelineEvent[]): SessionTimelineItem[];
+export function reduceTranscriptEvents(events: TranscriptEvent[]): TranscriptItem[];

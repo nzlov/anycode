@@ -1,28 +1,28 @@
 <template>
   <SessionTextMessage
-    v-if="event.content.__typename === 'SessionTextMessageContent'"
+    v-if="event.content.__typename === 'TranscriptMessageContent'"
     :event="textEvent"
     :known-user-prompts="knownUserPrompts"
     :workflow-prompt="workflowPrompt"
   />
   <SessionReasoningEvent
-    v-else-if="event.content.__typename === 'SessionReasoningContent'"
+    v-else-if="event.content.__typename === 'TranscriptReasoningContent'"
     :event="reasoningEvent"
   />
   <SessionCommandEvent
-    v-else-if="event.content.__typename === 'SessionCommandContent'"
+    v-else-if="event.content.__typename === 'TranscriptCommandContent'"
     :event="commandEvent"
   />
   <SessionToolEvent
-    v-else-if="event.content.__typename === 'SessionToolContent'"
+    v-else-if="event.content.__typename === 'TranscriptToolContent'"
     :event="toolEvent"
   />
   <SessionFileChangeEvent
-    v-else-if="event.content.__typename === 'SessionFileChangeContent'"
+    v-else-if="event.content.__typename === 'TranscriptFileChangeContent'"
     :event="fileChangeEvent"
   />
   <SessionStatusEvent
-    v-else-if="event.content.__typename === 'SessionStatusContent'"
+    v-else-if="event.content.__typename === 'TranscriptStatusContent'"
     :event="statusEvent"
   />
   <SessionUnknownEvent v-else :event="unknownEvent" />
@@ -39,19 +39,19 @@ import SessionTextMessage from '@/components/SessionTextMessage.vue';
 import SessionToolEvent from '@/components/SessionToolEvent.vue';
 import SessionUnknownEvent from '@/components/SessionUnknownEvent.vue';
 import type {
-  SessionCommandContent,
-  SessionFileChangeContent,
-  SessionReasoningContent,
-  SessionStatusContent,
-  SessionTextMessageContent,
-  SessionTimelineItem,
-  SessionToolContent,
-  SessionUnknownContent,
+  TranscriptCommandContent,
+  TranscriptFileChangeContent,
+  TranscriptReasoningContent,
+  TranscriptStatusContent,
+  TranscriptMessageContent,
+  TranscriptItem,
+  TranscriptToolContent,
+  TranscriptUnknownContent,
 } from '@/services/sessionTimeline';
 
 const props = withDefaults(
   defineProps<{
-    event: SessionTimelineItem;
+    event: TranscriptItem;
     knownUserPrompts?: readonly string[];
     workflowPrompt?: boolean;
   }>(),
@@ -59,24 +59,24 @@ const props = withDefaults(
 );
 
 const textEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionTextMessageContent },
+  () => props.event as TranscriptItem & { content: TranscriptMessageContent },
 );
 const reasoningEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionReasoningContent },
+  () => props.event as TranscriptItem & { content: TranscriptReasoningContent },
 );
 const commandEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionCommandContent },
+  () => props.event as TranscriptItem & { content: TranscriptCommandContent },
 );
 const toolEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionToolContent },
+  () => props.event as TranscriptItem & { content: TranscriptToolContent },
 );
 const fileChangeEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionFileChangeContent },
+  () => props.event as TranscriptItem & { content: TranscriptFileChangeContent },
 );
 const statusEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionStatusContent },
+  () => props.event as TranscriptItem & { content: TranscriptStatusContent },
 );
 const unknownEvent = computed(
-  () => props.event as SessionTimelineItem & { content: SessionUnknownContent },
+  () => props.event as TranscriptItem & { content: TranscriptUnknownContent },
 );
 </script>

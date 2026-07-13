@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-type SessionTimelineContent interface {
-	IsSessionTimelineContent()
+type TranscriptContent interface {
+	IsTranscriptContent()
 }
 
 type AppendPromptInput struct {
@@ -173,12 +173,6 @@ type ListQuickCommandsInput struct {
 	PageSize *int `json:"pageSize,omitempty"`
 }
 
-type ListSessionEventsInput struct {
-	SessionID     string  `json:"sessionId"`
-	BeforeEventID *string `json:"beforeEventId,omitempty"`
-	Limit         *int    `json:"limit,omitempty"`
-}
-
 type ListSessionsInput struct {
 	ProjectID *string `json:"projectId,omitempty"`
 	Scope     *string `json:"scope,omitempty"`
@@ -187,6 +181,12 @@ type ListSessionsInput struct {
 	PageSize  *int    `json:"pageSize,omitempty"`
 	Filter    *string `json:"filter,omitempty"`
 	Sort      *string `json:"sort,omitempty"`
+}
+
+type ListTranscriptEventsInput struct {
+	SessionID     string  `json:"sessionId"`
+	BeforeEventID *string `json:"beforeEventId,omitempty"`
+	Limit         *int    `json:"limit,omitempty"`
 }
 
 type MergeConfig struct {
@@ -358,15 +358,6 @@ type SessionCardStreamItem struct {
 	Card  *SessionCard `json:"card,omitempty"`
 }
 
-type SessionCommandContent struct {
-	Command    string `json:"command"`
-	Output     string `json:"output"`
-	ExitCode   *int   `json:"exitCode,omitempty"`
-	DurationMs *int   `json:"durationMs,omitempty"`
-}
-
-func (SessionCommandContent) IsSessionTimelineContent() {}
-
 type SessionCommitHistory struct {
 	Commits   *CommitRecordPage `json:"commits"`
 	Available bool              `json:"available"`
@@ -433,105 +424,11 @@ type SessionDiffInput struct {
 	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
-type SessionFileChangeContent struct {
-	Changes []*SessionTimelineFileChange `json:"changes"`
-}
-
-func (SessionFileChangeContent) IsSessionTimelineContent() {}
-
-type SessionReasoningContent struct {
-	Text string `json:"text"`
-}
-
-func (SessionReasoningContent) IsSessionTimelineContent() {}
-
 type SessionStateStreamItem struct {
 	Ready         bool           `json:"ready"`
 	Session       *SessionDetail `json:"session,omitempty"`
 	QuestionBatch *QuestionBatch `json:"questionBatch,omitempty"`
 }
-
-type SessionStatusContent struct {
-	Code    string         `json:"code"`
-	Level   string         `json:"level"`
-	Message string         `json:"message"`
-	Details map[string]any `json:"details"`
-}
-
-func (SessionStatusContent) IsSessionTimelineContent() {}
-
-type SessionStructuredText struct {
-	Format SessionTimelineTextFormat `json:"format"`
-	Text   string                    `json:"text"`
-}
-
-type SessionTextMessageContent struct {
-	Role   string                    `json:"role"`
-	Text   string                    `json:"text"`
-	Format SessionTimelineTextFormat `json:"format"`
-	Images []*SessionTimelineImage   `json:"images"`
-}
-
-func (SessionTextMessageContent) IsSessionTimelineContent() {}
-
-type SessionTimelineEvent struct {
-	ID            string                    `json:"id"`
-	OrderKey      string                    `json:"orderKey"`
-	CorrelationID *string                   `json:"correlationId,omitempty"`
-	Phase         SessionTimelineEventPhase `json:"phase"`
-	OccurredAt    time.Time                 `json:"occurredAt"`
-	Content       SessionTimelineContent    `json:"content"`
-}
-
-type SessionTimelineFileChange struct {
-	Kind        string `json:"kind"`
-	Path        string `json:"path"`
-	MovePath    string `json:"movePath"`
-	UnifiedDiff string `json:"unifiedDiff"`
-}
-
-type SessionTimelineImage struct {
-	Src    string `json:"src"`
-	Detail string `json:"detail"`
-}
-
-type SessionTimelinePage struct {
-	Events   []*SessionTimelineEvent `json:"events"`
-	Usage    *SessionTokenUsage      `json:"usage,omitempty"`
-	PageInfo *PageInfo               `json:"pageInfo"`
-}
-
-type SessionTimelineStreamItem struct {
-	Ready bool                  `json:"ready"`
-	Event *SessionTimelineEvent `json:"event,omitempty"`
-	Usage *SessionTokenUsage    `json:"usage,omitempty"`
-}
-
-type SessionTokenUsage struct {
-	InputTokens           int `json:"inputTokens"`
-	CachedInputTokens     int `json:"cachedInputTokens"`
-	OutputTokens          int `json:"outputTokens"`
-	ReasoningOutputTokens int `json:"reasoningOutputTokens"`
-	TotalTokens           int `json:"totalTokens"`
-	ContextWindow         int `json:"contextWindow"`
-}
-
-type SessionToolContent struct {
-	QualifiedName string                  `json:"qualifiedName"`
-	Category      string                  `json:"category"`
-	Input         *SessionStructuredText  `json:"input"`
-	Output        *SessionStructuredText  `json:"output"`
-	Images        []*SessionTimelineImage `json:"images"`
-}
-
-func (SessionToolContent) IsSessionTimelineContent() {}
-
-type SessionUnknownContent struct {
-	RawType string         `json:"rawType"`
-	Payload map[string]any `json:"payload"`
-}
-
-func (SessionUnknownContent) IsSessionTimelineContent() {}
 
 type SetDefaultWorkflowInput struct {
 	ProjectID  string `json:"projectId"`
@@ -568,6 +465,109 @@ type TodoList struct {
 	Total     int         `json:"total"`
 	Items     []*TodoItem `json:"items"`
 }
+
+type TranscriptCommandContent struct {
+	Command    string `json:"command"`
+	Output     string `json:"output"`
+	ExitCode   *int   `json:"exitCode,omitempty"`
+	DurationMs *int   `json:"durationMs,omitempty"`
+}
+
+func (TranscriptCommandContent) IsTranscriptContent() {}
+
+type TranscriptEvent struct {
+	ID            string               `json:"id"`
+	OrderKey      string               `json:"orderKey"`
+	CorrelationID *string              `json:"correlationId,omitempty"`
+	Phase         TranscriptEventPhase `json:"phase"`
+	OccurredAt    time.Time            `json:"occurredAt"`
+	Content       TranscriptContent    `json:"content"`
+}
+
+type TranscriptFileChange struct {
+	Kind        string `json:"kind"`
+	Path        string `json:"path"`
+	MovePath    string `json:"movePath"`
+	UnifiedDiff string `json:"unifiedDiff"`
+}
+
+type TranscriptFileChangeContent struct {
+	Changes []*TranscriptFileChange `json:"changes"`
+}
+
+func (TranscriptFileChangeContent) IsTranscriptContent() {}
+
+type TranscriptImage struct {
+	Src    string `json:"src"`
+	Detail string `json:"detail"`
+}
+
+type TranscriptMessageContent struct {
+	Role   string               `json:"role"`
+	Text   string               `json:"text"`
+	Format TranscriptTextFormat `json:"format"`
+	Images []*TranscriptImage   `json:"images"`
+}
+
+func (TranscriptMessageContent) IsTranscriptContent() {}
+
+type TranscriptPage struct {
+	Events   []*TranscriptEvent    `json:"events"`
+	Usage    *TranscriptTokenUsage `json:"usage,omitempty"`
+	PageInfo *PageInfo             `json:"pageInfo"`
+}
+
+type TranscriptReasoningContent struct {
+	Text string `json:"text"`
+}
+
+func (TranscriptReasoningContent) IsTranscriptContent() {}
+
+type TranscriptStatusContent struct {
+	Code    string         `json:"code"`
+	Level   string         `json:"level"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details"`
+}
+
+func (TranscriptStatusContent) IsTranscriptContent() {}
+
+type TranscriptStreamItem struct {
+	Ready bool                  `json:"ready"`
+	Event *TranscriptEvent      `json:"event,omitempty"`
+	Usage *TranscriptTokenUsage `json:"usage,omitempty"`
+}
+
+type TranscriptStructuredText struct {
+	Format TranscriptTextFormat `json:"format"`
+	Text   string               `json:"text"`
+}
+
+type TranscriptTokenUsage struct {
+	InputTokens           int `json:"inputTokens"`
+	CachedInputTokens     int `json:"cachedInputTokens"`
+	OutputTokens          int `json:"outputTokens"`
+	ReasoningOutputTokens int `json:"reasoningOutputTokens"`
+	TotalTokens           int `json:"totalTokens"`
+	ContextWindow         int `json:"contextWindow"`
+}
+
+type TranscriptToolContent struct {
+	QualifiedName string                    `json:"qualifiedName"`
+	Category      string                    `json:"category"`
+	Input         *TranscriptStructuredText `json:"input"`
+	Output        *TranscriptStructuredText `json:"output"`
+	Images        []*TranscriptImage        `json:"images"`
+}
+
+func (TranscriptToolContent) IsTranscriptContent() {}
+
+type TranscriptUnknownContent struct {
+	RawType string         `json:"rawType"`
+	Payload map[string]any `json:"payload"`
+}
+
+func (TranscriptUnknownContent) IsTranscriptContent() {}
 
 type UpdateProjectSettingsInput struct {
 	ProjectID           string `json:"projectId"`
@@ -688,56 +688,56 @@ type WorkflowRun struct {
 	Context       map[string]any `json:"context"`
 }
 
-type SessionTimelineEventPhase string
+type TranscriptEventPhase string
 
 const (
-	SessionTimelineEventPhaseStandalone SessionTimelineEventPhase = "STANDALONE"
-	SessionTimelineEventPhaseStarted    SessionTimelineEventPhase = "STARTED"
-	SessionTimelineEventPhaseProgress   SessionTimelineEventPhase = "PROGRESS"
-	SessionTimelineEventPhaseCompleted  SessionTimelineEventPhase = "COMPLETED"
-	SessionTimelineEventPhaseFailed     SessionTimelineEventPhase = "FAILED"
-	SessionTimelineEventPhaseCancelled  SessionTimelineEventPhase = "CANCELLED"
+	TranscriptEventPhaseStandalone TranscriptEventPhase = "STANDALONE"
+	TranscriptEventPhaseStarted    TranscriptEventPhase = "STARTED"
+	TranscriptEventPhaseProgress   TranscriptEventPhase = "PROGRESS"
+	TranscriptEventPhaseCompleted  TranscriptEventPhase = "COMPLETED"
+	TranscriptEventPhaseFailed     TranscriptEventPhase = "FAILED"
+	TranscriptEventPhaseCancelled  TranscriptEventPhase = "CANCELLED"
 )
 
-var AllSessionTimelineEventPhase = []SessionTimelineEventPhase{
-	SessionTimelineEventPhaseStandalone,
-	SessionTimelineEventPhaseStarted,
-	SessionTimelineEventPhaseProgress,
-	SessionTimelineEventPhaseCompleted,
-	SessionTimelineEventPhaseFailed,
-	SessionTimelineEventPhaseCancelled,
+var AllTranscriptEventPhase = []TranscriptEventPhase{
+	TranscriptEventPhaseStandalone,
+	TranscriptEventPhaseStarted,
+	TranscriptEventPhaseProgress,
+	TranscriptEventPhaseCompleted,
+	TranscriptEventPhaseFailed,
+	TranscriptEventPhaseCancelled,
 }
 
-func (e SessionTimelineEventPhase) IsValid() bool {
+func (e TranscriptEventPhase) IsValid() bool {
 	switch e {
-	case SessionTimelineEventPhaseStandalone, SessionTimelineEventPhaseStarted, SessionTimelineEventPhaseProgress, SessionTimelineEventPhaseCompleted, SessionTimelineEventPhaseFailed, SessionTimelineEventPhaseCancelled:
+	case TranscriptEventPhaseStandalone, TranscriptEventPhaseStarted, TranscriptEventPhaseProgress, TranscriptEventPhaseCompleted, TranscriptEventPhaseFailed, TranscriptEventPhaseCancelled:
 		return true
 	}
 	return false
 }
 
-func (e SessionTimelineEventPhase) String() string {
+func (e TranscriptEventPhase) String() string {
 	return string(e)
 }
 
-func (e *SessionTimelineEventPhase) UnmarshalGQL(v any) error {
+func (e *TranscriptEventPhase) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = SessionTimelineEventPhase(str)
+	*e = TranscriptEventPhase(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid SessionTimelineEventPhase", str)
+		return fmt.Errorf("%s is not a valid TranscriptEventPhase", str)
 	}
 	return nil
 }
 
-func (e SessionTimelineEventPhase) MarshalGQL(w io.Writer) {
+func (e TranscriptEventPhase) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *SessionTimelineEventPhase) UnmarshalJSON(b []byte) error {
+func (e *TranscriptEventPhase) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -745,58 +745,58 @@ func (e *SessionTimelineEventPhase) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e SessionTimelineEventPhase) MarshalJSON() ([]byte, error) {
+func (e TranscriptEventPhase) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil
 }
 
-type SessionTimelineTextFormat string
+type TranscriptTextFormat string
 
 const (
-	SessionTimelineTextFormatPlain    SessionTimelineTextFormat = "PLAIN"
-	SessionTimelineTextFormatMarkdown SessionTimelineTextFormat = "MARKDOWN"
-	SessionTimelineTextFormatJSON     SessionTimelineTextFormat = "JSON"
-	SessionTimelineTextFormatAnsi     SessionTimelineTextFormat = "ANSI"
+	TranscriptTextFormatPlain    TranscriptTextFormat = "PLAIN"
+	TranscriptTextFormatMarkdown TranscriptTextFormat = "MARKDOWN"
+	TranscriptTextFormatJSON     TranscriptTextFormat = "JSON"
+	TranscriptTextFormatAnsi     TranscriptTextFormat = "ANSI"
 )
 
-var AllSessionTimelineTextFormat = []SessionTimelineTextFormat{
-	SessionTimelineTextFormatPlain,
-	SessionTimelineTextFormatMarkdown,
-	SessionTimelineTextFormatJSON,
-	SessionTimelineTextFormatAnsi,
+var AllTranscriptTextFormat = []TranscriptTextFormat{
+	TranscriptTextFormatPlain,
+	TranscriptTextFormatMarkdown,
+	TranscriptTextFormatJSON,
+	TranscriptTextFormatAnsi,
 }
 
-func (e SessionTimelineTextFormat) IsValid() bool {
+func (e TranscriptTextFormat) IsValid() bool {
 	switch e {
-	case SessionTimelineTextFormatPlain, SessionTimelineTextFormatMarkdown, SessionTimelineTextFormatJSON, SessionTimelineTextFormatAnsi:
+	case TranscriptTextFormatPlain, TranscriptTextFormatMarkdown, TranscriptTextFormatJSON, TranscriptTextFormatAnsi:
 		return true
 	}
 	return false
 }
 
-func (e SessionTimelineTextFormat) String() string {
+func (e TranscriptTextFormat) String() string {
 	return string(e)
 }
 
-func (e *SessionTimelineTextFormat) UnmarshalGQL(v any) error {
+func (e *TranscriptTextFormat) UnmarshalGQL(v any) error {
 	str, ok := v.(string)
 	if !ok {
 		return fmt.Errorf("enums must be strings")
 	}
 
-	*e = SessionTimelineTextFormat(str)
+	*e = TranscriptTextFormat(str)
 	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid SessionTimelineTextFormat", str)
+		return fmt.Errorf("%s is not a valid TranscriptTextFormat", str)
 	}
 	return nil
 }
 
-func (e SessionTimelineTextFormat) MarshalGQL(w io.Writer) {
+func (e TranscriptTextFormat) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
-func (e *SessionTimelineTextFormat) UnmarshalJSON(b []byte) error {
+func (e *TranscriptTextFormat) UnmarshalJSON(b []byte) error {
 	s, err := strconv.Unquote(string(b))
 	if err != nil {
 		return err
@@ -804,7 +804,7 @@ func (e *SessionTimelineTextFormat) UnmarshalJSON(b []byte) error {
 	return e.UnmarshalGQL(s)
 }
 
-func (e SessionTimelineTextFormat) MarshalJSON() ([]byte, error) {
+func (e TranscriptTextFormat) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

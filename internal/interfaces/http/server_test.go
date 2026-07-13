@@ -111,7 +111,7 @@ func TestWebSocketInitFuncRequiresAuthorizationPayload(t *testing.T) {
 	}
 }
 
-func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *testing.T) {
+func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *testing.T) {
 	timeline := &fakeTimelineUseCase{ch: make(chan timelineapp.DTO, 1), subscribed: make(chan struct{})}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Timeline: timeline}))
 	server := httptest.NewServer(handler)
@@ -134,7 +134,7 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 		"type": "subscribe",
 		"payload": map[string]any{
 			"query": `subscription($sessionId: ID!) {
-				sessionEvents(sessionId: $sessionId) {
+				sessionTranscript(sessionId: $sessionId) {
 					ready
 						event {
 							id
@@ -142,7 +142,7 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 							phase
 							content {
 								__typename
-								... on SessionStatusContent {
+								... on TranscriptStatusContent {
 									code
 								}
 							}
@@ -156,7 +156,7 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	select {
 	case <-timeline.subscribed:
 	case <-time.After(time.Second):
-		t.Fatal("sessionEvents subscription was not opened")
+		t.Fatal("sessionTranscript subscription was not opened")
 	}
 	readyMessage := readSocketMessage(t, conn)
 	readyPayload, ok := readyMessage["payload"].(map[string]any)
@@ -167,9 +167,9 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	if !ok {
 		t.Fatalf("ready data = %#v", readyPayload["data"])
 	}
-	readyItem, ok := readyData["sessionEvents"].(map[string]any)
+	readyItem, ok := readyData["sessionTranscript"].(map[string]any)
 	if !ok || readyItem["ready"] != true || readyItem["event"] != nil {
-		t.Fatalf("sessionEvents ready item = %#v", readyData["sessionEvents"])
+		t.Fatalf("sessionTranscript ready item = %#v", readyData["sessionTranscript"])
 	}
 
 	timeline.ch <- timelineapp.DTO{
@@ -192,13 +192,13 @@ func TestGraphQLWebSocketSessionEventsSubscriptionReceivesPublishedEvent(t *test
 	if !ok {
 		t.Fatalf("payload data = %#v", payload["data"])
 	}
-	streamItem, ok := data["sessionEvents"].(map[string]any)
+	streamItem, ok := data["sessionTranscript"].(map[string]any)
 	if !ok {
-		t.Fatalf("sessionEvents payload = %#v", data["sessionEvents"])
+		t.Fatalf("sessionTranscript payload = %#v", data["sessionTranscript"])
 	}
 	event, ok := streamItem["event"].(map[string]any)
 	if !ok || streamItem["ready"] != false {
-		t.Fatalf("sessionEvents stream item = %#v", streamItem)
+		t.Fatalf("sessionTranscript stream item = %#v", streamItem)
 	}
 	content, _ := event["content"].(map[string]any)
 	if event["id"] != "event-1" || event["orderKey"] != "order-1" || event["phase"] != "STANDALONE" || content["code"] != "session.running" {

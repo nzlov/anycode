@@ -9,9 +9,9 @@ import { computed } from 'vue';
 
 import MarkdownContent from '@/components/MarkdownContent.vue';
 import StaticAnsiOutput from '@/components/StaticAnsiOutput.vue';
-import type { SessionStructuredText } from '@/services/sessionTimeline';
+import type { TranscriptStructuredText } from '@/services/sessionTimeline';
 
-const props = defineProps<{ content: SessionStructuredText }>();
+const props = defineProps<{ content: TranscriptStructuredText }>();
 
 const displayText = computed(() => {
   if (props.content.format !== 'json') return props.content.text;

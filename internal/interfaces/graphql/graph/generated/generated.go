@@ -216,7 +216,7 @@ type ComplexityRoot struct {
 		Session                func(childComplexity int, id string) int
 		SessionCommitHistory   func(childComplexity int, input model.SessionCommitHistoryInput) int
 		SessionDiff            func(childComplexity int, input model.SessionDiffInput) int
-		SessionEvents          func(childComplexity int, input model.ListSessionEventsInput) int
+		SessionTranscript      func(childComplexity int, input model.ListTranscriptEventsInput) int
 		Sessions               func(childComplexity int, input *model.ListSessionsInput) int
 		WorkflowDefinition     func(childComplexity int, id string) int
 	}
@@ -325,13 +325,6 @@ type ComplexityRoot struct {
 		Ready func(childComplexity int) int
 	}
 
-	SessionCommandContent struct {
-		Command    func(childComplexity int) int
-		DurationMs func(childComplexity int) int
-		ExitCode   func(childComplexity int) int
-		Output     func(childComplexity int) int
-	}
-
 	SessionCommitHistory struct {
 		Available func(childComplexity int) int
 		Commits   func(childComplexity int) int
@@ -376,99 +369,17 @@ type ComplexityRoot struct {
 		Mode      func(childComplexity int) int
 	}
 
-	SessionFileChangeContent struct {
-		Changes func(childComplexity int) int
-	}
-
-	SessionReasoningContent struct {
-		Text func(childComplexity int) int
-	}
-
 	SessionStateStreamItem struct {
 		QuestionBatch func(childComplexity int) int
 		Ready         func(childComplexity int) int
 		Session       func(childComplexity int) int
 	}
 
-	SessionStatusContent struct {
-		Code    func(childComplexity int) int
-		Details func(childComplexity int) int
-		Level   func(childComplexity int) int
-		Message func(childComplexity int) int
-	}
-
-	SessionStructuredText struct {
-		Format func(childComplexity int) int
-		Text   func(childComplexity int) int
-	}
-
-	SessionTextMessageContent struct {
-		Format func(childComplexity int) int
-		Images func(childComplexity int) int
-		Role   func(childComplexity int) int
-		Text   func(childComplexity int) int
-	}
-
-	SessionTimelineEvent struct {
-		Content       func(childComplexity int) int
-		CorrelationID func(childComplexity int) int
-		ID            func(childComplexity int) int
-		OccurredAt    func(childComplexity int) int
-		OrderKey      func(childComplexity int) int
-		Phase         func(childComplexity int) int
-	}
-
-	SessionTimelineFileChange struct {
-		Kind        func(childComplexity int) int
-		MovePath    func(childComplexity int) int
-		Path        func(childComplexity int) int
-		UnifiedDiff func(childComplexity int) int
-	}
-
-	SessionTimelineImage struct {
-		Detail func(childComplexity int) int
-		Src    func(childComplexity int) int
-	}
-
-	SessionTimelinePage struct {
-		Events   func(childComplexity int) int
-		PageInfo func(childComplexity int) int
-		Usage    func(childComplexity int) int
-	}
-
-	SessionTimelineStreamItem struct {
-		Event func(childComplexity int) int
-		Ready func(childComplexity int) int
-		Usage func(childComplexity int) int
-	}
-
-	SessionTokenUsage struct {
-		CachedInputTokens     func(childComplexity int) int
-		ContextWindow         func(childComplexity int) int
-		InputTokens           func(childComplexity int) int
-		OutputTokens          func(childComplexity int) int
-		ReasoningOutputTokens func(childComplexity int) int
-		TotalTokens           func(childComplexity int) int
-	}
-
-	SessionToolContent struct {
-		Category      func(childComplexity int) int
-		Images        func(childComplexity int) int
-		Input         func(childComplexity int) int
-		Output        func(childComplexity int) int
-		QualifiedName func(childComplexity int) int
-	}
-
-	SessionUnknownContent struct {
-		Payload func(childComplexity int) int
-		RawType func(childComplexity int) int
-	}
-
 	Subscription struct {
 		SessionCardChanged  func(childComplexity int, projectID *string) int
 		SessionCardUpdates  func(childComplexity int, projectID *string) int
-		SessionEvents       func(childComplexity int, sessionID string) int
 		SessionStateUpdates func(childComplexity int, sessionID string) int
+		SessionTranscript   func(childComplexity int, sessionID string) int
 	}
 
 	TodoItem struct {
@@ -480,6 +391,95 @@ type ComplexityRoot struct {
 		Completed func(childComplexity int) int
 		Items     func(childComplexity int) int
 		Total     func(childComplexity int) int
+	}
+
+	TranscriptCommandContent struct {
+		Command    func(childComplexity int) int
+		DurationMs func(childComplexity int) int
+		ExitCode   func(childComplexity int) int
+		Output     func(childComplexity int) int
+	}
+
+	TranscriptEvent struct {
+		Content       func(childComplexity int) int
+		CorrelationID func(childComplexity int) int
+		ID            func(childComplexity int) int
+		OccurredAt    func(childComplexity int) int
+		OrderKey      func(childComplexity int) int
+		Phase         func(childComplexity int) int
+	}
+
+	TranscriptFileChange struct {
+		Kind        func(childComplexity int) int
+		MovePath    func(childComplexity int) int
+		Path        func(childComplexity int) int
+		UnifiedDiff func(childComplexity int) int
+	}
+
+	TranscriptFileChangeContent struct {
+		Changes func(childComplexity int) int
+	}
+
+	TranscriptImage struct {
+		Detail func(childComplexity int) int
+		Src    func(childComplexity int) int
+	}
+
+	TranscriptMessageContent struct {
+		Format func(childComplexity int) int
+		Images func(childComplexity int) int
+		Role   func(childComplexity int) int
+		Text   func(childComplexity int) int
+	}
+
+	TranscriptPage struct {
+		Events   func(childComplexity int) int
+		PageInfo func(childComplexity int) int
+		Usage    func(childComplexity int) int
+	}
+
+	TranscriptReasoningContent struct {
+		Text func(childComplexity int) int
+	}
+
+	TranscriptStatusContent struct {
+		Code    func(childComplexity int) int
+		Details func(childComplexity int) int
+		Level   func(childComplexity int) int
+		Message func(childComplexity int) int
+	}
+
+	TranscriptStreamItem struct {
+		Event func(childComplexity int) int
+		Ready func(childComplexity int) int
+		Usage func(childComplexity int) int
+	}
+
+	TranscriptStructuredText struct {
+		Format func(childComplexity int) int
+		Text   func(childComplexity int) int
+	}
+
+	TranscriptTokenUsage struct {
+		CachedInputTokens     func(childComplexity int) int
+		ContextWindow         func(childComplexity int) int
+		InputTokens           func(childComplexity int) int
+		OutputTokens          func(childComplexity int) int
+		ReasoningOutputTokens func(childComplexity int) int
+		TotalTokens           func(childComplexity int) int
+	}
+
+	TranscriptToolContent struct {
+		Category      func(childComplexity int) int
+		Images        func(childComplexity int) int
+		Input         func(childComplexity int) int
+		Output        func(childComplexity int) int
+		QualifiedName func(childComplexity int) int
+	}
+
+	TranscriptUnknownContent struct {
+		Payload func(childComplexity int) int
+		RawType func(childComplexity int) int
 	}
 
 	WorkflowCondition struct {
@@ -578,7 +578,7 @@ type QueryResolver interface {
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
 	Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
-	SessionEvents(ctx context.Context, input model.ListSessionEventsInput) (*model.SessionTimelinePage, error)
+	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
 	BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error)
 	SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error)
@@ -587,7 +587,7 @@ type QueryResolver interface {
 	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
 }
 type SubscriptionResolver interface {
-	SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionTimelineStreamItem, error)
+	SessionTranscript(ctx context.Context, sessionID string) (<-chan *model.TranscriptStreamItem, error)
 	SessionStateUpdates(ctx context.Context, sessionID string) (<-chan *model.SessionStateStreamItem, error)
 	SessionCardChanged(ctx context.Context, projectID *string) (<-chan *model.SessionCard, error)
 	SessionCardUpdates(ctx context.Context, projectID *string) (<-chan *model.SessionCardStreamItem, error)
@@ -1457,17 +1457,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SessionDiff(childComplexity, args["input"].(model.SessionDiffInput)), true
-	case "Query.sessionEvents":
-		if e.ComplexityRoot.Query.SessionEvents == nil {
+	case "Query.sessionTranscript":
+		if e.ComplexityRoot.Query.SessionTranscript == nil {
 			break
 		}
 
-		args, err := ec.field_Query_sessionEvents_args(ctx, rawArgs)
+		args, err := ec.field_Query_sessionTranscript_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.SessionEvents(childComplexity, args["input"].(model.ListSessionEventsInput)), true
+		return e.ComplexityRoot.Query.SessionTranscript(childComplexity, args["input"].(model.ListTranscriptEventsInput)), true
 	case "Query.sessions":
 		if e.ComplexityRoot.Query.Sessions == nil {
 			break
@@ -1928,31 +1928,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionCardStreamItem.Ready(childComplexity), true
 
-	case "SessionCommandContent.command":
-		if e.ComplexityRoot.SessionCommandContent.Command == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionCommandContent.Command(childComplexity), true
-	case "SessionCommandContent.durationMs":
-		if e.ComplexityRoot.SessionCommandContent.DurationMs == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionCommandContent.DurationMs(childComplexity), true
-	case "SessionCommandContent.exitCode":
-		if e.ComplexityRoot.SessionCommandContent.ExitCode == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionCommandContent.ExitCode(childComplexity), true
-	case "SessionCommandContent.output":
-		if e.ComplexityRoot.SessionCommandContent.Output == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionCommandContent.Output(childComplexity), true
-
 	case "SessionCommitHistory.available":
 		if e.ComplexityRoot.SessionCommitHistory.Available == nil {
 			break
@@ -2149,20 +2124,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionDiff.Mode(childComplexity), true
 
-	case "SessionFileChangeContent.changes":
-		if e.ComplexityRoot.SessionFileChangeContent.Changes == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFileChangeContent.Changes(childComplexity), true
-
-	case "SessionReasoningContent.text":
-		if e.ComplexityRoot.SessionReasoningContent.Text == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionReasoningContent.Text(childComplexity), true
-
 	case "SessionStateStreamItem.questionBatch":
 		if e.ComplexityRoot.SessionStateStreamItem.QuestionBatch == nil {
 			break
@@ -2181,263 +2142,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionStateStreamItem.Session(childComplexity), true
-
-	case "SessionStatusContent.code":
-		if e.ComplexityRoot.SessionStatusContent.Code == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionStatusContent.Code(childComplexity), true
-	case "SessionStatusContent.details":
-		if e.ComplexityRoot.SessionStatusContent.Details == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionStatusContent.Details(childComplexity), true
-	case "SessionStatusContent.level":
-		if e.ComplexityRoot.SessionStatusContent.Level == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionStatusContent.Level(childComplexity), true
-	case "SessionStatusContent.message":
-		if e.ComplexityRoot.SessionStatusContent.Message == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionStatusContent.Message(childComplexity), true
-
-	case "SessionStructuredText.format":
-		if e.ComplexityRoot.SessionStructuredText.Format == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionStructuredText.Format(childComplexity), true
-	case "SessionStructuredText.text":
-		if e.ComplexityRoot.SessionStructuredText.Text == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionStructuredText.Text(childComplexity), true
-
-	case "SessionTextMessageContent.format":
-		if e.ComplexityRoot.SessionTextMessageContent.Format == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTextMessageContent.Format(childComplexity), true
-	case "SessionTextMessageContent.images":
-		if e.ComplexityRoot.SessionTextMessageContent.Images == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTextMessageContent.Images(childComplexity), true
-	case "SessionTextMessageContent.role":
-		if e.ComplexityRoot.SessionTextMessageContent.Role == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTextMessageContent.Role(childComplexity), true
-	case "SessionTextMessageContent.text":
-		if e.ComplexityRoot.SessionTextMessageContent.Text == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTextMessageContent.Text(childComplexity), true
-
-	case "SessionTimelineEvent.content":
-		if e.ComplexityRoot.SessionTimelineEvent.Content == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineEvent.Content(childComplexity), true
-	case "SessionTimelineEvent.correlationId":
-		if e.ComplexityRoot.SessionTimelineEvent.CorrelationID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineEvent.CorrelationID(childComplexity), true
-	case "SessionTimelineEvent.id":
-		if e.ComplexityRoot.SessionTimelineEvent.ID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineEvent.ID(childComplexity), true
-	case "SessionTimelineEvent.occurredAt":
-		if e.ComplexityRoot.SessionTimelineEvent.OccurredAt == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineEvent.OccurredAt(childComplexity), true
-	case "SessionTimelineEvent.orderKey":
-		if e.ComplexityRoot.SessionTimelineEvent.OrderKey == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineEvent.OrderKey(childComplexity), true
-	case "SessionTimelineEvent.phase":
-		if e.ComplexityRoot.SessionTimelineEvent.Phase == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineEvent.Phase(childComplexity), true
-
-	case "SessionTimelineFileChange.kind":
-		if e.ComplexityRoot.SessionTimelineFileChange.Kind == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineFileChange.Kind(childComplexity), true
-	case "SessionTimelineFileChange.movePath":
-		if e.ComplexityRoot.SessionTimelineFileChange.MovePath == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineFileChange.MovePath(childComplexity), true
-	case "SessionTimelineFileChange.path":
-		if e.ComplexityRoot.SessionTimelineFileChange.Path == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineFileChange.Path(childComplexity), true
-	case "SessionTimelineFileChange.unifiedDiff":
-		if e.ComplexityRoot.SessionTimelineFileChange.UnifiedDiff == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineFileChange.UnifiedDiff(childComplexity), true
-
-	case "SessionTimelineImage.detail":
-		if e.ComplexityRoot.SessionTimelineImage.Detail == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineImage.Detail(childComplexity), true
-	case "SessionTimelineImage.src":
-		if e.ComplexityRoot.SessionTimelineImage.Src == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineImage.Src(childComplexity), true
-
-	case "SessionTimelinePage.events":
-		if e.ComplexityRoot.SessionTimelinePage.Events == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelinePage.Events(childComplexity), true
-	case "SessionTimelinePage.pageInfo":
-		if e.ComplexityRoot.SessionTimelinePage.PageInfo == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelinePage.PageInfo(childComplexity), true
-	case "SessionTimelinePage.usage":
-		if e.ComplexityRoot.SessionTimelinePage.Usage == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelinePage.Usage(childComplexity), true
-
-	case "SessionTimelineStreamItem.event":
-		if e.ComplexityRoot.SessionTimelineStreamItem.Event == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineStreamItem.Event(childComplexity), true
-	case "SessionTimelineStreamItem.ready":
-		if e.ComplexityRoot.SessionTimelineStreamItem.Ready == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineStreamItem.Ready(childComplexity), true
-	case "SessionTimelineStreamItem.usage":
-		if e.ComplexityRoot.SessionTimelineStreamItem.Usage == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTimelineStreamItem.Usage(childComplexity), true
-
-	case "SessionTokenUsage.cachedInputTokens":
-		if e.ComplexityRoot.SessionTokenUsage.CachedInputTokens == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTokenUsage.CachedInputTokens(childComplexity), true
-	case "SessionTokenUsage.contextWindow":
-		if e.ComplexityRoot.SessionTokenUsage.ContextWindow == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTokenUsage.ContextWindow(childComplexity), true
-	case "SessionTokenUsage.inputTokens":
-		if e.ComplexityRoot.SessionTokenUsage.InputTokens == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTokenUsage.InputTokens(childComplexity), true
-	case "SessionTokenUsage.outputTokens":
-		if e.ComplexityRoot.SessionTokenUsage.OutputTokens == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTokenUsage.OutputTokens(childComplexity), true
-	case "SessionTokenUsage.reasoningOutputTokens":
-		if e.ComplexityRoot.SessionTokenUsage.ReasoningOutputTokens == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTokenUsage.ReasoningOutputTokens(childComplexity), true
-	case "SessionTokenUsage.totalTokens":
-		if e.ComplexityRoot.SessionTokenUsage.TotalTokens == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionTokenUsage.TotalTokens(childComplexity), true
-
-	case "SessionToolContent.category":
-		if e.ComplexityRoot.SessionToolContent.Category == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionToolContent.Category(childComplexity), true
-	case "SessionToolContent.images":
-		if e.ComplexityRoot.SessionToolContent.Images == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionToolContent.Images(childComplexity), true
-	case "SessionToolContent.input":
-		if e.ComplexityRoot.SessionToolContent.Input == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionToolContent.Input(childComplexity), true
-	case "SessionToolContent.output":
-		if e.ComplexityRoot.SessionToolContent.Output == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionToolContent.Output(childComplexity), true
-	case "SessionToolContent.qualifiedName":
-		if e.ComplexityRoot.SessionToolContent.QualifiedName == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionToolContent.QualifiedName(childComplexity), true
-
-	case "SessionUnknownContent.payload":
-		if e.ComplexityRoot.SessionUnknownContent.Payload == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionUnknownContent.Payload(childComplexity), true
-	case "SessionUnknownContent.rawType":
-		if e.ComplexityRoot.SessionUnknownContent.RawType == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionUnknownContent.RawType(childComplexity), true
 
 	case "Subscription.sessionCardChanged":
 		if e.ComplexityRoot.Subscription.SessionCardChanged == nil {
@@ -2461,17 +2165,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionCardUpdates(childComplexity, args["projectId"].(*string)), true
-	case "Subscription.sessionEvents":
-		if e.ComplexityRoot.Subscription.SessionEvents == nil {
-			break
-		}
-
-		args, err := ec.field_Subscription_sessionEvents_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Subscription.SessionEvents(childComplexity, args["sessionId"].(string)), true
 	case "Subscription.sessionStateUpdates":
 		if e.ComplexityRoot.Subscription.SessionStateUpdates == nil {
 			break
@@ -2483,6 +2176,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionStateUpdates(childComplexity, args["sessionId"].(string)), true
+	case "Subscription.sessionTranscript":
+		if e.ComplexityRoot.Subscription.SessionTranscript == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_sessionTranscript_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.SessionTranscript(childComplexity, args["sessionId"].(string)), true
 
 	case "TodoItem.completed":
 		if e.ComplexityRoot.TodoItem.Completed == nil {
@@ -2515,6 +2219,302 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TodoList.Total(childComplexity), true
+
+	case "TranscriptCommandContent.command":
+		if e.ComplexityRoot.TranscriptCommandContent.Command == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptCommandContent.Command(childComplexity), true
+	case "TranscriptCommandContent.durationMs":
+		if e.ComplexityRoot.TranscriptCommandContent.DurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptCommandContent.DurationMs(childComplexity), true
+	case "TranscriptCommandContent.exitCode":
+		if e.ComplexityRoot.TranscriptCommandContent.ExitCode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptCommandContent.ExitCode(childComplexity), true
+	case "TranscriptCommandContent.output":
+		if e.ComplexityRoot.TranscriptCommandContent.Output == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptCommandContent.Output(childComplexity), true
+
+	case "TranscriptEvent.content":
+		if e.ComplexityRoot.TranscriptEvent.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.Content(childComplexity), true
+	case "TranscriptEvent.correlationId":
+		if e.ComplexityRoot.TranscriptEvent.CorrelationID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.CorrelationID(childComplexity), true
+	case "TranscriptEvent.id":
+		if e.ComplexityRoot.TranscriptEvent.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.ID(childComplexity), true
+	case "TranscriptEvent.occurredAt":
+		if e.ComplexityRoot.TranscriptEvent.OccurredAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.OccurredAt(childComplexity), true
+	case "TranscriptEvent.orderKey":
+		if e.ComplexityRoot.TranscriptEvent.OrderKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.OrderKey(childComplexity), true
+	case "TranscriptEvent.phase":
+		if e.ComplexityRoot.TranscriptEvent.Phase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.Phase(childComplexity), true
+
+	case "TranscriptFileChange.kind":
+		if e.ComplexityRoot.TranscriptFileChange.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptFileChange.Kind(childComplexity), true
+	case "TranscriptFileChange.movePath":
+		if e.ComplexityRoot.TranscriptFileChange.MovePath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptFileChange.MovePath(childComplexity), true
+	case "TranscriptFileChange.path":
+		if e.ComplexityRoot.TranscriptFileChange.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptFileChange.Path(childComplexity), true
+	case "TranscriptFileChange.unifiedDiff":
+		if e.ComplexityRoot.TranscriptFileChange.UnifiedDiff == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptFileChange.UnifiedDiff(childComplexity), true
+
+	case "TranscriptFileChangeContent.changes":
+		if e.ComplexityRoot.TranscriptFileChangeContent.Changes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptFileChangeContent.Changes(childComplexity), true
+
+	case "TranscriptImage.detail":
+		if e.ComplexityRoot.TranscriptImage.Detail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptImage.Detail(childComplexity), true
+	case "TranscriptImage.src":
+		if e.ComplexityRoot.TranscriptImage.Src == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptImage.Src(childComplexity), true
+
+	case "TranscriptMessageContent.format":
+		if e.ComplexityRoot.TranscriptMessageContent.Format == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptMessageContent.Format(childComplexity), true
+	case "TranscriptMessageContent.images":
+		if e.ComplexityRoot.TranscriptMessageContent.Images == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptMessageContent.Images(childComplexity), true
+	case "TranscriptMessageContent.role":
+		if e.ComplexityRoot.TranscriptMessageContent.Role == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptMessageContent.Role(childComplexity), true
+	case "TranscriptMessageContent.text":
+		if e.ComplexityRoot.TranscriptMessageContent.Text == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptMessageContent.Text(childComplexity), true
+
+	case "TranscriptPage.events":
+		if e.ComplexityRoot.TranscriptPage.Events == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptPage.Events(childComplexity), true
+	case "TranscriptPage.pageInfo":
+		if e.ComplexityRoot.TranscriptPage.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptPage.PageInfo(childComplexity), true
+	case "TranscriptPage.usage":
+		if e.ComplexityRoot.TranscriptPage.Usage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptPage.Usage(childComplexity), true
+
+	case "TranscriptReasoningContent.text":
+		if e.ComplexityRoot.TranscriptReasoningContent.Text == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptReasoningContent.Text(childComplexity), true
+
+	case "TranscriptStatusContent.code":
+		if e.ComplexityRoot.TranscriptStatusContent.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStatusContent.Code(childComplexity), true
+	case "TranscriptStatusContent.details":
+		if e.ComplexityRoot.TranscriptStatusContent.Details == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStatusContent.Details(childComplexity), true
+	case "TranscriptStatusContent.level":
+		if e.ComplexityRoot.TranscriptStatusContent.Level == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStatusContent.Level(childComplexity), true
+	case "TranscriptStatusContent.message":
+		if e.ComplexityRoot.TranscriptStatusContent.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStatusContent.Message(childComplexity), true
+
+	case "TranscriptStreamItem.event":
+		if e.ComplexityRoot.TranscriptStreamItem.Event == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStreamItem.Event(childComplexity), true
+	case "TranscriptStreamItem.ready":
+		if e.ComplexityRoot.TranscriptStreamItem.Ready == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStreamItem.Ready(childComplexity), true
+	case "TranscriptStreamItem.usage":
+		if e.ComplexityRoot.TranscriptStreamItem.Usage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStreamItem.Usage(childComplexity), true
+
+	case "TranscriptStructuredText.format":
+		if e.ComplexityRoot.TranscriptStructuredText.Format == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStructuredText.Format(childComplexity), true
+	case "TranscriptStructuredText.text":
+		if e.ComplexityRoot.TranscriptStructuredText.Text == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptStructuredText.Text(childComplexity), true
+
+	case "TranscriptTokenUsage.cachedInputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.CachedInputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CachedInputTokens(childComplexity), true
+	case "TranscriptTokenUsage.contextWindow":
+		if e.ComplexityRoot.TranscriptTokenUsage.ContextWindow == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.ContextWindow(childComplexity), true
+	case "TranscriptTokenUsage.inputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.InputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.InputTokens(childComplexity), true
+	case "TranscriptTokenUsage.outputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.OutputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.OutputTokens(childComplexity), true
+	case "TranscriptTokenUsage.reasoningOutputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.ReasoningOutputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.ReasoningOutputTokens(childComplexity), true
+	case "TranscriptTokenUsage.totalTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.TotalTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.TotalTokens(childComplexity), true
+
+	case "TranscriptToolContent.category":
+		if e.ComplexityRoot.TranscriptToolContent.Category == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptToolContent.Category(childComplexity), true
+	case "TranscriptToolContent.images":
+		if e.ComplexityRoot.TranscriptToolContent.Images == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptToolContent.Images(childComplexity), true
+	case "TranscriptToolContent.input":
+		if e.ComplexityRoot.TranscriptToolContent.Input == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptToolContent.Input(childComplexity), true
+	case "TranscriptToolContent.output":
+		if e.ComplexityRoot.TranscriptToolContent.Output == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptToolContent.Output(childComplexity), true
+	case "TranscriptToolContent.qualifiedName":
+		if e.ComplexityRoot.TranscriptToolContent.QualifiedName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptToolContent.QualifiedName(childComplexity), true
+
+	case "TranscriptUnknownContent.payload":
+		if e.ComplexityRoot.TranscriptUnknownContent.Payload == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptUnknownContent.Payload(childComplexity), true
+	case "TranscriptUnknownContent.rawType":
+		if e.ComplexityRoot.TranscriptUnknownContent.RawType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptUnknownContent.RawType(childComplexity), true
 
 	case "WorkflowCondition.all":
 		if e.ComplexityRoot.WorkflowCondition.All == nil {
@@ -2775,8 +2775,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateQuickCommandInput,
 		ec.unmarshalInputCreateSessionInput,
 		ec.unmarshalInputListQuickCommandsInput,
-		ec.unmarshalInputListSessionEventsInput,
 		ec.unmarshalInputListSessionsInput,
+		ec.unmarshalInputListTranscriptEventsInput,
 		ec.unmarshalInputMergeConfigInput,
 		ec.unmarshalInputQuestionAnswerInput,
 		ec.unmarshalInputRetryConfigInput,
@@ -2902,7 +2902,7 @@ type Query {
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
   session(id: ID!): SessionDetail!
-  sessionEvents(input: ListSessionEventsInput!): SessionTimelinePage!
+  sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
@@ -2937,7 +2937,7 @@ type Mutation {
 }
 
 type Subscription {
-  sessionEvents(sessionId: ID!): SessionTimelineStreamItem!
+  sessionTranscript(sessionId: ID!): TranscriptStreamItem!
   sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
   sessionCardUpdates(projectId: ID): SessionCardStreamItem!
@@ -3143,22 +3143,22 @@ type PromptAppend {
   createdAt: Time!
 }
 
-type SessionTimelinePage {
-  events: [SessionTimelineEvent!]!
-  usage: SessionTokenUsage
+type TranscriptPage {
+  events: [TranscriptEvent!]!
+  usage: TranscriptTokenUsage
   pageInfo: PageInfo!
 }
 
-type SessionTimelineEvent {
+type TranscriptEvent {
   id: ID!
   orderKey: String!
   correlationId: ID
-  phase: SessionTimelineEventPhase!
+  phase: TranscriptEventPhase!
   occurredAt: Time!
-  content: SessionTimelineContent!
+  content: TranscriptContent!
 }
 
-enum SessionTimelineEventPhase {
+enum TranscriptEventPhase {
   STANDALONE
   STARTED
   PROGRESS
@@ -3167,82 +3167,82 @@ enum SessionTimelineEventPhase {
   CANCELLED
 }
 
-enum SessionTimelineTextFormat {
+enum TranscriptTextFormat {
   PLAIN
   MARKDOWN
   JSON
   ANSI
 }
 
-union SessionTimelineContent =
-    SessionTextMessageContent
-  | SessionReasoningContent
-  | SessionCommandContent
-  | SessionToolContent
-  | SessionFileChangeContent
-  | SessionStatusContent
-  | SessionUnknownContent
+union TranscriptContent =
+    TranscriptMessageContent
+  | TranscriptReasoningContent
+  | TranscriptCommandContent
+  | TranscriptToolContent
+  | TranscriptFileChangeContent
+  | TranscriptStatusContent
+  | TranscriptUnknownContent
 
-type SessionTimelineImage {
+type TranscriptImage {
   src: String!
   detail: String!
 }
 
-type SessionStructuredText {
-  format: SessionTimelineTextFormat!
+type TranscriptStructuredText {
+  format: TranscriptTextFormat!
   text: String!
 }
 
-type SessionTextMessageContent {
+type TranscriptMessageContent {
   role: String!
   text: String!
-  format: SessionTimelineTextFormat!
-  images: [SessionTimelineImage!]!
+  format: TranscriptTextFormat!
+  images: [TranscriptImage!]!
 }
 
-type SessionReasoningContent {
+type TranscriptReasoningContent {
   text: String!
 }
 
-type SessionCommandContent {
+type TranscriptCommandContent {
   command: String!
   output: String!
   exitCode: Int
   durationMs: Int
 }
 
-type SessionToolContent {
+type TranscriptToolContent {
   qualifiedName: String!
   category: String!
-  input: SessionStructuredText!
-  output: SessionStructuredText!
-  images: [SessionTimelineImage!]!
+  input: TranscriptStructuredText!
+  output: TranscriptStructuredText!
+  images: [TranscriptImage!]!
 }
 
-type SessionTimelineFileChange {
+type TranscriptFileChange {
   kind: String!
   path: String!
   movePath: String!
   unifiedDiff: String!
 }
 
-type SessionFileChangeContent {
-  changes: [SessionTimelineFileChange!]!
+type TranscriptFileChangeContent {
+  changes: [TranscriptFileChange!]!
 }
 
-type SessionStatusContent {
+type TranscriptStatusContent {
   code: String!
   level: String!
   message: String!
   details: JSON!
 }
 
-type SessionUnknownContent {
+type TranscriptUnknownContent {
   rawType: String!
   payload: JSON!
 }
 
-type SessionTokenUsage {
+type TranscriptTokenUsage {
   inputTokens: Int!
   cachedInputTokens: Int!
   outputTokens: Int!
@@ -3251,10 +3251,10 @@ type SessionTokenUsage {
   contextWindow: Int!
 }
 
-type SessionTimelineStreamItem {
+type TranscriptStreamItem {
   ready: Boolean!
-  event: SessionTimelineEvent
-  usage: SessionTokenUsage
+  event: TranscriptEvent
+  usage: TranscriptTokenUsage
 }
 
 type SessionStateStreamItem {
@@ -3502,7 +3502,7 @@ input AppendPromptInput {
   stagedAttachmentIds: [ID!]
 }
 
-input ListSessionEventsInput {
+input ListTranscriptEventsInput {
   sessionId: ID!
   beforeEventId: ID
   limit: Int
@@ -3987,10 +3987,10 @@ func (ec *executionContext) field_Query_sessionDiff_args(ctx context.Context, ra
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_sessionEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Query_sessionTranscript_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNListSessionEventsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListSessionEventsInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNListTranscriptEventsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListTranscriptEventsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4053,7 +4053,7 @@ func (ec *executionContext) field_Subscription_sessionCardUpdates_args(ctx conte
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_sessionEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Subscription_sessionStateUpdates_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
@@ -4064,7 +4064,7 @@ func (ec *executionContext) field_Subscription_sessionEvents_args(ctx context.Co
 	return args, nil
 }
 
-func (ec *executionContext) field_Subscription_sessionStateUpdates_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Subscription_sessionTranscript_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
@@ -8205,24 +8205,24 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_sessionEvents(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_sessionTranscript(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_sessionEvents,
+		ec.fieldContext_Query_sessionTranscript,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().SessionEvents(ctx, fc.Args["input"].(model.ListSessionEventsInput))
+			return ec.Resolvers.Query().SessionTranscript(ctx, fc.Args["input"].(model.ListTranscriptEventsInput))
 		},
 		nil,
-		ec.marshalNSessionTimelinePage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelinePage,
+		ec.marshalNTranscriptPage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptPage,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_sessionEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_sessionTranscript(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -8231,13 +8231,13 @@ func (ec *executionContext) fieldContext_Query_sessionEvents(ctx context.Context
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "events":
-				return ec.fieldContext_SessionTimelinePage_events(ctx, field)
+				return ec.fieldContext_TranscriptPage_events(ctx, field)
 			case "usage":
-				return ec.fieldContext_SessionTimelinePage_usage(ctx, field)
+				return ec.fieldContext_TranscriptPage_usage(ctx, field)
 			case "pageInfo":
-				return ec.fieldContext_SessionTimelinePage_pageInfo(ctx, field)
+				return ec.fieldContext_TranscriptPage_pageInfo(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelinePage", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptPage", field.Name)
 		},
 	}
 	defer func() {
@@ -8247,7 +8247,7 @@ func (ec *executionContext) fieldContext_Query_sessionEvents(ctx context.Context
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_sessionEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Query_sessionTranscript_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10921,122 +10921,6 @@ func (ec *executionContext) fieldContext_SessionCardStreamItem_card(_ context.Co
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionCommandContent_command(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommandContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionCommandContent_command,
-		func(ctx context.Context) (any, error) {
-			return obj.Command, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionCommandContent_command(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionCommandContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionCommandContent_output(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommandContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionCommandContent_output,
-		func(ctx context.Context) (any, error) {
-			return obj.Output, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionCommandContent_output(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionCommandContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionCommandContent_exitCode(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommandContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionCommandContent_exitCode,
-		func(ctx context.Context) (any, error) {
-			return obj.ExitCode, nil
-		},
-		nil,
-		ec.marshalOInt2ᚖint,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionCommandContent_exitCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionCommandContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionCommandContent_durationMs(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommandContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionCommandContent_durationMs,
-		func(ctx context.Context) (any, error) {
-			return obj.DurationMs, nil
-		},
-		nil,
-		ec.marshalOInt2ᚖint,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionCommandContent_durationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionCommandContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SessionCommitHistory_commits(ctx context.Context, field graphql.CollectedField, obj *model.SessionCommitHistory) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12037,74 +11921,6 @@ func (ec *executionContext) fieldContext_SessionDiff_available(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionFileChangeContent_changes(ctx context.Context, field graphql.CollectedField, obj *model.SessionFileChangeContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFileChangeContent_changes,
-		func(ctx context.Context) (any, error) {
-			return obj.Changes, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineFileChange2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineFileChangeᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFileChangeContent_changes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFileChangeContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "kind":
-				return ec.fieldContext_SessionTimelineFileChange_kind(ctx, field)
-			case "path":
-				return ec.fieldContext_SessionTimelineFileChange_path(ctx, field)
-			case "movePath":
-				return ec.fieldContext_SessionTimelineFileChange_movePath(ctx, field)
-			case "unifiedDiff":
-				return ec.fieldContext_SessionTimelineFileChange_unifiedDiff(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelineFileChange", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionReasoningContent_text(ctx context.Context, field graphql.CollectedField, obj *model.SessionReasoningContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionReasoningContent_text,
-		func(ctx context.Context) (any, error) {
-			return obj.Text, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionReasoningContent_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionReasoningContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SessionStateStreamItem_ready(ctx context.Context, field graphql.CollectedField, obj *model.SessionStateStreamItem) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12246,1303 +12062,24 @@ func (ec *executionContext) fieldContext_SessionStateStreamItem_questionBatch(_ 
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionStatusContent_code(ctx context.Context, field graphql.CollectedField, obj *model.SessionStatusContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStatusContent_code,
-		func(ctx context.Context) (any, error) {
-			return obj.Code, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStatusContent_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStatusContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionStatusContent_level(ctx context.Context, field graphql.CollectedField, obj *model.SessionStatusContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStatusContent_level,
-		func(ctx context.Context) (any, error) {
-			return obj.Level, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStatusContent_level(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStatusContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionStatusContent_message(ctx context.Context, field graphql.CollectedField, obj *model.SessionStatusContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStatusContent_message,
-		func(ctx context.Context) (any, error) {
-			return obj.Message, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStatusContent_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStatusContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionStatusContent_details(ctx context.Context, field graphql.CollectedField, obj *model.SessionStatusContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStatusContent_details,
-		func(ctx context.Context) (any, error) {
-			return obj.Details, nil
-		},
-		nil,
-		ec.marshalNJSON2map,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStatusContent_details(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStatusContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionStructuredText_format(ctx context.Context, field graphql.CollectedField, obj *model.SessionStructuredText) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStructuredText_format,
-		func(ctx context.Context) (any, error) {
-			return obj.Format, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineTextFormat,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStructuredText_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStructuredText",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionTimelineTextFormat does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionStructuredText_text(ctx context.Context, field graphql.CollectedField, obj *model.SessionStructuredText) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionStructuredText_text,
-		func(ctx context.Context) (any, error) {
-			return obj.Text, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionStructuredText_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionStructuredText",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTextMessageContent_role(ctx context.Context, field graphql.CollectedField, obj *model.SessionTextMessageContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTextMessageContent_role,
-		func(ctx context.Context) (any, error) {
-			return obj.Role, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTextMessageContent_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTextMessageContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTextMessageContent_text(ctx context.Context, field graphql.CollectedField, obj *model.SessionTextMessageContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTextMessageContent_text,
-		func(ctx context.Context) (any, error) {
-			return obj.Text, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTextMessageContent_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTextMessageContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTextMessageContent_format(ctx context.Context, field graphql.CollectedField, obj *model.SessionTextMessageContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTextMessageContent_format,
-		func(ctx context.Context) (any, error) {
-			return obj.Format, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineTextFormat,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTextMessageContent_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTextMessageContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionTimelineTextFormat does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTextMessageContent_images(ctx context.Context, field graphql.CollectedField, obj *model.SessionTextMessageContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTextMessageContent_images,
-		func(ctx context.Context) (any, error) {
-			return obj.Images, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineImage2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineImageᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTextMessageContent_images(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTextMessageContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "src":
-				return ec.fieldContext_SessionTimelineImage_src(ctx, field)
-			case "detail":
-				return ec.fieldContext_SessionTimelineImage_detail(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelineImage", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineEvent_id(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineEvent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineEvent_id,
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		ec.marshalNID2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineEvent_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineEvent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineEvent_orderKey(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineEvent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineEvent_orderKey,
-		func(ctx context.Context) (any, error) {
-			return obj.OrderKey, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineEvent_orderKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineEvent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineEvent_correlationId(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineEvent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineEvent_correlationId,
-		func(ctx context.Context) (any, error) {
-			return obj.CorrelationID, nil
-		},
-		nil,
-		ec.marshalOID2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineEvent_correlationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineEvent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineEvent_phase(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineEvent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineEvent_phase,
-		func(ctx context.Context) (any, error) {
-			return obj.Phase, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineEventPhase2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEventPhase,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineEvent_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineEvent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionTimelineEventPhase does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineEvent_occurredAt(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineEvent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineEvent_occurredAt,
-		func(ctx context.Context) (any, error) {
-			return obj.OccurredAt, nil
-		},
-		nil,
-		ec.marshalNTime2timeᚐTime,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineEvent_occurredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineEvent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Time does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineEvent_content(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineEvent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineEvent_content,
-		func(ctx context.Context) (any, error) {
-			return obj.Content, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineContent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineContent,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineEvent_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineEvent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionTimelineContent does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineFileChange_kind(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineFileChange) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineFileChange_kind,
-		func(ctx context.Context) (any, error) {
-			return obj.Kind, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineFileChange_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineFileChange",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineFileChange_path(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineFileChange) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineFileChange_path,
-		func(ctx context.Context) (any, error) {
-			return obj.Path, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineFileChange_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineFileChange",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineFileChange_movePath(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineFileChange) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineFileChange_movePath,
-		func(ctx context.Context) (any, error) {
-			return obj.MovePath, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineFileChange_movePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineFileChange",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineFileChange_unifiedDiff(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineFileChange) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineFileChange_unifiedDiff,
-		func(ctx context.Context) (any, error) {
-			return obj.UnifiedDiff, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineFileChange_unifiedDiff(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineFileChange",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineImage_src(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineImage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineImage_src,
-		func(ctx context.Context) (any, error) {
-			return obj.Src, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineImage_src(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineImage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineImage_detail(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineImage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineImage_detail,
-		func(ctx context.Context) (any, error) {
-			return obj.Detail, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineImage_detail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineImage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelinePage_events(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelinePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelinePage_events,
-		func(ctx context.Context) (any, error) {
-			return obj.Events, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEventᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelinePage_events(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelinePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_SessionTimelineEvent_id(ctx, field)
-			case "orderKey":
-				return ec.fieldContext_SessionTimelineEvent_orderKey(ctx, field)
-			case "correlationId":
-				return ec.fieldContext_SessionTimelineEvent_correlationId(ctx, field)
-			case "phase":
-				return ec.fieldContext_SessionTimelineEvent_phase(ctx, field)
-			case "occurredAt":
-				return ec.fieldContext_SessionTimelineEvent_occurredAt(ctx, field)
-			case "content":
-				return ec.fieldContext_SessionTimelineEvent_content(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelineEvent", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelinePage_usage(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelinePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelinePage_usage,
-		func(ctx context.Context) (any, error) {
-			return obj.Usage, nil
-		},
-		nil,
-		ec.marshalOSessionTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTokenUsage,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelinePage_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelinePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "inputTokens":
-				return ec.fieldContext_SessionTokenUsage_inputTokens(ctx, field)
-			case "cachedInputTokens":
-				return ec.fieldContext_SessionTokenUsage_cachedInputTokens(ctx, field)
-			case "outputTokens":
-				return ec.fieldContext_SessionTokenUsage_outputTokens(ctx, field)
-			case "reasoningOutputTokens":
-				return ec.fieldContext_SessionTokenUsage_reasoningOutputTokens(ctx, field)
-			case "totalTokens":
-				return ec.fieldContext_SessionTokenUsage_totalTokens(ctx, field)
-			case "contextWindow":
-				return ec.fieldContext_SessionTokenUsage_contextWindow(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTokenUsage", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelinePage_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelinePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelinePage_pageInfo,
-		func(ctx context.Context) (any, error) {
-			return obj.PageInfo, nil
-		},
-		nil,
-		ec.marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelinePage_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelinePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "page":
-				return ec.fieldContext_PageInfo_page(ctx, field)
-			case "pageSize":
-				return ec.fieldContext_PageInfo_pageSize(ctx, field)
-			case "total":
-				return ec.fieldContext_PageInfo_total(ctx, field)
-			case "nextCursor":
-				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineStreamItem_ready(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineStreamItem) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineStreamItem_ready,
-		func(ctx context.Context) (any, error) {
-			return obj.Ready, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineStreamItem_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineStreamItem",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineStreamItem_event(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineStreamItem) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineStreamItem_event,
-		func(ctx context.Context) (any, error) {
-			return obj.Event, nil
-		},
-		nil,
-		ec.marshalOSessionTimelineEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEvent,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineStreamItem_event(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineStreamItem",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_SessionTimelineEvent_id(ctx, field)
-			case "orderKey":
-				return ec.fieldContext_SessionTimelineEvent_orderKey(ctx, field)
-			case "correlationId":
-				return ec.fieldContext_SessionTimelineEvent_correlationId(ctx, field)
-			case "phase":
-				return ec.fieldContext_SessionTimelineEvent_phase(ctx, field)
-			case "occurredAt":
-				return ec.fieldContext_SessionTimelineEvent_occurredAt(ctx, field)
-			case "content":
-				return ec.fieldContext_SessionTimelineEvent_content(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelineEvent", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTimelineStreamItem_usage(ctx context.Context, field graphql.CollectedField, obj *model.SessionTimelineStreamItem) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTimelineStreamItem_usage,
-		func(ctx context.Context) (any, error) {
-			return obj.Usage, nil
-		},
-		nil,
-		ec.marshalOSessionTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTokenUsage,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTimelineStreamItem_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTimelineStreamItem",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "inputTokens":
-				return ec.fieldContext_SessionTokenUsage_inputTokens(ctx, field)
-			case "cachedInputTokens":
-				return ec.fieldContext_SessionTokenUsage_cachedInputTokens(ctx, field)
-			case "outputTokens":
-				return ec.fieldContext_SessionTokenUsage_outputTokens(ctx, field)
-			case "reasoningOutputTokens":
-				return ec.fieldContext_SessionTokenUsage_reasoningOutputTokens(ctx, field)
-			case "totalTokens":
-				return ec.fieldContext_SessionTokenUsage_totalTokens(ctx, field)
-			case "contextWindow":
-				return ec.fieldContext_SessionTokenUsage_contextWindow(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTokenUsage", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTokenUsage_inputTokens(ctx context.Context, field graphql.CollectedField, obj *model.SessionTokenUsage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTokenUsage_inputTokens,
-		func(ctx context.Context) (any, error) {
-			return obj.InputTokens, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTokenUsage_inputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTokenUsage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTokenUsage_cachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *model.SessionTokenUsage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTokenUsage_cachedInputTokens,
-		func(ctx context.Context) (any, error) {
-			return obj.CachedInputTokens, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTokenUsage_cachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTokenUsage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTokenUsage_outputTokens(ctx context.Context, field graphql.CollectedField, obj *model.SessionTokenUsage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTokenUsage_outputTokens,
-		func(ctx context.Context) (any, error) {
-			return obj.OutputTokens, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTokenUsage_outputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTokenUsage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTokenUsage_reasoningOutputTokens(ctx context.Context, field graphql.CollectedField, obj *model.SessionTokenUsage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTokenUsage_reasoningOutputTokens,
-		func(ctx context.Context) (any, error) {
-			return obj.ReasoningOutputTokens, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTokenUsage_reasoningOutputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTokenUsage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTokenUsage_totalTokens(ctx context.Context, field graphql.CollectedField, obj *model.SessionTokenUsage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTokenUsage_totalTokens,
-		func(ctx context.Context) (any, error) {
-			return obj.TotalTokens, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTokenUsage_totalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTokenUsage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionTokenUsage_contextWindow(ctx context.Context, field graphql.CollectedField, obj *model.SessionTokenUsage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionTokenUsage_contextWindow,
-		func(ctx context.Context) (any, error) {
-			return obj.ContextWindow, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionTokenUsage_contextWindow(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionTokenUsage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionToolContent_qualifiedName(ctx context.Context, field graphql.CollectedField, obj *model.SessionToolContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionToolContent_qualifiedName,
-		func(ctx context.Context) (any, error) {
-			return obj.QualifiedName, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionToolContent_qualifiedName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionToolContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionToolContent_category(ctx context.Context, field graphql.CollectedField, obj *model.SessionToolContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionToolContent_category,
-		func(ctx context.Context) (any, error) {
-			return obj.Category, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionToolContent_category(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionToolContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionToolContent_input(ctx context.Context, field graphql.CollectedField, obj *model.SessionToolContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionToolContent_input,
-		func(ctx context.Context) (any, error) {
-			return obj.Input, nil
-		},
-		nil,
-		ec.marshalNSessionStructuredText2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStructuredText,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionToolContent_input(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionToolContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "format":
-				return ec.fieldContext_SessionStructuredText_format(ctx, field)
-			case "text":
-				return ec.fieldContext_SessionStructuredText_text(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionStructuredText", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionToolContent_output(ctx context.Context, field graphql.CollectedField, obj *model.SessionToolContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionToolContent_output,
-		func(ctx context.Context) (any, error) {
-			return obj.Output, nil
-		},
-		nil,
-		ec.marshalNSessionStructuredText2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStructuredText,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionToolContent_output(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionToolContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "format":
-				return ec.fieldContext_SessionStructuredText_format(ctx, field)
-			case "text":
-				return ec.fieldContext_SessionStructuredText_text(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionStructuredText", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionToolContent_images(ctx context.Context, field graphql.CollectedField, obj *model.SessionToolContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionToolContent_images,
-		func(ctx context.Context) (any, error) {
-			return obj.Images, nil
-		},
-		nil,
-		ec.marshalNSessionTimelineImage2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineImageᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionToolContent_images(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionToolContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "src":
-				return ec.fieldContext_SessionTimelineImage_src(ctx, field)
-			case "detail":
-				return ec.fieldContext_SessionTimelineImage_detail(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelineImage", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionUnknownContent_rawType(ctx context.Context, field graphql.CollectedField, obj *model.SessionUnknownContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionUnknownContent_rawType,
-		func(ctx context.Context) (any, error) {
-			return obj.RawType, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionUnknownContent_rawType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionUnknownContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionUnknownContent_payload(ctx context.Context, field graphql.CollectedField, obj *model.SessionUnknownContent) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionUnknownContent_payload,
-		func(ctx context.Context) (any, error) {
-			return obj.Payload, nil
-		},
-		nil,
-		ec.marshalNJSON2map,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionUnknownContent_payload(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionUnknownContent",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Subscription_sessionEvents(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+func (ec *executionContext) _Subscription_sessionTranscript(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
 	return graphql.ResolveFieldStream(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Subscription_sessionEvents,
+		ec.fieldContext_Subscription_sessionTranscript,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Subscription().SessionEvents(ctx, fc.Args["sessionId"].(string))
+			return ec.Resolvers.Subscription().SessionTranscript(ctx, fc.Args["sessionId"].(string))
 		},
 		nil,
-		ec.marshalNSessionTimelineStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineStreamItem,
+		ec.marshalNTranscriptStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptStreamItem,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Subscription_sessionTranscript(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Subscription",
 		Field:      field,
@@ -13551,13 +12088,13 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "ready":
-				return ec.fieldContext_SessionTimelineStreamItem_ready(ctx, field)
+				return ec.fieldContext_TranscriptStreamItem_ready(ctx, field)
 			case "event":
-				return ec.fieldContext_SessionTimelineStreamItem_event(ctx, field)
+				return ec.fieldContext_TranscriptStreamItem_event(ctx, field)
 			case "usage":
-				return ec.fieldContext_SessionTimelineStreamItem_usage(ctx, field)
+				return ec.fieldContext_TranscriptStreamItem_usage(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionTimelineStreamItem", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptStreamItem", field.Name)
 		},
 	}
 	defer func() {
@@ -13567,7 +12104,7 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Subscription_sessionEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Subscription_sessionTranscript_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -13897,6 +12434,1469 @@ func (ec *executionContext) fieldContext_TodoList_items(_ context.Context, field
 				return ec.fieldContext_TodoItem_completed(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TodoItem", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptCommandContent_command(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptCommandContent_command,
+		func(ctx context.Context) (any, error) {
+			return obj.Command, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptCommandContent_command(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptCommandContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptCommandContent_output(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptCommandContent_output,
+		func(ctx context.Context) (any, error) {
+			return obj.Output, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptCommandContent_output(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptCommandContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptCommandContent_exitCode(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptCommandContent_exitCode,
+		func(ctx context.Context) (any, error) {
+			return obj.ExitCode, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptCommandContent_exitCode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptCommandContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptCommandContent_durationMs(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptCommandContent_durationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.DurationMs, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptCommandContent_durationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptCommandContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEvent_id(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEvent_orderKey(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_orderKey,
+		func(ctx context.Context) (any, error) {
+			return obj.OrderKey, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_orderKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEvent_correlationId(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_correlationId,
+		func(ctx context.Context) (any, error) {
+			return obj.CorrelationID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_correlationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEvent_phase(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_phase,
+		func(ctx context.Context) (any, error) {
+			return obj.Phase, nil
+		},
+		nil,
+		ec.marshalNTranscriptEventPhase2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventPhase,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TranscriptEventPhase does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEvent_occurredAt(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_occurredAt,
+		func(ctx context.Context) (any, error) {
+			return obj.OccurredAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_occurredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEvent_content(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNTranscriptContent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptContent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TranscriptContent does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptFileChange_kind(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptFileChange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptFileChange_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptFileChange_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptFileChange",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptFileChange_path(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptFileChange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptFileChange_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptFileChange_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptFileChange",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptFileChange_movePath(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptFileChange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptFileChange_movePath,
+		func(ctx context.Context) (any, error) {
+			return obj.MovePath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptFileChange_movePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptFileChange",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptFileChange_unifiedDiff(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptFileChange) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptFileChange_unifiedDiff,
+		func(ctx context.Context) (any, error) {
+			return obj.UnifiedDiff, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptFileChange_unifiedDiff(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptFileChange",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptFileChangeContent_changes(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptFileChangeContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptFileChangeContent_changes,
+		func(ctx context.Context) (any, error) {
+			return obj.Changes, nil
+		},
+		nil,
+		ec.marshalNTranscriptFileChange2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptFileChangeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptFileChangeContent_changes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptFileChangeContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "kind":
+				return ec.fieldContext_TranscriptFileChange_kind(ctx, field)
+			case "path":
+				return ec.fieldContext_TranscriptFileChange_path(ctx, field)
+			case "movePath":
+				return ec.fieldContext_TranscriptFileChange_movePath(ctx, field)
+			case "unifiedDiff":
+				return ec.fieldContext_TranscriptFileChange_unifiedDiff(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptFileChange", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptImage_src(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptImage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptImage_src,
+		func(ctx context.Context) (any, error) {
+			return obj.Src, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptImage_src(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptImage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptImage_detail(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptImage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptImage_detail,
+		func(ctx context.Context) (any, error) {
+			return obj.Detail, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptImage_detail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptImage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptMessageContent_role(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptMessageContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptMessageContent_role,
+		func(ctx context.Context) (any, error) {
+			return obj.Role, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptMessageContent_role(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptMessageContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptMessageContent_text(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptMessageContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptMessageContent_text,
+		func(ctx context.Context) (any, error) {
+			return obj.Text, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptMessageContent_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptMessageContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptMessageContent_format(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptMessageContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptMessageContent_format,
+		func(ctx context.Context) (any, error) {
+			return obj.Format, nil
+		},
+		nil,
+		ec.marshalNTranscriptTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTextFormat,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptMessageContent_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptMessageContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TranscriptTextFormat does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptMessageContent_images(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptMessageContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptMessageContent_images,
+		func(ctx context.Context) (any, error) {
+			return obj.Images, nil
+		},
+		nil,
+		ec.marshalNTranscriptImage2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptImageᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptMessageContent_images(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptMessageContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "src":
+				return ec.fieldContext_TranscriptImage_src(ctx, field)
+			case "detail":
+				return ec.fieldContext_TranscriptImage_detail(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptImage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptPage_events(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptPage_events,
+		func(ctx context.Context) (any, error) {
+			return obj.Events, nil
+		},
+		nil,
+		ec.marshalNTranscriptEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptPage_events(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TranscriptEvent_id(ctx, field)
+			case "orderKey":
+				return ec.fieldContext_TranscriptEvent_orderKey(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_TranscriptEvent_correlationId(ctx, field)
+			case "phase":
+				return ec.fieldContext_TranscriptEvent_phase(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
+			case "content":
+				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptPage_usage(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptPage_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptPage_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "inputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_cachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_outputTokens(ctx, field)
+			case "reasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_reasoningOutputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
+			case "contextWindow":
+				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptPage_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptPage_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptPage_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "page":
+				return ec.fieldContext_PageInfo_page(ctx, field)
+			case "pageSize":
+				return ec.fieldContext_PageInfo_pageSize(ctx, field)
+			case "total":
+				return ec.fieldContext_PageInfo_total(ctx, field)
+			case "nextCursor":
+				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptReasoningContent_text(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptReasoningContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptReasoningContent_text,
+		func(ctx context.Context) (any, error) {
+			return obj.Text, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptReasoningContent_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptReasoningContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStatusContent_code(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStatusContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStatusContent_code,
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStatusContent_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStatusContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStatusContent_level(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStatusContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStatusContent_level,
+		func(ctx context.Context) (any, error) {
+			return obj.Level, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStatusContent_level(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStatusContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStatusContent_message(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStatusContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStatusContent_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStatusContent_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStatusContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStatusContent_details(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStatusContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStatusContent_details,
+		func(ctx context.Context) (any, error) {
+			return obj.Details, nil
+		},
+		nil,
+		ec.marshalNJSON2map,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStatusContent_details(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStatusContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStreamItem_ready(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStreamItem_ready,
+		func(ctx context.Context) (any, error) {
+			return obj.Ready, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStreamItem_ready(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStreamItem_event(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStreamItem_event,
+		func(ctx context.Context) (any, error) {
+			return obj.Event, nil
+		},
+		nil,
+		ec.marshalOTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEvent,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStreamItem_event(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TranscriptEvent_id(ctx, field)
+			case "orderKey":
+				return ec.fieldContext_TranscriptEvent_orderKey(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_TranscriptEvent_correlationId(ctx, field)
+			case "phase":
+				return ec.fieldContext_TranscriptEvent_phase(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
+			case "content":
+				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStreamItem_usage(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStreamItem) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStreamItem_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStreamItem_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStreamItem",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "inputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_cachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_outputTokens(ctx, field)
+			case "reasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_reasoningOutputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
+			case "contextWindow":
+				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStructuredText_format(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStructuredText) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStructuredText_format,
+		func(ctx context.Context) (any, error) {
+			return obj.Format, nil
+		},
+		nil,
+		ec.marshalNTranscriptTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTextFormat,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStructuredText_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStructuredText",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type TranscriptTextFormat does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptStructuredText_text(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptStructuredText) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptStructuredText_text,
+		func(ctx context.Context) (any, error) {
+			return obj.Text, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptStructuredText_text(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptStructuredText",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_inputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_inputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.InputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_inputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_cachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_cachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_cachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_outputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_outputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.OutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_outputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_reasoningOutputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_reasoningOutputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.ReasoningOutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_reasoningOutputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_totalTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_totalTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_totalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_contextWindow(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_contextWindow,
+		func(ctx context.Context) (any, error) {
+			return obj.ContextWindow, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_contextWindow(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptToolContent_qualifiedName(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptToolContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptToolContent_qualifiedName,
+		func(ctx context.Context) (any, error) {
+			return obj.QualifiedName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptToolContent_qualifiedName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptToolContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptToolContent_category(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptToolContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptToolContent_category,
+		func(ctx context.Context) (any, error) {
+			return obj.Category, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptToolContent_category(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptToolContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptToolContent_input(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptToolContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptToolContent_input,
+		func(ctx context.Context) (any, error) {
+			return obj.Input, nil
+		},
+		nil,
+		ec.marshalNTranscriptStructuredText2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptStructuredText,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptToolContent_input(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptToolContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "format":
+				return ec.fieldContext_TranscriptStructuredText_format(ctx, field)
+			case "text":
+				return ec.fieldContext_TranscriptStructuredText_text(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptStructuredText", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptToolContent_output(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptToolContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptToolContent_output,
+		func(ctx context.Context) (any, error) {
+			return obj.Output, nil
+		},
+		nil,
+		ec.marshalNTranscriptStructuredText2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptStructuredText,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptToolContent_output(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptToolContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "format":
+				return ec.fieldContext_TranscriptStructuredText_format(ctx, field)
+			case "text":
+				return ec.fieldContext_TranscriptStructuredText_text(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptStructuredText", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptToolContent_images(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptToolContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptToolContent_images,
+		func(ctx context.Context) (any, error) {
+			return obj.Images, nil
+		},
+		nil,
+		ec.marshalNTranscriptImage2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptImageᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptToolContent_images(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptToolContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "src":
+				return ec.fieldContext_TranscriptImage_src(ctx, field)
+			case "detail":
+				return ec.fieldContext_TranscriptImage_detail(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptImage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptUnknownContent_rawType(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptUnknownContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptUnknownContent_rawType,
+		func(ctx context.Context) (any, error) {
+			return obj.RawType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptUnknownContent_rawType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptUnknownContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptUnknownContent_payload(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptUnknownContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptUnknownContent_payload,
+		func(ctx context.Context) (any, error) {
+			return obj.Payload, nil
+		},
+		nil,
+		ec.marshalNJSON2map,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptUnknownContent_payload(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptUnknownContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
 		},
 	}
 	return fc, nil
@@ -17018,50 +17018,6 @@ func (ec *executionContext) unmarshalInputListQuickCommandsInput(ctx context.Con
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputListSessionEventsInput(ctx context.Context, obj any) (model.ListSessionEventsInput, error) {
-	var it model.ListSessionEventsInput
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"sessionId", "beforeEventId", "limit"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "sessionId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.SessionID = data
-		case "beforeEventId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("beforeEventId"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.BeforeEventID = data
-		case "limit":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Limit = data
-		}
-	}
-	return it, nil
-}
-
 func (ec *executionContext) unmarshalInputListSessionsInput(ctx context.Context, obj any) (model.ListSessionsInput, error) {
 	var it model.ListSessionsInput
 	if obj == nil {
@@ -17129,6 +17085,50 @@ func (ec *executionContext) unmarshalInputListSessionsInput(ctx context.Context,
 				return it, err
 			}
 			it.Sort = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputListTranscriptEventsInput(ctx context.Context, obj any) (model.ListTranscriptEventsInput, error) {
+	var it model.ListTranscriptEventsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "beforeEventId", "limit"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "beforeEventId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("beforeEventId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BeforeEventID = data
+		case "limit":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("limit"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Limit = data
 		}
 	}
 	return it, nil
@@ -18023,64 +18023,64 @@ func (ec *executionContext) unmarshalInputWorkflowOutputFieldInput(ctx context.C
 
 // region    ************************** interface.gotpl ***************************
 
-func (ec *executionContext) _SessionTimelineContent(ctx context.Context, sel ast.SelectionSet, obj model.SessionTimelineContent) graphql.Marshaler {
+func (ec *executionContext) _TranscriptContent(ctx context.Context, sel ast.SelectionSet, obj model.TranscriptContent) graphql.Marshaler {
 	switch obj := (obj).(type) {
 	case nil:
 		return graphql.Null
-	case model.SessionUnknownContent:
-		return ec._SessionUnknownContent(ctx, sel, &obj)
-	case *model.SessionUnknownContent:
+	case model.TranscriptUnknownContent:
+		return ec._TranscriptUnknownContent(ctx, sel, &obj)
+	case *model.TranscriptUnknownContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionUnknownContent(ctx, sel, obj)
-	case model.SessionToolContent:
-		return ec._SessionToolContent(ctx, sel, &obj)
-	case *model.SessionToolContent:
+		return ec._TranscriptUnknownContent(ctx, sel, obj)
+	case model.TranscriptToolContent:
+		return ec._TranscriptToolContent(ctx, sel, &obj)
+	case *model.TranscriptToolContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionToolContent(ctx, sel, obj)
-	case model.SessionTextMessageContent:
-		return ec._SessionTextMessageContent(ctx, sel, &obj)
-	case *model.SessionTextMessageContent:
+		return ec._TranscriptToolContent(ctx, sel, obj)
+	case model.TranscriptStatusContent:
+		return ec._TranscriptStatusContent(ctx, sel, &obj)
+	case *model.TranscriptStatusContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionTextMessageContent(ctx, sel, obj)
-	case model.SessionStatusContent:
-		return ec._SessionStatusContent(ctx, sel, &obj)
-	case *model.SessionStatusContent:
+		return ec._TranscriptStatusContent(ctx, sel, obj)
+	case model.TranscriptReasoningContent:
+		return ec._TranscriptReasoningContent(ctx, sel, &obj)
+	case *model.TranscriptReasoningContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionStatusContent(ctx, sel, obj)
-	case model.SessionReasoningContent:
-		return ec._SessionReasoningContent(ctx, sel, &obj)
-	case *model.SessionReasoningContent:
+		return ec._TranscriptReasoningContent(ctx, sel, obj)
+	case model.TranscriptMessageContent:
+		return ec._TranscriptMessageContent(ctx, sel, &obj)
+	case *model.TranscriptMessageContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionReasoningContent(ctx, sel, obj)
-	case model.SessionFileChangeContent:
-		return ec._SessionFileChangeContent(ctx, sel, &obj)
-	case *model.SessionFileChangeContent:
+		return ec._TranscriptMessageContent(ctx, sel, obj)
+	case model.TranscriptFileChangeContent:
+		return ec._TranscriptFileChangeContent(ctx, sel, &obj)
+	case *model.TranscriptFileChangeContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionFileChangeContent(ctx, sel, obj)
-	case model.SessionCommandContent:
-		return ec._SessionCommandContent(ctx, sel, &obj)
-	case *model.SessionCommandContent:
+		return ec._TranscriptFileChangeContent(ctx, sel, obj)
+	case model.TranscriptCommandContent:
+		return ec._TranscriptCommandContent(ctx, sel, &obj)
+	case *model.TranscriptCommandContent:
 		if obj == nil {
 			return graphql.Null
 		}
-		return ec._SessionCommandContent(ctx, sel, obj)
+		return ec._TranscriptCommandContent(ctx, sel, obj)
 	default:
 		if typedObj, ok := obj.(graphql.Marshaler); ok {
 			return typedObj
 		} else {
-			panic(fmt.Errorf("unexpected type %T; non-generated variants of SessionTimelineContent must implement graphql.Marshaler", obj))
+			panic(fmt.Errorf("unexpected type %T; non-generated variants of TranscriptContent must implement graphql.Marshaler", obj))
 		}
 	}
 }
@@ -19561,7 +19561,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "sessionEvents":
+		case "sessionTranscript":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -19570,7 +19570,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_sessionEvents(ctx, field)
+				res = ec._Query_sessionTranscript(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -20454,54 +20454,6 @@ func (ec *executionContext) _SessionCardStreamItem(ctx context.Context, sel ast.
 	return out
 }
 
-var sessionCommandContentImplementors = []string{"SessionCommandContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionCommandContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionCommandContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionCommandContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionCommandContent")
-		case "command":
-			out.Values[i] = ec._SessionCommandContent_command(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "output":
-			out.Values[i] = ec._SessionCommandContent_output(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "exitCode":
-			out.Values[i] = ec._SessionCommandContent_exitCode(ctx, field, obj)
-		case "durationMs":
-			out.Values[i] = ec._SessionCommandContent_durationMs(ctx, field, obj)
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var sessionCommitHistoryImplementors = []string{"SessionCommitHistory"}
 
 func (ec *executionContext) _SessionCommitHistory(ctx context.Context, sel ast.SelectionSet, obj *model.SessionCommitHistory) graphql.Marshaler {
@@ -20786,84 +20738,6 @@ func (ec *executionContext) _SessionDiff(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
-var sessionFileChangeContentImplementors = []string{"SessionFileChangeContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionFileChangeContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionFileChangeContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionFileChangeContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionFileChangeContent")
-		case "changes":
-			out.Values[i] = ec._SessionFileChangeContent_changes(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionReasoningContentImplementors = []string{"SessionReasoningContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionReasoningContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionReasoningContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionReasoningContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionReasoningContent")
-		case "text":
-			out.Values[i] = ec._SessionReasoningContent_text(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var sessionStateStreamItemImplementors = []string{"SessionStateStreamItem"}
 
 func (ec *executionContext) _SessionStateStreamItem(ctx context.Context, sel ast.SelectionSet, obj *model.SessionStateStreamItem) graphql.Marshaler {
@@ -20907,573 +20781,6 @@ func (ec *executionContext) _SessionStateStreamItem(ctx context.Context, sel ast
 	return out
 }
 
-var sessionStatusContentImplementors = []string{"SessionStatusContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionStatusContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionStatusContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionStatusContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionStatusContent")
-		case "code":
-			out.Values[i] = ec._SessionStatusContent_code(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "level":
-			out.Values[i] = ec._SessionStatusContent_level(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "message":
-			out.Values[i] = ec._SessionStatusContent_message(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "details":
-			out.Values[i] = ec._SessionStatusContent_details(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionStructuredTextImplementors = []string{"SessionStructuredText"}
-
-func (ec *executionContext) _SessionStructuredText(ctx context.Context, sel ast.SelectionSet, obj *model.SessionStructuredText) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionStructuredTextImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionStructuredText")
-		case "format":
-			out.Values[i] = ec._SessionStructuredText_format(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "text":
-			out.Values[i] = ec._SessionStructuredText_text(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTextMessageContentImplementors = []string{"SessionTextMessageContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionTextMessageContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTextMessageContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTextMessageContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTextMessageContent")
-		case "role":
-			out.Values[i] = ec._SessionTextMessageContent_role(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "text":
-			out.Values[i] = ec._SessionTextMessageContent_text(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "format":
-			out.Values[i] = ec._SessionTextMessageContent_format(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "images":
-			out.Values[i] = ec._SessionTextMessageContent_images(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTimelineEventImplementors = []string{"SessionTimelineEvent"}
-
-func (ec *executionContext) _SessionTimelineEvent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTimelineEvent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTimelineEventImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTimelineEvent")
-		case "id":
-			out.Values[i] = ec._SessionTimelineEvent_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "orderKey":
-			out.Values[i] = ec._SessionTimelineEvent_orderKey(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "correlationId":
-			out.Values[i] = ec._SessionTimelineEvent_correlationId(ctx, field, obj)
-		case "phase":
-			out.Values[i] = ec._SessionTimelineEvent_phase(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "occurredAt":
-			out.Values[i] = ec._SessionTimelineEvent_occurredAt(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "content":
-			out.Values[i] = ec._SessionTimelineEvent_content(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTimelineFileChangeImplementors = []string{"SessionTimelineFileChange"}
-
-func (ec *executionContext) _SessionTimelineFileChange(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTimelineFileChange) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTimelineFileChangeImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTimelineFileChange")
-		case "kind":
-			out.Values[i] = ec._SessionTimelineFileChange_kind(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "path":
-			out.Values[i] = ec._SessionTimelineFileChange_path(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "movePath":
-			out.Values[i] = ec._SessionTimelineFileChange_movePath(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "unifiedDiff":
-			out.Values[i] = ec._SessionTimelineFileChange_unifiedDiff(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTimelineImageImplementors = []string{"SessionTimelineImage"}
-
-func (ec *executionContext) _SessionTimelineImage(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTimelineImage) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTimelineImageImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTimelineImage")
-		case "src":
-			out.Values[i] = ec._SessionTimelineImage_src(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "detail":
-			out.Values[i] = ec._SessionTimelineImage_detail(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTimelinePageImplementors = []string{"SessionTimelinePage"}
-
-func (ec *executionContext) _SessionTimelinePage(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTimelinePage) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTimelinePageImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTimelinePage")
-		case "events":
-			out.Values[i] = ec._SessionTimelinePage_events(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "usage":
-			out.Values[i] = ec._SessionTimelinePage_usage(ctx, field, obj)
-		case "pageInfo":
-			out.Values[i] = ec._SessionTimelinePage_pageInfo(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTimelineStreamItemImplementors = []string{"SessionTimelineStreamItem"}
-
-func (ec *executionContext) _SessionTimelineStreamItem(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTimelineStreamItem) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTimelineStreamItemImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTimelineStreamItem")
-		case "ready":
-			out.Values[i] = ec._SessionTimelineStreamItem_ready(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "event":
-			out.Values[i] = ec._SessionTimelineStreamItem_event(ctx, field, obj)
-		case "usage":
-			out.Values[i] = ec._SessionTimelineStreamItem_usage(ctx, field, obj)
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionTokenUsageImplementors = []string{"SessionTokenUsage"}
-
-func (ec *executionContext) _SessionTokenUsage(ctx context.Context, sel ast.SelectionSet, obj *model.SessionTokenUsage) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionTokenUsageImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionTokenUsage")
-		case "inputTokens":
-			out.Values[i] = ec._SessionTokenUsage_inputTokens(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "cachedInputTokens":
-			out.Values[i] = ec._SessionTokenUsage_cachedInputTokens(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "outputTokens":
-			out.Values[i] = ec._SessionTokenUsage_outputTokens(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "reasoningOutputTokens":
-			out.Values[i] = ec._SessionTokenUsage_reasoningOutputTokens(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "totalTokens":
-			out.Values[i] = ec._SessionTokenUsage_totalTokens(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "contextWindow":
-			out.Values[i] = ec._SessionTokenUsage_contextWindow(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionToolContentImplementors = []string{"SessionToolContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionToolContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionToolContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionToolContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionToolContent")
-		case "qualifiedName":
-			out.Values[i] = ec._SessionToolContent_qualifiedName(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "category":
-			out.Values[i] = ec._SessionToolContent_category(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "input":
-			out.Values[i] = ec._SessionToolContent_input(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "output":
-			out.Values[i] = ec._SessionToolContent_output(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "images":
-			out.Values[i] = ec._SessionToolContent_images(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionUnknownContentImplementors = []string{"SessionUnknownContent", "SessionTimelineContent"}
-
-func (ec *executionContext) _SessionUnknownContent(ctx context.Context, sel ast.SelectionSet, obj *model.SessionUnknownContent) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionUnknownContentImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionUnknownContent")
-		case "rawType":
-			out.Values[i] = ec._SessionUnknownContent_rawType(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "payload":
-			out.Values[i] = ec._SessionUnknownContent_payload(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var subscriptionImplementors = []string{"Subscription"}
 
 func (ec *executionContext) _Subscription(ctx context.Context, sel ast.SelectionSet) func(ctx context.Context) graphql.Marshaler {
@@ -21487,8 +20794,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	}
 
 	switch fields[0].Name {
-	case "sessionEvents":
-		return ec._Subscription_sessionEvents(ctx, fields[0])
+	case "sessionTranscript":
+		return ec._Subscription_sessionTranscript(ctx, fields[0])
 	case "sessionStateUpdates":
 		return ec._Subscription_sessionStateUpdates(ctx, fields[0])
 	case "sessionCardChanged":
@@ -21567,6 +20874,699 @@ func (ec *executionContext) _TodoList(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "items":
 			out.Values[i] = ec._TodoList_items(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptCommandContentImplementors = []string{"TranscriptCommandContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptCommandContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptCommandContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptCommandContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptCommandContent")
+		case "command":
+			out.Values[i] = ec._TranscriptCommandContent_command(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "output":
+			out.Values[i] = ec._TranscriptCommandContent_output(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "exitCode":
+			out.Values[i] = ec._TranscriptCommandContent_exitCode(ctx, field, obj)
+		case "durationMs":
+			out.Values[i] = ec._TranscriptCommandContent_durationMs(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptEventImplementors = []string{"TranscriptEvent"}
+
+func (ec *executionContext) _TranscriptEvent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptEvent")
+		case "id":
+			out.Values[i] = ec._TranscriptEvent_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "orderKey":
+			out.Values[i] = ec._TranscriptEvent_orderKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "correlationId":
+			out.Values[i] = ec._TranscriptEvent_correlationId(ctx, field, obj)
+		case "phase":
+			out.Values[i] = ec._TranscriptEvent_phase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "occurredAt":
+			out.Values[i] = ec._TranscriptEvent_occurredAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._TranscriptEvent_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptFileChangeImplementors = []string{"TranscriptFileChange"}
+
+func (ec *executionContext) _TranscriptFileChange(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptFileChange) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptFileChangeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptFileChange")
+		case "kind":
+			out.Values[i] = ec._TranscriptFileChange_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "path":
+			out.Values[i] = ec._TranscriptFileChange_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "movePath":
+			out.Values[i] = ec._TranscriptFileChange_movePath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unifiedDiff":
+			out.Values[i] = ec._TranscriptFileChange_unifiedDiff(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptFileChangeContentImplementors = []string{"TranscriptFileChangeContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptFileChangeContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptFileChangeContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptFileChangeContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptFileChangeContent")
+		case "changes":
+			out.Values[i] = ec._TranscriptFileChangeContent_changes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptImageImplementors = []string{"TranscriptImage"}
+
+func (ec *executionContext) _TranscriptImage(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptImage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptImageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptImage")
+		case "src":
+			out.Values[i] = ec._TranscriptImage_src(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "detail":
+			out.Values[i] = ec._TranscriptImage_detail(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptMessageContentImplementors = []string{"TranscriptMessageContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptMessageContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptMessageContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptMessageContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptMessageContent")
+		case "role":
+			out.Values[i] = ec._TranscriptMessageContent_role(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "text":
+			out.Values[i] = ec._TranscriptMessageContent_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "format":
+			out.Values[i] = ec._TranscriptMessageContent_format(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "images":
+			out.Values[i] = ec._TranscriptMessageContent_images(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptPageImplementors = []string{"TranscriptPage"}
+
+func (ec *executionContext) _TranscriptPage(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptPage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptPageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptPage")
+		case "events":
+			out.Values[i] = ec._TranscriptPage_events(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "usage":
+			out.Values[i] = ec._TranscriptPage_usage(ctx, field, obj)
+		case "pageInfo":
+			out.Values[i] = ec._TranscriptPage_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptReasoningContentImplementors = []string{"TranscriptReasoningContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptReasoningContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptReasoningContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptReasoningContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptReasoningContent")
+		case "text":
+			out.Values[i] = ec._TranscriptReasoningContent_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptStatusContentImplementors = []string{"TranscriptStatusContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptStatusContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptStatusContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptStatusContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptStatusContent")
+		case "code":
+			out.Values[i] = ec._TranscriptStatusContent_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "level":
+			out.Values[i] = ec._TranscriptStatusContent_level(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._TranscriptStatusContent_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "details":
+			out.Values[i] = ec._TranscriptStatusContent_details(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptStreamItemImplementors = []string{"TranscriptStreamItem"}
+
+func (ec *executionContext) _TranscriptStreamItem(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptStreamItem) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptStreamItemImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptStreamItem")
+		case "ready":
+			out.Values[i] = ec._TranscriptStreamItem_ready(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "event":
+			out.Values[i] = ec._TranscriptStreamItem_event(ctx, field, obj)
+		case "usage":
+			out.Values[i] = ec._TranscriptStreamItem_usage(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptStructuredTextImplementors = []string{"TranscriptStructuredText"}
+
+func (ec *executionContext) _TranscriptStructuredText(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptStructuredText) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptStructuredTextImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptStructuredText")
+		case "format":
+			out.Values[i] = ec._TranscriptStructuredText_format(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "text":
+			out.Values[i] = ec._TranscriptStructuredText_text(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptTokenUsageImplementors = []string{"TranscriptTokenUsage"}
+
+func (ec *executionContext) _TranscriptTokenUsage(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptTokenUsage) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptTokenUsageImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptTokenUsage")
+		case "inputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_inputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cachedInputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_cachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "outputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_outputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reasoningOutputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_reasoningOutputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_totalTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "contextWindow":
+			out.Values[i] = ec._TranscriptTokenUsage_contextWindow(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptToolContentImplementors = []string{"TranscriptToolContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptToolContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptToolContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptToolContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptToolContent")
+		case "qualifiedName":
+			out.Values[i] = ec._TranscriptToolContent_qualifiedName(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "category":
+			out.Values[i] = ec._TranscriptToolContent_category(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "input":
+			out.Values[i] = ec._TranscriptToolContent_input(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "output":
+			out.Values[i] = ec._TranscriptToolContent_output(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "images":
+			out.Values[i] = ec._TranscriptToolContent_images(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptUnknownContentImplementors = []string{"TranscriptUnknownContent", "TranscriptContent"}
+
+func (ec *executionContext) _TranscriptUnknownContent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptUnknownContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptUnknownContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptUnknownContent")
+		case "rawType":
+			out.Values[i] = ec._TranscriptUnknownContent_rawType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "payload":
+			out.Values[i] = ec._TranscriptUnknownContent_payload(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -22829,8 +22829,8 @@ func (ec *executionContext) marshalNJSON2map(ctx context.Context, sel ast.Select
 	return res
 }
 
-func (ec *executionContext) unmarshalNListSessionEventsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListSessionEventsInput(ctx context.Context, v any) (model.ListSessionEventsInput, error) {
-	res, err := ec.unmarshalInputListSessionEventsInput(ctx, v)
+func (ec *executionContext) unmarshalNListTranscriptEventsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListTranscriptEventsInput(ctx context.Context, v any) (model.ListTranscriptEventsInput, error) {
+	res, err := ec.unmarshalInputListTranscriptEventsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -23244,152 +23244,6 @@ func (ec *executionContext) marshalNSessionStateStreamItem2ᚖgithubᚗcomᚋnzl
 	return ec._SessionStateStreamItem(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNSessionStructuredText2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStructuredText(ctx context.Context, sel ast.SelectionSet, v *model.SessionStructuredText) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionStructuredText(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionTimelineContent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineContent(ctx context.Context, sel ast.SelectionSet, v model.SessionTimelineContent) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionTimelineContent(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionTimelineEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionTimelineEvent) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNSessionTimelineEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEvent(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNSessionTimelineEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEvent(ctx context.Context, sel ast.SelectionSet, v *model.SessionTimelineEvent) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionTimelineEvent(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNSessionTimelineEventPhase2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEventPhase(ctx context.Context, v any) (model.SessionTimelineEventPhase, error) {
-	var res model.SessionTimelineEventPhase
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNSessionTimelineEventPhase2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEventPhase(ctx context.Context, sel ast.SelectionSet, v model.SessionTimelineEventPhase) graphql.Marshaler {
-	return v
-}
-
-func (ec *executionContext) marshalNSessionTimelineFileChange2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineFileChangeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionTimelineFileChange) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNSessionTimelineFileChange2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineFileChange(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNSessionTimelineFileChange2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineFileChange(ctx context.Context, sel ast.SelectionSet, v *model.SessionTimelineFileChange) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionTimelineFileChange(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionTimelineImage2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineImageᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionTimelineImage) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNSessionTimelineImage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineImage(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNSessionTimelineImage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineImage(ctx context.Context, sel ast.SelectionSet, v *model.SessionTimelineImage) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionTimelineImage(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionTimelinePage2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelinePage(ctx context.Context, sel ast.SelectionSet, v model.SessionTimelinePage) graphql.Marshaler {
-	return ec._SessionTimelinePage(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNSessionTimelinePage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelinePage(ctx context.Context, sel ast.SelectionSet, v *model.SessionTimelinePage) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionTimelinePage(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionTimelineStreamItem2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineStreamItem(ctx context.Context, sel ast.SelectionSet, v model.SessionTimelineStreamItem) graphql.Marshaler {
-	return ec._SessionTimelineStreamItem(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNSessionTimelineStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineStreamItem(ctx context.Context, sel ast.SelectionSet, v *model.SessionTimelineStreamItem) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionTimelineStreamItem(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNSessionTimelineTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineTextFormat(ctx context.Context, v any) (model.SessionTimelineTextFormat, error) {
-	var res model.SessionTimelineTextFormat
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNSessionTimelineTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineTextFormat(ctx context.Context, sel ast.SelectionSet, v model.SessionTimelineTextFormat) graphql.Marshaler {
-	return v
-}
-
 func (ec *executionContext) unmarshalNSetDefaultWorkflowInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSetDefaultWorkflowInput(ctx context.Context, v any) (model.SetDefaultWorkflowInput, error) {
 	res, err := ec.unmarshalInputSetDefaultWorkflowInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -23496,6 +23350,152 @@ func (ec *executionContext) marshalNTodoItem2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._TodoItem(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptContent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptContent(ctx context.Context, sel ast.SelectionSet, v model.TranscriptContent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptContent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TranscriptEvent) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEvent(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEvent(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNTranscriptEventPhase2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventPhase(ctx context.Context, v any) (model.TranscriptEventPhase, error) {
+	var res model.TranscriptEventPhase
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTranscriptEventPhase2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventPhase(ctx context.Context, sel ast.SelectionSet, v model.TranscriptEventPhase) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNTranscriptFileChange2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptFileChangeᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TranscriptFileChange) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTranscriptFileChange2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptFileChange(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTranscriptFileChange2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptFileChange(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptFileChange) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptFileChange(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptImage2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptImageᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TranscriptImage) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTranscriptImage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptImage(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTranscriptImage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptImage(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptImage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptImage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptPage2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptPage(ctx context.Context, sel ast.SelectionSet, v model.TranscriptPage) graphql.Marshaler {
+	return ec._TranscriptPage(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTranscriptPage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptPage(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptPage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptPage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptStreamItem2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptStreamItem(ctx context.Context, sel ast.SelectionSet, v model.TranscriptStreamItem) graphql.Marshaler {
+	return ec._TranscriptStreamItem(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTranscriptStreamItem2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptStreamItem(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptStreamItem) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptStreamItem(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptStructuredText2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptStructuredText(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptStructuredText) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptStructuredText(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNTranscriptTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTextFormat(ctx context.Context, v any) (model.TranscriptTextFormat, error) {
+	var res model.TranscriptTextFormat
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNTranscriptTextFormat2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTextFormat(ctx context.Context, sel ast.SelectionSet, v model.TranscriptTextFormat) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput(ctx context.Context, v any) (model.UpdateProjectSettingsInput, error) {
@@ -24087,20 +24087,6 @@ func (ec *executionContext) marshalOSessionDetail2ᚖgithubᚗcomᚋnzlovᚋanyc
 	return ec._SessionDetail(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalOSessionTimelineEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTimelineEvent(ctx context.Context, sel ast.SelectionSet, v *model.SessionTimelineEvent) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._SessionTimelineEvent(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalOSessionTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTokenUsage(ctx context.Context, sel ast.SelectionSet, v *model.SessionTokenUsage) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return ec._SessionTokenUsage(ctx, sel, v)
-}
-
 func (ec *executionContext) unmarshalOString2ᚖstring(ctx context.Context, v any) (*string, error) {
 	if v == nil {
 		return nil, nil
@@ -24142,6 +24128,20 @@ func (ec *executionContext) marshalOTodoList2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._TodoList(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEvent(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptEvent) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TranscriptEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptTokenUsage) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TranscriptTokenUsage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOWorkflowCondition2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowCondition(ctx context.Context, sel ast.SelectionSet, v *model.WorkflowCondition) graphql.Marshaler {

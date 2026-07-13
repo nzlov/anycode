@@ -44,7 +44,7 @@
 import { computed, ref } from 'vue';
 
 import StaticAnsiOutput from '@/components/StaticAnsiOutput.vue';
-import type { SessionCommandContent, SessionTimelineItem } from '@/services/sessionTimeline';
+import type { TranscriptCommandContent, TranscriptItem } from '@/services/sessionTimeline';
 import {
   formatDuration,
   timelinePhaseColor,
@@ -54,7 +54,7 @@ import {
 } from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionTimelineItem & { content: SessionCommandContent };
+  event: TranscriptItem & { content: TranscriptCommandContent };
 }>();
 
 const expanded = ref(false);

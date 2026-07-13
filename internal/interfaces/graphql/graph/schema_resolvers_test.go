@@ -287,7 +287,7 @@ func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 	}
 }
 
-func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
+func TestSubscriptionSessionTranscriptForwardsUseCaseEvents(t *testing.T) {
 	sessionID := "session-1"
 	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan timelineapp.DTO, 1)
@@ -302,39 +302,39 @@ func TestSubscriptionSessionEventsForwardsUseCaseEvents(t *testing.T) {
 
 	timeline := &fakeTimelineUseCase{sessionEvents: source}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
-	ch, err := resolver.SessionEvents(context.Background(), sessionID)
+	ch, err := resolver.SessionTranscript(context.Background(), sessionID)
 	if err != nil {
-		t.Fatalf("SessionEvents() error = %v", err)
+		t.Fatalf("SessionTranscript() error = %v", err)
 	}
 
 	wantInput := timelineapp.SessionEventsInput{
 		Scope: eventdomain.Scope{SessionID: &eventSessionID},
 	}
 	if !reflect.DeepEqual(timeline.gotSessionEventsInput, wantInput) {
-		t.Fatalf("SessionEvents() input = %#v, want %#v", timeline.gotSessionEventsInput, wantInput)
+		t.Fatalf("SessionTranscript() input = %#v, want %#v", timeline.gotSessionEventsInput, wantInput)
 	}
 
 	got, ok := <-ch
 	if !ok {
-		t.Fatal("SessionEvents() channel closed before ready item")
+		t.Fatal("SessionTranscript() channel closed before ready item")
 	}
 	if !got.Ready || got.Event != nil {
-		t.Fatalf("SessionEvents() ready item = %#v", got)
+		t.Fatalf("SessionTranscript() ready item = %#v", got)
 	}
 	got, ok = <-ch
 	if !ok || got.Event == nil {
-		t.Fatal("SessionEvents() channel closed before event item")
+		t.Fatal("SessionTranscript() channel closed before event item")
 	}
 	event := got.Event
 	if got.Ready || event.ID != "event-1" || event.OrderKey != "order-1" || !event.OccurredAt.Equal(time.Date(2026, 7, 2, 1, 2, 3, 0, time.UTC)) {
-		t.Fatalf("SessionEvents() event = %#v", got)
+		t.Fatalf("SessionTranscript() event = %#v", got)
 	}
-	content, ok := event.Content.(*model.SessionTextMessageContent)
-	if !ok || content.Role != "assistant" || content.Text != "hello" || content.Format != model.SessionTimelineTextFormatMarkdown {
-		t.Fatalf("SessionEvents() content = %#v", event.Content)
+	content, ok := event.Content.(*model.TranscriptMessageContent)
+	if !ok || content.Role != "assistant" || content.Text != "hello" || content.Format != model.TranscriptTextFormatMarkdown {
+		t.Fatalf("SessionTranscript() content = %#v", event.Content)
 	}
 	if _, ok := <-ch; ok {
-		t.Fatal("SessionEvents() channel stayed open after source closed")
+		t.Fatal("SessionTranscript() channel stayed open after source closed")
 	}
 }
 
@@ -367,7 +367,7 @@ func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *tes
 	}
 	close(source)
 
-	events := &fakeEventUseCase{liveSessionEvents: source}
+	events := &fakeEventUseCase{liveSessionTranscript: source}
 	sessions := &fakeSessionUseCase{
 		getCardResult: sessionapp.CardDTO{
 			DTO: sessionapp.DTO{
@@ -419,7 +419,7 @@ func TestSubscriptionSessionCardUpdatesSendsReadyBeforeCards(t *testing.T) {
 		Type:      "session.running",
 	}
 	close(source)
-	events := &fakeEventUseCase{liveSessionEvents: source}
+	events := &fakeEventUseCase{liveSessionTranscript: source}
 	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{DTO: sessionapp.DTO{
 		ID:        sessiondomain.ID(sessionID),
 		ProjectID: sessiondomain.ProjectID(projectID),
@@ -440,15 +440,15 @@ func TestSubscriptionSessionCardUpdatesSendsReadyBeforeCards(t *testing.T) {
 	}
 }
 
-func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
+func TestSubscriptionSessionTranscriptStopsBlockedSendAfterCancel(t *testing.T) {
 	sessionID := "session-1"
 	source := make(chan timelineapp.DTO, 1)
 	timeline := &fakeTimelineUseCase{sessionEvents: source}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Subscription()
 	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := resolver.SessionEvents(ctx, sessionID)
+	ch, err := resolver.SessionTranscript(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("SessionEvents() error = %v", err)
+		t.Fatalf("SessionTranscript() error = %v", err)
 	}
 	if ready := <-ch; !ready.Ready {
 		t.Fatalf("ready item = %#v", ready)
@@ -465,10 +465,10 @@ func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 	select {
 	case _, ok := <-ch:
 		if ok {
-			t.Fatal("SessionEvents() delivered a blocked event after cancellation")
+			t.Fatal("SessionTranscript() delivered a blocked event after cancellation")
 		}
 	case <-time.After(time.Second):
-		t.Fatal("SessionEvents() did not close after cancellation")
+		t.Fatal("SessionTranscript() did not close after cancellation")
 	}
 }
 
@@ -476,7 +476,7 @@ func TestSubscriptionSessionCardChangedStopsBlockedSendAfterCancel(t *testing.T)
 	sessionID := "session-1"
 	eventSessionID := eventdomain.SessionID(sessionID)
 	source := make(chan eventapp.DTO, 1)
-	events := &fakeEventUseCase{liveSessionEvents: source}
+	events := &fakeEventUseCase{liveSessionTranscript: source}
 	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{DTO: sessionapp.DTO{
 		ID:        sessiondomain.ID(sessionID),
 		ProjectID: "project-1",
@@ -534,19 +534,19 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 	}
 }
 
-func TestQuerySessionEventsForwardsBeforeCursorAndLimit(t *testing.T) {
+func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	beforeEventID := "event-40"
 	limit := 50
 	timeline := &fakeTimelineUseCase{}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Query()
 
-	_, err := resolver.SessionEvents(context.Background(), model.ListSessionEventsInput{
+	_, err := resolver.SessionTranscript(context.Background(), model.ListTranscriptEventsInput{
 		SessionID:     "session-1",
 		BeforeEventID: &beforeEventID,
 		Limit:         &limit,
 	})
 	if err != nil {
-		t.Fatalf("SessionEvents() error = %v", err)
+		t.Fatalf("SessionTranscript() error = %v", err)
 	}
 
 	want := timelineapp.ListSessionEventsInput{
@@ -754,7 +754,7 @@ func TestSubscriptionSessionStateUpdatesRegistersBothSourcesBeforeReady(t *testi
 	questionSource := make(chan questionapp.BatchDTO, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := &fakeEventUseCase{liveSessionEvents: eventSource}
+	events := &fakeEventUseCase{liveSessionTranscript: eventSource}
 	questions := &fakeQuestionUseCase{updateSource: questionSource}
 	sessions := &fakeSessionUseCase{getResult: sessionapp.DetailDTO{DTO: sessionapp.DTO{
 		ID:        sessiondomain.ID(sessionID),
@@ -810,7 +810,7 @@ func TestSubscriptionSessionStateUpdatesEndsWhenEventSourceCloses(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	resolver := NewResolver(UseCases{
-		Events:    &fakeEventUseCase{liveSessionEvents: eventSource},
+		Events:    &fakeEventUseCase{liveSessionTranscript: eventSource},
 		Questions: &fakeQuestionUseCase{updateSource: questionSource},
 		Sessions:  &fakeSessionUseCase{},
 	}).Subscription()
@@ -838,7 +838,7 @@ func TestSubscriptionSessionStateUpdatesStopsBlockedSendAfterCancel(t *testing.T
 	eventSessionID := eventdomain.SessionID(sessionID)
 	eventSource := make(chan eventapp.DTO, 1)
 	questionSource := make(chan questionapp.BatchDTO)
-	events := &fakeEventUseCase{liveSessionEvents: eventSource}
+	events := &fakeEventUseCase{liveSessionTranscript: eventSource}
 	questions := &fakeQuestionUseCase{updateSource: questionSource}
 	sessions := &fakeSessionUseCase{getResult: sessionapp.DetailDTO{DTO: sessionapp.DTO{ID: sessiondomain.ID(sessionID)}}}
 	resolver := NewResolver(UseCases{Events: events, Questions: questions, Sessions: sessions}).Subscription()
@@ -1039,7 +1039,7 @@ func TestDiffFieldSelectedReadsNamedFragments(t *testing.T) {
 
 type fakeEventUseCase struct {
 	eventapp.UseCase
-	liveSessionEvents         <-chan eventapp.DTO
+	liveSessionTranscript     <-chan eventapp.DTO
 	gotLiveSessionEventsInput eventapp.LiveSessionEventsInput
 }
 
@@ -1129,7 +1129,7 @@ func (f *fakeProjectUseCase) BrowseDirectory(_ context.Context, input projectapp
 
 func (f *fakeEventUseCase) LiveSessionEvents(_ context.Context, input eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
 	f.gotLiveSessionEventsInput = input
-	return f.liveSessionEvents, nil
+	return f.liveSessionTranscript, nil
 }
 
 func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {

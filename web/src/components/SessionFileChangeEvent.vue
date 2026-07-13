@@ -40,9 +40,9 @@ import { computed, ref } from 'vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import { fileDiffFromUnifiedDiff } from '@/services/sessionFileChangeDiff';
 import type {
-  SessionFileChangeContent,
-  SessionTimelineFileChange,
-  SessionTimelineItem,
+  TranscriptFileChangeContent,
+  TranscriptFileChange,
+  TranscriptItem,
 } from '@/services/sessionTimeline';
 import {
   fileChangeKindLabel,
@@ -51,7 +51,7 @@ import {
 } from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionTimelineItem & { content: SessionFileChangeContent };
+  event: TranscriptItem & { content: TranscriptFileChangeContent };
 }>();
 
 const expanded = ref(false);
@@ -71,7 +71,7 @@ const plainFileChanges = computed(() =>
   fileChangePresentations.value.flatMap(({ change, diff }) => (diff ? [] : [change])),
 );
 
-function diffStatus(kind: SessionTimelineFileChange['kind']) {
+function diffStatus(kind: TranscriptFileChange['kind']) {
   if (kind === 'added') return 'added';
   if (kind === 'deleted') return 'deleted';
   if (kind === 'renamed') return 'renamed';

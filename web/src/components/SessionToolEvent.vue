@@ -41,7 +41,7 @@ import { computed, ref } from 'vue';
 
 import SessionEventImages from '@/components/SessionEventImages.vue';
 import StructuredContent from '@/components/StructuredContent.vue';
-import type { SessionTimelineItem, SessionToolContent } from '@/services/sessionTimeline';
+import type { TranscriptItem, TranscriptToolContent } from '@/services/sessionTimeline';
 import {
   timelinePhaseColor,
   timelinePhaseIcon,
@@ -51,7 +51,7 @@ import {
 } from '@/services/sessionTimelinePresentation';
 
 const props = defineProps<{
-  event: SessionTimelineItem & { content: SessionToolContent };
+  event: TranscriptItem & { content: TranscriptToolContent };
 }>();
 const expanded = ref(false);
 const content = computed(() => props.event.content);

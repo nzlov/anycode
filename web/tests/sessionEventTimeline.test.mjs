@@ -8,7 +8,7 @@ import {
   prependOlderEvents,
   shouldReconnectAfterClose,
   shouldReconnectCardStream,
-  sortSessionEvents,
+  sortTranscriptEvents,
 } from '../src/services/sessionEventTimeline.js';
 
 const newest = {
@@ -65,7 +65,7 @@ test('mergeSnapshotEvents preserves backend order keys across a page boundary', 
   const next = mergeSnapshotEvents([completed], [started, completed], []);
 
   assert.deepEqual(
-    sortSessionEvents(next).map((event) => event.id),
+    sortTranscriptEvents(next).map((event) => event.id),
     ['z-started', 'a-completed'],
   );
 });
@@ -124,12 +124,12 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
   assert.equal(validations, 1);
 });
 
-test('sortSessionEvents follows immutable backend order keys', () => {
+test('sortTranscriptEvents follows immutable backend order keys', () => {
   const completed = { ...newest, id: 'a-completed', orderKey: '02' };
   const started = { ...middle, id: 'z-started', orderKey: '01' };
 
   assert.deepEqual(
-    sortSessionEvents([started, completed]).map((event) => event.id),
+    sortTranscriptEvents([started, completed]).map((event) => event.id),
     ['z-started', 'a-completed'],
   );
 });

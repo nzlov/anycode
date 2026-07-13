@@ -314,7 +314,7 @@ import {
 } from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
-import { getSessionTimelinePage, type SessionTimelineEvent } from '@/services/sessionTimeline';
+import { getSessionTranscriptPage, type TranscriptEvent } from '@/services/sessionTimeline';
 import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
 import {
   closeSession,
@@ -681,7 +681,7 @@ async function openApprovalDialog(card: SessionCard) {
   approvalRejectPrompt.value = '';
   try {
     const [timelineResult, diffResult] = await Promise.allSettled([
-      getSessionTimelinePage(card.id, '', 40),
+      getSessionTranscriptPage(card.id, '', 40),
       getSessionAllDiff({ sessionId: card.id, mode: 'all', page: 1, pageSize: 20 }),
     ]);
     if (timelineResult.status === 'fulfilled') {
@@ -721,12 +721,12 @@ async function submitApproval(approved: boolean) {
   }
 }
 
-function recentModelOutput(events: SessionTimelineEvent[]) {
+function recentModelOutput(events: TranscriptEvent[]) {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (!event) continue;
     const content = event.content;
-    if (content.__typename === 'SessionTextMessageContent' && content.role === 'assistant') {
+    if (content.__typename === 'TranscriptMessageContent' && content.role === 'assistant') {
       const text = content.text.trim();
       if (text) return text;
     }
