@@ -960,6 +960,51 @@ a {
   bottom: 24px;
 }
 
+.forward-approval-dialog {
+  width: min(1040px, 92vw);
+  max-width: 92vw;
+  max-height: 88vh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+}
+
+.forward-approval-dialog__tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 8px;
+}
+
+.forward-approval-dialog__panels {
+  min-height: 0;
+}
+
+.forward-approval-dialog__panel {
+  max-height: 56vh;
+  overflow: auto;
+}
+
+.forward-approval-output {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.forward-approval-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.forward-approval-actions__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .new-session-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(180px, 220px);
@@ -1582,5 +1627,22 @@ a {
     min-height: 100dvh;
     max-height: 100dvh;
     border-radius: 0;
+  }
+
+  .forward-approval-dialog {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .forward-approval-dialog__panel {
+    max-height: none;
+  }
+
+  .forward-approval-actions__buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }

@@ -25,6 +25,7 @@ import (
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
+	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 )
 
 type UseCase interface {
@@ -130,6 +131,7 @@ type CardDTO struct {
 	ProjectName        string
 	RequirementSummary string
 	CurrentNodeTitle   string
+	PendingApproval    *PendingApprovalDTO
 	PendingQuestion    bool
 	TodoList           domain.TodoList
 	Attachments        []domain.SessionAttachment
@@ -140,6 +142,7 @@ type DetailDTO struct {
 	DTO
 	CloseReason      *domain.CloseReason
 	CurrentNodeTitle string
+	PendingApproval  *PendingApprovalDTO
 	Attachments      []domain.SessionAttachment
 	PromptAppends    []PromptAppendDTO
 	AvailableActions []string
@@ -162,6 +165,13 @@ type WorkflowRunDTO struct {
 	Context       map[string]any
 }
 
+type PendingApprovalDTO struct {
+	WorkflowRunID    domain.WorkflowRunID
+	NodeID           string
+	NodeRunID        string
+	CurrentNodeTitle string
+}
+
 const (
 	defaultPage              = 1
 	defaultPageSize          = 20
@@ -173,6 +183,11 @@ const (
 )
 
 var ErrProcessLifecycleNotWired = errors.New("session process lifecycle is not wired")
+
+type workflowApprovalPostCommitAdvance struct {
+	session domain.Session
+	advance domain.WorkflowAdvance
+}
 
 var errStaleAnswerUserQueue = errors.New("answer_user queue has no active process")
 var (
@@ -213,6 +228,10 @@ type Service struct {
 type questionCoordinator interface {
 	CreateBatch(ctx context.Context, input questionapp.CreateBatchInput) (questionapp.BatchDTO, error)
 	CancelPendingBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
+}
+
+type workflowApprovalRepositoryRunner interface {
+	SubmitApprovalForSessionWithRepositories(ctx context.Context, input domain.WorkflowApprovalInput, repo workflowdomain.Repository, events eventdomain.Store) (domain.WorkflowApprovalResult, []eventdomain.DomainEvent, error)
 }
 
 type Option func(*Service)
@@ -4270,31 +4289,197 @@ func (s *Service) SubmitWorkflowApproval(ctx context.Context, input SubmitWorkfl
 	if strings.TrimSpace(input.NodeID) == "" {
 		return WorkflowRunDTO{}, errors.New("workflow node id is required")
 	}
-	result, err := s.workflows.SubmitApprovalForSession(ctx, domain.WorkflowApprovalInput{
-		WorkflowRunID: input.WorkflowRunID,
-		NodeID:        input.NodeID,
-		Approved:      input.Approved,
-		Comment:       input.Comment,
+	if !input.Approved && strings.TrimSpace(input.Comment) == "" {
+		return WorkflowRunDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "approval rejection prompt is required")
+	}
+	runner, ok := s.workflows.(workflowApprovalRepositoryRunner)
+	if s.uow == nil || !ok {
+		return WorkflowRunDTO{}, errors.New("workflow approval requires transactional workflow repository runner")
+	}
+	return s.submitWorkflowApprovalInTx(ctx, input, runner)
+}
+
+func (s *Service) submitWorkflowApprovalInTx(ctx context.Context, input SubmitWorkflowApprovalInput, runner workflowApprovalRepositoryRunner) (WorkflowRunDTO, error) {
+	var result domain.WorkflowApprovalResult
+	var publishEvents []eventdomain.DomainEvent
+	var postCommitAdvance *workflowApprovalPostCommitAdvance
+	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		workflowInput := domain.WorkflowApprovalInput{
+			WorkflowRunID: input.WorkflowRunID,
+			NodeID:        input.NodeID,
+			Approved:      input.Approved,
+			Comment:       input.Comment,
+		}
+		approvalResult, workflowEvents, err := runner.SubmitApprovalForSessionWithRepositories(ctx, workflowInput, tx.Workflows(), tx.Events())
+		if err != nil {
+			return fmt.Errorf("submit workflow approval: %w", err)
+		}
+		session, err := tx.Sessions().Find(ctx, approvalResult.Run.SessionID)
+		if err != nil {
+			return fmt.Errorf("find session: %w", err)
+		}
+		if session.Mode != domain.ModeWorkflow {
+			return fmt.Errorf("session %q is not workflow mode", session.ID)
+		}
+		publishEvents = append(publishEvents, workflowEvents...)
+		approvalEvent, hasApprovalEvent, err := s.newSessionEvent(session, "workflow.approval_submitted", map[string]any{
+			"workflowRunId": string(input.WorkflowRunID),
+			"nodeId":        input.NodeID,
+			"approved":      input.Approved,
+		})
+		if err != nil {
+			return err
+		}
+		if hasApprovalEvent {
+			if err := tx.Events().Append(ctx, approvalEvent); err != nil {
+				return err
+			}
+			publishEvents = append(publishEvents, approvalEvent)
+		}
+		switch {
+		case approvalResult.RejectedAfterRun:
+			queued, queuedEvent, hasQueuedEvent, err := s.queueApprovalRejectionPrompt(ctx, tx, session, approvalResult.Advance, strings.TrimSpace(input.Comment))
+			if err != nil {
+				return err
+			}
+			session = queued
+			if hasQueuedEvent {
+				publishEvents = append(publishEvents, queuedEvent)
+			}
+		case approvalResult.Advance.Blocked:
+			if err := transitionSession(&session, domain.StatusBlocked, s.now()); err != nil {
+				return err
+			}
+			blockedEvent, hasBlockedEvent, err := s.newSessionEvent(session, "session.blocked", map[string]any{
+				"workflowRunId": string(approvalResult.Advance.WorkflowRunID),
+				"reason":        approvalResult.Advance.BlockedReason,
+			})
+			if err != nil {
+				return err
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if hasBlockedEvent {
+				if err := tx.Events().Append(ctx, blockedEvent); err != nil {
+					return err
+				}
+				publishEvents = append(publishEvents, blockedEvent)
+			}
+		case approvalResult.Advance.Completed:
+			if err := transitionSession(&session, domain.StatusCompleted, s.now()); err != nil {
+				return err
+			}
+			completedEvent, hasCompletedEvent, err := s.newSessionEvent(session, "session.completed", map[string]any{
+				"workflowRunId": string(approvalResult.Advance.WorkflowRunID),
+			})
+			if err != nil {
+				return err
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if hasCompletedEvent {
+				if err := tx.Events().Append(ctx, completedEvent); err != nil {
+					return err
+				}
+				publishEvents = append(publishEvents, completedEvent)
+			}
+		case approvalResult.Advance.RequiresCodex:
+			queued, queuedEvent, hasQueuedEvent, err := s.queueApprovalAdvance(ctx, tx, session, approvalResult.Advance)
+			if err != nil {
+				return err
+			}
+			session = queued
+			if hasQueuedEvent {
+				publishEvents = append(publishEvents, queuedEvent)
+			}
+		case !approvalResult.Advance.RequiresCodex && approvalResult.Advance.Merge == nil && approvalResult.Advance.Expr == nil && !approvalResult.Advance.Close:
+			if err := transitionSessionToWaitingApproval(&session, false, s.now()); err != nil {
+				return err
+			}
+			waitingEvent, hasWaitingEvent, err := s.newSessionEvent(session, "session.waiting_approval", map[string]any{
+				"workflowRunId":    string(approvalResult.Advance.WorkflowRunID),
+				"nodeRunId":        stringValuePtr(approvalResult.Advance.NodeRunID),
+				"currentNodeId":    approvalResult.Advance.CurrentNodeID,
+				"currentNodeTitle": approvalResult.Advance.CurrentNodeTitle,
+			})
+			if err != nil {
+				return err
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			if hasWaitingEvent {
+				if err := tx.Events().Append(ctx, waitingEvent); err != nil {
+					return err
+				}
+				publishEvents = append(publishEvents, waitingEvent)
+			}
+		case workflowAdvanceHasExternalEffects(approvalResult.Advance):
+			postCommitAdvance = &workflowApprovalPostCommitAdvance{
+				session: session,
+				advance: approvalResult.Advance,
+			}
+		default:
+			return errors.New("workflow approval returned unsupported transactional advance")
+		}
+		result = approvalResult
+		return nil
 	})
 	if err != nil {
-		return WorkflowRunDTO{}, fmt.Errorf("submit workflow approval: %w", err)
-	}
-	session, err := s.repo.Find(ctx, result.Run.SessionID)
-	if err != nil {
-		return WorkflowRunDTO{}, fmt.Errorf("find session: %w", err)
-	}
-	if session.Mode != domain.ModeWorkflow {
-		return WorkflowRunDTO{}, fmt.Errorf("session %q is not workflow mode", session.ID)
-	}
-	s.appendSessionEvent(ctx, session, "workflow.approval_submitted", map[string]any{
-		"workflowRunId": string(input.WorkflowRunID),
-		"nodeId":        input.NodeID,
-		"approved":      input.Approved,
-	})
-	if _, err := s.applyWorkflowAdvance(ctx, session, result.Advance, workflowAdvanceOptions{}); err != nil {
 		return WorkflowRunDTO{}, err
 	}
+	for _, event := range publishEvents {
+		s.publishSessionEvent(ctx, event)
+	}
+	if postCommitAdvance != nil {
+		if _, err := s.applyWorkflowAdvance(ctx, postCommitAdvance.session, postCommitAdvance.advance, workflowAdvanceOptions{}); err != nil {
+			return WorkflowRunDTO{}, err
+		}
+	}
+	s.scheduleQueueDrain()
 	return toWorkflowRunDTO(result.Run), nil
+}
+
+func (s *Service) queueApprovalAdvance(ctx context.Context, tx port.Tx, session domain.Session, advance domain.WorkflowAdvance) (domain.Session, eventdomain.DomainEvent, bool, error) {
+	options := codexStartOptions{
+		workflowRunID: advance.WorkflowRunID,
+		nodeRunID:     workflowNodeRunID(advance.NodeRunID),
+		prompt:        advance.Prompt,
+		initialStart:  session.Queue.InitialStart,
+	}
+	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, queuePriorityForSession(session), domain.QueueKindStart)
+	if err != nil {
+		return domain.Session{}, eventdomain.DomainEvent{}, false, err
+	}
+	if err := tx.Sessions().Save(ctx, queued); err != nil {
+		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("save queued session: %w", err)
+	}
+	if hasEvent {
+		if err := tx.Events().Append(ctx, event); err != nil {
+			return domain.Session{}, eventdomain.DomainEvent{}, false, err
+		}
+	}
+	return queued, event, hasEvent, nil
+}
+
+func (s *Service) queueApprovalRejectionPrompt(ctx context.Context, tx port.Tx, session domain.Session, advance domain.WorkflowAdvance, body string) (domain.Session, eventdomain.DomainEvent, bool, error) {
+	id, err := s.generateID()
+	if err != nil {
+		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("generate prompt append id: %w", err)
+	}
+	promptAppend := domain.PromptAppend{
+		ID:        string(id),
+		SessionID: session.ID,
+		Body:      body,
+		Status:    domain.PromptAppendPending,
+		CreatedAt: s.now(),
+	}
+	if err := tx.Sessions().AppendPrompt(ctx, promptAppend); err != nil {
+		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("append prompt: %w", err)
+	}
+	return s.queueApprovalAdvance(ctx, tx, session, advance)
 }
 
 func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, error) {
@@ -4314,11 +4499,11 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 		return DetailDTO{}, err
 	}
 	appends = attachPromptAppendAttachments(appends, attachments)
-	currentNodeTitle, err := s.currentNodeTitle(ctx, session)
+	currentNodeTitle, pendingApproval, err := s.currentNodeState(ctx, session)
 	if err != nil {
 		return DetailDTO{}, err
 	}
-	return toDetailDTO(session, attachments, appends, currentNodeTitle), nil
+	return toDetailDTO(session, attachments, appends, currentNodeTitle, pendingApproval), nil
 }
 
 func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error) {
@@ -4337,11 +4522,11 @@ func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, er
 	if err != nil {
 		return CardDTO{}, err
 	}
-	currentNodeTitle, err := s.currentNodeTitle(ctx, session)
+	currentNodeTitle, pendingApproval, err := s.currentNodeState(ctx, session)
 	if err != nil {
 		return CardDTO{}, err
 	}
-	card := toCardDTO(session, attachments, currentNodeTitle)
+	card := toCardDTO(session, attachments, currentNodeTitle, pendingApproval)
 	card.ProjectName = project.Name
 	return card, nil
 }
@@ -4383,11 +4568,11 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		if err != nil {
 			return port.Page[CardDTO]{}, err
 		}
-		currentNodeTitle, err := s.currentNodeTitle(ctx, session)
+		currentNodeTitle, pendingApproval, err := s.currentNodeState(ctx, session)
 		if err != nil {
 			return port.Page[CardDTO]{}, err
 		}
-		item := toCardDTO(session, attachments, currentNodeTitle)
+		item := toCardDTO(session, attachments, currentNodeTitle, pendingApproval)
 		item.ProjectName = projectName
 		items = append(items, item)
 	}
@@ -4445,31 +4630,65 @@ func toWorkflowRunDTO(run domain.WorkflowRunSnapshot) WorkflowRunDTO {
 	}
 }
 
-func (s *Service) currentNodeTitle(ctx context.Context, session domain.Session) (string, error) {
+func (s *Service) currentNodeState(ctx context.Context, session domain.Session) (string, *PendingApprovalDTO, error) {
 	if s.events == nil || session.Mode != domain.ModeWorkflow {
-		return "", nil
+		return "", nil, nil
 	}
 	sessionID := eventdomain.SessionID(session.ID)
 	events, err := s.events.After(ctx, eventdomain.Scope{ProjectID: string(session.ProjectID), SessionID: &sessionID}, "")
 	if err != nil {
-		return "", fmt.Errorf("list session events for current node: %w", err)
+		return "", nil, fmt.Errorf("list session events for current node: %w", err)
 	}
+	title := ""
+	var pendingApproval *PendingApprovalDTO
 	for i := len(events) - 1; i >= 0; i-- {
-		if !strings.HasPrefix(events[i].Type, "workflow.") {
-			continue
+		if pendingApproval == nil && session.Status == domain.StatusWaitingApproval {
+			if approval := pendingApprovalFromEvent(events[i]); approval != nil {
+				pendingApproval = approval
+				if strings.TrimSpace(title) == "" {
+					title = approval.CurrentNodeTitle
+				}
+			}
 		}
-		if title, ok := events[i].Payload["currentNodeTitle"].(string); ok {
-			return strings.TrimSpace(title), nil
+		if strings.TrimSpace(title) == "" && strings.HasPrefix(events[i].Type, "workflow.") {
+			if value, ok := events[i].Payload["currentNodeTitle"].(string); ok {
+				title = strings.TrimSpace(value)
+			}
+		}
+		if strings.TrimSpace(title) != "" && (pendingApproval != nil || session.Status != domain.StatusWaitingApproval) {
+			return title, pendingApproval, nil
 		}
 	}
-	return "", nil
+	return title, pendingApproval, nil
 }
 
-func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, currentNodeTitle string) CardDTO {
+func pendingApprovalFromEvent(event eventdomain.DomainEvent) *PendingApprovalDTO {
+	switch event.Type {
+	case "workflow.waiting_approval", "session.waiting_approval":
+	default:
+		return nil
+	}
+	workflowRunID, _ := event.Payload["workflowRunId"].(string)
+	nodeID, _ := event.Payload["currentNodeId"].(string)
+	if strings.TrimSpace(workflowRunID) == "" || strings.TrimSpace(nodeID) == "" {
+		return nil
+	}
+	nodeRunID, _ := event.Payload["nodeRunId"].(string)
+	title, _ := event.Payload["currentNodeTitle"].(string)
+	return &PendingApprovalDTO{
+		WorkflowRunID:    domain.WorkflowRunID(workflowRunID),
+		NodeID:           strings.TrimSpace(nodeID),
+		NodeRunID:        strings.TrimSpace(nodeRunID),
+		CurrentNodeTitle: strings.TrimSpace(title),
+	}
+}
+
+func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, currentNodeTitle string, pendingApproval *PendingApprovalDTO) CardDTO {
 	return CardDTO{
 		DTO:                toDTO(session),
 		RequirementSummary: session.Requirement,
 		CurrentNodeTitle:   currentNodeTitle,
+		PendingApproval:    pendingApproval,
 		PendingQuestion:    session.Status == domain.StatusWaitingUser,
 		TodoList:           session.TodoList,
 		Attachments:        attachments,
@@ -4477,7 +4696,7 @@ func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, c
 	}
 }
 
-func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string) DetailDTO {
+func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string, pendingApproval *PendingApprovalDTO) DetailDTO {
 	promptAppends := make([]PromptAppendDTO, 0, len(appends))
 	for _, promptAppend := range appends {
 		promptAppends = append(promptAppends, toPromptAppendDTO(promptAppend))
@@ -4486,6 +4705,7 @@ func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment,
 		DTO:              toDTO(session),
 		CloseReason:      session.CloseReason,
 		CurrentNodeTitle: currentNodeTitle,
+		PendingApproval:  pendingApproval,
 		Attachments:      attachments,
 		PromptAppends:    promptAppends,
 		AvailableActions: availableActions(session),
