@@ -62,22 +62,20 @@
               </q-item-section>
             </q-item>
 
-            <q-item v-if="question.allowCustom" tag="label" clickable class="option-item option-item--custom">
-              <q-item-section avatar>
+            <q-item v-if="question.allowCustom" class="option-item option-item--custom">
+              <q-item-section>
                 <q-radio
                   :model-value="drafts[question.id]?.choice"
                   val="__custom__"
+                  label="自定义答案"
                   @update:model-value="setChoice(question.id, String($event))"
                 />
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>自定义答案</q-item-label>
                 <q-input
                   :model-value="draftFor(question.id).customAnswer"
                   dense
                   outlined
                   autogrow
-                  class="q-mt-sm"
+                  class="custom-answer-input"
                   placeholder="输入自己的答案"
                   :disable="drafts[question.id]?.choice !== '__custom__'"
                   @update:model-value="setCustomAnswer(question.id, String($event ?? ''))"
@@ -302,6 +300,10 @@ function submit() {
 .option-item--custom {
   border-color: #67e8f9;
   background: #ecfeff;
+}
+
+.custom-answer-input {
+  margin: 8px 0 0 40px;
 }
 
 .answer-panel__actions {
