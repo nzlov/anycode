@@ -51,7 +51,15 @@ type UseCase interface {
 	HandleQuestionBatchAnswered(ctx context.Context, batch questionapp.BatchDTO) error
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
 	GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error)
+	LastSessionConfigForProject(ctx context.Context, projectID domain.ProjectID) (*ConfigDTO, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error)
+}
+
+type ConfigInput struct {
+	CodexModel      string
+	ReasoningEffort string
+	PermissionMode  string
+	FastMode        *bool
 }
 
 type CreateSessionInput struct {
@@ -59,7 +67,7 @@ type CreateSessionInput struct {
 	Requirement         string
 	Mode                domain.Mode
 	BaseBranch          string
-	Config              domain.Config
+	Config              ConfigInput
 	Priority            domain.Priority
 	StagedAttachmentIDs []domain.StagedAttachmentID
 }
@@ -82,7 +90,7 @@ type SetSessionPriorityInput struct {
 
 type UpdateSessionConfigInput struct {
 	SessionID domain.ID
-	Config    domain.Config
+	Config    ConfigInput
 }
 
 type AppendPromptInput struct {
@@ -131,6 +139,13 @@ type DTO struct {
 	LastRunAt          *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+}
+
+type ConfigDTO struct {
+	CodexModel      string
+	ReasoningEffort string
+	PermissionMode  string
+	FastMode        bool
 }
 
 type CardDTO struct {
@@ -955,17 +970,22 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 	return dto, nil
 }
 
-func (s *Service) resolveSessionConfig(ctx context.Context, projectID domain.ProjectID, requested domain.Config) (domain.Config, error) {
+func (s *Service) resolveSessionConfig(ctx context.Context, projectID domain.ProjectID, requested ConfigInput) (domain.Config, error) {
 	if strings.TrimSpace(requested.CodexModel) != "" &&
 		strings.TrimSpace(requested.ReasoningEffort) != "" &&
-		strings.TrimSpace(requested.PermissionMode) != "" {
-		return trimConfig(requested), nil
+		strings.TrimSpace(requested.PermissionMode) != "" &&
+		requested.FastMode != nil {
+		return configFromInput(requested, *requested.FastMode), nil
 	}
 	previous, ok, err := s.repo.LastConfigForProject(ctx, projectID)
 	if err != nil {
 		return domain.Config{}, fmt.Errorf("last config for project: %w", err)
 	}
-	config := trimConfig(requested)
+	fastMode := false
+	if requested.FastMode != nil {
+		fastMode = *requested.FastMode
+	}
+	config := configFromInput(requested, fastMode)
 	if !ok {
 		return config, nil
 	}
@@ -979,7 +999,19 @@ func (s *Service) resolveSessionConfig(ctx context.Context, projectID domain.Pro
 	if config.PermissionMode == "" {
 		config.PermissionMode = previous.PermissionMode
 	}
+	if requested.FastMode == nil {
+		config.FastMode = previous.FastMode
+	}
 	return config, nil
+}
+
+func configFromInput(input ConfigInput, fastMode bool) domain.Config {
+	return domain.Config{
+		CodexModel:      strings.TrimSpace(input.CodexModel),
+		ReasoningEffort: strings.TrimSpace(input.ReasoningEffort),
+		PermissionMode:  strings.TrimSpace(input.PermissionMode),
+		FastMode:        fastMode,
+	}
 }
 
 func trimConfig(config domain.Config) domain.Config {
@@ -987,6 +1019,7 @@ func trimConfig(config domain.Config) domain.Config {
 		CodexModel:      strings.TrimSpace(config.CodexModel),
 		ReasoningEffort: strings.TrimSpace(config.ReasoningEffort),
 		PermissionMode:  strings.TrimSpace(config.PermissionMode),
+		FastMode:        config.FastMode,
 	}
 }
 
@@ -999,6 +1032,28 @@ func (s *Service) sessionIDForProject(ctx context.Context, project projectdomain
 		return "", fmt.Errorf("count project sessions: %w", err)
 	}
 	return domain.ID(fmt.Sprintf("p%s-c%d", projectIDCode(project.ID), count+attempt+1)), nil
+}
+
+func (s *Service) LastSessionConfigForProject(ctx context.Context, projectID domain.ProjectID) (*ConfigDTO, error) {
+	if s == nil {
+		return nil, errors.New("session usecase: nil service")
+	}
+	if projectID == "" {
+		return nil, errors.New("project id is required")
+	}
+	config, ok, err := s.repo.LastConfigForProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("last config for project: %w", err)
+	}
+	if !ok {
+		return nil, nil
+	}
+	return &ConfigDTO{
+		CodexModel:      config.CodexModel,
+		ReasoningEffort: config.ReasoningEffort,
+		PermissionMode:  config.PermissionMode,
+		FastMode:        config.FastMode,
+	}, nil
 }
 
 func isRandomHexID(id domain.ID) bool {
@@ -1091,13 +1146,20 @@ func (s *Service) updateSessionConfig(ctx context.Context, input UpdateSessionCo
 	if input.SessionID == "" {
 		return DTO{}, errors.New("session id is required")
 	}
-	config := trimConfig(input.Config)
+	fastMode := false
+	if input.Config.FastMode != nil {
+		fastMode = *input.Config.FastMode
+	}
+	config := configFromInput(input.Config, fastMode)
 	if config.CodexModel == "" || config.ReasoningEffort == "" || config.PermissionMode == "" {
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session config is incomplete")
 	}
 	session, err := s.repo.Find(ctx, input.SessionID)
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
+	}
+	if input.Config.FastMode == nil {
+		config.FastMode = session.Config.FastMode
 	}
 	if session.Status == domain.StatusClosed {
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session config cannot be changed")
@@ -1108,6 +1170,7 @@ func (s *Service) updateSessionConfig(ctx context.Context, input UpdateSessionCo
 		"codexModel":      session.Config.CodexModel,
 		"reasoningEffort": session.Config.ReasoningEffort,
 		"permissionMode":  session.Config.PermissionMode,
+		"fastMode":        session.Config.FastMode,
 	}); err != nil {
 		return DTO{}, err
 	}
@@ -2197,6 +2260,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			Model:           strings.TrimSpace(session.Config.CodexModel),
 			ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
 			PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
+			FastMode:        session.Config.FastMode,
 		})
 	}
 	return s.codex.Start(ctx, processdomain.CodexStartInput{
@@ -2207,6 +2271,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		Model:           strings.TrimSpace(session.Config.CodexModel),
 		ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
 		PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
+		FastMode:        session.Config.FastMode,
 		AttachmentPaths: attachmentPaths,
 		ImagePaths:      imagePaths,
 	})
@@ -2912,6 +2977,8 @@ func processExitFailed(result processdomain.ExitResult) bool {
 func codexProcessFailureCode(result processdomain.ExitResult) string {
 	reason := strings.ToLower(result.FailureReason)
 	if strings.Contains(reason, "model_reasoning_effort") ||
+		strings.Contains(reason, "service_tier") ||
+		strings.Contains(reason, "service tier") ||
 		strings.Contains(reason, "reasoning effort") ||
 		strings.Contains(reason, "unsupported model") ||
 		strings.Contains(reason, "model ") && strings.Contains(reason, "not supported") ||

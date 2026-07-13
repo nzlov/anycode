@@ -8,7 +8,7 @@
     <q-card
       class="new-session-dialog app-content-dialog"
       :inert="branchesLoading"
-      :aria-busy="branchesLoading"
+      :aria-busy="branchesLoading || runConfigLoading"
     >
       <q-card-section class="new-session-dialog__header row items-center q-pb-sm">
         <div>
@@ -90,14 +90,35 @@
           />
         </div>
 
+        <q-banner v-if="runConfigError" dense rounded class="new-session-config-error">
+          <template #avatar>
+            <q-icon name="error_outline" color="negative" />
+          </template>
+          {{ runConfigError }}
+          <template #action>
+            <q-btn
+              flat
+              round
+              dense
+              class="app-icon-btn"
+              icon="refresh"
+              aria-label="重试加载项目运行参数"
+              @click="retryLastConfig"
+            >
+              <q-tooltip>重试</q-tooltip>
+            </q-btn>
+          </template>
+        </q-banner>
+
         <CodexPromptComposer
           v-model:prompt="prompt"
           v-model:files="files"
           v-model:model="model"
           v-model:effort="effort"
           v-model:permission="permission"
+          v-model:fast="fast"
           title="提示词"
-          :disabled="creating"
+          :disabled="creating || runConfigLoading || Boolean(runConfigError)"
         >
           <template #actions>
             <q-btn
@@ -126,14 +147,16 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Notify, useQuasar } from 'quasar';
 
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
-import {
-  normalizePermissionMode,
-} from '@/components/promptOptions';
+import { normalizePermissionMode } from '@/components/promptOptions';
 import { useProjectBranches } from '@/composables/useProjectBranches';
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
-import type { CreateSessionInput, SessionPriority } from '@/services/sessions';
+import {
+  getLastSessionConfig,
+  type CreateSessionInput,
+  type SessionPriority,
+} from '@/services/sessions';
 import { getWorkflowDefinition } from '@/services/workflows';
 
 const props = defineProps<{
@@ -158,12 +181,15 @@ const files = ref<File[]>([]);
 const model = ref('');
 const effort = ref('');
 const permission = ref(normalizePermissionMode('workspace-write'));
+const fast = ref(false);
 const creating = ref(false);
+const runConfigLoading = ref(false);
+const runConfigError = ref('');
 const workflowAvailabilityLoading = ref(false);
 const workflowAvailable = ref(false);
 const workflowAvailabilityToken = ref(0);
+const lastConfigRequestToken = ref(0);
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
-const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 
 const branchOptions = computed(() => {
   return projectBranchState(projectId.value).branches;
@@ -173,6 +199,7 @@ const selectedProject = computed(() =>
 );
 const branchesLoading = computed(() => Boolean(branchLoading.value[projectId.value]));
 const branchSelectionReady = computed(() => {
+  if (runConfigLoading.value || runConfigError.value) return false;
   if (!selectedProject.value) return false;
   if (!selectedProject.value.isGit) return true;
   const state = branchCache.value[projectId.value];
@@ -211,39 +238,43 @@ function rememberProjectId(value: string) {
   }
 }
 
-function storedSessionConfig() {
+function resetRunConfig() {
+  model.value = '';
+  effort.value = '';
+  permission.value = normalizePermissionMode('workspace-write');
+  fast.value = false;
+}
+
+async function loadLastConfigForProject(value: string) {
+  const token = lastConfigRequestToken.value + 1;
+  lastConfigRequestToken.value = token;
+  runConfigError.value = '';
+  resetRunConfig();
+  if (!value) {
+    runConfigLoading.value = false;
+    return;
+  }
+  runConfigLoading.value = true;
   try {
-    const raw = window.localStorage.getItem(lastSessionConfigStorageKey);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, string>)
-      : {};
-  } catch {
-    return {};
+    const config = await getLastSessionConfig(value);
+    if (lastConfigRequestToken.value !== token || projectId.value !== value) return;
+    if (!config) return;
+    model.value = config.codexModel;
+    effort.value = config.reasoningEffort;
+    permission.value = normalizePermissionMode(config.permissionMode);
+    fast.value = config.fastMode;
+  } catch (error) {
+    if (lastConfigRequestToken.value !== token || projectId.value !== value) return;
+    runConfigError.value = `获取项目运行参数失败：${errorMessage(error)}`;
+  } finally {
+    if (lastConfigRequestToken.value === token) {
+      runConfigLoading.value = false;
+    }
   }
 }
 
-function rememberSessionConfig() {
-  try {
-    window.localStorage.setItem(
-      lastSessionConfigStorageKey,
-      JSON.stringify({
-        codexModel: model.value,
-        reasoningEffort: effort.value,
-        permissionMode: permission.value,
-      }),
-    );
-  } catch {
-    // Ignore storage failures; the current session still uses the selected config.
-  }
-}
-
-function selectInitialRunConfig() {
-  const stored = storedSessionConfig();
-  model.value = stored.codexModel ?? model.value;
-  effort.value = stored.reasoningEffort ?? effort.value;
-  permission.value = normalizePermissionMode(stored.permissionMode ?? permission.value);
+function retryLastConfig() {
+  if (projectId.value) void loadLastConfigForProject(projectId.value);
 }
 
 function selectInitialProject() {
@@ -254,13 +285,14 @@ function selectInitialProject() {
   const nextProjectId =
     candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ??
     fallback;
-  if (!nextProjectId) return;
+  if (!nextProjectId) return false;
   if (projectId.value === nextProjectId) {
     branch.value = '';
     void loadBranchesForProject(nextProjectId, { refresh: true });
-    return;
+    return false;
   }
   projectId.value = nextProjectId;
+  return true;
 }
 
 async function loadWorkflowAvailability() {
@@ -339,6 +371,7 @@ async function createSession() {
     codexModel: model.value,
     reasoningEffort: effort.value,
     permissionMode: permission.value,
+    fastMode: fast.value,
   };
   const input: CreateSessionInput = {
     projectId: projectId.value,
@@ -368,7 +401,6 @@ async function createSession() {
     }
     await createSessionRequest(input);
     rememberProjectId(input.projectId);
-    rememberSessionConfig();
     files.value = [];
     prompt.value = '';
     emit('create');
@@ -434,8 +466,14 @@ watch(
 watch(
   () => props.modelValue,
   (open) => {
-    if (!open) return;
-    selectInitialRunConfig();
+    if (!open) {
+      lastConfigRequestToken.value += 1;
+      runConfigLoading.value = false;
+      runConfigError.value = '';
+      return;
+    }
+    const projectChanged = selectInitialProject();
+    if (!projectChanged && projectId.value) void loadLastConfigForProject(projectId.value);
     void loadProjects().then(() => {
       selectInitialProject();
       void loadWorkflowAvailability();
@@ -448,10 +486,11 @@ watch(projectId, (value, previous) => {
   branch.value = '';
   void loadBranchesForProject(value, { refresh: true });
   void loadWorkflowAvailability();
+  if (props.modelValue) void loadLastConfigForProject(value);
 });
 
 onMounted(() => {
-  selectInitialRunConfig();
+  if (props.modelValue && projectId.value) void loadLastConfigForProject(projectId.value);
   void loadProjects().then(loadWorkflowAvailability);
 });
 </script>

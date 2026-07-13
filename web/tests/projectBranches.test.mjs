@@ -31,7 +31,7 @@ test('switching projects waits for refreshed branches before creating a session'
   );
   assert.match(source, /:disable="creating \|\| !branchSelectionReady"/);
   assert.match(source, /:inert="branchesLoading"/);
-  assert.match(source, /:aria-busy="branchesLoading"/);
+  assert.match(source, /:aria-busy="branchesLoading \|\| runConfigLoading"/);
   assert.match(source, /<q-inner-loading\s+:showing="branchesLoading"/);
   assert.match(
     source,

@@ -2297,7 +2297,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 		args = append(args, "-C", input.Workdir)
 	}
 	args = c.appendMCPArgs(args, input.SessionID)
-	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, true)
+	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, true)
 	for _, path := range input.ImagePaths {
 		if path != "" {
 			args = append(args, "-i", path)
@@ -2312,7 +2312,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
 	args = c.appendMCPArgs(args, input.SessionID)
-	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, false)
+	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, false)
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}
@@ -2322,12 +2322,15 @@ func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	return args
 }
 
-func (c *Client) appendRuntimeConfigArgs(args []string, model string, reasoningEffort string, permissionMode string, allowSandboxFlag bool) []string {
+func (c *Client) appendRuntimeConfigArgs(args []string, model string, reasoningEffort string, permissionMode string, fastMode bool, allowSandboxFlag bool) []string {
 	if model != "" {
 		args = append(args, "-m", model)
 	}
 	if reasoningEffort != "" {
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", reasoningEffort))
+	}
+	if fastMode {
+		args = append(args, "-c", `service_tier="priority"`)
 	}
 	if permissionMode == "" {
 		return args

@@ -209,6 +209,7 @@ type ComplexityRoot struct {
 		BranchDiff             func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory        func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions      func(childComplexity int) int
+		LastSessionConfig      func(childComplexity int, projectID string) int
 		PendingQuestionBatches func(childComplexity int, sessionID string) int
 		ProjectGitState        func(childComplexity int, projectID string, refresh bool) int
 		Projects               func(childComplexity int) int
@@ -333,6 +334,7 @@ type ComplexityRoot struct {
 
 	SessionConfig struct {
 		CodexModel      func(childComplexity int) int
+		FastMode        func(childComplexity int) int
 		PermissionMode  func(childComplexity int) int
 		ReasoningEffort func(childComplexity int) int
 	}
@@ -579,6 +581,7 @@ type QueryResolver interface {
 	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
 	Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error)
+	LastSessionConfig(ctx context.Context, projectID string) (*model.SessionConfig, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
@@ -1387,6 +1390,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.CodexModelOptions(childComplexity), true
 
+	case "Query.lastSessionConfig":
+		if e.ComplexityRoot.Query.LastSessionConfig == nil {
+			break
+		}
+
+		args, err := ec.field_Query_lastSessionConfig_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.LastSessionConfig(childComplexity, args["projectId"].(string)), true
 	case "Query.pendingQuestionBatches":
 		if e.ComplexityRoot.Query.PendingQuestionBatches == nil {
 			break
@@ -1960,6 +1974,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionConfig.CodexModel(childComplexity), true
+	case "SessionConfig.fastMode":
+		if e.ComplexityRoot.SessionConfig.FastMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionConfig.FastMode(childComplexity), true
 	case "SessionConfig.permissionMode":
 		if e.ComplexityRoot.SessionConfig.PermissionMode == nil {
 			break
@@ -2915,6 +2935,7 @@ type Query {
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
+  lastSessionConfig(projectId: ID!): SessionConfig
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
@@ -3129,6 +3150,7 @@ type SessionConfig {
   codexModel: String!
   reasoningEffort: String!
   permissionMode: String!
+  fastMode: Boolean!
 }
 
 type SessionAttachment {
@@ -3494,6 +3516,7 @@ input SessionConfigInput {
   codexModel: String
   reasoningEffort: String
   permissionMode: String
+  fastMode: Boolean
 }
 
 input CloseSessionInput {
@@ -3946,6 +3969,17 @@ func (ec *executionContext) field_Query_browseDirectory_args(ctx context.Context
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_lastSessionConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -8206,6 +8240,57 @@ func (ec *executionContext) fieldContext_Query_sessions(ctx context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_lastSessionConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_lastSessionConfig,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().LastSessionConfig(ctx, fc.Args["projectId"].(string))
+		},
+		nil,
+		ec.marshalOSessionConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfig,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_lastSessionConfig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "codexModel":
+				return ec.fieldContext_SessionConfig_codexModel(ctx, field)
+			case "reasoningEffort":
+				return ec.fieldContext_SessionConfig_reasoningEffort(ctx, field)
+			case "permissionMode":
+				return ec.fieldContext_SessionConfig_permissionMode(ctx, field)
+			case "fastMode":
+				return ec.fieldContext_SessionConfig_fastMode(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionConfig", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_lastSessionConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_session(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9859,6 +9944,8 @@ func (ec *executionContext) fieldContext_Session_config(_ context.Context, field
 				return ec.fieldContext_SessionConfig_reasoningEffort(ctx, field)
 			case "permissionMode":
 				return ec.fieldContext_SessionConfig_permissionMode(ctx, field)
+			case "fastMode":
+				return ec.fieldContext_SessionConfig_fastMode(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionConfig", field.Name)
 		},
@@ -11158,6 +11245,35 @@ func (ec *executionContext) fieldContext_SessionConfig_permissionMode(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionConfig_fastMode(ctx context.Context, field graphql.CollectedField, obj *model.SessionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionConfig_fastMode,
+		func(ctx context.Context) (any, error) {
+			return obj.FastMode, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionConfig_fastMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionDetail_id(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11575,6 +11691,8 @@ func (ec *executionContext) fieldContext_SessionDetail_config(_ context.Context,
 				return ec.fieldContext_SessionConfig_reasoningEffort(ctx, field)
 			case "permissionMode":
 				return ec.fieldContext_SessionConfig_permissionMode(ctx, field)
+			case "fastMode":
+				return ec.fieldContext_SessionConfig_fastMode(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionConfig", field.Name)
 		},
@@ -17437,7 +17555,7 @@ func (ec *executionContext) unmarshalInputSessionConfigInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"codexModel", "reasoningEffort", "permissionMode"}
+	fieldsInOrder := [...]string{"codexModel", "reasoningEffort", "permissionMode", "fastMode"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -17465,6 +17583,13 @@ func (ec *executionContext) unmarshalInputSessionConfigInput(ctx context.Context
 				return it, err
 			}
 			it.PermissionMode = data
+		case "fastMode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("fastMode"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.FastMode = data
 		}
 	}
 	return it, nil
@@ -19683,6 +19808,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "lastSessionConfig":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_lastSessionConfig(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "session":
 			field := field
 
@@ -20665,6 +20809,11 @@ func (ec *executionContext) _SessionConfig(ctx context.Context, sel ast.Selectio
 			}
 		case "permissionMode":
 			out.Values[i] = ec._SessionConfig_permissionMode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fastMode":
+			out.Values[i] = ec._SessionConfig_fastMode(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -24219,6 +24368,13 @@ func (ec *executionContext) marshalOSessionCard2ᚖgithubᚗcomᚋnzlovᚋanycod
 		return graphql.Null
 	}
 	return ec._SessionCard(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOSessionConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfig(ctx context.Context, sel ast.SelectionSet, v *model.SessionConfig) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._SessionConfig(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOSessionConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfigInput(ctx context.Context, v any) (*model.SessionConfigInput, error) {

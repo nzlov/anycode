@@ -68,6 +68,17 @@
       </template>
       <q-tooltip>思考强度</q-tooltip>
     </q-select>
+
+    <q-checkbox
+      v-model="fastModel"
+      dense
+      label="Fast"
+      aria-label="Fast 模式"
+      class="prompt-fast-checkbox"
+      :disable="disabled || readonlyConfig"
+    >
+      <q-tooltip>使用优先服务层</q-tooltip>
+    </q-checkbox>
   </div>
 </template>
 
@@ -91,6 +102,7 @@ const props = withDefaults(
     model: string;
     effort: string;
     permission: string;
+    fast: boolean;
     modelOptions: CodexModelOption[];
     disabled?: boolean;
     readonlyConfig?: boolean;
@@ -105,6 +117,7 @@ const emit = defineEmits<{
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];
+  'update:fast': [value: boolean];
 }>();
 
 const modelModel = computed({
@@ -131,6 +144,10 @@ const effortModel = computed({
 const permissionModel = computed({
   get: () => props.permission,
   set: (value: string) => emit('update:permission', value),
+});
+const fastModel = computed({
+  get: () => props.fast,
+  set: (value: boolean) => emit('update:fast', value),
 });
 const permissionIcon = computed(
   () =>

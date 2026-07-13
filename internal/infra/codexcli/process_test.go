@@ -43,6 +43,7 @@ EOF
 		Model:           "gpt-test",
 		ReasoningEffort: "medium",
 		PermissionMode:  "workspace-write",
+		FastMode:        true,
 		AttachmentPaths: []string{"/kept/in/input.png"},
 		ImagePaths:      []string{"/kept/in/input.png"},
 	})
@@ -101,7 +102,7 @@ EOF
 	}
 
 	args := strings.TrimSpace(readFile(t, argsFile))
-	want := `exec --json --skip-git-repo-check -C ` + dir + ` -m gpt-test -c model_reasoning_effort="medium" --sandbox workspace-write -i /kept/in/input.png implement adapter`
+	want := `exec --json --skip-git-repo-check -C ` + dir + ` -m gpt-test -c model_reasoning_effort="medium" -c service_tier="priority" --sandbox workspace-write -i /kept/in/input.png implement adapter`
 	if args != want {
 		t.Fatalf("args = %q, want %q", args, want)
 	}
@@ -377,6 +378,7 @@ pwd > "$CODEX_PWD_FILE"
 		Model:           "gpt-test",
 		ReasoningEffort: "high",
 		PermissionMode:  "danger-full-access",
+		FastMode:        true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -387,12 +389,24 @@ pwd > "$CODEX_PWD_FILE"
 	waitForFile(t, argsFile)
 	waitForFile(t, pwdFile)
 
-	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" codex-session-1 next node`
+	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" -c service_tier="priority" codex-session-1 next node`
 	if args := strings.TrimSpace(readFile(t, argsFile)); args != wantArgs {
 		t.Fatalf("args = %q", args)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {
 		t.Fatalf("pwd = %q, want %q", gotDir, dir)
+	}
+}
+
+func TestBuildArgsOmitServiceTierWhenFastModeIsDisabled(t *testing.T) {
+	client := New("codex")
+	for name, args := range map[string][]string{
+		"start":  client.buildStartArgs(process.CodexStartInput{Model: "gpt-test"}),
+		"resume": client.buildResumeArgs(process.CodexResumeInput{Model: "gpt-test", CodexSessionID: "codex-session-1"}),
+	} {
+		if joined := strings.Join(args, " "); strings.Contains(joined, "service_tier") {
+			t.Fatalf("%s args contain service_tier with FastMode disabled: %q", name, joined)
+		}
 	}
 }
 

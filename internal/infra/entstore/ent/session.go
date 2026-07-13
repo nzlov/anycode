@@ -45,6 +45,8 @@ type Session struct {
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// PermissionMode holds the value of the "permission_mode" field.
 	PermissionMode string `json:"permission_mode,omitempty"`
+	// FastMode holds the value of the "fast_mode" field.
+	FastMode bool `json:"fast_mode,omitempty"`
 	// TodoList holds the value of the "todo_list" field.
 	TodoList session.TodoList `json:"todo_list,omitempty"`
 	// QueuedAt holds the value of the "queued_at" field.
@@ -83,7 +85,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case entsession.FieldTodoList:
 			values[i] = new([]byte)
-		case entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
+		case entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
 		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID:
 			values[i] = new(sql.NullString)
@@ -188,6 +190,12 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field permission_mode", values[i])
 			} else if value.Valid {
 				_m.PermissionMode = value.String
+			}
+		case entsession.FieldFastMode:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field fast_mode", values[i])
+			} else if value.Valid {
+				_m.FastMode = value.Bool
 			}
 		case entsession.FieldTodoList:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -355,6 +363,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("permission_mode=")
 	builder.WriteString(_m.PermissionMode)
+	builder.WriteString(", ")
+	builder.WriteString("fast_mode=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FastMode))
 	builder.WriteString(", ")
 	builder.WriteString("todo_list=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TodoList))

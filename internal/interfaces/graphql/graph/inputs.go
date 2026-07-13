@@ -8,14 +8,15 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
 
-func buildSessionConfig(input *model.SessionConfigInput) sessiondomain.Config {
+func buildSessionConfig(input *model.SessionConfigInput) sessionapp.ConfigInput {
 	if input == nil {
-		return sessiondomain.Config{}
+		return sessionapp.ConfigInput{}
 	}
-	return sessiondomain.Config{
+	return sessionapp.ConfigInput{
 		CodexModel:      stringValue(input.CodexModel, ""),
 		ReasoningEffort: stringValue(input.ReasoningEffort, ""),
 		PermissionMode:  stringValue(input.PermissionMode, ""),
+		FastMode:        input.FastMode,
 	}
 }
 

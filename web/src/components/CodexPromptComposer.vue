@@ -5,6 +5,7 @@
     :model="model"
     :effort="effort"
     :permission="permission"
+    :fast="fast"
     :title="title"
     :placeholder="placeholder"
     :disabled="disabled"
@@ -17,6 +18,7 @@
     @update:model="emit('update:model', $event)"
     @update:effort="emit('update:effort', $event)"
     @update:permission="emit('update:permission', $event)"
+    @update:fast="emit('update:fast', $event)"
   >
     <template #actions>
       <q-btn
@@ -100,6 +102,7 @@ const props = withDefaults(
     model: string;
     effort: string;
     permission: string;
+    fast: boolean;
     title?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -123,6 +126,7 @@ const emit = defineEmits<{
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];
+  'update:fast': [value: boolean];
 }>();
 
 const modelOptions = ref<CodexModelOption[]>([]);

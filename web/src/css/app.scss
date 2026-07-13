@@ -1029,6 +1029,13 @@ a {
   height: 44px;
 }
 
+.new-session-config-error {
+  border: 1px solid color-mix(in srgb, var(--q-negative) 32%, var(--ac-border));
+  color: var(--q-negative);
+  background: color-mix(in srgb, var(--q-negative) 7%, var(--ac-surface));
+  overflow-wrap: anywhere;
+}
+
 .prompt-shell {
   display: grid;
   position: relative;
@@ -1220,7 +1227,8 @@ a {
 }
 
 .prompt-config-controls--stacked .compact-select,
-.prompt-config-controls--stacked .prompt-config-chip {
+.prompt-config-controls--stacked .prompt-config-chip,
+.prompt-config-controls--stacked .prompt-fast-checkbox {
   width: 100%;
   min-width: 0;
   max-width: none;
@@ -1234,6 +1242,10 @@ a {
 
 .compact-select {
   min-width: 150px;
+}
+
+.prompt-fast-checkbox {
+  min-height: 44px;
 }
 
 .prompt-config-chip {
@@ -1537,7 +1549,8 @@ a {
   }
 
   .prompt-toolbar > .prompt-config-controls .compact-select,
-  .prompt-toolbar > .prompt-config-controls .prompt-config-chip {
+  .prompt-toolbar > .prompt-config-controls .prompt-config-chip,
+  .prompt-toolbar > .prompt-config-controls .prompt-fast-checkbox {
     width: 100%;
     min-width: 0;
     max-width: none;

@@ -217,6 +217,20 @@ func (_u *SessionUpdate) SetNillablePermissionMode(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetFastMode sets the "fast_mode" field.
+func (_u *SessionUpdate) SetFastMode(v bool) *SessionUpdate {
+	_u.mutation.SetFastMode(v)
+	return _u
+}
+
+// SetNillableFastMode sets the "fast_mode" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableFastMode(v *bool) *SessionUpdate {
+	if v != nil {
+		_u.SetFastMode(*v)
+	}
+	return _u
+}
+
 // SetTodoList sets the "todo_list" field.
 func (_u *SessionUpdate) SetTodoList(v session.TodoList) *SessionUpdate {
 	_u.mutation.SetTodoList(v)
@@ -536,6 +550,9 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.PermissionMode(); ok {
 		_spec.SetField(entsession.FieldPermissionMode, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.FastMode(); ok {
+		_spec.SetField(entsession.FieldFastMode, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.TodoList(); ok {
 		_spec.SetField(entsession.FieldTodoList, field.TypeJSON, value)
 	}
@@ -794,6 +811,20 @@ func (_u *SessionUpdateOne) SetPermissionMode(v string) *SessionUpdateOne {
 func (_u *SessionUpdateOne) SetNillablePermissionMode(v *string) *SessionUpdateOne {
 	if v != nil {
 		_u.SetPermissionMode(*v)
+	}
+	return _u
+}
+
+// SetFastMode sets the "fast_mode" field.
+func (_u *SessionUpdateOne) SetFastMode(v bool) *SessionUpdateOne {
+	_u.mutation.SetFastMode(v)
+	return _u
+}
+
+// SetNillableFastMode sets the "fast_mode" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableFastMode(v *bool) *SessionUpdateOne {
+	if v != nil {
+		_u.SetFastMode(*v)
 	}
 	return _u
 }
@@ -1146,6 +1177,9 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.PermissionMode(); ok {
 		_spec.SetField(entsession.FieldPermissionMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.FastMode(); ok {
+		_spec.SetField(entsession.FieldFastMode, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.TodoList(); ok {
 		_spec.SetField(entsession.FieldTodoList, field.TypeJSON, value)
