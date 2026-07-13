@@ -169,10 +169,10 @@ try {
     await waitForText(auditData.project.defaultBranch || 'main');
     await selectComposerOption('.new-session-dialog', '完全访问');
     await selectComposerOption('.new-session-dialog', 'gpt-5.5');
-    await selectComposerOption('.new-session-dialog', '高思考');
+    await selectComposerOption('.new-session-dialog', 'high');
     await waitForText('完全访问');
     await waitForText('gpt-5.5');
-    await waitForText('高思考');
+    await waitForText('high');
     await closeVisibleDialog();
   });
 
@@ -297,10 +297,10 @@ try {
     await waitForVisibleSelector('.attachment-preview-card');
     await clickAria('关闭预览');
     await selectComposerOption('.detail-composer', 'gpt-5.5');
-    await selectComposerOption('.detail-composer', '高思考');
+    await selectComposerOption('.detail-composer', 'high');
     await selectComposerOption('.detail-composer', '只读');
     await waitForText('gpt-5.5');
-    await waitForText('高思考');
+    await waitForText('high');
     await waitForText('只读');
   });
 
