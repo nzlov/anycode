@@ -111,6 +111,36 @@ func TestWebSocketInitFuncRequiresAuthorizationPayload(t *testing.T) {
 	}
 }
 
+func TestGraphQLWebSocketTransportSendsGraphQLTransportPing(t *testing.T) {
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{}))
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	url := "ws" + strings.TrimPrefix(server.URL, "http") + "/graphql"
+	conn, _, err := websocket.DefaultDialer.Dial(url, http.Header{"Sec-WebSocket-Protocol": []string{"graphql-transport-ws"}})
+	if err != nil {
+		t.Fatalf("dial graphql websocket: %v", err)
+	}
+	defer conn.Close()
+
+	writeSocketJSON(t, conn, map[string]any{
+		"type":    "connection_init",
+		"payload": map[string]any{"Authorization": "Bearer secret"},
+	})
+	assertSocketMessageType(t, conn, "connection_ack")
+	if err := conn.SetReadDeadline(time.Now().Add(11 * time.Second)); err != nil {
+		t.Fatalf("set websocket ping read deadline: %v", err)
+	}
+	var message map[string]any
+	if err := conn.ReadJSON(&message); err != nil {
+		t.Fatalf("read websocket ping: %v", err)
+	}
+	if message["type"] != "ping" {
+		t.Fatalf("websocket message type = %#v, want %q", message, "ping")
+	}
+	writeSocketJSON(t, conn, map[string]any{"type": "pong"})
+}
+
 func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *testing.T) {
 	timeline := &fakeTimelineUseCase{ch: make(chan timelineapp.DTO, 1), subscribed: make(chan struct{})}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Timeline: timeline}))
