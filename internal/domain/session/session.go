@@ -335,6 +335,7 @@ type Repository interface {
 	CountByProject(ctx context.Context, projectID ProjectID) (int, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error
+	UpdatePendingPromptAppendBody(ctx context.Context, sessionID ID, id string, body string) (PromptAppend, bool, error)
 	DeletePromptAppend(ctx context.Context, id string) error
 	ListPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)
 	ListPendingPromptAppends(ctx context.Context, sessionID ID) ([]PromptAppend, error)

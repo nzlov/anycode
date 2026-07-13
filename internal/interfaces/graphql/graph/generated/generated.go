@@ -167,6 +167,7 @@ type ComplexityRoot struct {
 		SubmitQuestionBatch        func(childComplexity int, input model.SubmitQuestionBatchInput) int
 		SubmitWorkflowApproval     func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
 		UpdateProjectSettings      func(childComplexity int, input model.UpdateProjectSettingsInput) int
+		UpdatePromptAppend         func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateSessionConfig        func(childComplexity int, input model.UpdateSessionConfigInput) int
 	}
 
@@ -562,6 +563,7 @@ type MutationResolver interface {
 	ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	CloseSession(ctx context.Context, input model.CloseSessionInput) (*model.Session, error)
 	AppendPrompt(ctx context.Context, input model.AppendPromptInput) (*model.PromptAppend, error)
+	UpdatePromptAppend(ctx context.Context, input model.UpdatePromptAppendInput) (*model.PromptAppend, error)
 	StageAttachment(ctx context.Context, file graphql.Upload) (*model.Attachment, error)
 	DeleteStagedAttachment(ctx context.Context, id string) (bool, error)
 	DeleteSessionAttachment(ctx context.Context, id string) (bool, error)
@@ -1197,6 +1199,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateProjectSettings(childComplexity, args["input"].(model.UpdateProjectSettingsInput)), true
+	case "Mutation.updatePromptAppend":
+		if e.ComplexityRoot.Mutation.UpdatePromptAppend == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updatePromptAppend_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdatePromptAppend(childComplexity, args["input"].(model.UpdatePromptAppendInput)), true
 	case "Mutation.updateSessionConfig":
 		if e.ComplexityRoot.Mutation.UpdateSessionConfig == nil {
 			break
@@ -2789,6 +2802,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSubmitQuestionBatchInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
+		ec.unmarshalInputUpdatePromptAppendInput,
 		ec.unmarshalInputUpdateSessionConfigInput,
 		ec.unmarshalInputWorkflowConditionInput,
 		ec.unmarshalInputWorkflowEdgeInput,
@@ -2927,6 +2941,7 @@ type Mutation {
   resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
+  updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
@@ -3502,6 +3517,12 @@ input AppendPromptInput {
   stagedAttachmentIds: [ID!]
 }
 
+input UpdatePromptAppendInput {
+  sessionId: ID!
+  promptAppendId: ID!
+  body: String!
+}
+
 input ListTranscriptEventsInput {
   sessionId: ID!
   beforeEventId: ID
@@ -3865,6 +3886,17 @@ func (ec *executionContext) field_Mutation_updateProjectSettings_args(ctx contex
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updatePromptAppend_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdatePromptAppendInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdatePromptAppendInput)
 	if err != nil {
 		return nil, err
 	}
@@ -6827,6 +6859,59 @@ func (ec *executionContext) fieldContext_Mutation_appendPrompt(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_appendPrompt_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updatePromptAppend(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updatePromptAppend,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdatePromptAppend(ctx, fc.Args["input"].(model.UpdatePromptAppendInput))
+		},
+		nil,
+		ec.marshalNPromptAppend2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptAppend,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updatePromptAppend(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_PromptAppend_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_PromptAppend_sessionId(ctx, field)
+			case "body":
+				return ec.fieldContext_PromptAppend_body(ctx, field)
+			case "attachments":
+				return ec.fieldContext_PromptAppend_attachments(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptAppend", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updatePromptAppend_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -17648,6 +17733,50 @@ func (ec *executionContext) unmarshalInputUpdateProjectSettingsInput(ctx context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdatePromptAppendInput(ctx context.Context, obj any) (model.UpdatePromptAppendInput, error) {
+	var it model.UpdatePromptAppendInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "promptAppendId", "body"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "promptAppendId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("promptAppendId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PromptAppendID = data
+		case "body":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("body"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Body = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateSessionConfigInput(ctx context.Context, obj any) (model.UpdateSessionConfigInput, error) {
 	var it model.UpdateSessionConfigInput
 	if obj == nil {
@@ -19069,6 +19198,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "appendPrompt":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_appendPrompt(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updatePromptAppend":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updatePromptAppend(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -23500,6 +23636,11 @@ func (ec *executionContext) marshalNTranscriptTextFormat2githubᚗcomᚋnzlovᚋ
 
 func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput(ctx context.Context, v any) (model.UpdateProjectSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateProjectSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdatePromptAppendInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdatePromptAppendInput(ctx context.Context, v any) (model.UpdatePromptAppendInput, error) {
+	res, err := ec.unmarshalInputUpdatePromptAppendInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
