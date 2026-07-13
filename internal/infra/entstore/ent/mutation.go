@@ -4820,6 +4820,7 @@ type QuestionBatchMutation struct {
 	session_id      *string
 	workflow_run_id *string
 	status          *string
+	delivery_status *string
 	questions       *[]map[string]interface{}
 	appendquestions []map[string]interface{}
 	answers         *[]map[string]interface{}
@@ -5056,6 +5057,42 @@ func (m *QuestionBatchMutation) OldStatus(ctx context.Context) (v string, err er
 // ResetStatus resets all changes to the "status" field.
 func (m *QuestionBatchMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetDeliveryStatus sets the "delivery_status" field.
+func (m *QuestionBatchMutation) SetDeliveryStatus(s string) {
+	m.delivery_status = &s
+}
+
+// DeliveryStatus returns the value of the "delivery_status" field in the mutation.
+func (m *QuestionBatchMutation) DeliveryStatus() (r string, exists bool) {
+	v := m.delivery_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeliveryStatus returns the old "delivery_status" field's value of the QuestionBatch entity.
+// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *QuestionBatchMutation) OldDeliveryStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeliveryStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeliveryStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeliveryStatus: %w", err)
+	}
+	return oldValue.DeliveryStatus, nil
+}
+
+// ResetDeliveryStatus resets all changes to the "delivery_status" field.
+func (m *QuestionBatchMutation) ResetDeliveryStatus() {
+	m.delivery_status = nil
 }
 
 // SetQuestions sets the "questions" field.
@@ -5315,7 +5352,7 @@ func (m *QuestionBatchMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *QuestionBatchMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.session_id != nil {
 		fields = append(fields, questionbatch.FieldSessionID)
 	}
@@ -5324,6 +5361,9 @@ func (m *QuestionBatchMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, questionbatch.FieldStatus)
+	}
+	if m.delivery_status != nil {
+		fields = append(fields, questionbatch.FieldDeliveryStatus)
 	}
 	if m.questions != nil {
 		fields = append(fields, questionbatch.FieldQuestions)
@@ -5354,6 +5394,8 @@ func (m *QuestionBatchMutation) Field(name string) (ent.Value, bool) {
 		return m.WorkflowRunID()
 	case questionbatch.FieldStatus:
 		return m.Status()
+	case questionbatch.FieldDeliveryStatus:
+		return m.DeliveryStatus()
 	case questionbatch.FieldQuestions:
 		return m.Questions()
 	case questionbatch.FieldAnswers:
@@ -5379,6 +5421,8 @@ func (m *QuestionBatchMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldWorkflowRunID(ctx)
 	case questionbatch.FieldStatus:
 		return m.OldStatus(ctx)
+	case questionbatch.FieldDeliveryStatus:
+		return m.OldDeliveryStatus(ctx)
 	case questionbatch.FieldQuestions:
 		return m.OldQuestions(ctx)
 	case questionbatch.FieldAnswers:
@@ -5418,6 +5462,13 @@ func (m *QuestionBatchMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case questionbatch.FieldDeliveryStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeliveryStatus(v)
 		return nil
 	case questionbatch.FieldQuestions:
 		v, ok := value.([]map[string]interface{})
@@ -5526,6 +5577,9 @@ func (m *QuestionBatchMutation) ResetField(name string) error {
 		return nil
 	case questionbatch.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case questionbatch.FieldDeliveryStatus:
+		m.ResetDeliveryStatus()
 		return nil
 	case questionbatch.FieldQuestions:
 		m.ResetQuestions()
@@ -6010,6 +6064,7 @@ type SessionMutation struct {
 	queue_node_run_id                *string
 	queue_prompt                     *string
 	queue_resume_codex_session_id    *string
+	queue_recovery_batch_id          *string
 	last_run_at                      *time.Time
 	created_at                       *time.Time
 	updated_at                       *time.Time
@@ -7040,6 +7095,42 @@ func (m *SessionMutation) ResetQueueResumeCodexSessionID() {
 	m.queue_resume_codex_session_id = nil
 }
 
+// SetQueueRecoveryBatchID sets the "queue_recovery_batch_id" field.
+func (m *SessionMutation) SetQueueRecoveryBatchID(s string) {
+	m.queue_recovery_batch_id = &s
+}
+
+// QueueRecoveryBatchID returns the value of the "queue_recovery_batch_id" field in the mutation.
+func (m *SessionMutation) QueueRecoveryBatchID() (r string, exists bool) {
+	v := m.queue_recovery_batch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQueueRecoveryBatchID returns the old "queue_recovery_batch_id" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldQueueRecoveryBatchID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQueueRecoveryBatchID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQueueRecoveryBatchID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQueueRecoveryBatchID: %w", err)
+	}
+	return oldValue.QueueRecoveryBatchID, nil
+}
+
+// ResetQueueRecoveryBatchID resets all changes to the "queue_recovery_batch_id" field.
+func (m *SessionMutation) ResetQueueRecoveryBatchID() {
+	m.queue_recovery_batch_id = nil
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (m *SessionMutation) SetLastRunAt(t time.Time) {
 	m.last_run_at = &t
@@ -7317,6 +7408,9 @@ func (m *SessionMutation) Fields() []string {
 	if m.queue_resume_codex_session_id != nil {
 		fields = append(fields, entsession.FieldQueueResumeCodexSessionID)
 	}
+	if m.queue_recovery_batch_id != nil {
+		fields = append(fields, entsession.FieldQueueRecoveryBatchID)
+	}
 	if m.last_run_at != nil {
 		fields = append(fields, entsession.FieldLastRunAt)
 	}
@@ -7385,6 +7479,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.QueuePrompt()
 	case entsession.FieldQueueResumeCodexSessionID:
 		return m.QueueResumeCodexSessionID()
+	case entsession.FieldQueueRecoveryBatchID:
+		return m.QueueRecoveryBatchID()
 	case entsession.FieldLastRunAt:
 		return m.LastRunAt()
 	case entsession.FieldCreatedAt:
@@ -7450,6 +7546,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldQueuePrompt(ctx)
 	case entsession.FieldQueueResumeCodexSessionID:
 		return m.OldQueueResumeCodexSessionID(ctx)
+	case entsession.FieldQueueRecoveryBatchID:
+		return m.OldQueueRecoveryBatchID(ctx)
 	case entsession.FieldLastRunAt:
 		return m.OldLastRunAt(ctx)
 	case entsession.FieldCreatedAt:
@@ -7634,6 +7732,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQueueResumeCodexSessionID(v)
+		return nil
+	case entsession.FieldQueueRecoveryBatchID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQueueRecoveryBatchID(v)
 		return nil
 	case entsession.FieldLastRunAt:
 		v, ok := value.(time.Time)
@@ -7822,6 +7927,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldQueueResumeCodexSessionID:
 		m.ResetQueueResumeCodexSessionID()
+		return nil
+	case entsession.FieldQueueRecoveryBatchID:
+		m.ResetQueueRecoveryBatchID()
 		return nil
 	case entsession.FieldLastRunAt:
 		m.ResetLastRunAt()

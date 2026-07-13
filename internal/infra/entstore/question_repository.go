@@ -30,6 +30,7 @@ func (r *QuestionRepository) CreateBatch(ctx context.Context, batch question.Bat
 		SetID(string(batch.ID)).
 		SetSessionID(string(batch.SessionID)).
 		SetStatus(string(batch.Status)).
+		SetDeliveryStatus(string(normalizeQuestionDelivery(batch.Delivery))).
 		SetQuestions(questions)
 	if batch.WorkflowRunID != nil {
 		create.SetWorkflowRunID(string(*batch.WorkflowRunID))
@@ -74,6 +75,39 @@ func (r *QuestionRepository) ListPendingBySession(ctx context.Context, sessionID
 		batches = append(batches, batch)
 	}
 	return batches, nil
+}
+
+func (r *QuestionRepository) FindLatestBySession(ctx context.Context, sessionID question.SessionID) (question.Batch, bool, error) {
+	row, err := r.client.QuestionBatch.Query().
+		Where(entquestionbatch.SessionIDEQ(string(sessionID))).
+		Order(ent.Desc(entquestionbatch.FieldCreatedAt), ent.Desc(entquestionbatch.FieldID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return question.Batch{}, false, nil
+		}
+		return question.Batch{}, false, fmt.Errorf("find latest question batch: %w", err)
+	}
+	batch, err := toDomainQuestionBatch(row)
+	return batch, err == nil, err
+}
+
+func (r *QuestionRepository) SetDeliveryStatus(ctx context.Context, id question.BatchID, status question.DeliveryStatus) (question.Batch, bool, error) {
+	row, err := r.client.QuestionBatch.Get(ctx, string(id))
+	if err != nil {
+		return question.Batch{}, false, fmt.Errorf("find question batch for delivery update: %w", err)
+	}
+	status = normalizeQuestionDelivery(status)
+	if question.DeliveryStatus(row.DeliveryStatus) == status {
+		batch, err := toDomainQuestionBatch(row)
+		return batch, false, err
+	}
+	row, err = row.Update().SetDeliveryStatus(string(status)).Save(ctx)
+	if err != nil {
+		return question.Batch{}, false, fmt.Errorf("update question delivery status: %w", err)
+	}
+	batch, err := toDomainQuestionBatch(row)
+	return batch, err == nil, err
 }
 
 func (r *QuestionRepository) SubmitAnswers(ctx context.Context, id question.BatchID, answers []question.Answer) (question.Batch, bool, error) {
@@ -189,10 +223,20 @@ func toDomainQuestionBatch(row *ent.QuestionBatch) (question.Batch, error) {
 		SessionID:     question.SessionID(row.SessionID),
 		WorkflowRunID: workflowRunID,
 		Status:        question.BatchStatus(row.Status),
+		Delivery:      normalizeQuestionDelivery(question.DeliveryStatus(row.DeliveryStatus)),
 		Questions:     questions,
 		CreatedAt:     row.CreatedAt,
 		AnsweredAt:    row.AnsweredAt,
 	}, nil
+}
+
+func normalizeQuestionDelivery(status question.DeliveryStatus) question.DeliveryStatus {
+	switch status {
+	case question.DeliveryRecoveryRequired, question.DeliveryRecoveryQueued, question.DeliveryDelivered:
+		return status
+	default:
+		return question.DeliveryPending
+	}
 }
 
 func applyAnswersToQuestions(batch *question.Batch, answers []question.Answer) {

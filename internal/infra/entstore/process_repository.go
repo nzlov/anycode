@@ -79,6 +79,20 @@ func (r *ProcessRepository) FindActiveBySession(ctx context.Context, sessionID p
 	return toDomainProcessRun(row), true, nil
 }
 
+func (r *ProcessRepository) FindLatestBySession(ctx context.Context, sessionID process.SessionID) (process.Run, bool, error) {
+	row, err := r.client.ProcessRun.Query().
+		Where(entprocessrun.SessionIDEQ(string(sessionID))).
+		Order(ent.Desc(entprocessrun.FieldStartedAt), ent.Desc(entprocessrun.FieldID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return process.Run{}, false, nil
+		}
+		return process.Run{}, false, fmt.Errorf("find latest process run: %w", err)
+	}
+	return toDomainProcessRun(row), true, nil
+}
+
 func (r *ProcessRepository) CountActive(ctx context.Context) (int, error) {
 	sessionIDs, err := r.client.Session.Query().
 		Where(entsession.StatusIn(concurrencySessionStatuses()...)).

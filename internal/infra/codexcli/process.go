@@ -27,6 +27,26 @@ var (
 	errAmbiguousSessionLogs = errors.New("multiple active codex session logs")
 )
 
+const processRunOwnerEnv = "ANYCODE_PROCESS_RUN_ID"
+
+type detachedProcessOps struct {
+	groupAlive   func(int) (bool, error)
+	groupOwnedBy func(int, process.RunID) (bool, error)
+	signalGroup  func(int, syscall.Signal) error
+	waitExit     func(context.Context, int, time.Duration) (bool, error)
+}
+
+func defaultDetachedProcessOps() detachedProcessOps {
+	return detachedProcessOps{
+		groupAlive:   detachedProcessGroupAlive,
+		groupOwnedBy: detachedProcessGroupOwnedBy,
+		signalGroup: func(processGroupID int, signal syscall.Signal) error {
+			return syscall.Kill(-processGroupID, signal)
+		},
+		waitExit: waitForDetachedProcessGroupExit,
+	}
+}
+
 type activeProcess struct {
 	cmd               *exec.Cmd
 	stderr            *bytes.Buffer
@@ -72,6 +92,7 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 	if c.mcpAuthToken != "" {
 		env = upsertEnv(env, "ANYCODE_MCP_TOKEN", c.mcpAuthToken)
 	}
+	env = upsertEnv(env, processRunOwnerEnv, string(runID))
 	cmd.Env = env
 	if workdir != "" {
 		cmd.Dir = workdir
@@ -147,6 +168,190 @@ func (c *Client) Stop(ctx context.Context, processRunID process.RunID) error {
 	}
 	active.cleanupWithoutEventConsumer(processRunID)
 	return nil
+}
+
+func (c *Client) StopDetached(ctx context.Context, detached process.DetachedProcess) error {
+	if detached.ProcessRunID == "" || detached.PID <= 0 {
+		return fmt.Errorf("%w: process run id and pid are required", process.ErrProcessOwnershipUnverified)
+	}
+	ops := c.detached
+	if ops.groupAlive == nil || ops.groupOwnedBy == nil || ops.signalGroup == nil || ops.waitExit == nil {
+		ops = defaultDetachedProcessOps()
+	}
+	alive, err := ops.groupAlive(detached.PID)
+	if err != nil {
+		return err
+	}
+	if !alive {
+		return nil
+	}
+	owned, err := ops.groupOwnedBy(detached.PID, detached.ProcessRunID)
+	if err != nil {
+		return err
+	}
+	if !owned {
+		alive, aliveErr := ops.groupAlive(detached.PID)
+		if aliveErr != nil {
+			return aliveErr
+		}
+		if !alive {
+			return nil
+		}
+		return fmt.Errorf("%w: pid %d is not owned by process run %s", process.ErrProcessOwnershipUnverified, detached.PID, detached.ProcessRunID)
+	}
+	if err := ops.signalGroup(detached.PID, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return fmt.Errorf("terminate detached codex process group %d: %w", detached.PID, err)
+	}
+	exited, err := ops.waitExit(ctx, detached.PID, 500*time.Millisecond)
+	if err != nil {
+		return err
+	}
+	if !exited {
+		if err := ops.signalGroup(detached.PID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			return fmt.Errorf("kill detached codex process group %d: %w", detached.PID, err)
+		}
+		exited, err = ops.waitExit(ctx, detached.PID, 2*time.Second)
+		if err != nil {
+			return err
+		}
+		if !exited {
+			return errors.New("detached codex process did not exit after SIGKILL")
+		}
+	}
+	if value, ok := processRegistry.Load(detached.ProcessRunID); ok {
+		active := value.(*activeProcess)
+		if active.cmd.Process != nil && active.cmd.Process.Pid == detached.PID {
+			reaped, err := waitForProcessDone(ctx, active.done, 2*time.Second)
+			if err != nil {
+				return err
+			}
+			if !reaped {
+				return errors.New("detached codex process was not reaped")
+			}
+			active.cleanupWithoutEventConsumer(detached.ProcessRunID)
+		}
+	}
+	return nil
+}
+
+func detachedProcessGroupOwnedBy(processGroupID int, runID process.RunID) (bool, error) {
+	members, err := detachedProcessGroupMembers(processGroupID)
+	if err != nil {
+		return false, err
+	}
+	if len(members) == 0 {
+		return false, nil
+	}
+	want := processRunOwnerEnv + "=" + string(runID)
+	verified := 0
+	for _, pid := range members {
+		raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return false, fmt.Errorf("%w: read pid %d environment: %v", process.ErrProcessOwnershipUnverified, pid, err)
+		}
+		matched := false
+		for _, item := range bytes.Split(raw, []byte{0}) {
+			if string(item) == want {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false, nil
+		}
+		verified++
+	}
+	return verified > 0, nil
+}
+
+func waitForDetachedProcessGroupExit(ctx context.Context, processGroupID int, timeout time.Duration) (bool, error) {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		alive, err := detachedProcessGroupAlive(processGroupID)
+		if err != nil {
+			return false, err
+		}
+		if !alive {
+			return true, nil
+		}
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-deadline.C:
+			return false, nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func detachedProcessGroupAlive(processGroupID int) (bool, error) {
+	if err := syscall.Kill(-processGroupID, 0); err != nil {
+		if errors.Is(err, syscall.ESRCH) {
+			return false, nil
+		}
+		if !errors.Is(err, syscall.EPERM) {
+			return false, fmt.Errorf("check detached codex process group %d: %w", processGroupID, err)
+		}
+	}
+	members, err := detachedProcessGroupMembers(processGroupID)
+	if err != nil {
+		return false, err
+	}
+	return len(members) > 0, nil
+}
+
+func detachedProcessGroupMembers(processGroupID int) ([]int, error) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, fmt.Errorf("%w: list proc processes: %v", process.ErrProcessOwnershipUnverified, err)
+	}
+	members := make([]int, 0, 1)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+		groupID, state, err := procProcessGroup(pid)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if groupID == processGroupID && state != 'Z' {
+			members = append(members, pid)
+		}
+	}
+	return members, nil
+}
+
+func procProcessGroup(pid int) (int, byte, error) {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return 0, 0, err
+	}
+	closing := bytes.LastIndexByte(raw, ')')
+	if closing < 0 || closing+2 >= len(raw) {
+		return 0, 0, fmt.Errorf("read detached codex process %d state: invalid proc stat", pid)
+	}
+	fields := strings.Fields(string(raw[closing+2:]))
+	if len(fields) < 3 || len(fields[0]) != 1 {
+		return 0, 0, fmt.Errorf("read detached codex process %d group: invalid proc stat", pid)
+	}
+	processGroupID, err := strconv.Atoi(fields[2])
+	if err != nil {
+		return 0, 0, fmt.Errorf("read detached codex process %d group: %w", pid, err)
+	}
+	return processGroupID, fields[0][0], nil
 }
 
 func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan process.CodexEvent, error) {

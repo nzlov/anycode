@@ -46,6 +46,20 @@ func (_c *QuestionBatchCreate) SetStatus(v string) *QuestionBatchCreate {
 	return _c
 }
 
+// SetDeliveryStatus sets the "delivery_status" field.
+func (_c *QuestionBatchCreate) SetDeliveryStatus(v string) *QuestionBatchCreate {
+	_c.mutation.SetDeliveryStatus(v)
+	return _c
+}
+
+// SetNillableDeliveryStatus sets the "delivery_status" field if the given value is not nil.
+func (_c *QuestionBatchCreate) SetNillableDeliveryStatus(v *string) *QuestionBatchCreate {
+	if v != nil {
+		_c.SetDeliveryStatus(*v)
+	}
+	return _c
+}
+
 // SetQuestions sets the "questions" field.
 func (_c *QuestionBatchCreate) SetQuestions(v []map[string]interface{}) *QuestionBatchCreate {
 	_c.mutation.SetQuestions(v)
@@ -141,6 +155,10 @@ func (_c *QuestionBatchCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *QuestionBatchCreate) defaults() {
+	if _, ok := _c.mutation.DeliveryStatus(); !ok {
+		v := questionbatch.DefaultDeliveryStatus
+		_c.mutation.SetDeliveryStatus(v)
+	}
 	if _, ok := _c.mutation.Questions(); !ok {
 		v := questionbatch.DefaultQuestions
 		_c.mutation.SetQuestions(v)
@@ -176,6 +194,9 @@ func (_c *QuestionBatchCreate) check() error {
 		if err := questionbatch.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "QuestionBatch.status": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.DeliveryStatus(); !ok {
+		return &ValidationError{Name: "delivery_status", err: errors.New(`ent: missing required field "QuestionBatch.delivery_status"`)}
 	}
 	if _, ok := _c.mutation.Questions(); !ok {
 		return &ValidationError{Name: "questions", err: errors.New(`ent: missing required field "QuestionBatch.questions"`)}
@@ -235,6 +256,10 @@ func (_c *QuestionBatchCreate) createSpec() (*QuestionBatch, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(questionbatch.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.DeliveryStatus(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryStatus, field.TypeString, value)
+		_node.DeliveryStatus = value
 	}
 	if value, ok := _c.mutation.Questions(); ok {
 		_spec.SetField(questionbatch.FieldQuestions, field.TypeJSON, value)

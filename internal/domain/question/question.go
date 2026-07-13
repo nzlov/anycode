@@ -12,6 +12,7 @@ type WorkflowRunID string
 type OptionID string
 
 type BatchStatus string
+type DeliveryStatus string
 
 const (
 	BatchPending   BatchStatus = "pending"
@@ -19,11 +20,19 @@ const (
 	BatchCancelled BatchStatus = "cancelled"
 )
 
+const (
+	DeliveryPending          DeliveryStatus = "pending"
+	DeliveryRecoveryRequired DeliveryStatus = "recovery_required"
+	DeliveryRecoveryQueued   DeliveryStatus = "recovery_queued"
+	DeliveryDelivered        DeliveryStatus = "delivered"
+)
+
 type Batch struct {
 	ID            BatchID
 	SessionID     SessionID
 	WorkflowRunID *WorkflowRunID
 	Status        BatchStatus
+	Delivery      DeliveryStatus
 	Questions     []Question
 	CreatedAt     time.Time
 	AnsweredAt    *time.Time
@@ -70,6 +79,12 @@ type Repository interface {
 	ListPendingBySession(ctx context.Context, sessionID SessionID) ([]Batch, error)
 	SubmitAnswers(ctx context.Context, id BatchID, answers []Answer) (Batch, bool, error)
 	CancelPendingBySession(ctx context.Context, sessionID SessionID, reason string) ([]Batch, error)
+}
+
+type RecoveryRepository interface {
+	Repository
+	FindLatestBySession(ctx context.Context, sessionID SessionID) (Batch, bool, error)
+	SetDeliveryStatus(ctx context.Context, id BatchID, status DeliveryStatus) (Batch, bool, error)
 }
 
 type AnswerWaiter interface {

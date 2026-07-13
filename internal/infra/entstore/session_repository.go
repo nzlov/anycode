@@ -64,7 +64,8 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
 			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 			SetQueuePrompt(s.Queue.Prompt).
-			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
+			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
+			SetQueueRecoveryBatchID(s.Queue.RecoveryBatchID)
 		if s.Queue.NodeRunID == nil {
 			update.SetQueueNodeRunID("")
 		} else {
@@ -125,7 +126,8 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
 		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 		SetQueuePrompt(s.Queue.Prompt).
-		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID)
+		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
+		SetQueueRecoveryBatchID(s.Queue.RecoveryBatchID)
 	if s.Queue.NodeRunID != nil {
 		create.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
 	}
@@ -591,6 +593,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			NodeRunID:               queueNodeRunID,
 			Prompt:                  row.QueuePrompt,
 			ResumeCodexSessionID:    row.QueueResumeCodexSessionID,
+			RecoveryBatchID:         row.QueueRecoveryBatchID,
 		},
 		LastRunAt: row.LastRunAt,
 		CreatedAt: row.CreatedAt,

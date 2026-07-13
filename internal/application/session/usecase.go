@@ -30,7 +30,7 @@ import (
 
 type UseCase interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error)
-	MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error)
+	RecoverInterruptedSessions(ctx context.Context) (int, error)
 	ExecuteSession(ctx context.Context, id domain.ID) (DTO, error)
 	ExecuteSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error)
 	StartSession(ctx context.Context, id domain.ID) (DTO, error)
@@ -239,6 +239,7 @@ type Service struct {
 	events              eventdomain.Store
 	publisher           eventdomain.Publisher
 	questions           questionCoordinator
+	questionRecovery    questiondomain.RecoveryRepository
 	launchMu            sync.Mutex
 	now                 func() time.Time
 	generateID          func() (domain.ID, error)
@@ -316,6 +317,12 @@ func WithQuestions(questions questionCoordinator) Option {
 	}
 }
 
+func WithQuestionRecovery(repo questiondomain.RecoveryRepository) Option {
+	return func(s *Service) {
+		s.questionRecovery = repo
+	}
+}
+
 func WithUnitOfWork(uow port.UnitOfWork) Option {
 	return func(s *Service) {
 		s.uow = uow
@@ -374,59 +381,449 @@ func (s *Service) scheduleQueueDrain() {
 	s.queueDrainScheduler(s)
 }
 
-func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error) {
+const restartRecoveryPrompt = "Continue the interrupted task after the AnyCode service restart. Inspect the current state before changing files, preserve completed work, and continue from the same task."
+
+func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 	if s == nil {
 		return 0, errors.New("session usecase: nil service")
 	}
-	sessions, err := s.repo.ListInterruptedWithCodexSession(ctx)
+	withCodexSession, err := s.repo.ListInterruptedWithCodexSession(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list interrupted sessions: %w", err)
 	}
-	now := s.now()
-	for _, session := range sessions {
-		recovered, err := s.recoverWorkflowProcessExit(ctx, session, now)
-		if err != nil {
-			return 0, fmt.Errorf("recover workflow process exit for session %s: %w", session.ID, err)
-		}
-		if recovered {
-			continue
-		}
-		previousStatus := session.Status
-		if err := transitionSession(&session, domain.StatusStopped, now); err != nil {
-			return 0, err
-		}
-		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "service_restarted", "session.recoverable", map[string]any{
-			"reason":         "service_restarted",
-			"previousStatus": string(previousStatus),
-			"codexSessionId": session.CodexSessionID,
-		}); err != nil {
-			return 0, fmt.Errorf("mark session %s recoverable: %w", session.ID, err)
-		}
-	}
-	unresumableSessions, err := s.listInterruptedWithoutCodexSession(ctx)
+	withoutCodexSession, err := s.listInterruptedWithoutCodexSession(ctx)
 	if err != nil {
 		return 0, err
 	}
-	for _, session := range unresumableSessions {
-		recovered, err := s.recoverWorkflowProcessExit(ctx, session, now)
-		if err != nil {
-			return 0, fmt.Errorf("recover workflow process exit for session %s: %w", session.ID, err)
-		}
-		if recovered {
+	sessions := append(withCodexSession, withoutCodexSession...)
+	seen := make(map[domain.ID]struct{}, len(sessions))
+	recovered := 0
+	for _, interrupted := range sessions {
+		if _, ok := seen[interrupted.ID]; ok {
 			continue
 		}
-		previousStatus := session.Status
-		if err := transitionSession(&session, domain.StatusResumeFailed, now); err != nil {
-			return 0, err
-		}
-		if err := s.saveInterruptedSessionWithEvent(ctx, session, now, "service_restarted", "session.resume_failed", map[string]any{
-			"reason":         "service_restarted_without_codex_session_id",
-			"previousStatus": string(previousStatus),
+		seen[interrupted.ID] = struct{}{}
+		if err := s.withSessionLock(ctx, interrupted.ID, func(ctx context.Context) error {
+			return s.recoverInterruptedSession(ctx, interrupted.ID)
 		}); err != nil {
-			return 0, fmt.Errorf("mark session %s resume failed: %w", session.ID, err)
+			return recovered, fmt.Errorf("recover interrupted session %s: %w", interrupted.ID, err)
+		}
+		recovered++
+	}
+	return recovered, nil
+}
+
+func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, error) {
+	return s.RecoverInterruptedSessions(ctx)
+}
+
+func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domain.ID) error {
+	session, err := s.repo.Find(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("find interrupted session: %w", err)
+	}
+	if !isInterruptedRecoveryStatus(session) {
+		return nil
+	}
+	var active processdomain.Run
+	hasActive := false
+	if s.processes != nil {
+		active, hasActive, err = s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+		if err != nil {
+			return fmt.Errorf("find interrupted process run: %w", err)
 		}
 	}
-	return len(sessions) + len(unresumableSessions), nil
+	if hasActive {
+		if err := s.stopDetachedProcess(ctx, active); err != nil {
+			return s.persistInterruptedRecoveryFailure(ctx, session, "detached_process_ownership_unverified", err.Error())
+		}
+	}
+	var interruptedRun *processdomain.Run
+	if hasActive {
+		interruptedRun = &active
+	}
+	if session.Mode == domain.ModeWorkflow && s.workflows != nil && s.events != nil {
+		_, checkpoint, err := s.latestWorkflowProcessExitInput(ctx, session.ID)
+		if err != nil {
+			return err
+		}
+		if checkpoint {
+			if interruptedRun != nil {
+				if err := s.settleInterruptedRun(ctx, session, *interruptedRun); err != nil {
+					return err
+				}
+			}
+			workflowRecovered, err := s.recoverWorkflowProcessExit(ctx, session, s.now())
+			if err != nil {
+				return fmt.Errorf("recover workflow process exit: %w", err)
+			}
+			if workflowRecovered {
+				return nil
+			}
+		}
+	}
+	switch session.Status {
+	case domain.StatusStopping:
+		return s.persistStoppedAfterRestart(ctx, session, interruptedRun)
+	case domain.StatusStarting, domain.StatusRunning:
+		if strings.TrimSpace(session.CodexSessionID) == "" {
+			return s.persistInterruptedRecoveryFailureWithRun(ctx, session, interruptedRun, "service_restarted_without_codex_session_id", "interrupted session has no Codex session id")
+		}
+		return s.queueInterruptedSessionResume(ctx, session, interruptedRun)
+	case domain.StatusWaitingUser:
+		return s.recoverWaitingUserSession(ctx, session, interruptedRun)
+	case domain.StatusQueued:
+		if session.Queue.Kind == domain.QueueKindAnswerUser {
+			return s.recoverWaitingUserSession(ctx, session, interruptedRun)
+		}
+	}
+	return nil
+}
+
+func (s *Service) settleInterruptedRun(ctx context.Context, session domain.Session, run processdomain.Run) error {
+	result := processdomain.ExitResult{FailureReason: "service_restarted", FinishedAt: s.now()}
+	return s.markProcessExitedWithSessionEventsAndSettlement(ctx, run.ID, result, session, false, []sessionEventInput{{
+		eventType: "process.exited",
+		payload:   processExitPayload(run.ID, result),
+	}}, promptAppendSettlementRelease)
+}
+
+func isInterruptedRecoveryStatus(session domain.Session) bool {
+	switch session.Status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+		return true
+	case domain.StatusQueued:
+		return session.Queue.Kind == domain.QueueKindAnswerUser
+	default:
+		return false
+	}
+}
+
+func (s *Service) stopDetachedProcess(ctx context.Context, run processdomain.Run) error {
+	if run.PID == nil || *run.PID <= 0 {
+		return fmt.Errorf("%w: process run %s has no persisted pid", processdomain.ErrProcessOwnershipUnverified, run.ID)
+	}
+	controller, ok := s.codex.(processdomain.DetachedProcessController)
+	if !ok {
+		return fmt.Errorf("%w: detached process controller is unavailable", processdomain.ErrProcessOwnershipUnverified)
+	}
+	cleanupCtx, cancel := detachedCleanupContext(ctx)
+	defer cancel()
+	return controller.StopDetached(cleanupCtx, processdomain.DetachedProcess{ProcessRunID: run.ID, PID: *run.PID})
+}
+
+func (s *Service) persistStoppedAfterRestart(ctx context.Context, session domain.Session, run *processdomain.Run) error {
+	previousStatus := session.Status
+	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+		return err
+	}
+	return s.saveInterruptedRecoveryState(ctx, session, run, nil, "", "session.stopped", map[string]any{
+		"reason":         "service_restarted_while_stopping",
+		"previousStatus": string(previousStatus),
+	})
+}
+
+func (s *Service) persistInterruptedRecoveryFailure(ctx context.Context, session domain.Session, code string, message string) error {
+	return s.persistInterruptedRecoveryFailureWithRun(ctx, session, nil, code, message)
+}
+
+func (s *Service) persistInterruptedRecoveryFailureWithRun(ctx context.Context, session domain.Session, run *processdomain.Run, code string, message string) error {
+	previousStatus := session.Status
+	if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
+		return err
+	}
+	if err := s.saveInterruptedRecoveryState(ctx, session, run, nil, "", "session.resume_failed", map[string]any{
+		"reason":         code,
+		"message":        message,
+		"previousStatus": string(previousStatus),
+	}); err != nil {
+		return err
+	}
+	if session.Mode == domain.ModeWorkflow && s.workflows != nil {
+		if _, err := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
+			SessionID: session.ID,
+			Code:      code,
+			Message:   message,
+		}); err != nil {
+			return fmt.Errorf("mark workflow waiting resume action: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) queueInterruptedSessionResume(ctx context.Context, session domain.Session, run *processdomain.Run) error {
+	options, err := s.recoveryCodexOptions(ctx, session, restartRecoveryPrompt, "")
+	if err != nil {
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "recovery_prepare_failed", err.Error())
+	}
+	if batch, ok, err := s.latestQuestionRecovery(ctx, session.ID); err != nil {
+		return err
+	} else if ok && batch.Status == questiondomain.BatchAnswered && (batch.Delivery == questiondomain.DeliveryRecoveryRequired || batch.Delivery == questiondomain.DeliveryRecoveryQueued) {
+		options.prompt, err = answerUserRecoveryPrompt(batch)
+		if err != nil {
+			return err
+		}
+		options.recoveryBatchID = batch.ID
+		return s.queueQuestionRecovery(ctx, session, options, batch.ID, run)
+	}
+	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, queuePriorityForSession(session), domain.QueueKindResume)
+	if err != nil {
+		return err
+	}
+	return s.saveInterruptedRecoveryStateAndEvent(ctx, queued, run, nil, "", event, hasEvent)
+}
+
+func (s *Service) recoveryCodexOptions(ctx context.Context, session domain.Session, prompt string, batchID questiondomain.BatchID) (codexStartOptions, error) {
+	options := codexStartOptions{
+		resumeCodexSessionID: strings.TrimSpace(session.CodexSessionID),
+		prompt:               strings.TrimSpace(prompt),
+		recoveryBatchID:      batchID,
+	}
+	if session.Mode != domain.ModeWorkflow {
+		return options, nil
+	}
+	if s.workflows == nil {
+		return codexStartOptions{}, errors.New("session workflow starter is required for workflow recovery")
+	}
+	advance, err := s.workflows.ResumeCurrentNodeForSession(ctx, domain.WorkflowResumeCurrentNodeInput{
+		SessionID: session.ID,
+		Reason:    "service restarted",
+	})
+	if err != nil {
+		return codexStartOptions{}, fmt.Errorf("resume workflow current node: %w", err)
+	}
+	options.workflowRunID = advance.WorkflowRunID
+	options.nodeRunID = workflowNodeRunID(advance.NodeRunID)
+	if options.prompt == "" {
+		options.prompt = advance.Prompt
+	}
+	return options, nil
+}
+
+func (s *Service) recoverWaitingUserSession(ctx context.Context, session domain.Session, run *processdomain.Run) error {
+	batch, ok, err := s.latestQuestionRecovery(ctx, session.ID)
+	if err != nil {
+		return err
+	}
+	if !ok || (batch.Status != questiondomain.BatchPending && batch.Status != questiondomain.BatchAnswered) {
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "answer_user_recovery_missing", "interrupted answer_user session has no recoverable question batch")
+	}
+	if isMergeFailureQuestionBatch(batch.Questions) {
+		return s.recoverMergeFailureQuestion(ctx, session, run, batch)
+	}
+	if strings.TrimSpace(session.CodexSessionID) == "" {
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "service_restarted_without_codex_session_id", "waiting answer_user session has no Codex session id")
+	}
+	if batch.Status == questiondomain.BatchAnswered {
+		prompt, err := answerUserRecoveryPrompt(batch)
+		if err != nil {
+			return err
+		}
+		options, err := s.recoveryCodexOptions(ctx, session, prompt, batch.ID)
+		if err != nil {
+			return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "answer_user_recovery_prepare_failed", err.Error())
+		}
+		return s.queueQuestionRecovery(ctx, session, options, batch.ID, run)
+	}
+	if run == nil && session.Status == domain.StatusWaitingUser && batch.Delivery == questiondomain.DeliveryRecoveryRequired {
+		return nil
+	}
+	if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
+		return err
+	}
+	return s.saveQuestionRecoveryState(ctx, session, run, batch.ID, questiondomain.DeliveryRecoveryRequired, "session.recovery_waiting_user", map[string]any{
+		"batchId": string(batch.ID),
+		"reason":  "service_restarted",
+	})
+}
+
+func (s *Service) recoverMergeFailureQuestion(ctx context.Context, session domain.Session, run *processdomain.Run, batch questiondomain.Batch) error {
+	if batch.Status == questiondomain.BatchPending {
+		if run == nil && session.Status == domain.StatusWaitingUser {
+			return nil
+		}
+		if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
+			return err
+		}
+		return s.saveInterruptedRecoveryState(ctx, session, run, nil, "", "session.recovery_waiting_user", map[string]any{
+			"batchId": string(batch.ID),
+			"reason":  "service_restarted",
+		})
+	}
+	if run != nil {
+		if err := s.settleInterruptedRun(ctx, session, *run); err != nil {
+			return err
+		}
+	}
+	dto := questionapp.BatchDTO{
+		ID:            batch.ID,
+		SessionID:     batch.SessionID,
+		WorkflowRunID: batch.WorkflowRunID,
+		Status:        batch.Status,
+		Delivery:      batch.Delivery,
+		Questions:     batch.Questions,
+	}
+	action, metadata, _, err := mergeFailureDecision(dto)
+	if err != nil {
+		return err
+	}
+	return s.applyMergeFailureDecision(ctx, session, batch.ID, action, metadata)
+}
+
+func (s *Service) latestQuestionRecovery(ctx context.Context, sessionID domain.ID) (questiondomain.Batch, bool, error) {
+	if s.questionRecovery == nil {
+		return questiondomain.Batch{}, false, nil
+	}
+	batch, ok, err := s.questionRecovery.FindLatestBySession(ctx, questiondomain.SessionID(sessionID))
+	if err != nil {
+		return questiondomain.Batch{}, false, fmt.Errorf("find latest question recovery: %w", err)
+	}
+	return batch, ok, nil
+}
+
+func (s *Service) queueQuestionRecovery(ctx context.Context, session domain.Session, options codexStartOptions, batchID questiondomain.BatchID, run *processdomain.Run) error {
+	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, domain.QueuePriorityImmediate, domain.QueueKindResume)
+	if err != nil {
+		return err
+	}
+	return s.saveQuestionRecoveryStateAndEvent(ctx, queued, run, batchID, questiondomain.DeliveryRecoveryQueued, event, hasEvent)
+}
+
+func (s *Service) saveQuestionRecoveryState(ctx context.Context, session domain.Session, run *processdomain.Run, batchID questiondomain.BatchID, delivery questiondomain.DeliveryStatus, eventType string, payload map[string]any) error {
+	event, hasEvent, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil {
+		return err
+	}
+	return s.saveQuestionRecoveryStateAndEvent(ctx, session, run, batchID, delivery, event, hasEvent)
+}
+
+func (s *Service) saveQuestionRecoveryStateAndEvent(ctx context.Context, session domain.Session, run *processdomain.Run, batchID questiondomain.BatchID, delivery questiondomain.DeliveryStatus, event eventdomain.DomainEvent, hasEvent bool) error {
+	return s.saveInterruptedRecoveryStateAndEvent(ctx, session, run, &batchID, delivery, event, hasEvent)
+}
+
+func (s *Service) saveInterruptedRecoveryState(ctx context.Context, session domain.Session, run *processdomain.Run, batchID *questiondomain.BatchID, delivery questiondomain.DeliveryStatus, eventType string, payload map[string]any) error {
+	event, hasEvent, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil {
+		return err
+	}
+	return s.saveInterruptedRecoveryStateAndEvent(ctx, session, run, batchID, delivery, event, hasEvent)
+}
+
+func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, session domain.Session, run *processdomain.Run, batchID *questiondomain.BatchID, delivery questiondomain.DeliveryStatus, event eventdomain.DomainEvent, hasEvent bool) error {
+	if batchID != nil && s.questionRecovery == nil {
+		return errors.New("question recovery repository is required")
+	}
+	result := processdomain.ExitResult{}
+	events := make([]eventdomain.DomainEvent, 0, 2)
+	if run != nil {
+		result = processdomain.ExitResult{FailureReason: "service_restarted", FinishedAt: s.now()}
+		processEvent, ok, err := s.newSessionEvent(session, "process.exited", processExitPayload(run.ID, result))
+		if err != nil {
+			return err
+		}
+		if ok {
+			events = append(events, processEvent)
+		}
+	}
+	if hasEvent {
+		events = append(events, event)
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if run != nil {
+				if err := tx.Processes().MarkExited(ctx, run.ID, result); err != nil {
+					return fmt.Errorf("mark interrupted process exited: %w", err)
+				}
+				if err := tx.Sessions().ReleasePromptAppends(ctx, string(run.ID)); err != nil {
+					return err
+				}
+			}
+			if batchID != nil {
+				repo, ok := tx.Questions().(questiondomain.RecoveryRepository)
+				if !ok {
+					return errors.New("transactional question recovery repository is required")
+				}
+				if _, _, err := repo.SetDeliveryStatus(ctx, *batchID, delivery); err != nil {
+					return err
+				}
+			}
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save recovery session: %w", err)
+			}
+			for _, event := range events {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	} else {
+		if run != nil {
+			if err := s.processes.MarkExited(ctx, run.ID, result); err != nil {
+				return fmt.Errorf("mark interrupted process exited: %w", err)
+			}
+			if err := s.repo.ReleasePromptAppends(ctx, string(run.ID)); err != nil {
+				return err
+			}
+		}
+		if batchID != nil {
+			if _, _, err := s.questionRecovery.SetDeliveryStatus(ctx, *batchID, delivery); err != nil {
+				return err
+			}
+		}
+		if err := s.repo.Save(ctx, session); err != nil {
+			return fmt.Errorf("save recovery session: %w", err)
+		}
+		for _, event := range events {
+			if err := s.events.Append(ctx, event); err != nil {
+				return err
+			}
+		}
+	}
+	for _, event := range events {
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
+type answerUserRecoveryAnswer struct {
+	QuestionID       string         `json:"questionId"`
+	SelectedOptionID *string        `json:"selectedOptionId,omitempty"`
+	CustomAnswer     string         `json:"customAnswer,omitempty"`
+	Payload          map[string]any `json:"payload,omitempty"`
+}
+
+func answerUserRecoveryPrompt(batch questiondomain.Batch) (string, error) {
+	answers := make([]answerUserRecoveryAnswer, 0, len(batch.Questions))
+	for _, question := range batch.Questions {
+		var selectedOptionID *string
+		if question.SelectedOptionID != nil {
+			value := string(*question.SelectedOptionID)
+			selectedOptionID = &value
+		}
+		answers = append(answers, answerUserRecoveryAnswer{
+			QuestionID:       string(question.ID),
+			SelectedOptionID: selectedOptionID,
+			CustomAnswer:     question.CustomAnswer,
+			Payload:          question.Answer,
+		})
+	}
+	payload, err := json.Marshal(struct {
+		Type    string                     `json:"type"`
+		BatchID string                     `json:"batchId"`
+		Answers []answerUserRecoveryAnswer `json:"answers"`
+	}{
+		Type:    "answer_user_recovery",
+		BatchID: string(batch.ID),
+		Answers: answers,
+	})
+	if err != nil {
+		return "", fmt.Errorf("encode answer_user recovery continuation: %w", err)
+	}
+	// GLUE: Converts an interrupted MCP tool result into a Codex resume prompt; remove when Codex can resume native tool results.
+	return "The AnyCode service restart interrupted delivery of a completed answer_user call. Continue the same task using this structured result; batchId is the idempotency key and the answer must not create a second question batch.\n\n" + string(payload), nil
 }
 
 func (s *Service) recoverWorkflowProcessExit(ctx context.Context, session domain.Session, now time.Time) (bool, error) {
@@ -844,6 +1241,11 @@ func (s *Service) startSession(ctx context.Context, id domain.ID, startOptions S
 }
 
 func (s *Service) startLoadedSession(ctx context.Context, session domain.Session, startOptions StartSessionOptions) (DTO, error) {
+	if session.Status == domain.StatusResumeFailed {
+		if err := s.settleDetachedProcessBeforeRecoveryAction(ctx, session); err != nil {
+			return DTO{}, err
+		}
+	}
 	if session.Mode == domain.ModeWorkflow {
 		switch session.Status {
 		case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusWaitingApproval, domain.StatusStopping:
@@ -1278,6 +1680,10 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	defer cancel()
 	stopErr := s.codex.Stop(cleanupCtx, active.ID)
 	processMissing := errors.Is(stopErr, processdomain.ErrProcessNotFound)
+	if processMissing {
+		stopErr = s.stopDetachedProcess(cleanupCtx, active)
+		processMissing = false
+	}
 	if stopErr != nil && !processMissing {
 		return DTO{}, fmt.Errorf("stop codex process: %w", stopErr)
 	}
@@ -1418,6 +1824,11 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot resume from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
+	if session.Status == domain.StatusResumeFailed {
+		if err := s.settleDetachedProcessBeforeRecoveryAction(ctx, session); err != nil {
+			return DTO{}, err
+		}
+	}
 	resumeCodexSessionID := strings.TrimSpace(startOptions.resumeCodexSessionID)
 	if resumeCodexSessionID == "" {
 		resumeCodexSessionID = strings.TrimSpace(session.CodexSessionID)
@@ -1429,6 +1840,18 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 	options := codexStartOptions{
 		resumeCodexSessionID: resumeCodexSessionID,
 		prompt:               strings.TrimSpace(startOptions.prompt),
+	}
+	var recoveryBatch *questiondomain.Batch
+	if batch, ok, err := s.latestQuestionRecovery(ctx, session.ID); err != nil {
+		return DTO{}, err
+	} else if ok && batch.Status == questiondomain.BatchAnswered && (batch.Delivery == questiondomain.DeliveryRecoveryRequired || batch.Delivery == questiondomain.DeliveryRecoveryQueued) {
+		prompt, err := answerUserRecoveryPrompt(batch)
+		if err != nil {
+			return DTO{}, err
+		}
+		options.prompt = prompt
+		options.recoveryBatchID = batch.ID
+		recoveryBatch = &batch
 	}
 	if session.Mode == domain.ModeWorkflow {
 		if s.workflows == nil {
@@ -1455,13 +1878,51 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 		if options.prompt == "" {
 			options.prompt = advance.Prompt
 		}
-	} else if err := s.requirePendingChatResume(ctx, session.ID); err != nil {
-		return DTO{}, err
+	} else if options.prompt == "" {
+		if err := s.requirePendingChatResume(ctx, session.ID); err != nil {
+			return DTO{}, err
+		}
+	}
+	if recoveryBatch != nil && !startOptions.Force {
+		if err := s.queueQuestionRecovery(ctx, session, options, recoveryBatch.ID, nil); err != nil {
+			return DTO{}, err
+		}
+		s.scheduleQueueDrain()
+		queued, err := s.repo.Find(ctx, session.ID)
+		if err != nil {
+			return DTO{}, fmt.Errorf("find queued question recovery: %w", err)
+		}
+		return toDTO(queued), nil
+	}
+	if recoveryBatch != nil && s.questionRecovery != nil {
+		if _, _, err := s.questionRecovery.SetDeliveryStatus(ctx, recoveryBatch.ID, questiondomain.DeliveryRecoveryQueued); err != nil {
+			return DTO{}, err
+		}
 	}
 	if startOptions.Force {
 		return s.startCodex(ctx, session, options, true)
 	}
 	return s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
+}
+
+func (s *Service) settleDetachedProcessBeforeRecoveryAction(ctx context.Context, session domain.Session) error {
+	if s.processes == nil {
+		return nil
+	}
+	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+	if err != nil {
+		return fmt.Errorf("find detached process before recovery action: %w", err)
+	}
+	if !ok {
+		return nil
+	}
+	if err := s.stopDetachedProcess(ctx, active); err != nil {
+		return apperror.Wrap(err, apperror.CodeResumeFailed, apperror.CategoryCodexError, "cannot verify the interrupted Codex process is stopped").
+			WithDetails(map[string]any{"sessionId": string(session.ID), "processRunId": string(active.ID)}).
+			WithRetryable(true).
+			WithUserAction("stop_session")
+	}
+	return s.settleInterruptedRun(ctx, session, active)
 }
 
 func (s *Service) MarkWaitingUser(ctx context.Context, id domain.ID) (DTO, error) {
@@ -1555,6 +2016,7 @@ type codexStartOptions struct {
 	workflowJSONRetry       bool
 	reviewAfterReuseFailure bool
 	initialStart            bool
+	recoveryBatchID         questiondomain.BatchID
 }
 
 func (s *Service) startCodex(ctx context.Context, session domain.Session, options codexStartOptions, force bool) (DTO, error) {
@@ -1607,11 +2069,25 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 	}
 	runID := processdomain.RunID(runIDValue)
 	now := s.now()
+	var resumeOf *processdomain.RunID
+	if options.resumeCodexSessionID != "" {
+		if history, ok := s.processes.(processdomain.HistoryRepository); ok {
+			latest, found, err := history.FindLatestBySession(ctx, processdomain.SessionID(session.ID))
+			if err != nil {
+				return DTO{}, fmt.Errorf("find process run resume parent: %w", err)
+			}
+			if found {
+				value := latest.ID
+				resumeOf = &value
+			}
+		}
+	}
 	run := processdomain.Run{
 		ID:        runID,
 		SessionID: processdomain.SessionID(session.ID),
 		NodeRunID: options.nodeRunID,
 		Status:    processdomain.StatusStarting,
+		ResumeOf:  resumeOf,
 		StartedAt: now,
 	}
 	if err := transitionSession(&session, domain.StatusStarting, now); err != nil {
@@ -1842,6 +2318,7 @@ func (s *Service) prepareQueuedSession(session domain.Session, options codexStar
 		NodeRunID:               queueNodeRunID(options.nodeRunID),
 		Prompt:                  strings.TrimSpace(options.prompt),
 		ResumeCodexSessionID:    options.resumeCodexSessionID,
+		RecoveryBatchID:         string(options.recoveryBatchID),
 	}, now); err != nil {
 		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("queue session %s: %w", session.ID, err)
 	}
@@ -2200,6 +2677,7 @@ func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 	nodeRunID := queueProcessNodeRunID(session.Queue.NodeRunID)
 	return codexStartOptions{
 		resumeCodexSessionID:    session.Queue.ResumeCodexSessionID,
+		recoveryBatchID:         questiondomain.BatchID(session.Queue.RecoveryBatchID),
 		workflowRunID:           session.Queue.WorkflowRunID,
 		nodeRunID:               nodeRunID,
 		prompt:                  session.Queue.Prompt,
@@ -2304,7 +2782,7 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	}
 	prompt := strings.TrimSpace(options.prompt)
 	if options.resumeCodexSessionID != "" {
-		if session.Mode != domain.ModeWorkflow && len(pendingIDs) == 0 {
+		if session.Mode != domain.ModeWorkflow && len(pendingIDs) == 0 && strings.TrimSpace(options.prompt) == "" {
 			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
 		}
 		prompt = joinPromptParts(prompt, pendingPrompt)
@@ -2485,7 +2963,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if event.Type == "process.exit" {
 				continue
 			}
-			s.persistCodexEventWithRetry(session.ID, handle, event)
+			s.persistCodexEventWithRetryForRecovery(session.ID, handle, event, options.recoveryBatchID)
 		}
 		s.releaseWorkdir(workdir, session.ID)
 		s.handleCodexProcessExit(session, handle, options, exitResult, workflowResults)
@@ -2507,6 +2985,10 @@ func (s *Service) processConsumerDone(runID processdomain.RunID) (<-chan struct{
 }
 
 func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) {
+	s.persistCodexEventWithRetryForRecovery(sessionID, handle, event, "")
+}
+
+func (s *Service) persistCodexEventWithRetryForRecovery(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent, recoveryBatchID questiondomain.BatchID) {
 	retryAcknowledgement := codexEventAcknowledgesPrompt(event)
 	retryDelay := s.processExitDelay
 	if retryDelay == nil {
@@ -2521,7 +3003,7 @@ func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle process
 			return
 		}
 		err := s.withSessionLock(retryCtx, sessionID, func(ctx context.Context) error {
-			return s.persistCodexEvent(ctx, sessionID, handle, event)
+			return s.persistCodexEventForRecovery(ctx, sessionID, handle, event, recoveryBatchID)
 		})
 		if err == nil {
 			return
@@ -2541,6 +3023,10 @@ func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle process
 }
 
 func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) error {
+	return s.persistCodexEventForRecovery(ctx, sessionID, handle, event, "")
+}
+
+func (s *Service) persistCodexEventForRecovery(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent, recoveryBatchID questiondomain.BatchID) error {
 	current, err := s.repo.Find(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("find session for codex event: %w", err)
@@ -2578,7 +3064,7 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
-	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, promptDelivered, extraEvents...)
+	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, promptDelivered, recoveryBatchID, extraEvents...)
 }
 
 func codexEventAcknowledgesPrompt(event processdomain.CodexEvent) bool {
@@ -3389,17 +3875,26 @@ func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questio
 		return err
 	}
 	if !ok {
-		return nil
+		if batch.Delivery != questiondomain.DeliveryRecoveryRequired && batch.Delivery != questiondomain.DeliveryRecoveryQueued {
+			return nil
+		}
+		return s.handleRecoveredQuestionBatch(ctx, batch)
 	}
-	session, err := s.repo.Find(ctx, domain.ID(batch.SessionID))
-	if err != nil {
-		return fmt.Errorf("find session: %w", err)
-	}
+	return s.withSessionLock(ctx, domain.ID(batch.SessionID), func(ctx context.Context) error {
+		session, err := s.repo.Find(ctx, domain.ID(batch.SessionID))
+		if err != nil {
+			return fmt.Errorf("find session: %w", err)
+		}
+		return s.applyMergeFailureDecision(ctx, session, batch.ID, action, metadata)
+	})
+}
+
+func (s *Service) applyMergeFailureDecision(ctx context.Context, session domain.Session, batchID questiondomain.BatchID, action string, metadata map[string]any) error {
 	workflowRunID := domain.WorkflowRunID(stringFromMap(metadata, "workflowRunId"))
 	nodeRunIDValue := domain.NodeRunID(stringFromMap(metadata, "nodeRunId"))
 	if workflowRunID == "" || nodeRunIDValue == "" {
 		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "merge failure question metadata is incomplete").
-			WithDetails(map[string]any{"batchId": string(batch.ID)})
+			WithDetails(map[string]any{"sessionId": string(session.ID), "batchId": string(batchID)})
 	}
 	nodeRunID := nodeRunIDValue
 	code := stringFromMap(metadata, "failureCode")
@@ -3421,7 +3916,7 @@ func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questio
 		})
 		return err
 	case "stop_session":
-		_, err := s.StopSession(ctx, session.ID)
+		_, err := s.stopSession(ctx, session.ID)
 		return err
 	case "fail_node":
 		_, err := s.handleWorkflowNodeFailure(ctx, session, workflowRunID, &nodeRunID, code, reason, mergeFailureOutputFromMetadata(metadata))
@@ -3430,6 +3925,52 @@ func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questio
 		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported merge failure action").
 			WithDetails(map[string]any{"action": action})
 	}
+}
+
+func (s *Service) handleRecoveredQuestionBatch(ctx context.Context, batch questionapp.BatchDTO) error {
+	queued := false
+	err := s.withSessionLock(ctx, domain.ID(batch.SessionID), func(ctx context.Context) error {
+		session, err := s.repo.Find(ctx, domain.ID(batch.SessionID))
+		if err != nil {
+			return fmt.Errorf("find session for recovered question batch: %w", err)
+		}
+		if session.Queue.RecoveryBatchID == string(batch.ID) {
+			return nil
+		}
+		switch session.Status {
+		case domain.StatusWaitingUser:
+		case domain.StatusQueued, domain.StatusStarting, domain.StatusRunning:
+			return nil
+		default:
+			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot recover answered question from current status").
+				WithDetails(map[string]any{"sessionId": string(session.ID), "status": string(session.Status), "batchId": string(batch.ID)})
+		}
+		domainBatch := questiondomain.Batch{
+			ID:            batch.ID,
+			SessionID:     batch.SessionID,
+			WorkflowRunID: batch.WorkflowRunID,
+			Status:        batch.Status,
+			Delivery:      batch.Delivery,
+			Questions:     batch.Questions,
+		}
+		prompt, err := answerUserRecoveryPrompt(domainBatch)
+		if err != nil {
+			return err
+		}
+		options, err := s.recoveryCodexOptions(ctx, session, prompt, batch.ID)
+		if err != nil {
+			return s.persistInterruptedRecoveryFailure(ctx, session, "answer_user_recovery_prepare_failed", err.Error())
+		}
+		if err := s.queueQuestionRecovery(ctx, session, options, batch.ID, nil); err != nil {
+			return err
+		}
+		queued = true
+		return nil
+	})
+	if err == nil && queued {
+		s.scheduleQueueDrain()
+	}
+	return err
 }
 
 func mergeFailureOutputFromMetadata(metadata map[string]any) map[string]any {
@@ -3506,6 +4047,15 @@ func mergeFailureDecision(batch questionapp.BatchDTO) (string, map[string]any, b
 		return action, metadata, true, nil
 	}
 	return "", nil, false, nil
+}
+
+func isMergeFailureQuestionBatch(questions []questiondomain.Question) bool {
+	for _, question := range questions {
+		if question.Type == "merge_failure_action" || stringFromMap(question.Metadata, "kind") == "merge_failure_action" {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeFailureAction(question questiondomain.Question) string {
@@ -3625,7 +4175,7 @@ type sessionEventInput struct {
 	payload   map[string]any
 }
 
-func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
+func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, promptDelivered bool, recoveryBatchID questiondomain.BatchID, extraInputs ...sessionEventInput) error {
 	var codexEvent eventdomain.DomainEvent
 	publishCodexEvent := s.publisher != nil && !event.RealtimeOnly
 	if publishCodexEvent {
@@ -3649,6 +4199,15 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 			if saveSession {
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return fmt.Errorf("save session: %w", err)
+				}
+			}
+			if promptDelivered && recoveryBatchID != "" {
+				repo, ok := tx.Questions().(questiondomain.RecoveryRepository)
+				if !ok {
+					return errors.New("transactional question recovery repository is required")
+				}
+				if _, _, err := repo.SetDeliveryStatus(ctx, recoveryBatchID, questiondomain.DeliveryDelivered); err != nil {
+					return err
 				}
 			}
 			for _, event := range extraEvents {
@@ -3676,6 +4235,14 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 	if saveSession {
 		if err := s.repo.Save(ctx, session); err != nil {
 			return fmt.Errorf("save session: %w", err)
+		}
+	}
+	if promptDelivered && recoveryBatchID != "" {
+		if s.questionRecovery == nil {
+			return errors.New("question recovery repository is required")
+		}
+		if _, _, err := s.questionRecovery.SetDeliveryStatus(ctx, recoveryBatchID, questiondomain.DeliveryDelivered); err != nil {
+			return err
 		}
 	}
 	if publishCodexEvent {

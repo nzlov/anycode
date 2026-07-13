@@ -66,6 +66,9 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	if found.ID != batch.ID || found.SessionID != batch.SessionID || found.Status != question.BatchPending || !found.CreatedAt.Equal(createdAt) {
 		t.Fatalf("found batch mismatch: %#v", found)
 	}
+	if found.Delivery != question.DeliveryPending {
+		t.Fatalf("found delivery = %q", found.Delivery)
+	}
 	if found.WorkflowRunID == nil || *found.WorkflowRunID != workflowRunID {
 		t.Fatalf("workflow run id mismatch: %#v", found.WorkflowRunID)
 	}
@@ -82,6 +85,14 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	if len(pending) != 1 || pending[0].ID != batch.ID {
 		t.Fatalf("pending batches = %#v", pending)
 	}
+	updatedDelivery, changed, err := repo.SetDeliveryStatus(ctx, batch.ID, question.DeliveryRecoveryRequired)
+	if err != nil || !changed || updatedDelivery.Delivery != question.DeliveryRecoveryRequired {
+		t.Fatalf("set recovery required = %#v changed=%v error=%v", updatedDelivery, changed, err)
+	}
+	latest, ok, err := repo.FindLatestBySession(ctx, batch.SessionID)
+	if err != nil || !ok || latest.ID != batch.ID || latest.Delivery != question.DeliveryRecoveryRequired {
+		t.Fatalf("latest recovery batch = %#v ok=%v error=%v", latest, ok, err)
+	}
 
 	persisted, transitioned, err := repo.SubmitAnswers(ctx, batch.ID, []question.Answer{
 		{
@@ -95,8 +106,11 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("submit answers: %v", err)
 	}
-	if !transitioned || persisted.Status != question.BatchAnswered {
+	if !transitioned || persisted.Status != question.BatchAnswered || persisted.Delivery != question.DeliveryRecoveryRequired {
 		t.Fatalf("submit transition = %#v %t", persisted, transitioned)
+	}
+	if delivered, changed, err := repo.SetDeliveryStatus(ctx, batch.ID, question.DeliveryDelivered); err != nil || !changed || delivered.Delivery != question.DeliveryDelivered {
+		t.Fatalf("set delivered = %#v changed=%v error=%v", delivered, changed, err)
 	}
 
 	answered, err := repo.FindBatch(ctx, batch.ID)

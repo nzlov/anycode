@@ -41,6 +41,7 @@ type BatchDTO struct {
 	SessionID     domain.SessionID
 	WorkflowRunID *domain.WorkflowRunID
 	Status        domain.BatchStatus
+	Delivery      domain.DeliveryStatus
 	Questions     []domain.Question
 }
 
@@ -104,6 +105,7 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 		SessionID:     input.SessionID,
 		WorkflowRunID: input.WorkflowRunID,
 		Status:        domain.BatchPending,
+		Delivery:      domain.DeliveryPending,
 		Questions:     questions,
 		CreatedAt:     s.now(),
 	}
@@ -221,6 +223,13 @@ func (s *Service) completeAnsweredBatch(ctx context.Context, batch domain.Batch,
 			return BatchDTO{}, fmt.Errorf("resume question waiter: %w", err)
 		}
 		delivery.resumeFailed = false
+		if repo, ok := s.repo.(domain.RecoveryRepository); ok {
+			persisted, _, err := repo.SetDeliveryStatus(ctx, batch.ID, domain.DeliveryDelivered)
+			if err != nil {
+				return BatchDTO{}, fmt.Errorf("mark question answers delivered: %w", err)
+			}
+			batch = persisted
+		}
 	}
 	dto := toDTO(batch)
 	s.publish(dto)
@@ -374,6 +383,7 @@ func toDTO(batch domain.Batch) BatchDTO {
 		SessionID:     batch.SessionID,
 		WorkflowRunID: batch.WorkflowRunID,
 		Status:        batch.Status,
+		Delivery:      batch.Delivery,
 		Questions:     append([]domain.Question(nil), batch.Questions...),
 	}
 }

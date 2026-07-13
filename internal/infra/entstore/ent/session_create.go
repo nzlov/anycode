@@ -333,6 +333,20 @@ func (_c *SessionCreate) SetNillableQueueResumeCodexSessionID(v *string) *Sessio
 	return _c
 }
 
+// SetQueueRecoveryBatchID sets the "queue_recovery_batch_id" field.
+func (_c *SessionCreate) SetQueueRecoveryBatchID(v string) *SessionCreate {
+	_c.mutation.SetQueueRecoveryBatchID(v)
+	return _c
+}
+
+// SetNillableQueueRecoveryBatchID sets the "queue_recovery_batch_id" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableQueueRecoveryBatchID(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetQueueRecoveryBatchID(*v)
+	}
+	return _c
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (_c *SessionCreate) SetLastRunAt(v time.Time) *SessionCreate {
 	_c.mutation.SetLastRunAt(v)
@@ -498,6 +512,10 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultQueueResumeCodexSessionID
 		_c.mutation.SetQueueResumeCodexSessionID(v)
 	}
+	if _, ok := _c.mutation.QueueRecoveryBatchID(); !ok {
+		v := entsession.DefaultQueueRecoveryBatchID
+		_c.mutation.SetQueueRecoveryBatchID(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := entsession.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -584,6 +602,9 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.QueueResumeCodexSessionID(); !ok {
 		return &ValidationError{Name: "queue_resume_codex_session_id", err: errors.New(`ent: missing required field "Session.queue_resume_codex_session_id"`)}
+	}
+	if _, ok := _c.mutation.QueueRecoveryBatchID(); !ok {
+		return &ValidationError{Name: "queue_recovery_batch_id", err: errors.New(`ent: missing required field "Session.queue_recovery_batch_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Session.created_at"`)}
@@ -721,6 +742,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.QueueResumeCodexSessionID(); ok {
 		_spec.SetField(entsession.FieldQueueResumeCodexSessionID, field.TypeString, value)
 		_node.QueueResumeCodexSessionID = value
+	}
+	if value, ok := _c.mutation.QueueRecoveryBatchID(); ok {
+		_spec.SetField(entsession.FieldQueueRecoveryBatchID, field.TypeString, value)
+		_node.QueueRecoveryBatchID = value
 	}
 	if value, ok := _c.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)

@@ -136,6 +136,18 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	if ok {
 		t.Fatalf("exited run should not be active: %#v", active)
 	}
+	resumeOf := run.ID
+	resumed := process.Run{
+		ID: "process-run-2", SessionID: run.SessionID, NodeRunID: &nodeRunID,
+		Status: process.StatusStarting, ResumeOf: &resumeOf, StartedAt: finishedAt.Add(time.Minute),
+	}
+	if err := repo.CreateRun(ctx, resumed); err != nil {
+		t.Fatalf("create resumed run: %v", err)
+	}
+	latest, ok, err := repo.FindLatestBySession(ctx, run.SessionID)
+	if err != nil || !ok || latest.ID != resumed.ID || latest.ResumeOf == nil || *latest.ResumeOf != run.ID {
+		t.Fatalf("latest resumed run = %#v ok=%v error=%v", latest, ok, err)
+	}
 }
 
 func TestProcessRepositoryHasAnyBySessionIncludesTerminalRuns(t *testing.T) {
