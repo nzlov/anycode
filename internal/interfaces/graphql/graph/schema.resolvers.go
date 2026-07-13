@@ -250,6 +250,22 @@ func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendP
 	return mapPromptAppend(dto), nil
 }
 
+// UpdatePromptAppend is the resolver for the updatePromptAppend field.
+func (r *mutationResolver) UpdatePromptAppend(ctx context.Context, input model.UpdatePromptAppendInput) (*model.PromptAppend, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.UpdatePromptAppend(ctx, sessionapp.UpdatePromptAppendInput{
+		SessionID:      sessiondomain.ID(input.SessionID),
+		PromptAppendID: input.PromptAppendID,
+		Body:           input.Body,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapPromptAppend(dto), nil
+}
+
 // StageAttachment is the resolver for the stageAttachment field.
 func (r *mutationResolver) StageAttachment(ctx context.Context, file graphql.Upload) (*model.Attachment, error) {
 	if r.UseCases.Attachments == nil {

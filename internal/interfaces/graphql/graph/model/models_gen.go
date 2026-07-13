@@ -574,6 +574,12 @@ type UpdateProjectSettingsInput struct {
 	WorktreeInitCommand string `json:"worktreeInitCommand"`
 }
 
+type UpdatePromptAppendInput struct {
+	SessionID      string `json:"sessionId"`
+	PromptAppendID string `json:"promptAppendId"`
+	Body           string `json:"body"`
+}
+
 type UpdateSessionConfigInput struct {
 	SessionID string              `json:"sessionId"`
 	Config    *SessionConfigInput `json:"config"`

@@ -417,6 +417,84 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 }
 
+func TestSessionRepositoryUpdatesOnlyMatchingPendingPromptAppendBody(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	repo := store.Sessions()
+	createdAt := time.Unix(20, 0).UTC()
+	if err := repo.AppendPrompt(ctx, session.PromptAppend{
+		ID:        "append-pending",
+		SessionID: "session-1",
+		Body:      "before",
+		Status:    session.PromptAppendPending,
+		CreatedAt: createdAt,
+	}); err != nil {
+		t.Fatalf("append pending prompt: %v", err)
+	}
+	attachment := session.SessionAttachment{
+		ID:         "attachment-1",
+		SessionID:  "session-1",
+		SourceType: session.AttachmentSourcePromptAppend,
+		SourceID:   "append-pending",
+		Kind:       "file",
+		Filename:   "notes.txt",
+		Path:       "/attachments/notes.txt",
+		MimeType:   "text/plain",
+		Size:       12,
+		CreatedAt:  createdAt,
+	}
+	if err := store.Attachments().SaveSessionAttachment(ctx, attachment); err != nil {
+		t.Fatalf("save prompt append attachment: %v", err)
+	}
+	if err := repo.AppendPrompt(ctx, session.PromptAppend{
+		ID:                     "append-dispatched",
+		SessionID:              "session-1",
+		Body:                   "dispatched",
+		Status:                 session.PromptAppendDispatched,
+		DispatchedProcessRunID: "process-1",
+		CreatedAt:              createdAt.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("append dispatched prompt: %v", err)
+	}
+
+	updated, ok, err := repo.UpdatePendingPromptAppendBody(ctx, "session-1", "append-pending", "after")
+	if err != nil {
+		t.Fatalf("UpdatePendingPromptAppendBody() error = %v", err)
+	}
+	if !ok || updated.Body != "after" || updated.Status != session.PromptAppendPending || !updated.CreatedAt.Equal(createdAt) {
+		t.Fatalf("UpdatePendingPromptAppendBody() = %#v ok=%v", updated, ok)
+	}
+	if _, ok, err := repo.UpdatePendingPromptAppendBody(ctx, "session-2", "append-pending", "wrong session"); err != nil || ok {
+		t.Fatalf("wrong-session update = ok:%v err:%v", ok, err)
+	}
+	if _, ok, err := repo.UpdatePendingPromptAppendBody(ctx, "session-1", "append-dispatched", "wrong status"); err != nil || ok {
+		t.Fatalf("dispatched update = ok:%v err:%v", ok, err)
+	}
+
+	appends, err := repo.ListPromptAppends(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("list prompt appends: %v", err)
+	}
+	if len(appends) != 2 || appends[0].Body != "after" || appends[1].Body != "dispatched" || appends[1].DispatchedProcessRunID != "process-1" {
+		t.Fatalf("prompt appends = %#v", appends)
+	}
+	attachments, err := store.Attachments().ListPromptAppendAttachments(ctx, "session-1", "append-pending")
+	if err != nil {
+		t.Fatalf("list prompt append attachments: %v", err)
+	}
+	if len(attachments) != 1 || attachments[0].ID != attachment.ID || attachments[0].SourceID != "append-pending" {
+		t.Fatalf("prompt append attachments = %#v", attachments)
+	}
+}
+
 func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{

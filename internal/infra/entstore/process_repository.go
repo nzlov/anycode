@@ -52,6 +52,16 @@ func (r *ProcessRepository) CreateRun(ctx context.Context, run process.Run) erro
 	return nil
 }
 
+func (r *ProcessRepository) HasAnyBySession(ctx context.Context, sessionID process.SessionID) (bool, error) {
+	exists, err := r.client.ProcessRun.Query().
+		Where(entprocessrun.SessionIDEQ(string(sessionID))).
+		Exist(ctx)
+	if err != nil {
+		return false, fmt.Errorf("check process run history: %w", err)
+	}
+	return exists, nil
+}
+
 func (r *ProcessRepository) FindActiveBySession(ctx context.Context, sessionID process.SessionID) (process.Run, bool, error) {
 	row, err := r.client.ProcessRun.Query().
 		Where(

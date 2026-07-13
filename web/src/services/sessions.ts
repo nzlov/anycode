@@ -610,6 +610,41 @@ export async function appendPrompt(
   });
 }
 
+export async function updatePromptAppend(
+  sessionId: string,
+  promptAppendId: string,
+  body: string,
+): Promise<PromptAppend> {
+  const data = await graphqlFetch<
+    { updatePromptAppend: GraphQLPromptAppend },
+    { input: { sessionId: string; promptAppendId: string; body: string } }
+  >({
+    query: `
+      mutation UpdatePromptAppend($input: UpdatePromptAppendInput!) {
+        updatePromptAppend(input: $input) {
+          id
+          sessionId
+          body
+          attachments {
+            id
+            sessionId
+            kind
+            filename
+            mimeType
+            size
+            previewable
+            createdAt
+          }
+          createdAt
+        }
+      }
+    `,
+    variables: { input: { sessionId, promptAppendId, body } },
+    notify: false,
+  });
+  return normalizePromptAppend(data.updatePromptAppend);
+}
+
 export async function stopSession(sessionId: string) {
   return graphqlFetch<{ stopSession: GraphQLSession }, { id: string }>({
     query: `

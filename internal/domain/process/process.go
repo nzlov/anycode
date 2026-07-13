@@ -91,6 +91,7 @@ type ExitResult struct {
 
 type Repository interface {
 	CreateRun(ctx context.Context, run Run) error
+	HasAnyBySession(ctx context.Context, sessionID SessionID) (bool, error)
 	FindActiveBySession(ctx context.Context, sessionID SessionID) (Run, bool, error)
 	CountActive(ctx context.Context) (int, error)
 	MarkWaitingUser(ctx context.Context, id RunID) error

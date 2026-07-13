@@ -3052,6 +3052,180 @@ func TestAppendPromptArchivesStagedAttachments(t *testing.T) {
 	}
 }
 
+func TestUpdatePromptAppendAllowsPendingAppendBeforeFirstProcessRun(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Status:    domain.StatusQueued,
+	}
+	createdAt := time.Unix(20, 0).UTC()
+	repo.appends = []domain.PromptAppend{{
+		ID:        "append-1",
+		SessionID: "session-1",
+		Body:      "before",
+		Status:    domain.PromptAppendPending,
+		CreatedAt: createdAt,
+	}}
+	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+		ID:         "attachment-1",
+		SessionID:  "session-1",
+		SourceType: domain.AttachmentSourcePromptAppend,
+		SourceID:   "append-1",
+		Filename:   "notes.txt",
+	}
+	processes := newFakeProcessRepository()
+	locker := &fakeSessionLocker{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithAttachments(repo, nil),
+		WithProcesses(processes, nil),
+		WithUnitOfWork(uow),
+		WithSessionLocker(locker),
+	)
+
+	got, err := service.UpdatePromptAppend(ctx, UpdatePromptAppendInput{
+		SessionID:      "session-1",
+		PromptAppendID: "append-1",
+		Body:           "  after  ",
+	})
+	if err != nil {
+		t.Fatalf("UpdatePromptAppend() error = %v", err)
+	}
+	if got.Body != "after" || !got.CreatedAt.Equal(createdAt) {
+		t.Fatalf("UpdatePromptAppend() = %#v", got)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].ID != "attachment-1" {
+		t.Fatalf("UpdatePromptAppend() attachments = %#v", got.Attachments)
+	}
+	if !uow.called || !reflect.DeepEqual(locker.ids, []domain.ID{"session-1"}) {
+		t.Fatalf("uow/locker = called:%v ids:%#v", uow.called, locker.ids)
+	}
+	if updated := repo.appends[0]; updated.Body != "after" || updated.Status != domain.PromptAppendPending || !updated.CreatedAt.Equal(createdAt) {
+		t.Fatalf("updated append = %#v", updated)
+	}
+}
+
+func TestUpdatePromptAppendRejectsAnyHistoricalProcessRun(t *testing.T) {
+	for _, status := range []domain.Status{
+		domain.StatusQueued,
+		domain.StatusStopped,
+		domain.StatusFailed,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			ctx := context.Background()
+			repo := newFakeRepository()
+			repo.sessions["session-1"] = domain.Session{ID: "session-1", Status: status}
+			repo.appends = []domain.PromptAppend{{
+				ID:        "append-1",
+				SessionID: "session-1",
+				Body:      "before",
+				Status:    domain.PromptAppendPending,
+			}}
+			processes := newFakeProcessRepository()
+			processes.created = []processdomain.Run{{
+				ID:        "process-1",
+				SessionID: "session-1",
+				Status:    processdomain.StatusExited,
+			}}
+			service := New(
+				repo,
+				newFakeProjectRepository("project-1"),
+				WithProcesses(processes, nil),
+				WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}),
+				WithSessionLocker(NewMemorySessionLocker()),
+			)
+
+			_, err := service.UpdatePromptAppend(ctx, UpdatePromptAppendInput{
+				SessionID:      "session-1",
+				PromptAppendID: "append-1",
+				Body:           "after",
+			})
+			appErr, ok := apperror.From(err)
+			if !ok || appErr.Code != apperror.CodePromptEditAfterStart || appErr.Category != apperror.CategoryValidationError {
+				t.Fatalf("UpdatePromptAppend() error = %#v", err)
+			}
+			if appErr.Message != "流程已开始运行，无法编辑追加提示" || appErr.Retryable || appErr.UserAction != "review_session" {
+				t.Fatalf("UpdatePromptAppend() structured error = %#v", appErr)
+			}
+			if appErr.Details["sessionId"] != "session-1" || appErr.Details["promptAppendId"] != "append-1" {
+				t.Fatalf("UpdatePromptAppend() details = %#v", appErr.Details)
+			}
+			if repo.appends[0].Body != "before" {
+				t.Fatalf("append was modified: %#v", repo.appends[0])
+			}
+		})
+	}
+}
+
+func TestUpdatePromptAppendRejectsInvalidTargetWithoutModification(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         UpdatePromptAppendInput
+		append        domain.PromptAppend
+		sessionStatus domain.Status
+		wantCode      string
+	}{
+		{
+			name:     "blank body",
+			input:    UpdatePromptAppendInput{SessionID: "session-1", PromptAppendID: "append-1", Body: "  "},
+			append:   domain.PromptAppend{ID: "append-1", SessionID: "session-1", Body: "before", Status: domain.PromptAppendPending},
+			wantCode: apperror.CodeValidationFailed,
+		},
+		{
+			name:     "wrong session",
+			input:    UpdatePromptAppendInput{SessionID: "session-1", PromptAppendID: "append-1", Body: "after"},
+			append:   domain.PromptAppend{ID: "append-1", SessionID: "session-2", Body: "before", Status: domain.PromptAppendPending},
+			wantCode: apperror.CodeNotFound,
+		},
+		{
+			name:     "not pending",
+			input:    UpdatePromptAppendInput{SessionID: "session-1", PromptAppendID: "append-1", Body: "after"},
+			append:   domain.PromptAppend{ID: "append-1", SessionID: "session-1", Body: "before", Status: domain.PromptAppendDispatched},
+			wantCode: apperror.CodeNotFound,
+		},
+		{
+			name:          "closed session",
+			input:         UpdatePromptAppendInput{SessionID: "session-1", PromptAppendID: "append-1", Body: "after"},
+			append:        domain.PromptAppend{ID: "append-1", SessionID: "session-1", Body: "before", Status: domain.PromptAppendPending},
+			sessionStatus: domain.StatusClosed,
+			wantCode:      apperror.CodeValidationFailed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := newFakeRepository()
+			status := test.sessionStatus
+			if status == "" {
+				status = domain.StatusQueued
+			}
+			repo.sessions["session-1"] = domain.Session{ID: "session-1", Status: status}
+			repo.appends = []domain.PromptAppend{test.append}
+			processes := newFakeProcessRepository()
+			service := New(
+				repo,
+				newFakeProjectRepository("project-1"),
+				WithProcesses(processes, nil),
+				WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}),
+				WithSessionLocker(NewMemorySessionLocker()),
+			)
+
+			_, err := service.UpdatePromptAppend(context.Background(), test.input)
+			appErr, ok := apperror.From(err)
+			if !ok || appErr.Code != test.wantCode {
+				t.Fatalf("UpdatePromptAppend() error = %#v", err)
+			}
+			if repo.appends[0].Body != "before" {
+				t.Fatalf("append was modified: %#v", repo.appends[0])
+			}
+		})
+	}
+}
+
 func TestAppendPromptAllowsAttachmentOnlyAppend(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -8599,6 +8773,18 @@ func (r *fakeRepository) AppendPrompt(_ context.Context, promptAppend domain.Pro
 	return nil
 }
 
+func (r *fakeRepository) UpdatePendingPromptAppendBody(_ context.Context, sessionID domain.ID, id string, body string) (domain.PromptAppend, bool, error) {
+	for index := range r.appends {
+		promptAppend := &r.appends[index]
+		if promptAppend.ID != id || promptAppend.SessionID != sessionID || promptAppend.Status != domain.PromptAppendPending {
+			continue
+		}
+		promptAppend.Body = body
+		return *promptAppend, true, nil
+	}
+	return domain.PromptAppend{}, false, nil
+}
+
 func (r *fakeRepository) DeletePromptAppend(_ context.Context, id string) error {
 	r.deletedAppends = append(r.deletedAppends, id)
 	for index, promptAppend := range r.appends {
@@ -9092,6 +9278,15 @@ func (r *fakeProcessRepository) CreateRun(_ context.Context, run processdomain.R
 	r.active = run
 	r.hasActive = true
 	return nil
+}
+
+func (r *fakeProcessRepository) HasAnyBySession(_ context.Context, sessionID processdomain.SessionID) (bool, error) {
+	for _, run := range r.created {
+		if run.SessionID == sessionID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *fakeProcessRepository) FindActiveBySession(_ context.Context, sessionID processdomain.SessionID) (processdomain.Run, bool, error) {

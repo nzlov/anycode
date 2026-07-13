@@ -138,6 +138,41 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	}
 }
 
+func TestProcessRepositoryHasAnyBySessionIncludesTerminalRuns(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	repo := store.Processes()
+	exists, err := repo.HasAnyBySession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("HasAnyBySession() before create error = %v", err)
+	}
+	if exists {
+		t.Fatal("HasAnyBySession() before create = true")
+	}
+	if err := repo.CreateRun(ctx, process.Run{
+		ID:        "process-run-1",
+		SessionID: "session-1",
+		Status:    process.StatusExited,
+	}); err != nil {
+		t.Fatalf("create terminal run: %v", err)
+	}
+	exists, err = repo.HasAnyBySession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("HasAnyBySession() error = %v", err)
+	}
+	if !exists {
+		t.Fatal("HasAnyBySession() = false, want true")
+	}
+}
+
 func TestProcessRepositoryRejectsSecondActiveRunForSession(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})

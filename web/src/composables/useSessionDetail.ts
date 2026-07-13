@@ -21,6 +21,7 @@ import {
   type PageInfo,
   stopSession as stopSessionRequest,
   updateSessionConfig,
+  updatePromptAppend,
   type SessionConfigInput,
   type SessionDetailData,
 } from '@/services/sessions';
@@ -140,6 +141,21 @@ export function useSessionDetail(sessionId: string) {
     } finally {
       appending.value = false;
     }
+  }
+
+  async function updatePromptAppendBody(promptAppendId: string, body: string) {
+    const updated = await updatePromptAppend(sessionId, promptAppendId, body.trim());
+    const current = session.value;
+    if (current) {
+      sessionRequests.invalidate();
+      session.value = {
+        ...current,
+        promptAppends: current.promptAppends.map((prompt) =>
+          prompt.id === updated.id ? updated : prompt,
+        ),
+      };
+    }
+    return updated;
   }
 
   async function stopSession() {
@@ -466,6 +482,7 @@ export function useSessionDetail(sessionId: string) {
     error,
     loadSessionDetail,
     appendDescription,
+    updatePromptAppendBody,
     executeSession,
     stopSession,
     closeSession,
