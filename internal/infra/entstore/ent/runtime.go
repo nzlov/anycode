@@ -306,15 +306,15 @@ func init() {
 	// entsession.DefaultQueueResumeCodexSessionID holds the default value on creation for the queue_resume_codex_session_id field.
 	entsession.DefaultQueueResumeCodexSessionID = entsessionDescQueueResumeCodexSessionID.Default.(string)
 	// entsessionDescQueueRecoveryBatchID is the schema descriptor for queue_recovery_batch_id field.
-	entsessionDescQueueRecoveryBatchID := entsessionFields[24].Descriptor()
+	entsessionDescQueueRecoveryBatchID := entsessionFields[25].Descriptor()
 	// entsession.DefaultQueueRecoveryBatchID holds the default value on creation for the queue_recovery_batch_id field.
 	entsession.DefaultQueueRecoveryBatchID = entsessionDescQueueRecoveryBatchID.Default.(string)
 	// entsessionDescCreatedAt is the schema descriptor for created_at field.
-	entsessionDescCreatedAt := entsessionFields[26].Descriptor()
+	entsessionDescCreatedAt := entsessionFields[27].Descriptor()
 	// entsession.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entsession.DefaultCreatedAt = entsessionDescCreatedAt.Default.(func() time.Time)
 	// entsessionDescUpdatedAt is the schema descriptor for updated_at field.
-	entsessionDescUpdatedAt := entsessionFields[27].Descriptor()
+	entsessionDescUpdatedAt := entsessionFields[28].Descriptor()
 	// entsession.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

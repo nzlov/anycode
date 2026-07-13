@@ -275,12 +275,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[27]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[28]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[25]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[26]},
 			},
 			{
 				Name:    "session_status",
