@@ -536,6 +536,7 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 
 func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	beforeEventID := "event-40"
+	messageRole := "assistant"
 	limit := 50
 	timeline := &fakeTimelineUseCase{}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Query()
@@ -543,6 +544,7 @@ func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	_, err := resolver.SessionTranscript(context.Background(), model.ListTranscriptEventsInput{
 		SessionID:     "session-1",
 		BeforeEventID: &beforeEventID,
+		MessageRole:   &messageRole,
 		Limit:         &limit,
 	})
 	if err != nil {
@@ -552,6 +554,7 @@ func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	want := timelineapp.ListSessionEventsInput{
 		SessionID:     "session-1",
 		BeforeEventID: eventdomain.ID(beforeEventID),
+		MessageRole:   messageRole,
 		Limit:         limit,
 	}
 	if !reflect.DeepEqual(timeline.gotListSessionEventsInput, want) {
@@ -744,6 +747,64 @@ func TestMutationAppendPromptForwardsStagedAttachmentIDs(t *testing.T) {
 	}
 	if len(sessions.gotAppend.StagedAttachmentIDs) != 2 || sessions.gotAppend.StagedAttachmentIDs[0] != "staged-1" || sessions.gotAppend.StagedAttachmentIDs[1] != "staged-2" {
 		t.Fatalf("AppendPrompt() staged ids = %#v", sessions.gotAppend.StagedAttachmentIDs)
+	}
+}
+
+func TestMutationUpdatePromptAppendForwardsTargetAndReturnsDTO(t *testing.T) {
+	sessions := &fakeSessionUseCase{
+		updateAppendResult: sessionapp.PromptAppendDTO{
+			ID:        "append-1",
+			SessionID: "session-1",
+			Body:      "after",
+			CreatedAt: time.Unix(34, 0).UTC(),
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.UpdatePromptAppend(context.Background(), model.UpdatePromptAppendInput{
+		SessionID:      "session-1",
+		PromptAppendID: "append-1",
+		Body:           "after",
+	})
+	if err != nil {
+		t.Fatalf("UpdatePromptAppend() error = %v", err)
+	}
+	if sessions.gotUpdateAppend.SessionID != "session-1" || sessions.gotUpdateAppend.PromptAppendID != "append-1" || sessions.gotUpdateAppend.Body != "after" {
+		t.Fatalf("UpdatePromptAppend() input = %#v", sessions.gotUpdateAppend)
+	}
+	if got.ID != "append-1" || got.Body != "after" {
+		t.Fatalf("UpdatePromptAppend() = %#v", got)
+	}
+}
+
+func TestMutationUpdatePromptAppendPresentsStartedErrorExtensions(t *testing.T) {
+	sessions := &fakeSessionUseCase{err: apperror.New(
+		apperror.CodePromptEditAfterStart,
+		apperror.CategoryValidationError,
+		"流程已开始运行，无法编辑追加提示",
+	).WithDetails(map[string]any{
+		"sessionId":      "session-1",
+		"promptAppendId": "append-1",
+	}).WithRetryable(false).WithUserAction("review_session")}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	_, err := resolver.UpdatePromptAppend(context.Background(), model.UpdatePromptAppendInput{
+		SessionID:      "session-1",
+		PromptAppendID: "append-1",
+		Body:           "after",
+	})
+	if err == nil {
+		t.Fatal("UpdatePromptAppend() expected error")
+	}
+	presented := ErrorPresenter(context.Background(), err)
+	if presented.Message != "流程已开始运行，无法编辑追加提示" {
+		t.Fatalf("message = %q", presented.Message)
+	}
+	if presented.Extensions["code"] != apperror.CodePromptEditAfterStart || presented.Extensions["category"] != string(apperror.CategoryValidationError) {
+		t.Fatalf("extensions = %#v", presented.Extensions)
+	}
+	if presented.Extensions["retryable"] != false || presented.Extensions["userAction"] != "review_session" {
+		t.Fatalf("extensions = %#v", presented.Extensions)
 	}
 }
 
@@ -1193,6 +1254,8 @@ type fakeSessionUseCase struct {
 	updateConfigResult sessionapp.DTO
 	gotAppend          sessionapp.AppendPromptInput
 	appendResult       sessionapp.PromptAppendDTO
+	gotUpdateAppend    sessionapp.UpdatePromptAppendInput
+	updateAppendResult sessionapp.PromptAppendDTO
 }
 
 func (f *fakeSessionUseCase) ExecuteSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
@@ -1240,6 +1303,11 @@ func (f *fakeSessionUseCase) StopProjectSessions(_ context.Context, projectID se
 func (f *fakeSessionUseCase) AppendPrompt(_ context.Context, input sessionapp.AppendPromptInput) (sessionapp.PromptAppendDTO, error) {
 	f.gotAppend = input
 	return f.appendResult, f.err
+}
+
+func (f *fakeSessionUseCase) UpdatePromptAppend(_ context.Context, input sessionapp.UpdatePromptAppendInput) (sessionapp.PromptAppendDTO, error) {
+	f.gotUpdateAppend = input
+	return f.updateAppendResult, f.err
 }
 
 func (f *fakeSessionUseCase) UpdateSessionConfig(_ context.Context, input sessionapp.UpdateSessionConfigInput) (sessionapp.DTO, error) {

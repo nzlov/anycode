@@ -271,6 +271,28 @@ func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsessi
 	return nil
 }
 
+func (r *SessionRepository) UpdatePendingPromptAppendBody(ctx context.Context, sessionID domainsession.ID, id string, body string) (domainsession.PromptAppend, bool, error) {
+	updated, err := r.client.PromptAppend.Update().
+		Where(
+			entpromptappend.IDEQ(id),
+			entpromptappend.SessionIDEQ(string(sessionID)),
+			entpromptappend.StatusEQ(string(domainsession.PromptAppendPending)),
+		).
+		SetBody(body).
+		Save(ctx)
+	if err != nil {
+		return domainsession.PromptAppend{}, false, fmt.Errorf("update pending prompt append body: %w", err)
+	}
+	if updated == 0 {
+		return domainsession.PromptAppend{}, false, nil
+	}
+	row, err := r.client.PromptAppend.Get(ctx, id)
+	if err != nil {
+		return domainsession.PromptAppend{}, false, fmt.Errorf("find updated prompt append: %w", err)
+	}
+	return promptAppendFromRow(row), true, nil
+}
+
 func (r *SessionRepository) DeletePromptAppend(ctx context.Context, id string) error {
 	if err := r.client.PromptAppend.DeleteOneID(id).Exec(ctx); err != nil && !ent.IsNotFound(err) {
 		return fmt.Errorf("delete prompt append: %w", err)
@@ -358,17 +380,21 @@ func (r *SessionRepository) ReleasePromptAppends(ctx context.Context, processRun
 func promptAppendsFromRows(rows []*ent.PromptAppend) []domainsession.PromptAppend {
 	appends := make([]domainsession.PromptAppend, 0, len(rows))
 	for _, row := range rows {
-		appends = append(appends, domainsession.PromptAppend{
-			ID:                     row.ID,
-			SessionID:              domainsession.ID(row.SessionID),
-			Body:                   row.Body,
-			Status:                 domainsession.PromptAppendStatus(row.Status),
-			DispatchedAt:           row.DispatchedAt,
-			DispatchedProcessRunID: row.DispatchedProcessRunID,
-			CreatedAt:              row.CreatedAt,
-		})
+		appends = append(appends, promptAppendFromRow(row))
 	}
 	return appends
+}
+
+func promptAppendFromRow(row *ent.PromptAppend) domainsession.PromptAppend {
+	return domainsession.PromptAppend{
+		ID:                     row.ID,
+		SessionID:              domainsession.ID(row.SessionID),
+		Body:                   row.Body,
+		Status:                 domainsession.PromptAppendStatus(row.Status),
+		DispatchedAt:           row.DispatchedAt,
+		DispatchedProcessRunID: row.DispatchedProcessRunID,
+		CreatedAt:              row.CreatedAt,
+	}
 }
 
 func (r *SessionRepository) AddMergeRecord(ctx context.Context, record domainsession.MergeRecord) error {

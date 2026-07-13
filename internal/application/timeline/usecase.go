@@ -22,6 +22,7 @@ type UseCase interface {
 type ListSessionEventsInput struct {
 	SessionID     sessiondomain.ID
 	BeforeEventID eventdomain.ID
+	MessageRole   string
 	Limit         int
 }
 
@@ -86,6 +87,7 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 	if err != nil {
 		return Page{}, fmt.Errorf("list session events: %w", err)
 	}
+	events = filterEventsByMessageRole(events, input.MessageRole)
 	pageEvents, total, hasMore := pageEventsBefore(events, input.BeforeEventID, limit)
 	nextCursor := ""
 	if hasMore && len(pageEvents) > 0 {
@@ -99,6 +101,21 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 		NextCursor: nextCursor,
 		Usage:      usage,
 	}, nil
+}
+
+func filterEventsByMessageRole(events []DTO, role string) []DTO {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return events
+	}
+	filtered := make([]DTO, 0, len(events))
+	for _, item := range events {
+		content, ok := item.Content.(processdomain.CodexMessageContent)
+		if ok && content.Role == role {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error) {

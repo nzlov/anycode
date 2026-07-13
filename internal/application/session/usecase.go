@@ -46,6 +46,7 @@ type UseCase interface {
 	MarkWaitingUser(ctx context.Context, id domain.ID) (DTO, error)
 	MarkRunningAfterUserWait(ctx context.Context, id domain.ID) (DTO, error)
 	AppendPrompt(ctx context.Context, input AppendPromptInput) (PromptAppendDTO, error)
+	UpdatePromptAppend(ctx context.Context, input UpdatePromptAppendInput) (PromptAppendDTO, error)
 	SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error)
 	HandleQuestionBatchAnswered(ctx context.Context, batch questionapp.BatchDTO) error
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
@@ -88,6 +89,12 @@ type AppendPromptInput struct {
 	SessionID           domain.ID
 	Body                string
 	StagedAttachmentIDs []domain.StagedAttachmentID
+}
+
+type UpdatePromptAppendInput struct {
+	SessionID      domain.ID
+	PromptAppendID string
+	Body           string
 }
 
 type SubmitWorkflowApprovalInput struct {
@@ -4428,6 +4435,91 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	return toPromptAppendDTO(append), nil
+}
+
+func (s *Service) UpdatePromptAppend(ctx context.Context, input UpdatePromptAppendInput) (PromptAppendDTO, error) {
+	if s == nil {
+		return PromptAppendDTO{}, errors.New("session usecase: nil service")
+	}
+	if input.SessionID == "" {
+		return PromptAppendDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session id is required")
+	}
+	promptAppendID := strings.TrimSpace(input.PromptAppendID)
+	if promptAppendID == "" {
+		return PromptAppendDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "prompt append id is required")
+	}
+	body := strings.TrimSpace(input.Body)
+	if body == "" {
+		return PromptAppendDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "追加提示正文不能为空")
+	}
+	if s.locker == nil || s.uow == nil {
+		return PromptAppendDTO{}, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "prompt append editing is not configured").WithRetryable(true)
+	}
+
+	var updated domain.PromptAppend
+	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+		var attachments []domain.SessionAttachment
+		if s.attachments != nil {
+			var err error
+			attachments, err = s.attachments.ListPromptAppendAttachments(ctx, input.SessionID, promptAppendID)
+			if err != nil {
+				return fmt.Errorf("list prompt append attachments: %w", err)
+			}
+		}
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			processes := tx.Processes()
+			sessions := tx.Sessions()
+			if processes == nil || sessions == nil {
+				return apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "prompt append editing transaction is not configured").WithRetryable(true)
+			}
+			session, err := sessions.Find(ctx, input.SessionID)
+			if err != nil {
+				return fmt.Errorf("find session for prompt append editing: %w", err)
+			}
+			if session.Status == domain.StatusClosed {
+				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "已关闭卡片不能编辑追加提示").
+					WithDetails(map[string]any{"sessionId": string(input.SessionID)})
+			}
+			started, err := processes.HasAnyBySession(ctx, processdomain.SessionID(input.SessionID))
+			if err != nil {
+				return fmt.Errorf("check session process history: %w", err)
+			}
+			if started {
+				return promptEditAfterStartError(input.SessionID, promptAppendID)
+			}
+			updatedAppend, ok, err := sessions.UpdatePendingPromptAppendBody(ctx, input.SessionID, promptAppendID, body)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "待编辑的追加提示不存在或已投递").
+					WithDetails(map[string]any{
+						"sessionId":      string(input.SessionID),
+						"promptAppendId": promptAppendID,
+					})
+			}
+			updated = updatedAppend
+			return nil
+		}); err != nil {
+			return err
+		}
+		updated.Attachments = attachments
+		return nil
+	})
+	if err != nil {
+		return PromptAppendDTO{}, err
+	}
+	return toPromptAppendDTO(updated), nil
+}
+
+func promptEditAfterStartError(sessionID domain.ID, promptAppendID string) error {
+	return apperror.New(apperror.CodePromptEditAfterStart, apperror.CategoryValidationError, "流程已开始运行，无法编辑追加提示").
+		WithDetails(map[string]any{
+			"sessionId":      string(sessionID),
+			"promptAppendId": promptAppendID,
+		}).
+		WithRetryable(false).
+		WithUserAction("review_session")
 }
 
 func (s *Service) appendPromptAndQueue(ctx context.Context, session domain.Session, promptAppend domain.PromptAppend, options codexStartOptions, priority domain.QueuePriority, kind domain.QueueKind) (domain.Session, bool, error) {

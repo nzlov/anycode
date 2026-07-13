@@ -22,6 +22,14 @@ test('latestTranscriptPageInput includes before cursor for older pages', () => {
   });
 });
 
+test('latestTranscriptPageInput includes an optional message role filter', () => {
+  assert.deepEqual(latestTranscriptPageInput('session-1', '', 10, 'assistant'), {
+    sessionId: 'session-1',
+    messageRole: 'assistant',
+    limit: 10,
+  });
+});
+
 test('olderTranscriptCursor uses the backend cursor', () => {
   assert.equal(olderTranscriptCursor({ nextCursor: 'event-40' }), 'event-40');
   assert.equal(olderTranscriptCursor({ nextCursor: '' }), null);

@@ -16,11 +16,13 @@ import {
   subscribeSessionStateUpdates,
   executeSession as executeSessionRequest,
   submitQuestionBatch,
+  submitWorkflowApproval as submitWorkflowApprovalRequest,
   type QuestionAnswerInput,
   type QuestionBatch,
   type PageInfo,
   stopSession as stopSessionRequest,
   updateSessionConfig,
+  updatePromptAppend,
   type SessionConfigInput,
   type SessionDetailData,
 } from '@/services/sessions';
@@ -55,6 +57,7 @@ export function useSessionDetail(sessionId: string) {
   const updatingConfig = ref(false);
   const questionsLoading = ref(false);
   const questionsSubmitting = ref(false);
+  const approvalSubmitting = ref(false);
   const pendingQuestionBatches = ref<QuestionBatch[]>([]);
   const error = ref('');
   let liveStopped = true;
@@ -140,6 +143,21 @@ export function useSessionDetail(sessionId: string) {
     } finally {
       appending.value = false;
     }
+  }
+
+  async function updatePromptAppendBody(promptAppendId: string, body: string) {
+    const updated = await updatePromptAppend(sessionId, promptAppendId, body.trim());
+    const current = session.value;
+    if (current) {
+      sessionRequests.invalidate();
+      session.value = {
+        ...current,
+        promptAppends: current.promptAppends.map((prompt) =>
+          prompt.id === updated.id ? updated : prompt,
+        ),
+      };
+    }
+    return updated;
   }
 
   async function stopSession() {
@@ -263,6 +281,30 @@ export function useSessionDetail(sessionId: string) {
       throw err;
     } finally {
       questionsSubmitting.value = false;
+    }
+  }
+
+  async function submitApproval(approved: boolean, comment: string) {
+    const approval = session.value?.pendingApproval;
+    if (!approval) {
+      error.value = '未找到当前审批上下文，请刷新后重试';
+      return;
+    }
+    approvalSubmitting.value = true;
+    error.value = '';
+    try {
+      await submitWorkflowApprovalRequest({
+        workflowRunId: approval.workflowRunId,
+        nodeId: approval.nodeId,
+        approved,
+        comment,
+      });
+      await loadSessionState();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '提交审批失败';
+      throw err;
+    } finally {
+      approvalSubmitting.value = false;
     }
   }
 
@@ -463,9 +505,11 @@ export function useSessionDetail(sessionId: string) {
     updatingConfig,
     questionsLoading,
     questionsSubmitting,
+    approvalSubmitting,
     error,
     loadSessionDetail,
     appendDescription,
+    updatePromptAppendBody,
     executeSession,
     stopSession,
     closeSession,
@@ -473,6 +517,7 @@ export function useSessionDetail(sessionId: string) {
     loadPendingQuestions,
     loadOlderEvents,
     submitPendingAnswers,
+    submitApproval,
     startLiveUpdates,
     stopLiveUpdates,
   };

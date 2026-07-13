@@ -1,7 +1,4 @@
-import {
-  type CodexModelOption,
-  normalizeCodexModelOptions,
-} from '@/components/promptOptions';
+import { type CodexModelOption } from '@/components/promptOptions';
 import { graphqlFetch } from '@/services/graphqlClient';
 
 interface CodexModelOptionsResponse {
@@ -25,5 +22,5 @@ export async function listCodexModelOptions() {
       }
     `,
   });
-  return normalizeCodexModelOptions(data.codexModelOptions);
+  return data.codexModelOptions;
 }

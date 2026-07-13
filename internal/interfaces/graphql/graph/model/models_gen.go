@@ -186,6 +186,7 @@ type ListSessionsInput struct {
 type ListTranscriptEventsInput struct {
 	SessionID     string  `json:"sessionId"`
 	BeforeEventID *string `json:"beforeEventId,omitempty"`
+	MessageRole   *string `json:"messageRole,omitempty"`
 	Limit         *int    `json:"limit,omitempty"`
 }
 
@@ -572,6 +573,12 @@ func (TranscriptUnknownContent) IsTranscriptContent() {}
 type UpdateProjectSettingsInput struct {
 	ProjectID           string `json:"projectId"`
 	WorktreeInitCommand string `json:"worktreeInitCommand"`
+}
+
+type UpdatePromptAppendInput struct {
+	SessionID      string `json:"sessionId"`
+	PromptAppendID string `json:"promptAppendId"`
+	Body           string `json:"body"`
 }
 
 type UpdateSessionConfigInput struct {

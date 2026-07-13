@@ -801,6 +801,10 @@ func (r *fakeSessionRepository) AppendPrompt(context.Context, sessiondomain.Prom
 	return nil
 }
 
+func (r *fakeSessionRepository) UpdatePendingPromptAppendBody(context.Context, sessiondomain.ID, string, string) (sessiondomain.PromptAppend, bool, error) {
+	return sessiondomain.PromptAppend{}, false, nil
+}
+
 func (r *fakeSessionRepository) DeletePromptAppend(context.Context, string) error {
 	return nil
 }

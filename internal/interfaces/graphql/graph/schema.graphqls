@@ -37,6 +37,7 @@ type Mutation {
   resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
+  updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
@@ -612,9 +613,16 @@ input AppendPromptInput {
   stagedAttachmentIds: [ID!]
 }
 
+input UpdatePromptAppendInput {
+  sessionId: ID!
+  promptAppendId: ID!
+  body: String!
+}
+
 input ListTranscriptEventsInput {
   sessionId: ID!
   beforeEventId: ID
+  messageRole: String
   limit: Int
 }
 

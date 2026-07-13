@@ -67,6 +67,13 @@
               @submit="submitAnswers"
             />
           </q-card>
+          <WorkflowApprovalPanel
+            v-else-if="isWaitingForApproval"
+            :key="approvalPanelKey"
+            :context-available="Boolean(session?.pendingApproval)"
+            :submitting="approvalSubmitting"
+            @submit="submitApproval"
+          />
           <CodexPromptComposer
             v-else
             v-model:prompt="appendText"
@@ -268,7 +275,14 @@
               <div class="append-history">
                 <div class="append-history__title">追加描述</div>
                 <q-list v-if="session?.promptAppends.length" bordered separator>
-                  <q-item v-for="item in session.promptAppends" :key="item.id">
+                  <q-item
+                    v-for="item in session.promptAppends"
+                    :key="item.id"
+                    clickable
+                    v-ripple
+                    aria-label="编辑追加提示"
+                    @click="openPromptAppendEditor(item)"
+                  >
                     <q-item-section>
                       <q-item-label class="append-history__body">{{ item.body }}</q-item-label>
                       <div v-if="item.attachments.length" class="append-history__attachments">
@@ -286,6 +300,10 @@
                       </div>
                       <q-item-label caption>{{ item.time }}</q-item-label>
                     </q-item-section>
+                    <q-item-section side>
+                      <q-icon name="edit" color="grey-7" />
+                    </q-item-section>
+                    <q-tooltip>编辑追加提示</q-tooltip>
                   </q-item>
                 </q-list>
                 <div v-else class="append-history__empty">暂无追加描述</div>
@@ -393,6 +411,73 @@
       </aside>
     </div>
 
+    <q-dialog v-model="promptEditDialogOpen" :persistent="promptEditSaving">
+      <q-card class="prompt-edit-dialog" aria-label="编辑追加提示">
+        <q-card-section class="prompt-edit-dialog__header">
+          <div class="text-subtitle1 text-weight-bold">编辑追加提示</div>
+          <q-btn
+            v-close-popup
+            flat
+            round
+            dense
+            class="app-icon-btn"
+            icon="close"
+            aria-label="关闭"
+            :disable="promptEditSaving"
+          >
+            <q-tooltip>关闭</q-tooltip>
+          </q-btn>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="prompt-edit-dialog__body">
+          <q-banner v-if="promptEditError" dense class="prompt-edit-dialog__error">
+            <template #avatar>
+              <q-icon name="error_outline" />
+            </template>
+            {{ promptEditError }}
+          </q-banner>
+          <q-input
+            v-model="promptEditBody"
+            outlined
+            type="textarea"
+            autogrow
+            label="追加提示正文"
+            :disable="promptEditSaving"
+          />
+          <div v-if="promptEditTarget?.attachments.length" class="prompt-edit-dialog__attachments">
+            <div class="text-caption text-muted">附件保持不变</div>
+            <div class="append-history__attachments">
+              <q-chip
+                v-for="attachment in promptEditTarget.attachments"
+                :key="attachment.id"
+                dense
+                square
+                outline
+                icon="attach_file"
+                color="primary"
+                text-color="primary"
+                :label="attachment.filename"
+              />
+            </div>
+          </div>
+        </q-card-section>
+        <q-separator />
+        <q-card-actions align="right">
+          <q-btn v-close-popup flat no-caps icon="close" label="取消" :disable="promptEditSaving" />
+          <q-btn
+            unelevated
+            no-caps
+            color="primary"
+            icon="save"
+            label="保存"
+            :loading="promptEditSaving"
+            :disable="!canSavePromptAppendEdit"
+            @click="savePromptAppendEdit"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-dialog v-model="fileDiffDialog">
       <q-card class="file-diff-dialog">
         <q-card-section class="diff-dialog-header">
@@ -438,6 +523,7 @@ import AppPagination from '@/components/AppPagination.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
+import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
@@ -451,7 +537,7 @@ import {
 } from '@/services/sessionStatusPresentation';
 import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
-import type { QuestionAnswerInput, SessionMode } from '@/services/sessions';
+import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 
 const route = useRoute();
@@ -460,6 +546,11 @@ const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
 const appendUploading = ref(false);
+const promptEditDialogOpen = ref(false);
+const promptEditTarget = ref<PromptAppend | null>(null);
+const promptEditBody = ref('');
+const promptEditSaving = ref(false);
+const promptEditError = ref('');
 const composerModel = ref('');
 const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
@@ -499,9 +590,11 @@ const {
   updatingConfig,
   questionsLoading,
   questionsSubmitting,
+  approvalSubmitting,
   error: detailError,
   loadSessionDetail,
   appendDescription,
+  updatePromptAppendBody,
   executeSession,
   stopSession,
   closeSession: closeSessionRequest,
@@ -509,6 +602,7 @@ const {
   loadPendingQuestions,
   loadOlderEvents,
   submitPendingAnswers,
+  submitApproval,
   startLiveUpdates,
   stopLiveUpdates,
 } = useSessionDetail(sessionId);
@@ -532,6 +626,14 @@ const isWaitingForAnswer = computed(
   () =>
     !isClosed.value && (session.value?.pendingQuestion || session.value?.status === 'waiting_user'),
 );
+const isWaitingForApproval = computed(
+  () => !isClosed.value && session.value?.status === 'waiting_approval',
+);
+const approvalPanelKey = computed(() => {
+  const approval = session.value?.pendingApproval;
+  if (!approval) return 'missing';
+  return `${approval.workflowRunId}:${approval.nodeId}:${approval.nodeRunId}`;
+});
 const composerConfigDirty = computed(() => {
   const current = session.value;
   if (!current) return false;
@@ -541,9 +643,12 @@ const composerConfigDirty = computed(() => {
     current.config.permissionMode !== composerPermission.value
   );
 });
-const streamEntries = computed<TranscriptItem[]>(() =>
-  reduceTranscriptEvents(events.value),
-);
+const canSavePromptAppendEdit = computed(() => {
+  const target = promptEditTarget.value;
+  const body = promptEditBody.value.trim();
+  return Boolean(target && body && body !== target.body.trim() && !promptEditSaving.value);
+});
+const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
 const latestTokenUsage = computed(() => tokenUsage.value);
 const composerAction = computed(() => {
   const current = session.value;
@@ -783,6 +888,30 @@ function fileColor(status: DiffFile['status']) {
   if (status === 'deleted') return 'negative';
   if (status === 'renamed') return 'warning';
   return 'primary';
+}
+
+function openPromptAppendEditor(prompt: PromptAppend) {
+  promptEditTarget.value = prompt;
+  promptEditBody.value = prompt.body;
+  promptEditError.value = '';
+  promptEditDialogOpen.value = true;
+}
+
+async function savePromptAppendEdit() {
+  const target = promptEditTarget.value;
+  if (!target || !canSavePromptAppendEdit.value) return;
+  promptEditSaving.value = true;
+  promptEditError.value = '';
+  try {
+    await updatePromptAppendBody(target.id, promptEditBody.value);
+    promptEditDialogOpen.value = false;
+    promptEditTarget.value = null;
+    promptEditBody.value = '';
+  } catch (err) {
+    promptEditError.value = err instanceof Error ? err.message : '保存追加提示失败';
+  } finally {
+    promptEditSaving.value = false;
+  }
 }
 
 async function sendAppend() {
@@ -1199,6 +1328,36 @@ async function scrollEventsToBottom() {
 .append-history__empty {
   color: var(--ac-text-muted);
   font-size: 13px;
+}
+
+.prompt-edit-dialog {
+  width: min(560px, 92vw);
+  max-width: 92vw;
+}
+
+.prompt-edit-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prompt-edit-dialog__body,
+.prompt-edit-dialog__attachments {
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-edit-dialog__body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.prompt-edit-dialog__error {
+  color: var(--q-negative);
+  background: var(--ac-surface-muted);
+  border: 1px solid currentColor;
+  border-radius: var(--ac-radius);
 }
 
 .file-diff-dialog {
