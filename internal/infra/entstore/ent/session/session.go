@@ -39,6 +39,8 @@ const (
 	FieldReasoningEffort = "reasoning_effort"
 	// FieldPermissionMode holds the string denoting the permission_mode field in the database.
 	FieldPermissionMode = "permission_mode"
+	// FieldFastMode holds the string denoting the fast_mode field in the database.
+	FieldFastMode = "fast_mode"
 	// FieldTodoList holds the string denoting the todo_list field in the database.
 	FieldTodoList = "todo_list"
 	// FieldQueuedAt holds the string denoting the queued_at field in the database.
@@ -87,6 +89,7 @@ var Columns = []string{
 	FieldCodexModel,
 	FieldReasoningEffort,
 	FieldPermissionMode,
+	FieldFastMode,
 	FieldTodoList,
 	FieldQueuedAt,
 	FieldQueueKind,
@@ -138,6 +141,8 @@ var (
 	DefaultReasoningEffort string
 	// DefaultPermissionMode holds the default value on creation for the "permission_mode" field.
 	DefaultPermissionMode string
+	// DefaultFastMode holds the default value on creation for the "fast_mode" field.
+	DefaultFastMode bool
 	// DefaultQueueKind holds the default value on creation for the "queue_kind" field.
 	DefaultQueueKind string
 	// DefaultQueuePriority holds the default value on creation for the "queue_priority" field.
@@ -231,6 +236,11 @@ func ByReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
 // ByPermissionMode orders the results by the permission_mode field.
 func ByPermissionMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPermissionMode, opts...).ToFunc()
+}
+
+// ByFastMode orders the results by the fast_mode field.
+func ByFastMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFastMode, opts...).ToFunc()
 }
 
 // ByQueuedAt orders the results by the queued_at field.

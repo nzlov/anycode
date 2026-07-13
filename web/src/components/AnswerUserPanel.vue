@@ -62,22 +62,20 @@
               </q-item-section>
             </q-item>
 
-            <q-item v-if="question.allowCustom" tag="label" clickable class="option-item option-item--custom">
-              <q-item-section avatar>
+            <q-item v-if="question.allowCustom" class="option-item option-item--custom">
+              <q-item-section>
                 <q-radio
                   :model-value="drafts[question.id]?.choice"
                   val="__custom__"
+                  label="自定义答案"
                   @update:model-value="setChoice(question.id, String($event))"
                 />
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>自定义答案</q-item-label>
                 <q-input
                   :model-value="draftFor(question.id).customAnswer"
                   dense
                   outlined
                   autogrow
-                  class="q-mt-sm"
+                  class="custom-answer-input"
                   placeholder="输入自己的答案"
                   :disable="drafts[question.id]?.choice !== '__custom__'"
                   @update:model-value="setCustomAnswer(question.id, String($event ?? ''))"
@@ -210,6 +208,16 @@ function submit() {
 <style scoped>
 .answer-panel {
   position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.answer-panel > .q-tab-panels {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .empty-state {
@@ -294,12 +302,16 @@ function submit() {
   background: #ecfeff;
 }
 
+.custom-answer-input {
+  margin: 8px 0 0 40px;
+}
+
 .answer-panel__actions {
   justify-content: space-between;
   padding: 12px 36px 22px;
 }
 
-@media (max-width: 699px) {
+@media (max-width: 599.98px) {
   .question-tabs {
     margin: 12px 16px 0;
   }

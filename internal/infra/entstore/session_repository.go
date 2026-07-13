@@ -56,6 +56,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
 			SetPermissionMode(s.Config.PermissionMode).
+			SetFastMode(s.Config.FastMode).
 			SetTodoList(s.TodoList).
 			SetQueueKind(string(s.Queue.Kind)).
 			SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
@@ -116,6 +117,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
 		SetPermissionMode(s.Config.PermissionMode).
+		SetFastMode(s.Config.FastMode).
 		SetTodoList(s.TodoList).
 		SetQueueKind(string(s.Queue.Kind)).
 		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
@@ -211,6 +213,7 @@ func (r *SessionRepository) LastConfigForProject(ctx context.Context, projectID 
 		CodexModel:      row.CodexModel,
 		ReasoningEffort: row.ReasoningEffort,
 		PermissionMode:  row.PermissionMode,
+		FastMode:        row.FastMode,
 	}, true, nil
 }
 
@@ -575,6 +578,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			CodexModel:      row.CodexModel,
 			ReasoningEffort: row.ReasoningEffort,
 			PermissionMode:  row.PermissionMode,
+			FastMode:        row.FastMode,
 		},
 		TodoList: row.TodoList,
 		QueuedAt: row.QueuedAt,

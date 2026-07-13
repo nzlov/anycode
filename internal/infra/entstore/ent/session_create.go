@@ -179,6 +179,20 @@ func (_c *SessionCreate) SetNillablePermissionMode(v *string) *SessionCreate {
 	return _c
 }
 
+// SetFastMode sets the "fast_mode" field.
+func (_c *SessionCreate) SetFastMode(v bool) *SessionCreate {
+	_c.mutation.SetFastMode(v)
+	return _c
+}
+
+// SetNillableFastMode sets the "fast_mode" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableFastMode(v *bool) *SessionCreate {
+	if v != nil {
+		_c.SetFastMode(*v)
+	}
+	return _c
+}
+
 // SetTodoList sets the "todo_list" field.
 func (_c *SessionCreate) SetTodoList(v session.TodoList) *SessionCreate {
 	_c.mutation.SetTodoList(v)
@@ -452,6 +466,10 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultPermissionMode
 		_c.mutation.SetPermissionMode(v)
 	}
+	if _, ok := _c.mutation.FastMode(); !ok {
+		v := entsession.DefaultFastMode
+		_c.mutation.SetFastMode(v)
+	}
 	if _, ok := _c.mutation.QueueKind(); !ok {
 		v := entsession.DefaultQueueKind
 		_c.mutation.SetQueueKind(v)
@@ -542,6 +560,9 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.PermissionMode(); !ok {
 		return &ValidationError{Name: "permission_mode", err: errors.New(`ent: missing required field "Session.permission_mode"`)}
+	}
+	if _, ok := _c.mutation.FastMode(); !ok {
+		return &ValidationError{Name: "fast_mode", err: errors.New(`ent: missing required field "Session.fast_mode"`)}
 	}
 	if _, ok := _c.mutation.QueueKind(); !ok {
 		return &ValidationError{Name: "queue_kind", err: errors.New(`ent: missing required field "Session.queue_kind"`)}
@@ -656,6 +677,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PermissionMode(); ok {
 		_spec.SetField(entsession.FieldPermissionMode, field.TypeString, value)
 		_node.PermissionMode = value
+	}
+	if value, ok := _c.mutation.FastMode(); ok {
+		_spec.SetField(entsession.FieldFastMode, field.TypeBool, value)
+		_node.FastMode = value
 	}
 	if value, ok := _c.mutation.TodoList(); ok {
 		_spec.SetField(entsession.FieldTodoList, field.TypeJSON, value)

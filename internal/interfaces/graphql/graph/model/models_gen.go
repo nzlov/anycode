@@ -374,12 +374,14 @@ type SessionConfig struct {
 	CodexModel      string `json:"codexModel"`
 	ReasoningEffort string `json:"reasoningEffort"`
 	PermissionMode  string `json:"permissionMode"`
+	FastMode        bool   `json:"fastMode"`
 }
 
 type SessionConfigInput struct {
 	CodexModel      *string `json:"codexModel,omitempty"`
 	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 	PermissionMode  *string `json:"permissionMode,omitempty"`
+	FastMode        *bool   `json:"fastMode,omitempty"`
 }
 
 type SessionDetail struct {

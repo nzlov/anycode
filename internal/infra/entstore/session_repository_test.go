@@ -41,6 +41,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			CodexModel:      "gpt-5.4",
 			ReasoningEffort: "high",
 			PermissionMode:  "workspace-write",
+			FastMode:        true,
 		},
 		TodoList: session.TodoList{Items: []session.TodoItem{
 			{Text: "梳理需求", Completed: true},
@@ -70,6 +71,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	updatedAt := now.Add(time.Minute)
 	input.Status = session.StatusStopped
 	input.Config.CodexModel = "gpt-5.4-mini"
+	input.Config.FastMode = false
 	input.Queue.InitialStart = false
 	input.UpdatedAt = updatedAt
 	if err := repo.Save(ctx, input); err != nil {
@@ -79,7 +81,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find updated session: %v", err)
 	}
-	if found.Status != session.StatusStopped || found.Config.CodexModel != "gpt-5.4-mini" {
+	if found.Status != session.StatusStopped || found.Config.CodexModel != "gpt-5.4-mini" || found.Config.FastMode {
 		t.Fatalf("updated session mismatch: %#v", found)
 	}
 	if found.Queue.InitialStart {
@@ -101,6 +103,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 				CodexModel:      "gpt-5.4-last",
 				ReasoningEffort: "medium",
 				PermissionMode:  "read-only",
+				FastMode:        true,
 			},
 			LastRunAt: &recentRun,
 			CreatedAt: now.Add(-8 * time.Minute),
@@ -296,7 +299,7 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	if !ok {
 		t.Fatal("last config not found")
 	}
-	if config.CodexModel != "gpt-5.4-last" || config.ReasoningEffort != "medium" || config.PermissionMode != "read-only" {
+	if config.CodexModel != "gpt-5.4-last" || config.ReasoningEffort != "medium" || config.PermissionMode != "read-only" || !config.FastMode {
 		t.Fatalf("last config mismatch: %#v", config)
 	}
 
@@ -669,6 +672,9 @@ func TestSessionRepositoryMigrateAddsFieldsToExistingSessions(t *testing.T) {
 	}
 	if found.TodoList.Total() != 0 {
 		t.Fatalf("todo list = %#v, want empty", found.TodoList)
+	}
+	if found.Config.FastMode {
+		t.Fatalf("legacy session fast mode = true, want false: %#v", found.Config)
 	}
 	queued, err := store.Sessions().Find(ctx, "legacy-queued-session")
 	if err != nil {

@@ -32,14 +32,16 @@ func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
 	service := New(repo, newFakeProjectRepository("project-1"))
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+	fastMode := true
 
 	got, err := service.CreateSession(ctx, CreateSessionInput{
 		ProjectID:   "project-1",
 		Requirement: "  implement app session  ",
-		Config: domain.Config{
+		Config: ConfigInput{
 			CodexModel:      "gpt-5.4-mini",
 			ReasoningEffort: "medium",
 			PermissionMode:  "workspace-write",
+			FastMode:        &fastMode,
 		},
 	})
 	if err != nil {
@@ -73,6 +75,7 @@ func TestCreateSessionFillsMissingConfigFromPreviousProjectSession(t *testing.T)
 		CodexModel:      "gpt-5.4",
 		ReasoningEffort: "high",
 		PermissionMode:  "workspace-write",
+		FastMode:        true,
 	}
 	repo.hasLastConfig = true
 	service := New(repo, newFakeProjectRepository("project-1"))
@@ -82,7 +85,7 @@ func TestCreateSessionFillsMissingConfigFromPreviousProjectSession(t *testing.T)
 	got, err := service.CreateSession(ctx, CreateSessionInput{
 		ProjectID:   "project-1",
 		Requirement: "implement app session",
-		Config: domain.Config{
+		Config: ConfigInput{
 			CodexModel: "gpt-5.5",
 		},
 	})
@@ -93,12 +96,105 @@ func TestCreateSessionFillsMissingConfigFromPreviousProjectSession(t *testing.T)
 		CodexModel:      "gpt-5.5",
 		ReasoningEffort: "high",
 		PermissionMode:  "workspace-write",
+		FastMode:        true,
 	}
 	if !reflect.DeepEqual(got.Config, want) {
 		t.Fatalf("Config = %#v, want %#v", got.Config, want)
 	}
 	if repo.lastConfigProjectID != "project-1" {
 		t.Fatalf("LastConfigForProject project = %q", repo.lastConfigProjectID)
+	}
+}
+
+func TestCreateSessionExplicitFastModeFalseOverridesPreviousProjectSession(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.lastConfig = domain.Config{
+		CodexModel:      "gpt-5.4",
+		ReasoningEffort: "high",
+		PermissionMode:  "workspace-write",
+		FastMode:        true,
+	}
+	repo.hasLastConfig = true
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+	fastMode := false
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement app session",
+		Config: ConfigInput{
+			CodexModel:      "gpt-5.5",
+			ReasoningEffort: "medium",
+			PermissionMode:  "read-only",
+			FastMode:        &fastMode,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.Config.FastMode {
+		t.Fatalf("Config.FastMode = true, want false: %#v", got.Config)
+	}
+}
+
+func TestCreateSessionExplicitFastModeTrueWhileInheritingOtherFields(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.lastConfig = domain.Config{
+		CodexModel:      "gpt-5.4",
+		ReasoningEffort: "high",
+		PermissionMode:  "workspace-write",
+		FastMode:        false,
+	}
+	repo.hasLastConfig = true
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+	fastMode := true
+
+	got, err := service.CreateSession(ctx, CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "implement app session",
+		Config: ConfigInput{
+			CodexModel: "gpt-5.5",
+			FastMode:   &fastMode,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if !got.Config.FastMode || got.Config.ReasoningEffort != "high" || got.Config.PermissionMode != "workspace-write" {
+		t.Fatalf("Config = %#v", got.Config)
+	}
+}
+
+func TestLastSessionConfigForProjectReturnsNullableConfigAndErrors(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	service := New(repo, newFakeProjectRepository("project-1"))
+
+	got, err := service.LastSessionConfigForProject(ctx, "project-1")
+	if err != nil || got != nil {
+		t.Fatalf("LastSessionConfigForProject() = %#v, %v; want nil, nil", got, err)
+	}
+
+	repo.lastConfig = domain.Config{
+		CodexModel:      "gpt-5.4",
+		ReasoningEffort: "high",
+		PermissionMode:  "workspace-write",
+		FastMode:        true,
+	}
+	repo.hasLastConfig = true
+	got, err = service.LastSessionConfigForProject(ctx, "project-1")
+	if err != nil || got == nil || got.CodexModel != "gpt-5.4" || !got.FastMode {
+		t.Fatalf("LastSessionConfigForProject() = %#v, %v", got, err)
+	}
+
+	repo.lastConfigErr = errors.New("database unavailable")
+	if _, err := service.LastSessionConfigForProject(ctx, "project-1"); err == nil || !strings.Contains(err.Error(), "database unavailable") {
+		t.Fatalf("LastSessionConfigForProject() error = %v", err)
 	}
 }
 
@@ -1762,7 +1858,10 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 	processes := newFakeProcessRepository()
 	events := &fakeEventStore{}
 	failedEvents := make(chan processdomain.CodexEvent, 1)
-	failedEvents <- processdomain.CodexEvent{Type: "process.exit", Payload: map[string]any{"exitCode": 7, "failureReason": "exit status 7"}}
+	failedEvents <- processdomain.CodexEvent{Type: "process.exit", Payload: map[string]any{
+		"exitCode":      2,
+		"failureReason": `configuration error: invalid value "priority" for service_tier`,
+	}}
 	close(failedEvents)
 	codex := &fakeCodexProcess{
 		startHandle:  processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-1"},
@@ -1799,7 +1898,7 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 	if workflows.completeInput.NodeRunID != "" {
 		t.Fatalf("complete should not be called on failed exit: %#v", workflows.completeInput)
 	}
-	if workflows.failInput.NodeRunID != "node-run-1" || workflows.failInput.Code != "codex_process_failed" {
+	if workflows.failInput.NodeRunID != "node-run-1" || workflows.failInput.Code != "codex_param_rejected" {
 		t.Fatalf("fail input = %#v", workflows.failInput)
 	}
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
@@ -1813,6 +1912,13 @@ func TestCodexProcessFailureCodeClassifiesParameterRejection(t *testing.T) {
 	})
 	if got != "codex_param_rejected" {
 		t.Fatalf("codexProcessFailureCode() = %q", got)
+	}
+
+	got = codexProcessFailureCode(processdomain.ExitResult{
+		FailureReason: `configuration error: invalid value "priority" for service_tier`,
+	})
+	if got != "codex_param_rejected" {
+		t.Fatalf("codexProcessFailureCode(service_tier) = %q", got)
 	}
 
 	got = codexProcessFailureCode(processdomain.ExitResult{FailureReason: "exit status 7"})
@@ -3491,14 +3597,22 @@ func TestUpdateSessionConfigPersistsTrimmedConfig(t *testing.T) {
 			CodexModel:      "gpt-old",
 			ReasoningEffort: "low",
 			PermissionMode:  "read-only",
+			FastMode:        true,
 		},
 	}
-	service := New(repo, newFakeProjectRepository("project-1"))
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(25, 0).UTC() }
+	ids := []domain.ID{"event-config-1", "event-config-2"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
 
 	got, err := service.UpdateSessionConfig(ctx, UpdateSessionConfigInput{
 		SessionID: "session-1",
-		Config: domain.Config{
+		Config: ConfigInput{
 			CodexModel:      " gpt-5.4-mini ",
 			ReasoningEffort: " high ",
 			PermissionMode:  " workspace-write ",
@@ -3511,6 +3625,7 @@ func TestUpdateSessionConfigPersistsTrimmedConfig(t *testing.T) {
 		CodexModel:      "gpt-5.4-mini",
 		ReasoningEffort: "high",
 		PermissionMode:  "workspace-write",
+		FastMode:        true,
 	}
 	if !reflect.DeepEqual(got.Config, want) {
 		t.Fatalf("Config = %#v, want %#v", got.Config, want)
@@ -3520,6 +3635,23 @@ func TestUpdateSessionConfigPersistsTrimmedConfig(t *testing.T) {
 	}
 	if !repo.sessions["session-1"].UpdatedAt.Equal(time.Unix(25, 0).UTC()) {
 		t.Fatalf("UpdatedAt = %v", repo.sessions["session-1"].UpdatedAt)
+	}
+	fastMode := false
+	got, err = service.UpdateSessionConfig(ctx, UpdateSessionConfigInput{
+		SessionID: "session-1",
+		Config: ConfigInput{
+			CodexModel:      "gpt-5.4-mini",
+			ReasoningEffort: "high",
+			PermissionMode:  "workspace-write",
+			FastMode:        &fastMode,
+		},
+	})
+	if err != nil || got.Config.FastMode || repo.sessions["session-1"].Config.FastMode {
+		t.Fatalf("explicit FastMode false was not persisted: got=%#v saved=%#v err=%v", got.Config, repo.sessions["session-1"].Config, err)
+	}
+	gotEvents := events.snapshot()
+	if len(gotEvents) != 2 || gotEvents[0].Payload["fastMode"] != true || gotEvents[1].Payload["fastMode"] != false {
+		t.Fatalf("session.config_changed events = %#v", gotEvents)
 	}
 }
 
@@ -4638,6 +4770,7 @@ func TestStartSessionCreatesProcessRunAndMarksRunning(t *testing.T) {
 			CodexModel:      "gpt-test",
 			ReasoningEffort: "medium",
 			PermissionMode:  "workspace-write",
+			FastMode:        true,
 		},
 	}
 	processes := newFakeProcessRepository()
@@ -4659,7 +4792,7 @@ func TestStartSessionCreatesProcessRunAndMarksRunning(t *testing.T) {
 	if processes.runningID != "process-run-1" || processes.runningPID != 1234 {
 		t.Fatalf("running process = id %q pid %d", processes.runningID, processes.runningPID)
 	}
-	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != promptWithAnswerUserGuidance("implement session") {
+	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != promptWithAnswerUserGuidance("implement session") || !codex.startInput.FastMode {
 		t.Fatalf("codex start input = %#v", codex.startInput)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusRunning {
@@ -5589,7 +5722,7 @@ func TestSessionModeMarksParamRejectedExitFailed(t *testing.T) {
 		Type: "process.exit",
 		Payload: map[string]any{
 			"exitCode":      2,
-			"failureReason": `exit status 2: invalid value "readonly" for '--sandbox'`,
+			"failureReason": `configuration error: invalid value "priority" for service_tier`,
 		},
 	}
 	close(source)
@@ -5625,7 +5758,7 @@ func TestSessionModeMarksParamRejectedExitFailed(t *testing.T) {
 	if got.Payload["failureCode"] != "codex_param_rejected" {
 		t.Fatalf("session failed payload = %#v", got.Payload)
 	}
-	if processes.exitedResult.FailureReason != `exit status 2: invalid value "readonly" for '--sandbox'` {
+	if processes.exitedResult.FailureReason != `configuration error: invalid value "priority" for service_tier` {
 		t.Fatalf("exited result = %#v", processes.exitedResult)
 	}
 }
@@ -6590,6 +6723,7 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 			CodexModel:      "gpt-5.4",
 			ReasoningEffort: "high",
 			PermissionMode:  "workspace-write",
+			FastMode:        true,
 		},
 	}
 	repo.appends = []domain.PromptAppend{{ID: "append-1", SessionID: "session-1", Body: "continue work", Status: domain.PromptAppendPending}}
@@ -6612,7 +6746,7 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	if codex.resumeInput.Prompt != "continue work" || repo.appends[0].Status != domain.PromptAppendInflight {
 		t.Fatalf("resume prompt delivery = %#v appends=%#v", codex.resumeInput, repo.appends)
 	}
-	if codex.resumeInput.Model != "gpt-5.4" || codex.resumeInput.ReasoningEffort != "high" || codex.resumeInput.PermissionMode != "workspace-write" {
+	if codex.resumeInput.Model != "gpt-5.4" || codex.resumeInput.ReasoningEffort != "high" || codex.resumeInput.PermissionMode != "workspace-write" || !codex.resumeInput.FastMode {
 		t.Fatalf("codex resume config = %#v", codex.resumeInput)
 	}
 }
@@ -8654,6 +8788,7 @@ type fakeRepository struct {
 	lastListQuery                       domain.ListQuery
 	lastConfig                          domain.Config
 	hasLastConfig                       bool
+	lastConfigErr                       error
 	lastConfigProjectID                 domain.ProjectID
 	appends                             []domain.PromptAppend
 	deletedAppends                      []string
@@ -8759,7 +8894,7 @@ func (r *fakeRepository) CountByProject(_ context.Context, projectID domain.Proj
 
 func (r *fakeRepository) LastConfigForProject(_ context.Context, projectID domain.ProjectID) (domain.Config, bool, error) {
 	r.lastConfigProjectID = projectID
-	return r.lastConfig, r.hasLastConfig, nil
+	return r.lastConfig, r.hasLastConfig, r.lastConfigErr
 }
 
 func (r *fakeRepository) AppendPrompt(_ context.Context, promptAppend domain.PromptAppend) error {

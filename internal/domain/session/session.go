@@ -215,6 +215,7 @@ type Config struct {
 	CodexModel      string
 	ReasoningEffort string
 	PermissionMode  string
+	FastMode        bool
 }
 
 type TodoList struct {

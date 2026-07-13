@@ -229,6 +229,16 @@ func mapSessionConfig(config sessiondomain.Config) *model.SessionConfig {
 		CodexModel:      config.CodexModel,
 		ReasoningEffort: config.ReasoningEffort,
 		PermissionMode:  config.PermissionMode,
+		FastMode:        config.FastMode,
+	}
+}
+
+func mapSessionConfigDTO(config sessionapp.ConfigDTO) *model.SessionConfig {
+	return &model.SessionConfig{
+		CodexModel:      config.CodexModel,
+		ReasoningEffort: config.ReasoningEffort,
+		PermissionMode:  config.PermissionMode,
+		FastMode:        config.FastMode,
 	}
 }
 

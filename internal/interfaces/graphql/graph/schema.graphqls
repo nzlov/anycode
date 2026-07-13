@@ -11,6 +11,7 @@ type Query {
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
+  lastSessionConfig(projectId: ID!): SessionConfig
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
@@ -226,6 +227,7 @@ type SessionConfig {
   codexModel: String!
   reasoningEffort: String!
   permissionMode: String!
+  fastMode: Boolean!
 }
 
 type SessionAttachment {
@@ -604,6 +606,7 @@ input SessionConfigInput {
   codexModel: String
   reasoningEffort: String
   permissionMode: String
+  fastMode: Boolean
 }
 
 input CloseSessionInput {

@@ -109,6 +109,13 @@ a {
   touch-action: manipulation;
 }
 
+.app-content-dialog {
+  box-sizing: border-box;
+  width: 90vw !important;
+  max-width: 90vw !important;
+  max-height: 90dvh !important;
+}
+
 .app-touch-list .q-item {
   min-height: 44px;
 }
@@ -834,10 +841,7 @@ a {
 .new-session-dialog {
   position: relative;
   display: flex;
-  max-height: min(880px, calc(100dvh - 48px));
   flex-direction: column;
-  width: min(920px, 92vw) !important;
-  max-width: 92vw !important;
   min-height: auto;
   margin: auto;
   overflow-x: hidden;
@@ -861,10 +865,6 @@ a {
 
 .global-settings-dialog {
   display: flex;
-  width: min(900px, calc(100vw - 32px)) !important;
-  max-width: calc(100vw - 32px) !important;
-  height: min(680px, calc(100dvh - 48px));
-  max-height: calc(100dvh - 48px);
   flex-direction: column;
   overflow: hidden;
   background: var(--ac-surface);
@@ -975,11 +975,9 @@ a {
 }
 
 .forward-approval-dialog {
-  width: min(960px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px) !important;
-  max-height: 88vh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  overflow: hidden;
 }
 
 .forward-approval-dialog__tabs {
@@ -992,10 +990,11 @@ a {
 
 .forward-approval-dialog__panels {
   min-height: 0;
+  overflow: hidden;
 }
 
 .forward-approval-dialog__panel {
-  max-height: 56vh;
+  height: 100%;
   overflow: auto;
 }
 
@@ -1005,9 +1004,6 @@ a {
 }
 
 .overview-diff-dialog {
-  width: min(1120px, calc(100vw - 32px));
-  max-width: calc(100vw - 32px) !important;
-  max-height: 88vh;
   display: flex;
   flex-direction: column;
 }
@@ -1066,6 +1062,13 @@ a {
 .prompt-config-controls .q-field__marginal {
   min-height: 44px;
   height: 44px;
+}
+
+.new-session-config-error {
+  border: 1px solid color-mix(in srgb, var(--q-negative) 32%, var(--ac-border));
+  color: var(--q-negative);
+  background: color-mix(in srgb, var(--q-negative) 7%, var(--ac-surface));
+  overflow-wrap: anywhere;
 }
 
 .prompt-shell {
@@ -1132,20 +1135,27 @@ a {
 }
 
 .attachment-preview-card {
-  width: min(760px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--ac-surface);
   color: var(--ac-text);
 }
 
 .attachment-preview-body {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: center;
   justify-content: center;
+  overflow: auto;
   background: var(--ac-surface-muted);
 }
 
 .attachment-preview-media {
   max-width: 100%;
-  max-height: 70vh;
+  max-height: 100%;
+  object-fit: contain;
   border-radius: var(--ac-radius);
 }
 
@@ -1252,7 +1262,8 @@ a {
 }
 
 .prompt-config-controls--stacked .compact-select,
-.prompt-config-controls--stacked .prompt-config-chip {
+.prompt-config-controls--stacked .prompt-config-chip,
+.prompt-config-controls--stacked .prompt-fast-checkbox {
   width: 100%;
   min-width: 0;
   max-width: none;
@@ -1266,6 +1277,10 @@ a {
 
 .compact-select {
   min-width: 150px;
+}
+
+.prompt-fast-checkbox {
+  min-height: 44px;
 }
 
 .prompt-config-chip {
@@ -1289,16 +1304,20 @@ a {
 }
 
 .directory-dialog {
-  width: min(920px, calc(100vw - 32px)) !important;
-  max-width: calc(100vw - 32px) !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--ac-surface);
   color: var(--ac-text);
 }
 
 .directory-dialog__body {
   display: grid;
-  gap: 12px;
   position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  gap: 12px;
+  overflow-y: auto;
 }
 
 .directory-breadcrumb {
@@ -1321,8 +1340,6 @@ a {
 
 .directory-list {
   min-height: 300px;
-  max-height: 330px;
-  overflow: auto;
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
 }
@@ -1348,28 +1365,22 @@ a {
 }
 
 .project-settings-dialog {
-  width: min(680px, calc(100vw - 32px)) !important;
-  max-width: calc(100vw - 32px) !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--ac-surface);
   color: var(--ac-text);
 }
 
 .project-settings-dialog__body {
   min-height: 280px;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .project-settings-dialog__body textarea {
   min-height: 220px !important;
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
-}
-
-@media (max-width: 599px) {
-  .project-settings-dialog {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-height: 100%;
-    border-radius: 0;
-  }
 }
 
 .state-card {
@@ -1585,7 +1596,8 @@ a {
   }
 
   .prompt-toolbar > .prompt-config-controls .compact-select,
-  .prompt-toolbar > .prompt-config-controls .prompt-config-chip {
+  .prompt-toolbar > .prompt-config-controls .prompt-config-chip,
+  .prompt-toolbar > .prompt-config-controls .prompt-fast-checkbox {
     width: 100%;
     min-width: 0;
     max-width: none;
@@ -1616,11 +1628,12 @@ a {
 }
 
 @media (max-width: 599.98px) {
-  .global-settings-dialog {
+  .app-content-dialog {
     width: 100vw !important;
     max-width: 100vw !important;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
     border-radius: 0;
   }
 
@@ -1654,27 +1667,5 @@ a {
   .global-settings-add-fab {
     right: 16px;
     bottom: 16px;
-  }
-
-  .new-session-dialog {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    height: 100dvh;
-    min-height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
-
-  .forward-approval-dialog,
-  .overview-diff-dialog {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
-
-  .forward-approval-dialog__panel {
-    max-height: none;
   }
 }

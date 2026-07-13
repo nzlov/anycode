@@ -442,6 +442,18 @@ func (r *queryResolver) Sessions(ctx context.Context, input *model.ListSessionsI
 	return mapSessionCardPage(dto), nil
 }
 
+// LastSessionConfig is the resolver for the lastSessionConfig field.
+func (r *queryResolver) LastSessionConfig(ctx context.Context, projectID string) (*model.SessionConfig, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.LastSessionConfigForProject(ctx, sessiondomain.ProjectID(projectID))
+	if err != nil || dto == nil {
+		return nil, err
+	}
+	return mapSessionConfigDTO(*dto), nil
+}
+
 // Session is the resolver for the session field.
 func (r *queryResolver) Session(ctx context.Context, id string) (*model.SessionDetail, error) {
 	if r.UseCases.Sessions == nil {

@@ -26,42 +26,9 @@
           class="overview-session-card cursor-pointer"
           :class="overviewCardClass(card)"
           @click="$router.push(`/sessions/${card.id}`)"
-          @keyup.enter="$router.push(`/sessions/${card.id}`)"
-          @keyup.space.prevent="$router.push(`/sessions/${card.id}`)"
+          @keyup.enter.self="$router.push(`/sessions/${card.id}`)"
+          @keyup.space.self.prevent="$router.push(`/sessions/${card.id}`)"
         >
-          <q-menu context-menu>
-            <q-list dense class="overview-card-menu app-touch-list">
-              <q-item-label header>优先级</q-item-label>
-              <q-item
-                v-for="priority in priorities"
-                :key="priority"
-                v-close-popup
-                clickable
-                :active="card.priority === priority"
-                :disable="card.status === 'closed'"
-                @click.stop="setCardPriority(card, priority)"
-              >
-                <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
-                <q-item-section v-if="card.priority === priority" side>
-                  <q-icon name="check" color="primary" />
-                </q-item-section>
-              </q-item>
-              <q-separator />
-              <q-item
-                v-close-popup
-                clickable
-                class="text-negative"
-                :disable="!card.availableActions.includes('close')"
-                @click.stop="closeCard(card)"
-              >
-                <q-item-section avatar>
-                  <q-icon name="close" />
-                </q-item-section>
-                <q-item-section>关闭卡片</q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
-
           <q-card-section class="overview-session-card__body">
             <div class="overview-card-chips">
               <q-badge
@@ -210,6 +177,47 @@
                 >
                   <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
                 </q-btn>
+                <q-btn
+                  flat
+                  dense
+                  class="lane-icon-btn app-icon-btn"
+                  icon="more_vert"
+                  aria-label="卡片操作"
+                  @click.stop
+                >
+                  <q-menu anchor="top right" self="bottom right" @click.stop>
+                    <q-list dense class="overview-card-menu app-touch-list">
+                      <q-item-label header>优先级</q-item-label>
+                      <q-item
+                        v-for="priority in priorities"
+                        :key="priority"
+                        v-close-popup
+                        clickable
+                        :active="card.priority === priority"
+                        :disable="card.status === 'closed'"
+                        @click.stop="setCardPriority(card, priority)"
+                      >
+                        <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
+                        <q-item-section v-if="card.priority === priority" side>
+                          <q-icon name="check" color="primary" />
+                        </q-item-section>
+                      </q-item>
+                      <q-separator />
+                      <q-item
+                        v-close-popup
+                        clickable
+                        class="text-negative"
+                        :disable="!card.availableActions.includes('close')"
+                        @click.stop="closeCard(card)"
+                      >
+                        <q-item-section avatar>
+                          <q-icon name="close" />
+                        </q-item-section>
+                        <q-item-section>关闭卡片</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
               </div>
             </div>
           </q-card-section>
@@ -236,7 +244,7 @@
     />
 
     <q-dialog v-model="approvalDialog" :maximized="$q.screen.lt.sm">
-      <q-card class="forward-approval-dialog">
+      <q-card class="forward-approval-dialog app-content-dialog">
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
             <q-tab name="output" icon="smart_toy" label="模型输出" />
@@ -286,7 +294,7 @@
     </q-dialog>
 
     <q-dialog v-model="diffDialog" :maximized="$q.screen.lt.sm" @hide="handleDiffDialogClosed">
-      <q-card class="overview-diff-dialog">
+      <q-card class="overview-diff-dialog app-content-dialog">
         <div class="overview-diff-dialog__header">
           <div class="text-subtitle1 text-weight-bold">Diff</div>
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭 Diff" />

@@ -1,6 +1,10 @@
 <template>
-  <q-dialog :model-value="modelValue" @update:model-value="emitModel">
-    <q-card class="directory-dialog">
+  <q-dialog
+    :model-value="modelValue"
+    :maximized="$q.screen.lt.sm"
+    @update:model-value="emitModel"
+  >
+    <q-card class="directory-dialog app-content-dialog">
       <q-card-section class="row items-center q-pb-sm">
         <div>
           <div class="text-subtitle1 text-weight-bold">选择项目目录</div>

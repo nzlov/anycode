@@ -4,7 +4,7 @@
     :maximized="$q.screen.lt.sm"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <q-card class="global-settings-dialog">
+    <q-card class="global-settings-dialog app-content-dialog">
       <q-card-section class="global-settings-header row items-center">
         <div class="text-subtitle1 text-weight-bold">全局设置</div>
         <q-space />

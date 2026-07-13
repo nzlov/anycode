@@ -11,6 +11,15 @@ test('overview cards rely on the card click target instead of a duplicate detail
   assert.equal(source.includes('打开卡片详情'), false);
 });
 
+test('overview card actions expose an explicit menu instead of a context-only menu', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /aria-label="卡片操作"/);
+  assert.doesNotMatch(source, /<q-menu\s+context-menu/);
+  assert.match(source, /@keyup\.enter\.self=/);
+  assert.match(source, /@keyup\.space\.self\.prevent=/);
+});
+
 test('overview requests latest and history ranges instead of dated buckets', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
   const oldLatestRange = ['recent', '3d'].join('');
@@ -122,12 +131,12 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /submitWorkflowApproval\(/);
   assert.doesNotMatch(overviewSource, /approvalRejectPrompt|recentModelOutput/);
   assert.match(
-    stylesSource,
-    /\.forward-approval-dialog\s*{[^}]*width:\s*min\(960px, calc\(100vw - 32px\)\);/s,
+    overviewSource,
+    /class="forward-approval-dialog app-content-dialog"/,
   );
   assert.match(
     stylesSource,
-    /\.forward-approval-dialog\s*{[^}]*max-width:\s*calc\(100vw - 32px\) !important;/s,
+    /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important[^}]*max-width:\s*90vw\s*!important/s,
   );
   assert.match(sessionsSource, /pendingApproval\s*\{/);
   assert.match(sessionsSource, /workflowRunId/);
@@ -174,9 +183,7 @@ test('overview cards expose batch-backed diff previews without triggering card n
   assert.match(previewSource, /当前会话没有可用 Diff/);
   assert.match(previewSource, /当前会话没有变更/);
   assert.match(previewSource, /label="完整 Diff"/);
-  assert.match(
-    stylesSource,
-    /\.overview-diff-dialog\s*{[^}]*width:\s*min\(1120px, calc\(100vw - 32px\)\);/s,
-  );
+  assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
+  assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);
   assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*auto/s);
 });

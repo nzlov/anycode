@@ -796,6 +796,7 @@ async function assertWorkflowCardFlow(projectId) {
         type: 'approval',
         title: '人工审批',
         prompt: '',
+        position: { x: 80, y: 80 },
         approval: { beforeRun: true, afterRun: false },
         retry: { maxAttempts: 0 },
         merge: null,
