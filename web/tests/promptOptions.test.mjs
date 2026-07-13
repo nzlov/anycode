@@ -27,8 +27,14 @@ test('Codex model defaults come from the loaded model catalog', () => {
   assert.equal(firstCodexModelValue(dynamicOptions), 'gpt-5.6-sol');
   assert.equal(normalizeCodexModel(dynamicOptions, 'missing-model'), 'gpt-5.6-sol');
   assert.deepEqual(
-    reasoningEffortOptionsForModel(dynamicOptions, 'gpt-5.6-sol').map((option) => option.value),
-    ['low', 'ultra'],
+    reasoningEffortOptionsForModel(dynamicOptions, 'gpt-5.6-sol').map(({ label, value }) => ({
+      label,
+      value,
+    })),
+    [
+      { label: 'low', value: 'low' },
+      { label: 'ultra', value: 'ultra' },
+    ],
   );
 });
 

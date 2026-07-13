@@ -9,25 +9,6 @@ export interface CodexModelOption extends PromptOption {
   reasoningEfforts: PromptOption[];
 }
 
-const reasoningEffortLabels: Record<string, string> = {
-  low: '低思考',
-  medium: '中等思考',
-  high: '高思考',
-  xhigh: '极高思考',
-  max: '最强思考',
-  ultra: '极限思考',
-};
-
-export function normalizeCodexModelOptions(options: CodexModelOption[]) {
-  return options.map((option) => ({
-    ...option,
-    reasoningEfforts: option.reasoningEfforts.map((effort) => ({
-      ...effort,
-      label: reasoningEffortLabels[effort.value] ?? effort.label,
-    })),
-  }));
-}
-
 export function firstCodexModelValue(options: CodexModelOption[]) {
   return options[0]?.value ?? '';
 }
