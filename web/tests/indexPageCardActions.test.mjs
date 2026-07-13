@@ -11,6 +11,15 @@ test('overview cards rely on the card click target instead of a duplicate detail
   assert.equal(source.includes('打开卡片详情'), false);
 });
 
+test('overview card actions expose an explicit menu instead of a context-only menu', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /aria-label="卡片操作"/);
+  assert.doesNotMatch(source, /<q-menu\s+context-menu/);
+  assert.match(source, /@keyup\.enter\.self=/);
+  assert.match(source, /@keyup\.space\.self\.prevent=/);
+});
+
 test('overview requests latest and history ranges instead of dated buckets', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
   const oldLatestRange = ['recent', '3d'].join('');
@@ -111,6 +120,8 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
   assert.match(overviewSource, /Promise\.allSettled/);
   assert.match(overviewSource, /approvalDiffTruncated/);
+  assert.match(overviewSource, /approvalDiffs\.length === 0/);
+  assert.match(overviewSource, /当前没有文件变更/);
   assert.match(overviewSource, /approvalOutputError/);
   assert.match(overviewSource, /<SessionEventMessage[^>]*:event="message"/);
   assert.match(overviewSource, /<WorkflowApprovalPanel/);
