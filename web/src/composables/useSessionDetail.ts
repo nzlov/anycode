@@ -16,6 +16,7 @@ import {
   subscribeSessionStateUpdates,
   executeSession as executeSessionRequest,
   submitQuestionBatch,
+  submitWorkflowApproval as submitWorkflowApprovalRequest,
   type QuestionAnswerInput,
   type QuestionBatch,
   type PageInfo,
@@ -55,6 +56,7 @@ export function useSessionDetail(sessionId: string) {
   const updatingConfig = ref(false);
   const questionsLoading = ref(false);
   const questionsSubmitting = ref(false);
+  const approvalSubmitting = ref(false);
   const pendingQuestionBatches = ref<QuestionBatch[]>([]);
   const error = ref('');
   let liveStopped = true;
@@ -266,6 +268,30 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
+  async function submitApproval(approved: boolean, comment: string) {
+    const approval = session.value?.pendingApproval;
+    if (!approval) {
+      error.value = '未找到当前审批上下文，请刷新后重试';
+      return;
+    }
+    approvalSubmitting.value = true;
+    error.value = '';
+    try {
+      await submitWorkflowApprovalRequest({
+        workflowRunId: approval.workflowRunId,
+        nodeId: approval.nodeId,
+        approved,
+        comment,
+      });
+      await loadSessionState();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '提交审批失败';
+      throw err;
+    } finally {
+      approvalSubmitting.value = false;
+    }
+  }
+
   async function startLiveUpdates() {
     liveStopped = false;
     bufferingLiveEvents = true;
@@ -463,6 +489,7 @@ export function useSessionDetail(sessionId: string) {
     updatingConfig,
     questionsLoading,
     questionsSubmitting,
+    approvalSubmitting,
     error,
     loadSessionDetail,
     appendDescription,
@@ -473,6 +500,7 @@ export function useSessionDetail(sessionId: string) {
     loadPendingQuestions,
     loadOlderEvents,
     submitPendingAnswers,
+    submitApproval,
     startLiveUpdates,
     stopLiveUpdates,
   };

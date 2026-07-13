@@ -67,6 +67,13 @@
               @submit="submitAnswers"
             />
           </q-card>
+          <WorkflowApprovalPanel
+            v-else-if="isWaitingForApproval"
+            :key="approvalPanelKey"
+            :context-available="Boolean(session?.pendingApproval)"
+            :submitting="approvalSubmitting"
+            @submit="submitApproval"
+          />
           <CodexPromptComposer
             v-else
             v-model:prompt="appendText"
@@ -438,6 +445,7 @@ import AppPagination from '@/components/AppPagination.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
+import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
@@ -499,6 +507,7 @@ const {
   updatingConfig,
   questionsLoading,
   questionsSubmitting,
+  approvalSubmitting,
   error: detailError,
   loadSessionDetail,
   appendDescription,
@@ -509,6 +518,7 @@ const {
   loadPendingQuestions,
   loadOlderEvents,
   submitPendingAnswers,
+  submitApproval,
   startLiveUpdates,
   stopLiveUpdates,
 } = useSessionDetail(sessionId);
@@ -532,6 +542,14 @@ const isWaitingForAnswer = computed(
   () =>
     !isClosed.value && (session.value?.pendingQuestion || session.value?.status === 'waiting_user'),
 );
+const isWaitingForApproval = computed(
+  () => !isClosed.value && session.value?.status === 'waiting_approval',
+);
+const approvalPanelKey = computed(() => {
+  const approval = session.value?.pendingApproval;
+  if (!approval) return 'missing';
+  return `${approval.workflowRunId}:${approval.nodeId}:${approval.nodeRunId}`;
+});
 const composerConfigDirty = computed(() => {
   const current = session.value;
   if (!current) return false;

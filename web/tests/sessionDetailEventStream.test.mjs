@@ -149,6 +149,38 @@ test('closed session detail removes the prompt area instead of showing a hint', 
   assert.doesNotMatch(pageSource, /卡片已关闭，工作树与分支已清理/);
 });
 
+test('session detail replaces the prompt composer with the shared inline approval panel', () => {
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+  const composableSource = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+  const approvalPanelSource = readFileSync(
+    new URL('../src/components/WorkflowApprovalPanel.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(pageSource, /<q-card v-if="isWaitingForAnswer"/);
+  assert.match(pageSource, /<WorkflowApprovalPanel\s+v-else-if="isWaitingForApproval"/);
+  assert.match(pageSource, /:key="approvalPanelKey"/);
+  assert.match(
+    pageSource,
+    /`\$\{approval\.workflowRunId\}:\$\{approval\.nodeId\}:\$\{approval\.nodeRunId\}`/,
+  );
+  assert.match(pageSource, /<CodexPromptComposer\s+v-else/);
+  assert.match(pageSource, /Boolean\(session\?\.pendingApproval\)/);
+  assert.match(composableSource, /submitWorkflowApproval as submitWorkflowApprovalRequest/);
+  assert.match(
+    composableSource,
+    /async function submitApproval\(approved: boolean, comment: string\)/,
+  );
+  assert.match(composableSource, /await loadSessionState\(\)/);
+  assert.doesNotMatch(approvalPanelSource, /SessionEventMessage|DiffViewer|模型输出|Diff/);
+});
+
 test('subscription schema exposes only session-scoped transcript and unified state streams', () => {
   const schemaSource = readFileSync(
     new URL('../../internal/interfaces/graphql/graph/schema.graphqls', import.meta.url),

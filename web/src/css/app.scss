@@ -961,8 +961,8 @@ a {
 }
 
 .forward-approval-dialog {
-  width: min(1040px, 92vw);
-  max-width: 92vw;
+  width: min(960px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px) !important;
   max-height: 88vh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
@@ -986,23 +986,8 @@ a {
 }
 
 .forward-approval-output {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.forward-approval-actions {
   display: grid;
   gap: 12px;
-}
-
-.forward-approval-actions__buttons {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .new-session-grid {
@@ -1639,10 +1624,5 @@ a {
 
   .forward-approval-dialog__panel {
     max-height: none;
-  }
-
-  .forward-approval-actions__buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
   }
 }

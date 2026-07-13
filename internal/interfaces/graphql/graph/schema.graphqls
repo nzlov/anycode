@@ -615,6 +615,7 @@ input AppendPromptInput {
 input ListTranscriptEventsInput {
   sessionId: ID!
   beforeEventId: ID
+  messageRole: String
   limit: Int
 }
 

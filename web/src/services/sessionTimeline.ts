@@ -163,6 +163,7 @@ export async function getSessionTranscriptPage(
   sessionId: string,
   beforeEventId: string,
   limit: number,
+  messageRole = '',
 ) {
   const data = await graphqlFetch<
     {
@@ -172,7 +173,7 @@ export async function getSessionTranscriptPage(
         pageInfo: PageInfo;
       };
     },
-    { input: { sessionId: string; beforeEventId?: string; limit: number } }
+    { input: { sessionId: string; beforeEventId?: string; messageRole?: string; limit: number } }
   >({
     query: `
       query SessionTranscript($input: ListTranscriptEventsInput!) {
@@ -183,7 +184,7 @@ export async function getSessionTranscriptPage(
         }
       }
     `,
-    variables: { input: latestTranscriptPageInput(sessionId, beforeEventId, limit) },
+    variables: { input: latestTranscriptPageInput(sessionId, beforeEventId, limit, messageRole) },
   });
   return {
     items: data.sessionTranscript.events.map(normalizeTranscriptEvent),

@@ -220,7 +220,7 @@
       @submit="submitAnswers"
     />
 
-    <q-dialog v-model="approvalDialog">
+    <q-dialog v-model="approvalDialog" :maximized="$q.screen.lt.sm">
       <q-card class="forward-approval-dialog">
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
@@ -232,7 +232,22 @@
         <q-separator />
         <q-tab-panels v-model="approvalTab" animated class="forward-approval-dialog__panels">
           <q-tab-panel name="output" class="forward-approval-dialog__panel">
-            <pre class="forward-approval-output">{{ approvalModelOutput || '暂无模型输出' }}</pre>
+            <q-banner
+              v-if="approvalOutputError"
+              dense
+              rounded
+              class="state-banner bg-negative text-white"
+            >
+              {{ approvalOutputError }}
+            </q-banner>
+            <div v-else-if="approvalMessages.length === 0" class="text-muted">暂无模型输出</div>
+            <div v-else class="forward-approval-output">
+              <SessionEventMessage
+                v-for="message in approvalMessages"
+                :key="message.id"
+                :event="message"
+              />
+            </div>
           </q-tab-panel>
           <q-tab-panel name="diff" class="forward-approval-dialog__panel">
             <q-banner v-if="approvalDiffError" dense rounded class="state-banner bg-negative text-white">
@@ -261,38 +276,12 @@
           </q-tab-panel>
         </q-tab-panels>
         <q-separator />
-        <q-card-section class="forward-approval-actions">
-          <q-banner v-if="!approvalContext" dense rounded class="state-banner bg-negative text-white">
-            未找到当前审批上下文，请刷新后重试
-          </q-banner>
-          <q-input
-            v-model="approvalRejectPrompt"
-            outlined
-            autogrow
-            label="拒绝时的新提示词"
-            :disable="approvalSubmitting"
-          />
-          <div class="forward-approval-actions__buttons">
-            <q-btn
-              flat
-              color="negative"
-              icon="close"
-              label="拒绝"
-              :loading="approvalSubmitting && approvalDecision === 'reject'"
-              :disable="approvalSubmitting || !approvalContext || approvalRejectPrompt.trim() === ''"
-              @click="submitApproval(false)"
-            />
-            <q-btn
-              unelevated
-              color="primary"
-              icon="check"
-              label="通过"
-              :loading="approvalSubmitting && approvalDecision === 'approve'"
-              :disable="approvalSubmitting || !approvalContext"
-              @click="submitApproval(true)"
-            />
-          </div>
-        </q-card-section>
+        <WorkflowApprovalPanel
+          v-if="approvalDialog"
+          :context-available="Boolean(approvalContext)"
+          :submitting="approvalSubmitting"
+          @submit="submitApproval"
+        />
       </q-card>
     </q-dialog>
   </q-page>
@@ -300,10 +289,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
+import SessionEventMessage from '@/components/SessionEventMessage.vue';
+import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import { getSessionAllDiff, type FileDiff } from '@/services/diff';
@@ -314,7 +306,8 @@ import {
 } from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
-import { getSessionTranscriptPage, type TranscriptEvent } from '@/services/sessionTimeline';
+import { getSessionTranscriptPage, type TranscriptItem } from '@/services/sessionTimeline';
+import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
 import {
   closeSession,
@@ -334,6 +327,7 @@ import {
 } from '@/services/sessions';
 
 const route = useRoute();
+const $q = useQuasar();
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
   return typeof value === 'string' ? value : '';
@@ -409,15 +403,14 @@ const approvalDialog = ref(false);
 const approvalTab = ref<'output' | 'diff'>('output');
 const approvalLoading = ref(false);
 const approvalSubmitting = ref(false);
-const approvalDecision = ref<'approve' | 'reject' | ''>('');
 const approvalSessionId = ref('');
 const approvalContext = ref<ApprovalContext | null>(null);
-const approvalModelOutput = ref('');
+const approvalMessages = ref<TranscriptItem[]>([]);
+const approvalOutputError = ref('');
 const approvalDiffs = ref<FileDiff[]>([]);
 const approvalDiffAvailable = ref(false);
 const approvalDiffTotal = ref(0);
 const approvalDiffError = ref('');
-const approvalRejectPrompt = ref('');
 const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
@@ -673,19 +666,21 @@ async function openApprovalDialog(card: SessionCard) {
   approvalContext.value = card.pendingApproval
     ? { workflowRunId: card.pendingApproval.workflowRunId, nodeId: card.pendingApproval.nodeId }
     : null;
-  approvalModelOutput.value = '';
+  approvalMessages.value = [];
+  approvalOutputError.value = '';
   approvalDiffs.value = [];
   approvalDiffAvailable.value = false;
   approvalDiffTotal.value = 0;
   approvalDiffError.value = '';
-  approvalRejectPrompt.value = '';
   try {
     const [timelineResult, diffResult] = await Promise.allSettled([
-      getSessionTranscriptPage(card.id, '', 40),
+      getSessionTranscriptPage(card.id, '', 10, 'assistant'),
       getSessionAllDiff({ sessionId: card.id, mode: 'all', page: 1, pageSize: 20 }),
     ]);
     if (timelineResult.status === 'fulfilled') {
-      approvalModelOutput.value = recentModelOutput(timelineResult.value.items);
+      approvalMessages.value = reduceTranscriptEvents(timelineResult.value.items);
+    } else {
+      approvalOutputError.value = '模型输出加载失败，请稍后刷新重试';
     }
     if (diffResult.status === 'fulfilled') {
       approvalDiffAvailable.value = diffResult.value.available;
@@ -700,11 +695,8 @@ async function openApprovalDialog(card: SessionCard) {
   }
 }
 
-async function submitApproval(approved: boolean) {
+async function submitApproval(approved: boolean, comment: string) {
   if (!approvalContext.value || !approvalSessionId.value) return;
-  const comment = approved ? '' : approvalRejectPrompt.value.trim();
-  if (!approved && comment === '') return;
-  approvalDecision.value = approved ? 'approve' : 'reject';
   approvalSubmitting.value = true;
   try {
     await submitWorkflowApproval({
@@ -717,20 +709,6 @@ async function submitApproval(approved: boolean) {
     await loadOverviewSessions();
   } finally {
     approvalSubmitting.value = false;
-    approvalDecision.value = '';
   }
-}
-
-function recentModelOutput(events: TranscriptEvent[]) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (!event) continue;
-    const content = event.content;
-    if (content.__typename === 'TranscriptMessageContent' && content.role === 'assistant') {
-      const text = content.text.trim();
-      if (text) return text;
-    }
-  }
-  return '';
 }
 </script>
