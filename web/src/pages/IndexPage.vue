@@ -26,42 +26,9 @@
           class="overview-session-card cursor-pointer"
           :class="overviewCardClass(card)"
           @click="$router.push(`/sessions/${card.id}`)"
-          @keyup.enter="$router.push(`/sessions/${card.id}`)"
-          @keyup.space.prevent="$router.push(`/sessions/${card.id}`)"
+          @keyup.enter.self="$router.push(`/sessions/${card.id}`)"
+          @keyup.space.self.prevent="$router.push(`/sessions/${card.id}`)"
         >
-          <q-menu context-menu>
-            <q-list dense class="overview-card-menu app-touch-list">
-              <q-item-label header>优先级</q-item-label>
-              <q-item
-                v-for="priority in priorities"
-                :key="priority"
-                v-close-popup
-                clickable
-                :active="card.priority === priority"
-                :disable="card.status === 'closed'"
-                @click.stop="setCardPriority(card, priority)"
-              >
-                <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
-                <q-item-section v-if="card.priority === priority" side>
-                  <q-icon name="check" color="primary" />
-                </q-item-section>
-              </q-item>
-              <q-separator />
-              <q-item
-                v-close-popup
-                clickable
-                class="text-negative"
-                :disable="!card.availableActions.includes('close')"
-                @click.stop="closeCard(card)"
-              >
-                <q-item-section avatar>
-                  <q-icon name="close" />
-                </q-item-section>
-                <q-item-section>关闭卡片</q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
-
           <q-card-section class="overview-session-card__body">
             <div class="overview-card-chips">
               <q-badge
@@ -195,6 +162,47 @@
                 >
                   <q-tooltip>{{ cardAction(card)?.tooltip }}</q-tooltip>
                 </q-btn>
+                <q-btn
+                  flat
+                  dense
+                  class="lane-icon-btn app-icon-btn"
+                  icon="more_vert"
+                  aria-label="卡片操作"
+                  @click.stop
+                >
+                  <q-menu anchor="top right" self="bottom right" @click.stop>
+                    <q-list dense class="overview-card-menu app-touch-list">
+                      <q-item-label header>优先级</q-item-label>
+                      <q-item
+                        v-for="priority in priorities"
+                        :key="priority"
+                        v-close-popup
+                        clickable
+                        :active="card.priority === priority"
+                        :disable="card.status === 'closed'"
+                        @click.stop="setCardPriority(card, priority)"
+                      >
+                        <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
+                        <q-item-section v-if="card.priority === priority" side>
+                          <q-icon name="check" color="primary" />
+                        </q-item-section>
+                      </q-item>
+                      <q-separator />
+                      <q-item
+                        v-close-popup
+                        clickable
+                        class="text-negative"
+                        :disable="!card.availableActions.includes('close')"
+                        @click.stop="closeCard(card)"
+                      >
+                        <q-item-section avatar>
+                          <q-icon name="close" />
+                        </q-item-section>
+                        <q-item-section>关闭卡片</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
               </div>
             </div>
           </q-card-section>
@@ -245,6 +253,14 @@
               class="state-banner bg-warning text-dark"
             >
               当前会话没有可用 Diff
+            </q-banner>
+            <q-banner
+              v-else-if="approvalDiffs.length === 0"
+              dense
+              rounded
+              class="state-banner bg-grey-2 text-dark"
+            >
+              当前没有文件变更
             </q-banner>
             <template v-else>
               <q-banner

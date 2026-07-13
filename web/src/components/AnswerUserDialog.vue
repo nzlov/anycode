@@ -1,5 +1,10 @@
 <template>
-  <q-dialog :model-value="modelValue" persistent @update:model-value="emit('update:modelValue', $event)">
+  <q-dialog
+    :model-value="modelValue"
+    :maximized="$q.screen.width <= 699"
+    persistent
+    @update:model-value="emit('update:modelValue', $event)"
+  >
     <q-card class="answer-dialog">
       <q-card-section class="dialog-header">
         <div>
@@ -59,7 +64,8 @@ const emit = defineEmits<{
   .answer-dialog {
     width: 100vw;
     max-width: 100vw;
-    min-height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     border-radius: 0;
   }
 }

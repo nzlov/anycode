@@ -11,6 +11,15 @@ test('overview cards rely on the card click target instead of a duplicate detail
   assert.equal(source.includes('打开卡片详情'), false);
 });
 
+test('overview card actions expose an explicit menu instead of a context-only menu', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /aria-label="卡片操作"/);
+  assert.doesNotMatch(source, /<q-menu\s+context-menu/);
+  assert.match(source, /@keyup\.enter\.self=/);
+  assert.match(source, /@keyup\.space\.self\.prevent=/);
+});
+
 test('overview requests latest and history ranges instead of dated buckets', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
   const oldLatestRange = ['recent', '3d'].join('');
@@ -79,12 +88,14 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /openApprovalDialog\(card\)/);
   assert.match(overviewSource, /<q-tab name="output"[^>]*label="模型输出"/);
   assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
-  assert.match(overviewSource, /getSessionTimelinePage\(card\.id, '', 40\)/);
+  assert.match(overviewSource, /getSessionTranscriptPage\(card\.id, '', 40\)/);
   assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId: card\.id, mode: 'all'/);
   assert.match(overviewSource, /card\.pendingApproval/);
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
   assert.match(overviewSource, /Promise\.allSettled/);
   assert.match(overviewSource, /approvalDiffTruncated/);
+  assert.match(overviewSource, /approvalDiffs\.length === 0/);
+  assert.match(overviewSource, /当前没有文件变更/);
   assert.match(overviewSource, /aria-label="关闭人工审核"/);
   assert.match(overviewSource, /!approvalContext/);
   assert.match(overviewSource, /approvalRejectPrompt\.trim\(\) === ''/);
