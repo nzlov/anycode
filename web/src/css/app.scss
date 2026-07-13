@@ -819,6 +819,7 @@ a {
 }
 
 .new-session-dialog {
+  position: relative;
   display: flex;
   max-height: min(880px, calc(100dvh - 48px));
   flex-direction: column;
