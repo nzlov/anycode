@@ -102,8 +102,8 @@ func NewMCPHandler(cfg config.Config, questions questionapp.UseCase, sessions se
 func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Handler {
 	srv := handler.New(schema)
 	srv.AddTransport(transport.Websocket{
-		KeepAlivePingInterval: 10 * time.Second,
-		InitFunc:              websocketInitFunc(accessKey),
+		PingPongInterval: 10 * time.Second,
+		InitFunc:         websocketInitFunc(accessKey),
 	})
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})

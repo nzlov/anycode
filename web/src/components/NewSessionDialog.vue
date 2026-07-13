@@ -5,7 +5,11 @@
     persistent
     @update:model-value="emitModel"
   >
-    <q-card class="new-session-dialog">
+    <q-card
+      class="new-session-dialog"
+      :inert="branchesLoading"
+      :aria-busy="branchesLoading"
+    >
       <q-card-section class="new-session-dialog__header row items-center q-pb-sm">
         <div>
           <div class="text-subtitle1 text-weight-bold">新建卡片</div>
@@ -104,13 +108,15 @@
               icon="send"
               label="创建卡片"
               no-caps
-              :disable="creating"
+              :disable="creating || !branchSelectionReady"
               :loading="creating"
               @click="createSession"
             />
           </template>
         </CodexPromptComposer>
       </q-card-section>
+
+      <q-inner-loading :showing="branchesLoading" color="primary" />
     </q-card>
   </q-dialog>
 </template>
@@ -144,7 +150,7 @@ const $q = useQuasar();
 const { projects, projectOptions, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
 const projectId = ref(projects.value[0]?.id ?? '');
-const branch = ref('main');
+const branch = ref('');
 const mode = ref<'workflow' | 'chat'>('chat');
 const priority = ref<SessionPriority>('medium');
 const prompt = ref('');
@@ -166,6 +172,12 @@ const selectedProject = computed(() =>
   projects.value.find((project) => project.id === projectId.value),
 );
 const branchesLoading = computed(() => Boolean(branchLoading.value[projectId.value]));
+const branchSelectionReady = computed(() => {
+  if (!selectedProject.value) return false;
+  if (!selectedProject.value.isGit) return true;
+  const state = branchCache.value[projectId.value];
+  return !branchesLoading.value && Boolean(state?.branches.includes(branch.value));
+});
 const canUseWorkflowMode = computed(() => workflowAvailable.value);
 
 const modeOptions = [
@@ -243,9 +255,12 @@ function selectInitialProject() {
     candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ??
     fallback;
   if (!nextProjectId) return;
+  if (projectId.value === nextProjectId) {
+    branch.value = '';
+    void loadBranchesForProject(nextProjectId, { refresh: true });
+    return;
+  }
   projectId.value = nextProjectId;
-  branch.value = projectBranch(nextProjectId);
-  void loadBranchesForProject(nextProjectId);
 }
 
 async function loadWorkflowAvailability() {
@@ -277,17 +292,16 @@ async function loadWorkflowAvailability() {
   }
 }
 
-function projectBranch(value: string) {
-  return projectBranchState(value).defaultBranch;
-}
-
 function projectBranchState(value: string) {
-  return branchCache.value[value] ?? { defaultBranch: 'main', branches: ['main'] };
+  return branchCache.value[value] ?? { defaultBranch: '', branches: [] };
 }
 
 async function loadBranchesForProject(value: string, options: { refresh?: boolean } = {}) {
   const project = projects.value.find((item) => item.id === value);
-  if (!project?.isGit) return;
+  if (!project?.isGit) {
+    if (projectId.value === value) branch.value = '';
+    return;
+  }
   try {
     const state = await loadProjectBranches(value, options);
     if (projectId.value !== value) return;
@@ -309,11 +323,33 @@ async function refreshProjectBranches(value: string) {
 }
 
 async function createSession() {
+  if (!branchSelectionReady.value) {
+    Notify.create({
+      type: 'negative',
+      icon: 'error',
+      position: 'top-right',
+      message: '请等待当前项目分支加载完成',
+      timeout: 5000,
+      actions: [{ icon: 'close', color: 'white', round: true }],
+    });
+    return;
+  }
+
   const config: CreateSessionInput['config'] = {
     codexModel: model.value,
     reasoningEffort: effort.value,
     permissionMode: permission.value,
   };
+  const input: CreateSessionInput = {
+    projectId: projectId.value,
+    requirement: prompt.value,
+    mode: canUseWorkflowMode.value ? mode.value : 'chat',
+    priority: priority.value,
+    config,
+  };
+  if (selectedProject.value?.isGit) {
+    input.baseBranch = branch.value;
+  }
 
   const selectedFiles = [...files.value];
   const stagedAttachmentIds: string[] = [];
@@ -327,21 +363,11 @@ async function createSession() {
     }
 
     phase = 'create';
-    const input: CreateSessionInput = {
-      projectId: projectId.value,
-      requirement: prompt.value,
-      mode: canUseWorkflowMode.value ? mode.value : 'chat',
-      priority: priority.value,
-      config,
-    };
-    if (selectedProject.value?.isGit) {
-      input.baseBranch = branch.value;
-    }
     if (stagedAttachmentIds.length > 0) {
       input.stagedAttachmentIds = stagedAttachmentIds;
     }
     await createSessionRequest(input);
-    rememberProjectId(projectId.value);
+    rememberProjectId(input.projectId);
     rememberSessionConfig();
     files.value = [];
     prompt.value = '';
@@ -419,8 +445,8 @@ watch(
 
 watch(projectId, (value, previous) => {
   if (!value || value === previous) return;
-  branch.value = projectBranch(value);
-  void loadBranchesForProject(value);
+  branch.value = '';
+  void loadBranchesForProject(value, { refresh: true });
   void loadWorkflowAvailability();
 });
 
