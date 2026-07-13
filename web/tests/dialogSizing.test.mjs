@@ -24,6 +24,7 @@ const contentDialogs = [
   [directorySource, 'directory-dialog'],
   [answerSource, 'answer-dialog'],
   [indexSource, 'forward-approval-dialog'],
+  [indexSource, 'overview-diff-dialog'],
   [composerSource, 'attachment-preview-card'],
   [detailSource, 'prompt-edit-dialog'],
   [detailSource, 'file-diff-dialog'],

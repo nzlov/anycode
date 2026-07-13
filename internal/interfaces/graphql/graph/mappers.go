@@ -425,6 +425,18 @@ func mapSessionDiff(dto diffapp.SessionDiffDTO) *model.SessionDiff {
 	}
 }
 
+func mapSessionDiffSummaries(dtos []diffapp.SessionDiffSummaryDTO) []*model.SessionDiffSummary {
+	result := make([]*model.SessionDiffSummary, 0, len(dtos))
+	for _, dto := range dtos {
+		result = append(result, &model.SessionDiffSummary{
+			SessionID:    string(dto.SessionID),
+			State:        model.SessionDiffSummaryState(dto.State),
+			FilesChanged: dto.FilesChanged,
+		})
+	}
+	return result
+}
+
 func mapCommitHistory(dto diffapp.CommitHistoryDTO) *model.SessionCommitHistory {
 	return &model.SessionCommitHistory{
 		Commits:   mapCommitRecordPage(dto.Commits),

@@ -218,6 +218,7 @@ type ComplexityRoot struct {
 		Session                func(childComplexity int, id string) int
 		SessionCommitHistory   func(childComplexity int, input model.SessionCommitHistoryInput) int
 		SessionDiff            func(childComplexity int, input model.SessionDiffInput) int
+		SessionDiffSummaries   func(childComplexity int, sessionIds []string) int
 		SessionTranscript      func(childComplexity int, input model.ListTranscriptEventsInput) int
 		Sessions               func(childComplexity int, input *model.ListSessionsInput) int
 		WorkflowDefinition     func(childComplexity int, id string) int
@@ -370,6 +371,12 @@ type ComplexityRoot struct {
 		FilePath  func(childComplexity int) int
 		Files     func(childComplexity int) int
 		Mode      func(childComplexity int) int
+	}
+
+	SessionDiffSummary struct {
+		FilesChanged func(childComplexity int) int
+		SessionID    func(childComplexity int) int
+		State        func(childComplexity int) int
 	}
 
 	SessionStateStreamItem struct {
@@ -585,6 +592,7 @@ type QueryResolver interface {
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
+	SessionDiffSummaries(ctx context.Context, sessionIds []string) ([]*model.SessionDiffSummary, error)
 	BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error)
 	SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error)
 	WorkflowDefinition(ctx context.Context, id string) (*model.WorkflowDefinition, error)
@@ -1484,6 +1492,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SessionDiff(childComplexity, args["input"].(model.SessionDiffInput)), true
+	case "Query.sessionDiffSummaries":
+		if e.ComplexityRoot.Query.SessionDiffSummaries == nil {
+			break
+		}
+
+		args, err := ec.field_Query_sessionDiffSummaries_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SessionDiffSummaries(childComplexity, args["sessionIds"].([]string)), true
 	case "Query.sessionTranscript":
 		if e.ComplexityRoot.Query.SessionTranscript == nil {
 			break
@@ -2156,6 +2175,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDiff.Mode(childComplexity), true
+
+	case "SessionDiffSummary.filesChanged":
+		if e.ComplexityRoot.SessionDiffSummary.FilesChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDiffSummary.FilesChanged(childComplexity), true
+	case "SessionDiffSummary.sessionId":
+		if e.ComplexityRoot.SessionDiffSummary.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDiffSummary.SessionID(childComplexity), true
+	case "SessionDiffSummary.state":
+		if e.ComplexityRoot.SessionDiffSummary.State == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDiffSummary.State(childComplexity), true
 
 	case "SessionStateStreamItem.questionBatch":
 		if e.ComplexityRoot.SessionStateStreamItem.QuestionBatch == nil {
@@ -2939,6 +2977,7 @@ type Query {
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
+  sessionDiffSummaries(sessionIds: [ID!]!): [SessionDiffSummary!]!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
@@ -3317,6 +3356,19 @@ type SessionDiff {
   fileDiff: FileDiff
   allDiff: [FileDiff!]!
   available: Boolean!
+}
+
+enum SessionDiffSummaryState {
+  changed
+  clean
+  unavailable
+  error
+}
+
+type SessionDiffSummary {
+  sessionId: ID!
+  state: SessionDiffSummaryState!
+  filesChanged: Int!
 }
 
 type DiffFilePage {
@@ -4040,6 +4092,17 @@ func (ec *executionContext) field_Query_sessionCommitHistory_args(ctx context.Co
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_sessionDiffSummaries_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionIds", ec.unmarshalNID2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionIds"] = arg0
 	return args, nil
 }
 
@@ -8480,6 +8543,55 @@ func (ec *executionContext) fieldContext_Query_sessionDiff(ctx context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_sessionDiffSummaries(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_sessionDiffSummaries,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SessionDiffSummaries(ctx, fc.Args["sessionIds"].([]string))
+		},
+		nil,
+		ec.marshalNSessionDiffSummary2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_sessionDiffSummaries(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "sessionId":
+				return ec.fieldContext_SessionDiffSummary_sessionId(ctx, field)
+			case "state":
+				return ec.fieldContext_SessionDiffSummary_state(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_SessionDiffSummary_filesChanged(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionDiffSummary", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_sessionDiffSummaries_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_branchDiff(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12120,6 +12232,93 @@ func (ec *executionContext) fieldContext_SessionDiff_available(_ context.Context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDiffSummary_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.SessionDiffSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDiffSummary_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDiffSummary_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDiffSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDiffSummary_state(ctx context.Context, field graphql.CollectedField, obj *model.SessionDiffSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDiffSummary_state,
+		func(ctx context.Context) (any, error) {
+			return obj.State, nil
+		},
+		nil,
+		ec.marshalNSessionDiffSummaryState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryState,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDiffSummary_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDiffSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type SessionDiffSummaryState does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDiffSummary_filesChanged(ctx context.Context, field graphql.CollectedField, obj *model.SessionDiffSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDiffSummary_filesChanged,
+		func(ctx context.Context) (any, error) {
+			return obj.FilesChanged, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDiffSummary_filesChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDiffSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -19893,6 +20092,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sessionDiffSummaries":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sessionDiffSummaries(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "branchDiff":
 			field := field
 
@@ -21005,6 +21226,55 @@ func (ec *executionContext) _SessionDiff(ctx context.Context, sel ast.SelectionS
 			}
 		case "available":
 			out.Values[i] = ec._SessionDiff_available(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var sessionDiffSummaryImplementors = []string{"SessionDiffSummary"}
+
+func (ec *executionContext) _SessionDiffSummary(ctx context.Context, sel ast.SelectionSet, obj *model.SessionDiffSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, sessionDiffSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("SessionDiffSummary")
+		case "sessionId":
+			out.Values[i] = ec._SessionDiffSummary_sessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "state":
+			out.Values[i] = ec._SessionDiffSummary_state(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filesChanged":
+			out.Values[i] = ec._SessionDiffSummary_filesChanged(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -23068,6 +23338,36 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]string, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
 	res, err := graphql.UnmarshalInt(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -23521,6 +23821,42 @@ func (ec *executionContext) marshalNSessionDiff2ᚖgithubᚗcomᚋnzlovᚋanycod
 func (ec *executionContext) unmarshalNSessionDiffInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffInput(ctx context.Context, v any) (model.SessionDiffInput, error) {
 	res, err := ec.unmarshalInputSessionDiffInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSessionDiffSummary2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionDiffSummary) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNSessionDiffSummary2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummary(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNSessionDiffSummary2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummary(ctx context.Context, sel ast.SelectionSet, v *model.SessionDiffSummary) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._SessionDiffSummary(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNSessionDiffSummaryState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryState(ctx context.Context, v any) (model.SessionDiffSummaryState, error) {
+	var res model.SessionDiffSummaryState
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNSessionDiffSummaryState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryState(ctx context.Context, sel ast.SelectionSet, v model.SessionDiffSummaryState) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) marshalNSessionStateStreamItem2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStateStreamItem(ctx context.Context, sel ast.SelectionSet, v model.SessionStateStreamItem) graphql.Marshaler {

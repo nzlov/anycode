@@ -15,6 +15,7 @@ type Query {
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
+  sessionDiffSummaries(sessionIds: [ID!]!): [SessionDiffSummary!]!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
@@ -393,6 +394,19 @@ type SessionDiff {
   fileDiff: FileDiff
   allDiff: [FileDiff!]!
   available: Boolean!
+}
+
+enum SessionDiffSummaryState {
+  changed
+  clean
+  unavailable
+  error
+}
+
+type SessionDiffSummary {
+  sessionId: ID!
+  state: SessionDiffSummaryState!
+  filesChanged: Int!
 }
 
 type DiffFilePage {

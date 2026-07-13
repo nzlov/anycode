@@ -505,6 +505,22 @@ func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiff
 	return mapSessionDiff(dto), nil
 }
 
+// SessionDiffSummaries is the resolver for the sessionDiffSummaries field.
+func (r *queryResolver) SessionDiffSummaries(ctx context.Context, sessionIds []string) ([]*model.SessionDiffSummary, error) {
+	if r.UseCases.Diff == nil {
+		return nil, missingUseCase("diff")
+	}
+	sessionIDs := make([]sessiondomain.ID, 0, len(sessionIds))
+	for _, sessionID := range sessionIds {
+		sessionIDs = append(sessionIDs, sessiondomain.ID(sessionID))
+	}
+	dtos, err := r.UseCases.Diff.GetSessionDiffSummaries(ctx, diffapp.SessionDiffSummariesInput{SessionIDs: sessionIDs})
+	if err != nil {
+		return nil, err
+	}
+	return mapSessionDiffSummaries(dtos), nil
+}
+
 // BranchDiff is the resolver for the branchDiff field.
 func (r *queryResolver) BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error) {
 	if r.UseCases.Diff == nil {

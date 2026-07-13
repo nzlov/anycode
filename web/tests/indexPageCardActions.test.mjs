@@ -119,11 +119,9 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /card\.pendingApproval/);
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
   assert.match(overviewSource, /Promise\.allSettled/);
-  assert.match(overviewSource, /approvalDiffTruncated/);
-  assert.match(overviewSource, /approvalDiffs\.length === 0/);
-  assert.match(overviewSource, /当前没有文件变更/);
   assert.match(overviewSource, /approvalOutputError/);
   assert.match(overviewSource, /<SessionEventMessage[^>]*:event="message"/);
+  assert.match(overviewSource, /<SessionDiffPreview[\s\S]*:file-diffs="approvalDiffs"/);
   assert.match(overviewSource, /<WorkflowApprovalPanel/);
   assert.match(overviewSource, /aria-label="关闭人工审核"/);
   assert.match(
@@ -153,4 +151,39 @@ test('overview waiting approval dialog shows model output and diff before submit
     approvalPanelSource,
     /function returnToDecision[\s\S]*rejectPrompt\.value\s*=\s*''/,
   );
+});
+
+test('overview cards expose batch-backed diff previews without triggering card navigation', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+  const previewSource = readFileSync(
+    new URL('../src/components/SessionDiffPreview.vue', import.meta.url),
+    'utf8',
+  );
+  const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
+
+  assert.match(overviewSource, /v-if="card\.filesChanged > 0"/);
+  assert.match(overviewSource, /icon="difference"/);
+  assert.match(overviewSource, /:label="String\(card\.filesChanged\)"/);
+  assert.match(overviewSource, /:aria-label="`查看 \$\{card\.filesChanged\} 个变更文件`"/);
+  assert.match(overviewSource, /@click\.stop="openDiffDialog\(card\)"/);
+  assert.match(overviewSource, /@keyup\.enter\.stop/);
+  assert.match(overviewSource, /@keyup\.space\.stop/);
+  assert.match(overviewSource, /getSessionDiffSummaries/);
+  assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId: card\.id, mode: 'all'/);
+  assert.match(overviewSource, /pageSize: 20/);
+  assert.match(
+    overviewSource,
+    /<q-dialog[\s\S]*?v-model="diffDialog"[\s\S]*?:maximized="\$q\.screen\.lt\.sm"/,
+  );
+  assert.match(overviewSource, /<SessionDiffPreview[\s\S]*:file-diffs="diffDialogDiffs"/);
+  assert.match(previewSource, /<DiffViewer :file-diffs="fileDiffs"/);
+  assert.match(previewSource, /当前会话没有可用 Diff/);
+  assert.match(previewSource, /当前会话没有变更/);
+  assert.match(previewSource, /label="完整 Diff"/);
+  assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
+  assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);
+  assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*auto/s);
 });

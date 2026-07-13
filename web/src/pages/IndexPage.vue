@@ -112,6 +112,21 @@
 
               <div class="overview-card-actions">
                 <q-btn
+                  v-if="card.filesChanged > 0"
+                  flat
+                  dense
+                  no-caps
+                  class="overview-diff-btn app-command-btn"
+                  icon="difference"
+                  :label="String(card.filesChanged)"
+                  :aria-label="`查看 ${card.filesChanged} 个变更文件`"
+                  @click.stop="openDiffDialog(card)"
+                  @keyup.enter.stop
+                  @keyup.space.stop
+                >
+                  <q-tooltip>查看 Diff</q-tooltip>
+                </q-btn>
+                <q-btn
                   v-if="card.pendingQuestion"
                   flat
                   dense
@@ -258,37 +273,14 @@
             </div>
           </q-tab-panel>
           <q-tab-panel name="diff" class="forward-approval-dialog__panel">
-            <q-banner v-if="approvalDiffError" dense rounded class="state-banner bg-negative text-white">
-              {{ approvalDiffError }}
-            </q-banner>
-            <q-banner
-              v-else-if="!approvalDiffAvailable"
-              dense
-              rounded
-              class="state-banner bg-warning text-dark"
-            >
-              当前会话没有可用 Diff
-            </q-banner>
-            <q-banner
-              v-else-if="approvalDiffs.length === 0"
-              dense
-              rounded
-              class="state-banner bg-grey-2 text-dark"
-            >
-              当前没有文件变更
-            </q-banner>
-            <template v-else>
-              <q-banner
-                v-if="approvalDiffTruncated"
-                dense
-                rounded
-                class="state-banner bg-warning text-dark q-mb-sm"
-              >
-                当前只展示前 {{ approvalDiffs.length }} 个文件
-                <q-btn flat dense no-caps label="完整 Diff" :to="approvalAllDiffRoute" />
-              </q-banner>
-              <DiffViewer :file-diffs="approvalDiffs" />
-            </template>
+            <SessionDiffPreview
+              :loading="approvalLoading"
+              :error="approvalDiffError"
+              :available="approvalDiffAvailable"
+              :file-diffs="approvalDiffs"
+              :total="approvalDiffTotal"
+              :full-diff-route="approvalAllDiffRoute"
+            />
           </q-tab-panel>
         </q-tab-panels>
         <q-separator />
@@ -300,6 +292,26 @@
         />
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="diffDialog" :maximized="$q.screen.lt.sm" @hide="handleDiffDialogClosed">
+      <q-card class="overview-diff-dialog app-content-dialog">
+        <div class="overview-diff-dialog__header">
+          <div class="text-subtitle1 text-weight-bold">Diff</div>
+          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭 Diff" />
+        </div>
+        <q-separator />
+        <q-card-section class="overview-diff-dialog__body">
+          <SessionDiffPreview
+            :loading="diffDialogLoading"
+            :error="diffDialogError"
+            :available="diffDialogAvailable"
+            :file-diffs="diffDialogDiffs"
+            :total="diffDialogTotal"
+            :full-diff-route="diffDialogAllDiffRoute"
+          />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -309,18 +321,27 @@ import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
-import DiffViewer from '@/components/DiffViewer.vue';
+import SessionDiffPreview from '@/components/SessionDiffPreview.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
-import { getSessionAllDiff, type FileDiff } from '@/services/diff';
+import {
+  getSessionAllDiff,
+  getSessionDiffSummaries,
+  type FileDiff,
+  type SessionDiffSummary,
+} from '@/services/diff';
 import {
   getGraphQLAccessKey,
   verifyGraphQLAccessKey,
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
+import {
+  activeOverviewDiffSessionIds,
+  createOverviewDiffSummaryController,
+} from '@/services/overviewDiffSummary';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
 import { getSessionTranscriptPage, type TranscriptItem } from '@/services/sessionTimeline';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
@@ -375,12 +396,13 @@ const {
 });
 const { projects, loadProjects } = useProjects();
 
+const diffSummariesBySessionId = ref<Record<string, SessionDiffSummary>>({});
 const overviewCardGroups = computed(() =>
   createOverviewCardGroups(latestRows.value, historyRows.value),
 );
-const latestCards = computed(() => overviewCardGroups.value.latestCards);
+const latestCards = computed(() => overviewCardGroups.value.latestCards.map(withDiffSummary));
 const uniqueHistoryCards = computed(() => overviewCardGroups.value.historyCards);
-const historyCards = computed(() => uniqueHistoryCards.value.slice(0, 10));
+const historyCards = computed(() => uniqueHistoryCards.value.slice(0, 10).map(withDiffSummary));
 const hasMoreHistory = computed(() => uniqueHistoryCards.value.length > historyCards.value.length);
 const scopedProject = computed(() =>
   projects.value.find((project) => project.id === projectScopeId.value),
@@ -410,6 +432,7 @@ const cardSections = computed(() => [
 const hasVisibleCards = computed(
   () => latestCards.value.length > 0 || historyCards.value.length > 0,
 );
+const visibleCards = computed(() => [...latestCards.value, ...historyCards.value]);
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
@@ -427,39 +450,64 @@ const approvalDiffs = ref<FileDiff[]>([]);
 const approvalDiffAvailable = ref(false);
 const approvalDiffTotal = ref(0);
 const approvalDiffError = ref('');
+const diffDialog = ref(false);
+const diffDialogLoading = ref(false);
+const diffDialogSessionId = ref('');
+const diffDialogDiffs = ref<FileDiff[]>([]);
+const diffDialogAvailable = ref(false);
+const diffDialogTotal = ref(0);
+const diffDialogError = ref('');
 const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
 const activeCloseSessionId = ref('');
 const priorities: SessionPriority[] = ['high', 'medium', 'low'];
-const approvalDiffTruncated = computed(
-  () => approvalDiffAvailable.value && approvalDiffTotal.value > approvalDiffs.value.length,
-);
 const approvalAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: approvalSessionId.value, mode: 'all' },
+}));
+const diffDialogAllDiffRoute = computed(() => ({
+  path: '/diff',
+  query: { sessionId: diffDialogSessionId.value, mode: 'all' },
 }));
 let cardSubscription: ReturnType<typeof subscribeSessionCardChanged> | null = null;
 let cardReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let cardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let liveStopped = true;
+let diffDialogRequestGeneration = 0;
 
 interface ApprovalContext {
   workflowRunId: string;
   nodeId: string;
 }
 
+const diffSummaryController = createOverviewDiffSummaryController({
+  loadSummaries: getSessionDiffSummaries,
+  applySummaries: (sessionIds: string[], summaries: SessionDiffSummary[]) => {
+    const next = { ...diffSummariesBySessionId.value };
+    for (const sessionId of sessionIds) delete next[sessionId];
+    for (const summary of summaries) next[summary.sessionId] = summary;
+    diffSummariesBySessionId.value = next;
+  },
+  getVisibleCards: () => visibleCards.value,
+  isPageVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
+});
+
 onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange);
   void startOverview();
 });
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  diffSummaryController.stop();
   stopOverviewLiveUpdates();
 });
 
 watch(projectScopeId, (value) => {
   latestProjectId.value = value;
   historyProjectId.value = value;
+  diffSummariesBySessionId.value = {};
   void loadOverviewSessions();
   if (!liveStopped) {
     startOverviewLiveUpdates();
@@ -469,11 +517,33 @@ watch(projectScopeId, (value) => {
 async function startOverview() {
   await loadProjects();
   await loadOverviewSessions();
+  diffSummaryController.start();
   startOverviewLiveUpdates();
 }
 
 async function loadOverviewSessions() {
   await Promise.all([loadLatestSessions(), loadHistorySessions()]);
+  await diffSummaryController
+    .refresh(visibleCards.value.map((card) => card.id))
+    .catch(() => undefined);
+  diffSummaryController.syncPolling();
+}
+
+function withDiffSummary(card: SessionCard): SessionCard {
+  const summary = diffSummariesBySessionId.value[card.id];
+  return {
+    ...card,
+    filesChanged: summary?.state === 'changed' ? summary.filesChanged : 0,
+  };
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    void diffSummaryController
+      .refresh(activeOverviewDiffSessionIds(visibleCards.value))
+      .catch(() => undefined);
+  }
+  diffSummaryController.syncPolling();
 }
 
 function startOverviewLiveUpdates(onSubscribed?: () => void) {
@@ -708,6 +778,43 @@ async function openApprovalDialog(card: SessionCard) {
     approvalDialog.value = true;
   } finally {
     approvalLoading.value = false;
+  }
+}
+
+async function openDiffDialog(card: SessionCard) {
+  const requestGeneration = ++diffDialogRequestGeneration;
+  diffDialogSessionId.value = card.id;
+  diffDialogLoading.value = true;
+  diffDialogDiffs.value = [];
+  diffDialogAvailable.value = false;
+  diffDialogTotal.value = 0;
+  diffDialogError.value = '';
+  diffDialog.value = true;
+  try {
+    const result = await getSessionAllDiff({
+      sessionId: card.id,
+      mode: 'all',
+      page: 1,
+      pageSize: 20,
+    });
+    if (requestGeneration !== diffDialogRequestGeneration) return;
+    diffDialogAvailable.value = result.available;
+    diffDialogDiffs.value = result.allDiff;
+    diffDialogTotal.value = result.pageInfo.total;
+  } catch {
+    if (requestGeneration !== diffDialogRequestGeneration) return;
+    diffDialogError.value = 'Diff 加载失败，请稍后重试';
+  } finally {
+    if (requestGeneration === diffDialogRequestGeneration) {
+      diffDialogLoading.value = false;
+    }
+  }
+}
+
+function handleDiffDialogClosed() {
+  diffDialogRequestGeneration += 1;
+  if (diffDialogSessionId.value) {
+    void diffSummaryController.refresh([diffDialogSessionId.value]).catch(() => undefined);
   }
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/nzlov/anycode/internal/application/apperror"
+	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -28,6 +29,28 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+func TestQuerySessionDiffSummariesForwardsBatchInput(t *testing.T) {
+	diffs := &fakeDiffUseCase{summaries: []diffapp.SessionDiffSummaryDTO{
+		{SessionID: "session-1", State: diffapp.SessionDiffSummaryChanged, FilesChanged: 3},
+		{SessionID: "session-2", State: diffapp.SessionDiffSummaryUnavailable},
+	}}
+	resolver := NewResolver(UseCases{Diff: diffs}).Query()
+
+	got, err := resolver.SessionDiffSummaries(context.Background(), []string{"session-1", "session-2"})
+	if err != nil {
+		t.Fatalf("SessionDiffSummaries() error = %v", err)
+	}
+	if !reflect.DeepEqual(diffs.summaryInput.SessionIDs, []sessiondomain.ID{"session-1", "session-2"}) {
+		t.Fatalf("summary input = %#v", diffs.summaryInput)
+	}
+	if len(got) != 2 || got[0].SessionID != "session-1" || got[0].State != model.SessionDiffSummaryStateChanged || got[0].FilesChanged != 3 {
+		t.Fatalf("SessionDiffSummaries() = %#v", got)
+	}
+	if got[1].State != model.SessionDiffSummaryStateUnavailable || got[1].FilesChanged != 0 {
+		t.Fatalf("SessionDiffSummaries()[1] = %#v", got[1])
+	}
+}
 
 func TestQueryCodexModelOptionsReturnsStartupCatalog(t *testing.T) {
 	resolver := NewResolver(UseCases{
@@ -1195,6 +1218,18 @@ type fakeEventUseCase struct {
 	eventapp.UseCase
 	liveSessionTranscript     <-chan eventapp.DTO
 	gotLiveSessionEventsInput eventapp.LiveSessionEventsInput
+}
+
+type fakeDiffUseCase struct {
+	diffapp.UseCase
+	summaryInput diffapp.SessionDiffSummariesInput
+	summaries    []diffapp.SessionDiffSummaryDTO
+	err          error
+}
+
+func (f *fakeDiffUseCase) GetSessionDiffSummaries(_ context.Context, input diffapp.SessionDiffSummariesInput) ([]diffapp.SessionDiffSummaryDTO, error) {
+	f.summaryInput = input
+	return f.summaries, f.err
 }
 
 type fakeTimelineUseCase struct {

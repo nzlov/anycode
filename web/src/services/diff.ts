@@ -3,6 +3,13 @@ import type { PageInfo } from '@/services/sessions';
 
 export type DiffMode = 'single' | 'all';
 export type DiffLineKind = 'context' | 'add' | 'delete' | 'header';
+export type SessionDiffSummaryState = 'changed' | 'clean' | 'unavailable' | 'error';
+
+export interface SessionDiffSummary {
+  sessionId: string;
+  state: SessionDiffSummaryState;
+  filesChanged: number;
+}
 
 export interface DiffFile {
   path: string;
@@ -119,12 +126,42 @@ interface GraphQLSessionDiff {
   allDiff?: GraphQLFileDiff[];
 }
 
+interface GraphQLSessionDiffSummary {
+  sessionId: string;
+  state: string;
+  filesChanged: number;
+}
+
 interface GraphQLSessionCommitHistory {
   available: boolean;
   commits: {
     items: CommitRecord[];
     pageInfo: PageInfo;
   };
+}
+
+export async function getSessionDiffSummaries(sessionIds: string[]): Promise<SessionDiffSummary[]> {
+  const uniqueSessionIds = [...new Set(sessionIds.filter(Boolean))];
+  if (uniqueSessionIds.length === 0) return [];
+
+  const data = await graphqlFetch<
+    { sessionDiffSummaries: GraphQLSessionDiffSummary[] },
+    { sessionIds: string[] }
+  >({
+    query: `
+      query SessionDiffSummaries($sessionIds: [ID!]!) {
+        sessionDiffSummaries(sessionIds: $sessionIds) {
+          sessionId
+          state
+          filesChanged
+        }
+      }
+    `,
+    variables: { sessionIds: uniqueSessionIds },
+    notify: false,
+  });
+
+  return data.sessionDiffSummaries.map(normalizeSessionDiffSummary);
 }
 
 export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
@@ -618,6 +655,26 @@ function normalizeSessionDiff(diff: GraphQLSessionDiff): SessionDiff {
     fileDiff: diff.fileDiff ? normalizeFileDiff(diff.fileDiff) : null,
     allDiff: (diff.allDiff ?? []).map(normalizeFileDiff),
   };
+}
+
+function normalizeSessionDiffSummary(summary: GraphQLSessionDiffSummary): SessionDiffSummary {
+  const state = normalizeSessionDiffSummaryState(summary.state);
+  return {
+    sessionId: summary.sessionId,
+    state,
+    filesChanged: state === 'changed' ? Math.max(0, summary.filesChanged) : 0,
+  };
+}
+
+function normalizeSessionDiffSummaryState(state: string): SessionDiffSummaryState {
+  switch (state) {
+    case 'changed':
+    case 'clean':
+    case 'unavailable':
+      return state;
+    default:
+      return 'error';
+  }
 }
 
 function normalizeFileDiff(diff: GraphQLFileDiff): FileDiff {
