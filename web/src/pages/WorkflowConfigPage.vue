@@ -144,6 +144,11 @@
           </div>
           <q-input v-model.number="retry" dense outlined type="number" label="失败重试次数" min="0" />
           <q-toggle v-model="requiresApproval" label="运行前人工审批" />
+          <q-toggle
+            v-if="nodeType !== 'approval' && nodeType !== 'close'"
+            v-model="requiresForwardApproval"
+            label="运行后前进审核"
+          />
           <q-select
             v-if="nodeType === 'merge'"
             v-model="mergeStrategy"
@@ -287,6 +292,7 @@ const nodePrompt = ref('');
 const outputFields = ref<WorkflowOutputField[]>([]);
 const retry = ref(0);
 const requiresApproval = ref(false);
+const requiresForwardApproval = ref(false);
 const mergeStrategy = ref('merge');
 const selectedEdgeIndex = ref<number | null>(null);
 const edgePriority = ref(0);
@@ -338,13 +344,13 @@ const conditionFieldOptions = computed(() => {
   return [{ label: 'last.status', value: 'last.status' }, ...fields];
 });
 const systemOutputFieldKeys = computed(() => {
-  const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
-  return new Set(systemOutputFields(nodeType.value, approvalBeforeRun, nodeType.value === 'merge').map((field) => field.key));
+  const approvalEnabled = requiresApproval.value || requiresForwardApproval.value || nodeType.value === 'approval';
+  return new Set(systemOutputFields(nodeType.value, approvalEnabled, nodeType.value === 'merge').map((field) => field.key));
 });
 
-watch([nodeType, requiresApproval], () => {
-  const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
-  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalBeforeRun, nodeType.value === 'merge'));
+watch([nodeType, requiresApproval, requiresForwardApproval], () => {
+  const approvalEnabled = requiresApproval.value || requiresForwardApproval.value || nodeType.value === 'approval';
+  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalEnabled, nodeType.value === 'merge'));
 });
 
 onMounted(async () => {
@@ -407,6 +413,7 @@ function loadSelectedNode() {
     outputFields.value = [];
     retry.value = 0;
     requiresApproval.value = false;
+    requiresForwardApproval.value = false;
     mergeStrategy.value = 'merge';
     return;
   }
@@ -417,6 +424,7 @@ function loadSelectedNode() {
   outputFields.value = node.outputFields.map((field) => ({ ...field }));
   retry.value = node.retry.maxAttempts;
   requiresApproval.value = node.approval.beforeRun;
+  requiresForwardApproval.value = node.approval.afterRun;
   mergeStrategy.value = node.merge?.strategy ?? 'merge';
 }
 
@@ -431,11 +439,12 @@ function applyNodeEdit() {
   node.title = nodeTitle.value.trim() || nextId;
   node.prompt = nodePrompt.value.trim();
   const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
+  const approvalAfterRun = requiresForwardApproval.value && nodeType.value !== 'approval' && nodeType.value !== 'close';
   const merge = nodeType.value === 'merge' ? { strategy: mergeStrategy.value } : null;
-  node.outputFields = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalBeforeRun, Boolean(merge)));
+  node.outputFields = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalBeforeRun || approvalAfterRun, Boolean(merge)));
   node.retry.maxAttempts = Math.max(0, Number(retry.value) || 0);
   node.approval.beforeRun = approvalBeforeRun;
-  node.approval.afterRun = false;
+  node.approval.afterRun = approvalAfterRun;
   node.merge = merge;
   outputFields.value = node.outputFields.map((field) => ({ ...field }));
   if (oldId !== nextId) {

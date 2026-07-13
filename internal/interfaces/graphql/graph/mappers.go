@@ -149,6 +149,7 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		BaseBranch:         dto.BaseBranch,
 		WorktreeBranch:     dto.WorktreeBranch,
 		CurrentNodeTitle:   dto.CurrentNodeTitle,
+		PendingApproval:    mapPendingApproval(dto.PendingApproval),
 		PendingQuestion:    dto.PendingQuestion,
 		TodoList:           mapTodoList(dto.TodoList),
 		Attachments:        attachments,
@@ -156,6 +157,18 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		LastRunAt:          dto.LastRunAt,
 		CreatedAt:          dto.CreatedAt,
 		UpdatedAt:          dto.UpdatedAt,
+	}
+}
+
+func mapPendingApproval(dto *sessionapp.PendingApprovalDTO) *model.PendingApproval {
+	if dto == nil {
+		return nil
+	}
+	return &model.PendingApproval{
+		WorkflowRunID:    string(dto.WorkflowRunID),
+		NodeID:           dto.NodeID,
+		NodeRunID:        dto.NodeRunID,
+		CurrentNodeTitle: dto.CurrentNodeTitle,
 	}
 }
 
@@ -197,6 +210,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		BaseBranch:       dto.BaseBranch,
 		WorktreeBranch:   dto.WorktreeBranch,
 		CurrentNodeTitle: dto.CurrentNodeTitle,
+		PendingApproval:  mapPendingApproval(dto.PendingApproval),
 		WorktreePath:     dto.WorktreePath,
 		CodexSessionID:   dto.CodexSessionID,
 		Config:           mapSessionConfig(dto.Config),

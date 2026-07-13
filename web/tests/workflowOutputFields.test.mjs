@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { completeOutputFields, systemOutputFields } from '../src/services/workflowOutputFields.js';
@@ -32,4 +33,13 @@ test('preserves custom fields while replacing active system fields', () => {
     { key: 'result', description: '自定义结果', valueType: 'string' },
     { key: 'approval.approved', description: '人工审批是否通过', valueType: 'boolean' },
   ]);
+});
+
+test('workflow config persists after-run forward approval', () => {
+  const source = readFileSync(new URL('../src/pages/WorkflowConfigPage.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /v-model="requiresForwardApproval"/);
+  assert.match(source, /label="运行后前进审核"/);
+  assert.match(source, /node\.approval\.afterRun = approvalAfterRun/);
+  assert.doesNotMatch(source, /node\.approval\.afterRun = false/);
 });

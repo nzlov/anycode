@@ -177,6 +177,13 @@ type ComplexityRoot struct {
 		Total      func(childComplexity int) int
 	}
 
+	PendingApproval struct {
+		CurrentNodeTitle func(childComplexity int) int
+		NodeID           func(childComplexity int) int
+		NodeRunID        func(childComplexity int) int
+		WorkflowRunID    func(childComplexity int) int
+	}
+
 	Project struct {
 		CreatedAt           func(childComplexity int) int
 		DefaultWorkflowID   func(childComplexity int) int
@@ -295,6 +302,7 @@ type ComplexityRoot struct {
 		ID                 func(childComplexity int) int
 		LastRunAt          func(childComplexity int) int
 		Mode               func(childComplexity int) int
+		PendingApproval    func(childComplexity int) int
 		PendingQuestion    func(childComplexity int) int
 		Priority           func(childComplexity int) int
 		ProjectID          func(childComplexity int) int
@@ -348,6 +356,7 @@ type ComplexityRoot struct {
 		ID               func(childComplexity int) int
 		LastRunAt        func(childComplexity int) int
 		Mode             func(childComplexity int) int
+		PendingApproval  func(childComplexity int) int
 		Priority         func(childComplexity int) int
 		ProjectID        func(childComplexity int) int
 		PromptAppends    func(childComplexity int) int
@@ -1225,6 +1234,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PageInfo.Total(childComplexity), true
 
+	case "PendingApproval.currentNodeTitle":
+		if e.ComplexityRoot.PendingApproval.CurrentNodeTitle == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PendingApproval.CurrentNodeTitle(childComplexity), true
+	case "PendingApproval.nodeId":
+		if e.ComplexityRoot.PendingApproval.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PendingApproval.NodeID(childComplexity), true
+	case "PendingApproval.nodeRunId":
+		if e.ComplexityRoot.PendingApproval.NodeRunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PendingApproval.NodeRunID(childComplexity), true
+	case "PendingApproval.workflowRunId":
+		if e.ComplexityRoot.PendingApproval.WorkflowRunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PendingApproval.WorkflowRunID(childComplexity), true
+
 	case "Project.createdAt":
 		if e.ComplexityRoot.Project.CreatedAt == nil {
 			break
@@ -1801,6 +1835,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.Mode(childComplexity), true
+	case "SessionCard.pendingApproval":
+		if e.ComplexityRoot.SessionCard.PendingApproval == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.PendingApproval(childComplexity), true
 	case "SessionCard.pendingQuestion":
 		if e.ComplexityRoot.SessionCard.PendingQuestion == nil {
 			break
@@ -2017,6 +2057,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.Mode(childComplexity), true
+	case "SessionDetail.pendingApproval":
+		if e.ComplexityRoot.SessionDetail.PendingApproval == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.PendingApproval(childComplexity), true
 	case "SessionDetail.priority":
 		if e.ComplexityRoot.SessionDetail.Priority == nil {
 			break
@@ -3007,6 +3053,7 @@ type SessionCard {
   baseBranch: String!
   worktreeBranch: String!
   currentNodeTitle: String!
+  pendingApproval: PendingApproval
   pendingQuestion: Boolean!
   todoList: TodoList
   attachments: [SessionAttachment!]!
@@ -3043,6 +3090,7 @@ type SessionDetail {
   baseBranch: String!
   worktreeBranch: String!
   currentNodeTitle: String!
+  pendingApproval: PendingApproval
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!
@@ -3053,6 +3101,13 @@ type SessionDetail {
   lastRunAt: Time
   createdAt: Time!
   updatedAt: Time!
+}
+
+type PendingApproval {
+  workflowRunId: ID!
+  nodeId: ID!
+  nodeRunId: ID!
+  currentNodeTitle: String!
 }
 
 type SessionConfig {
@@ -7229,6 +7284,122 @@ func (ec *executionContext) fieldContext_PageInfo_nextCursor(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _PendingApproval_workflowRunId(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PendingApproval_workflowRunId,
+		func(ctx context.Context) (any, error) {
+			return obj.WorkflowRunID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PendingApproval_workflowRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PendingApproval",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PendingApproval_nodeId(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PendingApproval_nodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PendingApproval_nodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PendingApproval",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PendingApproval_nodeRunId(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PendingApproval_nodeRunId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeRunID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PendingApproval_nodeRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PendingApproval",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PendingApproval_currentNodeTitle(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PendingApproval_currentNodeTitle,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentNodeTitle, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PendingApproval_currentNodeTitle(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PendingApproval",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Project_id(ctx context.Context, field graphql.CollectedField, obj *model.Project) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7994,6 +8165,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionDetail_currentNodeTitle(ctx, field)
+			case "pendingApproval":
+				return ec.fieldContext_SessionDetail_pendingApproval(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -10274,6 +10447,45 @@ func (ec *executionContext) fieldContext_SessionCard_currentNodeTitle(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_pendingApproval(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_pendingApproval,
+		func(ctx context.Context) (any, error) {
+			return obj.PendingApproval, nil
+		},
+		nil,
+		ec.marshalOPendingApproval2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPendingApproval,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_pendingApproval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "workflowRunId":
+				return ec.fieldContext_PendingApproval_workflowRunId(ctx, field)
+			case "nodeId":
+				return ec.fieldContext_PendingApproval_nodeId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_PendingApproval_nodeRunId(ctx, field)
+			case "currentNodeTitle":
+				return ec.fieldContext_PendingApproval_currentNodeTitle(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PendingApproval", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_pendingQuestion(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10549,6 +10761,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
+			case "pendingApproval":
+				return ec.fieldContext_SessionCard_pendingApproval(ctx, field)
 			case "pendingQuestion":
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
 			case "todoList":
@@ -10684,6 +10898,8 @@ func (ec *executionContext) fieldContext_SessionCardStreamItem_card(_ context.Co
 				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
+			case "pendingApproval":
+				return ec.fieldContext_SessionCard_pendingApproval(ctx, field)
 			case "pendingQuestion":
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
 			case "todoList":
@@ -11257,6 +11473,45 @@ func (ec *executionContext) fieldContext_SessionDetail_currentNodeTitle(_ contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_pendingApproval(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_pendingApproval,
+		func(ctx context.Context) (any, error) {
+			return obj.PendingApproval, nil
+		},
+		nil,
+		ec.marshalOPendingApproval2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPendingApproval,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_pendingApproval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "workflowRunId":
+				return ec.fieldContext_PendingApproval_workflowRunId(ctx, field)
+			case "nodeId":
+				return ec.fieldContext_PendingApproval_nodeId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_PendingApproval_nodeRunId(ctx, field)
+			case "currentNodeTitle":
+				return ec.fieldContext_PendingApproval_currentNodeTitle(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PendingApproval", field.Name)
 		},
 	}
 	return fc, nil
@@ -11923,6 +12178,8 @@ func (ec *executionContext) fieldContext_SessionStateStreamItem_session(_ contex
 				return ec.fieldContext_SessionDetail_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionDetail_currentNodeTitle(ctx, field)
+			case "pendingApproval":
+				return ec.fieldContext_SessionDetail_pendingApproval(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
 			case "codexSessionId":
@@ -13413,6 +13670,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionCardChanged(ctx con
 				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
+			case "pendingApproval":
+				return ec.fieldContext_SessionCard_pendingApproval(ctx, field)
 			case "pendingQuestion":
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
 			case "todoList":
@@ -18940,6 +19199,60 @@ func (ec *executionContext) _PageInfo(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var pendingApprovalImplementors = []string{"PendingApproval"}
+
+func (ec *executionContext) _PendingApproval(ctx context.Context, sel ast.SelectionSet, obj *model.PendingApproval) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, pendingApprovalImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PendingApproval")
+		case "workflowRunId":
+			out.Values[i] = ec._PendingApproval_workflowRunId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodeId":
+			out.Values[i] = ec._PendingApproval_nodeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodeRunId":
+			out.Values[i] = ec._PendingApproval_nodeRunId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentNodeTitle":
+			out.Values[i] = ec._PendingApproval_currentNodeTitle(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var projectImplementors = []string{"Project"}
 
 func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, obj *model.Project) graphql.Marshaler {
@@ -20002,6 +20315,8 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "pendingApproval":
+			out.Values[i] = ec._SessionCard_pendingApproval(ctx, field, obj)
 		case "pendingQuestion":
 			out.Values[i] = ec._SessionCard_pendingQuestion(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -20338,6 +20653,8 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "pendingApproval":
+			out.Values[i] = ec._SessionDetail_pendingApproval(ctx, field, obj)
 		case "worktreePath":
 			out.Values[i] = ec._SessionDetail_worktreePath(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -23724,6 +24041,13 @@ func (ec *executionContext) unmarshalOMergeConfigInput2ᚖgithubᚗcomᚋnzlov�
 	}
 	res, err := ec.unmarshalInputMergeConfigInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOPendingApproval2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPendingApproval(ctx context.Context, sel ast.SelectionSet, v *model.PendingApproval) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._PendingApproval(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx context.Context, sel ast.SelectionSet, v *model.QuestionBatch) graphql.Marshaler {

@@ -70,3 +70,27 @@ test('overview card backgrounds highlight running and waiting answer states only
   assert.match(stylesSource, /\.overview-session-card--waiting_user\s*{[^}]*background:\s*#eeaa00;/s);
   assert.doesNotMatch(stylesSource, /\.overview-session-card--(?:stopped|closed)\s*{/);
 });
+
+test('overview waiting approval dialog shows model output and diff before submit', () => {
+  const overviewSource = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+  const sessionsSource = readFileSync(new URL('../src/services/sessions.ts', import.meta.url), 'utf8');
+
+  assert.match(overviewSource, /card\.status === 'waiting_approval'/);
+  assert.match(overviewSource, /openApprovalDialog\(card\)/);
+  assert.match(overviewSource, /<q-tab name="output"[^>]*label="模型输出"/);
+  assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
+  assert.match(overviewSource, /getSessionTimelinePage\(card\.id, '', 40\)/);
+  assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId: card\.id, mode: 'all'/);
+  assert.match(overviewSource, /card\.pendingApproval/);
+  assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
+  assert.match(overviewSource, /Promise\.allSettled/);
+  assert.match(overviewSource, /approvalDiffTruncated/);
+  assert.match(overviewSource, /aria-label="关闭人工审核"/);
+  assert.match(overviewSource, /!approvalContext/);
+  assert.match(overviewSource, /approvalRejectPrompt\.trim\(\) === ''/);
+  assert.match(overviewSource, /submitWorkflowApproval\(/);
+  assert.match(sessionsSource, /pendingApproval\s*\{/);
+  assert.match(sessionsSource, /workflowRunId/);
+  assert.match(sessionsSource, /normalizePendingApproval/);
+  assert.match(sessionsSource, /mutation SubmitWorkflowApproval/);
+});

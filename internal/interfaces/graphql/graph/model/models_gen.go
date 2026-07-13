@@ -207,6 +207,13 @@ type PageInfo struct {
 	NextCursor string `json:"nextCursor"`
 }
 
+type PendingApproval struct {
+	WorkflowRunID    string `json:"workflowRunId"`
+	NodeID           string `json:"nodeId"`
+	NodeRunID        string `json:"nodeRunId"`
+	CurrentNodeTitle string `json:"currentNodeTitle"`
+}
+
 type Project struct {
 	ID                  string    `json:"id"`
 	Name                string    `json:"name"`
@@ -331,6 +338,7 @@ type SessionCard struct {
 	BaseBranch         string               `json:"baseBranch"`
 	WorktreeBranch     string               `json:"worktreeBranch"`
 	CurrentNodeTitle   string               `json:"currentNodeTitle"`
+	PendingApproval    *PendingApproval     `json:"pendingApproval,omitempty"`
 	PendingQuestion    bool                 `json:"pendingQuestion"`
 	TodoList           *TodoList            `json:"todoList,omitempty"`
 	Attachments        []*SessionAttachment `json:"attachments"`
@@ -393,6 +401,7 @@ type SessionDetail struct {
 	BaseBranch       string               `json:"baseBranch"`
 	WorktreeBranch   string               `json:"worktreeBranch"`
 	CurrentNodeTitle string               `json:"currentNodeTitle"`
+	PendingApproval  *PendingApproval     `json:"pendingApproval,omitempty"`
 	WorktreePath     string               `json:"worktreePath"`
 	CodexSessionID   string               `json:"codexSessionId"`
 	Config           *SessionConfig       `json:"config"`

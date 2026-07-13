@@ -40,9 +40,17 @@ export interface SessionCard {
   updatedAt: string;
   updatedTime: string;
   pendingQuestion: boolean;
+  pendingApproval?: PendingApproval | null;
   todoList?: SessionTodoList | null;
   filesChanged: number;
   availableActions: string[];
+}
+
+export interface PendingApproval {
+  workflowRunId: string;
+  nodeId: string;
+  nodeRunId: string;
+  currentNodeTitle: string;
 }
 
 export interface SessionTodoList {
@@ -123,6 +131,13 @@ export interface QuestionAnswerInput {
   payload?: Record<string, unknown>;
 }
 
+export interface SubmitWorkflowApprovalInput {
+  workflowRunId: string;
+  nodeId: string;
+  approved: boolean;
+  comment?: string;
+}
+
 export interface PageInfo {
   page: number;
   pageSize: number;
@@ -195,11 +210,19 @@ interface GraphQLSessionCard {
   worktreeBranch: string;
   currentNodeTitle: string;
   pendingQuestion: boolean;
+  pendingApproval?: GraphQLPendingApproval | null;
   todoList?: GraphQLSessionTodoList | null;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
   availableActions: string[];
+}
+
+interface GraphQLPendingApproval {
+  workflowRunId: string;
+  nodeId: string;
+  nodeRunId: string;
+  currentNodeTitle: string;
 }
 
 interface GraphQLSessionTodoList {
@@ -224,6 +247,7 @@ interface GraphQLSessionDetail {
   baseBranch: string;
   worktreeBranch: string;
   currentNodeTitle: string;
+  pendingApproval?: GraphQLPendingApproval | null;
   config: {
     codexModel: string;
     reasoningEffort: string;
@@ -301,6 +325,12 @@ const sessionCardFields = `
   baseBranch
   worktreeBranch
   currentNodeTitle
+  pendingApproval {
+    workflowRunId
+    nodeId
+    nodeRunId
+    currentNodeTitle
+  }
   pendingQuestion
   todoList {
     completed
@@ -327,6 +357,12 @@ const sessionDetailFields = `
   baseBranch
   worktreeBranch
   currentNodeTitle
+  pendingApproval {
+    workflowRunId
+    nodeId
+    nodeRunId
+    currentNodeTitle
+  }
   config {
     codexModel
     reasoningEffort
@@ -689,6 +725,35 @@ export async function submitQuestionBatch(batchId: string, answers: QuestionAnsw
   return normalizeQuestionBatch(data.submitQuestionBatch);
 }
 
+export async function submitWorkflowApproval(input: SubmitWorkflowApprovalInput) {
+  const data = await graphqlFetch<
+    {
+      submitWorkflowApproval: {
+        id: string;
+        sessionId: string;
+        status: string;
+        currentNodeId: string;
+        context: Record<string, unknown>;
+      };
+    },
+    { input: SubmitWorkflowApprovalInput }
+  >({
+    query: `
+      mutation SubmitWorkflowApproval($input: SubmitWorkflowApprovalInput!) {
+        submitWorkflowApproval(input: $input) {
+          id
+          sessionId
+          status
+          currentNodeId
+          context
+        }
+      }
+    `,
+    variables: { input },
+  });
+  return data.submitWorkflowApproval;
+}
+
 export async function createSession(input: CreateSessionInput) {
   const data = await graphqlFetch<{ createSession: GraphQLSession }, { input: CreateSessionInput }>(
     {
@@ -735,6 +800,18 @@ function normalizeTodoList(todoList?: GraphQLSessionTodoList | null): SessionTod
   };
 }
 
+function normalizePendingApproval(
+  approval?: GraphQLPendingApproval | null,
+): PendingApproval | null {
+  if (!approval) return null;
+  return {
+    workflowRunId: approval.workflowRunId,
+    nodeId: approval.nodeId,
+    nodeRunId: approval.nodeRunId,
+    currentNodeTitle: approval.currentNodeTitle,
+  };
+}
+
 function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
   return {
     id: session.id,
@@ -753,6 +830,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     updatedTime: session.updatedAt,
     pendingQuestion: session.pendingQuestion,
+    pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: normalizeTodoList(session.todoList),
     filesChanged: 0,
     availableActions: normalizeAvailableActions(session.availableActions),
@@ -778,6 +856,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     updatedTime: session.updatedAt,
     pendingQuestion: status === 'waiting_user',
+    pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: null,
     filesChanged: 0,
     config: session.config,
@@ -831,6 +910,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     updatedTime: session.updatedAt,
     pendingQuestion: status === 'waiting_user',
+    pendingApproval: null,
     todoList: null,
     filesChanged: 0,
     availableActions: normalizeAvailableActions(session.availableActions),

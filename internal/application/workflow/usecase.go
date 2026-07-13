@@ -212,7 +212,7 @@ func completeSystemOutputFields(graph domain.Graph) domain.Graph {
 
 func completeNodeOutputFields(node domain.Node) []domain.OutputField {
 	fields := append([]domain.OutputField(nil), node.OutputFields...)
-	if requiresApproval(node) {
+	if requiresApproval(node) || node.Approval.AfterRun {
 		fields = ensureOutputField(fields, domain.OutputField{
 			Key:         "approval.approved",
 			Description: "Whether the human approval passed.",
@@ -265,7 +265,7 @@ func (s *Service) ActivateDefinition(ctx context.Context, id domain.DefinitionID
 }
 
 func (s *Service) SubmitApproval(ctx context.Context, input SubmitApprovalInput) (RunDTO, error) {
-	run, _, err := s.submitApproval(ctx, domain.RunID(input.WorkflowRunID), input.NodeID, input.Approved, input.Comment)
+	run, _, _, err := s.submitApproval(ctx, domain.RunID(input.WorkflowRunID), input.NodeID, input.Approved, input.Comment)
 	if err != nil {
 		return RunDTO{}, err
 	}
@@ -273,52 +273,132 @@ func (s *Service) SubmitApproval(ctx context.Context, input SubmitApprovalInput)
 }
 
 func (s *Service) SubmitApprovalForSession(ctx context.Context, input sessiondomain.WorkflowApprovalInput) (sessiondomain.WorkflowApprovalResult, error) {
-	run, advance, err := s.submitApproval(ctx, domain.RunID(input.WorkflowRunID), input.NodeID, input.Approved, input.Comment)
+	run, advance, rejectedAfterRun, err := s.submitApproval(ctx, domain.RunID(input.WorkflowRunID), input.NodeID, input.Approved, input.Comment)
 	if err != nil {
 		return sessiondomain.WorkflowApprovalResult{}, err
 	}
 	return sessiondomain.WorkflowApprovalResult{
-		Run:     toSessionWorkflowRunSnapshot(run),
-		Advance: advance,
+		Run:              toSessionWorkflowRunSnapshot(run),
+		Advance:          advance,
+		RejectedAfterRun: rejectedAfterRun,
 	}, nil
 }
 
-func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID, nodeID string, approved bool, comment string) (domain.Run, sessiondomain.WorkflowAdvance, error) {
+func (s *Service) SubmitApprovalForSessionWithRepositories(ctx context.Context, input sessiondomain.WorkflowApprovalInput, repo domain.Repository, events eventdomain.Store) (sessiondomain.WorkflowApprovalResult, []eventdomain.DomainEvent, error) {
+	if repo == nil {
+		return sessiondomain.WorkflowApprovalResult{}, nil, errors.New("workflow repository is required")
+	}
+	recorder := &workflowEventRecorder{store: events}
+	clone := *s
+	clone.repo = repo
+	clone.uow = nil
+	clone.events = recorder
+	clone.publisher = nil
+	result, err := clone.SubmitApprovalForSession(ctx, input)
+	if err != nil {
+		return sessiondomain.WorkflowApprovalResult{}, nil, err
+	}
+	return result, append([]eventdomain.DomainEvent(nil), recorder.events...), nil
+}
+
+func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID, nodeID string, approved bool, comment string) (domain.Run, sessiondomain.WorkflowAdvance, bool, error) {
 	if s == nil {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, errors.New("workflow usecase: nil service")
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, errors.New("workflow usecase: nil service")
 	}
 	if s.repo == nil {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, errors.New("workflow repository is required")
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, errors.New("workflow repository is required")
 	}
 	if workflowRunID == "" {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, errors.New("workflow run id is required")
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, errors.New("workflow run id is required")
 	}
 	if strings.TrimSpace(nodeID) == "" {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, errors.New("workflow node id is required")
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, errors.New("workflow node id is required")
 	}
 	run, err := s.repo.FindRun(ctx, workflowRunID)
 	if err != nil {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, err
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
 	if run.Status != domain.RunWaitingApproval {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run cannot accept approval from status %q", run.Status)
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, fmt.Errorf("workflow run cannot accept approval from status %q", run.Status)
 	}
 	if run.CurrentNodeID != nodeID {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run is waiting on node %q, not %q", run.CurrentNodeID, nodeID)
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, fmt.Errorf("workflow run is waiting on node %q, not %q", run.CurrentNodeID, nodeID)
 	}
 	nodeRun, err := s.repo.FindLatestNodeRun(ctx, run.ID, nodeID)
 	if err != nil {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, err
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
 	if nodeRun.Status != domain.NodeWaitingApproval {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, fmt.Errorf("node run cannot accept approval from status %q", nodeRun.Status)
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, fmt.Errorf("node run cannot accept approval from status %q", nodeRun.Status)
+	}
+	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	if err != nil {
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+	}
+	node, err := findNode(definition.Graph, run.CurrentNodeID)
+	if err != nil {
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
 	now := s.now()
-	output := map[string]any{
-		"approval": map[string]any{
-			"approved": approved,
-			"comment":  strings.TrimSpace(comment),
-		},
+	output := outputWithApproval(nodeRun.Output, approved, comment)
+	if isAfterRunApproval(node, nodeRun) && !approved {
+		failedNodeRun := domain.NodeRun{
+			ID:            nodeRun.ID,
+			WorkflowRunID: nodeRun.WorkflowRunID,
+			NodeID:        nodeRun.NodeID,
+			Status:        domain.NodeFailed,
+			Attempt:       nodeRun.Attempt,
+			ProcessRunID:  nodeRun.ProcessRunID,
+			StartedAt:     nodeRun.StartedAt,
+			FinishedAt:    &now,
+			Output:        output,
+		}
+		run.Context = contextAfterFailedNode(run.Context, output)
+		nextNodeRun, advance, err := s.nextNodeRunForNode(&run, node, nodeRun.Attempt+1, now, false, true)
+		if err != nil {
+			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+		}
+		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
+			return repo.CompleteNodeAndAdvance(ctx, failedNodeRun, run, &nextNodeRun)
+		}); err != nil {
+			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+		}
+		advancedRun, err := s.repo.FindRun(ctx, domain.RunID(advance.WorkflowRunID))
+		if err != nil {
+			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+		}
+		return advancedRun, advance, true, nil
+	}
+	if isBeforeRunApproval(node, nodeRun) && approved {
+		nodeRun.Status = domain.NodeRunning
+		nodeRun.Output = output
+		run.Status = domain.RunRunning
+		run.Context = contextAfterBeforeApproval(run.Context, output)
+		nodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
+		advance := sessiondomain.WorkflowAdvance{
+			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
+			NodeRunID:        &nodeRunID,
+			CurrentNodeID:    node.ID,
+			CurrentNodeTitle: node.Title,
+			Status:           string(run.Status),
+			RequiresCodex:    isCodexNode(node),
+			Prompt:           nodePrompt("", node, paramsFromContext(run.Context)),
+			Merge:            mergeRequest(node),
+			Expr:             exprRequest(node, paramsFromContext(run.Context)),
+		}
+		if advance.Merge != nil || advance.Expr != nil {
+			advance.RequiresCodex = false
+		}
+		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
+			return repo.CompleteNodeAndAdvance(ctx, nodeRun, run, nil)
+		}); err != nil {
+			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+		}
+		advancedRun, err := s.repo.FindRun(ctx, domain.RunID(advance.WorkflowRunID))
+		if err != nil {
+			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+		}
+		return advancedRun, advance, false, nil
 	}
 	if !approved {
 		nodeRun.Status = domain.NodeFailed
@@ -327,10 +407,6 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 		run.Status = domain.RunBlocked
 		run.Context = contextAfterNode(run.Context, output)
 		run.Context.Values["blockedReason"] = "approval rejected"
-		definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
-		if err != nil {
-			return domain.Run{}, sessiondomain.WorkflowAdvance{}, err
-		}
 		advance := sessiondomain.WorkflowAdvance{
 			WorkflowRunID: sessiondomain.WorkflowRunID(run.ID),
 			Status:        string(run.Status),
@@ -340,19 +416,19 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
 			return repo.CompleteNodeAndAdvance(ctx, nodeRun, run, nil)
 		}); err != nil {
-			return domain.Run{}, sessiondomain.WorkflowAdvance{}, err
+			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 		}
-		return run, advance, nil
+		return run, advance, false, nil
 	}
-	advance, err := s.completeNode(ctx, run, nodeRun.ID, output)
+	advance, err := s.completeNodeWithOptions(ctx, run, nodeRun.ID, output, completeNodeOptions{skipAfterRunApproval: isAfterRunApproval(node, nodeRun)})
 	if err != nil {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, err
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
 	advancedRun, err := s.repo.FindRun(ctx, domain.RunID(advance.WorkflowRunID))
 	if err != nil {
-		return domain.Run{}, sessiondomain.WorkflowAdvance{}, err
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
-	return advancedRun, advance, nil
+	return advancedRun, advance, false, nil
 }
 
 func (s *Service) StartForSession(ctx context.Context, input sessiondomain.WorkflowStartInput) (sessiondomain.WorkflowStart, error) {
@@ -680,7 +756,7 @@ func (s *Service) RerunCurrentNodeForSession(ctx context.Context, input sessiond
 		return advance, nil
 	}
 	now := s.now()
-	nextNodeRun, advance, err := s.nextNodeRunForNode(&run, node, nodeRun.Attempt+1, now, false)
+	nextNodeRun, advance, err := s.nextNodeRunForNode(&run, node, nodeRun.Attempt+1, now, false, false)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -851,6 +927,14 @@ func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domai
 }
 
 func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any) (sessiondomain.WorkflowAdvance, error) {
+	return s.completeNodeWithOptions(ctx, run, nodeRunID, output, completeNodeOptions{})
+}
+
+type completeNodeOptions struct {
+	skipAfterRunApproval bool
+}
+
+func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any, options completeNodeOptions) (sessiondomain.WorkflowAdvance, error) {
 	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
@@ -885,6 +969,27 @@ func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID do
 		Output:        payloadOrEmpty(output),
 	}
 	contextValue := contextAfterNode(run.Context, completedNodeRun.Output)
+	if currentNode.Approval.AfterRun && !options.skipAfterRunApproval {
+		completedNodeRun.Status = domain.NodeWaitingApproval
+		completedNodeRun.FinishedAt = nil
+		run.Status = domain.RunWaitingApproval
+		run.Context = contextValue
+		resultNodeRunID := sessiondomain.NodeRunID(completedNodeRun.ID)
+		advance := sessiondomain.WorkflowAdvance{
+			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
+			NodeRunID:        &resultNodeRunID,
+			CurrentNodeID:    currentNode.ID,
+			CurrentNodeTitle: currentNode.Title,
+			Status:           string(run.Status),
+			RequiresCodex:    false,
+		}
+		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
+			return repo.CompleteNodeAndAdvance(ctx, completedNodeRun, run, nil)
+		}); err != nil {
+			return sessiondomain.WorkflowAdvance{}, err
+		}
+		return advance, nil
+	}
 	planner := domain.DefaultPlanner{}
 	decision, err := planner.NextNode(definition, run, contextValue)
 	if err != nil {
@@ -1039,7 +1144,7 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 	planner := domain.DefaultPlanner{}
 	run.Context = contextValue
 	if planner.ShouldRetry(node, nodeRun.Attempt, failure) {
-		nextNodeRun, advance, err := s.nextNodeRunForNode(&run, node, nodeRun.Attempt+1, now, false)
+		nextNodeRun, advance, err := s.nextNodeRunForNode(&run, node, nodeRun.Attempt+1, now, false, false)
 		if err != nil {
 			return sessiondomain.WorkflowAdvance{}, err
 		}
@@ -1078,7 +1183,7 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
-	nextNodeRun, advance, err := s.nextNodeRunForNode(&run, nextNode, 1, now, true)
+	nextNodeRun, advance, err := s.nextNodeRunForNode(&run, nextNode, 1, now, true, false)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -1103,7 +1208,7 @@ func failureNodeOutput(failure domain.NodeFailure, output map[string]any) map[st
 	return failureOutput
 }
 
-func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt int, now time.Time, updateCurrentNode bool) (domain.NodeRun, sessiondomain.WorkflowAdvance, error) {
+func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt int, now time.Time, updateCurrentNode bool, skipBeforeApproval bool) (domain.NodeRun, sessiondomain.WorkflowAdvance, error) {
 	nextNodeRunID, err := s.generateID()
 	if err != nil {
 		return domain.NodeRun{}, sessiondomain.WorkflowAdvance{}, fmt.Errorf("generate workflow node run id: %w", err)
@@ -1139,7 +1244,7 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 	requiresCodex := true
 	merge := mergeRequest(node)
 	expr := exprRequest(node, paramsFromContext(run.Context))
-	if requiresApproval(node) {
+	if requiresApproval(node) && !skipBeforeApproval {
 		run.Status = domain.RunWaitingApproval
 		nodeStatus = domain.NodeWaitingApproval
 		requiresCodex = false
@@ -1293,6 +1398,42 @@ func (s *Service) publishWorkflowEvent(ctx context.Context, event eventdomain.Do
 	_ = s.publisher.PublishAfterCommit(ctx, event)
 }
 
+type workflowEventRecorder struct {
+	store  eventdomain.Store
+	events []eventdomain.DomainEvent
+}
+
+func (r *workflowEventRecorder) Append(ctx context.Context, event eventdomain.DomainEvent) error {
+	if r.store != nil {
+		if err := r.store.Append(ctx, event); err != nil {
+			return err
+		}
+	}
+	r.events = append(r.events, event)
+	return nil
+}
+
+func (r *workflowEventRecorder) List(ctx context.Context, scope eventdomain.Scope) ([]eventdomain.DomainEvent, error) {
+	if r.store == nil {
+		return nil, errors.New("workflow event store is required")
+	}
+	return r.store.List(ctx, scope)
+}
+
+func (r *workflowEventRecorder) After(ctx context.Context, scope eventdomain.Scope, after eventdomain.ID) ([]eventdomain.DomainEvent, error) {
+	if r.store == nil {
+		return nil, errors.New("workflow event store is required")
+	}
+	return r.store.After(ctx, scope, after)
+}
+
+func (r *workflowEventRecorder) Before(ctx context.Context, scope eventdomain.Scope, before eventdomain.ID, limit int) ([]eventdomain.DomainEvent, int, bool, error) {
+	if r.store == nil {
+		return nil, 0, false, errors.New("workflow event store is required")
+	}
+	return r.store.Before(ctx, scope, before, limit)
+}
+
 func stringValuePtr(value *sessiondomain.NodeRunID) string {
 	if value == nil {
 		return ""
@@ -1354,9 +1495,16 @@ func contextAfterNode(contextValue domain.Context, output map[string]any) domain
 	for key, value := range contextValue.Values {
 		values[key] = value
 	}
-	results := payloadOrEmpty(output)
+	fullOutput := payloadOrEmpty(output)
+	results := fullOutput
 	if nested, ok := output["results"].(map[string]any); ok {
-		results = payloadOrEmpty(nested)
+		results = copyMap(payloadOrEmpty(nested))
+		if approval, exists := fullOutput["approval"]; exists {
+			results["approval"] = approval
+		}
+	}
+	if approval, exists := fullOutput["approval"]; exists {
+		values["approval"] = approval
 	}
 	values["results"] = results
 	values["last"] = map[string]any{
@@ -1376,6 +1524,17 @@ func contextAfterFailedNode(contextValue domain.Context, output map[string]any) 
 	values["last"] = map[string]any{
 		"status": "failed",
 		"output": results,
+	}
+	return domain.Context{Values: values}
+}
+
+func contextAfterBeforeApproval(contextValue domain.Context, output map[string]any) domain.Context {
+	values := map[string]any{}
+	for key, value := range contextValue.Values {
+		values[key] = value
+	}
+	if approval, exists := output["approval"]; exists {
+		values["approval"] = approval
 	}
 	return domain.Context{Values: values}
 }
@@ -1458,9 +1617,34 @@ func payloadOrEmpty(payload map[string]any) map[string]any {
 	return payload
 }
 
+func outputWithApproval(output map[string]any, approved bool, comment string) map[string]any {
+	next := copyMap(payloadOrEmpty(output))
+	next["approval"] = map[string]any{
+		"approved": approved,
+		"comment":  strings.TrimSpace(comment),
+	}
+	return next
+}
+
+func isAfterRunApproval(node domain.Node, nodeRun domain.NodeRun) bool {
+	return node.Approval.AfterRun && (len(nodeRun.Output) > 0 || !requiresApproval(node))
+}
+
+func isBeforeRunApproval(node domain.Node, nodeRun domain.NodeRun) bool {
+	if isApprovalNode(node) {
+		return false
+	}
+	return node.Approval.BeforeRun && len(nodeRun.Output) == 0
+}
+
 func requiresApproval(node domain.Node) bool {
 	nodeType := strings.TrimSpace(strings.ToLower(node.Type))
 	return node.Approval.BeforeRun || nodeType == "approval" || nodeType == "manual_approval"
+}
+
+func isApprovalNode(node domain.Node) bool {
+	nodeType := strings.TrimSpace(strings.ToLower(node.Type))
+	return nodeType == "approval" || nodeType == "manual_approval"
 }
 
 func exprRequest(node domain.Node, params map[string]any) *sessiondomain.WorkflowExpr {

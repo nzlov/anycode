@@ -163,6 +163,7 @@ type SessionCard {
   baseBranch: String!
   worktreeBranch: String!
   currentNodeTitle: String!
+  pendingApproval: PendingApproval
   pendingQuestion: Boolean!
   todoList: TodoList
   attachments: [SessionAttachment!]!
@@ -199,6 +200,7 @@ type SessionDetail {
   baseBranch: String!
   worktreeBranch: String!
   currentNodeTitle: String!
+  pendingApproval: PendingApproval
   worktreePath: String!
   codexSessionId: String!
   config: SessionConfig!
@@ -209,6 +211,13 @@ type SessionDetail {
   lastRunAt: Time
   createdAt: Time!
   updatedAt: Time!
+}
+
+type PendingApproval {
+  workflowRunId: ID!
+  nodeId: ID!
+  nodeRunId: ID!
+  currentNodeTitle: String!
 }
 
 type SessionConfig {

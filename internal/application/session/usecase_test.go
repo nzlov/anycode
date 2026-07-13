@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
+	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	gitdiffdomain "github.com/nzlov/anycode/internal/domain/gitdiff"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
@@ -21,6 +23,7 @@ import (
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
+	"github.com/nzlov/anycode/internal/infra/entstore"
 )
 
 func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
@@ -608,7 +611,7 @@ func TestCreateWorkflowSessionStartsFirstNodeCodexWithNodeRun(t *testing.T) {
 	}}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-1"}}
-	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}))
 	ids := []domain.ID{"session-1", "process-run-1"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
@@ -710,7 +713,7 @@ func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T
 	}}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-1"}}
-	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}))
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 
@@ -1263,7 +1266,7 @@ func TestRestartedWorkflowExprDoesNotMarkNextCodexInitial(t *testing.T) {
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
-	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}))
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 
 	if _, err := service.StartSession(ctx, "session-1"); err != nil {
@@ -1910,7 +1913,7 @@ func TestSubmitWorkflowApprovalStartsNextCodexNode(t *testing.T) {
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
 	events := &fakeEventStore{}
-	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithProcesses(processes, codex), WithEvents(events))
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithProcesses(processes, codex), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
 	nextID := 0
 	service.generateID = func() (domain.ID, error) {
 		nextID++
@@ -1996,7 +1999,8 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
-	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex))
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}
+	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex), WithUnitOfWork(uow))
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 
 	if _, err := service.StartSession(ctx, "session-1"); err != nil {
@@ -2054,7 +2058,7 @@ func TestSubmitWorkflowApprovalRejectBlocksSession(t *testing.T) {
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{}
 	events := &fakeEventStore{}
-	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithProcesses(processes, codex), WithEvents(events))
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithProcesses(processes, codex), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
 	nextID := 0
 	service.generateID = func() (domain.ID, error) {
 		nextID++
@@ -2076,6 +2080,313 @@ func TestSubmitWorkflowApprovalRejectBlocksSession(t *testing.T) {
 	}
 	if codex.startCalled || len(processes.created) != 0 {
 		t.Fatalf("codex/process should not start: start=%v runs=%#v", codex.startCalled, processes.created)
+	}
+}
+
+func TestSubmitWorkflowApprovalRejectsAfterRunWithPromptAppend(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "ship feature",
+		Mode:         domain.ModeWorkflow,
+		Status:       domain.StatusWaitingApproval,
+		WorktreePath: "/workspace/project-1",
+	}
+	nodeRunID := domain.NodeRunID("node-run-2")
+	workflows := &fakeWorkflowStarter{
+		approvalResult: domain.WorkflowApprovalResult{
+			Run: domain.WorkflowRunSnapshot{
+				ID:            "workflow-run-1",
+				SessionID:     "session-1",
+				Status:        "running",
+				CurrentNodeID: "build",
+			},
+			Advance: domain.WorkflowAdvance{
+				WorkflowRunID:    "workflow-run-1",
+				NodeRunID:        &nodeRunID,
+				CurrentNodeID:    "build",
+				CurrentNodeTitle: "Build",
+				Status:           "running",
+				RequiresCodex:    true,
+				Prompt:           "Build",
+			},
+			RejectedAfterRun: true,
+		},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithProcesses(processes, codex), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo}}))
+	ids := []domain.ID{"append-1", "process-run-1"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+	service.now = func() time.Time { return time.Unix(52, 0).UTC() }
+
+	got, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Approved:      false,
+		Comment:       "fix failing tests",
+	})
+	if err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	if got.Status != "running" || workflows.approvalInput.Comment != "fix failing tests" {
+		t.Fatalf("approval result=%#v input=%#v", got, workflows.approvalInput)
+	}
+	if len(repo.appends) != 1 || repo.appends[0].Body != "fix failing tests" || repo.appends[0].Status != domain.PromptAppendPending {
+		t.Fatalf("prompt appends = %#v", repo.appends)
+	}
+	queued := repo.sessions["session-1"]
+	if queued.Status != domain.StatusQueued || queued.Queue.NodeRunID == nil || *queued.Queue.NodeRunID != "node-run-2" {
+		t.Fatalf("queued session = %#v", queued)
+	}
+	if queued.Queue.Prompt != "Build" {
+		t.Fatalf("queued prompt = %q", queued.Queue.Prompt)
+	}
+	if len(processes.created) != 0 || codex.startCalled {
+		t.Fatalf("process should be queued, created=%#v start=%v", processes.created, codex.startCalled)
+	}
+}
+
+func TestSubmitWorkflowApprovalRequiresTransactionalRunner(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      domain.ModeWorkflow,
+		Status:    domain.StatusWaitingApproval,
+	}
+	workflows := &fakeWorkflowStarter{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows))
+
+	_, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "approve",
+		Approved:      true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires transactional workflow repository runner") {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	if workflows.approvalInput.WorkflowRunID != "" {
+		t.Fatalf("workflow approval should not be submitted without transaction: %#v", workflows.approvalInput)
+	}
+}
+
+func TestSubmitWorkflowApprovalExecutesPostCommitExprAdvance(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	session := domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      domain.ModeWorkflow,
+		Status:    domain.StatusWaitingApproval,
+	}
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	definition := workflowdomain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Version:   1,
+		Graph: workflowdomain.Graph{
+			Nodes: []workflowdomain.Node{
+				{ID: "build", Type: "codex", Title: "Build", Approval: workflowdomain.ApprovalConfig{AfterRun: true}},
+				{ID: "expr", Type: "expr", Title: "Expr", Prompt: `{status: "ready"}`},
+				{ID: "verify", Type: "codex", Title: "Verify", Prompt: "Verify result"},
+			},
+			Edges: []workflowdomain.Edge{
+				{From: "build", To: "expr"},
+				{From: "expr", To: "verify"},
+			},
+		},
+	}
+	if err := store.Workflows().SaveDefinition(ctx, definition); err != nil {
+		t.Fatalf("save definition: %v", err)
+	}
+	now := time.Unix(10, 0).UTC()
+	run := workflowdomain.Run{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               workflowdomain.RunWaitingApproval,
+		CurrentNodeID:        "build",
+		Context:              workflowdomain.Context{Values: map[string]any{}},
+		StartedAt:            &now,
+	}
+	nodeRun := workflowdomain.NodeRun{
+		ID:            "node-run-1",
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Status:        workflowdomain.NodeWaitingApproval,
+		Attempt:       1,
+		Output:        map[string]any{"results": map[string]any{"status": "passed"}},
+		StartedAt:     &now,
+	}
+	if err := store.Workflows().CreateInitialRun(ctx, run, nodeRun); err != nil {
+		t.Fatalf("create workflow run: %v", err)
+	}
+	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithEvents(store.Events()))
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"), WithWorkflows(workflowService), WithUnitOfWork(store), WithEvents(store.Events()))
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("session-event-%d", nextID)), nil
+	}
+	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
+
+	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Approved:      true,
+	}); err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	gotSession, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	if gotSession.Status != domain.StatusQueued || gotSession.Queue.NodeRunID == nil || gotSession.Queue.Prompt == "" {
+		t.Fatalf("session after expr advance = %#v", gotSession)
+	}
+	gotRun, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	if err != nil {
+		t.Fatalf("find workflow run: %v", err)
+	}
+	if gotRun.CurrentNodeID != "verify" || gotRun.Status != workflowdomain.RunRunning {
+		t.Fatalf("workflow run after expr advance = %#v", gotRun)
+	}
+	exprRun, err := store.Workflows().FindLatestNodeRun(ctx, "workflow-run-1", "expr")
+	if err != nil {
+		t.Fatalf("find expr node run: %v", err)
+	}
+	if exprRun.Status != workflowdomain.NodeSucceeded {
+		t.Fatalf("expr node run = %#v", exprRun)
+	}
+}
+
+func TestSubmitWorkflowApprovalRejectsAfterRunRollsBackWhenPromptAppendFails(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{
+		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	session := domain.Session{
+		ID:        "session-1",
+		ProjectID: "project-1",
+		Mode:      domain.ModeWorkflow,
+		Status:    domain.StatusWaitingApproval,
+	}
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	definition := workflowdomain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Version:   1,
+		Graph: workflowdomain.Graph{
+			Nodes: []workflowdomain.Node{{
+				ID:       "build",
+				Type:     "codex",
+				Title:    "Build",
+				Approval: workflowdomain.ApprovalConfig{AfterRun: true},
+			}},
+		},
+	}
+	if err := store.Workflows().SaveDefinition(ctx, definition); err != nil {
+		t.Fatalf("save definition: %v", err)
+	}
+	now := time.Unix(10, 0).UTC()
+	run := workflowdomain.Run{
+		ID:                   "workflow-run-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+		Status:               workflowdomain.RunWaitingApproval,
+		CurrentNodeID:        "build",
+		Context:              workflowdomain.Context{Values: map[string]any{}},
+		StartedAt:            &now,
+	}
+	nodeRun := workflowdomain.NodeRun{
+		ID:            "node-run-1",
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Status:        workflowdomain.NodeWaitingApproval,
+		Attempt:       1,
+		Output:        map[string]any{"results": map[string]any{"status": "failed"}},
+		StartedAt:     &now,
+	}
+	if err := store.Workflows().CreateInitialRun(ctx, run, nodeRun); err != nil {
+		t.Fatalf("create workflow run: %v", err)
+	}
+	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithEvents(store.Events()))
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"), WithWorkflows(workflowService), WithUnitOfWork(store), WithEvents(store.Events()))
+	idCalls := 0
+	service.generateID = func() (domain.ID, error) {
+		idCalls++
+		if idCalls == 2 {
+			return "", errors.New("generate append id failed")
+		}
+		return domain.ID(fmt.Sprintf("event-%d", idCalls)), nil
+	}
+
+	_, err = service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "build",
+		Approved:      false,
+		Comment:       "fix it",
+	})
+	if err == nil || !strings.Contains(err.Error(), "generate prompt append id") {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	gotRun, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	if err != nil {
+		t.Fatalf("find workflow run: %v", err)
+	}
+	if gotRun.Status != workflowdomain.RunWaitingApproval {
+		t.Fatalf("workflow run status = %q", gotRun.Status)
+	}
+	gotNodeRun, err := store.Workflows().FindLatestNodeRun(ctx, "workflow-run-1", "build")
+	if err != nil {
+		t.Fatalf("find node run: %v", err)
+	}
+	if gotNodeRun.Status != workflowdomain.NodeWaitingApproval || gotNodeRun.Attempt != 1 {
+		t.Fatalf("node run = %#v", gotNodeRun)
+	}
+	gotSession, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	if gotSession.Status != domain.StatusWaitingApproval {
+		t.Fatalf("session status = %q", gotSession.Status)
+	}
+	appends, err := store.Sessions().ListPromptAppends(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("list prompt appends: %v", err)
+	}
+	if len(appends) != 0 {
+		t.Fatalf("prompt appends = %#v", appends)
 	}
 }
 
@@ -8284,6 +8595,11 @@ func (s *fakeWorkflowStarter) SubmitApprovalForSession(_ context.Context, input 
 		return domain.WorkflowApprovalResult{}, s.approvalErr
 	}
 	return s.approvalResult, nil
+}
+
+func (s *fakeWorkflowStarter) SubmitApprovalForSessionWithRepositories(ctx context.Context, input domain.WorkflowApprovalInput, _ workflowdomain.Repository, _ eventdomain.Store) (domain.WorkflowApprovalResult, []eventdomain.DomainEvent, error) {
+	result, err := s.SubmitApprovalForSession(ctx, input)
+	return result, nil, err
 }
 
 type fakeProcessRepository struct {

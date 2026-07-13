@@ -478,8 +478,9 @@ type WorkflowRunSnapshot struct {
 }
 
 type WorkflowApprovalResult struct {
-	Run     WorkflowRunSnapshot
-	Advance WorkflowAdvance
+	Run              WorkflowRunSnapshot
+	Advance          WorkflowAdvance
+	RejectedAfterRun bool
 }
 
 type WorkflowAdvance struct {
