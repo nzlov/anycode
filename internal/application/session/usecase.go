@@ -180,6 +180,7 @@ var (
 	errProcessCleanupPending = errors.New("codex process may still be running")
 )
 var errWorkflowResumeStateNotPersisted = errors.New("workflow resume failure state was not persisted")
+var errCloseRequiresStop = errors.New("session must stop before close")
 var fallbackEventSequence atomic.Uint64
 
 type Service struct {
@@ -195,6 +196,7 @@ type Service struct {
 	merge               gitdiffdomain.MergePort
 	processes           processdomain.Repository
 	codex               processdomain.CodexProcess
+	processConsumers    sync.Map
 	workdirMu           sync.Mutex
 	activeWorkdirs      map[string]domain.ID
 	events              eventdomain.Store
@@ -880,7 +882,7 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 		return DTO{}, fmt.Errorf("start workflow: %w", err)
 	}
 	if start.Close {
-		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
+		return s.closeWorkflowSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
 	}
 	if start.Merge != nil {
 		return s.executeWorkflowMerge(ctx, session, domain.WorkflowAdvance{
@@ -1093,7 +1095,47 @@ func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		dto, err = s.stopSession(ctx, id)
 		return err
 	})
+	if err == nil && dto.Status == domain.StatusStopping {
+		cleanupCtx, cancel := detachedCleanupContext(ctx)
+		defer cancel()
+		dto, err = s.waitForStopCompletion(cleanupCtx, id)
+	}
 	return dto, err
+}
+
+func (s *Service) waitForStopCompletion(ctx context.Context, id domain.ID) (DTO, error) {
+	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(id))
+	if err != nil {
+		return DTO{}, fmt.Errorf("find stopping process: %w", err)
+	}
+	if ok {
+		if done, exists := s.processConsumerDone(active.ID); exists {
+			select {
+			case <-ctx.Done():
+				return DTO{}, fmt.Errorf("wait for stopped process: %w", ctx.Err())
+			case <-done:
+			}
+		}
+	}
+	for {
+		session, err := s.repo.Find(ctx, id)
+		if err != nil {
+			return DTO{}, fmt.Errorf("find stopped session: %w", err)
+		}
+		if session.Status == domain.StatusStopped || session.Status == domain.StatusClosed {
+			return toDTO(session), nil
+		}
+		if session.Status != domain.StatusStopping {
+			return DTO{}, fmt.Errorf("session stop did not complete: status %q", session.Status)
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return DTO{}, fmt.Errorf("wait for stopped session: %w", ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
@@ -1145,14 +1187,22 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	}
 	cleanupCtx, cancel := detachedCleanupContext(ctx)
 	defer cancel()
-	if err := s.codex.Stop(cleanupCtx, active.ID); err != nil && !errors.Is(err, processdomain.ErrProcessNotFound) {
-		return DTO{}, fmt.Errorf("stop codex process: %w", err)
+	stopErr := s.codex.Stop(cleanupCtx, active.ID)
+	processMissing := errors.Is(stopErr, processdomain.ErrProcessNotFound)
+	if stopErr != nil && !processMissing {
+		return DTO{}, fmt.Errorf("stop codex process: %w", stopErr)
+	}
+	if s.hasProcessConsumer(active.ID) {
+		if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
+			return DTO{}, err
+		}
+		return toDTO(session), nil
 	}
 	finishedAt := s.now()
 	if err := transitionSession(&session, domain.StatusStopped, finishedAt); err != nil {
 		return DTO{}, err
 	}
-	if err := s.markProcessExitedWithSessionEvents(cleanupCtx, active.ID, processdomain.ExitResult{
+	if err := s.markProcessExitedWithSessionEventsAndSettlement(cleanupCtx, active.ID, processdomain.ExitResult{
 		FailureReason: "stopped by user",
 		FinishedAt:    finishedAt,
 	}, session, true, []sessionEventInput{{
@@ -1161,7 +1211,7 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 			"processRunId": string(active.ID),
 			"reason":       "user_stopped",
 		},
-	}}); err != nil {
+	}}, promptAppendSettlementRelease); err != nil {
 		return DTO{}, err
 	}
 	if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
@@ -2306,7 +2356,13 @@ func promptWithAttachments(prompt string, paths []string) string {
 }
 
 func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions, workdir string) {
+	done := make(chan struct{})
+	s.processConsumers.Store(handle.ProcessRunID, (<-chan struct{})(done))
 	go func() {
+		defer func() {
+			s.processConsumers.Delete(handle.ProcessRunID)
+			close(done)
+		}()
 		events, err := s.codex.Events(context.Background(), handle)
 		if err != nil {
 			cleanupCtx, cancel := detachedCleanupContext(context.Background())
@@ -2338,13 +2394,59 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if event.Type == "process.exit" {
 				continue
 			}
-			_ = s.withSessionLock(context.Background(), session.ID, func(ctx context.Context) error {
-				return s.persistCodexEvent(ctx, session.ID, handle, event)
-			})
+			s.persistCodexEventWithRetry(session.ID, handle, event)
 		}
 		s.releaseWorkdir(workdir, session.ID)
 		s.handleCodexProcessExit(session, handle, options, exitResult, workflowResults)
 	}()
+}
+
+func (s *Service) hasProcessConsumer(runID processdomain.RunID) bool {
+	_, ok := s.processConsumers.Load(runID)
+	return ok
+}
+
+func (s *Service) processConsumerDone(runID processdomain.RunID) (<-chan struct{}, bool) {
+	value, ok := s.processConsumers.Load(runID)
+	if !ok {
+		return nil, false
+	}
+	done, ok := value.(<-chan struct{})
+	return done, ok
+}
+
+func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) {
+	retryAcknowledgement := codexEventAcknowledgesPrompt(event)
+	retryDelay := s.processExitDelay
+	if retryDelay == nil {
+		retryDelay = processExitRetryDelay
+	}
+	retryCtx := s.lifecycleCtx
+	if retryCtx == nil {
+		retryCtx = context.Background()
+	}
+	for attempt := 0; ; attempt++ {
+		if retryCtx.Err() != nil {
+			return
+		}
+		err := s.withSessionLock(retryCtx, sessionID, func(ctx context.Context) error {
+			return s.persistCodexEvent(ctx, sessionID, handle, event)
+		})
+		if err == nil {
+			return
+		}
+		if !retryAcknowledgement {
+			log.Printf("persist codex event: session=%s process_run=%s type=%s error=%v", sessionID, handle.ProcessRunID, event.Type, err)
+			return
+		}
+		timer := time.NewTimer(retryDelay(attempt))
+		select {
+		case <-retryCtx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) error {
@@ -2384,7 +2486,17 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 			saveSession = false
 		}
 	}
-	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, extraEvents...)
+	promptDelivered := codexEventAcknowledgesPrompt(event)
+	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, promptDelivered, extraEvents...)
+}
+
+func codexEventAcknowledgesPrompt(event processdomain.CodexEvent) bool {
+	switch strings.ToLower(strings.TrimSpace(event.Type)) {
+	case "task.started", "turn.started":
+		return true
+	}
+	message, ok := event.Content.(processdomain.CodexMessageContent)
+	return ok && strings.EqualFold(strings.TrimSpace(message.Role), "user")
 }
 
 func codexEventCanUpdateSession(status domain.Status) bool {
@@ -2545,10 +2657,25 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	}
 	if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil {
 		workflowExitInput := workflowProcessExitInput(handle, options, exitResult, workflowResults)
-		if err := s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{
+		workflowInputs := []sessionEventInput{
 			processEvent,
 			{eventType: "workflow.exit_pending", payload: workflowProcessExitPayload(workflowExitInput)},
-		}); err != nil {
+		}
+		saveSession := false
+		if current.Status == domain.StatusStopping {
+			if err := transitionSession(&current, domain.StatusStopped, exitResult.FinishedAt); err != nil {
+				return domain.Session{}, false, err
+			}
+			saveSession = true
+			workflowInputs = append(workflowInputs, sessionEventInput{
+				eventType: "session.stopped",
+				payload: map[string]any{
+					"processRunId": string(handle.ProcessRunID),
+					"reason":       "process_exited",
+				},
+			})
+		}
+		if err := s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, saveSession, workflowInputs, promptAppendSettlementForExitedSession(current.Status)); err != nil {
 			return domain.Session{}, false, err
 		}
 		switch current.Status {
@@ -2561,6 +2688,10 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	inputs := []sessionEventInput{processEvent}
 	switch current.Status {
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+		settlement := promptAppendSettlementAutomatic
+		if current.Status == domain.StatusStopping {
+			settlement = promptAppendSettlementRelease
+		}
 		nextStatus := domain.StatusStopped
 		if processExitFailed(exitResult) && current.Status != domain.StatusStopping {
 			if options.resumeCodexSessionID != "" {
@@ -2581,12 +2712,21 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 		payload := processExitPayload(handle.ProcessRunID, exitResult)
 		payload["reason"] = "process_exited"
 		inputs = append(inputs, sessionEventInput{eventType: eventType, payload: payload})
-		if err := s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, true, inputs); err != nil {
+		if err := s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, true, inputs, settlement); err != nil {
 			return domain.Session{}, false, err
 		}
 		return domain.Session{}, false, nil
 	default:
-		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, inputs)
+		return domain.Session{}, false, s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, false, inputs, promptAppendSettlementForExitedSession(current.Status))
+	}
+}
+
+func promptAppendSettlementForExitedSession(status domain.Status) promptAppendSettlement {
+	switch status {
+	case domain.StatusStopping, domain.StatusStopped, domain.StatusClosed:
+		return promptAppendSettlementRelease
+	default:
+		return promptAppendSettlementAutomatic
 	}
 }
 
@@ -2857,7 +2997,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		}
 		return toDTO(session), nil
 	case advance.Close:
-		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
+		return s.closeWorkflowSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonWorkflowClosed})
 	case advance.Completed:
 		if err := transitionSession(&session, domain.StatusCompleted, s.now()); err != nil {
 			return DTO{}, err
@@ -3049,7 +3189,7 @@ func (s *Service) completeWorkflowMergeNode(ctx context.Context, session domain.
 		return DTO{}, err
 	}
 	if next.Completed {
-		return s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonMergedClosed})
+		return s.closeWorkflowSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: domain.CloseReasonMergedClosed})
 	}
 	return s.applyWorkflowAdvance(ctx, session, next, workflowAdvanceOptions{})
 }
@@ -3392,7 +3532,7 @@ type sessionEventInput struct {
 	payload   map[string]any
 }
 
-func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, extraInputs ...sessionEventInput) error {
+func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
 	var codexEvent eventdomain.DomainEvent
 	publishCodexEvent := s.publisher != nil && !event.RealtimeOnly
 	if publishCodexEvent {
@@ -3408,6 +3548,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 	}
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if promptDelivered {
+				if err := tx.Sessions().CompletePromptAppends(ctx, string(processRunID), promptDeliveryTime(event, s.now())); err != nil {
+					return err
+				}
+			}
 			if saveSession {
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return fmt.Errorf("save session: %w", err)
@@ -3430,6 +3575,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 		}
 		return nil
 	}
+	if promptDelivered {
+		if err := s.repo.CompletePromptAppends(ctx, string(processRunID), promptDeliveryTime(event, s.now())); err != nil {
+			return err
+		}
+	}
 	if saveSession {
 		if err := s.repo.Save(ctx, session); err != nil {
 			return fmt.Errorf("save session: %w", err)
@@ -3447,6 +3597,13 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 		s.publishSessionEvent(ctx, event)
 	}
 	return nil
+}
+
+func promptDeliveryTime(event processdomain.CodexEvent, fallback time.Time) time.Time {
+	if event.CreatedAt.IsZero() {
+		return fallback
+	}
+	return event.CreatedAt
 }
 
 func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.RunID, event processdomain.CodexEvent) (eventdomain.DomainEvent, error) {
@@ -3665,6 +3822,17 @@ func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdo
 }
 
 func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, inputs []sessionEventInput) error {
+	return s.markProcessExitedWithSessionEventsAndSettlement(ctx, runID, result, session, saveSession, inputs, promptAppendSettlementAutomatic)
+}
+
+type promptAppendSettlement uint8
+
+const (
+	promptAppendSettlementAutomatic promptAppendSettlement = iota
+	promptAppendSettlementRelease
+)
+
+func (s *Service) markProcessExitedWithSessionEventsAndSettlement(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, inputs []sessionEventInput, settlement promptAppendSettlement) error {
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
 		return err
@@ -3674,7 +3842,7 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 			if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
 				return fmt.Errorf("mark process exited: %w", err)
 			}
-			if err := settlePromptAppends(ctx, tx.Sessions(), runID, result); err != nil {
+			if err := settlePromptAppends(ctx, tx.Sessions(), runID, result, settlement); err != nil {
 				return err
 			}
 			if saveSession {
@@ -3699,7 +3867,7 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 	if err := s.processes.MarkExited(ctx, runID, result); err != nil {
 		return fmt.Errorf("mark process exited: %w", err)
 	}
-	if err := settlePromptAppends(ctx, s.repo, runID, result); err != nil {
+	if err := settlePromptAppends(ctx, s.repo, runID, result, settlement); err != nil {
 		return err
 	}
 	if saveSession {
@@ -3716,7 +3884,11 @@ func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID 
 	return nil
 }
 
-func settlePromptAppends(ctx context.Context, repo domain.Repository, runID processdomain.RunID, result processdomain.ExitResult) error {
+func settlePromptAppends(ctx context.Context, repo domain.Repository, runID processdomain.RunID, result processdomain.ExitResult, settlement promptAppendSettlement) error {
+	switch settlement {
+	case promptAppendSettlementRelease:
+		return repo.ReleasePromptAppends(ctx, string(runID))
+	}
 	if processExitFailed(result) {
 		return repo.ReleasePromptAppends(ctx, string(runID))
 	}
@@ -3968,13 +4140,20 @@ func codexSessionIDKeys() []string {
 }
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
-	var dto DTO
-	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
-		var err error
-		dto, err = s.closeSession(ctx, input)
-		return err
-	})
-	return dto, err
+	for {
+		var dto DTO
+		err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
+			var err error
+			dto, err = s.closeSession(ctx, input)
+			return err
+		})
+		if !errors.Is(err, errCloseRequiresStop) {
+			return dto, err
+		}
+		if _, err := s.StopSession(ctx, input.SessionID); err != nil {
+			return DTO{}, err
+		}
+	}
 }
 
 func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
@@ -4000,13 +4179,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		return DTO{}, err
 	}
 	if requiresStop {
-		if _, err := s.stopSession(ctx, session.ID); err != nil {
-			return DTO{}, err
-		}
-		session, err = s.repo.Find(ctx, input.SessionID)
-		if err != nil {
-			return DTO{}, fmt.Errorf("find stopped session: %w", err)
-		}
+		return DTO{}, errCloseRequiresStop
 	}
 	if session.Status == domain.StatusWaitingUser || session.Queue.Kind == domain.QueueKindAnswerUser {
 		now := s.now()
@@ -4069,6 +4242,36 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		return DTO{}, err
 	}
 	return toDTO(session), nil
+}
+
+func (s *Service) closeWorkflowSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
+	session, err := s.repo.Find(ctx, input.SessionID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find workflow session to close: %w", err)
+	}
+	requiresStop, err := closeRequiresStop(ctx, s, session)
+	if err != nil {
+		return DTO{}, err
+	}
+	if requiresStop {
+		if s.processes == nil {
+			return DTO{}, errors.New("session process repository is required")
+		}
+		_, active, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+		if err != nil {
+			return DTO{}, fmt.Errorf("find active workflow process before close: %w", err)
+		}
+		if active {
+			return DTO{}, errCloseRequiresStop
+		}
+		if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+			return DTO{}, err
+		}
+		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "workflow_closing_without_active_process"}); err != nil {
+			return DTO{}, err
+		}
+	}
+	return s.closeSession(ctx, input)
 }
 
 func closeRequiresStop(ctx context.Context, s *Service, session domain.Session) (bool, error) {
