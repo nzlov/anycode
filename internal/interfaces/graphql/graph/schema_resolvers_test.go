@@ -931,8 +931,8 @@ func TestSubscriptionSessionStateUpdatesStopsBlockedSendAfterCancel(t *testing.T
 
 func TestSubmitQuestionBatchNotifiesSessionUseCase(t *testing.T) {
 	optionID := "retry_merge"
-	questions := &fakeQuestionUseCase{
-		submitResult: questionapp.BatchDTO{
+	sessions := &fakeSessionUseCase{
+		submitQuestionResult: questionapp.BatchDTO{
 			ID:        "batch-1",
 			SessionID: "session-1",
 			Status:    questiondomain.BatchAnswered,
@@ -949,8 +949,7 @@ func TestSubmitQuestionBatchNotifiesSessionUseCase(t *testing.T) {
 			},
 		},
 	}
-	sessions := &fakeSessionUseCase{}
-	resolver := NewResolver(UseCases{Questions: questions, Sessions: sessions}).Mutation()
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
 
 	got, err := resolver.SubmitQuestionBatch(context.Background(), model.SubmitQuestionBatchInput{
 		BatchID: "batch-1",
@@ -968,18 +967,15 @@ func TestSubmitQuestionBatchNotifiesSessionUseCase(t *testing.T) {
 	if got.ID != "batch-1" || got.Status != string(questiondomain.BatchAnswered) {
 		t.Fatalf("SubmitQuestionBatch() = %#v", got)
 	}
-	if questions.gotSubmit.BatchID != "batch-1" || len(questions.gotSubmit.Answers) != 1 {
-		t.Fatalf("question submit input = %#v", questions.gotSubmit)
-	}
-	if sessions.gotAnswered.ID != "batch-1" || sessions.gotAnswered.Status != questiondomain.BatchAnswered {
-		t.Fatalf("session answered batch = %#v", sessions.gotAnswered)
+	if sessions.gotSubmitQuestion.BatchID != "batch-1" || len(sessions.gotSubmitQuestion.Answers) != 1 {
+		t.Fatalf("question submit input = %#v", sessions.gotSubmitQuestion)
 	}
 }
 
 func TestSubmitQuestionBatchCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
 	optionID := "retry_merge"
-	questions := &fakeQuestionUseCase{
-		submitResult: questionapp.BatchDTO{
+	sessions := &fakeSessionUseCase{
+		submitQuestionResult: questionapp.BatchDTO{
 			ID:        "batch-1",
 			SessionID: "session-1",
 			Status:    questiondomain.BatchAnswered,
@@ -996,8 +992,8 @@ func TestSubmitQuestionBatchCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
 			},
 		},
 	}
-	sessions := &fakeSessionUseCase{err: errors.New("merge retry failed")}
-	resolver := NewResolver(UseCases{Questions: questions, Sessions: sessions}).Mutation()
+	sessions.err = errors.New("merge retry failed")
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
 	input := model.SubmitQuestionBatchInput{
 		BatchID: "batch-1",
 		Answers: []*model.QuestionAnswerInput{
@@ -1017,8 +1013,8 @@ func TestSubmitQuestionBatchCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second SubmitQuestionBatch() error = %v", err)
 	}
-	if got.ID != "batch-1" || questions.submitCalls != 2 || sessions.answeredCalls != 2 {
-		t.Fatalf("retry result=%#v questionCalls=%d sessionCalls=%d", got, questions.submitCalls, sessions.answeredCalls)
+	if got.ID != "batch-1" || sessions.submitQuestionCalls != 2 {
+		t.Fatalf("retry result=%#v sessionCalls=%d", got, sessions.submitQuestionCalls)
 	}
 }
 
@@ -1237,25 +1233,34 @@ func (f *fakeQuestionUseCase) QuestionBatchUpdates(_ context.Context, sessionID 
 
 type fakeSessionUseCase struct {
 	sessionapp.UseCase
-	gotAnswered        questionapp.BatchDTO
-	answeredCalls      int
-	err                error
-	gotGetCardID       sessiondomain.ID
-	getCardResult      sessionapp.CardDTO
-	gotGetID           sessiondomain.ID
-	getResult          sessionapp.DetailDTO
-	gotResumeID        sessiondomain.ID
-	resumeResult       sessionapp.DTO
-	gotExecuteID       sessiondomain.ID
-	gotExecuteForce    bool
-	executeResult      sessionapp.DTO
-	stopProjectID      sessiondomain.ProjectID
-	gotUpdateConfig    sessionapp.UpdateSessionConfigInput
-	updateConfigResult sessionapp.DTO
-	gotAppend          sessionapp.AppendPromptInput
-	appendResult       sessionapp.PromptAppendDTO
-	gotUpdateAppend    sessionapp.UpdatePromptAppendInput
-	updateAppendResult sessionapp.PromptAppendDTO
+	gotAnswered          questionapp.BatchDTO
+	answeredCalls        int
+	gotSubmitQuestion    questionapp.SubmitBatchInput
+	submitQuestionResult questionapp.BatchDTO
+	submitQuestionCalls  int
+	err                  error
+	gotGetCardID         sessiondomain.ID
+	getCardResult        sessionapp.CardDTO
+	gotGetID             sessiondomain.ID
+	getResult            sessionapp.DetailDTO
+	gotResumeID          sessiondomain.ID
+	resumeResult         sessionapp.DTO
+	gotExecuteID         sessiondomain.ID
+	gotExecuteForce      bool
+	executeResult        sessionapp.DTO
+	stopProjectID        sessiondomain.ProjectID
+	gotUpdateConfig      sessionapp.UpdateSessionConfigInput
+	updateConfigResult   sessionapp.DTO
+	gotAppend            sessionapp.AppendPromptInput
+	appendResult         sessionapp.PromptAppendDTO
+	gotUpdateAppend      sessionapp.UpdatePromptAppendInput
+	updateAppendResult   sessionapp.PromptAppendDTO
+}
+
+func (f *fakeSessionUseCase) SubmitQuestionBatch(_ context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {
+	f.gotSubmitQuestion = input
+	f.submitQuestionCalls++
+	return f.submitQuestionResult, f.err
 }
 
 func (f *fakeSessionUseCase) ExecuteSession(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {

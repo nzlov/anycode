@@ -9,6 +9,7 @@ type BatchID string
 type QuestionID string
 type SessionID string
 type WorkflowRunID string
+type ProcessRunID string
 type OptionID string
 
 type BatchStatus string
@@ -19,14 +20,27 @@ const (
 	BatchCancelled BatchStatus = "cancelled"
 )
 
+type DeliveryStatus string
+
+const (
+	DeliveryNone           DeliveryStatus = "none"
+	DeliveryAwaitingResume DeliveryStatus = "awaiting_resume"
+	DeliveryInflight       DeliveryStatus = "inflight"
+	DeliveryDelivered      DeliveryStatus = "delivered"
+)
+
 type Batch struct {
-	ID            BatchID
-	SessionID     SessionID
-	WorkflowRunID *WorkflowRunID
-	Status        BatchStatus
-	Questions     []Question
-	CreatedAt     time.Time
-	AnsweredAt    *time.Time
+	ID                   BatchID
+	SessionID            SessionID
+	WorkflowRunID        *WorkflowRunID
+	OriginProcessRunID   *ProcessRunID
+	Status               BatchStatus
+	DeliveryStatus       DeliveryStatus
+	DeliveryProcessRunID *ProcessRunID
+	Questions            []Question
+	CreatedAt            time.Time
+	AnsweredAt           *time.Time
+	DeliveredAt          *time.Time
 }
 
 type Question struct {
@@ -72,10 +86,17 @@ type Repository interface {
 	CancelPendingBySession(ctx context.Context, sessionID SessionID, reason string) ([]Batch, error)
 }
 
-type AnswerWaiter interface {
-	Prepare(ctx context.Context, batchID BatchID) error
-	Wait(ctx context.Context, batchID BatchID) ([]Answer, error)
-	Resume(ctx context.Context, batchID BatchID, answers []Answer) error
-	Cancel(ctx context.Context, batchID BatchID, reason string) error
-	Forget(batchID BatchID)
+type AgentRepository interface {
+	Repository
+	CancelPendingBatch(ctx context.Context, id BatchID, reason string) (Batch, bool, error)
+	FindPendingByOriginProcessRun(ctx context.Context, processRunID ProcessRunID) (Batch, bool, error)
+	FindAwaitingDeliveryBySession(ctx context.Context, sessionID SessionID) (Batch, bool, error)
+	ListAgentBatchesForRecovery(ctx context.Context) ([]Batch, error)
+	SetOriginProcessRun(ctx context.Context, id BatchID, processRunID ProcessRunID) error
+	MarkDeliveryAwaitingResume(ctx context.Context, id BatchID) error
+	MarkDeliveryInflight(ctx context.Context, id BatchID, processRunID ProcessRunID) error
+	MarkDeliveryDeliveredByProcessRun(ctx context.Context, processRunID ProcessRunID, deliveredAt time.Time) ([]Batch, error)
+	ResetDeliveryAwaitingResume(ctx context.Context, id BatchID) error
+	ResetDeliveryAwaitingResumeByProcessRun(ctx context.Context, processRunID ProcessRunID) ([]Batch, error)
+	CancelUndeliveredBySession(ctx context.Context, sessionID SessionID) ([]Batch, error)
 }

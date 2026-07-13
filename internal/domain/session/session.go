@@ -119,6 +119,8 @@ type QueueIntent struct {
 	NodeRunID               *NodeRunID
 	Prompt                  string
 	ResumeCodexSessionID    string
+	ResumeOfProcessRunID    string
+	AnswerBatchID           string
 }
 
 func (s *Session) QueueExecution(intent QueueIntent, now time.Time) error {
@@ -168,8 +170,8 @@ func (s *Session) clearQueue() {
 
 var allowedStatusTransitions = map[Status][]Status{
 	StatusCreated:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
-	StatusQueued:          {StatusStarting, StatusRunning, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusClosed},
-	StatusStarting:        {StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
+	StatusQueued:          {StatusStarting, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusClosed},
+	StatusStarting:        {StatusQueued, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
 	StatusRunning:         {StatusQueued, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusWaitingUser:     {StatusQueued, StatusRunning, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusWaitingApproval: {StatusQueued, StatusStarting, StatusRunning, StatusWaitingUser, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},

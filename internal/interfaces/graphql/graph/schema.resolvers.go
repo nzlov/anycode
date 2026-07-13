@@ -347,20 +347,15 @@ func (r *mutationResolver) SubmitWorkflowApproval(ctx context.Context, input mod
 
 // SubmitQuestionBatch is the resolver for the submitQuestionBatch field.
 func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.SubmitQuestionBatchInput) (*model.QuestionBatch, error) {
-	if r.UseCases.Questions == nil {
-		return nil, missingUseCase("questions")
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Questions.SubmitBatch(ctx, questionapp.SubmitBatchInput{
+	dto, err := r.UseCases.Sessions.SubmitQuestionBatch(ctx, questionapp.SubmitBatchInput{
 		BatchID: questiondomain.BatchID(input.BatchID),
 		Answers: buildQuestionAnswers(input.Answers),
 	})
 	if err != nil {
 		return nil, err
-	}
-	if r.UseCases.Sessions != nil {
-		if err := r.UseCases.Sessions.HandleQuestionBatchAnswered(ctx, dto); err != nil {
-			return nil, err
-		}
 	}
 	return mapQuestionBatch(dto), nil
 }

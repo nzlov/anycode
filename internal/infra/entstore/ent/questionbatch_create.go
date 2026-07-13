@@ -40,9 +40,51 @@ func (_c *QuestionBatchCreate) SetNillableWorkflowRunID(v *string) *QuestionBatc
 	return _c
 }
 
+// SetOriginProcessRunID sets the "origin_process_run_id" field.
+func (_c *QuestionBatchCreate) SetOriginProcessRunID(v string) *QuestionBatchCreate {
+	_c.mutation.SetOriginProcessRunID(v)
+	return _c
+}
+
+// SetNillableOriginProcessRunID sets the "origin_process_run_id" field if the given value is not nil.
+func (_c *QuestionBatchCreate) SetNillableOriginProcessRunID(v *string) *QuestionBatchCreate {
+	if v != nil {
+		_c.SetOriginProcessRunID(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *QuestionBatchCreate) SetStatus(v string) *QuestionBatchCreate {
 	_c.mutation.SetStatus(v)
+	return _c
+}
+
+// SetDeliveryStatus sets the "delivery_status" field.
+func (_c *QuestionBatchCreate) SetDeliveryStatus(v string) *QuestionBatchCreate {
+	_c.mutation.SetDeliveryStatus(v)
+	return _c
+}
+
+// SetNillableDeliveryStatus sets the "delivery_status" field if the given value is not nil.
+func (_c *QuestionBatchCreate) SetNillableDeliveryStatus(v *string) *QuestionBatchCreate {
+	if v != nil {
+		_c.SetDeliveryStatus(*v)
+	}
+	return _c
+}
+
+// SetDeliveryProcessRunID sets the "delivery_process_run_id" field.
+func (_c *QuestionBatchCreate) SetDeliveryProcessRunID(v string) *QuestionBatchCreate {
+	_c.mutation.SetDeliveryProcessRunID(v)
+	return _c
+}
+
+// SetNillableDeliveryProcessRunID sets the "delivery_process_run_id" field if the given value is not nil.
+func (_c *QuestionBatchCreate) SetNillableDeliveryProcessRunID(v *string) *QuestionBatchCreate {
+	if v != nil {
+		_c.SetDeliveryProcessRunID(*v)
+	}
 	return _c
 }
 
@@ -100,6 +142,20 @@ func (_c *QuestionBatchCreate) SetNillableAnsweredAt(v *time.Time) *QuestionBatc
 	return _c
 }
 
+// SetDeliveredAt sets the "delivered_at" field.
+func (_c *QuestionBatchCreate) SetDeliveredAt(v time.Time) *QuestionBatchCreate {
+	_c.mutation.SetDeliveredAt(v)
+	return _c
+}
+
+// SetNillableDeliveredAt sets the "delivered_at" field if the given value is not nil.
+func (_c *QuestionBatchCreate) SetNillableDeliveredAt(v *time.Time) *QuestionBatchCreate {
+	if v != nil {
+		_c.SetDeliveredAt(*v)
+	}
+	return _c
+}
+
 // SetID sets the "id" field.
 func (_c *QuestionBatchCreate) SetID(v string) *QuestionBatchCreate {
 	_c.mutation.SetID(v)
@@ -141,6 +197,18 @@ func (_c *QuestionBatchCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *QuestionBatchCreate) defaults() {
+	if _, ok := _c.mutation.OriginProcessRunID(); !ok {
+		v := questionbatch.DefaultOriginProcessRunID
+		_c.mutation.SetOriginProcessRunID(v)
+	}
+	if _, ok := _c.mutation.DeliveryStatus(); !ok {
+		v := questionbatch.DefaultDeliveryStatus
+		_c.mutation.SetDeliveryStatus(v)
+	}
+	if _, ok := _c.mutation.DeliveryProcessRunID(); !ok {
+		v := questionbatch.DefaultDeliveryProcessRunID
+		_c.mutation.SetDeliveryProcessRunID(v)
+	}
 	if _, ok := _c.mutation.Questions(); !ok {
 		v := questionbatch.DefaultQuestions
 		_c.mutation.SetQuestions(v)
@@ -169,6 +237,9 @@ func (_c *QuestionBatchCreate) check() error {
 			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "QuestionBatch.session_id": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.OriginProcessRunID(); !ok {
+		return &ValidationError{Name: "origin_process_run_id", err: errors.New(`ent: missing required field "QuestionBatch.origin_process_run_id"`)}
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "QuestionBatch.status"`)}
 	}
@@ -176,6 +247,12 @@ func (_c *QuestionBatchCreate) check() error {
 		if err := questionbatch.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "QuestionBatch.status": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.DeliveryStatus(); !ok {
+		return &ValidationError{Name: "delivery_status", err: errors.New(`ent: missing required field "QuestionBatch.delivery_status"`)}
+	}
+	if _, ok := _c.mutation.DeliveryProcessRunID(); !ok {
+		return &ValidationError{Name: "delivery_process_run_id", err: errors.New(`ent: missing required field "QuestionBatch.delivery_process_run_id"`)}
 	}
 	if _, ok := _c.mutation.Questions(); !ok {
 		return &ValidationError{Name: "questions", err: errors.New(`ent: missing required field "QuestionBatch.questions"`)}
@@ -232,9 +309,21 @@ func (_c *QuestionBatchCreate) createSpec() (*QuestionBatch, *sqlgraph.CreateSpe
 		_spec.SetField(questionbatch.FieldWorkflowRunID, field.TypeString, value)
 		_node.WorkflowRunID = &value
 	}
+	if value, ok := _c.mutation.OriginProcessRunID(); ok {
+		_spec.SetField(questionbatch.FieldOriginProcessRunID, field.TypeString, value)
+		_node.OriginProcessRunID = value
+	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(questionbatch.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.DeliveryStatus(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryStatus, field.TypeString, value)
+		_node.DeliveryStatus = value
+	}
+	if value, ok := _c.mutation.DeliveryProcessRunID(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryProcessRunID, field.TypeString, value)
+		_node.DeliveryProcessRunID = value
 	}
 	if value, ok := _c.mutation.Questions(); ok {
 		_spec.SetField(questionbatch.FieldQuestions, field.TypeJSON, value)
@@ -255,6 +344,10 @@ func (_c *QuestionBatchCreate) createSpec() (*QuestionBatch, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.AnsweredAt(); ok {
 		_spec.SetField(questionbatch.FieldAnsweredAt, field.TypeTime, value)
 		_node.AnsweredAt = &value
+	}
+	if value, ok := _c.mutation.DeliveredAt(); ok {
+		_spec.SetField(questionbatch.FieldDeliveredAt, field.TypeTime, value)
+		_node.DeliveredAt = &value
 	}
 	return _node, _spec
 }

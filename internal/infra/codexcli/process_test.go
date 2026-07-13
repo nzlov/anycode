@@ -988,6 +988,7 @@ printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
 	for _, want := range []string{
 		`-c mcp_servers.anycode.type="streamable_http"`,
 		`-c mcp_servers.anycode.url="http://127.0.0.1:8080/mcp/sessions/session-1"`,
+		`-c mcp_servers.anycode.tool_timeout_sec=86400`,
 		`-c mcp_servers.anycode.bearer_token_env_var="ANYCODE_MCP_TOKEN"`,
 	} {
 		if !strings.Contains(args, want) {
@@ -1026,6 +1027,7 @@ printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
 		`-c mcp_servers.anycode.type="stdio"`,
 		`-c mcp_servers.anycode.command="/app/anycode"`,
 		`-c mcp_servers.anycode.args=["mcp-stdio","--session-id","session-1","--socket","/data/codex/mcp.sock"]`,
+		`-c mcp_servers.anycode.tool_timeout_sec=86400`,
 		`-c mcp_servers.anycode.env_vars=["ANYCODE_MCP_TOKEN"]`,
 	} {
 		if !strings.Contains(args, want) {
@@ -1061,6 +1063,7 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 	waitForFile(t, argsFile)
 	args := strings.TrimSpace(readFile(t, argsFile))
 	for _, want := range []string{
+		`-c mcp_servers.anycode.tool_timeout_sec=86400`,
 		`-c features.network_proxy.enabled=true`,
 		`-c default_permissions="anycode-mcp"`,
 		`-c permissions.anycode-mcp.extends=":workspace"`,
@@ -1099,6 +1102,7 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 	waitForFile(t, argsFile)
 	args := strings.TrimSpace(readFile(t, argsFile))
 	for _, want := range []string{
+		`-c mcp_servers.anycode.tool_timeout_sec=86400`,
 		`-c features.network_proxy.enabled=true`,
 		`-c default_permissions="anycode-mcp"`,
 		`-c permissions.anycode-mcp.extends=":workspace"`,

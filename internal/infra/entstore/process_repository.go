@@ -3,6 +3,7 @@ package entstore
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 	domainsession "github.com/nzlov/anycode/internal/domain/session"
@@ -12,6 +13,7 @@ import (
 )
 
 var _ process.Repository = (*ProcessRepository)(nil)
+var _ process.HistoricalRunFinder = (*ProcessRepository)(nil)
 
 type ProcessRepository struct {
 	client *ent.Client
@@ -60,6 +62,31 @@ func (r *ProcessRepository) HasAnyBySession(ctx context.Context, sessionID proce
 		return false, fmt.Errorf("check process run history: %w", err)
 	}
 	return exists, nil
+}
+
+func (r *ProcessRepository) FindRun(ctx context.Context, id process.RunID) (process.Run, error) {
+	row, err := r.client.ProcessRun.Get(ctx, string(id))
+	if err != nil {
+		return process.Run{}, fmt.Errorf("find process run: %w", err)
+	}
+	return toDomainProcessRun(row), nil
+}
+
+func (r *ProcessRepository) FindLatestRunBySessionBefore(ctx context.Context, sessionID process.SessionID, before time.Time) (process.Run, bool, error) {
+	row, err := r.client.ProcessRun.Query().
+		Where(
+			entprocessrun.SessionIDEQ(string(sessionID)),
+			entprocessrun.StartedAtLTE(before),
+		).
+		Order(ent.Desc(entprocessrun.FieldStartedAt), ent.Desc(entprocessrun.FieldID)).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return process.Run{}, false, nil
+		}
+		return process.Run{}, false, fmt.Errorf("find historical process run: %w", err)
+	}
+	return toDomainProcessRun(row), true, nil
 }
 
 func (r *ProcessRepository) FindActiveBySession(ctx context.Context, sessionID process.SessionID) (process.Run, bool, error) {

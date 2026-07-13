@@ -145,3 +145,40 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 		t.Fatalf("node run output mismatch: %#v", persistedNodeRun.Output)
 	}
 }
+
+func TestWorkflowRepositoryTransitionsNodeThroughAnswerUserResume(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo := store.Workflows()
+	now := time.Now().UTC()
+	if err := repo.CreateRun(ctx, workflow.Run{
+		ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: workflow.RunRunning, CurrentNodeID: "build", StartedAt: &now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SaveNodeRun(ctx, workflow.NodeRun{
+		ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: workflow.NodeRunning, Attempt: 1, StartedAt: &now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.MarkNodeWaitingUser(ctx, "workflow-run-1", "node-run-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.MarkNodeRunning(ctx, "workflow-run-1", "node-run-1", "process-run-resume"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.FindLatestNodeRun(ctx, "workflow-run-1", "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != workflow.NodeRunning || got.Attempt != 1 || got.ProcessRunID == nil || *got.ProcessRunID != "process-run-resume" {
+		t.Fatalf("node run = %#v", got)
+	}
+}

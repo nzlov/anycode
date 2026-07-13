@@ -20,7 +20,6 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/nzlov/anycode/internal/application/apperror"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
-	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -36,7 +35,6 @@ type HandlerOption func(*handlerOptions)
 type handlerOptions struct {
 	graphqlHandler http.Handler
 	attachments    attachmentapp.UseCase
-	questions      questionapp.UseCase
 	sessions       sessionapp.UseCase
 	accessKey      string
 	playground     bool
@@ -47,7 +45,6 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 		resolver := graph.NewResolver(useCases)
 		schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
 		opts.graphqlHandler = newGraphQLServer(schema, opts.accessKey)
-		opts.questions = useCases.Questions
 		opts.sessions = useCases.Sessions
 	}
 }
@@ -86,7 +83,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	attachmentHandler := newAttachmentHandler(opts.attachments)
 	mux.Handle("GET /attachments/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
 	mux.Handle("GET /attachments/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
-	mux.Handle("POST /mcp/sessions/{sessionID}", NewMCPHandler(cfg, opts.questions, opts.sessions))
+	mux.Handle("POST /mcp/sessions/{sessionID}", NewMCPHandler(cfg, opts.sessions))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
@@ -95,8 +92,8 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	return mux
 }
 
-func NewMCPHandler(cfg config.Config, questions questionapp.UseCase, sessions sessionapp.UseCase) http.Handler {
-	return bearerAuth(cfg.AccessKey, newMCPHandler(questions, sessions))
+func NewMCPHandler(cfg config.Config, sessions sessionapp.UseCase) http.Handler {
+	return bearerAuth(cfg.AccessKey, newMCPHandler(sessions))
 }
 
 func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Handler {

@@ -375,6 +375,34 @@ func (_u *SessionUpdate) SetNillableQueueResumeCodexSessionID(v *string) *Sessio
 	return _u
 }
 
+// SetQueueResumeOfProcessRunID sets the "queue_resume_of_process_run_id" field.
+func (_u *SessionUpdate) SetQueueResumeOfProcessRunID(v string) *SessionUpdate {
+	_u.mutation.SetQueueResumeOfProcessRunID(v)
+	return _u
+}
+
+// SetNillableQueueResumeOfProcessRunID sets the "queue_resume_of_process_run_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueResumeOfProcessRunID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueResumeOfProcessRunID(*v)
+	}
+	return _u
+}
+
+// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
+func (_u *SessionUpdate) SetQueueAnswerBatchID(v string) *SessionUpdate {
+	_u.mutation.SetQueueAnswerBatchID(v)
+	return _u
+}
+
+// SetNillableQueueAnswerBatchID sets the "queue_answer_batch_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableQueueAnswerBatchID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetQueueAnswerBatchID(*v)
+	}
+	return _u
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (_u *SessionUpdate) SetLastRunAt(v time.Time) *SessionUpdate {
 	_u.mutation.SetLastRunAt(v)
@@ -574,6 +602,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.QueueResumeCodexSessionID(); ok {
 		_spec.SetField(entsession.FieldQueueResumeCodexSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueResumeOfProcessRunID(); ok {
+		_spec.SetField(entsession.FieldQueueResumeOfProcessRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
+		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)
@@ -956,6 +990,34 @@ func (_u *SessionUpdateOne) SetNillableQueueResumeCodexSessionID(v *string) *Ses
 	return _u
 }
 
+// SetQueueResumeOfProcessRunID sets the "queue_resume_of_process_run_id" field.
+func (_u *SessionUpdateOne) SetQueueResumeOfProcessRunID(v string) *SessionUpdateOne {
+	_u.mutation.SetQueueResumeOfProcessRunID(v)
+	return _u
+}
+
+// SetNillableQueueResumeOfProcessRunID sets the "queue_resume_of_process_run_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueResumeOfProcessRunID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueResumeOfProcessRunID(*v)
+	}
+	return _u
+}
+
+// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
+func (_u *SessionUpdateOne) SetQueueAnswerBatchID(v string) *SessionUpdateOne {
+	_u.mutation.SetQueueAnswerBatchID(v)
+	return _u
+}
+
+// SetNillableQueueAnswerBatchID sets the "queue_answer_batch_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableQueueAnswerBatchID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetQueueAnswerBatchID(*v)
+	}
+	return _u
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (_u *SessionUpdateOne) SetLastRunAt(v time.Time) *SessionUpdateOne {
 	_u.mutation.SetLastRunAt(v)
@@ -1185,6 +1247,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.QueueResumeCodexSessionID(); ok {
 		_spec.SetField(entsession.FieldQueueResumeCodexSessionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueResumeOfProcessRunID(); ok {
+		_spec.SetField(entsession.FieldQueueResumeOfProcessRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
+		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)

@@ -126,8 +126,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 	eventService := eventapp.New()
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes, timelineapp.WithHistory(events))
-	questionWaiter := questionapp.NewMemoryAnswerWaiter()
-	questionService := questionapp.New(store.Questions(), questionWaiter)
+	questionService := questionapp.New(store.Questions())
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
@@ -177,7 +176,7 @@ func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath s
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("POST /mcp/sessions/{sessionID}", httpinterface.NewMCPHandler(cfg, useCases.Questions, useCases.Sessions))
+	mux.Handle("POST /mcp/sessions/{sessionID}", httpinterface.NewMCPHandler(cfg, useCases.Sessions))
 	server := &http.Server{Handler: mux}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -215,7 +214,7 @@ func ensureCodexReady(ctx context.Context, prober codexProber) (processdomain.Co
 	if len(capabilities.Models) == 0 {
 		return processdomain.CodexCapabilities{}, errors.New("codex cli did not return model options")
 	}
-	log.Printf("codex cli ready: version=%s exec=%t resume=%t models=%d", capabilities.Version, capabilities.SupportsExec, capabilities.SupportsResume, len(capabilities.Models))
+	log.Printf("codex cli ready: version=%s exec=%t resume=%t mcp_tool_timeout=%t models=%d", capabilities.Version, capabilities.SupportsExec, capabilities.SupportsResume, capabilities.SupportsMCPToolTimeout, len(capabilities.Models))
 	return capabilities, nil
 }
 

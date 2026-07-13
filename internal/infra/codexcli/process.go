@@ -27,6 +27,8 @@ var (
 	errAmbiguousSessionLogs = errors.New("multiple active codex session logs")
 )
 
+const mcpToolTimeoutSeconds = 86400
+
 type activeProcess struct {
 	cmd               *exec.Cmd
 	stderr            *bytes.Buffer
@@ -2354,6 +2356,9 @@ func (c *Client) appendMCPArgs(args []string, sessionID process.SessionID) []str
 			"-c", fmt.Sprintf("mcp_servers.anycode.command=%q", c.mcpStdioCommand),
 			"-c", fmt.Sprintf("mcp_servers.anycode.args=%s", tomlStringArray(mcpArgs)),
 		)
+		if c.mcpToolTimeout {
+			args = append(args, "-c", fmt.Sprintf("mcp_servers.anycode.tool_timeout_sec=%d", mcpToolTimeoutSeconds))
+		}
 		if c.mcpAuthToken != "" {
 			args = append(args, "-c", `mcp_servers.anycode.env_vars=["ANYCODE_MCP_TOKEN"]`)
 		}
@@ -2367,6 +2372,9 @@ func (c *Client) appendMCPArgs(args []string, sessionID process.SessionID) []str
 		"-c", `mcp_servers.anycode.type="streamable_http"`,
 		"-c", fmt.Sprintf("mcp_servers.anycode.url=%q", url),
 	)
+	if c.mcpToolTimeout {
+		args = append(args, "-c", fmt.Sprintf("mcp_servers.anycode.tool_timeout_sec=%d", mcpToolTimeoutSeconds))
+	}
 	if c.mcpAuthToken != "" {
 		args = append(args, "-c", `mcp_servers.anycode.bearer_token_env_var="ANYCODE_MCP_TOKEN"`)
 	}

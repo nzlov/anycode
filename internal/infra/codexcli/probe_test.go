@@ -6,7 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+
+	"github.com/nzlov/anycode/internal/domain/process"
 )
 
 func TestProbeReadsVersionAndCapabilities(t *testing.T) {
@@ -14,6 +17,7 @@ func TestProbeReadsVersionAndCapabilities(t *testing.T) {
 case "$*" in
   "--version") echo "codex 1.2.3"; exit 0 ;;
   "exec --help") echo "exec help"; exit 0 ;;
+  "exec --help --strict-config -c mcp_servers.anycode.tool_timeout_sec=86400") echo "exec timeout config help"; exit 0 ;;
   "exec resume --help") echo "resume help"; exit 0 ;;
   "debug models") echo '{"models":[{"slug":"gpt-5.6-sol","display_name":"GPT-5.6-Sol","default_reasoning_level":"low","supported_reasoning_levels":[{"effort":"low","description":"Fast"},{"effort":"high","description":"Deep"}],"visibility":"list","priority":1}]}'; exit 0 ;;
 esac
@@ -28,7 +32,7 @@ exit 2
 	if got.Version != "codex 1.2.3" {
 		t.Fatalf("Version = %q", got.Version)
 	}
-	if !got.SupportsExec || !got.SupportsResume {
+	if !got.SupportsExec || !got.SupportsResume || !got.SupportsMCPToolTimeout {
 		t.Fatalf("capabilities = %+v", got)
 	}
 }
@@ -38,6 +42,7 @@ func TestProbeReadsModelCatalog(t *testing.T) {
 case "$*" in
   "--version") echo "codex 1.2.3"; exit 0 ;;
   "exec --help") echo "exec help"; exit 0 ;;
+  "exec --help --strict-config -c mcp_servers.anycode.tool_timeout_sec=86400") echo "exec timeout config help"; exit 0 ;;
   "exec resume --help") echo "resume help"; exit 0 ;;
   "debug models") cat <<'JSON'
 {"models":[
@@ -83,6 +88,31 @@ exit 42
 	}
 	if probeErr.Code != "version_failed" {
 		t.Fatalf("Code = %q", probeErr.Code)
+	}
+}
+
+func TestProbeDisablesMCPToolTimeoutWhenStrictConfigRejectsIt(t *testing.T) {
+	bin := fakeCodex(t, `#!/bin/sh
+case "$*" in
+  "--version") echo "codex 1.2.3"; exit 0 ;;
+  "exec --help") echo "exec help"; exit 0 ;;
+  "exec resume --help") echo "resume help"; exit 0 ;;
+  "debug models") echo '{"models":[{"slug":"gpt-test","visibility":"list"}]}' ; exit 0 ;;
+  "exec --help --strict-config -c mcp_servers.anycode.tool_timeout_sec=86400") echo "unknown field" >&2; exit 2 ;;
+esac
+exit 2
+`)
+	client := New(bin, WithMCP("http://127.0.0.1:8080", "secret"))
+	capabilities, err := client.Probe(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capabilities.SupportsMCPToolTimeout {
+		t.Fatal("tool timeout capability = true")
+	}
+	args := strings.Join(client.buildStartArgs(process.CodexStartInput{SessionID: "session-1"}), " ")
+	if strings.Contains(args, "tool_timeout_sec") {
+		t.Fatalf("unsupported timeout was injected: %s", args)
 	}
 }
 

@@ -22,8 +22,14 @@ type QuestionBatch struct {
 	SessionID string `json:"session_id,omitempty"`
 	// WorkflowRunID holds the value of the "workflow_run_id" field.
 	WorkflowRunID *string `json:"workflow_run_id,omitempty"`
+	// OriginProcessRunID holds the value of the "origin_process_run_id" field.
+	OriginProcessRunID string `json:"origin_process_run_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// DeliveryStatus holds the value of the "delivery_status" field.
+	DeliveryStatus string `json:"delivery_status,omitempty"`
+	// DeliveryProcessRunID holds the value of the "delivery_process_run_id" field.
+	DeliveryProcessRunID string `json:"delivery_process_run_id,omitempty"`
 	// Questions holds the value of the "questions" field.
 	Questions []map[string]interface{} `json:"questions,omitempty"`
 	// Answers holds the value of the "answers" field.
@@ -33,7 +39,9 @@ type QuestionBatch struct {
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// AnsweredAt holds the value of the "answered_at" field.
-	AnsweredAt   *time.Time `json:"answered_at,omitempty"`
+	AnsweredAt *time.Time `json:"answered_at,omitempty"`
+	// DeliveredAt holds the value of the "delivered_at" field.
+	DeliveredAt  *time.Time `json:"delivered_at,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -44,9 +52,9 @@ func (*QuestionBatch) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case questionbatch.FieldQuestions, questionbatch.FieldAnswers:
 			values[i] = new([]byte)
-		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldWorkflowRunID, questionbatch.FieldStatus, questionbatch.FieldCancelReason:
+		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldWorkflowRunID, questionbatch.FieldOriginProcessRunID, questionbatch.FieldStatus, questionbatch.FieldDeliveryStatus, questionbatch.FieldDeliveryProcessRunID, questionbatch.FieldCancelReason:
 			values[i] = new(sql.NullString)
-		case questionbatch.FieldCreatedAt, questionbatch.FieldAnsweredAt:
+		case questionbatch.FieldCreatedAt, questionbatch.FieldAnsweredAt, questionbatch.FieldDeliveredAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -82,11 +90,29 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 				_m.WorkflowRunID = new(string)
 				*_m.WorkflowRunID = value.String
 			}
+		case questionbatch.FieldOriginProcessRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field origin_process_run_id", values[i])
+			} else if value.Valid {
+				_m.OriginProcessRunID = value.String
+			}
 		case questionbatch.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case questionbatch.FieldDeliveryStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field delivery_status", values[i])
+			} else if value.Valid {
+				_m.DeliveryStatus = value.String
+			}
+		case questionbatch.FieldDeliveryProcessRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field delivery_process_run_id", values[i])
+			} else if value.Valid {
+				_m.DeliveryProcessRunID = value.String
 			}
 		case questionbatch.FieldQuestions:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -122,6 +148,13 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.AnsweredAt = new(time.Time)
 				*_m.AnsweredAt = value.Time
+			}
+		case questionbatch.FieldDeliveredAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field delivered_at", values[i])
+			} else if value.Valid {
+				_m.DeliveredAt = new(time.Time)
+				*_m.DeliveredAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -167,8 +200,17 @@ func (_m *QuestionBatch) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
+	builder.WriteString("origin_process_run_id=")
+	builder.WriteString(_m.OriginProcessRunID)
+	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("delivery_status=")
+	builder.WriteString(_m.DeliveryStatus)
+	builder.WriteString(", ")
+	builder.WriteString("delivery_process_run_id=")
+	builder.WriteString(_m.DeliveryProcessRunID)
 	builder.WriteString(", ")
 	builder.WriteString("questions=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Questions))
@@ -184,6 +226,11 @@ func (_m *QuestionBatch) String() string {
 	builder.WriteString(", ")
 	if v := _m.AnsweredAt; v != nil {
 		builder.WriteString("answered_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.DeliveredAt; v != nil {
+		builder.WriteString("delivered_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')

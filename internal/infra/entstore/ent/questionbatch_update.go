@@ -63,6 +63,20 @@ func (_u *QuestionBatchUpdate) ClearWorkflowRunID() *QuestionBatchUpdate {
 	return _u
 }
 
+// SetOriginProcessRunID sets the "origin_process_run_id" field.
+func (_u *QuestionBatchUpdate) SetOriginProcessRunID(v string) *QuestionBatchUpdate {
+	_u.mutation.SetOriginProcessRunID(v)
+	return _u
+}
+
+// SetNillableOriginProcessRunID sets the "origin_process_run_id" field if the given value is not nil.
+func (_u *QuestionBatchUpdate) SetNillableOriginProcessRunID(v *string) *QuestionBatchUpdate {
+	if v != nil {
+		_u.SetOriginProcessRunID(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *QuestionBatchUpdate) SetStatus(v string) *QuestionBatchUpdate {
 	_u.mutation.SetStatus(v)
@@ -73,6 +87,34 @@ func (_u *QuestionBatchUpdate) SetStatus(v string) *QuestionBatchUpdate {
 func (_u *QuestionBatchUpdate) SetNillableStatus(v *string) *QuestionBatchUpdate {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetDeliveryStatus sets the "delivery_status" field.
+func (_u *QuestionBatchUpdate) SetDeliveryStatus(v string) *QuestionBatchUpdate {
+	_u.mutation.SetDeliveryStatus(v)
+	return _u
+}
+
+// SetNillableDeliveryStatus sets the "delivery_status" field if the given value is not nil.
+func (_u *QuestionBatchUpdate) SetNillableDeliveryStatus(v *string) *QuestionBatchUpdate {
+	if v != nil {
+		_u.SetDeliveryStatus(*v)
+	}
+	return _u
+}
+
+// SetDeliveryProcessRunID sets the "delivery_process_run_id" field.
+func (_u *QuestionBatchUpdate) SetDeliveryProcessRunID(v string) *QuestionBatchUpdate {
+	_u.mutation.SetDeliveryProcessRunID(v)
+	return _u
+}
+
+// SetNillableDeliveryProcessRunID sets the "delivery_process_run_id" field if the given value is not nil.
+func (_u *QuestionBatchUpdate) SetNillableDeliveryProcessRunID(v *string) *QuestionBatchUpdate {
+	if v != nil {
+		_u.SetDeliveryProcessRunID(*v)
 	}
 	return _u
 }
@@ -132,6 +174,26 @@ func (_u *QuestionBatchUpdate) SetNillableAnsweredAt(v *time.Time) *QuestionBatc
 // ClearAnsweredAt clears the value of the "answered_at" field.
 func (_u *QuestionBatchUpdate) ClearAnsweredAt() *QuestionBatchUpdate {
 	_u.mutation.ClearAnsweredAt()
+	return _u
+}
+
+// SetDeliveredAt sets the "delivered_at" field.
+func (_u *QuestionBatchUpdate) SetDeliveredAt(v time.Time) *QuestionBatchUpdate {
+	_u.mutation.SetDeliveredAt(v)
+	return _u
+}
+
+// SetNillableDeliveredAt sets the "delivered_at" field if the given value is not nil.
+func (_u *QuestionBatchUpdate) SetNillableDeliveredAt(v *time.Time) *QuestionBatchUpdate {
+	if v != nil {
+		_u.SetDeliveredAt(*v)
+	}
+	return _u
+}
+
+// ClearDeliveredAt clears the value of the "delivered_at" field.
+func (_u *QuestionBatchUpdate) ClearDeliveredAt() *QuestionBatchUpdate {
+	_u.mutation.ClearDeliveredAt()
 	return _u
 }
 
@@ -203,8 +265,17 @@ func (_u *QuestionBatchUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if _u.mutation.WorkflowRunIDCleared() {
 		_spec.ClearField(questionbatch.FieldWorkflowRunID, field.TypeString)
 	}
+	if value, ok := _u.mutation.OriginProcessRunID(); ok {
+		_spec.SetField(questionbatch.FieldOriginProcessRunID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(questionbatch.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeliveryStatus(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeliveryProcessRunID(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryProcessRunID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Questions(); ok {
 		_spec.SetField(questionbatch.FieldQuestions, field.TypeJSON, value)
@@ -230,6 +301,12 @@ func (_u *QuestionBatchUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	}
 	if _u.mutation.AnsweredAtCleared() {
 		_spec.ClearField(questionbatch.FieldAnsweredAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DeliveredAt(); ok {
+		_spec.SetField(questionbatch.FieldDeliveredAt, field.TypeTime, value)
+	}
+	if _u.mutation.DeliveredAtCleared() {
+		_spec.ClearField(questionbatch.FieldDeliveredAt, field.TypeTime)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -285,6 +362,20 @@ func (_u *QuestionBatchUpdateOne) ClearWorkflowRunID() *QuestionBatchUpdateOne {
 	return _u
 }
 
+// SetOriginProcessRunID sets the "origin_process_run_id" field.
+func (_u *QuestionBatchUpdateOne) SetOriginProcessRunID(v string) *QuestionBatchUpdateOne {
+	_u.mutation.SetOriginProcessRunID(v)
+	return _u
+}
+
+// SetNillableOriginProcessRunID sets the "origin_process_run_id" field if the given value is not nil.
+func (_u *QuestionBatchUpdateOne) SetNillableOriginProcessRunID(v *string) *QuestionBatchUpdateOne {
+	if v != nil {
+		_u.SetOriginProcessRunID(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *QuestionBatchUpdateOne) SetStatus(v string) *QuestionBatchUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -295,6 +386,34 @@ func (_u *QuestionBatchUpdateOne) SetStatus(v string) *QuestionBatchUpdateOne {
 func (_u *QuestionBatchUpdateOne) SetNillableStatus(v *string) *QuestionBatchUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
+	}
+	return _u
+}
+
+// SetDeliveryStatus sets the "delivery_status" field.
+func (_u *QuestionBatchUpdateOne) SetDeliveryStatus(v string) *QuestionBatchUpdateOne {
+	_u.mutation.SetDeliveryStatus(v)
+	return _u
+}
+
+// SetNillableDeliveryStatus sets the "delivery_status" field if the given value is not nil.
+func (_u *QuestionBatchUpdateOne) SetNillableDeliveryStatus(v *string) *QuestionBatchUpdateOne {
+	if v != nil {
+		_u.SetDeliveryStatus(*v)
+	}
+	return _u
+}
+
+// SetDeliveryProcessRunID sets the "delivery_process_run_id" field.
+func (_u *QuestionBatchUpdateOne) SetDeliveryProcessRunID(v string) *QuestionBatchUpdateOne {
+	_u.mutation.SetDeliveryProcessRunID(v)
+	return _u
+}
+
+// SetNillableDeliveryProcessRunID sets the "delivery_process_run_id" field if the given value is not nil.
+func (_u *QuestionBatchUpdateOne) SetNillableDeliveryProcessRunID(v *string) *QuestionBatchUpdateOne {
+	if v != nil {
+		_u.SetDeliveryProcessRunID(*v)
 	}
 	return _u
 }
@@ -354,6 +473,26 @@ func (_u *QuestionBatchUpdateOne) SetNillableAnsweredAt(v *time.Time) *QuestionB
 // ClearAnsweredAt clears the value of the "answered_at" field.
 func (_u *QuestionBatchUpdateOne) ClearAnsweredAt() *QuestionBatchUpdateOne {
 	_u.mutation.ClearAnsweredAt()
+	return _u
+}
+
+// SetDeliveredAt sets the "delivered_at" field.
+func (_u *QuestionBatchUpdateOne) SetDeliveredAt(v time.Time) *QuestionBatchUpdateOne {
+	_u.mutation.SetDeliveredAt(v)
+	return _u
+}
+
+// SetNillableDeliveredAt sets the "delivered_at" field if the given value is not nil.
+func (_u *QuestionBatchUpdateOne) SetNillableDeliveredAt(v *time.Time) *QuestionBatchUpdateOne {
+	if v != nil {
+		_u.SetDeliveredAt(*v)
+	}
+	return _u
+}
+
+// ClearDeliveredAt clears the value of the "delivered_at" field.
+func (_u *QuestionBatchUpdateOne) ClearDeliveredAt() *QuestionBatchUpdateOne {
+	_u.mutation.ClearDeliveredAt()
 	return _u
 }
 
@@ -455,8 +594,17 @@ func (_u *QuestionBatchUpdateOne) sqlSave(ctx context.Context) (_node *QuestionB
 	if _u.mutation.WorkflowRunIDCleared() {
 		_spec.ClearField(questionbatch.FieldWorkflowRunID, field.TypeString)
 	}
+	if value, ok := _u.mutation.OriginProcessRunID(); ok {
+		_spec.SetField(questionbatch.FieldOriginProcessRunID, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(questionbatch.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeliveryStatus(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeliveryProcessRunID(); ok {
+		_spec.SetField(questionbatch.FieldDeliveryProcessRunID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Questions(); ok {
 		_spec.SetField(questionbatch.FieldQuestions, field.TypeJSON, value)
@@ -482,6 +630,12 @@ func (_u *QuestionBatchUpdateOne) sqlSave(ctx context.Context) (_node *QuestionB
 	}
 	if _u.mutation.AnsweredAtCleared() {
 		_spec.ClearField(questionbatch.FieldAnsweredAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.DeliveredAt(); ok {
+		_spec.SetField(questionbatch.FieldDeliveredAt, field.TypeTime, value)
+	}
+	if _u.mutation.DeliveredAtCleared() {
+		_spec.ClearField(questionbatch.FieldDeliveredAt, field.TypeTime)
 	}
 	_node = &QuestionBatch{config: _u.config}
 	_spec.Assign = _node.assignValues

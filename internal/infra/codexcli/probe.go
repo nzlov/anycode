@@ -22,6 +22,7 @@ type Client struct {
 	mcpStdioCommand string
 	mcpStdioSocket  string
 	mcpAuthToken    string
+	mcpToolTimeout  bool
 }
 
 type Option func(*Client)
@@ -78,7 +79,7 @@ func New(bin string, options ...Option) *Client {
 	if bin == "" {
 		bin = defaultBin
 	}
-	client := &Client{bin: bin}
+	client := &Client{bin: bin, mcpToolTimeout: true}
 	for _, option := range options {
 		option(client)
 	}
@@ -126,11 +127,14 @@ func (c *Client) Probe(ctx context.Context) (process.CodexCapabilities, error) {
 		}
 	}
 
+	supportsMCPToolTimeout := commandWorks(ctx, bin, "exec", "--help", "--strict-config", "-c", fmt.Sprintf("mcp_servers.anycode.tool_timeout_sec=%d", mcpToolTimeoutSeconds))
+	c.mcpToolTimeout = supportsMCPToolTimeout
 	return process.CodexCapabilities{
-		Version:        firstLine(version),
-		SupportsExec:   commandWorks(ctx, bin, "exec", "--help"),
-		SupportsResume: commandWorks(ctx, bin, "exec", "resume", "--help"),
-		Models:         models,
+		Version:                firstLine(version),
+		SupportsExec:           commandWorks(ctx, bin, "exec", "--help"),
+		SupportsResume:         commandWorks(ctx, bin, "exec", "resume", "--help"),
+		SupportsMCPToolTimeout: supportsMCPToolTimeout,
+		Models:                 models,
 	}, nil
 }
 

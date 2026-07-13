@@ -100,6 +100,14 @@ type Repository interface {
 	MarkExited(ctx context.Context, id RunID, result ExitResult) error
 }
 
+type RunFinder interface {
+	FindRun(ctx context.Context, id RunID) (Run, error)
+}
+
+type HistoricalRunFinder interface {
+	FindLatestRunBySessionBefore(ctx context.Context, sessionID SessionID, before time.Time) (Run, bool, error)
+}
+
 type CodexStartInput struct {
 	ProcessRunID    RunID
 	SessionID       SessionID
@@ -130,10 +138,11 @@ type CodexHandle struct {
 }
 
 type CodexCapabilities struct {
-	Version        string
-	SupportsExec   bool
-	SupportsResume bool
-	Models         []CodexModel
+	Version                string
+	SupportsExec           bool
+	SupportsResume         bool
+	SupportsMCPToolTimeout bool
+	Models                 []CodexModel
 }
 
 type CodexModel struct {

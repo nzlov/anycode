@@ -47,8 +47,11 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			{Text: "实现卡片展示", Completed: false},
 		}},
 		Queue: session.QueueIntent{
-			Kind:         session.QueueKindStart,
-			InitialStart: true,
+			Kind:                 session.QueueKindAnswerUser,
+			InitialStart:         true,
+			ResumeCodexSessionID: "codex-1",
+			ResumeOfProcessRunID: "process-run-1",
+			AnswerBatchID:        "batch-1",
 		},
 		LastRunAt: &now,
 		CreatedAt: now.Add(-10 * time.Minute),

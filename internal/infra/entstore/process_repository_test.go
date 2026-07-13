@@ -62,6 +62,10 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	if active.NodeRunID == nil || *active.NodeRunID != nodeRunID {
 		t.Fatalf("node run id mismatch: %#v", active.NodeRunID)
 	}
+	foundRun, err := repo.FindRun(ctx, run.ID)
+	if err != nil || foundRun.ID != run.ID {
+		t.Fatalf("FindRun() = %#v, %v", foundRun, err)
+	}
 
 	if err := repo.MarkRunning(ctx, run.ID, 1234, "codex-session-1"); err != nil {
 		t.Fatalf("mark running: %v", err)

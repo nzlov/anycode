@@ -59,6 +59,10 @@ const (
 	FieldQueuePrompt = "queue_prompt"
 	// FieldQueueResumeCodexSessionID holds the string denoting the queue_resume_codex_session_id field in the database.
 	FieldQueueResumeCodexSessionID = "queue_resume_codex_session_id"
+	// FieldQueueResumeOfProcessRunID holds the string denoting the queue_resume_of_process_run_id field in the database.
+	FieldQueueResumeOfProcessRunID = "queue_resume_of_process_run_id"
+	// FieldQueueAnswerBatchID holds the string denoting the queue_answer_batch_id field in the database.
+	FieldQueueAnswerBatchID = "queue_answer_batch_id"
 	// FieldLastRunAt holds the string denoting the last_run_at field in the database.
 	FieldLastRunAt = "last_run_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -97,6 +101,8 @@ var Columns = []string{
 	FieldQueueNodeRunID,
 	FieldQueuePrompt,
 	FieldQueueResumeCodexSessionID,
+	FieldQueueResumeOfProcessRunID,
+	FieldQueueAnswerBatchID,
 	FieldLastRunAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -152,6 +158,10 @@ var (
 	DefaultQueuePrompt string
 	// DefaultQueueResumeCodexSessionID holds the default value on creation for the "queue_resume_codex_session_id" field.
 	DefaultQueueResumeCodexSessionID string
+	// DefaultQueueResumeOfProcessRunID holds the default value on creation for the "queue_resume_of_process_run_id" field.
+	DefaultQueueResumeOfProcessRunID string
+	// DefaultQueueAnswerBatchID holds the default value on creation for the "queue_answer_batch_id" field.
+	DefaultQueueAnswerBatchID string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -276,6 +286,16 @@ func ByQueuePrompt(opts ...sql.OrderTermOption) OrderOption {
 // ByQueueResumeCodexSessionID orders the results by the queue_resume_codex_session_id field.
 func ByQueueResumeCodexSessionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueueResumeCodexSessionID, opts...).ToFunc()
+}
+
+// ByQueueResumeOfProcessRunID orders the results by the queue_resume_of_process_run_id field.
+func ByQueueResumeOfProcessRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueResumeOfProcessRunID, opts...).ToFunc()
+}
+
+// ByQueueAnswerBatchID orders the results by the queue_answer_batch_id field.
+func ByQueueAnswerBatchID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQueueAnswerBatchID, opts...).ToFunc()
 }
 
 // ByLastRunAt orders the results by the last_run_at field.

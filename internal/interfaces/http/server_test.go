@@ -489,13 +489,9 @@ func TestMCPRequiresBearerAndListsAnswerUserTool(t *testing.T) {
 	}
 }
 
-func TestMCPAnswerUserCreatesBatchAndReturnsAnswers(t *testing.T) {
-	optionID := questiondomain.OptionID("continue")
-	questions := &fakeQuestionUseCase{
-		waitAnswers: []questiondomain.Answer{{QuestionID: "question-1", SelectedOptionID: &optionID}},
-	}
+func TestMCPAnswerUserCreatesDurableSuspension(t *testing.T) {
 	sessions := &fakeMCPSessionUseCase{}
-	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Questions: questions, Sessions: sessions}))
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Sessions: sessions}))
 	body := `{
 		"jsonrpc":"2.0",
 		"id":2,
@@ -520,17 +516,11 @@ func TestMCPAnswerUserCreatesBatchAndReturnsAnswers(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("mcp tools/call status = %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if questions.created.SessionID != "session-1" || len(questions.created.Questions) != 1 {
-		t.Fatalf("created batch input = %#v", questions.created)
+	if sessions.requestInput.SessionID != "session-1" || len(sessions.requestInput.Questions) != 1 {
+		t.Fatalf("request input = %#v", sessions.requestInput)
 	}
-	if questions.created.Questions[0].Title != "Choose next step" || !questions.created.Questions[0].AllowCustom {
-		t.Fatalf("created question = %#v", questions.created.Questions[0])
-	}
-	if questions.waitedBatchID != "batch-1" {
-		t.Fatalf("waited batch id = %q", questions.waitedBatchID)
-	}
-	if sessions.waitingSessionID != "session-1" || sessions.runningSessionID != "session-1" {
-		t.Fatalf("session state calls = waiting %q running %q", sessions.waitingSessionID, sessions.runningSessionID)
+	if sessions.requestInput.Questions[0].Title != "Choose next step" || !sessions.requestInput.Questions[0].AllowCustom {
+		t.Fatalf("created question = %#v", sessions.requestInput.Questions[0])
 	}
 	var response struct {
 		Result struct {
@@ -546,13 +536,13 @@ func TestMCPAnswerUserCreatesBatchAndReturnsAnswers(t *testing.T) {
 	if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "text" {
 		t.Fatalf("mcp content = %#v", response.Result.Content)
 	}
-	if !strings.Contains(response.Result.Content[0].Text, `"batchId":"batch-1"`) || !strings.Contains(response.Result.Content[0].Text, `"QuestionID":"question-1"`) {
+	if !strings.Contains(response.Result.Content[0].Text, `"batchId":"batch-1"`) || !strings.Contains(response.Result.Content[0].Text, `"status":"suspended"`) {
 		t.Fatalf("mcp answer text = %s", response.Result.Content[0].Text)
 	}
 }
 
 func TestMCPAnswerUserWritesStructuredApplicationError(t *testing.T) {
-	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Questions: &fakeQuestionUseCase{}}))
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Sessions: &fakeMCPSessionUseCase{}}))
 	body := `{
 		"jsonrpc":"2.0",
 		"id":2,
@@ -736,18 +726,12 @@ type fakeQuestionUseCase struct {
 
 type fakeMCPSessionUseCase struct {
 	sessionapp.UseCase
-	waitingSessionID sessiondomain.ID
-	runningSessionID sessiondomain.ID
+	requestInput sessionapp.RequestUserAnswerInput
 }
 
-func (u *fakeMCPSessionUseCase) MarkWaitingUser(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
-	u.waitingSessionID = id
-	return sessionapp.DTO{ID: id}, nil
-}
-
-func (u *fakeMCPSessionUseCase) MarkRunningAfterUserWait(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
-	u.runningSessionID = id
-	return sessionapp.DTO{ID: id}, nil
+func (u *fakeMCPSessionUseCase) RequestUserAnswer(_ context.Context, input sessionapp.RequestUserAnswerInput) (questionapp.BatchDTO, error) {
+	u.requestInput = input
+	return questionapp.BatchDTO{ID: "batch-1", SessionID: questiondomain.SessionID(input.SessionID), Status: questiondomain.BatchPending, Questions: input.Questions}, nil
 }
 
 func (u *fakeQuestionUseCase) CreateBatch(_ context.Context, input questionapp.CreateBatchInput) (questionapp.BatchDTO, error) {

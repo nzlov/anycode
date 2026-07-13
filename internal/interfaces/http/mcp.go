@@ -7,19 +7,17 @@ import (
 	"strings"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
-	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type mcpHandler struct {
-	questions questionapp.UseCase
-	sessions  sessionapp.UseCase
+	sessions sessionapp.UseCase
 }
 
-func newMCPHandler(questions questionapp.UseCase, sessions sessionapp.UseCase) http.Handler {
-	return mcpHandler{questions: questions, sessions: sessions}
+func newMCPHandler(sessions sessionapp.UseCase) http.Handler {
+	return mcpHandler{sessions: sessions}
 }
 
 func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,8 +54,8 @@ func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h mcpHandler) callTool(ctx context.Context, sessionID string, raw json.RawMessage) (map[string]any, error) {
-	if h.questions == nil {
-		return nil, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "question service unavailable").WithRetryable(true)
+	if h.sessions == nil {
+		return nil, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "session service unavailable").WithRetryable(true)
 	}
 	var params mcpToolCallParams
 	if err := json.Unmarshal(raw, &params); err != nil {
@@ -74,30 +72,16 @@ func (h mcpHandler) callTool(ctx context.Context, sessionID string, raw json.Raw
 	if err != nil {
 		return nil, err
 	}
-	batch, err := h.questions.CreateBatch(ctx, questionapp.CreateBatchInput{
-		SessionID: questiondomain.SessionID(sessionID),
+	batch, err := h.sessions.RequestUserAnswer(ctx, sessionapp.RequestUserAnswerInput{
+		SessionID: sessiondomain.ID(sessionID),
 		Questions: questions,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if h.sessions != nil {
-		if _, err := h.sessions.MarkWaitingUser(ctx, sessiondomain.ID(sessionID)); err != nil {
-			return nil, err
-		}
-	}
-	answers, err := h.questions.Wait(ctx, batch.ID)
-	if err != nil {
-		return nil, err
-	}
-	if h.sessions != nil {
-		if _, err := h.sessions.MarkRunningAfterUserWait(ctx, sessiondomain.ID(sessionID)); err != nil {
-			return nil, err
-		}
-	}
 	payload, err := json.Marshal(map[string]any{
 		"batchId": string(batch.ID),
-		"answers": answers,
+		"status":  "suspended",
 	})
 	if err != nil {
 		return nil, err
