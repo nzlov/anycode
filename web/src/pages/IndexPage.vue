@@ -74,43 +74,48 @@
             </div>
 
             <div class="overview-card-footer">
-              <q-btn
-                v-if="card.todoList"
-                flat
-                dense
-                no-caps
-                class="overview-todo-btn app-command-btn"
-                icon="checklist"
-                :label="`${card.todoList.completed}/${card.todoList.total}`"
-                aria-label="查看 TODO List"
-                @click.stop
-                @keyup.enter.stop
-                @keyup.space.stop
-              >
-                <q-tooltip>TODO List</q-tooltip>
-                <q-menu anchor="top left" self="bottom left" class="overview-todo-menu" @click.stop>
-                  <q-list dense separator class="app-touch-list">
-                    <q-item
-                      v-for="(item, index) in card.todoList.items"
-                      :key="`${card.id}-${index}`"
-                    >
-                      <q-item-section avatar>
-                        <q-icon
-                          :name="item.completed ? 'check_circle' : 'radio_button_unchecked'"
-                          :color="item.completed ? 'positive' : 'grey-6'"
-                        />
-                      </q-item-section>
-                      <q-item-section>
-                        <q-item-label :class="{ 'overview-todo-item--done': item.completed }">
-                          {{ item.text }}
-                        </q-item-label>
-                      </q-item-section>
-                    </q-item>
-                  </q-list>
-                </q-menu>
-              </q-btn>
+              <div class="overview-card-secondary-actions">
+                <q-btn
+                  v-if="card.todoList"
+                  flat
+                  dense
+                  no-caps
+                  class="overview-todo-btn app-command-btn"
+                  icon="checklist"
+                  :label="`${card.todoList.completed}/${card.todoList.total}`"
+                  aria-label="查看 TODO List"
+                  @click.stop
+                  @keyup.enter.stop
+                  @keyup.space.stop
+                >
+                  <q-tooltip>TODO List</q-tooltip>
+                  <q-menu
+                    anchor="top left"
+                    self="bottom left"
+                    class="overview-todo-menu"
+                    @click.stop
+                  >
+                    <q-list dense separator class="app-touch-list">
+                      <q-item
+                        v-for="(item, index) in card.todoList.items"
+                        :key="`${card.id}-${index}`"
+                      >
+                        <q-item-section avatar>
+                          <q-icon
+                            :name="item.completed ? 'check_circle' : 'radio_button_unchecked'"
+                            :color="item.completed ? 'positive' : 'grey-6'"
+                          />
+                        </q-item-section>
+                        <q-item-section>
+                          <q-item-label :class="{ 'overview-todo-item--done': item.completed }">
+                            {{ item.text }}
+                          </q-item-label>
+                        </q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
 
-              <div class="overview-card-actions">
                 <q-btn
                   v-if="card.filesChanged > 0"
                   flat
@@ -126,6 +131,9 @@
                 >
                   <q-tooltip>查看 Diff</q-tooltip>
                 </q-btn>
+              </div>
+
+              <div class="overview-card-actions">
                 <q-btn
                   v-if="card.pendingQuestion"
                   flat
@@ -297,17 +305,27 @@
       <q-card class="overview-diff-dialog app-content-dialog">
         <div class="overview-diff-dialog__header">
           <div class="text-subtitle1 text-weight-bold">Diff</div>
-          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭 Diff" />
+          <div class="overview-diff-dialog__header-actions">
+            <q-btn
+              flat
+              round
+              dense
+              icon="open_in_new"
+              aria-label="打开完整 Diff 页面"
+              :to="diffDialogAllDiffRoute"
+              @click.stop
+            >
+              <q-tooltip>打开完整 Diff 页面</q-tooltip>
+            </q-btn>
+            <q-btn v-close-popup flat round dense icon="close" aria-label="关闭 Diff" />
+          </div>
         </div>
         <q-separator />
         <q-card-section class="overview-diff-dialog__body">
-          <SessionDiffPreview
-            :loading="diffDialogLoading"
-            :error="diffDialogError"
-            :available="diffDialogAvailable"
-            :file-diffs="diffDialogDiffs"
-            :total="diffDialogTotal"
-            :full-diff-route="diffDialogAllDiffRoute"
+          <DiffWorkspace
+            v-if="diffDialog"
+            v-model="diffDialogWorkspaceState"
+            :target="diffDialogTarget"
           />
         </q-card-section>
       </q-card>
@@ -321,6 +339,7 @@ import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
+import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import SessionDiffPreview from '@/components/SessionDiffPreview.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
@@ -329,6 +348,8 @@ import { useSessionsPage } from '@/composables/useSessionsPage';
 import {
   getSessionAllDiff,
   getSessionDiffSummaries,
+  type DiffWorkspaceState,
+  type DiffWorkspaceTarget,
   type FileDiff,
   type SessionDiffSummary,
 } from '@/services/diff';
@@ -451,12 +472,13 @@ const approvalDiffAvailable = ref(false);
 const approvalDiffTotal = ref(0);
 const approvalDiffError = ref('');
 const diffDialog = ref(false);
-const diffDialogLoading = ref(false);
 const diffDialogSessionId = ref('');
-const diffDialogDiffs = ref<FileDiff[]>([]);
-const diffDialogAvailable = ref(false);
-const diffDialogTotal = ref(0);
-const diffDialogError = ref('');
+const diffDialogWorkspaceState = ref<DiffWorkspaceState>({
+  mode: 'all',
+  filePath: '',
+  page: 1,
+  pageSize: 20,
+});
 const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
@@ -470,11 +492,14 @@ const diffDialogAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: diffDialogSessionId.value, mode: 'all' },
 }));
+const diffDialogTarget = computed<DiffWorkspaceTarget>(() => ({
+  kind: 'session',
+  sessionId: diffDialogSessionId.value,
+}));
 let cardSubscription: ReturnType<typeof subscribeSessionCardChanged> | null = null;
 let cardReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let cardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let liveStopped = true;
-let diffDialogRequestGeneration = 0;
 
 interface ApprovalContext {
   workflowRunId: string;
@@ -781,38 +806,13 @@ async function openApprovalDialog(card: SessionCard) {
   }
 }
 
-async function openDiffDialog(card: SessionCard) {
-  const requestGeneration = ++diffDialogRequestGeneration;
+function openDiffDialog(card: SessionCard) {
   diffDialogSessionId.value = card.id;
-  diffDialogLoading.value = true;
-  diffDialogDiffs.value = [];
-  diffDialogAvailable.value = false;
-  diffDialogTotal.value = 0;
-  diffDialogError.value = '';
+  diffDialogWorkspaceState.value = { mode: 'all', filePath: '', page: 1, pageSize: 20 };
   diffDialog.value = true;
-  try {
-    const result = await getSessionAllDiff({
-      sessionId: card.id,
-      mode: 'all',
-      page: 1,
-      pageSize: 20,
-    });
-    if (requestGeneration !== diffDialogRequestGeneration) return;
-    diffDialogAvailable.value = result.available;
-    diffDialogDiffs.value = result.allDiff;
-    diffDialogTotal.value = result.pageInfo.total;
-  } catch {
-    if (requestGeneration !== diffDialogRequestGeneration) return;
-    diffDialogError.value = 'Diff 加载失败，请稍后重试';
-  } finally {
-    if (requestGeneration === diffDialogRequestGeneration) {
-      diffDialogLoading.value = false;
-    }
-  }
 }
 
 function handleDiffDialogClosed() {
-  diffDialogRequestGeneration += 1;
   if (diffDialogSessionId.value) {
     void diffSummaryController.refresh([diffDialogSessionId.value]).catch(() => undefined);
   }

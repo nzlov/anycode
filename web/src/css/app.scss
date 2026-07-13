@@ -345,8 +345,16 @@ a {
   display: flex;
   min-height: 44px;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.overview-card-secondary-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .overview-todo-btn {
@@ -642,7 +650,6 @@ a {
 }
 
 .detail-grid,
-.diff-layout,
 .workflow-layout {
   display: grid;
   gap: 16px;
@@ -681,11 +688,6 @@ a {
 
 .composer-card {
   padding: 8px;
-}
-
-.diff-layout {
-  grid-template-columns: 320px minmax(0, 1fr);
-  align-items: start;
 }
 
 .diff-content {
@@ -1018,10 +1020,22 @@ a {
   padding: 8px 12px 8px 16px;
 }
 
+.overview-diff-dialog__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .overview-diff-dialog__body {
+  display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.overview-diff-dialog__body .diff-workspace {
+  width: 100%;
   overflow: auto;
 }
 
@@ -1429,7 +1443,6 @@ a {
 
 @media (max-width: 1023.98px) {
   .detail-grid,
-  .diff-layout,
   .workflow-layout {
     grid-template-columns: 1fr;
   }

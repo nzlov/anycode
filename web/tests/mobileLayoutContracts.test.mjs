@@ -19,6 +19,7 @@ const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
 const detailSource = readSource('../src/pages/SessionDetailPage.vue');
 const diffPageSource = readSource('../src/pages/DiffPage.vue');
+const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const commitHistorySource = readSource('../src/pages/CommitHistoryPage.vue');
 const headlessE2ESource = readSource('../../scripts/headless-e2e.mjs');
 const stylesSource = readSource('../src/css/app.scss');
@@ -141,11 +142,13 @@ test('pagination has one responsive component owner on every affected page', () 
     stylesSource,
     /\.app-pagination \.q-btn\s*{[^}]*min-width:\s*44px\s*!important[^}]*min-height:\s*44px\s*!important/s,
   );
-  for (const pageSource of [detailSource, diffPageSource, commitHistorySource]) {
+  for (const pageSource of [detailSource, diffWorkspaceSource, commitHistorySource]) {
     assert.match(pageSource, /import AppPagination/);
     assert.match(pageSource, /<AppPagination/);
     assert.doesNotMatch(pageSource, /<q-pagination/);
   }
+  assert.match(diffPageSource, /<DiffWorkspace/);
+  assert.doesNotMatch(diffPageSource, /import AppPagination|<AppPagination/);
 });
 
 test('session detail mobile navigation shows one scroll owner at a time', () => {
