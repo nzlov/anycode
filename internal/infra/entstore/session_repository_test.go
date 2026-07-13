@@ -345,6 +345,13 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	if err := repo.ReleasePromptAppends(ctx, "process-run-1"); err != nil {
 		t.Fatalf("release prompt append: %v", err)
 	}
+	appends, err = repo.ListPromptAppends(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("list released prompt append: %v", err)
+	}
+	if len(appends) != 1 || appends[0].Status != session.PromptAppendPending || appends[0].DispatchedProcessRunID != "" {
+		t.Fatalf("released prompt append = %#v", appends)
+	}
 	if err := repo.MarkPromptAppendsInflight(ctx, []string{"append-1"}, "process-run-2"); err != nil {
 		t.Fatalf("mark prompt append inflight again: %v", err)
 	}
@@ -358,7 +365,6 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	if len(appends) != 1 || appends[0].Status != session.PromptAppendDispatched || appends[0].DispatchedAt == nil || !appends[0].DispatchedAt.Equal(dispatchedAt) || appends[0].DispatchedProcessRunID != "process-run-2" {
 		t.Fatalf("dispatched prompt append = %#v", appends)
 	}
-
 	if err := repo.AddMergeRecord(ctx, session.MergeRecord{
 		ID:             "merge-record-failed",
 		SessionID:      input.ID,

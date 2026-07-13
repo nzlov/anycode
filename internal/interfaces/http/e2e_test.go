@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -443,6 +444,7 @@ type smokeCodexProcess struct {
 	startInput   processdomain.CodexStartInput
 	events       chan processdomain.CodexEvent
 	stoppedRunID processdomain.RunID
+	stopOnce     sync.Once
 }
 
 func (p *smokeCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
@@ -460,6 +462,7 @@ func (p *smokeCodexProcess) Resume(_ context.Context, input processdomain.CodexR
 
 func (p *smokeCodexProcess) Stop(_ context.Context, processRunID processdomain.RunID) error {
 	p.stoppedRunID = processRunID
+	p.stopOnce.Do(func() { close(p.events) })
 	return nil
 }
 
