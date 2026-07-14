@@ -1778,6 +1778,11 @@ func applyCodexItemSemantic(event *process.CodexEvent, itemType string, item map
 	command := normalizeDisplayCommand(firstString(normalized["command"], item["command"]))
 	name := firstString(normalized["qualifiedName"], item["name"])
 	input := firstString(normalized["input"], item["input"])
+	if name == "exec" {
+		if nestedName := extractExecToolName(input); nestedName != "" {
+			name = nestedName
+		}
+	}
 
 	switch itemType {
 	case "agent_message", "assistant_message":

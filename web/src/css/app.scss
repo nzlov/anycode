@@ -82,6 +82,15 @@ a {
   color: var(--ac-text);
 }
 
+.app-header__title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-icon-btn {
   width: 44px;
   min-width: 44px;
@@ -226,10 +235,6 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.overview-history-link {
-  flex: 0 0 auto;
 }
 
 .overview-card-grid {

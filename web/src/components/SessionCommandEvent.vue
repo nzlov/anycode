@@ -3,12 +3,14 @@
     <button
       type="button"
       class="command-event__header"
-      :aria-expanded="expanded"
-      @click="expanded = !expanded"
+      :aria-expanded="canExpand ? expanded : undefined"
+      :disabled="!canExpand"
+      @click="canExpand && (expanded = !expanded)"
     >
-      <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
+      <q-icon v-if="canExpand" :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
+      <span v-else class="command-event__toggle-placeholder" aria-hidden="true" />
       <q-icon name="terminal" size="16px" />
-      <span>{{ firstCommand?.command || 'Shell' }}</span>
+      <span class="command-event__title">{{ firstCommand?.command || 'Shell' }}</span>
       <q-badge
         v-if="additionalCommandCount"
         outline
@@ -33,11 +35,12 @@
       </q-icon>
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
-    <div v-if="expanded" class="command-event__body">
-      <section v-for="(command, index) in content.commands" :key="index">
-        <div class="command-event__label">
-          {{ content.commands.length > 1 ? `命令 ${index + 1}` : '命令' }}
-        </div>
+    <div v-if="expanded && canExpand" class="command-event__body">
+      <div v-if="firstCommand?.workdir" class="command-event__workdir">
+        {{ firstCommand.workdir }}
+      </div>
+      <section v-for="(command, index) in additionalCommands" :key="index">
+        <div class="command-event__label">命令 {{ index + 2 }}</div>
         <pre class="command-event__command"><code>{{ command.command }}</code></pre>
         <div v-if="command.workdir" class="command-event__workdir">{{ command.workdir }}</div>
       </section>
@@ -69,7 +72,11 @@ const props = defineProps<{
 const expanded = ref(false);
 const content = computed(() => props.event.content);
 const firstCommand = computed(() => content.value.commands[0]);
-const additionalCommandCount = computed(() => Math.max(0, content.value.commands.length - 1));
+const additionalCommands = computed(() => content.value.commands.slice(1));
+const additionalCommandCount = computed(() => additionalCommands.value.length);
+const canExpand = computed(
+  () => Boolean(firstCommand.value?.workdir || additionalCommands.value.length || content.value.output),
+);
 const duration = computed(() => formatDuration(content.value.durationMs));
 </script>
 
@@ -97,7 +104,7 @@ const duration = computed(() => formatDuration(content.value.durationMs));
   text-align: left;
 }
 
-.command-event__header span {
+.command-event__title {
   flex: 1 1 auto;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -112,10 +119,20 @@ const duration = computed(() => formatDuration(content.value.durationMs));
   font-weight: 400;
 }
 
-.command-event__header:hover,
-.command-event__header:focus-visible {
+.command-event__header:not(:disabled):hover,
+.command-event__header:not(:disabled):focus-visible {
   border-color: color-mix(in srgb, var(--q-primary) 45%, var(--ac-border));
   outline: none;
+}
+
+.command-event__header:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.command-event__toggle-placeholder {
+  width: 18px;
+  flex: 0 0 18px;
 }
 
 .command-event__body {
@@ -147,7 +164,6 @@ const duration = computed(() => formatDuration(content.value.durationMs));
 }
 
 .command-event__workdir {
-  margin-top: 4px;
   overflow-wrap: anywhere;
   color: var(--ac-text-muted);
   font-family: 'Fira Code', 'JetBrains Mono', monospace;

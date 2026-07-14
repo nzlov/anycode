@@ -5,6 +5,7 @@ go 1.26
 require (
 	entgo.io/ent v0.14.6
 	github.com/99designs/gqlgen v0.17.89
+	github.com/dop251/goja v0.0.0-20260701091749-b07b74453ea9
 	github.com/expr-lang/expr v1.17.8
 	github.com/gorilla/websocket v1.5.0
 	github.com/tursodatabase/libsql-client-go v0.0.0-20260528064733-9d5d30a29a60
@@ -22,6 +23,7 @@ require (
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-openapi/inflect v0.19.0 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

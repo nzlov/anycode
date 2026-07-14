@@ -28,12 +28,13 @@ test('desktop overview replaces the create FAB with the persistent create panel'
   assert.match(newSessionSource, /const dialogVisible = computed/);
 });
 
-test('overview keeps only latest cards and links history from the filter toolbar', () => {
+test('overview keeps only latest cards and links history from the application header', () => {
   assert.match(indexSource, /class="overview-filter-toolbar"/);
-  assert.match(indexSource, /icon="history"/);
-  assert.match(indexSource, /aria-label="历史卡片"/);
-  assert.doesNotMatch(indexSource, /\slabel="历史卡片"/);
-  assert.match(indexSource, /:to="sessionsRoute"/);
+  assert.doesNotMatch(indexSource, /icon="history"|aria-label="历史卡片"|:to="sessionsRoute"/);
+  assert.match(layoutSource, /icon="history"/);
+  assert.match(layoutSource, /aria-label="历史卡片"/);
+  assert.doesNotMatch(layoutSource, /\slabel="历史卡片"/);
+  assert.match(layoutSource, /:to="sessionsRoute"/);
   assert.match(indexSource, /const showDesktopFocusLayout = computed/);
   assert.match(indexSource, /v-for="card in visibleLatestCards"/);
   assert.doesNotMatch(indexSource, /historySection|historyCards|hasMoreHistory/);
