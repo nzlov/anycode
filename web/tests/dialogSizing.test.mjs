@@ -93,3 +93,14 @@ test('long content dialogs keep one explicit scrolling content area', () => {
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
   assert.match(detailSource, /\.file-diff-body\s*{[^}]*overflow:\s*auto/s);
 });
+
+test('desktop new session panel is capped to the viewport and scrolls its body', () => {
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel\s*{[^}]*max-height:\s*var\(--overview-create-panel-height\)\s*!important/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s,
+  );
+});

@@ -1,10 +1,7 @@
 <template>
   <q-page class="page-shell">
     <div class="page-heading">
-      <div>
-        <div class="text-h5 text-weight-bold">会话表格</div>
-        <div class="text-body2 text-muted">分页、过滤、排序和 total 均由 GraphQL 后端计算</div>
-      </div>
+      <div class="text-h5 text-weight-bold">会话表格</div>
     </div>
 
     <q-card flat bordered class="table-filter-card">
