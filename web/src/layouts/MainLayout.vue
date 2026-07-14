@@ -155,7 +155,11 @@
       />
     </q-page-container>
 
-    <q-page-sticky v-if="$route.name === 'overview'" position="bottom-right" :offset="[24, 24]">
+    <q-page-sticky
+      v-if="$route.name === 'overview' && $q.screen.width < overviewDesktopMinWidth"
+      position="bottom-right"
+      :offset="[24, 24]"
+    >
       <q-btn
         fab
         color="positive"
@@ -169,8 +173,10 @@
     </q-page-sticky>
 
     <new-session-dialog
+      v-if="$route.name === 'overview'"
       v-model="newSessionOpen"
       :default-project-id="newSessionDefaultProjectId"
+      :panel="showOverviewCreatePanel"
       @create="handleSessionCreated"
     />
     <project-directory-dialog v-model="directoryDialogOpen" />
@@ -257,6 +263,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
@@ -270,6 +277,8 @@ import { getSession } from '@/services/sessions';
 import type { ProjectSummary } from '@/services/projects';
 
 const leftDrawerOpen = ref(false);
+const $q = useQuasar();
+const overviewDesktopMinWidth = 700;
 const newSessionOpen = ref(false);
 const directoryDialogOpen = ref(false);
 const settingsDialogOpen = ref(false);
@@ -286,6 +295,9 @@ const route = useRoute();
 const router = useRouter();
 const activeProjectId = ref('');
 const pageRefreshKey = ref(0);
+const showOverviewCreatePanel = computed(
+  () => route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth,
+);
 const newSessionDefaultProjectId = computed(() => {
   const projectId = route.params.projectId;
   if (typeof projectId === 'string') return projectId;

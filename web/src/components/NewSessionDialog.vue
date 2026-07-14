@@ -1,12 +1,17 @@
 <template>
   <q-dialog
-    :model-value="modelValue"
-    :maximized="$q.screen.lt.sm"
+    :model-value="dialogVisible"
+    :maximized="!panel && $q.screen.lt.sm"
+    :seamless="panel"
+    :no-focus="panel"
+    :no-refocus="panel"
+    :class="{ 'new-session-panel-host': panel }"
     persistent
     @update:model-value="emitModel"
   >
     <q-card
       class="new-session-dialog app-content-dialog"
+      :class="{ 'new-session-dialog--panel': panel }"
       :inert="branchesLoading"
       :aria-busy="branchesLoading || runConfigLoading"
     >
@@ -17,6 +22,7 @@
         </div>
         <q-space />
         <q-btn
+          v-if="!panel"
           v-close-popup
           flat
           round
@@ -118,6 +124,7 @@
           v-model:permission="permission"
           v-model:fast="fast"
           title="提示词"
+          :compact="panel"
           :disabled="creating || runConfigLoading || Boolean(runConfigError)"
         >
           <template #actions>
@@ -162,6 +169,7 @@ import { getWorkflowDefinition } from '@/services/workflows';
 const props = defineProps<{
   modelValue: boolean;
   defaultProjectId?: string;
+  panel?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -190,6 +198,7 @@ const workflowAvailable = ref(false);
 const workflowAvailabilityToken = ref(0);
 const lastConfigRequestToken = ref(0);
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
+const dialogVisible = computed(() => Boolean(props.panel || props.modelValue));
 
 const branchOptions = computed(() => {
   return projectBranchState(projectId.value).branches;
@@ -463,34 +472,40 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => props.modelValue,
-  (open) => {
-    if (!open) {
-      lastConfigRequestToken.value += 1;
-      runConfigLoading.value = false;
-      runConfigError.value = '';
-      return;
-    }
-    const projectChanged = selectInitialProject();
-    if (!projectChanged && projectId.value) void loadLastConfigForProject(projectId.value);
-    void loadProjects().then(() => {
-      selectInitialProject();
-      void loadWorkflowAvailability();
-    });
-  },
-);
+watch(dialogVisible, (open) => {
+  if (!open) {
+    lastConfigRequestToken.value += 1;
+    runConfigLoading.value = false;
+    runConfigError.value = '';
+    return;
+  }
+  const projectChanged = selectInitialProject();
+  if (!projectChanged && projectId.value) void loadLastConfigForProject(projectId.value);
+  void loadProjects().then(() => {
+    selectInitialProject();
+    void loadWorkflowAvailability();
+  });
+});
 
 watch(projectId, (value, previous) => {
   if (!value || value === previous) return;
   branch.value = '';
   void loadBranchesForProject(value, { refresh: true });
   void loadWorkflowAvailability();
-  if (props.modelValue) void loadLastConfigForProject(value);
+  if (dialogVisible.value) void loadLastConfigForProject(value);
 });
 
+watch(
+  () => props.defaultProjectId,
+  (value, previous) => {
+    if (!dialogVisible.value || value === previous) return;
+    const projectChanged = selectInitialProject();
+    if (!projectChanged && projectId.value) void loadLastConfigForProject(projectId.value);
+  },
+);
+
 onMounted(() => {
-  if (props.modelValue && projectId.value) void loadLastConfigForProject(projectId.value);
+  if (dialogVisible.value && projectId.value) void loadLastConfigForProject(projectId.value);
   void loadProjects().then(loadWorkflowAvailability);
 });
 </script>

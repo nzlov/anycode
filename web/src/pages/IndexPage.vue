@@ -1,9 +1,12 @@
 <template>
-  <q-page class="workbench-page page-shell">
+  <q-page
+    class="workbench-page page-shell"
+    :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
+  >
     <div class="page-heading">
       <div>
         <div class="text-h5 text-weight-bold">{{ pageTitle }}</div>
-        <div class="text-body2 text-muted">最新卡片与历史卡片</div>
+        <div class="text-body2 text-muted">{{ pageCaption }}</div>
       </div>
     </div>
 
@@ -13,6 +16,16 @@
           <div class="text-subtitle1 text-weight-bold">{{ section.title }}</div>
           <div class="text-caption text-muted">{{ section.caption }}</div>
         </div>
+        <q-btn
+          v-if="section.id === 'latest' && showDesktopFocusLayout"
+          flat
+          dense
+          no-caps
+          class="overview-history-link app-command-btn"
+          icon="history"
+          label="历史卡片"
+          :to="sessionsRoute"
+        />
       </div>
 
       <div v-if="section.cards.length > 0" class="overview-card-grid">
@@ -242,7 +255,7 @@
       <q-banner v-else dense rounded class="empty-lane-banner">暂无{{ section.title }}</q-banner>
     </section>
 
-    <q-banner v-if="!hasVisibleCards" rounded class="empty-lane-banner q-mt-md">
+    <q-banner v-if="!hasAnyCards" rounded class="empty-lane-banner q-mt-md">
       暂无卡片
     </q-banner>
 
@@ -390,6 +403,8 @@ import {
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
+const overviewDesktopMinWidth = 700;
+const showDesktopFocusLayout = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
   return typeof value === 'string' ? value : '';
@@ -433,31 +448,35 @@ const scopedProject = computed(() =>
   projects.value.find((project) => project.id === projectScopeId.value),
 );
 const pageTitle = computed(() => scopedProject.value?.name ?? '总揽');
+const pageCaption = computed(() =>
+  showDesktopFocusLayout.value ? '最新卡片' : '最新卡片与历史卡片',
+);
 const sessionsRoute = computed(() =>
   projectScopeId.value
     ? { name: 'sessions', query: { projectId: projectScopeId.value, scope: 'closed' } }
     : { name: 'sessions', query: { scope: 'closed' } },
 );
-const cardSections = computed(() => [
-  {
+const cardSections = computed(() => {
+  const latestSection = {
     id: 'latest',
     title: '最新',
     caption: '未关闭的卡片，按最近操作倒序',
     cards: latestCards.value,
     showMore: false,
-  },
-  {
+  };
+  const historySection = {
     id: 'history',
     title: '历史',
     caption: '已关闭的卡片，按最近操作倒序',
     cards: historyCards.value,
     showMore: hasMoreHistory.value,
-  },
-]);
-const hasVisibleCards = computed(
+  };
+  return showDesktopFocusLayout.value ? [latestSection] : [latestSection, historySection];
+});
+const hasAnyCards = computed(
   () => latestCards.value.length > 0 || historyCards.value.length > 0,
 );
-const visibleCards = computed(() => [...latestCards.value, ...historyCards.value]);
+const visibleCards = computed(() => cardSections.value.flatMap((section) => section.cards));
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);

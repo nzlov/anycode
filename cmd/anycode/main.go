@@ -36,6 +36,8 @@ import (
 	httpinterface "github.com/nzlov/anycode/internal/interfaces/http"
 )
 
+const databaseStartupTimeout = 30 * time.Second
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp-stdio" {
 		if err := runMCPStdio(os.Args[2:]); err != nil {
@@ -46,8 +48,9 @@ func main() {
 
 	cfg := config.LoadFromEnv()
 	ctx := context.Background()
+	databaseCtx, cancelDatabase := context.WithTimeout(ctx, databaseStartupTimeout)
 
-	store, err := entstore.Open(ctx, entstore.OpenOptions{
+	store, err := entstore.Open(databaseCtx, entstore.OpenOptions{
 		DatabaseURL: cfg.TursoDatabaseURL,
 		AuthToken:   cfg.TursoAuthToken,
 		DataDir:     cfg.DataDir,
@@ -57,9 +60,10 @@ func main() {
 	}
 	defer store.Close()
 
-	if err := store.Migrate(ctx); err != nil {
+	if err := store.Migrate(databaseCtx); err != nil {
 		log.Fatalf("migrate entstore: %s", err.Error())
 	}
+	cancelDatabase()
 
 	executable, err := os.Executable()
 	if err != nil {

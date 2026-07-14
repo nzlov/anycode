@@ -83,6 +83,30 @@ func TestTransitionClearsQueueWhenExecutionLeavesQueue(t *testing.T) {
 	}
 }
 
+func TestMatchesLifecycleSnapshotComparesIntentValues(t *testing.T) {
+	nodeRunID := NodeRunID("node-run-1")
+	queuedAt := time.Unix(20, 0).UTC()
+	reason := CloseReasonUserClosed
+	current := Session{
+		ID: "session-1", Status: StatusStopping, UpdatedAt: time.Unix(30, 0).UTC(), QueuedAt: &queuedAt, CloseReason: &reason,
+		Queue: QueueIntent{Kind: QueueKindResume, Priority: QueuePriorityHigh, NodeRunID: &nodeRunID, Prompt: "continue"},
+	}
+	otherNodeRunID := NodeRunID("node-run-1")
+	otherQueuedAt := queuedAt
+	otherReason := reason
+	expected := current
+	expected.Queue.NodeRunID = &otherNodeRunID
+	expected.QueuedAt = &otherQueuedAt
+	expected.CloseReason = &otherReason
+	if !current.MatchesLifecycleSnapshot(expected) {
+		t.Fatal("equal lifecycle values should match despite distinct pointers")
+	}
+	expected.CloseReason = nil
+	if current.MatchesLifecycleSnapshot(expected) {
+		t.Fatal("different close intent should not match")
+	}
+}
+
 func TestTransitionRejectsInvalidLifecycleMove(t *testing.T) {
 	session := Session{Status: StatusClosed}
 

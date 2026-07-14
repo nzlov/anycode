@@ -242,7 +242,10 @@ var (
 	errProcessCleanupPending = errors.New("codex process may still be running")
 )
 var errWorkflowResumeStateNotPersisted = errors.New("workflow resume failure state was not persisted")
-var errCloseRequiresStop = errors.New("session must stop before close")
+var (
+	errCloseRequiresStop     = errors.New("session must stop before close")
+	errClosePreparationStale = errors.New("session changed while preparing close")
+)
 var fallbackEventSequence atomic.Uint64
 
 type Service struct {
@@ -264,7 +267,6 @@ type Service struct {
 	events              eventdomain.Store
 	publisher           eventdomain.Publisher
 	questions           questionCoordinator
-	launchMu            sync.Mutex
 	now                 func() time.Time
 	generateID          func() (domain.ID, error)
 	maxConcurrentAgents int
@@ -720,8 +722,18 @@ func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 			continue
 		}
 		seen[interrupted.ID] = struct{}{}
+		var activeSnapshot *processdomain.Run
+		if s.processes != nil {
+			active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(interrupted.ID))
+			if err != nil {
+				return recovered, fmt.Errorf("snapshot interrupted process for session %s: %w", interrupted.ID, err)
+			}
+			if found {
+				activeSnapshot = &active
+			}
+		}
 		if err := s.withSessionLock(ctx, interrupted.ID, func(ctx context.Context) error {
-			return s.recoverInterruptedSession(ctx, interrupted.ID)
+			return s.recoverInterruptedSession(ctx, interrupted.ID, activeSnapshot)
 		}); err != nil {
 			return recovered, fmt.Errorf("recover interrupted session %s: %w", interrupted.ID, err)
 		}
@@ -734,7 +746,7 @@ func (s *Service) MarkInterruptedSessionsRecoverable(ctx context.Context) (int, 
 	return s.RecoverInterruptedSessions(ctx)
 }
 
-func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domain.ID) error {
+func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domain.ID, activeSnapshot *processdomain.Run) error {
 	session, err := s.repo.Find(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("find interrupted session: %w", err)
@@ -742,22 +754,34 @@ func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domai
 	if !isInterruptedRecoveryStatus(session) {
 		return nil
 	}
-	var active processdomain.Run
-	hasActive := false
+	var currentActive processdomain.Run
+	hasCurrentActive := false
 	if s.processes != nil {
-		active, hasActive, err = s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+		currentActive, hasCurrentActive, err = s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
 		if err != nil {
 			return fmt.Errorf("find interrupted process run: %w", err)
 		}
 	}
-	if hasActive {
-		if err := s.stopDetachedProcess(ctx, active); err != nil {
+	if activeSnapshot == nil && hasCurrentActive {
+		return nil
+	}
+	if activeSnapshot != nil && hasCurrentActive && currentActive.ID != activeSnapshot.ID {
+		return nil
+	}
+	if activeSnapshot != nil && hasCurrentActive {
+		if err := s.stopDetachedProcess(ctx, *activeSnapshot); err != nil {
 			return s.persistInterruptedRecoveryFailure(ctx, session, "detached_process_ownership_unverified", err.Error())
 		}
 	}
-	var interruptedRun *processdomain.Run
-	if hasActive {
-		interruptedRun = &active
+	interruptedRun := activeSnapshot
+	if session.Status == domain.StatusStopping && session.CloseReason != nil {
+		if interruptedRun != nil {
+			if err := s.settleInterruptedRun(ctx, session, *interruptedRun); err != nil {
+				return err
+			}
+		}
+		_, err := s.closeSession(ctx, CloseSessionInput{SessionID: session.ID, Reason: *session.CloseReason})
+		return err
 	}
 	if session.Mode == domain.ModeWorkflow && s.workflows != nil && s.events != nil {
 		_, checkpoint, err := s.latestWorkflowProcessExitInput(ctx, session.ID)
@@ -857,6 +881,7 @@ func (s *Service) recoverAnswerUserSessions(ctx context.Context) (map[domain.ID]
 func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondomain.BatchID) (bool, error) {
 	var result questiondomain.Batch
 	var events []eventdomain.DomainEvent
+	preparedCloseRecovery := false
 	manualWorkflowRecovery := false
 	workflowRecoveryCode := ""
 	workflowRecoveryMessage := ""
@@ -897,7 +922,9 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 					events = append(events, event)
 				}
 			}
-			if session.Status == domain.StatusStopping {
+			if session.Status == domain.StatusStopping && session.CloseReason != nil {
+				preparedCloseRecovery = true
+			} else if session.Status == domain.StatusStopping {
 				if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
 					return err
 				}
@@ -1154,7 +1181,7 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 			return false, err
 		}
 	}
-	return result.ID != "", nil
+	return result.ID != "" && !preparedCloseRecovery, nil
 }
 
 func markWorkflowNodeWaiting(ctx context.Context, repo workflowdomain.Repository, batch questiondomain.Batch, origin processdomain.Run) error {
@@ -1191,11 +1218,12 @@ func (s *Service) stopDetachedProcess(ctx context.Context, run processdomain.Run
 }
 
 func (s *Service) persistStoppedAfterRestart(ctx context.Context, session domain.Session, run *processdomain.Run) error {
+	expected := session
 	previousStatus := session.Status
 	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
 		return err
 	}
-	return s.saveInterruptedRecoveryState(ctx, session, run, "session.stopped", map[string]any{
+	return s.saveInterruptedRecoveryState(ctx, expected, session, run, true, "session.stopped", map[string]any{
 		"reason":         "service_restarted_while_stopping",
 		"previousStatus": string(previousStatus),
 	})
@@ -1206,11 +1234,12 @@ func (s *Service) persistInterruptedRecoveryFailure(ctx context.Context, session
 }
 
 func (s *Service) persistInterruptedRecoveryFailureWithRun(ctx context.Context, session domain.Session, run *processdomain.Run, code string, message string) error {
+	expected := session
 	previousStatus := session.Status
 	if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
 		return err
 	}
-	if err := s.saveInterruptedRecoveryState(ctx, session, run, "session.resume_failed", map[string]any{
+	if err := s.saveInterruptedRecoveryState(ctx, expected, session, run, run != nil, "session.resume_failed", map[string]any{
 		"reason":         code,
 		"message":        message,
 		"previousStatus": string(previousStatus),
@@ -1241,7 +1270,7 @@ func (s *Service) queueInterruptedSessionResume(ctx context.Context, session dom
 	if err != nil {
 		return err
 	}
-	return s.saveInterruptedRecoveryStateAndEvent(ctx, queued, run, event, hasEvent)
+	return s.saveInterruptedRecoveryStateAndEvent(ctx, session, queued, run, true, event, hasEvent)
 }
 
 func (s *Service) recoveryCodexOptions(ctx context.Context, session domain.Session, prompt string) (codexStartOptions, error) {
@@ -1282,10 +1311,11 @@ func (s *Service) recoverInternalWaitingUserSession(ctx context.Context, session
 		if run == nil && session.Status == domain.StatusWaitingUser {
 			return nil
 		}
+		expected := session
 		if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
 			return err
 		}
-		return s.saveInterruptedRecoveryState(ctx, session, run, "session.recovery_waiting_user", map[string]any{
+		return s.saveInterruptedRecoveryState(ctx, expected, session, run, true, "session.recovery_waiting_user", map[string]any{
 			"batchId": string(batch.ID),
 			"reason":  "service_restarted",
 		})
@@ -1326,17 +1356,18 @@ func (s *Service) latestQuestionBatch(ctx context.Context, sessionID domain.ID) 
 	return batch, found, nil
 }
 
-func (s *Service) saveInterruptedRecoveryState(ctx context.Context, session domain.Session, run *processdomain.Run, eventType string, payload map[string]any) error {
+func (s *Service) saveInterruptedRecoveryState(ctx context.Context, expected domain.Session, session domain.Session, run *processdomain.Run, guardReplacement bool, eventType string, payload map[string]any) error {
 	event, hasEvent, err := s.newSessionEvent(session, eventType, payload)
 	if err != nil {
 		return err
 	}
-	return s.saveInterruptedRecoveryStateAndEvent(ctx, session, run, event, hasEvent)
+	return s.saveInterruptedRecoveryStateAndEvent(ctx, expected, session, run, guardReplacement, event, hasEvent)
 }
 
-func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, session domain.Session, run *processdomain.Run, event eventdomain.DomainEvent, hasEvent bool) error {
+func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, expected domain.Session, session domain.Session, run *processdomain.Run, guardReplacement bool, event eventdomain.DomainEvent, hasEvent bool) error {
 	result := processdomain.ExitResult{}
 	events := make([]eventdomain.DomainEvent, 0, 2)
+	superseded := false
 	if run != nil {
 		result = processdomain.ExitResult{FailureReason: "service_restarted", FinishedAt: s.now()}
 		processEvent, ok, err := s.newSessionEvent(session, "process.exited", processExitPayload(run.ID, result))
@@ -1352,6 +1383,22 @@ func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, sess
 	}
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			current, err := tx.Sessions().Find(ctx, expected.ID)
+			if err != nil {
+				return fmt.Errorf("find session during interrupted recovery: %w", err)
+			}
+			if !current.MatchesLifecycleSnapshot(expected) {
+				superseded = true
+				return nil
+			}
+			active, found, err := tx.Processes().FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+			if err != nil {
+				return fmt.Errorf("find replacement process during recovery: %w", err)
+			}
+			if guardReplacement && found && (run == nil || active.ID != run.ID) {
+				superseded = true
+				return nil
+			}
 			if run != nil {
 				if err := tx.Processes().MarkExited(ctx, run.ID, result); err != nil {
 					return fmt.Errorf("mark interrupted process exited: %w", err)
@@ -1373,6 +1420,22 @@ func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, sess
 			return err
 		}
 	} else {
+		current, err := s.repo.Find(ctx, expected.ID)
+		if err != nil {
+			return fmt.Errorf("find session during interrupted recovery: %w", err)
+		}
+		if !current.MatchesLifecycleSnapshot(expected) {
+			return nil
+		}
+		if s.processes != nil {
+			active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+			if err != nil {
+				return fmt.Errorf("find replacement process during recovery: %w", err)
+			}
+			if guardReplacement && found && (run == nil || active.ID != run.ID) {
+				return nil
+			}
+		}
 		if run != nil {
 			if err := s.processes.MarkExited(ctx, run.ID, result); err != nil {
 				return fmt.Errorf("mark interrupted process exited: %w", err)
@@ -1391,6 +1454,9 @@ func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, sess
 				}
 			}
 		}
+	}
+	if superseded {
+		return nil
 	}
 	for _, event := range events {
 		s.publishSessionEvent(ctx, event)
@@ -2242,7 +2308,28 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if err != nil {
 		return DTO{}, fmt.Errorf("find session: %w", err)
 	}
-	if session.Status == domain.StatusStopped {
+	if session.Status == domain.StatusClosed {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
+	}
+	if s.processes == nil || s.codex == nil {
+		if session.Status == domain.StatusStopped {
+			cleanupCtx, cancel := detachedCleanupContext(ctx)
+			defer cancel()
+			if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
+				return DTO{}, err
+			}
+			return toDTO(session), nil
+		}
+		if session.Status == domain.StatusQueued && session.Queue.Kind != domain.QueueKindAnswerUser {
+			return s.stopSessionWithoutActiveProcess(ctx, session, "queue_cancelled", false)
+		}
+		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
+	}
+	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(id))
+	if err != nil {
+		return DTO{}, fmt.Errorf("find active process run: %w", err)
+	}
+	if session.Status == domain.StatusStopped && !ok {
 		cleanupCtx, cancel := detachedCleanupContext(ctx)
 		defer cancel()
 		if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
@@ -2250,22 +2337,15 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		}
 		return toDTO(session), nil
 	}
-	switch session.Status {
-	case domain.StatusQueued, domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping, domain.StatusResumeFailed:
-	default:
-		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
-	}
-	if session.Status == domain.StatusQueued && session.Queue.Kind != domain.QueueKindAnswerUser {
+	if session.Status == domain.StatusQueued && session.Queue.Kind != domain.QueueKindAnswerUser && !ok {
 		return s.stopSessionWithoutActiveProcess(ctx, session, "queue_cancelled", false)
 	}
-	if s.processes == nil || s.codex == nil {
-		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
-	}
-	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(id))
-	if err != nil {
-		return DTO{}, fmt.Errorf("find active process run: %w", err)
-	}
 	if !ok {
+		switch session.Status {
+		case domain.StatusQueued, domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping, domain.StatusResumeFailed:
+		default:
+			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
+		}
 		cleanupCtx, cancel := detachedCleanupContext(ctx)
 		defer cancel()
 		stopReason := "no_active_process"
@@ -2915,6 +2995,14 @@ type codexStartOptions struct {
 	initialStart            bool
 }
 
+type executionClaimNotAcquiredError struct {
+	result port.ExecutionClaimResult
+}
+
+func (e *executionClaimNotAcquiredError) Error() string {
+	return "session execution claim was not acquired: " + string(e.result.Status)
+}
+
 func (s *Service) activeProcessWithCodexSession(ctx context.Context, sessionID domain.ID) (processdomain.Run, error) {
 	for attempt := 0; attempt < 20; attempt++ {
 		active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
@@ -3137,25 +3225,18 @@ func (s *Service) startCodex(ctx context.Context, session domain.Session, option
 	if s.processes == nil || s.codex == nil {
 		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
 	}
-	_, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-	if err != nil {
-		return DTO{}, fmt.Errorf("find active process run: %w", err)
+	maxActive := 0
+	if !force {
+		maxActive = s.maxConcurrentAgents
 	}
-	if ok {
-		return toDTO(session), nil
-	}
-	s.launchMu.Lock()
-	defer s.launchMu.Unlock()
-	if !force && s.maxConcurrentAgents > 0 {
-		activeCount, err := s.processes.CountActive(ctx)
-		if err != nil {
-			return DTO{}, fmt.Errorf("count active process runs: %w", err)
+	dto, err := s.startCodexWithWorkdirReservation(ctx, session, options, maxActive)
+	var claimErr *executionClaimNotAcquiredError
+	if errors.As(err, &claimErr) {
+		if claimErr.result.Status == port.ExecutionAtCapacity {
+			return s.queueCodex(ctx, claimErr.result.Session, options, queuePriorityForStartOptions(claimErr.result.Session, options), queueKindForStartOptions(options))
 		}
-		if activeCount >= s.maxConcurrentAgents {
-			return s.queueCodex(ctx, session, options, queuePriorityForStartOptions(session, options), queueKindForStartOptions(options))
-		}
+		return toDTO(claimErr.result.Session), nil
 	}
-	dto, err := s.startCodexWithWorkdirReservation(ctx, session, options)
 	if errors.Is(err, errWorkdirBusy) {
 		return s.queueCodex(ctx, session, options, queuePriorityForStartOptions(session, options), queueKindForStartOptions(options))
 	}
@@ -3171,7 +3252,7 @@ func (s *Service) enqueueCodex(ctx context.Context, session domain.Session, opti
 	return dto, nil
 }
 
-func (s *Service) startCodexNow(ctx context.Context, session domain.Session, options codexStartOptions, workdir string) (DTO, error) {
+func (s *Service) startCodexNow(ctx context.Context, session domain.Session, options codexStartOptions, workdir string, maxActive int) (DTO, error) {
 	resolved, err := s.resolveCodexInput(ctx, session, options)
 	if err != nil {
 		return DTO{}, err
@@ -3208,11 +3289,16 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		value := options.resumeOfProcessRunID
 		run.ResumeOf = &value
 	}
+	expectedSession := session
 	if err := transitionSession(&session, domain.StatusStarting, now); err != nil {
 		return DTO{}, err
 	}
-	if err := s.createProcessRunWithSessionEvent(ctx, run, session, options, "session.starting", map[string]any{"processRunId": string(runID)}); err != nil {
+	claim, err := s.createProcessRunWithSessionEvent(ctx, expectedSession, run, session, options, maxActive, "session.starting", map[string]any{"processRunId": string(runID)})
+	if err != nil {
 		return DTO{}, err
+	}
+	if claim.Status != port.ExecutionClaimed {
+		return toDTO(claim.Session), &executionClaimNotAcquiredError{result: claim}
 	}
 
 	handle, err := s.startCodexProcess(ctx, session, runID, options, workdir)
@@ -3343,7 +3429,7 @@ func (s *Service) markWorkflowResumeFailed(ctx context.Context, session domain.S
 	return nil
 }
 
-func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session domain.Session, options codexStartOptions) (DTO, error) {
+func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session domain.Session, options codexStartOptions, maxActive int) (DTO, error) {
 	workdir, err := s.codexWorkdir(ctx, session)
 	if err != nil {
 		return DTO{}, err
@@ -3351,7 +3437,7 @@ func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session 
 	if !s.reserveWorkdir(workdir, session.ID) {
 		return DTO{}, errWorkdirBusy
 	}
-	dto, err := s.startCodexNow(ctx, session, options, workdir)
+	dto, err := s.startCodexNow(ctx, session, options, workdir, maxActive)
 	if err != nil && !errors.Is(err, errProcessCleanupPending) {
 		s.releaseWorkdir(workdir, session.ID)
 	}
@@ -3507,25 +3593,6 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 			if current.Status != domain.StatusQueued {
 				return nil
 			}
-			s.launchMu.Lock()
-			defer s.launchMu.Unlock()
-			if s.maxConcurrentAgents > 0 {
-				activeCount, err := s.processes.CountActive(ctx)
-				if err != nil {
-					return fmt.Errorf("count active process runs: %w", err)
-				}
-				if activeCount >= s.maxConcurrentAgents {
-					atCapacity = true
-					return nil
-				}
-			}
-			current, err = s.repo.Find(ctx, session.ID)
-			if err != nil {
-				return fmt.Errorf("find queued session: %w", err)
-			}
-			if current.Status != domain.StatusQueued {
-				return nil
-			}
 			if current.Queue.Kind == domain.QueueKindAnswerUser {
 				active, err := s.answerOriginStillActive(ctx, current)
 				if err != nil {
@@ -3539,7 +3606,14 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 			if s.codex == nil {
 				return ErrProcessLifecycleNotWired
 			}
-			if _, err := s.startCodexWithWorkdirReservation(ctx, current, codexStartOptionsFromQueue(current)); err != nil {
+			if _, err := s.startCodexWithWorkdirReservation(ctx, current, codexStartOptionsFromQueue(current), s.maxConcurrentAgents); err != nil {
+				var claimErr *executionClaimNotAcquiredError
+				if errors.As(err, &claimErr) {
+					if claimErr.result.Status == port.ExecutionAtCapacity {
+						atCapacity = true
+					}
+					return nil
+				}
 				if errors.Is(err, errWorkdirBusy) {
 					atCapacity = true
 					return nil
@@ -4609,8 +4683,10 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 			return DTO{}, err
 		}
 		if err := s.saveSessionWithEvent(ctx, session, "session.blocked", map[string]any{
-			"workflowRunId": string(advance.WorkflowRunID),
-			"reason":        advance.BlockedReason,
+			"workflowRunId":  string(advance.WorkflowRunID),
+			"reason":         advance.BlockedReason,
+			"failureCode":    advance.BlockedCode,
+			"failureMessage": advance.BlockedMessage,
 		}); err != nil {
 			return DTO{}, err
 		}
@@ -4868,7 +4944,7 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 					{
 						ID:          "fail_node",
 						Label:       "标记节点失败",
-						Description: "执行节点失败处理，按流程重试、失败分支或阻塞规则继续。",
+						Description: "执行节点失败处理；有剩余重试时重跑当前节点，耗尽后阻塞流程。",
 						Payload:     mergeFailureActionPayload(metadata, "fail_node"),
 					},
 					{
@@ -5302,15 +5378,56 @@ func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEv
 	return payload
 }
 
-func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run processdomain.Run, session domain.Session, options codexStartOptions, eventType string, payload map[string]any) error {
+func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expectedSession domain.Session, run processdomain.Run, session domain.Session, options codexStartOptions, maxActive int, eventType string, payload map[string]any) (port.ExecutionClaimResult, error) {
 	if s.uow != nil {
 		event, ok, err := s.newSessionEvent(session, eventType, payload)
 		if err != nil {
-			return err
+			return port.ExecutionClaimResult{}, err
 		}
+		var result port.ExecutionClaimResult
+		var publishedEvent *eventdomain.DomainEvent
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := tx.Processes().CreateRun(ctx, run); err != nil {
-				return fmt.Errorf("create process run: %w", err)
+			claim, err := tx.ClaimExecution(ctx, port.ExecutionClaimInput{
+				ExpectedSession: expectedSession,
+				StartingSession: session,
+				Run:             run,
+				MaxActive:       maxActive,
+			})
+			if err != nil {
+				return err
+			}
+			result = claim
+			switch claim.Status {
+			case port.ExecutionAlreadyActive:
+				if claim.ActiveRun == nil {
+					return errors.New("active execution claim has no process run")
+				}
+				reconciled, err := reconcileSessionWithActiveRun(claim.Session, *claim.ActiveRun, s.now())
+				if err != nil {
+					return err
+				}
+				if err := tx.Sessions().Save(ctx, reconciled); err != nil {
+					return fmt.Errorf("reconcile active execution session: %w", err)
+				}
+				result.Session = reconciled
+				reconcileEvent, hasEvent, err := s.newSessionEvent(reconciled, "session.execution_already_active", map[string]any{
+					"processRunId": string(claim.ActiveRun.ID),
+				})
+				if err != nil {
+					return err
+				}
+				if hasEvent {
+					if err := tx.Events().Append(ctx, reconcileEvent); err != nil {
+						return err
+					}
+					publishedEvent = &reconcileEvent
+				}
+				return nil
+			case port.ExecutionStale, port.ExecutionAtCapacity:
+				return nil
+			case port.ExecutionClaimed:
+			default:
+				return fmt.Errorf("unsupported execution claim status %q", claim.Status)
 			}
 			if options.answerBatchID != "" {
 				repo, ok := tx.Questions().(questiondomain.AgentRepository)
@@ -5330,9 +5447,6 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run proc
 					return err
 				}
 			}
-			if err := tx.Sessions().Save(ctx, session); err != nil {
-				return fmt.Errorf("save session: %w", err)
-			}
 			if err := tx.Sessions().MarkPromptAppendsInflight(ctx, options.promptAppendIDs, string(run.ID)); err != nil {
 				return err
 			}
@@ -5340,33 +5454,81 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, run proc
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
+				publishedEvent = &event
 			}
 			return nil
 		}); err != nil {
-			return err
+			return port.ExecutionClaimResult{}, err
 		}
-		if ok {
-			s.publishSessionEvent(ctx, event)
+		if publishedEvent != nil {
+			s.publishSessionEvent(ctx, *publishedEvent)
 		}
-		return nil
+		return result, nil
 	}
 	if options.answerBatchID != "" {
-		return errors.New("answer_user process creation requires a unit of work")
+		return port.ExecutionClaimResult{}, errors.New("answer_user process creation requires a unit of work")
+	}
+	// GLUE: Legacy in-memory wiring has no transaction boundary; production entstore execution uses the atomic claim above.
+	active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(expectedSession.ID))
+	if err != nil {
+		return port.ExecutionClaimResult{}, err
+	}
+	if found {
+		reconciled, err := reconcileSessionWithActiveRun(expectedSession, active, s.now())
+		if err != nil {
+			return port.ExecutionClaimResult{}, err
+		}
+		if err := s.saveSessionWithEvent(ctx, reconciled, "session.execution_already_active", map[string]any{"processRunId": string(active.ID)}); err != nil {
+			return port.ExecutionClaimResult{}, err
+		}
+		return port.ExecutionClaimResult{Status: port.ExecutionAlreadyActive, Session: reconciled, ActiveRun: &active}, nil
+	}
+	if maxActive > 0 {
+		count, err := s.processes.CountActive(ctx)
+		if err != nil {
+			return port.ExecutionClaimResult{}, err
+		}
+		if count >= maxActive {
+			return port.ExecutionClaimResult{Status: port.ExecutionAtCapacity, Session: expectedSession}, nil
+		}
 	}
 	if err := s.processes.CreateRun(ctx, run); err != nil {
-		return fmt.Errorf("create process run: %w", err)
+		return port.ExecutionClaimResult{}, fmt.Errorf("create process run: %w", err)
 	}
 	if err := s.repo.MarkPromptAppendsInflight(ctx, options.promptAppendIDs, string(run.ID)); err != nil {
 		_ = s.processes.MarkExited(ctx, run.ID, processdomain.ExitResult{FailureReason: err.Error(), FinishedAt: s.now()})
-		return err
+		return port.ExecutionClaimResult{}, err
 	}
 	if err := s.saveSessionWithEvent(ctx, session, eventType, payload); err != nil {
 		result := processdomain.ExitResult{FailureReason: err.Error(), FinishedAt: s.now()}
 		_ = s.processes.MarkExited(ctx, run.ID, result)
 		_ = s.repo.ReleasePromptAppends(ctx, string(run.ID))
-		return err
+		return port.ExecutionClaimResult{}, err
 	}
-	return nil
+	return port.ExecutionClaimResult{Status: port.ExecutionClaimed, Session: session}, nil
+}
+
+func reconcileSessionWithActiveRun(session domain.Session, run processdomain.Run, now time.Time) (domain.Session, error) {
+	status := domain.StatusRunning
+	switch run.Status {
+	case processdomain.StatusStarting:
+		status = domain.StatusStarting
+	case processdomain.StatusRunning:
+		status = domain.StatusRunning
+	case processdomain.StatusWaitingUser:
+		status = domain.StatusWaitingUser
+	case processdomain.StatusStopping:
+		status = domain.StatusStopping
+	default:
+		return domain.Session{}, fmt.Errorf("process run %s is not active", run.ID)
+	}
+	if err := transitionSession(&session, status, now); err != nil {
+		return domain.Session{}, err
+	}
+	if strings.TrimSpace(run.CodexSessionID) != "" {
+		session.CodexSessionID = run.CodexSessionID
+	}
+	return session, nil
 }
 
 func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session, eventType string, payload map[string]any) error {
@@ -5587,10 +5749,10 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	return s.saveSessionAndEvent(ctx, session, event, ok)
 }
 
-func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput) error {
+func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput) (bool, error) {
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
@@ -5604,23 +5766,23 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 			}
 			return nil
 		}); err != nil {
-			return err
+			return false, err
 		}
 		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
-		return nil
+		return true, nil
 	}
 	if err := s.repo.Save(ctx, session); err != nil {
-		return fmt.Errorf("save session: %w", err)
+		return false, fmt.Errorf("save session: %w", err)
 	}
 	for _, event := range events {
 		if err := s.events.Append(ctx, event); err != nil {
-			return err
+			return true, err
 		}
 		s.publishSessionEvent(ctx, event)
 	}
-	return nil
+	return true, nil
 }
 
 func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
@@ -5861,12 +6023,18 @@ func codexSessionIDKeys() []string {
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
 	for {
+		if err := ctx.Err(); err != nil {
+			return DTO{}, err
+		}
 		var dto DTO
 		err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
 			var err error
 			dto, err = s.closeSession(ctx, input)
 			return err
 		})
+		if errors.Is(err, errClosePreparationStale) {
+			continue
+		}
 		if !errors.Is(err, errCloseRequiresStop) {
 			return dto, err
 		}
@@ -5897,24 +6065,24 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		}
 		return toDTO(session), nil
 	}
-	requiresStop, err := closeRequiresStop(ctx, s, session)
+	prepared, err := s.prepareSessionClose(ctx, session, reason)
 	if err != nil {
 		return DTO{}, err
 	}
-	if requiresStop {
+	switch prepared.Status {
+	case port.CloseAlreadyClosed:
+		return toDTO(prepared.Session), nil
+	case port.CloseActive:
 		return DTO{}, errCloseRequiresStop
-	}
-	if session.Status == domain.StatusWaitingUser || session.Queue.Kind == domain.QueueKindAnswerUser {
-		now := s.now()
-		if err := transitionSession(&session, domain.StatusStopped, now); err != nil {
-			return DTO{}, err
-		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "closing_without_active_process"}); err != nil {
-			return DTO{}, err
-		}
+	case port.CloseStale:
+		return DTO{}, errClosePreparationStale
+	case port.ClosePrepared:
+		session = prepared.Session
+	default:
+		return DTO{}, fmt.Errorf("unsupported close preparation status %q", prepared.Status)
 	}
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
-		return DTO{}, err
+		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
 	}
 	now := s.now()
 	cleanupRequested := false
@@ -5924,18 +6092,20 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			cleanupRequested = true
 		case domain.WorktreeCleanupActive, domain.WorktreeCleanupProvisioning, domain.WorktreeCleanupFailed:
 			if err := session.RequestWorktreeCleanup(now); err != nil {
-				return DTO{}, err
+				return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
 			}
 			cleanupRequested = true
 		case domain.WorktreeCleanupCleaned:
 		case domain.WorktreeCleanupNotApplicable, "":
-			return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryValidationError, "git session worktree ownership is not persisted").WithDetails(map[string]any{
+			closeErr := apperror.New(apperror.CodeCloseFailed, apperror.CategoryValidationError, "git session worktree ownership is not persisted").WithDetails(map[string]any{
 				"sessionId": string(session.ID),
 			})
+			return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, closeErr)
 		}
 	}
 	if err := session.Close(reason, now); err != nil {
-		return DTO{}, fmt.Errorf("close session %s: %w", session.ID, err)
+		closeErr := fmt.Errorf("close session %s: %w", session.ID, err)
+		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, closeErr)
 	}
 	events := []sessionEventInput{{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}}}
 	if cleanupRequested {
@@ -5943,8 +6113,15 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			"worktreeBranch": session.WorktreeBranch,
 		}})
 	}
-	if err := s.saveSessionWithEvents(ctx, session, events); err != nil {
-		return DTO{}, err
+	committed, err := s.saveSessionWithEvents(ctx, session, events)
+	if err != nil {
+		if committed {
+			if cleanupRequested {
+				s.scheduleWorktreeCleanup()
+			}
+			return DTO{}, err
+		}
+		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
 	}
 	if cleanupRequested {
 		s.scheduleWorktreeCleanup()
@@ -5953,57 +6130,107 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 }
 
 func (s *Service) closeWorkflowSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
-	session, err := s.repo.Find(ctx, input.SessionID)
-	if err != nil {
-		return DTO{}, fmt.Errorf("find workflow session to close: %w", err)
+	for {
+		if err := ctx.Err(); err != nil {
+			return DTO{}, err
+		}
+		dto, err := s.closeSession(ctx, input)
+		if errors.Is(err, errClosePreparationStale) {
+			continue
+		}
+		return dto, err
 	}
-	requiresStop, err := closeRequiresStop(ctx, s, session)
+}
+
+func (s *Service) prepareSessionClose(ctx context.Context, expected domain.Session, reason domain.CloseReason) (port.ClosePreparationResult, error) {
+	closing := expected
+	if err := transitionSession(&closing, domain.StatusStopping, s.now()); err != nil {
+		return port.ClosePreparationResult{}, err
+	}
+	closing.CloseReason = &reason
+	if s.uow != nil {
+		event, hasEvent, err := s.newSessionEvent(closing, "session.closing", map[string]any{"reason": string(reason)})
+		if err != nil {
+			return port.ClosePreparationResult{}, err
+		}
+		var result port.ClosePreparationResult
+		var publish bool
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			prepared, err := tx.PrepareClose(ctx, port.ClosePreparationInput{ExpectedSession: expected, ClosingSession: closing})
+			if err != nil {
+				return err
+			}
+			result = prepared
+			if prepared.Status == port.ClosePrepared && hasEvent {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+				publish = true
+			}
+			return nil
+		}); err != nil {
+			return port.ClosePreparationResult{}, err
+		}
+		if publish {
+			s.publishSessionEvent(ctx, event)
+		}
+		return result, nil
+	}
+	// GLUE: Legacy in-memory wiring relies on the process-local session lock; production entstore uses the atomic close preparation above.
+	if expected.Status == domain.StatusStopping && s.processes == nil {
+		return port.ClosePreparationResult{Status: port.ClosePrepared, Session: expected}, nil
+	}
+	requiresStop, err := closeRequiresStop(ctx, s, expected)
 	if err != nil {
-		return DTO{}, err
+		return port.ClosePreparationResult{}, err
 	}
 	if requiresStop {
-		if s.processes == nil {
-			return DTO{}, errors.New("session process repository is required")
+		var activeRun *processdomain.Run
+		if s.processes != nil {
+			active, found, findErr := s.processes.FindActiveBySession(ctx, processdomain.SessionID(expected.ID))
+			if findErr != nil {
+				return port.ClosePreparationResult{}, findErr
+			}
+			if found {
+				activeRun = &active
+			}
 		}
-		_, active, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-		if err != nil {
-			return DTO{}, fmt.Errorf("find active workflow process before close: %w", err)
-		}
-		if active {
-			return DTO{}, errCloseRequiresStop
-		}
-		if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
-			return DTO{}, err
-		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": "workflow_closing_without_active_process"}); err != nil {
-			return DTO{}, err
-		}
+		return port.ClosePreparationResult{Status: port.CloseActive, Session: expected, ActiveRun: activeRun}, nil
 	}
-	return s.closeSession(ctx, input)
+	if err := s.saveSessionWithEvent(ctx, closing, "session.closing", map[string]any{"reason": string(reason)}); err != nil {
+		return port.ClosePreparationResult{}, err
+	}
+	return port.ClosePreparationResult{Status: port.ClosePrepared, Session: closing}, nil
+}
+
+func (s *Service) releaseClosePreparation(ctx context.Context, closing domain.Session, cause error) error {
+	if closing.Status != domain.StatusStopping {
+		return cause
+	}
+	closing.CloseReason = nil
+	if err := transitionSession(&closing, domain.StatusStopped, s.now()); err != nil {
+		return errors.Join(cause, err)
+	}
+	if err := s.saveSessionWithEvent(ctx, closing, "session.close_failed", map[string]any{"reason": cause.Error()}); err != nil {
+		return errors.Join(cause, err)
+	}
+	return cause
 }
 
 func closeRequiresStop(ctx context.Context, s *Service, session domain.Session) (bool, error) {
+	if session.Status == domain.StatusClosed {
+		return false, nil
+	}
+	if s != nil && s.processes != nil {
+		_, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+		if err != nil {
+			return false, fmt.Errorf("find active process run: %w", err)
+		}
+		return ok, nil
+	}
 	switch session.Status {
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping, domain.StatusResumeFailed:
 		return true, nil
-	case domain.StatusQueued:
-		if s == nil || s.processes == nil {
-			return false, nil
-		}
-		_, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-		if err != nil {
-			return false, fmt.Errorf("find active process run: %w", err)
-		}
-		return ok, nil
-	case domain.StatusWaitingUser:
-		if s == nil || s.processes == nil || s.codex == nil {
-			return false, nil
-		}
-		_, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-		if err != nil {
-			return false, fmt.Errorf("find active process run: %w", err)
-		}
-		return ok, nil
 	default:
 		return false, nil
 	}
