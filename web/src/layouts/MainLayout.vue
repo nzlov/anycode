@@ -186,10 +186,7 @@
     <q-dialog v-model="removeProjectDialogOpen">
       <q-card class="confirm-dialog">
         <q-card-section class="row items-center q-pb-sm">
-          <div>
-            <div class="text-subtitle1 text-weight-bold">移除项目</div>
-            <div class="text-caption text-muted">会停止该项目所有运行中的卡片，并从列表隐藏。</div>
-          </div>
+          <div class="text-subtitle1 text-weight-bold">移除项目</div>
           <q-space />
           <q-btn v-close-popup flat round dense class="app-icon-btn" icon="close" aria-label="关闭">
             <q-tooltip>关闭</q-tooltip>
@@ -232,7 +229,6 @@
       <q-card class="confirm-dialog">
         <q-card-section>
           <div class="text-subtitle1 text-weight-bold">退出登录</div>
-          <div class="text-body2 text-muted q-mt-xs">退出后需要重新输入访问密钥。</div>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn

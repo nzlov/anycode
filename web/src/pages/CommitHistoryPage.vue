@@ -1,12 +1,7 @@
 <template>
   <q-page class="page-shell">
     <div class="page-heading">
-      <div>
-        <div class="text-h5 text-weight-bold">提交记录</div>
-        <div class="text-body2 text-muted">
-          {{ session?.title ?? sessionId }} · {{ session?.branch ?? '-' }}
-        </div>
-      </div>
+      <div class="text-h5 text-weight-bold">提交记录</div>
       <q-btn
         flat
         round

@@ -1,16 +1,7 @@
 <template>
   <q-page class="page-shell diff-page">
     <div class="page-heading">
-      <div class="heading-copy">
-        <div class="text-h5 text-weight-bold">当前分支变更</div>
-        <div class="text-body2 text-muted">
-          <template v-if="target?.kind === 'branch'">
-            项目 {{ target.projectId }} · {{ target.branch }}
-          </template>
-          <template v-else-if="target?.kind === 'session'">会话 {{ target.sessionId }}</template>
-          <template v-else>缺少 Diff 目标，无法读取 Diff</template>
-        </div>
-      </div>
+      <div class="text-h5 text-weight-bold">当前分支变更</div>
     </div>
 
     <q-banner v-if="!target" rounded class="state-banner bg-warning text-dark">
@@ -121,5 +112,15 @@ watch(
 
 .state-banner {
   margin-bottom: 16px;
+}
+
+@media (min-width: 1024px) {
+  .diff-page :deep(.diff-files) {
+    position: sticky;
+    top: 66px;
+    max-height: calc(100dvh - 82px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 </style>

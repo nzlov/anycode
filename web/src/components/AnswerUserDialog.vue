@@ -7,10 +7,7 @@
   >
     <q-card class="answer-dialog app-content-dialog">
       <q-card-section class="dialog-header">
-        <div>
-          <div class="text-subtitle1 text-weight-bold">待回答问题</div>
-          <div class="text-caption text-muted">选择每个问题的答案后一起提交。</div>
-        </div>
+        <div class="text-subtitle1 text-weight-bold">待回答问题</div>
         <q-btn flat round dense icon="close" :disable="submitting" v-close-popup>
           <q-tooltip>关闭</q-tooltip>
         </q-btn>

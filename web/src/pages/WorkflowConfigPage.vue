@@ -1,12 +1,7 @@
 <template>
   <q-page class="page-shell">
     <div class="page-heading">
-      <div>
-        <div class="text-h5 text-weight-bold">流程配置</div>
-        <div class="text-body2 text-muted">
-          {{ projectName }} · 从左侧拖入节点类型，点击右侧端口后点击目标左侧端口创建连线
-        </div>
-      </div>
+      <div class="text-h5 text-weight-bold">流程配置</div>
       <div class="row items-center q-gutter-sm">
         <q-chip v-if="definitionId" dense outline color="primary">v{{ version }}</q-chip>
         <q-btn flat round color="primary" icon="content_copy" aria-label="复制流程配置" @click="copyWorkflowConfig">
@@ -326,7 +321,6 @@ const conditionOpOptions = ['eq', 'ne', 'contains', 'exists', 'gt', 'gte', 'lt',
 
 const projectId = computed(() => String(route.params.projectId ?? ''));
 const project = computed(() => projects.value.find((item) => item.id === projectId.value));
-const projectName = computed(() => project.value?.name ?? projectId.value);
 const selectedEdge = computed(() => {
   if (selectedEdgeIndex.value == null) return null;
   return graph.edges[selectedEdgeIndex.value] ?? null;

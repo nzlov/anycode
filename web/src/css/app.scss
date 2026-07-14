@@ -870,7 +870,7 @@ a {
   right: 24px;
   bottom: 24px;
   height: auto;
-  max-height: none !important;
+  max-height: var(--overview-create-panel-height) !important;
   margin: 0;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius) !important;
@@ -883,8 +883,8 @@ a {
 }
 
 .new-session-dialog--panel .new-session-body {
-  flex: 0 0 auto;
-  overflow: visible;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .new-session-body {
