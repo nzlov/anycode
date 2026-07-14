@@ -12,7 +12,7 @@ function commandEvent(id, orderKey, correlationId, phase, content = {}) {
     occurredAt: `2026-07-12T00:00:${orderKey}Z`,
     content: {
       __typename: 'TranscriptCommandContent',
-      command: '',
+      commands: [],
       output: '',
       exitCode: null,
       durationMs: null,
@@ -58,7 +58,9 @@ function messageEvent(id, orderKey, text) {
 
 test('completed updates the started item without changing normal message order', () => {
   const items = reduceTranscriptEvents([
-    commandEvent('start-a', '01', 'call-a', 'started', { command: 'npm test' }),
+    commandEvent('start-a', '01', 'call-a', 'started', {
+      commands: [{ command: 'npm test', workdir: '' }],
+    }),
     messageEvent('message-b', '02', 'working'),
     commandEvent('complete-a', '03', 'call-a', 'completed', { output: 'passed' }),
   ]);
@@ -75,8 +77,12 @@ test('completed updates the started item without changing normal message order',
 
 test('interleaved operations merge only by correlation id', () => {
   const items = reduceTranscriptEvents([
-    commandEvent('start-a', '01', 'call-a', 'started', { command: 'same command' }),
-    commandEvent('start-b', '02', 'call-b', 'started', { command: 'same command' }),
+    commandEvent('start-a', '01', 'call-a', 'started', {
+      commands: [{ command: 'same command', workdir: '' }],
+    }),
+    commandEvent('start-b', '02', 'call-b', 'started', {
+      commands: [{ command: 'same command', workdir: '' }],
+    }),
     commandEvent('complete-b', '03', 'call-b', 'completed', { output: 'b output' }),
     commandEvent('complete-a', '04', 'call-a', 'completed', { output: 'a output' }),
   ]);
@@ -102,20 +108,26 @@ test('loading an older start later anchors the merged item at the start', () => 
   const completed = commandEvent('complete-a', '03', 'call-a', 'completed', {
     output: 'output',
   });
-  const start = commandEvent('start-a', '01', 'call-a', 'started', { command: 'go test ./...' });
+  const start = commandEvent('start-a', '01', 'call-a', 'started', {
+    commands: [{ command: 'go test ./...', workdir: '/workspace' }],
+  });
 
   const items = reduceTranscriptEvents([completed, start]);
 
   assert.equal(items.length, 1);
   assert.equal(items[0].id, 'call-a');
   assert.equal(items[0].orderKey, '01');
-  assert.equal(items[0].content.command, 'go test ./...');
+  assert.deepEqual(items[0].content.commands, [
+    { command: 'go test ./...', workdir: '/workspace' },
+  ]);
   assert.equal(items[0].content.output, 'output');
 });
 
 test('typed command completion keeps exit metadata and terminal phase', () => {
   const items = reduceTranscriptEvents([
-    commandEvent('start-a', '01', 'call-a', 'started', { command: 'exit 7' }),
+    commandEvent('start-a', '01', 'call-a', 'started', {
+      commands: [{ command: 'exit 7', workdir: '' }],
+    }),
     commandEvent('complete-a', '02', 'call-a', 'failed', {
       output: 'failed',
       exitCode: 7,
@@ -125,7 +137,7 @@ test('typed command completion keeps exit metadata and terminal phase', () => {
 
   assert.equal(items.length, 1);
   assert.equal(items[0].phase, 'failed');
-  assert.equal(items[0].content.command, 'exit 7');
+  assert.equal(items[0].content.commands[0].command, 'exit 7');
   assert.equal(items[0].content.output, 'failed');
   assert.equal(items[0].content.exitCode, 7);
   assert.equal(items[0].content.durationMs, 125);

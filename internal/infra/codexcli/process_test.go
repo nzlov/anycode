@@ -81,7 +81,7 @@ EOF
 		t.Fatalf("command result event = %+v", got[2])
 	}
 	commandResult, ok := got[2].Content.(process.CodexCommandContent)
-	if !ok || commandResult.Command != "go test ./..." || commandResult.Output != "ok" {
+	if !ok || len(commandResult.Commands) != 1 || commandResult.Commands[0].Command != "go test ./..." || commandResult.Output != "ok" {
 		t.Fatalf("typed command result = %#v", got[2].Content)
 	}
 	resultItem, ok := got[2].Payload["item"].(map[string]any)
@@ -156,7 +156,7 @@ func TestPrimeCodexTranscriptProjectorCorrelatesCommandAcrossResumeBaseline(t *t
 	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"ok"}}`), "/workspace/project", filepath.Base(path), int64(len(prefix)))
 	projector.project(completed)
 	command, ok := completed[0].Content.(process.CodexCommandContent)
-	if !ok || command.Command != "go test ./..." || command.Output != "ok" {
+	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.Output != "ok" {
 		t.Fatalf("resumed command completion = %#v", completed[0].Content)
 	}
 }
@@ -331,7 +331,7 @@ func TestPrimeCodexTranscriptProjectorResumesAtIncompleteLineStart(t *testing.T)
 				t.Fatalf("resumed events = %d, want %d", len(resumed), test.wantResumedEventCount)
 			}
 			command, ok := resumed[len(resumed)-1].Content.(process.CodexCommandContent)
-			if !ok || command.Command != "go test ./..." || command.Output != "ok" {
+			if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.Output != "ok" {
 				t.Fatalf("resumed command completion = %#v", resumed[len(resumed)-1].Content)
 			}
 			for _, event := range resumed {
@@ -350,7 +350,7 @@ func TestCodexTranscriptProjectorUsesStartedTypeForTimedResults(t *testing.T) {
 	projector.project(commandStarted)
 	projector.project(commandCompleted)
 	command, ok := commandCompleted[0].Content.(process.CodexCommandContent)
-	if !ok || command.Command != "go test ./..." || command.ExitCode == nil || *command.ExitCode != 7 || command.DurationMS == nil || *command.DurationMS != 125 || commandCompleted[0].Phase != process.CodexPhaseFailed {
+	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.ExitCode == nil || *command.ExitCode != 7 || command.DurationMS == nil || *command.DurationMS != 125 || commandCompleted[0].Phase != process.CodexPhaseFailed {
 		t.Fatalf("correlated command result = %#v, phase %q", commandCompleted[0].Content, commandCompleted[0].Phase)
 	}
 
@@ -361,6 +361,19 @@ func TestCodexTranscriptProjectorUsesStartedTypeForTimedResults(t *testing.T) {
 	tool, ok := toolCompleted[0].Content.(process.CodexToolContent)
 	if !ok || tool.Output.Text != "answered" {
 		t.Fatalf("timed tool result = %#v", toolCompleted[0].Content)
+	}
+}
+
+func TestCodexTranscriptProjectorCorrelatesCustomExecBatchOutput(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	started := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec","name":"exec","input":"const results = await Promise.all([tools.exec_command({\"cmd\":\"npm test\",\"workdir\":\"/workspace/web\"}), tools.exec_command({\"cmd\":\"go test ./...\"})]);"}}`), "/workspace/project", "rollout.jsonl", 0)
+	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-exec","output":"all passed"}}`), "/workspace/project", "rollout.jsonl", 1)
+	projector.project(started)
+	projector.project(completed)
+
+	command, ok := completed[0].Content.(process.CodexCommandContent)
+	if !ok || completed[0].CorrelationID != "call-exec" || len(command.Commands) != 2 || command.Commands[0].Command != "npm test" || command.Commands[0].Workdir != "/workspace/web" || command.Commands[1].Command != "go test ./..." || command.Output != "all passed" {
+		t.Fatalf("completed batch = %#v, correlationID %q", completed[0].Content, completed[0].CorrelationID)
 	}
 }
 
@@ -1583,12 +1596,12 @@ func TestParseSessionLogLineBuildsTypedTimelineEvents(t *testing.T) {
 	}{
 		{
 			name:      "command started",
-			raw:       `{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec","arguments":"{\"cmd\":\"/bin/bash -lc 'npm test'\"}"}}`,
+			raw:       `{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"function_call","call_id":"call-shell","name":"exec","arguments":"{\"cmd\":\"/bin/bash -lc 'npm test'\",\"workdir\":\"/workspace/web\"}"}}`,
 			wantPhase: process.CodexPhaseStarted,
 			wantID:    "call-shell",
 			assertValue: func(t *testing.T, content process.CodexEventContent) {
 				command, ok := content.(process.CodexCommandContent)
-				if !ok || command.Command != "npm test" {
+				if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "npm test" || command.Commands[0].Workdir != "/workspace/web" {
 					t.Fatalf("command content = %#v", content)
 				}
 			},
@@ -1690,6 +1703,152 @@ func TestParseSessionLogLineBuildsTypedTimelineEvents(t *testing.T) {
 				t.Fatalf("event source order = %d/%d", event.SourceOffset, event.SourceIndex)
 			}
 			test.assertValue(t, event.Content)
+		})
+	}
+}
+
+func TestParseCustomExecCommandCalls(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		wantCommands []any
+		wantCommand  bool
+	}{
+		{
+			name:        "single command with workdir",
+			input:       `const result = await tools.exec_command({"cmd":"go test ./...","workdir":"/workspace/project"});`,
+			wantCommand: true,
+			wantCommands: []any{
+				map[string]any{"command": "go test ./...", "workdir": "/workspace/project"},
+			},
+		},
+		{
+			name: "promise all preserves source order and unquoted fields",
+			input: `const [first, second] = await Promise.all([
+  tools.exec_command({ cmd: "npm test", workdir: "/workspace/web" }),
+  tools.exec_command({cmd: "go test ./...", max_output_tokens: 12000}),
+]);`,
+			wantCommand: true,
+			wantCommands: []any{
+				map[string]any{"command": "npm test", "workdir": "/workspace/web"},
+				map[string]any{"command": "go test ./...", "workdir": ""},
+			},
+		},
+		{
+			name:        "escaped JSON string",
+			input:       `const result = await tools.exec_command({"cmd":"printf \"a\\nb\""});`,
+			wantCommand: true,
+			wantCommands: []any{
+				map[string]any{"command": "printf \"a\\nb\"", "workdir": ""},
+			},
+		},
+		{
+			name:        "regex in ignored property preserves object boundaries",
+			input:       `const result = tools.exec_command({cmd: "npm test", filter: /a,b/});`,
+			wantCommand: true,
+			wantCommands: []any{
+				map[string]any{"command": "npm test", "workdir": ""},
+			},
+		},
+		{
+			name:        "call text inside ignored property regex is ignored",
+			input:       `const result = tools.exec_command({cmd: "npm test", filter: /tools.exec_command({"cmd":"false"})/});`,
+			wantCommand: true,
+			wantCommands: []any{
+				map[string]any{"command": "npm test", "workdir": ""},
+			},
+		},
+		{
+			name:        "call text inside string is ignored",
+			input:       `const example = "tools.exec_command({\\\"cmd\\\":\\\"false\\\"})";`,
+			wantCommand: false,
+		},
+		{
+			name:        "call text inside comment is ignored",
+			input:       `// tools.exec_command({"cmd":"false"})`,
+			wantCommand: false,
+		},
+		{
+			name:        "call text inside regex is ignored",
+			input:       `const pattern = /tools.exec_command({"cmd":"false"})/;`,
+			wantCommand: false,
+		},
+		{
+			name:        "member tools call is ignored across comment trivia",
+			input:       `const result = runner./* adapter */tools.exec_command({"cmd":"false"});`,
+			wantCommand: false,
+		},
+		{
+			name:        "member tools call after numeric literal is ignored",
+			input:       `const result = 1..tools.exec_command({"cmd":"false"});`,
+			wantCommand: false,
+		},
+		{
+			name:        "dynamic command falls back",
+			input:       `const result = await tools.exec_command({cmd: command});`,
+			wantCommand: false,
+		},
+		{
+			name:        "dynamic workdir falls back",
+			input:       `const result = await tools.exec_command({cmd: "npm test", workdir});`,
+			wantCommand: false,
+		},
+		{
+			name:        "truncated call falls back",
+			input:       `const result = await tools.exec_command({"cmd":"go test ./..."`,
+			wantCommand: false,
+		},
+		{
+			name: "one invalid call makes the outer exec fall back",
+			input: `const results = await Promise.all([
+  tools.exec_command({"cmd":"npm test"}),
+  tools.exec_command({cmd: command}),
+]);`,
+			wantCommand: false,
+		},
+		{
+			name: "nested static calls are all extracted",
+			input: `const result = tools.exec_command({
+  cmd: "outer",
+  metadata: { nested: tools.exec_command({cmd: "inner"}) },
+});`,
+			wantCommand: true,
+			wantCommands: []any{
+				map[string]any{"command": "outer", "workdir": ""},
+				map[string]any{"command": "inner", "workdir": ""},
+			},
+		},
+		{
+			name: "dynamic nested call makes the outer exec fall back",
+			input: `const result = tools.exec_command({
+  cmd: "outer",
+  metadata: { nested: tools.exec_command({cmd: command}) },
+});`,
+			wantCommand: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := `{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec","name":"exec","input":` + strconv.Quote(test.input) + `}}`
+			events := parseSessionLogLine([]byte(raw), "/workspace/project", "rollout.jsonl", 0)
+			if len(events) != 1 {
+				t.Fatalf("events = %d, want 1", len(events))
+			}
+			_, isCommand := events[0].Content.(process.CodexCommandContent)
+			if isCommand != test.wantCommand {
+				t.Fatalf("content = %#v, want command = %t", events[0].Content, test.wantCommand)
+			}
+			normalized := eventNormalizedItem(t, events[0])
+			if test.wantCommand {
+				if normalized["type"] != "command_execution" || !reflect.DeepEqual(normalized["commands"], test.wantCommands) {
+					t.Fatalf("normalized item = %#v, want commands %#v", normalized, test.wantCommands)
+				}
+				return
+			}
+			if normalized["type"] != "custom_tool_call" || normalized["input"] != test.input {
+				t.Fatalf("fallback normalized item = %#v", normalized)
+			}
 		})
 	}
 }

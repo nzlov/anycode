@@ -478,13 +478,18 @@ type TodoList struct {
 }
 
 type TranscriptCommandContent struct {
-	Command    string `json:"command"`
-	Output     string `json:"output"`
-	ExitCode   *int   `json:"exitCode,omitempty"`
-	DurationMs *int   `json:"durationMs,omitempty"`
+	Commands   []*TranscriptCommandInvocation `json:"commands"`
+	Output     string                         `json:"output"`
+	ExitCode   *int                           `json:"exitCode,omitempty"`
+	DurationMs *int                           `json:"durationMs,omitempty"`
 }
 
 func (TranscriptCommandContent) IsTranscriptContent() {}
+
+type TranscriptCommandInvocation struct {
+	Command string `json:"command"`
+	Workdir string `json:"workdir"`
+}
 
 type TranscriptEvent struct {
 	ID            string               `json:"id"`
