@@ -30,12 +30,9 @@
 
       <q-tab-panels v-model="activeQuestionId" animated>
         <q-tab-panel v-for="question in questions" :key="question.id" :name="question.id">
-          <div class="question-title">{{ question.title || '未命名问题' }}</div>
-          <div v-if="question.body" class="question-body">{{ question.body }}</div>
-
-          <q-card v-if="question.body" flat bordered class="question-context">
-            <div class="text-caption text-negative text-weight-bold">上下文</div>
-            <div class="mono question-context__text">{{ question.body }}</div>
+          <q-card flat bordered class="question-card">
+            <div class="question-title">{{ question.title || '未命名问题' }}</div>
+            <div v-if="question.body" class="question-body">{{ question.body }}</div>
           </q-card>
 
           <div class="text-body2 text-weight-bold q-mb-sm">选择答案</div>
@@ -140,7 +137,9 @@ interface DraftAnswer {
 
 const activeQuestionId = ref('');
 const drafts = ref<Record<string, DraftAnswer>>({});
-const currentBatch = computed(() => props.batches.find((batch) => batch.status === 'pending') ?? null);
+const currentBatch = computed(
+  () => props.batches.find((batch) => batch.status === 'pending') ?? null,
+);
 const questions = computed<AgentQuestion[]>(() => currentBatch.value?.questions ?? []);
 const canSubmit = computed(() =>
   questions.value.every((question) => {
@@ -258,29 +257,23 @@ function submit() {
   padding: 36px;
 }
 
-.question-title {
-  margin-bottom: 6px;
-  color: var(--ac-text);
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.question-body {
-  margin-bottom: 14px;
-  color: var(--ac-text-muted);
-  white-space: pre-wrap;
-}
-
-.question-context {
+.question-card {
   display: grid;
   gap: 8px;
   margin-bottom: 22px;
   padding: 18px;
   border-color: #fed7aa;
   background: #fff7ed;
+  overflow-wrap: anywhere;
 }
 
-.question-context__text {
+.question-title {
+  color: #9a3412;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.question-body {
   color: #9a3412;
   font-size: 13px;
   white-space: pre-wrap;
