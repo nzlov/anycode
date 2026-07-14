@@ -41,7 +41,10 @@ function toTranscriptItem(event, id = event.id) {
 function mergeTranscriptContent(current, incoming) {
   if (current.__typename === 'TranscriptCommandContent') {
     if (incoming.__typename === 'TranscriptCommandContent') {
-      return mergeDefined(current, incoming);
+      return {
+        ...mergeDefined(current, incoming),
+        commands: incoming.commands?.length ? incoming.commands : current.commands,
+      };
     }
   }
 

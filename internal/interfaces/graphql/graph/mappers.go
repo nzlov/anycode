@@ -342,7 +342,11 @@ func mapTranscriptContent(content processdomain.CodexEventContent) model.Transcr
 	case processdomain.CodexReasoningContent:
 		return &model.TranscriptReasoningContent{Text: value.Text}
 	case processdomain.CodexCommandContent:
-		return &model.TranscriptCommandContent{Command: value.Command, Output: value.Output, ExitCode: value.ExitCode, DurationMs: value.DurationMS}
+		commands := make([]*model.TranscriptCommandInvocation, 0, len(value.Commands))
+		for _, command := range value.Commands {
+			commands = append(commands, &model.TranscriptCommandInvocation{Command: command.Command, Workdir: command.Workdir})
+		}
+		return &model.TranscriptCommandContent{Commands: commands, Output: value.Output, ExitCode: value.ExitCode, DurationMs: value.DurationMS}
 	case processdomain.CodexToolContent:
 		return &model.TranscriptToolContent{
 			QualifiedName: value.QualifiedName,

@@ -1495,8 +1495,8 @@ func (p *codexTranscriptProjector) mergeCommandState(event *process.CodexEvent) 
 		return
 	}
 	if command, ok := event.Content.(process.CodexCommandContent); ok {
-		if previous, exists := p.commands[event.CorrelationID]; exists && command.Command == "" {
-			command.Command = previous.Command
+		if previous, exists := p.commands[event.CorrelationID]; exists && len(command.Commands) == 0 {
+			command.Commands = previous.Commands
 		}
 		event.Content = command
 		if event.Phase == process.CodexPhaseStarted || event.Phase == process.CodexPhaseProgress {
@@ -1791,7 +1791,14 @@ func applyCodexItemSemantic(event *process.CodexEvent, itemType string, item map
 		event.Content = process.CodexReasoningContent{Text: output}
 	case "command_execution":
 		event.Phase = phase
-		content := process.CodexCommandContent{Command: command, Output: normalizeANSIText(output), ExitCode: intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"]), DurationMS: intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])}
+		commands := commandInvocationsFromValue(normalized["commands"])
+		if len(commands) == 0 && command != "" {
+			commands = []process.CodexCommandInvocation{{Command: command}}
+		}
+		for index := range commands {
+			commands[index].Command = normalizeDisplayCommand(commands[index].Command)
+		}
+		content := process.CodexCommandContent{Commands: commands, Output: normalizeANSIText(output), ExitCode: intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"]), DurationMS: intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])}
 		if content.ExitCode != nil && *content.ExitCode != 0 && event.Phase == process.CodexPhaseCompleted {
 			event.Phase = process.CodexPhaseFailed
 		}
@@ -2101,13 +2108,16 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		callID := stringValue(payload, "call_id")
 		command := commandFromFunctionArguments(payload)
 		itemType := "tool_call"
-		if command != "" {
+		if command.Command != "" {
 			itemType = "command_execution"
 		}
 		normalized := normalizedItem(itemType, "in_progress")
 		normalized["qualifiedName"] = qualifiedToolName(payload)
 		normalized["input"] = stringOrJSON(payload["arguments"])
-		normalized["command"] = command
+		normalized["command"] = command.Command
+		if command.Command != "" {
+			normalized["commands"] = commandInvocationValues([]process.CodexCommandInvocation{command})
+		}
 		return []process.CodexEvent{{
 			EventID:   eventID(timestamp, "item.started", callID),
 			Type:      "item.started",
@@ -2131,9 +2141,19 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		}}
 	case "custom_tool_call":
 		callID := stringValue(payload, "call_id")
-		normalized := normalizedItem("custom_tool_call", "in_progress")
-		normalized["qualifiedName"] = stringValue(payload, "name")
-		normalized["input"] = stringOrJSON(payload["input"])
+		name := stringValue(payload, "name")
+		input := stringOrJSON(payload["input"])
+		itemType := "custom_tool_call"
+		commands, extracted := extractExecCommandInvocations(input)
+		if name == "exec" && extracted {
+			itemType = "command_execution"
+		}
+		normalized := normalizedItem(itemType, "in_progress")
+		normalized["qualifiedName"] = name
+		normalized["input"] = input
+		if itemType == "command_execution" {
+			normalized["commands"] = commandInvocationValues(commands)
+		}
 		return []process.CodexEvent{{
 			EventID:   eventID(timestamp, "item.started", callID),
 			Type:      "item.started",
@@ -2361,16 +2381,47 @@ func jsonText(value any) string {
 	return string(encoded)
 }
 
-func commandFromFunctionArguments(payload map[string]any) string {
+func commandFromFunctionArguments(payload map[string]any) process.CodexCommandInvocation {
 	arguments := stringValue(payload, "arguments")
 	if arguments == "" {
-		return ""
+		return process.CodexCommandInvocation{}
 	}
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(arguments), &parsed); err != nil {
-		return arguments
+		return process.CodexCommandInvocation{Command: arguments}
 	}
-	return stringValue(parsed, "cmd", "command")
+	return process.CodexCommandInvocation{
+		Command: stringValue(parsed, "cmd", "command"),
+		Workdir: stringValue(parsed, "workdir"),
+	}
+}
+
+func commandInvocationValues(commands []process.CodexCommandInvocation) []any {
+	values := make([]any, 0, len(commands))
+	for _, command := range commands {
+		values = append(values, map[string]any{"command": command.Command, "workdir": command.Workdir})
+	}
+	return values
+}
+
+func commandInvocationsFromValue(value any) []process.CodexCommandInvocation {
+	entries, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	commands := make([]process.CodexCommandInvocation, 0, len(entries))
+	for _, entry := range entries {
+		item, ok := entry.(map[string]any)
+		if !ok {
+			return nil
+		}
+		command := stringValue(item, "command")
+		if command == "" {
+			return nil
+		}
+		commands = append(commands, process.CodexCommandInvocation{Command: command, Workdir: stringValue(item, "workdir")})
+	}
+	return commands
 }
 
 func messageText(payload map[string]any) string {

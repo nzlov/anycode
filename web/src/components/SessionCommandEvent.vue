@@ -8,7 +8,13 @@
     >
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="terminal" size="16px" />
-      <span>{{ content.command || 'Shell' }}</span>
+      <span>{{ firstCommand?.command || 'Shell' }}</span>
+      <q-badge
+        v-if="additionalCommandCount"
+        outline
+        color="primary"
+        :label="`+${additionalCommandCount} 条`"
+      />
       <q-badge
         v-if="content.exitCode !== null"
         outline
@@ -28,9 +34,12 @@
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
     <div v-if="expanded" class="command-event__body">
-      <section v-if="content.command">
-        <div class="command-event__label">命令</div>
-        <pre class="command-event__command"><code>{{ content.command }}</code></pre>
+      <section v-for="(command, index) in content.commands" :key="index">
+        <div class="command-event__label">
+          {{ content.commands.length > 1 ? `命令 ${index + 1}` : '命令' }}
+        </div>
+        <pre class="command-event__command"><code>{{ command.command }}</code></pre>
+        <div v-if="command.workdir" class="command-event__workdir">{{ command.workdir }}</div>
       </section>
       <section v-if="content.output">
         <div class="command-event__label">输出</div>
@@ -59,6 +68,8 @@ const props = defineProps<{
 
 const expanded = ref(false);
 const content = computed(() => props.event.content);
+const firstCommand = computed(() => content.value.commands[0]);
+const additionalCommandCount = computed(() => Math.max(0, content.value.commands.length - 1));
 const duration = computed(() => formatDuration(content.value.durationMs));
 </script>
 
@@ -133,5 +144,14 @@ const duration = computed(() => formatDuration(content.value.durationMs));
   line-height: 1.6;
   user-select: text;
   white-space: pre;
+}
+
+.command-event__workdir {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--ac-text-muted);
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.5;
 }
 </style>

@@ -6,10 +6,7 @@
   >
     <q-card class="directory-dialog app-content-dialog">
       <q-card-section class="row items-center q-pb-sm">
-        <div>
-          <div class="text-subtitle1 text-weight-bold">选择项目目录</div>
-          <div class="text-caption text-muted">目录树由后端权限范围决定</div>
-        </div>
+        <div class="text-subtitle1 text-weight-bold">选择项目目录</div>
         <q-space />
         <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
           <q-tooltip>关闭</q-tooltip>

@@ -3,7 +3,6 @@
     <q-card flat bordered class="login-panel">
       <q-card-section class="login-panel__header">
         <div class="text-h6 text-weight-bold">AnyCode</div>
-        <div class="text-body2 text-muted">输入访问密钥后进入工作台</div>
       </q-card-section>
 
       <q-card-section>

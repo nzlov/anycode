@@ -46,7 +46,7 @@ test('desktop overview keeps only latest cards and links history from the sectio
   assert.doesNotMatch(indexSource, /v-if="!hasVisibleCards"/);
 });
 
-test('desktop create panel overlays cards while reserving enough final scroll space', () => {
+test('desktop create panel uses one project row within its reserved maximum height', () => {
   assert.match(
     stylesSource,
     /:root\s*{[^}]*--overview-create-panel-height:\s*min\(420px, calc\(100dvh - 104px\)\)/s,
@@ -57,7 +57,23 @@ test('desktop create panel overlays cards while reserving enough final scroll sp
   );
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel\s*{[^}]*position:\s*fixed[^}]*bottom:\s*24px[^}]*height:\s*var\(--overview-create-panel-height\)[^}]*z-index:/s,
+    /\.new-session-dialog--panel\s*{[^}]*position:\s*fixed[^}]*bottom:\s*24px[^}]*height:\s*auto[^}]*max-height:\s*var\(--overview-create-panel-height\)\s*!important[^}]*z-index:/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-panel-host \.new-session-dialog--panel\s*{[^}]*overflow:\s*visible/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*grid-auto-flow:\s*column/s,
+  );
+  assert.match(
+    newSessionSource,
+    /label="项目"[\s\S]*class="branch-picker"[\s\S]*label="优先级"[\s\S]*class="new-session-mode"/,
   );
   assert.match(stylesSource, /@media \(min-width: 700px\) and \(max-width: 1023\.98px\)/);
   assert.match(stylesSource, /@media \(min-width: 1024px\)/);

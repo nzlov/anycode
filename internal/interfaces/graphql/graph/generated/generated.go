@@ -407,10 +407,15 @@ type ComplexityRoot struct {
 	}
 
 	TranscriptCommandContent struct {
-		Command    func(childComplexity int) int
+		Commands   func(childComplexity int) int
 		DurationMs func(childComplexity int) int
 		ExitCode   func(childComplexity int) int
 		Output     func(childComplexity int) int
+	}
+
+	TranscriptCommandInvocation struct {
+		Command func(childComplexity int) int
+		Workdir func(childComplexity int) int
 	}
 
 	TranscriptEvent struct {
@@ -2332,12 +2337,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TodoList.Total(childComplexity), true
 
-	case "TranscriptCommandContent.command":
-		if e.ComplexityRoot.TranscriptCommandContent.Command == nil {
+	case "TranscriptCommandContent.commands":
+		if e.ComplexityRoot.TranscriptCommandContent.Commands == nil {
 			break
 		}
 
-		return e.ComplexityRoot.TranscriptCommandContent.Command(childComplexity), true
+		return e.ComplexityRoot.TranscriptCommandContent.Commands(childComplexity), true
 	case "TranscriptCommandContent.durationMs":
 		if e.ComplexityRoot.TranscriptCommandContent.DurationMs == nil {
 			break
@@ -2356,6 +2361,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptCommandContent.Output(childComplexity), true
+
+	case "TranscriptCommandInvocation.command":
+		if e.ComplexityRoot.TranscriptCommandInvocation.Command == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptCommandInvocation.Command(childComplexity), true
+	case "TranscriptCommandInvocation.workdir":
+		if e.ComplexityRoot.TranscriptCommandInvocation.Workdir == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptCommandInvocation.Workdir(childComplexity), true
 
 	case "TranscriptEvent.content":
 		if e.ComplexityRoot.TranscriptEvent.Content == nil {
@@ -3389,10 +3407,15 @@ type TranscriptReasoningContent {
 }
 
 type TranscriptCommandContent {
-  command: String!
+  commands: [TranscriptCommandInvocation!]!
   output: String!
   exitCode: Int
   durationMs: Int
+}
+
+type TranscriptCommandInvocation {
+  command: String!
+  workdir: String!
 }
 
 type TranscriptToolContent {
@@ -13138,30 +13161,36 @@ func (ec *executionContext) fieldContext_TodoList_items(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _TranscriptCommandContent_command(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandContent) (ret graphql.Marshaler) {
+func (ec *executionContext) _TranscriptCommandContent_commands(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandContent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TranscriptCommandContent_command,
+		ec.fieldContext_TranscriptCommandContent_commands,
 		func(ctx context.Context) (any, error) {
-			return obj.Command, nil
+			return obj.Commands, nil
 		},
 		nil,
-		ec.marshalNString2string,
+		ec.marshalNTranscriptCommandInvocation2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptCommandInvocationᚄ,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_TranscriptCommandContent_command(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TranscriptCommandContent_commands(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TranscriptCommandContent",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			switch field.Name {
+			case "command":
+				return ec.fieldContext_TranscriptCommandInvocation_command(ctx, field)
+			case "workdir":
+				return ec.fieldContext_TranscriptCommandInvocation_workdir(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptCommandInvocation", field.Name)
 		},
 	}
 	return fc, nil
@@ -13249,6 +13278,64 @@ func (ec *executionContext) fieldContext_TranscriptCommandContent_durationMs(_ c
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptCommandInvocation_command(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandInvocation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptCommandInvocation_command,
+		func(ctx context.Context) (any, error) {
+			return obj.Command, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptCommandInvocation_command(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptCommandInvocation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptCommandInvocation_workdir(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptCommandInvocation) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptCommandInvocation_workdir,
+		func(ctx context.Context) (any, error) {
+			return obj.Workdir, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptCommandInvocation_workdir(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptCommandInvocation",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -22027,8 +22114,8 @@ func (ec *executionContext) _TranscriptCommandContent(ctx context.Context, sel a
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("TranscriptCommandContent")
-		case "command":
-			out.Values[i] = ec._TranscriptCommandContent_command(ctx, field, obj)
+		case "commands":
+			out.Values[i] = ec._TranscriptCommandContent_commands(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -22041,6 +22128,50 @@ func (ec *executionContext) _TranscriptCommandContent(ctx context.Context, sel a
 			out.Values[i] = ec._TranscriptCommandContent_exitCode(ctx, field, obj)
 		case "durationMs":
 			out.Values[i] = ec._TranscriptCommandContent_durationMs(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptCommandInvocationImplementors = []string{"TranscriptCommandInvocation"}
+
+func (ec *executionContext) _TranscriptCommandInvocation(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptCommandInvocation) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptCommandInvocationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptCommandInvocation")
+		case "command":
+			out.Values[i] = ec._TranscriptCommandInvocation_command(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "workdir":
+			out.Values[i] = ec._TranscriptCommandInvocation_workdir(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -24631,6 +24762,32 @@ func (ec *executionContext) marshalNTodoItem2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._TodoItem(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptCommandInvocation2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptCommandInvocationᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TranscriptCommandInvocation) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTranscriptCommandInvocation2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptCommandInvocation(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTranscriptCommandInvocation2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptCommandInvocation(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptCommandInvocation) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptCommandInvocation(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNTranscriptContent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptContent(ctx context.Context, sel ast.SelectionSet, v model.TranscriptContent) graphql.Marshaler {

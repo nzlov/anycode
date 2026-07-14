@@ -38,6 +38,8 @@ test('session event presentation moves usage out of the event list into session 
 
   assert.match(timelineSource, /\.\.\. on TranscriptMessageContent/);
   assert.match(timelineSource, /\.\.\. on TranscriptCommandContent/);
+  assert.match(timelineSource, /commands \{ command workdir \}/);
+  assert.doesNotMatch(timelineSource, /TranscriptCommandContent \{ command output/);
   assert.match(timelineSource, /\.\.\. on TranscriptToolContent/);
   assert.match(timelineSource, /usage \{ \$\{transcriptUsageFields\} \}/);
   assert.match(componentSource, /SessionToolEvent/);
@@ -321,7 +323,11 @@ test('exec events render selectable command code separately from terminal output
   );
 
   assert.match(componentSource, /<pre[^>]*class="command-event__command"[^>]*>/);
-  assert.match(componentSource, /<code>\{\{ content\.command \}\}<\/code>/);
+  assert.match(componentSource, /v-for="\(command, index\) in content\.commands"/);
+  assert.match(componentSource, /<code>\{\{ command\.command \}\}<\/code>/);
+  assert.match(componentSource, /`\+\$\{additionalCommandCount\} 条`/);
+  assert.match(componentSource, /content\.commands\.length > 1 \? `命令 \$\{index \+ 1\}` : '命令'/);
+  assert.match(componentSource, /class="command-event__workdir">\{\{ command\.workdir \}\}/);
   assert.match(componentSource, /<StaticAnsiOutput :text="content\.output"/);
   assert.doesNotMatch(componentSource, /SessionTerminalOutput/);
   assert.match(ansiSource, /Anser\.ansiToJson/);

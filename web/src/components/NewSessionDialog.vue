@@ -16,10 +16,7 @@
       :aria-busy="branchesLoading || runConfigLoading"
     >
       <q-card-section class="new-session-dialog__header row items-center q-pb-sm">
-        <div>
-          <div class="text-subtitle1 text-weight-bold">新建卡片</div>
-          <div class="text-caption text-muted">配置项目、分支和 Codex 运行参数</div>
-        </div>
+        <div class="text-subtitle1 text-weight-bold">新建卡片</div>
         <q-space />
         <q-btn
           v-if="!panel"
@@ -80,6 +77,7 @@
             outlined
             dense
             label="优先级"
+            class="new-session-priority"
             emit-value
             map-options
             :disable="creating"
@@ -90,6 +88,7 @@
             v-model="mode"
             spread
             no-caps
+            class="new-session-mode"
             toggle-color="dark"
             :disable="creating || workflowAvailabilityLoading"
             :options="modeOptions"

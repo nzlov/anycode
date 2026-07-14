@@ -149,6 +149,13 @@ test('pagination has one responsive component owner on every affected page', () 
   assert.doesNotMatch(diffPageSource, /import AppPagination|<AppPagination/);
 });
 
+test('desktop diff page keeps the file list visible while diff content scrolls', () => {
+  assert.match(
+    diffPageSource,
+    /@media \(min-width:\s*1024px\)[\s\S]*?\.diff-page\s+:deep\(\.diff-files\)\s*{[^}]*position:\s*sticky[^}]*top:\s*66px[^}]*max-height:\s*calc\(100dvh\s*-\s*82px\)[^}]*overflow-y:\s*auto/s,
+  );
+});
+
 test('session detail mobile navigation shows one scroll owner at a time', () => {
   assert.match(detailSource, /class="detail-mobile-tabs lt-md"/);
   assert.match(detailSource, /q-tab name="session"/);

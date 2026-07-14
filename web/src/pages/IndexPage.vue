@@ -4,18 +4,12 @@
     :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
   >
     <div class="page-heading">
-      <div>
-        <div class="text-h5 text-weight-bold">{{ pageTitle }}</div>
-        <div class="text-body2 text-muted">{{ pageCaption }}</div>
-      </div>
+      <div class="text-h5 text-weight-bold">{{ pageTitle }}</div>
     </div>
 
     <section v-for="section in cardSections" :key="section.id" class="overview-card-section">
       <div class="overview-card-section__heading">
-        <div>
-          <div class="text-subtitle1 text-weight-bold">{{ section.title }}</div>
-          <div class="text-caption text-muted">{{ section.caption }}</div>
-        </div>
+        <div class="text-subtitle1 text-weight-bold">{{ section.title }}</div>
         <q-btn
           v-if="section.id === 'latest' && showDesktopFocusLayout"
           flat
@@ -448,9 +442,6 @@ const scopedProject = computed(() =>
   projects.value.find((project) => project.id === projectScopeId.value),
 );
 const pageTitle = computed(() => scopedProject.value?.name ?? '总揽');
-const pageCaption = computed(() =>
-  showDesktopFocusLayout.value ? '最新卡片' : '最新卡片与历史卡片',
-);
 const sessionsRoute = computed(() =>
   projectScopeId.value
     ? { name: 'sessions', query: { projectId: projectScopeId.value, scope: 'closed' } }
@@ -460,14 +451,12 @@ const cardSections = computed(() => {
   const latestSection = {
     id: 'latest',
     title: '最新',
-    caption: '未关闭的卡片，按最近操作倒序',
     cards: latestCards.value,
     showMore: false,
   };
   const historySection = {
     id: 'history',
     title: '历史',
-    caption: '已关闭的卡片，按最近操作倒序',
     cards: historyCards.value,
     showMore: hasMoreHistory.value,
   };
