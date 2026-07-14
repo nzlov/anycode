@@ -1121,40 +1121,26 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 		}
 		return advance, nil
 	}
-	decision, err := planner.NextNode(definition, run, contextValue)
-	if err != nil {
-		return sessiondomain.WorkflowAdvance{}, err
+	reason := strings.TrimSpace(failure.Message)
+	if reason == "" {
+		reason = "workflow node failed"
 	}
-	if decision.Blocked || decision.NextNodeID == "" {
-		reason := decision.Reason
-		if strings.TrimSpace(reason) == "" {
-			reason = "workflow node failed"
-		}
-		run.Status = domain.RunBlocked
-		run.Context.Values["blockedReason"] = reason
-		advance := sessiondomain.WorkflowAdvance{
-			WorkflowRunID: sessiondomain.WorkflowRunID(run.ID),
-			Status:        string(run.Status),
-			Blocked:       true,
-			BlockedReason: reason,
-		}
-		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
-			return repo.CompleteNodeAndAdvance(ctx, failedNodeRun, run, nil)
-		}); err != nil {
-			return sessiondomain.WorkflowAdvance{}, err
-		}
-		return advance, nil
+	run.Status = domain.RunBlocked
+	run.Context.Values["blockedReason"] = reason
+	run.Context.Values["blockedFailure"] = map[string]any{
+		"code":    failure.Code,
+		"message": failure.Message,
 	}
-	nextNode, err := findNode(definition.Graph, decision.NextNodeID)
-	if err != nil {
-		return sessiondomain.WorkflowAdvance{}, err
-	}
-	nextNodeRun, advance, err := s.nextNodeRunForNode(&run, nextNode, 1, now, true, false)
-	if err != nil {
-		return sessiondomain.WorkflowAdvance{}, err
+	advance := sessiondomain.WorkflowAdvance{
+		WorkflowRunID:  sessiondomain.WorkflowRunID(run.ID),
+		Status:         string(run.Status),
+		Blocked:        true,
+		BlockedReason:  reason,
+		BlockedCode:    failure.Code,
+		BlockedMessage: failure.Message,
 	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
-		return repo.CompleteNodeAndAdvance(ctx, failedNodeRun, run, &nextNodeRun)
+		return repo.CompleteNodeAndAdvance(ctx, failedNodeRun, run, nil)
 	}); err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -1279,6 +1265,12 @@ func workflowEventInputFromAdvance(advance sessiondomain.WorkflowAdvance) workfl
 	switch {
 	case advance.Blocked:
 		payload["reason"] = advance.BlockedReason
+		if strings.TrimSpace(advance.BlockedCode) != "" {
+			payload["failureCode"] = advance.BlockedCode
+		}
+		if strings.TrimSpace(advance.BlockedMessage) != "" {
+			payload["failureMessage"] = advance.BlockedMessage
+		}
 		return workflowEventInput{eventType: "workflow.blocked", payload: payload}
 	case advance.Close:
 		return workflowEventInput{eventType: "workflow.closed", payload: payload}

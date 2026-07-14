@@ -171,19 +171,55 @@ func (s *Session) clearQueue() {
 	s.Queue = QueueIntent{}
 }
 
+func (s Session) MatchesLifecycleSnapshot(expected Session) bool {
+	return s.ID == expected.ID &&
+		s.Status == expected.Status &&
+		s.UpdatedAt.Equal(expected.UpdatedAt) &&
+		queueIntentsEqual(s.Queue, expected.Queue) &&
+		timePointersEqual(s.QueuedAt, expected.QueuedAt) &&
+		closeReasonsEqual(s.CloseReason, expected.CloseReason)
+}
+
+func queueIntentsEqual(left QueueIntent, right QueueIntent) bool {
+	if left.Kind != right.Kind || left.Priority != right.Priority || left.InitialStart != right.InitialStart ||
+		left.ReviewAfterReuseFailure != right.ReviewAfterReuseFailure || left.WorkflowRunID != right.WorkflowRunID ||
+		left.Prompt != right.Prompt || left.ResumeCodexSessionID != right.ResumeCodexSessionID ||
+		left.ResumeOfProcessRunID != right.ResumeOfProcessRunID || left.AnswerBatchID != right.AnswerBatchID {
+		return false
+	}
+	if left.NodeRunID == nil || right.NodeRunID == nil {
+		return left.NodeRunID == nil && right.NodeRunID == nil
+	}
+	return *left.NodeRunID == *right.NodeRunID
+}
+
+func timePointersEqual(left *time.Time, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right)
+}
+
+func closeReasonsEqual(left *CloseReason, right *CloseReason) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 var allowedStatusTransitions = map[Status][]Status{
-	StatusCreated:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusCreated:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusQueued:          {StatusStarting, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusClosed},
 	StatusStarting:        {StatusQueued, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
 	StatusRunning:         {StatusQueued, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusWaitingUser:     {StatusQueued, StatusRunning, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
-	StatusWaitingApproval: {StatusQueued, StatusStarting, StatusRunning, StatusWaitingUser, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusWaitingApproval: {StatusQueued, StatusStarting, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusStopping:        {StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
-	StatusStopped:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusStopped:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusResumeFailed:    {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
-	StatusFailed:          {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusBlocked, StatusCompleted, StatusClosed},
-	StatusBlocked:         {StatusClosed},
-	StatusCompleted:       {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusFailed, StatusBlocked, StatusClosed},
+	StatusFailed:          {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusBlocked:         {StatusStopping, StatusClosed},
+	StatusCompleted:       {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusClosed},
 	StatusClosed:          {},
 }
 
@@ -505,6 +541,8 @@ type WorkflowAdvance struct {
 	Completed        bool
 	Blocked          bool
 	BlockedReason    string
+	BlockedCode      string
+	BlockedMessage   string
 }
 
 type WorkflowMerge struct {

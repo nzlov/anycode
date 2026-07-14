@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +69,15 @@ func TestProjectRepositoryWithLocalSQLite(t *testing.T) {
 	}
 	if found.DefaultWorkflowID == nil || *found.DefaultWorkflowID != workflowID {
 		t.Fatalf("default workflow mismatch: %#v", found.DefaultWorkflowID)
+	}
+}
+
+func TestSQLiteDSNUsesImmediateTransactionsAndBusyTimeout(t *testing.T) {
+	dsn := withForeignKeys("/tmp/anycode.db")
+	for _, option := range []string{"_fk=1", "_txlock=immediate", "_pragma=busy_timeout(5000)"} {
+		if !strings.Contains(dsn, option) {
+			t.Fatalf("dsn %q does not contain %q", dsn, option)
+		}
 	}
 }
 

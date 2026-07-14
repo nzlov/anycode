@@ -266,15 +266,25 @@ func isRemoteLibSQLURL(url string) bool {
 }
 
 func withForeignKeys(dsn string) string {
-	if strings.Contains(dsn, "_fk=") {
-		return dsn
-	}
 	if !strings.HasPrefix(dsn, "file:") && dsn != ":memory:" {
 		dsn = "file:" + dsn
 	}
+	if !strings.Contains(dsn, "_fk=") {
+		dsn = appendSQLiteDSNOption(dsn, "_fk=1")
+	}
+	if !strings.Contains(dsn, "_txlock=") {
+		dsn = appendSQLiteDSNOption(dsn, "_txlock=immediate")
+	}
+	if !strings.Contains(strings.ToLower(dsn), "busy_timeout") {
+		dsn = appendSQLiteDSNOption(dsn, "_pragma=busy_timeout(5000)")
+	}
+	return dsn
+}
+
+func appendSQLiteDSNOption(dsn string, option string) string {
 	sep := "?"
 	if strings.Contains(dsn, "?") {
 		sep = "&"
 	}
-	return dsn + sep + "_fk=1"
+	return dsn + sep + option
 }
