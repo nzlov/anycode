@@ -3797,7 +3797,7 @@ func transitionSessionToWaitingApproval(session *domain.Session, initialStart bo
 	if err := transitionSession(session, domain.StatusWaitingApproval, now); err != nil {
 		return err
 	}
-	// GLUE: InitialStart remains in QueueIntent for prompt guidance; remove when workflow state owns it.
+	// GLUE: InitialStart survives approval for first-execution validation; remove when workflow state owns it.
 	session.Queue = domain.QueueIntent{InitialStart: initialStart}
 	return nil
 }
@@ -3808,9 +3808,6 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	prompt := strings.TrimSpace(options.prompt)
-	if options.initialStart {
-		prompt = promptWithSessionGuidance(prompt, session)
-	}
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
@@ -3828,7 +3825,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		ProcessRunID:    runID,
 		SessionID:       processdomain.SessionID(session.ID),
 		Workdir:         workdir,
-		Prompt:          promptWithAttachments(prompt, attachmentPaths),
+		Prompt:          promptWithAttachments(promptWithAnyCodeGuidance(prompt, session), attachmentPaths),
 		Model:           strings.TrimSpace(session.Config.CodexModel),
 		ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
 		PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
@@ -3915,26 +3912,15 @@ func joinPromptParts(parts ...string) string {
 }
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
-const answerUserPromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。"
-const worktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
+const anyCodePromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。\n\nAnyCode 卡片的 TODO List 仅来自 Codex 的结构化计划事件。处理包含多个可执行步骤的任务时，必须调用 `update_plan` 创建计划，并在步骤状态变化后持续调用 `update_plan` 更新状态；不要只在回复中输出 Markdown checklist。单步骤任务或纯问答无需创建计划。"
+const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 
-func promptWithSessionGuidance(prompt string, session domain.Session) string {
-	prompt = promptWithAnswerUserGuidance(prompt)
-	if strings.TrimSpace(session.BaseBranch) == "" || strings.Contains(prompt, worktreePromptGuidance) {
-		return prompt
+func promptWithAnyCodeGuidance(prompt string, session domain.Session) string {
+	guidance := anyCodePromptGuidance
+	if strings.TrimSpace(session.BaseBranch) != "" {
+		guidance += "\n\n" + managedWorktreePromptGuidance
 	}
-	return prompt + "\n\n" + worktreePromptGuidance
-}
-
-func promptWithAnswerUserGuidance(prompt string) string {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		return answerUserPromptGuidance
-	}
-	if strings.Contains(prompt, answerUserPromptGuidance) {
-		return prompt
-	}
-	return prompt + "\n\n" + answerUserPromptGuidance
+	return joinPromptParts(prompt, guidance)
 }
 
 func rebuiltSessionPrompt(session domain.Session, nodePrompt string, reviewAfterReuseFailure bool, appends []domain.PromptAppend) string {
