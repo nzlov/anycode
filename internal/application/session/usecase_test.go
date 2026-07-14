@@ -972,7 +972,7 @@ func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T
 	}
 }
 
-func TestRestartedWorkflowNodePromptDoesNotRepeatAnswerUserGuidance(t *testing.T) {
+func TestRestartedWorkflowNodePromptIncludesUnifiedAnyCodeGuidance(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -981,6 +981,7 @@ func TestRestartedWorkflowNodePromptDoesNotRepeatAnswerUserGuidance(t *testing.T
 		Requirement:  "ship feature",
 		Mode:         domain.ModeWorkflow,
 		Status:       domain.StatusStopped,
+		BaseBranch:   "main",
 		WorktreePath: "/workspace/project-1",
 	}
 	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
@@ -1021,8 +1022,10 @@ func TestRestartedWorkflowNodePromptDoesNotRepeatAnswerUserGuidance(t *testing.T
 	if !strings.Contains(prompt, "Run workflow node") {
 		t.Fatalf("prompt missing workflow node prompt: %q", prompt)
 	}
-	if strings.Contains(prompt, answerUserPromptGuidance) {
-		t.Fatalf("restarted workflow prompt should not repeat answer_user guidance: %q", prompt)
+	for _, want := range []string{"`answer_user`", "`update_plan`", "不得删除、移动、重建或清理当前工作树"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("restarted workflow prompt missing unified AnyCode guidance %q: %q", want, prompt)
+		}
 	}
 }
 
@@ -1519,7 +1522,7 @@ func TestRestartedWorkflowExprDoesNotMarkNextCodexInitial(t *testing.T) {
 	if _, err := service.DrainQueuedSessions(ctx); err != nil {
 		t.Fatalf("DrainQueuedSessions() error = %v", err)
 	}
-	if codex.startInput.Prompt != "Build after expr" {
+	if codex.startInput.Prompt != promptWithAnyCodeGuidance("Build after expr", repo.sessions["session-1"]) {
 		t.Fatalf("restarted expr prompt = %q", codex.startInput.Prompt)
 	}
 }
@@ -2279,7 +2282,7 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 	if _, err := service.DrainQueuedSessions(ctx); err != nil {
 		t.Fatalf("DrainQueuedSessions() error = %v", err)
 	}
-	if codex.startInput.Prompt != "Verify build" {
+	if codex.startInput.Prompt != promptWithAnyCodeGuidance("Verify build", repo.sessions["session-1"]) {
 		t.Fatalf("restarted workflow prompt = %q", codex.startInput.Prompt)
 	}
 	consumerDone, ok := service.processConsumerDone(codex.startInput.ProcessRunID)
@@ -3065,7 +3068,7 @@ func TestCreateWorkflowSessionRetriesWhenCodexStartFailsBeforeMaxAttempts(t *tes
 	if processes.created[1].NodeRunID == nil || *processes.created[1].NodeRunID != "node-run-2" {
 		t.Fatalf("second process run = %#v", processes.created[1])
 	}
-	if len(codex.startInputs) != 2 || codex.startInputs[1].Prompt != "Retry workflow node" {
+	if len(codex.startInputs) != 2 || codex.startInputs[1].Prompt != promptWithAnyCodeGuidance("Retry workflow node", repo.sessions["session-1"]) {
 		t.Fatalf("codex start inputs = %#v", codex.startInputs)
 	}
 }
@@ -4242,7 +4245,7 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 	if codex.resumeInput.Prompt != "only this new instruction\n\nAttached files available on disk:\n- "+newPath {
 		t.Fatalf("codex resume prompt = %q", codex.resumeInput.Prompt)
 	}
-	if strings.Contains(codex.resumeInput.Prompt, answerUserPromptGuidance) || strings.Contains(codex.resumeInput.Prompt, worktreePromptGuidance) {
+	if strings.Contains(codex.resumeInput.Prompt, anyCodePromptGuidance) || strings.Contains(codex.resumeInput.Prompt, managedWorktreePromptGuidance) {
 		t.Fatalf("codex resume prompt should not repeat session guidance: %q", codex.resumeInput.Prompt)
 	}
 	if strings.Contains(codex.resumeInput.Prompt, "/data/attachments/sessions/session-1/notes.md") {
@@ -4502,8 +4505,11 @@ func TestAppendPromptRebuiltStartSendsPromptToCodexOnce(t *testing.T) {
 	if strings.Contains(prompt, "当前流程节点提示词") {
 		t.Fatalf("chat rebuilt prompt should not wrap itself as node prompt: %q", prompt)
 	}
-	if strings.Contains(prompt, answerUserPromptGuidance) || strings.Contains(prompt, worktreePromptGuidance) {
-		t.Fatalf("chat rebuilt prompt should not repeat session guidance: %q", prompt)
+	if !strings.Contains(prompt, anyCodePromptGuidance) {
+		t.Fatalf("chat rebuilt start prompt missing TODO guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, managedWorktreePromptGuidance) {
+		t.Fatalf("git chat rebuilt prompt missing worktree guidance: %q", prompt)
 	}
 	for _, want := range []string{
 		"原始需求：\noriginal requirement",
@@ -5751,7 +5757,7 @@ func TestStartSessionCreatesProcessRunAndMarksRunning(t *testing.T) {
 	if processes.runningID != "process-run-1" || processes.runningPID != 1234 {
 		t.Fatalf("running process = id %q pid %d", processes.runningID, processes.runningPID)
 	}
-	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != promptWithAnswerUserGuidance("implement session") || !codex.startInput.FastMode {
+	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != promptWithAnyCodeGuidance("implement session", repo.sessions["session-1"]) || !codex.startInput.FastMode {
 		t.Fatalf("codex start input = %#v", codex.startInput)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusRunning {
@@ -5791,6 +5797,15 @@ func TestStartSessionPromptMentionsAnswerUserGuidance(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "不要使用 `request_user_input`") {
 		t.Fatalf("prompt should tell Codex not to use request_user_input for AnyCode questions: %q", prompt)
+	}
+	if !strings.Contains(prompt, "`update_plan`") {
+		t.Fatalf("prompt missing structured TODO tool guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "不要只在回复中输出 Markdown checklist") {
+		t.Fatalf("prompt should distinguish structured TODO updates from Markdown: %q", prompt)
+	}
+	if strings.Contains(prompt, managedWorktreePromptGuidance) {
+		t.Fatalf("non-git session prompt should not include worktree guidance: %q", prompt)
 	}
 }
 
@@ -6954,7 +6969,7 @@ func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
 	if codex.startInput.SessionID != "high-session" {
 		t.Fatalf("started session = %q, want high-session", codex.startInput.SessionID)
 	}
-	if codex.startInput.Prompt != promptWithSessionGuidance("high priority", repo.sessions["high-session"]) {
+	if codex.startInput.Prompt != promptWithAnyCodeGuidance("high priority", repo.sessions["high-session"]) {
 		t.Fatalf("initial queued prompt = %q", codex.startInput.Prompt)
 	}
 	if repo.sessions["high-session"].Status != domain.StatusRunning || repo.sessions["low-session"].Status != domain.StatusQueued {
