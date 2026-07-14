@@ -295,6 +295,10 @@ type workflowApprovalRepositoryRunner interface {
 	SubmitApprovalForSessionWithRepositories(ctx context.Context, input domain.WorkflowApprovalInput, repo workflowdomain.Repository, events eventdomain.Store) (domain.WorkflowApprovalResult, []eventdomain.DomainEvent, error)
 }
 
+type workflowResumeFailureRepositoryRunner interface {
+	MarkResumeFailedForSessionWithRepositories(ctx context.Context, input domain.WorkflowResumeFailureInput, repo workflowdomain.Repository, events eventdomain.Store) (domain.WorkflowRunSnapshot, []eventdomain.DomainEvent, error)
+}
+
 type Option func(*Service)
 
 func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentStore) Option {
@@ -1986,6 +1990,8 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 	if s.workflows == nil {
 		return DTO{}, errors.New("session workflow starter is required for workflow mode")
 	}
+	// A new WorkflowRun starts a new Codex conversation; nodes inside that run reuse it.
+	session.CodexSessionID = ""
 	start, err := s.workflows.StartForSession(ctx, domain.WorkflowStartInput{
 		ProjectID:            session.ProjectID,
 		SessionID:            session.ID,
@@ -2991,6 +2997,7 @@ type codexStartOptions struct {
 	prompt                  string
 	promptAppendIDs         []string
 	workflowJSONRetry       bool
+	resumeAcknowledged      bool
 	reviewAfterReuseFailure bool
 	initialStart            bool
 }
@@ -4029,6 +4036,9 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if results, ok := workflowResultsFromEvent(event); ok {
 				workflowResults = results
 			}
+			if codexEventAcknowledgesPrompt(event) {
+				options.resumeAcknowledged = true
+			}
 			if event.Type == "process.exit" {
 				continue
 			}
@@ -4331,6 +4341,29 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 			}
 			return current, false, nil
 		}
+	}
+	if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil &&
+		options.resumeCodexSessionID != "" && !options.resumeAcknowledged &&
+		current.Status != domain.StatusStopping && current.Status != domain.StatusStopped && current.Status != domain.StatusClosed {
+		message := strings.TrimSpace(exitResult.FailureReason)
+		if message == "" {
+			message = "Codex resume exited before acknowledging the workflow node prompt"
+		}
+		resumeFailureResult := exitResult
+		resumeFailureResult.FailureReason = message
+		inputs := []sessionEventInput{
+			{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, resumeFailureResult)},
+			{eventType: "process.resume_failed", payload: map[string]any{
+				"processRunId": string(handle.ProcessRunID), "reason": message,
+			}},
+			{eventType: "session.resume_failed", payload: map[string]any{
+				"processRunId": string(handle.ProcessRunID), "reason": message,
+			}},
+		}
+		if err := s.persistWorkflowResumeFailure(ctx, current, handle.ProcessRunID, resumeFailureResult, message, inputs); err != nil {
+			return domain.Session{}, false, err
+		}
+		return current, false, nil
 	}
 	if current.Mode == domain.ModeWorkflow && options.workflowRunID != "" && options.nodeRunID != nil {
 		workflowExitInput := workflowProcessExitInput(handle, options, exitResult, workflowResults)
@@ -4710,17 +4743,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		}
 		return toDTO(session), nil
 	default:
-		options := codexStartOptions{
-			workflowRunID:           advance.WorkflowRunID,
-			nodeRunID:               workflowNodeRunID(advance.NodeRunID),
-			prompt:                  advance.Prompt,
-			workflowJSONRetry:       advance.RequireJSONRetry,
-			reviewAfterReuseFailure: advanceOptions.forceNewCodexSession,
-			initialStart:            initialStart,
-		}
-		if session.CodexSessionID != "" && !advanceOptions.forceNewCodexSession {
-			options.resumeCodexSessionID = session.CodexSessionID
-		}
+		options := workflowCodexStartOptions(session, advance, advanceOptions)
 		dto, err := s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
 		if err != nil {
 			return s.handleWorkflowNodeFailure(ctx, session, advance.WorkflowRunID, advance.NodeRunID, "codex_start_failed", err.Error())
@@ -5657,30 +5680,9 @@ func (s *Service) markProcessExitedWithSessionEventsAndSettlement(ctx context.Co
 	var resetBatches []questiondomain.Batch
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
-				return fmt.Errorf("mark process exited: %w", err)
-			}
-			if repo, ok := tx.Questions().(questiondomain.AgentRepository); ok {
-				batches, err := repo.ResetDeliveryAwaitingResumeByProcessRun(ctx, questiondomain.ProcessRunID(runID))
-				if err != nil {
-					return err
-				}
-				resetBatches = batches
-			}
-			if err := settlePromptAppends(ctx, tx.Sessions(), runID, result, settlement); err != nil {
-				return err
-			}
-			if saveSession {
-				if err := tx.Sessions().Save(ctx, session); err != nil {
-					return fmt.Errorf("save session: %w", err)
-				}
-			}
-			for _, event := range events {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-			}
-			return nil
+			var err error
+			resetBatches, err = persistProcessExitInTx(ctx, tx, runID, result, session, saveSession, events, settlement)
+			return err
 		}); err != nil {
 			return err
 		}
@@ -5712,6 +5714,82 @@ func (s *Service) markProcessExitedWithSessionEventsAndSettlement(ctx context.Co
 		s.publishSessionEvent(ctx, event)
 	}
 	return nil
+}
+
+func (s *Service) persistWorkflowResumeFailure(ctx context.Context, session domain.Session, runID processdomain.RunID, result processdomain.ExitResult, message string, inputs []sessionEventInput) error {
+	runner, ok := s.workflows.(workflowResumeFailureRepositoryRunner)
+	if s.uow == nil || !ok {
+		return errors.New("workflow resume failure requires transactional workflow repository runner")
+	}
+	if err := transitionSession(&session, domain.StatusResumeFailed, result.FinishedAt); err != nil {
+		return err
+	}
+	events, err := s.newSessionEvents(session, inputs)
+	if err != nil {
+		return err
+	}
+	var workflowEvents []eventdomain.DomainEvent
+	var resetBatches []questiondomain.Batch
+	err = s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		var err error
+		resetBatches, err = persistProcessExitInTx(ctx, tx, runID, result, session, true, events, promptAppendSettlementRelease)
+		if err != nil {
+			return err
+		}
+		_, recorded, err := runner.MarkResumeFailedForSessionWithRepositories(ctx, domain.WorkflowResumeFailureInput{
+			SessionID: session.ID,
+			Code:      "resume_failed",
+			Message:   message,
+		}, tx.Workflows(), tx.Events())
+		if err != nil {
+			return fmt.Errorf("mark workflow resume failed: %w", err)
+		}
+		workflowEvents = recorded
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, event := range events {
+		s.publishSessionEvent(ctx, event)
+	}
+	for _, event := range workflowEvents {
+		s.publishSessionEvent(ctx, event)
+	}
+	if s.questions != nil {
+		for _, batch := range resetBatches {
+			s.publishQuestionBatch(questionBatchDTO(batch))
+		}
+	}
+	return nil
+}
+
+func persistProcessExitInTx(ctx context.Context, tx port.Tx, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, events []eventdomain.DomainEvent, settlement promptAppendSettlement) ([]questiondomain.Batch, error) {
+	if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
+		return nil, fmt.Errorf("mark process exited: %w", err)
+	}
+	var resetBatches []questiondomain.Batch
+	if repo, ok := tx.Questions().(questiondomain.AgentRepository); ok {
+		batches, err := repo.ResetDeliveryAwaitingResumeByProcessRun(ctx, questiondomain.ProcessRunID(runID))
+		if err != nil {
+			return nil, err
+		}
+		resetBatches = batches
+	}
+	if err := settlePromptAppends(ctx, tx.Sessions(), runID, result, settlement); err != nil {
+		return nil, err
+	}
+	if saveSession {
+		if err := tx.Sessions().Save(ctx, session); err != nil {
+			return nil, fmt.Errorf("save session: %w", err)
+		}
+	}
+	for _, event := range events {
+		if err := tx.Events().Append(ctx, event); err != nil {
+			return nil, err
+		}
+	}
+	return resetBatches, nil
 }
 
 func settlePromptAppends(ctx context.Context, repo domain.Repository, runID processdomain.RunID, result processdomain.ExitResult, settlement promptAppendSettlement) error {
@@ -6636,13 +6714,8 @@ func (s *Service) submitWorkflowApprovalInTx(ctx context.Context, input SubmitWo
 }
 
 func (s *Service) queueApprovalAdvance(ctx context.Context, tx port.Tx, session domain.Session, advance domain.WorkflowAdvance) (domain.Session, eventdomain.DomainEvent, bool, error) {
-	options := codexStartOptions{
-		workflowRunID: advance.WorkflowRunID,
-		nodeRunID:     workflowNodeRunID(advance.NodeRunID),
-		prompt:        advance.Prompt,
-		initialStart:  session.Queue.InitialStart,
-	}
-	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, queuePriorityForSession(session), domain.QueueKindStart)
+	options := workflowCodexStartOptions(session, advance, workflowAdvanceOptions{})
+	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, queuePriorityForSession(session), queueKindForStartOptions(options))
 	if err != nil {
 		return domain.Session{}, eventdomain.DomainEvent{}, false, err
 	}
@@ -6673,6 +6746,21 @@ func (s *Service) queueApprovalRejectionPrompt(ctx context.Context, tx port.Tx, 
 		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("append prompt: %w", err)
 	}
 	return s.queueApprovalAdvance(ctx, tx, session, advance)
+}
+
+func workflowCodexStartOptions(session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) codexStartOptions {
+	options := codexStartOptions{
+		workflowRunID:           advance.WorkflowRunID,
+		nodeRunID:               workflowNodeRunID(advance.NodeRunID),
+		prompt:                  advance.Prompt,
+		workflowJSONRetry:       advance.RequireJSONRetry,
+		reviewAfterReuseFailure: advanceOptions.forceNewCodexSession,
+		initialStart:            advanceOptions.initialStart || session.Queue.InitialStart,
+	}
+	if strings.TrimSpace(session.CodexSessionID) != "" && !advanceOptions.forceNewCodexSession {
+		options.resumeCodexSessionID = session.CodexSessionID
+	}
+	return options
 }
 
 func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, error) {

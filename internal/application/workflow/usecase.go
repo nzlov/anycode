@@ -606,6 +606,23 @@ func (s *Service) MarkResumeFailedForSession(ctx context.Context, input sessiond
 	return toSessionWorkflowRunSnapshot(run), nil
 }
 
+func (s *Service) MarkResumeFailedForSessionWithRepositories(ctx context.Context, input sessiondomain.WorkflowResumeFailureInput, repo domain.Repository, events eventdomain.Store) (sessiondomain.WorkflowRunSnapshot, []eventdomain.DomainEvent, error) {
+	if repo == nil {
+		return sessiondomain.WorkflowRunSnapshot{}, nil, errors.New("workflow repository is required")
+	}
+	recorder := &workflowEventRecorder{store: events}
+	clone := *s
+	clone.repo = repo
+	clone.uow = nil
+	clone.events = recorder
+	clone.publisher = nil
+	result, err := clone.MarkResumeFailedForSession(ctx, input)
+	if err != nil {
+		return sessiondomain.WorkflowRunSnapshot{}, nil, err
+	}
+	return result, append([]eventdomain.DomainEvent(nil), recorder.events...), nil
+}
+
 func (s *Service) ResumeCurrentNodeForSession(ctx context.Context, input sessiondomain.WorkflowResumeCurrentNodeInput) (sessiondomain.WorkflowAdvance, error) {
 	if s == nil {
 		return sessiondomain.WorkflowAdvance{}, errors.New("workflow usecase: nil service")
