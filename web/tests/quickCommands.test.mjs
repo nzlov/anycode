@@ -71,7 +71,13 @@ test('shared Codex prompt composer owns the quick reply menu for both prompt sur
   const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
   const detailSource = readSource('../src/pages/SessionDetailPage.vue');
 
-  assert.match(composerSource, /label="快捷回复"/);
+  assert.match(composerSource, /:label="compact \? undefined : '快捷回复'"/);
+  assert.match(composerSource, /:aria-label="compact \? '快捷回复' : undefined"/);
+  assert.match(composerSource, /<q-tooltip v-if="compact">快捷回复<\/q-tooltip>/);
+  assert.match(
+    composerSource,
+    /:class="compact \? 'quick-reply-btn app-icon-btn' : 'quick-reply-btn app-command-btn'"/,
+  );
   assert.match(composerSource, /appendQuickCommand/);
   assert.match(composerSource, /command\.content/);
   assert.match(composableSource, /listQuickCommands/);

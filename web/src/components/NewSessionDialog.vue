@@ -15,11 +15,10 @@
       :inert="branchesLoading"
       :aria-busy="branchesLoading || runConfigLoading"
     >
-      <q-card-section class="new-session-dialog__header row items-center q-pb-sm">
+      <q-card-section v-if="!panel" class="new-session-dialog__header row items-center q-pb-sm">
         <div class="text-subtitle1 text-weight-bold">新建卡片</div>
         <q-space />
         <q-btn
-          v-if="!panel"
           v-close-popup
           flat
           round
@@ -33,13 +32,14 @@
         </q-btn>
       </q-card-section>
 
-      <q-separator />
+      <q-separator v-if="!panel" />
 
       <q-card-section class="new-session-body">
-        <div class="new-session-grid">
+        <div class="new-session-grid new-session-context">
           <q-select
             v-model="projectId"
-            outlined
+            :outlined="!panel"
+            :borderless="panel"
             dense
             label="项目"
             emit-value
@@ -50,7 +50,8 @@
           <div v-if="selectedProject?.isGit" class="branch-picker">
             <q-select
               v-model="branch"
-              outlined
+              :outlined="!panel"
+              :borderless="panel"
               dense
               label="基础分支"
               class="branch-picker__select"
@@ -74,7 +75,8 @@
           </div>
           <q-select
             v-model="priority"
-            outlined
+            :outlined="!panel"
+            :borderless="panel"
             dense
             label="优先级"
             class="new-session-priority"
@@ -88,6 +90,7 @@
             v-model="mode"
             spread
             no-caps
+            :dense="panel"
             class="new-session-mode"
             toggle-color="dark"
             :disable="creating || workflowAvailabilityLoading"
@@ -122,8 +125,9 @@
           v-model:effort="effort"
           v-model:permission="permission"
           v-model:fast="fast"
-          title="提示词"
+          :title="panel ? '' : '提示词'"
           :compact="panel"
+          :show-badge="!panel"
           :disabled="creating || runConfigLoading || Boolean(runConfigError)"
         >
           <template #actions>
