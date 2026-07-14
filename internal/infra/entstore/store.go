@@ -75,11 +75,53 @@ func Open(ctx context.Context, opts OpenOptions) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
-	drv := entsql.OpenDB(dialect.SQLite, db)
+	drv := newImmediateTransactionDriver(db)
 	return &Store{
 		client: ent.NewClient(ent.Driver(drv)),
 		db:     db,
 	}, nil
+}
+
+type immediateTransactionDriver struct {
+	dialect.Driver
+	db *sql.DB
+}
+
+func newImmediateTransactionDriver(db *sql.DB) dialect.Driver {
+	return &immediateTransactionDriver{
+		Driver: entsql.OpenDB(dialect.SQLite, db),
+		db:     db,
+	}
+}
+
+func (d *immediateTransactionDriver) Tx(ctx context.Context) (dialect.Tx, error) {
+	conn, err := d.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return nil, errors.Join(err, conn.Close())
+	}
+	drv := entsql.NewDriver(dialect.SQLite, entsql.Conn{ExecQuerier: conn})
+	return &immediateTransaction{ExecQuerier: drv, conn: conn}, nil
+}
+
+type immediateTransaction struct {
+	dialect.ExecQuerier
+	conn *sql.Conn
+}
+
+func (t *immediateTransaction) Commit() error {
+	return t.finish("COMMIT")
+}
+
+func (t *immediateTransaction) Rollback() error {
+	return t.finish("ROLLBACK")
+}
+
+func (t *immediateTransaction) finish(statement string) error {
+	_, err := t.conn.ExecContext(context.Background(), statement)
+	return errors.Join(err, t.conn.Close())
 }
 
 func (s *Store) Client() *ent.Client {

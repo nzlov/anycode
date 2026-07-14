@@ -911,51 +911,64 @@ func TestFailNodeRetriesCurrentNodeBeforeMaxAttempts(t *testing.T) {
 	}
 }
 
-func TestFailNodeUsesFailureBranchAfterRetriesExhausted(t *testing.T) {
+func TestFailNodeBlocksAfterRetriesExhaustedWithoutEvaluatingEdges(t *testing.T) {
 	ctx := context.Background()
-	repo := newFakeRepository()
-	repo.definitions["workflow-1"] = domain.Definition{
-		ID:        "workflow-1",
-		ProjectID: "project-1",
-		Name:      "default",
-		Graph: domain.Graph{
-			Nodes: []domain.Node{
-				{ID: "build", Type: "codex", Title: "Build", Retry: domain.RetryConfig{MaxAttempts: 2}},
-				{ID: "repair", Type: "codex", Title: "Repair", Prompt: "Repair failure"},
-			},
-			Edges: []domain.Edge{{From: "build", To: "repair", Condition: domain.Condition{Field: "last.status", Op: "eq", Value: "failed"}}},
+	cases := []struct {
+		name   string
+		target domain.Node
+		edge   domain.Edge
+	}{
+		{
+			name:   "conditional failure edge",
+			target: domain.Node{ID: "repair", Type: "codex", Title: "Repair"},
+			edge:   domain.Edge{From: "build", To: "repair", Condition: domain.Condition{Field: "last.status", Op: "eq", Value: "failed"}},
+		},
+		{
+			name:   "unconditional edge",
+			target: domain.Node{ID: "push", Type: "codex", Title: "Push"},
+			edge:   domain.Edge{From: "build", To: "push"},
+		},
+		{
+			name:   "close edge",
+			target: domain.Node{ID: "close", Type: "close", Title: "Close"},
+			edge:   domain.Edge{From: "build", To: "close"},
 		},
 	}
-	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
-		SessionID:            "session-1",
-		WorkflowDefinitionID: "workflow-1",
-		Status:               domain.RunRunning,
-		CurrentNodeID:        "build",
-		Context:              domain.Context{Values: map[string]any{}},
-	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-2", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 2}}
-	service := New(repo)
-	service.now = func() time.Time { return time.Unix(11, 0).UTC() }
-	service.generateID = func() (string, error) { return "node-run-3", nil }
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newFakeRepository()
+			repo.definitions["workflow-1"] = domain.Definition{
+				ID: "workflow-1", ProjectID: "project-1", Name: "default",
+				Graph: domain.Graph{
+					Nodes: []domain.Node{{ID: "build", Type: "codex", Title: "Build", Retry: domain.RetryConfig{MaxAttempts: 2}}, tt.target},
+					Edges: []domain.Edge{tt.edge},
+				},
+			}
+			repo.runs = []domain.Run{{
+				ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
+				Status: domain.RunRunning, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}},
+			}}
+			repo.nodeRuns = []domain.NodeRun{{ID: "node-run-2", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 2}}
+			service := New(repo)
+			service.now = func() time.Time { return time.Unix(11, 0).UTC() }
 
-	got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-2",
-		Code:          "codex_start_failed",
-		Message:       "permanent failure",
-	})
-	if err != nil {
-		t.Fatalf("FailNode() error = %v", err)
-	}
-	if !got.RequiresCodex || got.NodeRunID == nil || *got.NodeRunID != "node-run-3" || got.CurrentNodeID != "repair" {
-		t.Fatalf("FailNode() = %#v", got)
-	}
-	if repo.runs[0].Status != domain.RunRunning || repo.runs[0].CurrentNodeID != "repair" {
-		t.Fatalf("run = %#v", repo.runs[0])
-	}
-	if repo.nodeRuns[0].Status != domain.NodeFailed || len(repo.nodeRuns) != 2 || repo.nodeRuns[1].NodeID != "repair" || repo.nodeRuns[1].Attempt != 1 {
-		t.Fatalf("node runs = %#v", repo.nodeRuns)
+			got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
+				WorkflowRunID: "workflow-run-1", NodeRunID: "node-run-2",
+				Code: "codex_start_failed", Message: "permanent failure",
+			})
+			if err != nil {
+				t.Fatalf("FailNode() error = %v", err)
+			}
+			if !got.Blocked || got.Close || got.RequiresCodex || got.BlockedReason != "permanent failure" {
+				t.Fatalf("FailNode() = %#v", got)
+			}
+			if repo.runs[0].Status != domain.RunBlocked || repo.runs[0].CurrentNodeID != "build" {
+				t.Fatalf("run = %#v", repo.runs[0])
+			}
+			if repo.nodeRuns[0].Status != domain.NodeFailed || len(repo.nodeRuns) != 1 {
+				t.Fatalf("node runs = %#v", repo.nodeRuns)
+			}
+		})
 	}
 }
 
@@ -1007,10 +1020,10 @@ func TestFailNodeUsesProvidedOutputForFailureBranchContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FailNode() error = %v", err)
 	}
-	if !got.RequiresCodex || got.NodeRunID == nil || *got.NodeRunID != "node-run-repair" || got.CurrentNodeID != "repair" {
+	if !got.Blocked || got.RequiresCodex || got.CurrentNodeID != "" {
 		t.Fatalf("FailNode() = %#v", got)
 	}
-	if repo.nodeRuns[0].Status != domain.NodeFailed || len(repo.nodeRuns) != 2 || repo.nodeRuns[1].NodeID != "repair" {
+	if repo.nodeRuns[0].Status != domain.NodeFailed || len(repo.nodeRuns) != 1 {
 		t.Fatalf("node runs = %#v", repo.nodeRuns)
 	}
 	results, ok := repo.runs[0].Context.Values["results"].(map[string]any)
@@ -1059,11 +1072,15 @@ func TestFailNodeBlocksWhenNoFailureBranchMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FailNode() error = %v", err)
 	}
-	if !got.Blocked || got.BlockedReason != "workflow node failed" {
+	if !got.Blocked || got.BlockedReason != "failed" || got.BlockedCode != "codex_start_failed" || got.BlockedMessage != "failed" {
 		t.Fatalf("FailNode() = %#v", got)
 	}
 	if repo.runs[0].Status != domain.RunBlocked {
 		t.Fatalf("run = %#v", repo.runs[0])
+	}
+	blockedFailure, ok := repo.runs[0].Context.Values["blockedFailure"].(map[string]any)
+	if !ok || blockedFailure["code"] != "codex_start_failed" || blockedFailure["message"] != "failed" {
+		t.Fatalf("blocked failure = %#v", repo.runs[0].Context.Values["blockedFailure"])
 	}
 }
 

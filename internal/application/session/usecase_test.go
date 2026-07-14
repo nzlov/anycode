@@ -816,7 +816,7 @@ func TestWorkflowAdvanceClosesRunningSessionWithoutActiveProcess(t *testing.T) {
 		t.Fatalf("close reason = %#v", saved.CloseReason)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 2 || gotEvents[0].Type != "session.stopped" || gotEvents[1].Type != "session.closed" {
+	if len(gotEvents) != 2 || gotEvents[0].Type != "session.closing" || gotEvents[1].Type != "session.closed" {
 		t.Fatalf("events = %#v", gotEvents)
 	}
 }
@@ -4187,6 +4187,82 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 	}
 }
 
+func TestCloseSessionRejectsExecutionClaimBeforeWorktreeCleanup(t *testing.T) {
+	ctx := context.Background()
+	databaseURL := filepath.Join(t.TempDir(), "anycode.db")
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: databaseURL})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	contender, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: databaseURL})
+	if err != nil {
+		t.Fatalf("open contender store: %v", err)
+	}
+	defer contender.Close()
+
+	now := time.Date(2026, 7, 14, 13, 0, 0, 0, time.UTC)
+	saved := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusStopped,
+		BaseBranch: "main", WorktreePath: "/data/worktrees/project-1/session-1", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Sessions().Save(ctx, saved); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	expected, err := store.Sessions().Find(ctx, saved.ID)
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	starting := expected
+	if err := starting.TransitionTo(domain.StatusStarting, now.Add(time.Second)); err != nil {
+		t.Fatalf("transition starting: %v", err)
+	}
+
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID: "project-1", Path: projectdomain.ProjectPath{Value: "/workspace/project-1"}, IsGit: true,
+	}
+	worktrees := newFakeWorktreeManager()
+	var claim port.ExecutionClaimResult
+	var claimErr error
+	worktrees.existsHook = func() {
+		claim, claimErr = contender.ClaimExecution(ctx, port.ExecutionClaimInput{
+			ExpectedSession: expected,
+			StartingSession: starting,
+			Run: processdomain.Run{
+				ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusStarting, StartedAt: now.Add(time.Second),
+			},
+		})
+	}
+	service := New(store.Sessions(), projects,
+		WithProcesses(store.Processes(), &fakeCodexProcess{}),
+		WithEvents(store.Events()),
+		WithUnitOfWork(store),
+		WithWorktrees(worktrees),
+	)
+	service.now = func() time.Time { return now.Add(2 * time.Second) }
+
+	closed, err := service.CloseSession(ctx, CloseSessionInput{SessionID: saved.ID})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if claimErr != nil {
+		t.Fatalf("ClaimExecution() error = %v", claimErr)
+	}
+	if claim.Status != port.ExecutionStale {
+		t.Fatalf("ClaimExecution() status = %q, want %q", claim.Status, port.ExecutionStale)
+	}
+	if _, found, err := store.Processes().FindActiveBySession(ctx, "session-1"); err != nil || found {
+		t.Fatalf("active process after close = %v, %v", found, err)
+	}
+	if closed.Status != domain.StatusClosed || len(worktrees.removed) != 1 {
+		t.Fatalf("closed session = %#v, removed = %#v", closed, worktrees.removed)
+	}
+}
+
 func TestCloseSessionKeepsSessionOpenWhenFinalSaveFailsAfterCleanup(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -4199,10 +4275,13 @@ func TestCloseSessionKeepsSessionOpenWhenFinalSaveFailsAfterCleanup(t *testing.T
 		WorktreeBaseCommit: "base",
 	}
 	repo.saveHook = func(session domain.Session) error {
-		if session.WorktreePath != "" || session.Status != domain.StatusClosed {
-			t.Fatalf("final save session = %#v", session)
+		if session.Status == domain.StatusClosed {
+			if session.WorktreePath != "" {
+				t.Fatalf("final save session = %#v", session)
+			}
+			return errors.New("save closed session failed")
 		}
-		return errors.New("save closed session failed")
+		return nil
 	}
 	projects := newFakeProjectRepository()
 	projects.projects["project-1"] = projectdomain.Project{
@@ -4225,8 +4304,8 @@ func TestCloseSessionKeepsSessionOpenWhenFinalSaveFailsAfterCleanup(t *testing.T
 		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
 	}
 	saved := repo.sessions["session-1"]
-	if saved.WorktreePath != "/data/worktrees/project-1/session-1" || saved.Status == domain.StatusClosed {
-		t.Fatalf("session should remain unchanged after final save failure: %#v", saved)
+	if saved.WorktreePath != "/data/worktrees/project-1/session-1" || saved.Status != domain.StatusStopping {
+		t.Fatalf("session should retain the close barrier after destructive cleanup: %#v", saved)
 	}
 }
 
@@ -4241,8 +4320,11 @@ func TestCloseSessionRetriesBranchCleanupAfterFinalSaveFailure(t *testing.T) {
 		WorktreePath:       "/data/worktrees/project-1/session-1",
 		WorktreeBaseCommit: "base",
 	}
-	repo.saveHook = func(domain.Session) error {
-		return errors.New("save closed session failed")
+	repo.saveHook = func(session domain.Session) error {
+		if session.Status == domain.StatusClosed {
+			return errors.New("save closed session failed")
+		}
+		return nil
 	}
 	projects := newFakeProjectRepository()
 	projects.projects["project-1"] = projectdomain.Project{
@@ -4381,7 +4463,7 @@ func TestCloseSessionDoesNotSaveClosedWhenWorktreeRemoveFails(t *testing.T) {
 	if repo.sessions["session-1"].Status == domain.StatusClosed {
 		t.Fatalf("session should not be closed after worktree remove failure: %#v", repo.sessions["session-1"])
 	}
-	if len(repo.saved) != 0 {
+	if len(repo.saved) != 2 || repo.sessions["session-1"].Status != domain.StatusStopped {
 		t.Fatalf("Save() calls = %#v", repo.saved)
 	}
 	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
@@ -4425,11 +4507,11 @@ func TestCloseSessionRecordsBranchDeleteFailureAndStillCloses(t *testing.T) {
 		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 1 || gotEvents[0].Type != "session.closed" || gotEvents[0].Payload["branchCleanupFailed"] != true {
+	if len(gotEvents) != 2 || gotEvents[0].Type != "session.closing" || gotEvents[1].Type != "session.closed" || gotEvents[1].Payload["branchCleanupFailed"] != true {
 		t.Fatalf("closed events = %#v", gotEvents)
 	}
-	if gotEvents[0].Payload["branchCleanupError"] != "delete branch failed" {
-		t.Fatalf("branch cleanup error = %#v", gotEvents[0].Payload)
+	if gotEvents[1].Payload["branchCleanupError"] != "delete branch failed" {
+		t.Fatalf("branch cleanup error = %#v", gotEvents[1].Payload)
 	}
 }
 
@@ -4546,7 +4628,7 @@ func TestCloseSessionStopsBeforeCleanupWhenQuestionCancellationFails(t *testing.
 	if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
 		t.Fatalf("cleanup ran after cancellation failure: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
 	}
-	if len(repo.saved) != 1 || repo.sessions["session-1"].Status != domain.StatusStopped {
+	if len(repo.saved) != 2 || repo.sessions["session-1"].Status != domain.StatusStopped {
 		t.Fatalf("session should remain stopped after cancellation failure: %#v", repo.sessions["session-1"])
 	}
 }
@@ -4624,7 +4706,12 @@ func TestCloseSessionWritesClosedEventAndClearsRemovedWorktree(t *testing.T) {
 	events := &fakeEventStore{}
 	service := New(repo, projects, WithWorktrees(worktrees), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
-	service.generateID = func() (domain.ID, error) { return "event-closed", nil }
+	ids := []domain.ID{"event-closing", "event-closed"}
+	service.generateID = func() (domain.ID, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
 
 	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1", Reason: domain.CloseReasonMergedClosed})
 	if err != nil {
@@ -4637,7 +4724,7 @@ func TestCloseSessionWritesClosedEventAndClearsRemovedWorktree(t *testing.T) {
 		t.Fatalf("removed worktrees = %#v", worktrees.removed)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 1 || gotEvents[0].Type != "session.closed" || gotEvents[0].Payload["reason"] != string(domain.CloseReasonMergedClosed) {
+	if len(gotEvents) != 2 || gotEvents[0].Type != "session.closing" || gotEvents[1].Type != "session.closed" || gotEvents[1].Payload["reason"] != string(domain.CloseReasonMergedClosed) {
 		t.Fatalf("events = %#v", gotEvents)
 	}
 }
@@ -4673,6 +4760,67 @@ func TestCloseSessionStopsActiveProcessBeforeClosing(t *testing.T) {
 	saved := repo.sessions["session-1"]
 	if saved.CloseReason == nil || *saved.CloseReason != domain.CloseReasonUserClosed {
 		t.Fatalf("CloseReason = %#v", saved.CloseReason)
+	}
+}
+
+func TestCloseSessionStopsActiveProcessFromFailedStateBeforeCleanup(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusFailed,
+		BaseBranch: "main", WorktreePath: "/data/worktrees/project-1/session-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", IsGit: true}
+	worktrees := newFakeWorktreeManager()
+	processes.markExitedDoneHook = func() {
+		if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
+			t.Fatalf("worktree cleanup ran before process exit: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
+		}
+	}
+	service := New(repo, projects, WithProcesses(processes, &fakeCodexProcess{}), WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(31, 0).UTC() }
+
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.Status != domain.StatusClosed {
+		t.Fatalf("CloseSession() status = %q", got.Status)
+	}
+	if processes.exitedID != "process-run-1" {
+		t.Fatalf("process exit id = %q", processes.exitedID)
+	}
+	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) {
+		t.Fatalf("removed worktrees = %#v", worktrees.removed)
+	}
+}
+
+func TestCloseRequiresStopForActiveProcessRegardlessOfSessionStatus(t *testing.T) {
+	ctx := context.Background()
+	for _, status := range []domain.Status{
+		domain.StatusFailed,
+		domain.StatusBlocked,
+		domain.StatusQueued,
+		domain.StatusRunning,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			processes := newFakeProcessRepository()
+			processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+			processes.hasActive = true
+			service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}))
+
+			requiresStop, err := closeRequiresStop(ctx, service, domain.Session{ID: "session-1", Status: status})
+			if err != nil {
+				t.Fatalf("closeRequiresStop() error = %v", err)
+			}
+			if !requiresStop {
+				t.Fatal("closeRequiresStop() = false, want true")
+			}
+		})
 	}
 }
 
@@ -5851,7 +5999,8 @@ func TestStartSessionQueuesWhenAgentLimitReached(t *testing.T) {
 	processes := newFakeProcessRepository()
 	processes.activeCount = 1
 	codex := &fakeCodexProcess{}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1))
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1), WithUnitOfWork(uow))
 	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
 
 	got, err := service.StartSession(ctx, "session-1")
@@ -6047,6 +6196,43 @@ func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
 	}
 	if repo.sessions["high-session"].Status != domain.StatusRunning || repo.sessions["low-session"].Status != domain.StatusQueued {
 		t.Fatalf("session statuses: high=%q low=%q", repo.sessions["high-session"].Status, repo.sessions["low-session"].Status)
+	}
+}
+
+func TestDrainQueuedSessionsConvergesQueueWhenProcessAlreadyActive(t *testing.T) {
+	ctx := context.Background()
+	queuedAt := time.Unix(41, 0).UTC()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusQueued,
+		CodexSessionID: "codex-session-1", WorktreePath: "/workspace/session-1", QueuedAt: &queuedAt,
+		Queue: domain.QueueIntent{
+			Kind: domain.QueueKindResume, Prompt: "resume current workflow node",
+			ResumeCodexSessionID: "codex-session-1", ResumeOfProcessRunID: "process-old",
+		},
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{
+		ID: "process-new", SessionID: "session-1", Status: processdomain.StatusRunning, CodexSessionID: "codex-session-1",
+	}
+	processes.hasActive = true
+	codex := &fakeCodexProcess{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithMaxConcurrentAgents(1))
+	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
+
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil {
+		t.Fatalf("DrainQueuedSessions() error = %v", err)
+	}
+	if started != 0 {
+		t.Fatalf("DrainQueuedSessions() = %d, want 0", started)
+	}
+	got := repo.sessions["session-1"]
+	if got.Status != domain.StatusRunning || got.Queue != (domain.QueueIntent{}) || got.QueuedAt != nil {
+		t.Fatalf("converged session = %#v", got)
+	}
+	if codex.resumeCalled || len(processes.created) != 0 {
+		t.Fatalf("duplicate execution launched: resume=%v created=%#v", codex.resumeCalled, processes.created)
 	}
 }
 
@@ -7715,7 +7901,12 @@ func TestLifecycleActionsUseSessionLocker(t *testing.T) {
 		WorktreePath: "/workspace/session-1",
 	}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
+	startStream := make(chan processdomain.CodexEvent)
+	resumeStream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{
+		startHandle:  processdomain.CodexHandle{PID: 1234},
+		eventStreams: []<-chan processdomain.CodexEvent{startStream, resumeStream},
+	}
 	locker := &fakeSessionLocker{}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithSessionLocker(locker))
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
@@ -7723,8 +7914,12 @@ func TestLifecycleActionsUseSessionLocker(t *testing.T) {
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
-	if !slices.Equal(locker.ids, []domain.ID{"session-1"}) {
+	if len(locker.ids) == 0 || locker.ids[len(locker.ids)-1] != "session-1" {
 		t.Fatalf("locked ids after start = %#v", locker.ids)
+	}
+	close(startStream)
+	if done, ok := service.processConsumerDone("process-run-1"); ok {
+		<-done
 	}
 
 	repo.sessions["session-1"] = domain.Session{
@@ -7737,23 +7932,33 @@ func TestLifecycleActionsUseSessionLocker(t *testing.T) {
 	repo.appends = []domain.PromptAppend{{ID: "append-1", SessionID: "session-1", Body: "continue", Status: domain.PromptAppendPending}}
 	codex.resumeHandle = processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}
 	service.generateID = func() (domain.ID, error) { return "process-run-2", nil }
+	lockedBeforeResume := len(locker.ids)
 	if _, err := service.ResumeSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
-	if !slices.Equal(locker.ids, []domain.ID{"session-1", "session-1"}) {
+	if len(locker.ids) <= lockedBeforeResume || locker.ids[len(locker.ids)-1] != "session-1" {
 		t.Fatalf("locked ids after resume = %#v", locker.ids)
 	}
 
 	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning}
 	processes.active = processdomain.Run{ID: "process-run-2", SessionID: "session-1", Status: processdomain.StatusRunning}
 	processes.hasActive = true
+	codex.stopHook = func(context.Context, processdomain.RunID) error {
+		close(resumeStream)
+		return nil
+	}
+	lockedBeforeStop := len(locker.ids)
 	if _, err := service.StopSession(ctx, "session-1"); err != nil {
 		t.Fatalf("StopSession() error = %v", err)
 	}
+	if len(locker.ids) <= lockedBeforeStop {
+		t.Fatalf("StopSession() did not use locker: %#v", locker.ids)
+	}
+	lockedBeforeClose := len(locker.ids)
 	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err != nil {
 		t.Fatalf("CloseSession() error = %v", err)
 	}
-	if !slices.Equal(locker.ids, []domain.ID{"session-1", "session-1", "session-1", "session-1"}) {
+	if len(locker.ids) <= lockedBeforeClose {
 		t.Fatalf("locked ids = %#v", locker.ids)
 	}
 }
@@ -7769,6 +7974,7 @@ func TestStartSessionUsesUnitOfWorkForProcessLifecycleEvents(t *testing.T) {
 		WorktreePath: "/workspace/session-1",
 	}
 	txRepo := newFakeRepository()
+	txRepo.sessions["session-1"] = repo.sessions["session-1"]
 	txProcesses := newFakeProcessRepository()
 	txEvents := &fakeEventStore{}
 	publisher := &fakeEventPublisher{}
@@ -7838,6 +8044,7 @@ func TestResumeFailureUsesUnitOfWorkForProcessEventAndSessionEvents(t *testing.T
 	}
 	repo.appends = []domain.PromptAppend{{ID: "append-1", SessionID: "session-1", Body: "retry", Status: domain.PromptAppendPending}}
 	txRepo := newFakeRepository()
+	txRepo.sessions["session-1"] = repo.sessions["session-1"]
 	txProcesses := newFakeProcessRepository()
 	txEvents := &fakeEventStore{}
 	publisher := &fakeEventPublisher{}
@@ -8865,6 +9072,7 @@ type fakeWorktreeManager struct {
 	removeErr         error
 	deleteBranchErr   error
 	statErr           error
+	existsHook        func()
 	createCalled      bool
 	createProjectPath string
 	createProjectID   domain.ProjectID
@@ -8926,6 +9134,11 @@ func (m *fakeWorktreeManager) HeadCommit(_ context.Context, path string, ref str
 }
 
 func (m *fakeWorktreeManager) Exists(_ context.Context, path string) (bool, error) {
+	if m.existsHook != nil {
+		hook := m.existsHook
+		m.existsHook = nil
+		hook()
+	}
 	if m.statErr != nil {
 		return false, m.statErr
 	}
@@ -9136,6 +9349,7 @@ type fakeProcessRepository struct {
 	markExitedCalls    int
 	markExitedFailures int
 	markExitedHook     func()
+	markExitedDoneHook func()
 }
 
 func newFakeProcessRepository() *fakeProcessRepository {
@@ -9274,7 +9488,6 @@ func (r *fakeProcessRepository) MarkExited(_ context.Context, id processdomain.R
 		return errors.New("mark process exited failed")
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.exitedID = id
 	r.exitedResult = result
 	if r.active.ID == id {
@@ -9284,6 +9497,11 @@ func (r *fakeProcessRepository) MarkExited(_ context.Context, id processdomain.R
 		if active.ID == id {
 			delete(r.activeBySession, sessionID)
 		}
+	}
+	doneHook := r.markExitedDoneHook
+	r.mu.Unlock()
+	if doneHook != nil {
+		doneHook()
 	}
 	return nil
 }
@@ -9337,6 +9555,7 @@ type fakeCodexProcess struct {
 	stopHook      func(context.Context, processdomain.RunID) error
 	detachedStops []processdomain.DetachedProcess
 	detachedErr   error
+	detachedHook  func(processdomain.DetachedProcess)
 	eventsCalled  bool
 	eventsErr     error
 	events        <-chan processdomain.CodexEvent
@@ -9390,6 +9609,9 @@ func (p *fakeCodexProcess) Stop(ctx context.Context, id processdomain.RunID) err
 
 func (p *fakeCodexProcess) StopDetached(_ context.Context, detached processdomain.DetachedProcess) error {
 	p.detachedStops = append(p.detachedStops, detached)
+	if p.detachedHook != nil {
+		p.detachedHook(detached)
+	}
 	return p.detachedErr
 }
 
@@ -9439,7 +9661,8 @@ func (u *fakeUnitOfWork) Do(ctx context.Context, fn func(context.Context, port.T
 }
 
 type fakeSessionLocker struct {
-	ids []domain.ID
+	ids  []domain.ID
+	hook func()
 }
 
 type mutexSessionLocker struct {
@@ -9454,6 +9677,11 @@ func (l *mutexSessionLocker) WithSessionLock(ctx context.Context, _ domain.ID, f
 
 func (l *fakeSessionLocker) WithSessionLock(ctx context.Context, id domain.ID, fn func(context.Context) error) error {
 	l.ids = append(l.ids, id)
+	if l.hook != nil {
+		hook := l.hook
+		l.hook = nil
+		hook()
+	}
 	return fn(ctx)
 }
 
@@ -9464,6 +9692,69 @@ type fakeTx struct {
 	questions questiondomain.Repository
 	processes processdomain.Repository
 	events    eventdomain.Store
+}
+
+func (tx fakeTx) ClaimExecution(ctx context.Context, input port.ExecutionClaimInput) (port.ExecutionClaimResult, error) {
+	if tx.sessions == nil || tx.processes == nil {
+		return port.ExecutionClaimResult{}, errors.New("execution claim repositories are required")
+	}
+	current, err := tx.sessions.Find(ctx, input.ExpectedSession.ID)
+	if err != nil {
+		return port.ExecutionClaimResult{}, err
+	}
+	active, found, err := tx.processes.FindActiveBySession(ctx, processdomain.SessionID(current.ID))
+	if err != nil {
+		return port.ExecutionClaimResult{}, err
+	}
+	if found {
+		return port.ExecutionClaimResult{Status: port.ExecutionAlreadyActive, Session: current, ActiveRun: &active}, nil
+	}
+	if !current.MatchesLifecycleSnapshot(input.ExpectedSession) {
+		return port.ExecutionClaimResult{Status: port.ExecutionStale, Session: current}, nil
+	}
+	if input.MaxActive > 0 {
+		count, err := tx.processes.CountActive(ctx)
+		if err != nil {
+			return port.ExecutionClaimResult{}, err
+		}
+		if count >= input.MaxActive {
+			return port.ExecutionClaimResult{Status: port.ExecutionAtCapacity, Session: current}, nil
+		}
+	}
+	if err := tx.processes.CreateRun(ctx, input.Run); err != nil {
+		return port.ExecutionClaimResult{}, err
+	}
+	if err := tx.sessions.Save(ctx, input.StartingSession); err != nil {
+		return port.ExecutionClaimResult{}, err
+	}
+	return port.ExecutionClaimResult{Status: port.ExecutionClaimed, Session: input.StartingSession}, nil
+}
+
+func (tx fakeTx) PrepareClose(ctx context.Context, input port.ClosePreparationInput) (port.ClosePreparationResult, error) {
+	if tx.sessions == nil || tx.processes == nil {
+		return port.ClosePreparationResult{}, errors.New("close preparation repositories are required")
+	}
+	current, err := tx.sessions.Find(ctx, input.ExpectedSession.ID)
+	if err != nil {
+		return port.ClosePreparationResult{}, err
+	}
+	if current.Status == domain.StatusClosed {
+		return port.ClosePreparationResult{Status: port.CloseAlreadyClosed, Session: current}, nil
+	}
+	active, found, err := tx.processes.FindActiveBySession(ctx, processdomain.SessionID(current.ID))
+	if err != nil {
+		return port.ClosePreparationResult{}, err
+	}
+	if found {
+		return port.ClosePreparationResult{Status: port.CloseActive, Session: current, ActiveRun: &active}, nil
+	}
+	if !current.MatchesLifecycleSnapshot(input.ExpectedSession) {
+		return port.ClosePreparationResult{Status: port.CloseStale, Session: current}, nil
+	}
+	if err := tx.sessions.Save(ctx, input.ClosingSession); err != nil {
+		return port.ClosePreparationResult{}, err
+	}
+	return port.ClosePreparationResult{Status: port.ClosePrepared, Session: input.ClosingSession}, nil
 }
 
 func (tx fakeTx) Projects() projectdomain.Repository {

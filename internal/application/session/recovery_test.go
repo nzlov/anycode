@@ -165,6 +165,160 @@ func TestRecoverInterruptedWorkflowKeepsCurrentNodeAttempt(t *testing.T) {
 	}
 }
 
+func TestRecoverInterruptedSessionDoesNotReplaceNewActiveRun(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+		CodexSessionID: "codex-1", WorktreePath: "/workspace/session-1",
+	}
+	repo.sessions[session.ID] = session
+	repo.interruptedSessions = []domain.Session{session}
+	processes := newFakeProcessRepository()
+	oldRun := processdomain.Run{
+		ID: "process-old", SessionID: "session-1", Status: processdomain.StatusRunning,
+		PID: intPointer(101), CodexSessionID: "codex-1",
+	}
+	newRun := processdomain.Run{
+		ID: "process-new", SessionID: "session-1", Status: processdomain.StatusRunning,
+		PID: intPointer(202), CodexSessionID: "codex-1",
+	}
+	processes.active = oldRun
+	processes.hasActive = true
+	codex := &fakeCodexProcess{detachedHook: func(processdomain.DetachedProcess) {
+		processes.mu.Lock()
+		processes.active = newRun
+		processes.hasActive = true
+		processes.mu.Unlock()
+		repo.sessions[session.ID] = session
+	}}
+	events := &fakeEventStore{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithUnitOfWork(uow))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-recovery", nil }
+
+	if _, err := service.RecoverInterruptedSessions(ctx); err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	got := repo.sessions[session.ID]
+	if got.Status != domain.StatusRunning || got.Queue != (domain.QueueIntent{}) {
+		t.Fatalf("replacement session = %#v, want running without queue", got)
+	}
+	active, ok, err := processes.FindActiveBySession(ctx, "session-1")
+	if err != nil || !ok || active.ID != newRun.ID {
+		t.Fatalf("active process = %#v, %v, %v", active, ok, err)
+	}
+	for _, event := range events.snapshot() {
+		if event.Type == "session.queued" {
+			t.Fatalf("stale recovery queued replacement run: %#v", events.snapshot())
+		}
+	}
+}
+
+func TestRecoverInterruptedSessionSkipsRunCreatedAfterSnapshot(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+		CodexSessionID: "codex-1", WorktreePath: "/workspace/session-1",
+	}
+	repo.sessions[session.ID] = session
+	repo.interruptedSessions = []domain.Session{session}
+	processes := newFakeProcessRepository()
+	newRun := processdomain.Run{
+		ID: "process-new", SessionID: "session-1", Status: processdomain.StatusRunning,
+		PID: intPointer(202), CodexSessionID: "codex-1",
+	}
+	locker := &fakeSessionLocker{hook: func() {
+		processes.mu.Lock()
+		processes.active = newRun
+		processes.hasActive = true
+		processes.mu.Unlock()
+	}}
+	codex := &fakeCodexProcess{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithSessionLocker(locker))
+
+	if _, err := service.RecoverInterruptedSessions(ctx); err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	got := repo.sessions[session.ID]
+	if got.Status != domain.StatusRunning || got.Queue != (domain.QueueIntent{}) {
+		t.Fatalf("replacement session = %#v", got)
+	}
+	if len(codex.detachedStops) != 0 {
+		t.Fatalf("new process was stopped: %#v", codex.detachedStops)
+	}
+}
+
+func TestRecoverInterruptedSessionCompletesPreparedClose(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	reason := domain.CloseReasonUserClosed
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusStopping,
+		CloseReason: &reason,
+	}
+	repo.sessions[session.ID] = session
+	repo.interruptedSessions = []domain.Session{session}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+
+	if _, err := service.RecoverInterruptedSessions(ctx); err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	got := repo.sessions[session.ID]
+	if got.Status != domain.StatusClosed || got.CloseReason == nil || *got.CloseReason != reason || got.ClosedAt == nil {
+		t.Fatalf("recovered close session = %#v", got)
+	}
+}
+
+func TestRecoverInterruptedSessionDoesNotOverwritePreparedClose(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+		CodexSessionID: "codex-1", WorktreePath: "/workspace/session-1", UpdatedAt: time.Unix(90, 0).UTC(),
+	}
+	repo.sessions[session.ID] = session
+	repo.interruptedSessions = []domain.Session{session}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{
+		ID: "process-old", SessionID: "session-1", Status: processdomain.StatusRunning,
+		PID: intPointer(101), CodexSessionID: "codex-1",
+	}
+	processes.hasActive = true
+	reason := domain.CloseReasonUserClosed
+	codex := &fakeCodexProcess{detachedHook: func(processdomain.DetachedProcess) {
+		processes.mu.Lock()
+		processes.hasActive = false
+		processes.mu.Unlock()
+		closing := session
+		closing.Status = domain.StatusStopping
+		closing.CloseReason = &reason
+		closing.UpdatedAt = time.Unix(100, 0).UTC()
+		repo.sessions[session.ID] = closing
+	}}
+	events := &fakeEventStore{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithUnitOfWork(uow))
+	service.now = func() time.Time { return time.Unix(110, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-recovery", nil }
+
+	if _, err := service.RecoverInterruptedSessions(ctx); err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	got := repo.sessions[session.ID]
+	if got.Status != domain.StatusStopping || got.CloseReason == nil || *got.CloseReason != reason || got.Queue != (domain.QueueIntent{}) {
+		t.Fatalf("prepared close was overwritten = %#v", got)
+	}
+	for _, event := range events.snapshot() {
+		if event.Type == "session.queued" {
+			t.Fatalf("stale recovery queued prepared close: %#v", events.snapshot())
+		}
+	}
+}
+
 func processNodeRunID(value string) *processdomain.NodeRunID {
 	id := processdomain.NodeRunID(value)
 	return &id
