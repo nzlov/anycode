@@ -15,6 +15,7 @@ import (
 )
 
 const defaultGitBin = "git"
+const worktreeOwnershipMarkerSuffix = ".anycode-owner"
 
 type Client struct {
 	gitBin  string
@@ -66,6 +67,12 @@ func New(gitBin string) *Client {
 func NewWorktrees(dataDir string) *Client {
 	if dataDir == "" {
 		dataDir = os.Getenv("ANYCODE_DATA_DIR")
+	}
+	if dataDir == "" {
+		dataDir = "."
+	}
+	if absolute, err := filepath.Abs(dataDir); err == nil {
+		dataDir = absolute
 	}
 	return &Client{gitBin: defaultGitBin, dataDir: dataDir}
 }
@@ -150,17 +157,6 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 	return strings.TrimSpace(out), nil
 }
 
-func (c *Client) Exists(_ context.Context, path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return false, err
-}
-
 func (c *Client) CurrentBranch(ctx context.Context, path string) (string, error) {
 	out, err := c.run(ctx, path, "branch", "--show-current")
 	if err != nil {
@@ -177,37 +173,250 @@ func (c *Client) PathForSession(projectID session.ProjectID, sessionID session.I
 	if base == "" {
 		base = "."
 	}
-	return filepath.Join(base, "worktrees", string(projectID), string(sessionID))
+	path := filepath.Join(base, "worktrees", string(projectID), string(sessionID))
+	if absolute, err := filepath.Abs(path); err == nil {
+		return absolute
+	}
+	return filepath.Clean(path)
 }
 
-func (c *Client) Create(ctx context.Context, projectPath string, projectID session.ProjectID, sessionID session.ID, baseBranch string) (string, error) {
+func (c *Client) Create(ctx context.Context, projectPath string, projectID session.ProjectID, sessionID session.ID, branch string, baseBranch string, ownershipToken string) (string, error) {
 	path := c.PathForSession(projectID, sessionID)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("prepare worktree parent: %w", err)
-	}
 	ref := strings.TrimSpace(baseBranch)
 	if ref == "" {
 		ref = "HEAD"
 	}
-	branch := strings.TrimSpace(string(sessionID))
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return "", errors.New("worktree branch is required")
+	}
+	ownershipToken = strings.TrimSpace(ownershipToken)
+	if ownershipToken == "" {
+		return "", errors.New("worktree ownership token is required")
+	}
+	preflight, err := c.InspectOwnership(ctx, projectPath, path, branch, ownershipToken)
+	if err != nil {
+		return "", err
+	}
+	if preflight.PathExists || preflight.BranchExists || preflight.Registered || preflight.MarkerExists {
+		return "", errors.New("worktree ownership namespace is not empty")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("prepare worktree parent: %w", err)
+	}
+	if err := claimOwnershipMarker(path, ownershipToken); err != nil {
+		return "", fmt.Errorf("claim worktree ownership marker: %w", err)
+	}
 	args := []string{"worktree", "add", "-b", branch, path, ref}
 	if err := c.fetchRemotes(ctx, projectPath); err != nil {
-		_ = os.RemoveAll(path)
 		return "", err
 	}
 	hasCommits, err := c.hasCommits(ctx, projectPath)
 	if err != nil {
-		_ = os.RemoveAll(path)
 		return "", err
 	}
 	if !hasCommits {
 		args = []string{"worktree", "add", "--orphan", "-b", branch, path}
 	}
 	if _, err := c.run(ctx, projectPath, args...); err != nil {
-		_ = os.RemoveAll(path)
 		return "", err
 	}
+	linked, _, err := c.inspectWorktreeLink(ctx, projectPath, path, branch)
+	if err != nil {
+		return "", err
+	}
+	if !linked {
+		return "", errors.New("created worktree is not linked to the target project and branch")
+	}
 	return path, nil
+}
+
+func (c *Client) InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (session.WorktreeOwnership, error) {
+	path = absolutePath(strings.TrimSpace(path))
+	branch = strings.TrimSpace(branch)
+	ownershipToken = strings.TrimSpace(ownershipToken)
+	linked, ownership, err := c.inspectWorktreeLink(ctx, projectPath, path, branch)
+	if err != nil {
+		return ownership, err
+	}
+	markerPath := ownershipMarkerPath(path)
+	content, err := os.ReadFile(markerPath)
+	if err == nil {
+		ownership.MarkerExists = true
+		ownership.TokenMatches = ownershipToken != "" && strings.TrimSpace(string(content)) == ownershipToken
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return ownership, err
+	}
+	ownership.Matches = linked && ownership.TokenMatches
+	return ownership, nil
+}
+
+func (c *Client) inspectWorktreeLink(ctx context.Context, projectPath string, path string, branch string) (bool, session.WorktreeOwnership, error) {
+	path = absolutePath(strings.TrimSpace(path))
+	branch = strings.TrimSpace(branch)
+	ownership := session.WorktreeOwnership{}
+	info, err := os.Lstat(path)
+	if err == nil {
+		ownership.PathExists = true
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, ownership, err
+	}
+
+	out, err := c.run(ctx, projectPath, "branch", "--list", "--format=%(refname:short)", branch)
+	if err != nil {
+		return false, ownership, err
+	}
+	ownership.BranchExists = strings.TrimSpace(out) == branch
+
+	out, err = c.run(ctx, projectPath, "worktree", "list", "--porcelain", "-z")
+	if err != nil {
+		return false, ownership, err
+	}
+	registeredBranch, registered := registeredWorktreeBranch(out, path)
+	ownership.Registered = registered
+	if !registered || registeredBranch != branch || !ownership.PathExists || info == nil || !info.IsDir() {
+		return false, ownership, nil
+	}
+	marker, err := os.Lstat(filepath.Join(path, ".git"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, ownership, nil
+		}
+		return false, ownership, err
+	}
+	if !marker.Mode().IsRegular() {
+		return false, ownership, nil
+	}
+	content, err := os.ReadFile(filepath.Join(path, ".git"))
+	if err != nil {
+		return false, ownership, err
+	}
+	gitDirValue, ok := strings.CutPrefix(strings.TrimSpace(string(content)), "gitdir: ")
+	if !ok {
+		return false, ownership, nil
+	}
+	gitDir := canonicalPath(absolutePathFrom(path, gitDirValue))
+	commonDir, err := c.commonGitDir(ctx, projectPath)
+	if err != nil {
+		return false, ownership, err
+	}
+	if !pathWithin(commonDir, gitDir) {
+		return false, ownership, nil
+	}
+	reverse, err := os.ReadFile(filepath.Join(gitDir, "gitdir"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, ownership, nil
+		}
+		return false, ownership, err
+	}
+	if canonicalPath(absolutePathFrom(gitDir, strings.TrimSpace(string(reverse)))) != canonicalPath(filepath.Join(path, ".git")) {
+		return false, ownership, nil
+	}
+	return true, ownership, nil
+}
+
+func registeredWorktreeBranch(output string, path string) (string, bool) {
+	path = canonicalPath(path)
+	for _, record := range strings.Split(output, "\x00\x00") {
+		registeredPath := ""
+		branch := ""
+		for _, field := range strings.Split(record, "\x00") {
+			switch {
+			case strings.HasPrefix(field, "worktree "):
+				registeredPath = canonicalPath(strings.TrimPrefix(field, "worktree "))
+			case strings.HasPrefix(field, "branch refs/heads/"):
+				branch = strings.TrimPrefix(field, "branch refs/heads/")
+			}
+		}
+		if registeredPath == path {
+			return branch, true
+		}
+	}
+	return "", false
+}
+
+func (c *Client) commonGitDir(ctx context.Context, projectPath string) (string, error) {
+	out, err := c.run(ctx, projectPath, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	return canonicalPath(absolutePathFrom(projectPath, strings.TrimSpace(out))), nil
+}
+
+func (c *Client) ReleaseOwnership(_ context.Context, path string, ownershipToken string) error {
+	markerPath := ownershipMarkerPath(absolutePath(path))
+	content, err := os.ReadFile(markerPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if strings.TrimSpace(string(content)) != strings.TrimSpace(ownershipToken) {
+		return errors.New("worktree ownership marker does not match")
+	}
+	return os.Remove(markerPath)
+}
+
+func claimOwnershipMarker(path string, ownershipToken string) error {
+	markerPath := ownershipMarkerPath(path)
+	temporary, err := os.CreateTemp(filepath.Dir(markerPath), ".anycode-owner-claim-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.WriteString(strings.TrimSpace(ownershipToken) + "\n"); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Link(temporaryPath, markerPath)
+}
+
+func ownershipMarkerPath(path string) string {
+	return absolutePath(path) + worktreeOwnershipMarkerSuffix
+}
+
+func absolutePath(path string) string {
+	if absolute, err := filepath.Abs(path); err == nil {
+		return filepath.Clean(absolute)
+	}
+	return filepath.Clean(path)
+}
+
+func canonicalPath(path string) string {
+	path = absolutePath(path)
+	if evaluated, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(evaluated)
+	}
+	return path
+}
+
+func absolutePathFrom(base string, path string) string {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	return absolutePath(filepath.Join(base, path))
+}
+
+func pathWithin(parent string, child string) bool {
+	relative, err := filepath.Rel(canonicalPath(parent), canonicalPath(child))
+	if err != nil || relative == "." {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func (c *Client) fetchRemotes(ctx context.Context, path string) error {

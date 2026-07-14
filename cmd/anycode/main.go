@@ -82,6 +82,9 @@ func main() {
 	if err := reconcileInterruptedSessions(ctx, useCases.Sessions); err != nil {
 		log.Fatalf("recover sessions: %s", err.Error())
 	}
+	if err := reconcileWorktreeCleanup(ctx, useCases.Sessions); err != nil {
+		log.Fatalf("reconcile worktree cleanup: %s", err.Error())
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -94,6 +97,7 @@ func main() {
 		log.Fatalf("listen on %s: %s", cfg.HTTPAddr, err.Error())
 	}
 	log.Printf("anycode listening on %s", cfg.HTTPAddr)
+	useCases.Sessions.StartWorktreeCleanupCoordinator()
 	go func() {
 		if err := drainQueuedSessions(context.Background(), useCases.Sessions); err != nil {
 			log.Printf("drain queued sessions: %s", err.Error())
@@ -157,6 +161,7 @@ func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, 
 type recoverySessionUseCase interface {
 	RecoverInterruptedSessions(ctx context.Context) (int, error)
 	DrainQueuedSessions(ctx context.Context) (int, error)
+	ReconcileWorktreeCleanup(ctx context.Context) (int, error)
 }
 
 func reconcileInterruptedSessions(ctx context.Context, sessions recoverySessionUseCase) error {
@@ -177,6 +182,17 @@ func drainQueuedSessions(ctx context.Context, sessions recoverySessionUseCase) e
 	}
 	if drainedCount > 0 {
 		log.Printf("started queued codex sessions: count=%d", drainedCount)
+	}
+	return nil
+}
+
+func reconcileWorktreeCleanup(ctx context.Context, sessions recoverySessionUseCase) error {
+	reconciledCount, err := sessions.ReconcileWorktreeCleanup(ctx)
+	if err != nil {
+		return err
+	}
+	if reconciledCount > 0 {
+		log.Printf("reconciled provisioning session worktrees: count=%d", reconciledCount)
 	}
 	return nil
 }

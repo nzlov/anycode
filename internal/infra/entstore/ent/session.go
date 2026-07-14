@@ -35,8 +35,32 @@ type Session struct {
 	BaseBranch string `json:"base_branch,omitempty"`
 	// WorktreePath holds the value of the "worktree_path" field.
 	WorktreePath string `json:"worktree_path,omitempty"`
+	// WorktreeBranch holds the value of the "worktree_branch" field.
+	WorktreeBranch string `json:"worktree_branch,omitempty"`
 	// WorktreeBaseCommit holds the value of the "worktree_base_commit" field.
 	WorktreeBaseCommit string `json:"worktree_base_commit,omitempty"`
+	// WorktreeCleanupStatus holds the value of the "worktree_cleanup_status" field.
+	WorktreeCleanupStatus string `json:"worktree_cleanup_status,omitempty"`
+	// WorktreeCleanupAttempts holds the value of the "worktree_cleanup_attempts" field.
+	WorktreeCleanupAttempts int `json:"worktree_cleanup_attempts,omitempty"`
+	// WorktreeOwnershipToken holds the value of the "worktree_ownership_token" field.
+	WorktreeOwnershipToken string `json:"worktree_ownership_token,omitempty"`
+	// WorktreeOwnershipConfirmedAt holds the value of the "worktree_ownership_confirmed_at" field.
+	WorktreeOwnershipConfirmedAt *time.Time `json:"worktree_ownership_confirmed_at,omitempty"`
+	// WorktreeCleanupRequestedAt holds the value of the "worktree_cleanup_requested_at" field.
+	WorktreeCleanupRequestedAt *time.Time `json:"worktree_cleanup_requested_at,omitempty"`
+	// WorktreeCleanupLastAt holds the value of the "worktree_cleanup_last_at" field.
+	WorktreeCleanupLastAt *time.Time `json:"worktree_cleanup_last_at,omitempty"`
+	// WorktreeCleanupNextAt holds the value of the "worktree_cleanup_next_at" field.
+	WorktreeCleanupNextAt *time.Time `json:"worktree_cleanup_next_at,omitempty"`
+	// WorktreeCleanupCompletedAt holds the value of the "worktree_cleanup_completed_at" field.
+	WorktreeCleanupCompletedAt *time.Time `json:"worktree_cleanup_completed_at,omitempty"`
+	// WorktreeCleanupErrorCode holds the value of the "worktree_cleanup_error_code" field.
+	WorktreeCleanupErrorCode string `json:"worktree_cleanup_error_code,omitempty"`
+	// WorktreeCleanupError holds the value of the "worktree_cleanup_error" field.
+	WorktreeCleanupError string `json:"worktree_cleanup_error,omitempty"`
+	// WorktreeCleanupRetryable holds the value of the "worktree_cleanup_retryable" field.
+	WorktreeCleanupRetryable bool `json:"worktree_cleanup_retryable,omitempty"`
 	// CodexSessionID holds the value of the "codex_session_id" field.
 	CodexSessionID string `json:"codex_session_id,omitempty"`
 	// CodexModel holds the value of the "codex_model" field.
@@ -89,11 +113,13 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case entsession.FieldTodoList:
 			values[i] = new([]byte)
-		case entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
+		case entsession.FieldWorktreeCleanupRetryable, entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBaseCommit, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID:
+		case entsession.FieldWorktreeCleanupAttempts:
+			values[i] = new(sql.NullInt64)
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID:
 			values[i] = new(sql.NullString)
-		case entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
+		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -165,11 +191,88 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.WorktreePath = value.String
 			}
+		case entsession.FieldWorktreeBranch:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_branch", values[i])
+			} else if value.Valid {
+				_m.WorktreeBranch = value.String
+			}
 		case entsession.FieldWorktreeBaseCommit:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field worktree_base_commit", values[i])
 			} else if value.Valid {
 				_m.WorktreeBaseCommit = value.String
+			}
+		case entsession.FieldWorktreeCleanupStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_status", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupStatus = value.String
+			}
+		case entsession.FieldWorktreeCleanupAttempts:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_attempts", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupAttempts = int(value.Int64)
+			}
+		case entsession.FieldWorktreeOwnershipToken:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_ownership_token", values[i])
+			} else if value.Valid {
+				_m.WorktreeOwnershipToken = value.String
+			}
+		case entsession.FieldWorktreeOwnershipConfirmedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_ownership_confirmed_at", values[i])
+			} else if value.Valid {
+				_m.WorktreeOwnershipConfirmedAt = new(time.Time)
+				*_m.WorktreeOwnershipConfirmedAt = value.Time
+			}
+		case entsession.FieldWorktreeCleanupRequestedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_requested_at", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupRequestedAt = new(time.Time)
+				*_m.WorktreeCleanupRequestedAt = value.Time
+			}
+		case entsession.FieldWorktreeCleanupLastAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_last_at", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupLastAt = new(time.Time)
+				*_m.WorktreeCleanupLastAt = value.Time
+			}
+		case entsession.FieldWorktreeCleanupNextAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_next_at", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupNextAt = new(time.Time)
+				*_m.WorktreeCleanupNextAt = value.Time
+			}
+		case entsession.FieldWorktreeCleanupCompletedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_completed_at", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupCompletedAt = new(time.Time)
+				*_m.WorktreeCleanupCompletedAt = value.Time
+			}
+		case entsession.FieldWorktreeCleanupErrorCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_error_code", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupErrorCode = value.String
+			}
+		case entsession.FieldWorktreeCleanupError:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_error", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupError = value.String
+			}
+		case entsession.FieldWorktreeCleanupRetryable:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_cleanup_retryable", values[i])
+			} else if value.Valid {
+				_m.WorktreeCleanupRetryable = value.Bool
 			}
 		case entsession.FieldCodexSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -365,8 +468,54 @@ func (_m *Session) String() string {
 	builder.WriteString("worktree_path=")
 	builder.WriteString(_m.WorktreePath)
 	builder.WriteString(", ")
+	builder.WriteString("worktree_branch=")
+	builder.WriteString(_m.WorktreeBranch)
+	builder.WriteString(", ")
 	builder.WriteString("worktree_base_commit=")
 	builder.WriteString(_m.WorktreeBaseCommit)
+	builder.WriteString(", ")
+	builder.WriteString("worktree_cleanup_status=")
+	builder.WriteString(_m.WorktreeCleanupStatus)
+	builder.WriteString(", ")
+	builder.WriteString("worktree_cleanup_attempts=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WorktreeCleanupAttempts))
+	builder.WriteString(", ")
+	builder.WriteString("worktree_ownership_token=")
+	builder.WriteString(_m.WorktreeOwnershipToken)
+	builder.WriteString(", ")
+	if v := _m.WorktreeOwnershipConfirmedAt; v != nil {
+		builder.WriteString("worktree_ownership_confirmed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.WorktreeCleanupRequestedAt; v != nil {
+		builder.WriteString("worktree_cleanup_requested_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.WorktreeCleanupLastAt; v != nil {
+		builder.WriteString("worktree_cleanup_last_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.WorktreeCleanupNextAt; v != nil {
+		builder.WriteString("worktree_cleanup_next_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.WorktreeCleanupCompletedAt; v != nil {
+		builder.WriteString("worktree_cleanup_completed_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("worktree_cleanup_error_code=")
+	builder.WriteString(_m.WorktreeCleanupErrorCode)
+	builder.WriteString(", ")
+	builder.WriteString("worktree_cleanup_error=")
+	builder.WriteString(_m.WorktreeCleanupError)
+	builder.WriteString(", ")
+	builder.WriteString("worktree_cleanup_retryable=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WorktreeCleanupRetryable))
 	builder.WriteString(", ")
 	builder.WriteString("codex_session_id=")
 	builder.WriteString(_m.CodexSessionID)

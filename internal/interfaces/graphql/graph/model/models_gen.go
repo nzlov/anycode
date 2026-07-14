@@ -299,21 +299,22 @@ type SaveWorkflowDefinitionInput struct {
 }
 
 type Session struct {
-	ID               string         `json:"id"`
-	ProjectID        string         `json:"projectId"`
-	Requirement      string         `json:"requirement"`
-	Mode             string         `json:"mode"`
-	Status           string         `json:"status"`
-	Priority         string         `json:"priority"`
-	BaseBranch       string         `json:"baseBranch"`
-	WorktreeBranch   string         `json:"worktreeBranch"`
-	WorktreePath     string         `json:"worktreePath"`
-	CodexSessionID   string         `json:"codexSessionId"`
-	Config           *SessionConfig `json:"config"`
-	AvailableActions []string       `json:"availableActions"`
-	LastRunAt        *time.Time     `json:"lastRunAt,omitempty"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	UpdatedAt        time.Time      `json:"updatedAt"`
+	ID               string           `json:"id"`
+	ProjectID        string           `json:"projectId"`
+	Requirement      string           `json:"requirement"`
+	Mode             string           `json:"mode"`
+	Status           string           `json:"status"`
+	Priority         string           `json:"priority"`
+	BaseBranch       string           `json:"baseBranch"`
+	WorktreeBranch   string           `json:"worktreeBranch"`
+	WorktreePath     string           `json:"worktreePath"`
+	WorktreeCleanup  *WorktreeCleanup `json:"worktreeCleanup"`
+	CodexSessionID   string           `json:"codexSessionId"`
+	Config           *SessionConfig   `json:"config"`
+	AvailableActions []string         `json:"availableActions"`
+	LastRunAt        *time.Time       `json:"lastRunAt,omitempty"`
+	CreatedAt        time.Time        `json:"createdAt"`
+	UpdatedAt        time.Time        `json:"updatedAt"`
 }
 
 type SessionAttachment struct {
@@ -397,6 +398,7 @@ type SessionDetail struct {
 	CurrentNodeTitle string               `json:"currentNodeTitle"`
 	PendingApproval  *PendingApproval     `json:"pendingApproval,omitempty"`
 	WorktreePath     string               `json:"worktreePath"`
+	WorktreeCleanup  *WorktreeCleanup     `json:"worktreeCleanup"`
 	CodexSessionID   string               `json:"codexSessionId"`
 	Config           *SessionConfig       `json:"config"`
 	Attachments      []*SessionAttachment `json:"attachments"`
@@ -701,6 +703,20 @@ type WorkflowRun struct {
 	Status        string         `json:"status"`
 	CurrentNodeID string         `json:"currentNodeId"`
 	Context       map[string]any `json:"context"`
+}
+
+type WorktreeCleanup struct {
+	Status      string                `json:"status"`
+	Attempts    int                   `json:"attempts"`
+	RequestedAt *time.Time            `json:"requestedAt,omitempty"`
+	CompletedAt *time.Time            `json:"completedAt,omitempty"`
+	Error       *WorktreeCleanupError `json:"error,omitempty"`
+}
+
+type WorktreeCleanupError struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	Retryable bool   `json:"retryable"`
 }
 
 type SessionDiffSummaryState string

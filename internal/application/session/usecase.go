@@ -42,6 +42,10 @@ type UseCase interface {
 	ResumeSession(ctx context.Context, id domain.ID) (DTO, error)
 	ResumeSessionWithOptions(ctx context.Context, id domain.ID, options StartSessionOptions) (DTO, error)
 	DrainQueuedSessions(ctx context.Context) (int, error)
+	ReconcileWorktreeCleanup(ctx context.Context) (int, error)
+	DrainWorktreeCleanup(ctx context.Context) (int, error)
+	RetryWorktreeCleanup(ctx context.Context, id domain.ID) (DTO, error)
+	StartWorktreeCleanupCoordinator()
 	CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error)
 	UpdateSessionConfig(ctx context.Context, input UpdateSessionConfigInput) (DTO, error)
 	RequestUserAnswer(ctx context.Context, input RequestUserAnswerInput) (questionapp.BatchDTO, error)
@@ -138,12 +142,27 @@ type DTO struct {
 	WorktreeBranch     string
 	WorktreePath       string
 	WorktreeBaseCommit string
+	WorktreeCleanup    WorktreeCleanupDTO
 	CodexSessionID     string
 	Config             domain.Config
 	AvailableActions   []string
 	LastRunAt          *time.Time
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+}
+
+type WorktreeCleanupDTO struct {
+	Status      domain.WorktreeCleanupStatus
+	Attempts    int
+	RequestedAt *time.Time
+	CompletedAt *time.Time
+	Error       *WorktreeCleanupErrorDTO
+}
+
+type WorktreeCleanupErrorDTO struct {
+	Code      string
+	Message   string
+	Retryable bool
 }
 
 type ConfigDTO struct {
@@ -205,6 +224,8 @@ const (
 	maxPageSize              = 100
 	processCleanupTimeout    = 5 * time.Second
 	processExitRetryMaxDelay = 30 * time.Second
+	worktreeCleanupInterval  = 5 * time.Second
+	worktreeCleanupBatchSize = 100
 
 	maxSessionIDAttempts = 100
 )
@@ -251,6 +272,9 @@ type Service struct {
 	processExitDelay    func(int) time.Duration
 	lifecycleCtx        context.Context
 	lifecycleCancel     context.CancelFunc
+	cleanupWake         chan struct{}
+	cleanupStartOnce    sync.Once
+	cleanupWG           sync.WaitGroup
 }
 
 type questionCoordinator interface {
@@ -365,6 +389,7 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 		processExitDelay:    processExitRetryDelay,
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
+		cleanupWake:         make(chan struct{}, 1),
 	}
 	for _, option := range options {
 		option(service)
@@ -375,7 +400,288 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 func (s *Service) Close() {
 	if s != nil && s.lifecycleCancel != nil {
 		s.lifecycleCancel()
+		s.cleanupWG.Wait()
 	}
+}
+
+func (s *Service) StartWorktreeCleanupCoordinator() {
+	if s == nil {
+		return
+	}
+	s.cleanupStartOnce.Do(func() {
+		s.cleanupWG.Add(1)
+		go s.runWorktreeCleanupCoordinator()
+	})
+	s.scheduleWorktreeCleanup()
+}
+
+func (s *Service) runWorktreeCleanupCoordinator() {
+	defer s.cleanupWG.Done()
+	ticker := time.NewTicker(worktreeCleanupInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.lifecycleCtx.Done():
+			return
+		case <-s.cleanupWake:
+		case <-ticker.C:
+		}
+		if _, err := s.DrainWorktreeCleanup(s.lifecycleCtx); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("drain session worktree cleanup: %v", err)
+		}
+	}
+}
+
+func (s *Service) scheduleWorktreeCleanup() {
+	if s == nil || s.cleanupWake == nil {
+		return
+	}
+	select {
+	case s.cleanupWake <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Service) ReconcileWorktreeCleanup(ctx context.Context) (int, error) {
+	if s == nil || s.repo == nil {
+		return 0, nil
+	}
+	reconciled := 0
+	for {
+		sessions, err := s.repo.ListProvisioningWorktrees(ctx, worktreeCleanupBatchSize)
+		if err != nil {
+			return reconciled, err
+		}
+		if len(sessions) == 0 {
+			return reconciled, nil
+		}
+		for _, candidate := range sessions {
+			if err := s.withSessionLock(ctx, candidate.ID, func(ctx context.Context) error {
+				current, err := s.repo.Find(ctx, candidate.ID)
+				if err != nil {
+					return fmt.Errorf("find provisioning session worktree: %w", err)
+				}
+				if current.WorktreeCleanup.Status != domain.WorktreeCleanupProvisioning {
+					return nil
+				}
+				now := s.now()
+				if current.Status != domain.StatusClosed && current.Status != domain.StatusFailed {
+					if err := transitionSession(&current, domain.StatusFailed, now); err != nil {
+						return err
+					}
+				}
+				if err := current.RequestWorktreeCleanup(now); err != nil {
+					return err
+				}
+				if err := s.saveSessionWithEvent(ctx, current, "session.worktree_cleanup_requested", map[string]any{
+					"reason":         "service_restarted_during_provisioning",
+					"worktreeBranch": current.WorktreeBranch,
+				}); err != nil {
+					return err
+				}
+				reconciled++
+				return nil
+			}); err != nil {
+				return reconciled, err
+			}
+		}
+		if len(sessions) < worktreeCleanupBatchSize {
+			return reconciled, nil
+		}
+	}
+}
+
+func (s *Service) DrainWorktreeCleanup(ctx context.Context) (int, error) {
+	if s == nil || s.repo == nil || s.worktrees == nil || s.projects == nil {
+		return 0, nil
+	}
+	processed := 0
+	for {
+		sessions, err := s.repo.ListWorktreeCleanupDue(ctx, s.now(), worktreeCleanupBatchSize)
+		if err != nil {
+			return processed, err
+		}
+		if len(sessions) == 0 {
+			return processed, nil
+		}
+		for _, candidate := range sessions {
+			if err := s.withSessionLock(ctx, candidate.ID, func(ctx context.Context) error {
+				current, err := s.repo.Find(ctx, candidate.ID)
+				if err != nil {
+					return fmt.Errorf("find session for worktree cleanup: %w", err)
+				}
+				if !worktreeCleanupDue(current, s.now()) {
+					return nil
+				}
+				if err := s.cleanupSessionWorktree(ctx, current); err != nil {
+					return err
+				}
+				processed++
+				return nil
+			}); err != nil {
+				return processed, err
+			}
+		}
+		if len(sessions) < worktreeCleanupBatchSize {
+			return processed, nil
+		}
+	}
+}
+
+func (s *Service) RetryWorktreeCleanup(ctx context.Context, id domain.ID) (DTO, error) {
+	var dto DTO
+	err := s.withSessionLock(ctx, id, func(ctx context.Context) error {
+		current, err := s.repo.Find(ctx, id)
+		if err != nil {
+			return fmt.Errorf("find session for worktree cleanup retry: %w", err)
+		}
+		if current.Status != domain.StatusClosed || current.WorktreeCleanup.Status != domain.WorktreeCleanupFailed || !current.WorktreeCleanup.Retryable {
+			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session worktree cleanup cannot be retried").WithDetails(map[string]any{
+				"sessionId": string(id),
+				"status":    string(current.WorktreeCleanup.Status),
+			})
+		}
+		if err := current.RequestWorktreeCleanup(s.now()); err != nil {
+			return err
+		}
+		if err := s.saveSessionWithEvent(ctx, current, "session.worktree_cleanup_requested", map[string]any{
+			"reason":         "user_retry",
+			"worktreeBranch": current.WorktreeBranch,
+		}); err != nil {
+			return err
+		}
+		dto = toDTO(current)
+		return nil
+	})
+	if err != nil {
+		return DTO{}, err
+	}
+	s.scheduleWorktreeCleanup()
+	return dto, nil
+}
+
+func (s *Service) cleanupSessionWorktree(ctx context.Context, session domain.Session) error {
+	if session.Status != domain.StatusClosed && session.Status != domain.StatusFailed {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_cleanup_state_invalid", "worktree cleanup requires a closed or failed session; no resources were deleted", false)
+	}
+	expectedPath := strings.TrimSpace(s.worktrees.PathForSession(session.ProjectID, session.ID))
+	if expectedPath == "" || strings.TrimSpace(session.WorktreePath) != expectedPath {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_path_mismatch", "persisted worktree path does not match the managed session path", false)
+	}
+	if strings.TrimSpace(session.WorktreeBranch) != worktreeBranchName(session.ID) || session.WorktreeBranch == strings.TrimSpace(session.BaseBranch) {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_branch_mismatch", "persisted worktree branch is not owned by the session", false)
+	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return s.recordWorktreeCleanupFailure(ctx, session, "project_lookup_failed", err.Error(), true)
+	}
+	if !project.IsGit {
+		return s.recordWorktreeCleanupFailure(ctx, session, "project_not_git", "session owns a worktree but project is not a git repository", false)
+	}
+	ownership, err := s.worktrees.InspectOwnership(ctx, project.Path.Value, session.WorktreePath, session.WorktreeBranch, session.WorktreeCleanup.OwnershipToken)
+	if err != nil {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_inspect_failed", err.Error(), true)
+	}
+	noResources := !ownership.PathExists && !ownership.BranchExists && !ownership.Registered
+	if !ownership.TokenMatches {
+		if noResources && !ownership.MarkerExists {
+			return s.completeWorktreeCleanup(ctx, session)
+		}
+		code := "worktree_ownership_unconfirmed"
+		message := "worktree ownership token could not be confirmed; no resources were deleted"
+		if session.WorktreeCleanup.OwnershipConfirmedAt != nil {
+			code = "worktree_ownership_changed"
+			message = "managed worktree ownership marker no longer matches; no resources were deleted"
+		}
+		return s.recordWorktreeCleanupFailure(ctx, session, code, message, false)
+	}
+	if session.WorktreeCleanup.OwnershipConfirmedAt == nil {
+		if noResources {
+			if err := s.worktrees.ReleaseOwnership(ctx, session.WorktreePath, session.WorktreeCleanup.OwnershipToken); err != nil {
+				return s.recordWorktreeCleanupFailure(ctx, session, "worktree_ownership_release_failed", err.Error(), true)
+			}
+			return s.completeWorktreeCleanup(ctx, session)
+		}
+		if !ownership.Matches {
+			return s.recordWorktreeCleanupFailure(ctx, session, "worktree_ownership_unconfirmed", "worktree is not linked to the persisted project, path, and branch; no resources were deleted", false)
+		}
+		now := s.now()
+		if err := session.ConfirmWorktreeOwnership(now); err != nil {
+			return err
+		}
+		if err := s.saveSessionWithEvent(ctx, session, "session.worktree_ownership_confirmed", map[string]any{
+			"worktreeBranch": session.WorktreeBranch,
+		}); err != nil {
+			return err
+		}
+	}
+	if ownership.PathExists && !ownership.Matches {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_ownership_changed", "managed worktree path no longer matches the persisted branch; no resources were deleted", false)
+	}
+	if ownership.PathExists {
+		if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
+			return s.recordWorktreeCleanupFailure(ctx, session, "worktree_remove_failed", err.Error(), true)
+		}
+	}
+	if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, session.WorktreeBranch); err != nil {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_branch_delete_failed", err.Error(), true)
+	}
+	if err := s.worktrees.ReleaseOwnership(ctx, session.WorktreePath, session.WorktreeCleanup.OwnershipToken); err != nil {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_ownership_release_failed", err.Error(), true)
+	}
+	return s.completeWorktreeCleanup(ctx, session)
+}
+
+func (s *Service) completeWorktreeCleanup(ctx context.Context, session domain.Session) error {
+	if err := session.CompleteWorktreeCleanup(s.now()); err != nil {
+		return err
+	}
+	return s.saveSessionWithEvent(ctx, session, "session.worktree_cleanup_completed", map[string]any{
+		"attempts":       session.WorktreeCleanup.Attempts,
+		"worktreeBranch": session.WorktreeBranch,
+	})
+}
+
+func (s *Service) recordWorktreeCleanupFailure(ctx context.Context, session domain.Session, code string, message string, retryable bool) error {
+	now := s.now()
+	var nextAt *time.Time
+	if retryable {
+		next := now.Add(worktreeCleanupRetryDelay(session.WorktreeCleanup.Attempts + 1))
+		nextAt = &next
+	}
+	if err := session.FailWorktreeCleanup(code, message, retryable, nextAt, now); err != nil {
+		return err
+	}
+	return s.saveSessionWithEvent(ctx, session, "session.worktree_cleanup_failed", map[string]any{
+		"attempts":       session.WorktreeCleanup.Attempts,
+		"code":           code,
+		"error":          message,
+		"retryable":      retryable,
+		"nextAttemptAt":  nextAt,
+		"worktreeBranch": session.WorktreeBranch,
+	})
+}
+
+func worktreeCleanupDue(session domain.Session, now time.Time) bool {
+	switch session.WorktreeCleanup.Status {
+	case domain.WorktreeCleanupPending:
+		return true
+	case domain.WorktreeCleanupFailed:
+		return session.WorktreeCleanup.Retryable && session.WorktreeCleanup.NextAt != nil && !session.WorktreeCleanup.NextAt.After(now)
+	default:
+		return false
+	}
+}
+
+func worktreeCleanupRetryDelay(attempt int) time.Duration {
+	delays := [...]time.Duration{5 * time.Second, 30 * time.Second, 2 * time.Minute, 10 * time.Minute, 30 * time.Minute}
+	if attempt <= 1 {
+		return delays[0]
+	}
+	if attempt > len(delays) {
+		return delays[len(delays)-1]
+	}
+	return delays[attempt-1]
 }
 
 func (s *Service) scheduleQueueDrain() {
@@ -1275,6 +1581,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	now := s.now()
 	baseBranch := ""
+	worktreeOwnershipToken := ""
 	if project.IsGit {
 		baseBranch = strings.TrimSpace(input.BaseBranch)
 		if baseBranch == "" {
@@ -1285,22 +1592,18 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		if s.worktrees == nil {
 			return DTO{}, errors.New("session worktree manager is required for git project")
 		}
+		worktreeOwnershipToken, err = generateWorktreeOwnershipToken()
+		if err != nil {
+			return DTO{}, fmt.Errorf("generate worktree ownership token: %w", err)
+		}
 	}
 
-	var id domain.ID
-	var session domain.Session
-	var worktreePath string
-	createdSession := false
-	for attempt := 0; attempt < maxSessionIDAttempts; attempt++ {
-		id, err = s.sessionIDForProject(ctx, project, generatedID, attempt)
-		if err != nil {
-			return DTO{}, err
-		}
-		worktreePath = project.Path.Value
+	createWithID := func(ctx context.Context, id domain.ID) (DTO, error) {
+		worktreePath := project.Path.Value
 		if project.IsGit {
 			worktreePath = s.worktrees.PathForSession(input.ProjectID, id)
 		}
-		session = domain.Session{
+		session := domain.Session{
 			ID:           id,
 			ProjectID:    input.ProjectID,
 			Requirement:  requirement,
@@ -1309,99 +1612,95 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			Priority:     normalizePriority(input.Priority),
 			BaseBranch:   baseBranch,
 			WorktreePath: worktreePath,
-			Config:       config,
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			WorktreeCleanup: domain.WorktreeCleanup{
+				Status: domain.WorktreeCleanupNotApplicable,
+			},
+			Config:    config,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if project.IsGit {
+			if err := session.BeginWorktreeProvisioning(worktreePath, worktreeBranchName(id), worktreeOwnershipToken, now); err != nil {
+				return DTO{}, err
+			}
 		}
 		if err := s.repo.Create(ctx, session); err != nil {
-			if isRandomHexID(generatedID) && errors.Is(err, domain.ErrSessionAlreadyExists) {
-				continue
-			}
 			return DTO{}, fmt.Errorf("create session: %w", err)
 		}
-		createdSession = true
-		break
-	}
-	if !createdSession {
-		return DTO{}, fmt.Errorf("create session: exhausted %d session id attempts", maxSessionIDAttempts)
-	}
 
-	createdWorktree := false
-	if project.IsGit {
-		createdPath, err := s.worktrees.Create(ctx, project.Path.Value, input.ProjectID, id, baseBranch)
-		if err != nil {
-			failedAt := s.now()
-			if transitionErr := transitionSession(&session, domain.StatusFailed, failedAt); transitionErr != nil {
-				return DTO{}, transitionErr
+		if project.IsGit {
+			createdPath, err := s.worktrees.Create(ctx, project.Path.Value, input.ProjectID, id, session.WorktreeBranch, baseBranch, session.WorktreeCleanup.OwnershipToken)
+			if err != nil {
+				createErr := apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "create session worktree failed").WithDetails(map[string]any{
+					"projectId":  string(input.ProjectID),
+					"sessionId":  string(id),
+					"baseBranch": baseBranch,
+				}).WithRetryable(true)
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, createErr, "worktree_create_failed")
 			}
-			_ = s.repo.Save(ctx, session)
-			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "create session worktree failed").WithDetails(map[string]any{
-				"projectId":  string(input.ProjectID),
-				"sessionId":  string(id),
-				"baseBranch": baseBranch,
-			}).WithRetryable(true)
-		}
-		createdWorktree = true
-		pathChanged := createdPath != worktreePath
-		worktreePath = createdPath
-		baseCommit, err := s.worktrees.HeadCommit(ctx, createdPath, "")
-		if err != nil {
-			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
-				return DTO{}, errors.Join(fmt.Errorf("read session worktree base commit: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+			if createdPath != worktreePath {
+				createErr := apperror.New(apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "created worktree path does not match persisted ownership").WithDetails(map[string]any{
+					"sessionId":    string(id),
+					"expectedPath": worktreePath,
+					"actualPath":   createdPath,
+				})
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, createErr, "worktree_path_mismatch")
 			}
-			return DTO{}, apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "read session worktree base commit failed").WithDetails(map[string]any{
-				"projectId": string(input.ProjectID),
-				"sessionId": string(id),
-			}).WithRetryable(true)
-		}
-		session.WorktreePath = createdPath
-		session.WorktreeBaseCommit = baseCommit
-		if pathChanged || strings.TrimSpace(baseCommit) != "" {
-			session.UpdatedAt = s.now()
+			baseCommit, err := s.worktrees.HeadCommit(ctx, createdPath, "")
+			if err != nil {
+				baseErr := apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryInfraError, "read session worktree base commit failed").WithDetails(map[string]any{
+					"projectId": string(input.ProjectID),
+					"sessionId": string(id),
+				}).WithRetryable(true)
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, baseErr, "worktree_base_commit_failed")
+			}
+			session.WorktreeBaseCommit = baseCommit
+			if err := session.ActivateWorktree(s.now()); err != nil {
+				return DTO{}, err
+			}
 			if err := s.repo.Save(ctx, session); err != nil {
-				if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
-					return DTO{}, errors.Join(fmt.Errorf("save session worktree snapshot: %w", err), fmt.Errorf("cleanup created worktree: %w", cleanupErr))
-				}
-				return DTO{}, fmt.Errorf("save session worktree snapshot: %w", err)
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, fmt.Errorf("save active session worktree: %w", err), "worktree_active_save_failed")
 			}
 		}
-	}
-	if project.IsGit && strings.TrimSpace(project.WorktreeInitCommand) != "" {
-		if err := s.initializeWorktree(ctx, session, project.WorktreeInitCommand); err != nil {
-			return DTO{}, err
-		}
-	}
-	if _, err := s.archiveStagedAttachments(ctx, id, domain.AttachmentSourceRequirement, string(id), stagedAttachments); err != nil {
-		failedAt := s.now()
-		if transitionErr := transitionSession(&session, domain.StatusFailed, failedAt); transitionErr != nil {
-			return DTO{}, transitionErr
-		}
-		_ = s.repo.Save(ctx, session)
-		if createdWorktree {
-			if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
-				return DTO{}, errors.Join(err, fmt.Errorf("cleanup created worktree: %w", cleanupErr))
+		if project.IsGit && strings.TrimSpace(project.WorktreeInitCommand) != "" {
+			if err := s.initializeWorktree(ctx, session, project.WorktreeInitCommand); err != nil {
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, err, "worktree_init_cancelled")
 			}
 		}
-		return DTO{}, err
-	}
-	if mode == domain.ModeWorkflow {
-		dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), true)
+		if _, err := s.archiveStagedAttachments(ctx, id, domain.AttachmentSourceRequirement, string(id), stagedAttachments); err != nil {
+			return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, err, "attachment_archive_failed")
+		}
+		if mode == domain.ModeWorkflow {
+			dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), true)
+			if startErr != nil {
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, startErr, "workflow_start_failed")
+			}
+			return dto, nil
+		}
+		dto, startErr := s.enqueueCodex(ctx, session, codexStartOptions{initialStart: true}, queuePriorityForSession(session))
 		if startErr != nil {
-			failedAt := s.now()
-			if transitionErr := transitionSession(&session, domain.StatusFailed, failedAt); transitionErr != nil {
-				return DTO{}, transitionErr
-			}
-			_ = s.repo.Save(ctx, session)
-			if createdWorktree {
-				if cleanupErr := s.cleanupCreatedWorktree(ctx, project.Path.Value, worktreePath, id); cleanupErr != nil {
-					return DTO{}, errors.Join(startErr, fmt.Errorf("cleanup created worktree: %w", cleanupErr))
-				}
-			}
-			return DTO{}, startErr
+			return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, startErr, "session_start_failed")
 		}
 		return dto, nil
 	}
-	return s.enqueueCodex(ctx, session, codexStartOptions{initialStart: true}, queuePriorityForSession(session))
+
+	for attempt := 0; attempt < maxSessionIDAttempts; attempt++ {
+		id, err := s.sessionIDForProject(ctx, project, generatedID, attempt)
+		if err != nil {
+			return DTO{}, err
+		}
+		var dto DTO
+		err = s.withSessionLock(ctx, id, func(ctx context.Context) error {
+			var createErr error
+			dto, createErr = createWithID(ctx, id)
+			return createErr
+		})
+		if isRandomHexID(generatedID) && errors.Is(err, domain.ErrSessionAlreadyExists) {
+			continue
+		}
+		return dto, err
+	}
+	return DTO{}, fmt.Errorf("create session: exhausted %d session id attempts", maxSessionIDAttempts)
 }
 
 func (s *Service) initializeWorktree(ctx context.Context, session domain.Session, script string) error {
@@ -1449,14 +1748,32 @@ func (s *Service) recordSessionEvent(ctx context.Context, session domain.Session
 	return nil
 }
 
-func (s *Service) cleanupCreatedWorktree(ctx context.Context, projectPath string, worktreePath string, sessionID domain.ID) error {
-	if s == nil || s.worktrees == nil {
-		return nil
+func (s *Service) failCreatedSessionWithCleanup(ctx context.Context, session domain.Session, cause error, reason string) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), processCleanupTimeout)
+	defer cancel()
+	now := s.now()
+	if session.Status != domain.StatusFailed {
+		if err := transitionSession(&session, domain.StatusFailed, now); err != nil {
+			return errors.Join(cause, err)
+		}
 	}
-	return errors.Join(
-		s.worktrees.Remove(ctx, worktreePath),
-		s.worktrees.DeleteBranch(ctx, projectPath, worktreeBranchName(sessionID)),
-	)
+	if strings.TrimSpace(session.BaseBranch) != "" {
+		if err := session.RequestWorktreeCleanup(now); err != nil {
+			return errors.Join(cause, err)
+		}
+	}
+	eventType := "session.failed"
+	if strings.TrimSpace(session.BaseBranch) != "" {
+		eventType = "session.worktree_cleanup_requested"
+	}
+	if err := s.saveSessionWithEvent(cleanupCtx, session, eventType, map[string]any{
+		"reason":         reason,
+		"worktreeBranch": session.WorktreeBranch,
+	}); err != nil {
+		return errors.Join(cause, err)
+	}
+	s.scheduleWorktreeCleanup()
+	return cause
 }
 
 func (s *Service) StartSession(ctx context.Context, id domain.ID) (DTO, error) {
@@ -1519,6 +1836,9 @@ func (s *Service) startSession(ctx context.Context, id domain.ID, startOptions S
 }
 
 func (s *Service) startLoadedSession(ctx context.Context, session domain.Session, startOptions StartSessionOptions) (DTO, error) {
+	if err := requireActiveWorktree(session); err != nil {
+		return DTO{}, err
+	}
 	if session.Status == domain.StatusResumeFailed {
 		if err := s.settleDetachedProcessBeforeRecoveryAction(ctx, session); err != nil {
 			return DTO{}, err
@@ -2099,6 +2419,9 @@ func (s *Service) resumeSession(ctx context.Context, id domain.ID, startOptions 
 }
 
 func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Session, startOptions StartSessionOptions) (DTO, error) {
+	if err := requireActiveWorktree(session); err != nil {
+		return DTO{}, err
+	}
 	switch session.Status {
 	case domain.StatusStopped, domain.StatusResumeFailed:
 	case domain.StatusQueued:
@@ -3036,6 +3359,9 @@ func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session 
 }
 
 func (s *Service) codexWorkdir(ctx context.Context, session domain.Session) (string, error) {
+	if err := requireActiveWorktree(session); err != nil {
+		return "", err
+	}
 	workdir := strings.TrimSpace(session.WorktreePath)
 	if workdir != "" {
 		return workdir, nil
@@ -5261,6 +5587,42 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	return s.saveSessionAndEvent(ctx, session, event, ok)
 }
 
+func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput) error {
+	events, err := s.newSessionEvents(session, inputs)
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Sessions().Save(ctx, session); err != nil {
+				return fmt.Errorf("save session: %w", err)
+			}
+			for _, event := range events {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, event := range events {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.repo.Save(ctx, session); err != nil {
+		return fmt.Errorf("save session: %w", err)
+	}
+	for _, event := range events {
+		if err := s.events.Append(ctx, event); err != nil {
+			return err
+		}
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
 func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
@@ -5530,6 +5892,9 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unsupported close reason").WithDetails(map[string]any{"reason": string(reason)})
 	}
 	if session.Status == domain.StatusClosed {
+		if session.WorktreeCleanup.Status == domain.WorktreeCleanupPending || (session.WorktreeCleanup.Status == domain.WorktreeCleanupFailed && session.WorktreeCleanup.Retryable) {
+			s.scheduleWorktreeCleanup()
+		}
 		return toDTO(session), nil
 	}
 	requiresStop, err := closeRequiresStop(ctx, s, session)
@@ -5551,53 +5916,38 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
 		return DTO{}, err
 	}
-	closedPayload := map[string]any{"reason": string(reason)}
-	if strings.TrimSpace(session.BaseBranch) != "" && strings.TrimSpace(session.WorktreePath) != "" {
-		if s.worktrees == nil {
-			return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryInfraError, "session worktree manager is required").WithDetails(map[string]any{
+	now := s.now()
+	cleanupRequested := false
+	if strings.TrimSpace(session.BaseBranch) != "" {
+		switch session.WorktreeCleanup.Status {
+		case domain.WorktreeCleanupPending:
+			cleanupRequested = true
+		case domain.WorktreeCleanupActive, domain.WorktreeCleanupProvisioning, domain.WorktreeCleanupFailed:
+			if err := session.RequestWorktreeCleanup(now); err != nil {
+				return DTO{}, err
+			}
+			cleanupRequested = true
+		case domain.WorktreeCleanupCleaned:
+		case domain.WorktreeCleanupNotApplicable, "":
+			return DTO{}, apperror.New(apperror.CodeCloseFailed, apperror.CategoryValidationError, "git session worktree ownership is not persisted").WithDetails(map[string]any{
 				"sessionId": string(session.ID),
 			})
 		}
-		exists, err := s.worktrees.Exists(ctx, session.WorktreePath)
-		if err != nil {
-			return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "check session worktree existence failed").WithDetails(map[string]any{
-				"sessionId": string(session.ID),
-			}).WithRetryable(true)
-		}
-		var project projectdomain.Project
-		if exists {
-			project, err = s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
-			if err != nil {
-				return DTO{}, fmt.Errorf("find project for session worktree cleanup: %w", err)
-			}
-			if project.IsGit {
-				if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
-					return DTO{}, apperror.Wrap(err, apperror.CodeCloseFailed, apperror.CategoryInfraError, "remove session worktree failed").WithDetails(map[string]any{
-						"sessionId": string(session.ID),
-					}).WithRetryable(true)
-				}
-			}
-		} else {
-			project, err = s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
-			if err != nil {
-				closedPayload["branchCleanupFailed"] = true
-				closedPayload["branchCleanupError"] = fmt.Sprintf("find project for branch cleanup: %v", err)
-			}
-		}
-		if project.IsGit {
-			if err := s.worktrees.DeleteBranch(ctx, project.Path.Value, worktreeBranchName(session.ID)); err != nil {
-				closedPayload["branchCleanupFailed"] = true
-				closedPayload["branchCleanupError"] = err.Error()
-			}
-		}
-		session.WorktreePath = ""
 	}
-	now := s.now()
 	if err := session.Close(reason, now); err != nil {
 		return DTO{}, fmt.Errorf("close session %s: %w", session.ID, err)
 	}
-	if err := s.saveSessionWithEvent(ctx, session, "session.closed", closedPayload); err != nil {
+	events := []sessionEventInput{{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}}}
+	if cleanupRequested {
+		events = append(events, sessionEventInput{eventType: "session.worktree_cleanup_requested", payload: map[string]any{
+			"worktreeBranch": session.WorktreeBranch,
+		}})
+	}
+	if err := s.saveSessionWithEvents(ctx, session, events); err != nil {
 		return DTO{}, err
+	}
+	if cleanupRequested {
+		s.scheduleWorktreeCleanup()
 	}
 	return toDTO(session), nil
 }
@@ -5714,6 +6064,9 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		}
 		if session.Status == domain.StatusClosed {
 			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session cannot be appended")
+		}
+		if err := requireActiveWorktree(session); err != nil {
+			return err
 		}
 		id, err := s.generateID()
 		if err != nil {
@@ -6223,6 +6576,7 @@ func toDTO(session domain.Session) DTO {
 		WorktreeBranch:     worktreeBranchForSession(session),
 		WorktreePath:       session.WorktreePath,
 		WorktreeBaseCommit: session.WorktreeBaseCommit,
+		WorktreeCleanup:    toWorktreeCleanupDTO(session.WorktreeCleanup),
 		CodexSessionID:     session.CodexSessionID,
 		Config:             session.Config,
 		AvailableActions:   availableActions(session),
@@ -6236,11 +6590,28 @@ func worktreeBranchForSession(session domain.Session) string {
 	if strings.TrimSpace(session.BaseBranch) == "" {
 		return ""
 	}
-	return worktreeBranchName(session.ID)
+	return strings.TrimSpace(session.WorktreeBranch)
 }
 
 func worktreeBranchName(sessionID domain.ID) string {
 	return strings.TrimSpace(string(sessionID))
+}
+
+func toWorktreeCleanupDTO(cleanup domain.WorktreeCleanup) WorktreeCleanupDTO {
+	dto := WorktreeCleanupDTO{
+		Status:      cleanup.Status,
+		Attempts:    cleanup.Attempts,
+		RequestedAt: cleanup.RequestedAt,
+		CompletedAt: cleanup.CompletedAt,
+	}
+	if cleanup.ErrorCode != "" || cleanup.Error != "" {
+		dto.Error = &WorktreeCleanupErrorDTO{
+			Code:      cleanup.ErrorCode,
+			Message:   cleanup.Error,
+			Retryable: cleanup.Retryable,
+		}
+	}
+	return dto
 }
 
 func toWorkflowRunDTO(run domain.WorkflowRunSnapshot) WorkflowRunDTO {
@@ -6454,6 +6825,15 @@ func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {
 }
 
 func availableActions(session domain.Session) []string {
+	if strings.TrimSpace(session.BaseBranch) != "" && session.WorktreeCleanup.Status != domain.WorktreeCleanupActive {
+		if session.Status == domain.StatusClosed && session.WorktreeCleanup.Status == domain.WorktreeCleanupFailed && session.WorktreeCleanup.Retryable {
+			return []string{"retry_worktree_cleanup"}
+		}
+		if session.Status != domain.StatusClosed {
+			return []string{"close"}
+		}
+		return []string{}
+	}
 	switch session.Status {
 	case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
 		return []string{"execute", "close"}
@@ -6491,7 +6871,18 @@ func workflowNodeRunID(value *domain.NodeRunID) *processdomain.NodeRunID {
 
 func canResume(session domain.Session) bool {
 	return strings.TrimSpace(session.CodexSessionID) != "" &&
+		(strings.TrimSpace(session.BaseBranch) == "" || session.WorktreeCleanup.Status == domain.WorktreeCleanupActive) &&
 		(session.Status == domain.StatusStopped || session.Status == domain.StatusResumeFailed)
+}
+
+func requireActiveWorktree(session domain.Session) error {
+	if err := session.RequireActiveWorktree(); err != nil {
+		return apperror.Wrap(err, apperror.CodeWorktreeFailed, apperror.CategoryUserActionRequired, "session worktree is not available for execution").WithDetails(map[string]any{
+			"sessionId":             string(session.ID),
+			"worktreeCleanupStatus": string(session.WorktreeCleanup.Status),
+		}).WithRetryable(session.WorktreeCleanup.Retryable).WithUserAction("wait_for_worktree_cleanup")
+	}
+	return nil
 }
 
 func generateID() (domain.ID, error) {
@@ -6500,6 +6891,14 @@ func generateID() (domain.ID, error) {
 		return "", err
 	}
 	return domain.ID(hex.EncodeToString(b[:])), nil
+}
+
+func generateWorktreeOwnershipToken() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value[:]), nil
 }
 
 func normalizePage(page, pageSize int) (int, int) {

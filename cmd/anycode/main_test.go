@@ -99,10 +99,13 @@ func TestStartupReconcilesBeforeQueueDrain(t *testing.T) {
 	if strings.Join(sessions.calls, ",") != "recover" {
 		t.Fatalf("reconcile calls = %#v", sessions.calls)
 	}
+	if err := reconcileWorktreeCleanup(context.Background(), sessions); err != nil {
+		t.Fatalf("reconcileWorktreeCleanup() error = %v", err)
+	}
 	if err := drainQueuedSessions(context.Background(), sessions); err != nil {
 		t.Fatalf("drainQueuedSessions() error = %v", err)
 	}
-	if strings.Join(sessions.calls, ",") != "recover,drain" {
+	if strings.Join(sessions.calls, ",") != "recover,worktree,drain" {
 		t.Fatalf("startup calls = %#v", sessions.calls)
 	}
 }
@@ -113,11 +116,13 @@ type fakeCodexProber struct {
 }
 
 type fakeRecoverySessions struct {
-	calls        []string
-	recoverCount int
-	drainCount   int
-	recoverErr   error
-	drainErr     error
+	calls         []string
+	recoverCount  int
+	drainCount    int
+	worktreeCount int
+	recoverErr    error
+	drainErr      error
+	worktreeErr   error
 }
 
 func (s *fakeRecoverySessions) RecoverInterruptedSessions(context.Context) (int, error) {
@@ -128,6 +133,11 @@ func (s *fakeRecoverySessions) RecoverInterruptedSessions(context.Context) (int,
 func (s *fakeRecoverySessions) DrainQueuedSessions(context.Context) (int, error) {
 	s.calls = append(s.calls, "drain")
 	return s.drainCount, s.drainErr
+}
+
+func (s *fakeRecoverySessions) ReconcileWorktreeCleanup(context.Context) (int, error) {
+	s.calls = append(s.calls, "worktree")
+	return s.worktreeCount, s.worktreeErr
 }
 
 func (p fakeCodexProber) Probe(context.Context) (processdomain.CodexCapabilities, error) {

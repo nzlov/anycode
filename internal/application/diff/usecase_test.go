@@ -887,6 +887,14 @@ func (r *fakeSessionRepository) ListQueued(context.Context) ([]sessiondomain.Ses
 	return nil, nil
 }
 
+func (r *fakeSessionRepository) ListProvisioningWorktrees(context.Context, int) ([]sessiondomain.Session, error) {
+	return nil, nil
+}
+
+func (r *fakeSessionRepository) ListWorktreeCleanupDue(context.Context, time.Time, int) ([]sessiondomain.Session, error) {
+	return nil, nil
+}
+
 func (r *fakeSessionRepository) ListInterruptedWithCodexSession(context.Context) ([]sessiondomain.Session, error) {
 	return nil, nil
 }

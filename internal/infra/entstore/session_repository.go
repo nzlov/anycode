@@ -51,7 +51,14 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetPriority(string(normalizePriority(s.Priority))).
 			SetBaseBranch(s.BaseBranch).
 			SetWorktreePath(s.WorktreePath).
+			SetWorktreeBranch(s.WorktreeBranch).
 			SetWorktreeBaseCommit(s.WorktreeBaseCommit).
+			SetWorktreeCleanupStatus(string(normalizeWorktreeCleanupStatus(s.WorktreeCleanup.Status))).
+			SetWorktreeCleanupAttempts(s.WorktreeCleanup.Attempts).
+			SetWorktreeOwnershipToken(s.WorktreeCleanup.OwnershipToken).
+			SetWorktreeCleanupErrorCode(s.WorktreeCleanup.ErrorCode).
+			SetWorktreeCleanupError(s.WorktreeCleanup.Error).
+			SetWorktreeCleanupRetryable(s.WorktreeCleanup.Retryable).
 			SetCodexSessionID(s.CodexSessionID).
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
@@ -71,6 +78,31 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			update.SetQueueNodeRunID("")
 		} else {
 			update.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
+		}
+		if s.WorktreeCleanup.RequestedAt == nil {
+			update.ClearWorktreeCleanupRequestedAt()
+		} else {
+			update.SetWorktreeCleanupRequestedAt(*s.WorktreeCleanup.RequestedAt)
+		}
+		if s.WorktreeCleanup.OwnershipConfirmedAt == nil {
+			update.ClearWorktreeOwnershipConfirmedAt()
+		} else {
+			update.SetWorktreeOwnershipConfirmedAt(*s.WorktreeCleanup.OwnershipConfirmedAt)
+		}
+		if s.WorktreeCleanup.LastAt == nil {
+			update.ClearWorktreeCleanupLastAt()
+		} else {
+			update.SetWorktreeCleanupLastAt(*s.WorktreeCleanup.LastAt)
+		}
+		if s.WorktreeCleanup.NextAt == nil {
+			update.ClearWorktreeCleanupNextAt()
+		} else {
+			update.SetWorktreeCleanupNextAt(*s.WorktreeCleanup.NextAt)
+		}
+		if s.WorktreeCleanup.CompletedAt == nil {
+			update.ClearWorktreeCleanupCompletedAt()
+		} else {
+			update.SetWorktreeCleanupCompletedAt(*s.WorktreeCleanup.CompletedAt)
 		}
 		if s.QueuedAt == nil {
 			update.ClearQueuedAt()
@@ -114,7 +146,14 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetPriority(string(normalizePriority(s.Priority))).
 		SetBaseBranch(s.BaseBranch).
 		SetWorktreePath(s.WorktreePath).
+		SetWorktreeBranch(s.WorktreeBranch).
 		SetWorktreeBaseCommit(s.WorktreeBaseCommit).
+		SetWorktreeCleanupStatus(string(normalizeWorktreeCleanupStatus(s.WorktreeCleanup.Status))).
+		SetWorktreeCleanupAttempts(s.WorktreeCleanup.Attempts).
+		SetWorktreeOwnershipToken(s.WorktreeCleanup.OwnershipToken).
+		SetWorktreeCleanupErrorCode(s.WorktreeCleanup.ErrorCode).
+		SetWorktreeCleanupError(s.WorktreeCleanup.Error).
+		SetWorktreeCleanupRetryable(s.WorktreeCleanup.Retryable).
 		SetCodexSessionID(s.CodexSessionID).
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
@@ -132,6 +171,21 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
 	if s.Queue.NodeRunID != nil {
 		create.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
+	}
+	if s.WorktreeCleanup.RequestedAt != nil {
+		create.SetWorktreeCleanupRequestedAt(*s.WorktreeCleanup.RequestedAt)
+	}
+	if s.WorktreeCleanup.OwnershipConfirmedAt != nil {
+		create.SetWorktreeOwnershipConfirmedAt(*s.WorktreeCleanup.OwnershipConfirmedAt)
+	}
+	if s.WorktreeCleanup.LastAt != nil {
+		create.SetWorktreeCleanupLastAt(*s.WorktreeCleanup.LastAt)
+	}
+	if s.WorktreeCleanup.NextAt != nil {
+		create.SetWorktreeCleanupNextAt(*s.WorktreeCleanup.NextAt)
+	}
+	if s.WorktreeCleanup.CompletedAt != nil {
+		create.SetWorktreeCleanupCompletedAt(*s.WorktreeCleanup.CompletedAt)
 	}
 	if s.QueuedAt != nil {
 		create.SetQueuedAt(*s.QueuedAt)
@@ -194,6 +248,52 @@ func (r *SessionRepository) ListQueued(ctx context.Context) ([]domainsession.Ses
 		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list queued sessions: %w", err)
+	}
+	sessions := make([]domainsession.Session, 0, len(rows))
+	for _, row := range rows {
+		sessions = append(sessions, toDomainSession(row))
+	}
+	return sessions, nil
+}
+
+func (r *SessionRepository) ListWorktreeCleanupDue(ctx context.Context, now time.Time, limit int) ([]domainsession.Session, error) {
+	if limit < 1 {
+		limit = 100
+	}
+	rows, err := r.client.Session.Query().
+		Where(entsession.Or(
+			entsession.WorktreeCleanupStatusEQ(string(domainsession.WorktreeCleanupPending)),
+			entsession.And(
+				entsession.WorktreeCleanupStatusEQ(string(domainsession.WorktreeCleanupFailed)),
+				entsession.WorktreeCleanupRetryableEQ(true),
+				entsession.WorktreeCleanupNextAtNotNil(),
+				entsession.WorktreeCleanupNextAtLTE(now),
+			),
+		)).
+		Order(ent.Asc(entsession.FieldWorktreeCleanupNextAt), ent.Asc(entsession.FieldUpdatedAt), ent.Asc(entsession.FieldID)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions due for worktree cleanup: %w", err)
+	}
+	sessions := make([]domainsession.Session, 0, len(rows))
+	for _, row := range rows {
+		sessions = append(sessions, toDomainSession(row))
+	}
+	return sessions, nil
+}
+
+func (r *SessionRepository) ListProvisioningWorktrees(ctx context.Context, limit int) ([]domainsession.Session, error) {
+	if limit < 1 {
+		limit = 100
+	}
+	rows, err := r.client.Session.Query().
+		Where(entsession.WorktreeCleanupStatusEQ(string(domainsession.WorktreeCleanupProvisioning))).
+		Order(ent.Asc(entsession.FieldUpdatedAt), ent.Asc(entsession.FieldID)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list provisioning session worktrees: %w", err)
 	}
 	sessions := make([]domainsession.Session, 0, len(rows))
 	for _, row := range rows {
@@ -576,8 +676,22 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		CloseReason:        closeReason,
 		BaseBranch:         row.BaseBranch,
 		WorktreePath:       row.WorktreePath,
+		WorktreeBranch:     row.WorktreeBranch,
 		WorktreeBaseCommit: row.WorktreeBaseCommit,
-		CodexSessionID:     row.CodexSessionID,
+		WorktreeCleanup: domainsession.WorktreeCleanup{
+			Status:               domainsession.WorktreeCleanupStatus(row.WorktreeCleanupStatus),
+			Attempts:             row.WorktreeCleanupAttempts,
+			OwnershipToken:       row.WorktreeOwnershipToken,
+			OwnershipConfirmedAt: row.WorktreeOwnershipConfirmedAt,
+			RequestedAt:          row.WorktreeCleanupRequestedAt,
+			LastAt:               row.WorktreeCleanupLastAt,
+			NextAt:               row.WorktreeCleanupNextAt,
+			CompletedAt:          row.WorktreeCleanupCompletedAt,
+			ErrorCode:            row.WorktreeCleanupErrorCode,
+			Error:                row.WorktreeCleanupError,
+			Retryable:            row.WorktreeCleanupRetryable,
+		},
+		CodexSessionID: row.CodexSessionID,
 		Config: domainsession.Config{
 			CodexModel:      row.CodexModel,
 			ReasoningEffort: row.ReasoningEffort,
@@ -625,6 +739,13 @@ func normalizeQueuePriority(priority domainsession.QueuePriority) domainsession.
 	default:
 		return domainsession.QueuePriorityMedium
 	}
+}
+
+func normalizeWorktreeCleanupStatus(status domainsession.WorktreeCleanupStatus) domainsession.WorktreeCleanupStatus {
+	if status == "" {
+		return domainsession.WorktreeCleanupNotApplicable
+	}
+	return status
 }
 
 func toDomainMergeRecord(row *ent.MergeRecord) domainsession.MergeRecord {

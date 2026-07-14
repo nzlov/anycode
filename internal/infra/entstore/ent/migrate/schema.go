@@ -257,7 +257,19 @@ var (
 		{Name: "close_reason", Type: field.TypeString, Nullable: true},
 		{Name: "base_branch", Type: field.TypeString, Default: ""},
 		{Name: "worktree_path", Type: field.TypeString, Default: ""},
+		{Name: "worktree_branch", Type: field.TypeString, Default: ""},
 		{Name: "worktree_base_commit", Type: field.TypeString, Default: ""},
+		{Name: "worktree_cleanup_status", Type: field.TypeString, Default: "not_applicable"},
+		{Name: "worktree_cleanup_attempts", Type: field.TypeInt, Default: 0},
+		{Name: "worktree_ownership_token", Type: field.TypeString, Default: ""},
+		{Name: "worktree_ownership_confirmed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "worktree_cleanup_requested_at", Type: field.TypeTime, Nullable: true},
+		{Name: "worktree_cleanup_last_at", Type: field.TypeTime, Nullable: true},
+		{Name: "worktree_cleanup_next_at", Type: field.TypeTime, Nullable: true},
+		{Name: "worktree_cleanup_completed_at", Type: field.TypeTime, Nullable: true},
+		{Name: "worktree_cleanup_error_code", Type: field.TypeString, Default: ""},
+		{Name: "worktree_cleanup_error", Type: field.TypeString, Default: ""},
+		{Name: "worktree_cleanup_retryable", Type: field.TypeBool, Default: false},
 		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
 		{Name: "codex_model", Type: field.TypeString, Default: ""},
 		{Name: "reasoning_effort", Type: field.TypeString, Default: ""},
@@ -294,12 +306,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[29]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[41]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[27]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[39]},
 			},
 			{
 				Name:    "session_status",
@@ -309,7 +321,12 @@ var (
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[18], SessionsColumns[5], SessionsColumns[16]},
+				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[30], SessionsColumns[5], SessionsColumns[28]},
+			},
+			{
+				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[41]},
 			},
 		},
 	}

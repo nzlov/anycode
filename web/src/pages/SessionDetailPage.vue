@@ -188,6 +188,35 @@
                     <q-item-label>{{ session?.worktreeBranch || '-' }}</q-item-label>
                   </q-item-section>
                 </q-item>
+                <q-item v-if="worktreeCleanup && worktreeCleanup.status !== 'not_applicable'">
+                  <q-item-section>
+                    <q-item-label caption>工作树清理</q-item-label>
+                    <q-item-label>
+                      <q-badge
+                        outline
+                        :color="worktreeCleanupColor(worktreeCleanup.status)"
+                        :label="worktreeCleanupLabel(worktreeCleanup.status)"
+                      />
+                    </q-item-label>
+                    <q-item-label v-if="worktreeCleanup.error" caption class="text-negative">
+                      {{ worktreeCleanup.error.message }}
+                    </q-item-label>
+                  </q-item-section>
+                  <q-item-section v-if="canRetryWorktreeCleanup" side>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      icon="refresh"
+                      color="primary"
+                      aria-label="重试工作树清理"
+                      :loading="retryingWorktreeCleanup"
+                      @click="retryCurrentWorktreeCleanup"
+                    >
+                      <q-tooltip>重试工作树清理</q-tooltip>
+                    </q-btn>
+                  </q-item-section>
+                </q-item>
                 <q-item>
                   <q-item-section>
                     <q-item-label caption>更新时间</q-item-label>
@@ -593,6 +622,7 @@ const {
   executing,
   stopping,
   closing,
+  retryingWorktreeCleanup,
   updatingConfig,
   questionsLoading,
   questionsSubmitting,
@@ -604,6 +634,7 @@ const {
   executeSession,
   stopSession,
   closeSession: closeSessionRequest,
+  retryWorktreeCleanup,
   updateConfig,
   loadPendingQuestions,
   loadOlderEvents,
@@ -624,6 +655,10 @@ const knownUserPrompts = computed(() => {
 });
 const canExecute = computed(() => session.value?.availableActions.includes('execute') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
+const worktreeCleanup = computed(() => session.value?.worktreeCleanup ?? null);
+const canRetryWorktreeCleanup = computed(
+  () => session.value?.availableActions.includes('retry_worktree_cleanup') ?? false,
+);
 const canCancelQueue = computed(
   () => session.value?.status === 'queued' && session.value.availableActions.includes('stop'),
 );
@@ -781,6 +816,24 @@ function closeReasonLabel(value: string) {
     workflow_closed: '流程关闭',
   };
   return labels[value] ?? value;
+}
+
+function worktreeCleanupLabel(status: string) {
+  const labels: Record<string, string> = {
+    provisioning: '创建中',
+    active: '使用中',
+    pending: '等待清理',
+    failed: '清理失败',
+    cleaned: '已清理',
+  };
+  return labels[status] ?? status;
+}
+
+function worktreeCleanupColor(status: string) {
+  if (status === 'failed') return 'negative';
+  if (status === 'pending' || status === 'provisioning') return 'warning';
+  if (status === 'cleaned') return 'positive';
+  return 'primary';
 }
 
 async function loadChangeList() {
@@ -972,6 +1025,15 @@ async function closeCurrentSession() {
     await closeSessionRequest();
   } catch (err) {
     notifyError(err, '关闭卡片失败');
+  }
+}
+
+async function retryCurrentWorktreeCleanup() {
+  if (!canRetryWorktreeCleanup.value) return;
+  try {
+    await retryWorktreeCleanup();
+  } catch (err) {
+    notifyError(err, '重试工作树清理失败');
   }
 }
 
@@ -1441,5 +1503,4 @@ async function scrollEventsToBottom() {
     min-height: 0;
   }
 }
-
 </style>

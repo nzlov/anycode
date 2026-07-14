@@ -15,6 +15,7 @@ import {
   getSession,
   subscribeSessionStateUpdates,
   executeSession as executeSessionRequest,
+  retrySessionWorktreeCleanup as retrySessionWorktreeCleanupRequest,
   submitQuestionBatch,
   submitWorkflowApproval as submitWorkflowApprovalRequest,
   type QuestionAnswerInput,
@@ -54,6 +55,7 @@ export function useSessionDetail(sessionId: string) {
   const executing = ref(false);
   const stopping = ref(false);
   const closing = ref(false);
+  const retryingWorktreeCleanup = ref(false);
   const updatingConfig = ref(false);
   const questionsLoading = ref(false);
   const questionsSubmitting = ref(false);
@@ -184,6 +186,20 @@ export function useSessionDetail(sessionId: string) {
       throw err;
     } finally {
       closing.value = false;
+    }
+  }
+
+  async function retryWorktreeCleanup() {
+    retryingWorktreeCleanup.value = true;
+    error.value = '';
+    try {
+      await retrySessionWorktreeCleanupRequest(sessionId);
+      await loadSessionDetail();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '重试工作树清理失败';
+      throw err;
+    } finally {
+      retryingWorktreeCleanup.value = false;
     }
   }
 
@@ -502,6 +518,7 @@ export function useSessionDetail(sessionId: string) {
     executing,
     stopping,
     closing,
+    retryingWorktreeCleanup,
     updatingConfig,
     questionsLoading,
     questionsSubmitting,
@@ -513,6 +530,7 @@ export function useSessionDetail(sessionId: string) {
     executeSession,
     stopSession,
     closeSession,
+    retryWorktreeCleanup,
     updateConfig,
     loadPendingQuestions,
     loadOlderEvents,

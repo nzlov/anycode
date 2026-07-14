@@ -230,6 +230,18 @@ func (r *mutationResolver) CloseSession(ctx context.Context, input model.CloseSe
 	return mapSession(dto), nil
 }
 
+// RetrySessionWorktreeCleanup is the resolver for the retrySessionWorktreeCleanup field.
+func (r *mutationResolver) RetrySessionWorktreeCleanup(ctx context.Context, id string) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.RetryWorktreeCleanup(ctx, sessiondomain.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // AppendPrompt is the resolver for the appendPrompt field.
 func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendPromptInput) (*model.PromptAppend, error) {
 	if r.UseCases.Sessions == nil {

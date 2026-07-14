@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,8 @@ var (
 	ErrSessionAlreadyExists    = errors.New("session already exists")
 	ErrInvalidStatusTransition = errors.New("invalid session status transition")
 	ErrInvalidQueueIntent      = errors.New("invalid session queue intent")
+	ErrInvalidWorktreeCleanup  = errors.New("invalid worktree cleanup transition")
+	ErrWorktreeUnavailable     = errors.New("session worktree is unavailable")
 )
 
 type ID string
@@ -88,6 +91,17 @@ const (
 	CloseReasonWorkflowClosed CloseReason = "workflow_closed"
 )
 
+type WorktreeCleanupStatus string
+
+const (
+	WorktreeCleanupNotApplicable WorktreeCleanupStatus = "not_applicable"
+	WorktreeCleanupProvisioning  WorktreeCleanupStatus = "provisioning"
+	WorktreeCleanupActive        WorktreeCleanupStatus = "active"
+	WorktreeCleanupPending       WorktreeCleanupStatus = "pending"
+	WorktreeCleanupFailed        WorktreeCleanupStatus = "failed"
+	WorktreeCleanupCleaned       WorktreeCleanupStatus = "cleaned"
+)
+
 type Session struct {
 	ID                 ID
 	ProjectID          ProjectID
@@ -98,7 +112,9 @@ type Session struct {
 	CloseReason        *CloseReason
 	BaseBranch         string
 	WorktreePath       string
+	WorktreeBranch     string
 	WorktreeBaseCommit string
+	WorktreeCleanup    WorktreeCleanup
 	CodexSessionID     string
 	Config             Config
 	TodoList           TodoList
@@ -108,6 +124,20 @@ type Session struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	ClosedAt           *time.Time
+}
+
+type WorktreeCleanup struct {
+	Status               WorktreeCleanupStatus
+	Attempts             int
+	OwnershipToken       string
+	OwnershipConfirmedAt *time.Time
+	RequestedAt          *time.Time
+	LastAt               *time.Time
+	NextAt               *time.Time
+	CompletedAt          *time.Time
+	ErrorCode            string
+	Error                string
+	Retryable            bool
 }
 
 type QueueIntent struct {
@@ -163,6 +193,116 @@ func (s *Session) Close(reason CloseReason, now time.Time) error {
 	}
 	s.CloseReason = &reason
 	s.ClosedAt = timePtr(now)
+	return nil
+}
+
+func (s *Session) BeginWorktreeProvisioning(path string, branch string, ownershipToken string, now time.Time) error {
+	path = strings.TrimSpace(path)
+	branch = strings.TrimSpace(branch)
+	ownershipToken = strings.TrimSpace(ownershipToken)
+	if path == "" || branch == "" || ownershipToken == "" || branch != strings.TrimSpace(string(s.ID)) || branch == strings.TrimSpace(s.BaseBranch) {
+		return fmt.Errorf("%w: path=%q branch=%q", ErrInvalidWorktreeCleanup, path, branch)
+	}
+	if s.WorktreeCleanup.Status != "" && s.WorktreeCleanup.Status != WorktreeCleanupNotApplicable {
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidWorktreeCleanup, s.WorktreeCleanup.Status, WorktreeCleanupProvisioning)
+	}
+	s.WorktreePath = path
+	s.WorktreeBranch = branch
+	s.WorktreeCleanup = WorktreeCleanup{Status: WorktreeCleanupProvisioning, OwnershipToken: ownershipToken}
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s *Session) ActivateWorktree(now time.Time) error {
+	if s.WorktreeCleanup.Status != WorktreeCleanupProvisioning {
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidWorktreeCleanup, s.WorktreeCleanup.Status, WorktreeCleanupActive)
+	}
+	if err := s.ConfirmWorktreeOwnership(now); err != nil {
+		return err
+	}
+	s.WorktreeCleanup.Status = WorktreeCleanupActive
+	s.WorktreeCleanup.ErrorCode = ""
+	s.WorktreeCleanup.Error = ""
+	s.WorktreeCleanup.Retryable = false
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s *Session) ConfirmWorktreeOwnership(now time.Time) error {
+	switch s.WorktreeCleanup.Status {
+	case WorktreeCleanupProvisioning, WorktreeCleanupPending, WorktreeCleanupFailed:
+	default:
+		return fmt.Errorf("%w: confirm ownership from %s", ErrInvalidWorktreeCleanup, s.WorktreeCleanup.Status)
+	}
+	if strings.TrimSpace(s.WorktreePath) == "" || strings.TrimSpace(s.WorktreeBranch) == "" || strings.TrimSpace(s.WorktreeCleanup.OwnershipToken) == "" {
+		return fmt.Errorf("%w: worktree ownership is incomplete", ErrInvalidWorktreeCleanup)
+	}
+	if s.WorktreeCleanup.OwnershipConfirmedAt == nil {
+		s.WorktreeCleanup.OwnershipConfirmedAt = timePtr(now)
+	}
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s *Session) RequestWorktreeCleanup(now time.Time) error {
+	switch s.WorktreeCleanup.Status {
+	case WorktreeCleanupActive, WorktreeCleanupProvisioning, WorktreeCleanupFailed:
+	case WorktreeCleanupPending:
+		return nil
+	default:
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidWorktreeCleanup, s.WorktreeCleanup.Status, WorktreeCleanupPending)
+	}
+	s.WorktreeCleanup.Status = WorktreeCleanupPending
+	if s.WorktreeCleanup.RequestedAt == nil {
+		s.WorktreeCleanup.RequestedAt = timePtr(now)
+	}
+	s.WorktreeCleanup.NextAt = timePtr(now)
+	s.WorktreeCleanup.ErrorCode = ""
+	s.WorktreeCleanup.Error = ""
+	s.WorktreeCleanup.Retryable = true
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s *Session) FailWorktreeCleanup(code string, message string, retryable bool, nextAt *time.Time, now time.Time) error {
+	if s.WorktreeCleanup.Status != WorktreeCleanupPending && s.WorktreeCleanup.Status != WorktreeCleanupFailed {
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidWorktreeCleanup, s.WorktreeCleanup.Status, WorktreeCleanupFailed)
+	}
+	s.WorktreeCleanup.Status = WorktreeCleanupFailed
+	s.WorktreeCleanup.Attempts++
+	s.WorktreeCleanup.LastAt = timePtr(now)
+	s.WorktreeCleanup.NextAt = nextAt
+	s.WorktreeCleanup.CompletedAt = nil
+	s.WorktreeCleanup.ErrorCode = strings.TrimSpace(code)
+	s.WorktreeCleanup.Error = strings.TrimSpace(message)
+	s.WorktreeCleanup.Retryable = retryable
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s *Session) CompleteWorktreeCleanup(now time.Time) error {
+	if s.WorktreeCleanup.Status != WorktreeCleanupPending && s.WorktreeCleanup.Status != WorktreeCleanupFailed {
+		return fmt.Errorf("%w: %s -> %s", ErrInvalidWorktreeCleanup, s.WorktreeCleanup.Status, WorktreeCleanupCleaned)
+	}
+	s.WorktreeCleanup.Status = WorktreeCleanupCleaned
+	s.WorktreeCleanup.Attempts++
+	s.WorktreeCleanup.LastAt = timePtr(now)
+	s.WorktreeCleanup.NextAt = nil
+	s.WorktreeCleanup.CompletedAt = timePtr(now)
+	s.WorktreeCleanup.ErrorCode = ""
+	s.WorktreeCleanup.Error = ""
+	s.WorktreeCleanup.Retryable = false
+	s.UpdatedAt = now
+	return nil
+}
+
+func (s Session) RequireActiveWorktree() error {
+	if strings.TrimSpace(s.BaseBranch) == "" {
+		return nil
+	}
+	if s.WorktreeCleanup.Status != WorktreeCleanupActive || strings.TrimSpace(s.WorktreePath) == "" || strings.TrimSpace(s.WorktreeBranch) == "" {
+		return fmt.Errorf("%w: cleanup_status=%q", ErrWorktreeUnavailable, s.WorktreeCleanup.Status)
+	}
 	return nil
 }
 
@@ -337,6 +477,8 @@ type Repository interface {
 	Find(ctx context.Context, id ID) (Session, error)
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
 	ListQueued(ctx context.Context) ([]Session, error)
+	ListProvisioningWorktrees(ctx context.Context, limit int) ([]Session, error)
+	ListWorktreeCleanupDue(ctx context.Context, now time.Time, limit int) ([]Session, error)
 	ListInterruptedWithCodexSession(ctx context.Context) ([]Session, error)
 	CountByProject(ctx context.Context, projectID ProjectID) (int, error)
 	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
@@ -383,12 +525,22 @@ type AttachmentStore interface {
 }
 
 type WorktreeManager interface {
-	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, baseBranch string) (string, error)
-	Exists(ctx context.Context, path string) (bool, error)
+	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, branch string, baseBranch string, ownershipToken string) (string, error)
+	InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (WorktreeOwnership, error)
 	HeadCommit(ctx context.Context, path string, ref string) (string, error)
 	Remove(ctx context.Context, path string) error
 	DeleteBranch(ctx context.Context, projectPath string, branch string) error
+	ReleaseOwnership(ctx context.Context, path string, ownershipToken string) error
 	PathForSession(projectID ProjectID, sessionID ID) string
+}
+
+type WorktreeOwnership struct {
+	PathExists   bool
+	BranchExists bool
+	Registered   bool
+	MarkerExists bool
+	TokenMatches bool
+	Matches      bool
 }
 
 type WorktreeInitResult struct {
