@@ -293,7 +293,12 @@ function selectInitialProject() {
   const nextProjectId =
     candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ??
     fallback;
-  if (!nextProjectId) return false;
+  if (!nextProjectId) {
+    if (!projectId.value) return false;
+    projectId.value = '';
+    branch.value = '';
+    return true;
+  }
   if (projectId.value === nextProjectId) {
     branch.value = '';
     void loadBranchesForProject(nextProjectId, { refresh: true });

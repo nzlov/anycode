@@ -11,6 +11,8 @@ import {
 const projects = ref<ProjectSummary[]>([]);
 const loading = ref(false);
 const loaded = ref(false);
+let loadPromise: Promise<void> | null = null;
+let mutationRevision = 0;
 
 export function useProjects() {
   const projectOptions = computed(() =>
@@ -20,19 +22,26 @@ export function useProjects() {
     })),
   );
 
-  async function loadProjects() {
-    if (loading.value) return;
+  function loadProjects() {
+    if (loadPromise) return loadPromise;
+    const revision = mutationRevision;
     loading.value = true;
-    try {
-      projects.value = await listProjects();
-      loaded.value = true;
-    } finally {
-      loading.value = false;
-    }
+    loadPromise = listProjects()
+      .then((result) => {
+        if (revision !== mutationRevision) return;
+        projects.value = result;
+        loaded.value = true;
+      })
+      .finally(() => {
+        loading.value = false;
+        loadPromise = null;
+      });
+    return loadPromise;
   }
 
   async function createProjectFromPath(path: string) {
     const project = await createProject({ path, name: basename(path) });
+    mutationRevision += 1;
     const existingIndex = projects.value.findIndex((item) => item.id === project.id);
     if (existingIndex >= 0) {
       projects.value.splice(existingIndex, 1, project);
@@ -44,6 +53,7 @@ export function useProjects() {
 
   async function removeProjectById(id: string) {
     await removeProject(id);
+    mutationRevision += 1;
     projects.value = projects.value.filter((project) => project.id !== id);
   }
 
@@ -52,6 +62,7 @@ export function useProjects() {
     worktreeInitCommand: string;
   }) {
     const project = await updateProjectSettings(input);
+    mutationRevision += 1;
     const index = projects.value.findIndex((item) => item.id === project.id);
     if (index >= 0) {
       const current = projects.value[index]!;

@@ -28,8 +28,6 @@ export const themeTokens = {
       border: '#d9e0ea',
       text: '#0f172a',
       textMuted: '#64748b',
-      sidebar: '#111827',
-      sidebarBorder: '#1e293b',
     },
     dark: {
       surface: '#111827',
@@ -38,8 +36,6 @@ export const themeTokens = {
       border: '#263449',
       text: '#e2e8f0',
       textMuted: '#94a3b8',
-      sidebar: '#020617',
-      sidebarBorder: '#1e293b',
     },
   },
 };
