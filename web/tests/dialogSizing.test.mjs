@@ -51,8 +51,11 @@ test('all content dialogs use the shared card class and Quasar mobile maximizati
     );
   }
 
-  for (const source of [
+  assert.match(
     newSessionSource,
+    /<q-dialog[\s\S]{0,180}:maximized="!panel && \$q\.screen\.lt\.sm"/,
+  );
+  for (const source of [
     globalSettingsSource,
     projectSettingsSource,
     directorySource,

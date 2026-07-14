@@ -1,4 +1,5 @@
 :root {
+  --overview-create-panel-height: min(420px, calc(100dvh - 104px));
   --ac-surface: #ffffff;
   --ac-surface-muted: #f6f8fb;
   --ac-surface-raised: #ffffff;
@@ -162,6 +163,10 @@ a {
   padding-bottom: 88px;
 }
 
+.page-shell.workbench-page--desktop-focus {
+  padding-bottom: calc(var(--overview-create-panel-height) + 48px);
+}
+
 .page-container--detail {
   box-sizing: border-box;
   height: 100dvh;
@@ -248,6 +253,10 @@ a {
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
+}
+
+.overview-history-link {
+  flex: 0 0 auto;
 }
 
 .overview-card-grid {
@@ -850,6 +859,23 @@ a {
   background: var(--ac-surface);
   color: var(--ac-text);
   border-radius: var(--ac-radius);
+}
+
+.new-session-panel-host.q-dialog {
+  z-index: 1000 !important;
+}
+
+.new-session-dialog--panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  height: var(--overview-create-panel-height);
+  max-height: var(--overview-create-panel-height) !important;
+  margin: 0;
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius) !important;
+  box-shadow: 0 18px 46px rgb(15 23 42 / 18%);
+  z-index: 1;
 }
 
 .new-session-body {
@@ -1461,6 +1487,22 @@ a {
 
   .workflow-canvas-board {
     min-height: 560px;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 1023.98px) {
+  .new-session-dialog--panel {
+    left: 24px;
+    width: auto !important;
+    max-width: none !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .new-session-dialog--panel {
+    left: 312px;
+    width: auto !important;
+    max-width: none !important;
   }
 }
 

@@ -40,7 +40,7 @@ test('prompt runtime controls have one shared component owner', () => {
 });
 
 test('new session dialog uses Quasar mobile maximization and one scrolling body', () => {
-  assert.match(newSessionSource, /:maximized="\$q\.screen\.lt\.sm"/);
+  assert.match(newSessionSource, /:maximized="!panel && \$q\.screen\.lt\.sm"/);
   assert.match(newSessionSource, /const \$q = useQuasar\(\)/);
   assert.match(newSessionSource, /class="new-session-dialog app-content-dialog"/);
   assert.match(
