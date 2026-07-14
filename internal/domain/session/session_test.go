@@ -177,3 +177,80 @@ func TestCloseOwnsTerminalMetadata(t *testing.T) {
 		t.Fatalf("close metadata = closedAt=%v queuedAt=%v queue=%#v", session.ClosedAt, session.QueuedAt, session.Queue)
 	}
 }
+
+func TestWorktreeCleanupLifecycle(t *testing.T) {
+	now := time.Unix(70, 0).UTC()
+	session := Session{ID: "session-1", BaseBranch: "main", WorktreeCleanup: WorktreeCleanup{Status: WorktreeCleanupNotApplicable}}
+
+	if err := session.BeginWorktreeProvisioning("/data/worktrees/project-1/session-1", "session-1", "owner-token", now); err != nil {
+		t.Fatalf("BeginWorktreeProvisioning() error = %v", err)
+	}
+	if err := session.ActivateWorktree(now.Add(time.Second)); err != nil {
+		t.Fatalf("ActivateWorktree() error = %v", err)
+	}
+	if session.WorktreeCleanup.OwnershipConfirmedAt == nil || !session.WorktreeCleanup.OwnershipConfirmedAt.Equal(now.Add(time.Second)) {
+		t.Fatalf("ownership confirmation = %#v", session.WorktreeCleanup.OwnershipConfirmedAt)
+	}
+	if err := session.RequestWorktreeCleanup(now.Add(2 * time.Second)); err != nil {
+		t.Fatalf("RequestWorktreeCleanup() error = %v", err)
+	}
+	next := now.Add(time.Minute)
+	if err := session.FailWorktreeCleanup("branch_checked_out", "branch is checked out", true, &next, now.Add(3*time.Second)); err != nil {
+		t.Fatalf("FailWorktreeCleanup() error = %v", err)
+	}
+	if err := session.RequestWorktreeCleanup(now.Add(4 * time.Second)); err != nil {
+		t.Fatalf("RequestWorktreeCleanup() retry error = %v", err)
+	}
+	if err := session.CompleteWorktreeCleanup(now.Add(5 * time.Second)); err != nil {
+		t.Fatalf("CompleteWorktreeCleanup() error = %v", err)
+	}
+	if session.WorktreeCleanup.Status != WorktreeCleanupCleaned || session.WorktreeCleanup.Attempts != 2 || session.WorktreeCleanup.CompletedAt == nil {
+		t.Fatalf("worktree cleanup = %#v", session.WorktreeCleanup)
+	}
+}
+
+func TestConfirmWorktreeOwnershipWhileCleanupPending(t *testing.T) {
+	now := time.Unix(75, 0).UTC()
+	session := Session{
+		ID:             "session-1",
+		BaseBranch:     "main",
+		WorktreePath:   "/data/worktrees/project-1/session-1",
+		WorktreeBranch: "session-1",
+		WorktreeCleanup: WorktreeCleanup{
+			Status:         WorktreeCleanupPending,
+			OwnershipToken: "owner-token",
+		},
+	}
+
+	if err := session.ConfirmWorktreeOwnership(now); err != nil {
+		t.Fatalf("ConfirmWorktreeOwnership() error = %v", err)
+	}
+	if session.WorktreeCleanup.OwnershipConfirmedAt == nil || !session.WorktreeCleanup.OwnershipConfirmedAt.Equal(now) {
+		t.Fatalf("ownership confirmation = %#v", session.WorktreeCleanup.OwnershipConfirmedAt)
+	}
+}
+
+func TestWorktreeCleanupRejectsUnownedBranch(t *testing.T) {
+	session := Session{ID: "session-1", BaseBranch: "main", WorktreeCleanup: WorktreeCleanup{Status: WorktreeCleanupNotApplicable}}
+
+	err := session.BeginWorktreeProvisioning("/data/worktrees/project-1/session-1", "merge-session-1", "owner-token", time.Unix(80, 0).UTC())
+	if !errors.Is(err, ErrInvalidWorktreeCleanup) {
+		t.Fatalf("BeginWorktreeProvisioning() error = %v", err)
+	}
+}
+
+func TestRequireActiveWorktreeRejectsCleanupStates(t *testing.T) {
+	for _, status := range []WorktreeCleanupStatus{WorktreeCleanupProvisioning, WorktreeCleanupPending, WorktreeCleanupFailed, WorktreeCleanupCleaned} {
+		t.Run(string(status), func(t *testing.T) {
+			session := Session{
+				BaseBranch:      "main",
+				WorktreePath:    "/data/worktrees/project-1/session-1",
+				WorktreeBranch:  "session-1",
+				WorktreeCleanup: WorktreeCleanup{Status: status},
+			}
+			if err := session.RequireActiveWorktree(); !errors.Is(err, ErrWorktreeUnavailable) {
+				t.Fatalf("RequireActiveWorktree() error = %v", err)
+			}
+		})
+	}
+}

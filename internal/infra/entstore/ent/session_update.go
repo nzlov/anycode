@@ -147,6 +147,20 @@ func (_u *SessionUpdate) SetNillableWorktreePath(v *string) *SessionUpdate {
 	return _u
 }
 
+// SetWorktreeBranch sets the "worktree_branch" field.
+func (_u *SessionUpdate) SetWorktreeBranch(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeBranch(v)
+	return _u
+}
+
+// SetNillableWorktreeBranch sets the "worktree_branch" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeBranch(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeBranch(*v)
+	}
+	return _u
+}
+
 // SetWorktreeBaseCommit sets the "worktree_base_commit" field.
 func (_u *SessionUpdate) SetWorktreeBaseCommit(v string) *SessionUpdate {
 	_u.mutation.SetWorktreeBaseCommit(v)
@@ -157,6 +171,197 @@ func (_u *SessionUpdate) SetWorktreeBaseCommit(v string) *SessionUpdate {
 func (_u *SessionUpdate) SetNillableWorktreeBaseCommit(v *string) *SessionUpdate {
 	if v != nil {
 		_u.SetWorktreeBaseCommit(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupStatus sets the "worktree_cleanup_status" field.
+func (_u *SessionUpdate) SetWorktreeCleanupStatus(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupStatus(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupStatus sets the "worktree_cleanup_status" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupStatus(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupStatus(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupAttempts sets the "worktree_cleanup_attempts" field.
+func (_u *SessionUpdate) SetWorktreeCleanupAttempts(v int) *SessionUpdate {
+	_u.mutation.ResetWorktreeCleanupAttempts()
+	_u.mutation.SetWorktreeCleanupAttempts(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupAttempts sets the "worktree_cleanup_attempts" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupAttempts(v *int) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupAttempts(*v)
+	}
+	return _u
+}
+
+// AddWorktreeCleanupAttempts adds value to the "worktree_cleanup_attempts" field.
+func (_u *SessionUpdate) AddWorktreeCleanupAttempts(v int) *SessionUpdate {
+	_u.mutation.AddWorktreeCleanupAttempts(v)
+	return _u
+}
+
+// SetWorktreeOwnershipToken sets the "worktree_ownership_token" field.
+func (_u *SessionUpdate) SetWorktreeOwnershipToken(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeOwnershipToken(v)
+	return _u
+}
+
+// SetNillableWorktreeOwnershipToken sets the "worktree_ownership_token" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeOwnershipToken(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeOwnershipToken(*v)
+	}
+	return _u
+}
+
+// SetWorktreeOwnershipConfirmedAt sets the "worktree_ownership_confirmed_at" field.
+func (_u *SessionUpdate) SetWorktreeOwnershipConfirmedAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorktreeOwnershipConfirmedAt(v)
+	return _u
+}
+
+// SetNillableWorktreeOwnershipConfirmedAt sets the "worktree_ownership_confirmed_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeOwnershipConfirmedAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeOwnershipConfirmedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeOwnershipConfirmedAt clears the value of the "worktree_ownership_confirmed_at" field.
+func (_u *SessionUpdate) ClearWorktreeOwnershipConfirmedAt() *SessionUpdate {
+	_u.mutation.ClearWorktreeOwnershipConfirmedAt()
+	return _u
+}
+
+// SetWorktreeCleanupRequestedAt sets the "worktree_cleanup_requested_at" field.
+func (_u *SessionUpdate) SetWorktreeCleanupRequestedAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupRequestedAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupRequestedAt sets the "worktree_cleanup_requested_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupRequestedAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupRequestedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupRequestedAt clears the value of the "worktree_cleanup_requested_at" field.
+func (_u *SessionUpdate) ClearWorktreeCleanupRequestedAt() *SessionUpdate {
+	_u.mutation.ClearWorktreeCleanupRequestedAt()
+	return _u
+}
+
+// SetWorktreeCleanupLastAt sets the "worktree_cleanup_last_at" field.
+func (_u *SessionUpdate) SetWorktreeCleanupLastAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupLastAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupLastAt sets the "worktree_cleanup_last_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupLastAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupLastAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupLastAt clears the value of the "worktree_cleanup_last_at" field.
+func (_u *SessionUpdate) ClearWorktreeCleanupLastAt() *SessionUpdate {
+	_u.mutation.ClearWorktreeCleanupLastAt()
+	return _u
+}
+
+// SetWorktreeCleanupNextAt sets the "worktree_cleanup_next_at" field.
+func (_u *SessionUpdate) SetWorktreeCleanupNextAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupNextAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupNextAt sets the "worktree_cleanup_next_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupNextAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupNextAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupNextAt clears the value of the "worktree_cleanup_next_at" field.
+func (_u *SessionUpdate) ClearWorktreeCleanupNextAt() *SessionUpdate {
+	_u.mutation.ClearWorktreeCleanupNextAt()
+	return _u
+}
+
+// SetWorktreeCleanupCompletedAt sets the "worktree_cleanup_completed_at" field.
+func (_u *SessionUpdate) SetWorktreeCleanupCompletedAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupCompletedAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupCompletedAt sets the "worktree_cleanup_completed_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupCompletedAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupCompletedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupCompletedAt clears the value of the "worktree_cleanup_completed_at" field.
+func (_u *SessionUpdate) ClearWorktreeCleanupCompletedAt() *SessionUpdate {
+	_u.mutation.ClearWorktreeCleanupCompletedAt()
+	return _u
+}
+
+// SetWorktreeCleanupErrorCode sets the "worktree_cleanup_error_code" field.
+func (_u *SessionUpdate) SetWorktreeCleanupErrorCode(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupErrorCode(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupErrorCode sets the "worktree_cleanup_error_code" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupErrorCode(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupErrorCode(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupError sets the "worktree_cleanup_error" field.
+func (_u *SessionUpdate) SetWorktreeCleanupError(v string) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupError(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupError sets the "worktree_cleanup_error" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupError(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupError(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupRetryable sets the "worktree_cleanup_retryable" field.
+func (_u *SessionUpdate) SetWorktreeCleanupRetryable(v bool) *SessionUpdate {
+	_u.mutation.SetWorktreeCleanupRetryable(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupRetryable sets the "worktree_cleanup_retryable" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorktreeCleanupRetryable(v *bool) *SessionUpdate {
+	if v != nil {
+		_u.SetWorktreeCleanupRetryable(*v)
 	}
 	return _u
 }
@@ -563,8 +768,62 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.WorktreePath(); ok {
 		_spec.SetField(entsession.FieldWorktreePath, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.WorktreeBranch(); ok {
+		_spec.SetField(entsession.FieldWorktreeBranch, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.WorktreeBaseCommit(); ok {
 		_spec.SetField(entsession.FieldWorktreeBaseCommit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupStatus(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupAttempts(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupAttempts, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWorktreeCleanupAttempts(); ok {
+		_spec.AddField(entsession.FieldWorktreeCleanupAttempts, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WorktreeOwnershipToken(); ok {
+		_spec.SetField(entsession.FieldWorktreeOwnershipToken, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeOwnershipConfirmedAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeOwnershipConfirmedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeOwnershipConfirmedAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeOwnershipConfirmedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupRequestedAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupRequestedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupRequestedAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupRequestedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupLastAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupLastAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupLastAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupLastAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupNextAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupNextAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupNextAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupNextAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupCompletedAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupCompletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupCompletedAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupCompletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupErrorCode(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupErrorCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupError(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupError, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupRetryable(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupRetryable, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
@@ -779,6 +1038,20 @@ func (_u *SessionUpdateOne) SetNillableWorktreePath(v *string) *SessionUpdateOne
 	return _u
 }
 
+// SetWorktreeBranch sets the "worktree_branch" field.
+func (_u *SessionUpdateOne) SetWorktreeBranch(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeBranch(v)
+	return _u
+}
+
+// SetNillableWorktreeBranch sets the "worktree_branch" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeBranch(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeBranch(*v)
+	}
+	return _u
+}
+
 // SetWorktreeBaseCommit sets the "worktree_base_commit" field.
 func (_u *SessionUpdateOne) SetWorktreeBaseCommit(v string) *SessionUpdateOne {
 	_u.mutation.SetWorktreeBaseCommit(v)
@@ -789,6 +1062,197 @@ func (_u *SessionUpdateOne) SetWorktreeBaseCommit(v string) *SessionUpdateOne {
 func (_u *SessionUpdateOne) SetNillableWorktreeBaseCommit(v *string) *SessionUpdateOne {
 	if v != nil {
 		_u.SetWorktreeBaseCommit(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupStatus sets the "worktree_cleanup_status" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupStatus(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupStatus(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupStatus sets the "worktree_cleanup_status" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupStatus(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupStatus(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupAttempts sets the "worktree_cleanup_attempts" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupAttempts(v int) *SessionUpdateOne {
+	_u.mutation.ResetWorktreeCleanupAttempts()
+	_u.mutation.SetWorktreeCleanupAttempts(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupAttempts sets the "worktree_cleanup_attempts" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupAttempts(v *int) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupAttempts(*v)
+	}
+	return _u
+}
+
+// AddWorktreeCleanupAttempts adds value to the "worktree_cleanup_attempts" field.
+func (_u *SessionUpdateOne) AddWorktreeCleanupAttempts(v int) *SessionUpdateOne {
+	_u.mutation.AddWorktreeCleanupAttempts(v)
+	return _u
+}
+
+// SetWorktreeOwnershipToken sets the "worktree_ownership_token" field.
+func (_u *SessionUpdateOne) SetWorktreeOwnershipToken(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeOwnershipToken(v)
+	return _u
+}
+
+// SetNillableWorktreeOwnershipToken sets the "worktree_ownership_token" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeOwnershipToken(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeOwnershipToken(*v)
+	}
+	return _u
+}
+
+// SetWorktreeOwnershipConfirmedAt sets the "worktree_ownership_confirmed_at" field.
+func (_u *SessionUpdateOne) SetWorktreeOwnershipConfirmedAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorktreeOwnershipConfirmedAt(v)
+	return _u
+}
+
+// SetNillableWorktreeOwnershipConfirmedAt sets the "worktree_ownership_confirmed_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeOwnershipConfirmedAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeOwnershipConfirmedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeOwnershipConfirmedAt clears the value of the "worktree_ownership_confirmed_at" field.
+func (_u *SessionUpdateOne) ClearWorktreeOwnershipConfirmedAt() *SessionUpdateOne {
+	_u.mutation.ClearWorktreeOwnershipConfirmedAt()
+	return _u
+}
+
+// SetWorktreeCleanupRequestedAt sets the "worktree_cleanup_requested_at" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupRequestedAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupRequestedAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupRequestedAt sets the "worktree_cleanup_requested_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupRequestedAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupRequestedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupRequestedAt clears the value of the "worktree_cleanup_requested_at" field.
+func (_u *SessionUpdateOne) ClearWorktreeCleanupRequestedAt() *SessionUpdateOne {
+	_u.mutation.ClearWorktreeCleanupRequestedAt()
+	return _u
+}
+
+// SetWorktreeCleanupLastAt sets the "worktree_cleanup_last_at" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupLastAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupLastAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupLastAt sets the "worktree_cleanup_last_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupLastAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupLastAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupLastAt clears the value of the "worktree_cleanup_last_at" field.
+func (_u *SessionUpdateOne) ClearWorktreeCleanupLastAt() *SessionUpdateOne {
+	_u.mutation.ClearWorktreeCleanupLastAt()
+	return _u
+}
+
+// SetWorktreeCleanupNextAt sets the "worktree_cleanup_next_at" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupNextAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupNextAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupNextAt sets the "worktree_cleanup_next_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupNextAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupNextAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupNextAt clears the value of the "worktree_cleanup_next_at" field.
+func (_u *SessionUpdateOne) ClearWorktreeCleanupNextAt() *SessionUpdateOne {
+	_u.mutation.ClearWorktreeCleanupNextAt()
+	return _u
+}
+
+// SetWorktreeCleanupCompletedAt sets the "worktree_cleanup_completed_at" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupCompletedAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupCompletedAt(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupCompletedAt sets the "worktree_cleanup_completed_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupCompletedAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupCompletedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorktreeCleanupCompletedAt clears the value of the "worktree_cleanup_completed_at" field.
+func (_u *SessionUpdateOne) ClearWorktreeCleanupCompletedAt() *SessionUpdateOne {
+	_u.mutation.ClearWorktreeCleanupCompletedAt()
+	return _u
+}
+
+// SetWorktreeCleanupErrorCode sets the "worktree_cleanup_error_code" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupErrorCode(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupErrorCode(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupErrorCode sets the "worktree_cleanup_error_code" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupErrorCode(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupErrorCode(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupError sets the "worktree_cleanup_error" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupError(v string) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupError(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupError sets the "worktree_cleanup_error" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupError(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupError(*v)
+	}
+	return _u
+}
+
+// SetWorktreeCleanupRetryable sets the "worktree_cleanup_retryable" field.
+func (_u *SessionUpdateOne) SetWorktreeCleanupRetryable(v bool) *SessionUpdateOne {
+	_u.mutation.SetWorktreeCleanupRetryable(v)
+	return _u
+}
+
+// SetNillableWorktreeCleanupRetryable sets the "worktree_cleanup_retryable" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorktreeCleanupRetryable(v *bool) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorktreeCleanupRetryable(*v)
 	}
 	return _u
 }
@@ -1225,8 +1689,62 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	if value, ok := _u.mutation.WorktreePath(); ok {
 		_spec.SetField(entsession.FieldWorktreePath, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.WorktreeBranch(); ok {
+		_spec.SetField(entsession.FieldWorktreeBranch, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.WorktreeBaseCommit(); ok {
 		_spec.SetField(entsession.FieldWorktreeBaseCommit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupStatus(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupAttempts(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupAttempts, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWorktreeCleanupAttempts(); ok {
+		_spec.AddField(entsession.FieldWorktreeCleanupAttempts, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WorktreeOwnershipToken(); ok {
+		_spec.SetField(entsession.FieldWorktreeOwnershipToken, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeOwnershipConfirmedAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeOwnershipConfirmedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeOwnershipConfirmedAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeOwnershipConfirmedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupRequestedAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupRequestedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupRequestedAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupRequestedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupLastAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupLastAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupLastAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupLastAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupNextAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupNextAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupNextAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupNextAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupCompletedAt(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupCompletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorktreeCleanupCompletedAtCleared() {
+		_spec.ClearField(entsession.FieldWorktreeCleanupCompletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupErrorCode(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupErrorCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupError(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupError, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorktreeCleanupRetryable(); ok {
+		_spec.SetField(entsession.FieldWorktreeCleanupRetryable, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)

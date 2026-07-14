@@ -29,8 +29,32 @@ const (
 	FieldBaseBranch = "base_branch"
 	// FieldWorktreePath holds the string denoting the worktree_path field in the database.
 	FieldWorktreePath = "worktree_path"
+	// FieldWorktreeBranch holds the string denoting the worktree_branch field in the database.
+	FieldWorktreeBranch = "worktree_branch"
 	// FieldWorktreeBaseCommit holds the string denoting the worktree_base_commit field in the database.
 	FieldWorktreeBaseCommit = "worktree_base_commit"
+	// FieldWorktreeCleanupStatus holds the string denoting the worktree_cleanup_status field in the database.
+	FieldWorktreeCleanupStatus = "worktree_cleanup_status"
+	// FieldWorktreeCleanupAttempts holds the string denoting the worktree_cleanup_attempts field in the database.
+	FieldWorktreeCleanupAttempts = "worktree_cleanup_attempts"
+	// FieldWorktreeOwnershipToken holds the string denoting the worktree_ownership_token field in the database.
+	FieldWorktreeOwnershipToken = "worktree_ownership_token"
+	// FieldWorktreeOwnershipConfirmedAt holds the string denoting the worktree_ownership_confirmed_at field in the database.
+	FieldWorktreeOwnershipConfirmedAt = "worktree_ownership_confirmed_at"
+	// FieldWorktreeCleanupRequestedAt holds the string denoting the worktree_cleanup_requested_at field in the database.
+	FieldWorktreeCleanupRequestedAt = "worktree_cleanup_requested_at"
+	// FieldWorktreeCleanupLastAt holds the string denoting the worktree_cleanup_last_at field in the database.
+	FieldWorktreeCleanupLastAt = "worktree_cleanup_last_at"
+	// FieldWorktreeCleanupNextAt holds the string denoting the worktree_cleanup_next_at field in the database.
+	FieldWorktreeCleanupNextAt = "worktree_cleanup_next_at"
+	// FieldWorktreeCleanupCompletedAt holds the string denoting the worktree_cleanup_completed_at field in the database.
+	FieldWorktreeCleanupCompletedAt = "worktree_cleanup_completed_at"
+	// FieldWorktreeCleanupErrorCode holds the string denoting the worktree_cleanup_error_code field in the database.
+	FieldWorktreeCleanupErrorCode = "worktree_cleanup_error_code"
+	// FieldWorktreeCleanupError holds the string denoting the worktree_cleanup_error field in the database.
+	FieldWorktreeCleanupError = "worktree_cleanup_error"
+	// FieldWorktreeCleanupRetryable holds the string denoting the worktree_cleanup_retryable field in the database.
+	FieldWorktreeCleanupRetryable = "worktree_cleanup_retryable"
 	// FieldCodexSessionID holds the string denoting the codex_session_id field in the database.
 	FieldCodexSessionID = "codex_session_id"
 	// FieldCodexModel holds the string denoting the codex_model field in the database.
@@ -88,7 +112,19 @@ var Columns = []string{
 	FieldCloseReason,
 	FieldBaseBranch,
 	FieldWorktreePath,
+	FieldWorktreeBranch,
 	FieldWorktreeBaseCommit,
+	FieldWorktreeCleanupStatus,
+	FieldWorktreeCleanupAttempts,
+	FieldWorktreeOwnershipToken,
+	FieldWorktreeOwnershipConfirmedAt,
+	FieldWorktreeCleanupRequestedAt,
+	FieldWorktreeCleanupLastAt,
+	FieldWorktreeCleanupNextAt,
+	FieldWorktreeCleanupCompletedAt,
+	FieldWorktreeCleanupErrorCode,
+	FieldWorktreeCleanupError,
+	FieldWorktreeCleanupRetryable,
 	FieldCodexSessionID,
 	FieldCodexModel,
 	FieldReasoningEffort,
@@ -137,8 +173,22 @@ var (
 	DefaultBaseBranch string
 	// DefaultWorktreePath holds the default value on creation for the "worktree_path" field.
 	DefaultWorktreePath string
+	// DefaultWorktreeBranch holds the default value on creation for the "worktree_branch" field.
+	DefaultWorktreeBranch string
 	// DefaultWorktreeBaseCommit holds the default value on creation for the "worktree_base_commit" field.
 	DefaultWorktreeBaseCommit string
+	// DefaultWorktreeCleanupStatus holds the default value on creation for the "worktree_cleanup_status" field.
+	DefaultWorktreeCleanupStatus string
+	// DefaultWorktreeCleanupAttempts holds the default value on creation for the "worktree_cleanup_attempts" field.
+	DefaultWorktreeCleanupAttempts int
+	// DefaultWorktreeOwnershipToken holds the default value on creation for the "worktree_ownership_token" field.
+	DefaultWorktreeOwnershipToken string
+	// DefaultWorktreeCleanupErrorCode holds the default value on creation for the "worktree_cleanup_error_code" field.
+	DefaultWorktreeCleanupErrorCode string
+	// DefaultWorktreeCleanupError holds the default value on creation for the "worktree_cleanup_error" field.
+	DefaultWorktreeCleanupError string
+	// DefaultWorktreeCleanupRetryable holds the default value on creation for the "worktree_cleanup_retryable" field.
+	DefaultWorktreeCleanupRetryable bool
 	// DefaultCodexSessionID holds the default value on creation for the "codex_session_id" field.
 	DefaultCodexSessionID string
 	// DefaultCodexModel holds the default value on creation for the "codex_model" field.
@@ -223,9 +273,69 @@ func ByWorktreePath(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorktreePath, opts...).ToFunc()
 }
 
+// ByWorktreeBranch orders the results by the worktree_branch field.
+func ByWorktreeBranch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeBranch, opts...).ToFunc()
+}
+
 // ByWorktreeBaseCommit orders the results by the worktree_base_commit field.
 func ByWorktreeBaseCommit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorktreeBaseCommit, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupStatus orders the results by the worktree_cleanup_status field.
+func ByWorktreeCleanupStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupStatus, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupAttempts orders the results by the worktree_cleanup_attempts field.
+func ByWorktreeCleanupAttempts(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupAttempts, opts...).ToFunc()
+}
+
+// ByWorktreeOwnershipToken orders the results by the worktree_ownership_token field.
+func ByWorktreeOwnershipToken(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeOwnershipToken, opts...).ToFunc()
+}
+
+// ByWorktreeOwnershipConfirmedAt orders the results by the worktree_ownership_confirmed_at field.
+func ByWorktreeOwnershipConfirmedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeOwnershipConfirmedAt, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupRequestedAt orders the results by the worktree_cleanup_requested_at field.
+func ByWorktreeCleanupRequestedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupRequestedAt, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupLastAt orders the results by the worktree_cleanup_last_at field.
+func ByWorktreeCleanupLastAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupLastAt, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupNextAt orders the results by the worktree_cleanup_next_at field.
+func ByWorktreeCleanupNextAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupNextAt, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupCompletedAt orders the results by the worktree_cleanup_completed_at field.
+func ByWorktreeCleanupCompletedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupCompletedAt, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupErrorCode orders the results by the worktree_cleanup_error_code field.
+func ByWorktreeCleanupErrorCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupErrorCode, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupError orders the results by the worktree_cleanup_error field.
+func ByWorktreeCleanupError(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupError, opts...).ToFunc()
+}
+
+// ByWorktreeCleanupRetryable orders the results by the worktree_cleanup_retryable field.
+func ByWorktreeCleanupRetryable(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeCleanupRetryable, opts...).ToFunc()
 }
 
 // ByCodexSessionID orders the results by the codex_session_id field.

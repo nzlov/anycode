@@ -6229,7 +6229,20 @@ type SessionMutation struct {
 	close_reason                     *string
 	base_branch                      *string
 	worktree_path                    *string
+	worktree_branch                  *string
 	worktree_base_commit             *string
+	worktree_cleanup_status          *string
+	worktree_cleanup_attempts        *int
+	addworktree_cleanup_attempts     *int
+	worktree_ownership_token         *string
+	worktree_ownership_confirmed_at  *time.Time
+	worktree_cleanup_requested_at    *time.Time
+	worktree_cleanup_last_at         *time.Time
+	worktree_cleanup_next_at         *time.Time
+	worktree_cleanup_completed_at    *time.Time
+	worktree_cleanup_error_code      *string
+	worktree_cleanup_error           *string
+	worktree_cleanup_retryable       *bool
 	codex_session_id                 *string
 	codex_model                      *string
 	reasoning_effort                 *string
@@ -6662,6 +6675,42 @@ func (m *SessionMutation) ResetWorktreePath() {
 	m.worktree_path = nil
 }
 
+// SetWorktreeBranch sets the "worktree_branch" field.
+func (m *SessionMutation) SetWorktreeBranch(s string) {
+	m.worktree_branch = &s
+}
+
+// WorktreeBranch returns the value of the "worktree_branch" field in the mutation.
+func (m *SessionMutation) WorktreeBranch() (r string, exists bool) {
+	v := m.worktree_branch
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeBranch returns the old "worktree_branch" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeBranch(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeBranch is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeBranch requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeBranch: %w", err)
+	}
+	return oldValue.WorktreeBranch, nil
+}
+
+// ResetWorktreeBranch resets all changes to the "worktree_branch" field.
+func (m *SessionMutation) ResetWorktreeBranch() {
+	m.worktree_branch = nil
+}
+
 // SetWorktreeBaseCommit sets the "worktree_base_commit" field.
 func (m *SessionMutation) SetWorktreeBaseCommit(s string) {
 	m.worktree_base_commit = &s
@@ -6696,6 +6745,487 @@ func (m *SessionMutation) OldWorktreeBaseCommit(ctx context.Context) (v string, 
 // ResetWorktreeBaseCommit resets all changes to the "worktree_base_commit" field.
 func (m *SessionMutation) ResetWorktreeBaseCommit() {
 	m.worktree_base_commit = nil
+}
+
+// SetWorktreeCleanupStatus sets the "worktree_cleanup_status" field.
+func (m *SessionMutation) SetWorktreeCleanupStatus(s string) {
+	m.worktree_cleanup_status = &s
+}
+
+// WorktreeCleanupStatus returns the value of the "worktree_cleanup_status" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupStatus() (r string, exists bool) {
+	v := m.worktree_cleanup_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupStatus returns the old "worktree_cleanup_status" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupStatus: %w", err)
+	}
+	return oldValue.WorktreeCleanupStatus, nil
+}
+
+// ResetWorktreeCleanupStatus resets all changes to the "worktree_cleanup_status" field.
+func (m *SessionMutation) ResetWorktreeCleanupStatus() {
+	m.worktree_cleanup_status = nil
+}
+
+// SetWorktreeCleanupAttempts sets the "worktree_cleanup_attempts" field.
+func (m *SessionMutation) SetWorktreeCleanupAttempts(i int) {
+	m.worktree_cleanup_attempts = &i
+	m.addworktree_cleanup_attempts = nil
+}
+
+// WorktreeCleanupAttempts returns the value of the "worktree_cleanup_attempts" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupAttempts() (r int, exists bool) {
+	v := m.worktree_cleanup_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupAttempts returns the old "worktree_cleanup_attempts" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupAttempts(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupAttempts is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupAttempts requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupAttempts: %w", err)
+	}
+	return oldValue.WorktreeCleanupAttempts, nil
+}
+
+// AddWorktreeCleanupAttempts adds i to the "worktree_cleanup_attempts" field.
+func (m *SessionMutation) AddWorktreeCleanupAttempts(i int) {
+	if m.addworktree_cleanup_attempts != nil {
+		*m.addworktree_cleanup_attempts += i
+	} else {
+		m.addworktree_cleanup_attempts = &i
+	}
+}
+
+// AddedWorktreeCleanupAttempts returns the value that was added to the "worktree_cleanup_attempts" field in this mutation.
+func (m *SessionMutation) AddedWorktreeCleanupAttempts() (r int, exists bool) {
+	v := m.addworktree_cleanup_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWorktreeCleanupAttempts resets all changes to the "worktree_cleanup_attempts" field.
+func (m *SessionMutation) ResetWorktreeCleanupAttempts() {
+	m.worktree_cleanup_attempts = nil
+	m.addworktree_cleanup_attempts = nil
+}
+
+// SetWorktreeOwnershipToken sets the "worktree_ownership_token" field.
+func (m *SessionMutation) SetWorktreeOwnershipToken(s string) {
+	m.worktree_ownership_token = &s
+}
+
+// WorktreeOwnershipToken returns the value of the "worktree_ownership_token" field in the mutation.
+func (m *SessionMutation) WorktreeOwnershipToken() (r string, exists bool) {
+	v := m.worktree_ownership_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeOwnershipToken returns the old "worktree_ownership_token" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeOwnershipToken(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeOwnershipToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeOwnershipToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeOwnershipToken: %w", err)
+	}
+	return oldValue.WorktreeOwnershipToken, nil
+}
+
+// ResetWorktreeOwnershipToken resets all changes to the "worktree_ownership_token" field.
+func (m *SessionMutation) ResetWorktreeOwnershipToken() {
+	m.worktree_ownership_token = nil
+}
+
+// SetWorktreeOwnershipConfirmedAt sets the "worktree_ownership_confirmed_at" field.
+func (m *SessionMutation) SetWorktreeOwnershipConfirmedAt(t time.Time) {
+	m.worktree_ownership_confirmed_at = &t
+}
+
+// WorktreeOwnershipConfirmedAt returns the value of the "worktree_ownership_confirmed_at" field in the mutation.
+func (m *SessionMutation) WorktreeOwnershipConfirmedAt() (r time.Time, exists bool) {
+	v := m.worktree_ownership_confirmed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeOwnershipConfirmedAt returns the old "worktree_ownership_confirmed_at" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeOwnershipConfirmedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeOwnershipConfirmedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeOwnershipConfirmedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeOwnershipConfirmedAt: %w", err)
+	}
+	return oldValue.WorktreeOwnershipConfirmedAt, nil
+}
+
+// ClearWorktreeOwnershipConfirmedAt clears the value of the "worktree_ownership_confirmed_at" field.
+func (m *SessionMutation) ClearWorktreeOwnershipConfirmedAt() {
+	m.worktree_ownership_confirmed_at = nil
+	m.clearedFields[entsession.FieldWorktreeOwnershipConfirmedAt] = struct{}{}
+}
+
+// WorktreeOwnershipConfirmedAtCleared returns if the "worktree_ownership_confirmed_at" field was cleared in this mutation.
+func (m *SessionMutation) WorktreeOwnershipConfirmedAtCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldWorktreeOwnershipConfirmedAt]
+	return ok
+}
+
+// ResetWorktreeOwnershipConfirmedAt resets all changes to the "worktree_ownership_confirmed_at" field.
+func (m *SessionMutation) ResetWorktreeOwnershipConfirmedAt() {
+	m.worktree_ownership_confirmed_at = nil
+	delete(m.clearedFields, entsession.FieldWorktreeOwnershipConfirmedAt)
+}
+
+// SetWorktreeCleanupRequestedAt sets the "worktree_cleanup_requested_at" field.
+func (m *SessionMutation) SetWorktreeCleanupRequestedAt(t time.Time) {
+	m.worktree_cleanup_requested_at = &t
+}
+
+// WorktreeCleanupRequestedAt returns the value of the "worktree_cleanup_requested_at" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupRequestedAt() (r time.Time, exists bool) {
+	v := m.worktree_cleanup_requested_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupRequestedAt returns the old "worktree_cleanup_requested_at" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupRequestedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupRequestedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupRequestedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupRequestedAt: %w", err)
+	}
+	return oldValue.WorktreeCleanupRequestedAt, nil
+}
+
+// ClearWorktreeCleanupRequestedAt clears the value of the "worktree_cleanup_requested_at" field.
+func (m *SessionMutation) ClearWorktreeCleanupRequestedAt() {
+	m.worktree_cleanup_requested_at = nil
+	m.clearedFields[entsession.FieldWorktreeCleanupRequestedAt] = struct{}{}
+}
+
+// WorktreeCleanupRequestedAtCleared returns if the "worktree_cleanup_requested_at" field was cleared in this mutation.
+func (m *SessionMutation) WorktreeCleanupRequestedAtCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldWorktreeCleanupRequestedAt]
+	return ok
+}
+
+// ResetWorktreeCleanupRequestedAt resets all changes to the "worktree_cleanup_requested_at" field.
+func (m *SessionMutation) ResetWorktreeCleanupRequestedAt() {
+	m.worktree_cleanup_requested_at = nil
+	delete(m.clearedFields, entsession.FieldWorktreeCleanupRequestedAt)
+}
+
+// SetWorktreeCleanupLastAt sets the "worktree_cleanup_last_at" field.
+func (m *SessionMutation) SetWorktreeCleanupLastAt(t time.Time) {
+	m.worktree_cleanup_last_at = &t
+}
+
+// WorktreeCleanupLastAt returns the value of the "worktree_cleanup_last_at" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupLastAt() (r time.Time, exists bool) {
+	v := m.worktree_cleanup_last_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupLastAt returns the old "worktree_cleanup_last_at" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupLastAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupLastAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupLastAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupLastAt: %w", err)
+	}
+	return oldValue.WorktreeCleanupLastAt, nil
+}
+
+// ClearWorktreeCleanupLastAt clears the value of the "worktree_cleanup_last_at" field.
+func (m *SessionMutation) ClearWorktreeCleanupLastAt() {
+	m.worktree_cleanup_last_at = nil
+	m.clearedFields[entsession.FieldWorktreeCleanupLastAt] = struct{}{}
+}
+
+// WorktreeCleanupLastAtCleared returns if the "worktree_cleanup_last_at" field was cleared in this mutation.
+func (m *SessionMutation) WorktreeCleanupLastAtCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldWorktreeCleanupLastAt]
+	return ok
+}
+
+// ResetWorktreeCleanupLastAt resets all changes to the "worktree_cleanup_last_at" field.
+func (m *SessionMutation) ResetWorktreeCleanupLastAt() {
+	m.worktree_cleanup_last_at = nil
+	delete(m.clearedFields, entsession.FieldWorktreeCleanupLastAt)
+}
+
+// SetWorktreeCleanupNextAt sets the "worktree_cleanup_next_at" field.
+func (m *SessionMutation) SetWorktreeCleanupNextAt(t time.Time) {
+	m.worktree_cleanup_next_at = &t
+}
+
+// WorktreeCleanupNextAt returns the value of the "worktree_cleanup_next_at" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupNextAt() (r time.Time, exists bool) {
+	v := m.worktree_cleanup_next_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupNextAt returns the old "worktree_cleanup_next_at" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupNextAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupNextAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupNextAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupNextAt: %w", err)
+	}
+	return oldValue.WorktreeCleanupNextAt, nil
+}
+
+// ClearWorktreeCleanupNextAt clears the value of the "worktree_cleanup_next_at" field.
+func (m *SessionMutation) ClearWorktreeCleanupNextAt() {
+	m.worktree_cleanup_next_at = nil
+	m.clearedFields[entsession.FieldWorktreeCleanupNextAt] = struct{}{}
+}
+
+// WorktreeCleanupNextAtCleared returns if the "worktree_cleanup_next_at" field was cleared in this mutation.
+func (m *SessionMutation) WorktreeCleanupNextAtCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldWorktreeCleanupNextAt]
+	return ok
+}
+
+// ResetWorktreeCleanupNextAt resets all changes to the "worktree_cleanup_next_at" field.
+func (m *SessionMutation) ResetWorktreeCleanupNextAt() {
+	m.worktree_cleanup_next_at = nil
+	delete(m.clearedFields, entsession.FieldWorktreeCleanupNextAt)
+}
+
+// SetWorktreeCleanupCompletedAt sets the "worktree_cleanup_completed_at" field.
+func (m *SessionMutation) SetWorktreeCleanupCompletedAt(t time.Time) {
+	m.worktree_cleanup_completed_at = &t
+}
+
+// WorktreeCleanupCompletedAt returns the value of the "worktree_cleanup_completed_at" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupCompletedAt() (r time.Time, exists bool) {
+	v := m.worktree_cleanup_completed_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupCompletedAt returns the old "worktree_cleanup_completed_at" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupCompletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupCompletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupCompletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupCompletedAt: %w", err)
+	}
+	return oldValue.WorktreeCleanupCompletedAt, nil
+}
+
+// ClearWorktreeCleanupCompletedAt clears the value of the "worktree_cleanup_completed_at" field.
+func (m *SessionMutation) ClearWorktreeCleanupCompletedAt() {
+	m.worktree_cleanup_completed_at = nil
+	m.clearedFields[entsession.FieldWorktreeCleanupCompletedAt] = struct{}{}
+}
+
+// WorktreeCleanupCompletedAtCleared returns if the "worktree_cleanup_completed_at" field was cleared in this mutation.
+func (m *SessionMutation) WorktreeCleanupCompletedAtCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldWorktreeCleanupCompletedAt]
+	return ok
+}
+
+// ResetWorktreeCleanupCompletedAt resets all changes to the "worktree_cleanup_completed_at" field.
+func (m *SessionMutation) ResetWorktreeCleanupCompletedAt() {
+	m.worktree_cleanup_completed_at = nil
+	delete(m.clearedFields, entsession.FieldWorktreeCleanupCompletedAt)
+}
+
+// SetWorktreeCleanupErrorCode sets the "worktree_cleanup_error_code" field.
+func (m *SessionMutation) SetWorktreeCleanupErrorCode(s string) {
+	m.worktree_cleanup_error_code = &s
+}
+
+// WorktreeCleanupErrorCode returns the value of the "worktree_cleanup_error_code" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupErrorCode() (r string, exists bool) {
+	v := m.worktree_cleanup_error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupErrorCode returns the old "worktree_cleanup_error_code" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupErrorCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupErrorCode: %w", err)
+	}
+	return oldValue.WorktreeCleanupErrorCode, nil
+}
+
+// ResetWorktreeCleanupErrorCode resets all changes to the "worktree_cleanup_error_code" field.
+func (m *SessionMutation) ResetWorktreeCleanupErrorCode() {
+	m.worktree_cleanup_error_code = nil
+}
+
+// SetWorktreeCleanupError sets the "worktree_cleanup_error" field.
+func (m *SessionMutation) SetWorktreeCleanupError(s string) {
+	m.worktree_cleanup_error = &s
+}
+
+// WorktreeCleanupError returns the value of the "worktree_cleanup_error" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupError() (r string, exists bool) {
+	v := m.worktree_cleanup_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupError returns the old "worktree_cleanup_error" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupError: %w", err)
+	}
+	return oldValue.WorktreeCleanupError, nil
+}
+
+// ResetWorktreeCleanupError resets all changes to the "worktree_cleanup_error" field.
+func (m *SessionMutation) ResetWorktreeCleanupError() {
+	m.worktree_cleanup_error = nil
+}
+
+// SetWorktreeCleanupRetryable sets the "worktree_cleanup_retryable" field.
+func (m *SessionMutation) SetWorktreeCleanupRetryable(b bool) {
+	m.worktree_cleanup_retryable = &b
+}
+
+// WorktreeCleanupRetryable returns the value of the "worktree_cleanup_retryable" field in the mutation.
+func (m *SessionMutation) WorktreeCleanupRetryable() (r bool, exists bool) {
+	v := m.worktree_cleanup_retryable
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorktreeCleanupRetryable returns the old "worktree_cleanup_retryable" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldWorktreeCleanupRetryable(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorktreeCleanupRetryable is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorktreeCleanupRetryable requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorktreeCleanupRetryable: %w", err)
+	}
+	return oldValue.WorktreeCleanupRetryable, nil
+}
+
+// ResetWorktreeCleanupRetryable resets all changes to the "worktree_cleanup_retryable" field.
+func (m *SessionMutation) ResetWorktreeCleanupRetryable() {
+	m.worktree_cleanup_retryable = nil
 }
 
 // SetCodexSessionID sets the "codex_session_id" field.
@@ -7553,7 +8083,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 30)
+	fields := make([]string, 0, 42)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -7578,8 +8108,44 @@ func (m *SessionMutation) Fields() []string {
 	if m.worktree_path != nil {
 		fields = append(fields, entsession.FieldWorktreePath)
 	}
+	if m.worktree_branch != nil {
+		fields = append(fields, entsession.FieldWorktreeBranch)
+	}
 	if m.worktree_base_commit != nil {
 		fields = append(fields, entsession.FieldWorktreeBaseCommit)
+	}
+	if m.worktree_cleanup_status != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupStatus)
+	}
+	if m.worktree_cleanup_attempts != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupAttempts)
+	}
+	if m.worktree_ownership_token != nil {
+		fields = append(fields, entsession.FieldWorktreeOwnershipToken)
+	}
+	if m.worktree_ownership_confirmed_at != nil {
+		fields = append(fields, entsession.FieldWorktreeOwnershipConfirmedAt)
+	}
+	if m.worktree_cleanup_requested_at != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupRequestedAt)
+	}
+	if m.worktree_cleanup_last_at != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupLastAt)
+	}
+	if m.worktree_cleanup_next_at != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupNextAt)
+	}
+	if m.worktree_cleanup_completed_at != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupCompletedAt)
+	}
+	if m.worktree_cleanup_error_code != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupErrorCode)
+	}
+	if m.worktree_cleanup_error != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupError)
+	}
+	if m.worktree_cleanup_retryable != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupRetryable)
 	}
 	if m.codex_session_id != nil {
 		fields = append(fields, entsession.FieldCodexSessionID)
@@ -7668,8 +8234,32 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.BaseBranch()
 	case entsession.FieldWorktreePath:
 		return m.WorktreePath()
+	case entsession.FieldWorktreeBranch:
+		return m.WorktreeBranch()
 	case entsession.FieldWorktreeBaseCommit:
 		return m.WorktreeBaseCommit()
+	case entsession.FieldWorktreeCleanupStatus:
+		return m.WorktreeCleanupStatus()
+	case entsession.FieldWorktreeCleanupAttempts:
+		return m.WorktreeCleanupAttempts()
+	case entsession.FieldWorktreeOwnershipToken:
+		return m.WorktreeOwnershipToken()
+	case entsession.FieldWorktreeOwnershipConfirmedAt:
+		return m.WorktreeOwnershipConfirmedAt()
+	case entsession.FieldWorktreeCleanupRequestedAt:
+		return m.WorktreeCleanupRequestedAt()
+	case entsession.FieldWorktreeCleanupLastAt:
+		return m.WorktreeCleanupLastAt()
+	case entsession.FieldWorktreeCleanupNextAt:
+		return m.WorktreeCleanupNextAt()
+	case entsession.FieldWorktreeCleanupCompletedAt:
+		return m.WorktreeCleanupCompletedAt()
+	case entsession.FieldWorktreeCleanupErrorCode:
+		return m.WorktreeCleanupErrorCode()
+	case entsession.FieldWorktreeCleanupError:
+		return m.WorktreeCleanupError()
+	case entsession.FieldWorktreeCleanupRetryable:
+		return m.WorktreeCleanupRetryable()
 	case entsession.FieldCodexSessionID:
 		return m.CodexSessionID()
 	case entsession.FieldCodexModel:
@@ -7737,8 +8327,32 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldBaseBranch(ctx)
 	case entsession.FieldWorktreePath:
 		return m.OldWorktreePath(ctx)
+	case entsession.FieldWorktreeBranch:
+		return m.OldWorktreeBranch(ctx)
 	case entsession.FieldWorktreeBaseCommit:
 		return m.OldWorktreeBaseCommit(ctx)
+	case entsession.FieldWorktreeCleanupStatus:
+		return m.OldWorktreeCleanupStatus(ctx)
+	case entsession.FieldWorktreeCleanupAttempts:
+		return m.OldWorktreeCleanupAttempts(ctx)
+	case entsession.FieldWorktreeOwnershipToken:
+		return m.OldWorktreeOwnershipToken(ctx)
+	case entsession.FieldWorktreeOwnershipConfirmedAt:
+		return m.OldWorktreeOwnershipConfirmedAt(ctx)
+	case entsession.FieldWorktreeCleanupRequestedAt:
+		return m.OldWorktreeCleanupRequestedAt(ctx)
+	case entsession.FieldWorktreeCleanupLastAt:
+		return m.OldWorktreeCleanupLastAt(ctx)
+	case entsession.FieldWorktreeCleanupNextAt:
+		return m.OldWorktreeCleanupNextAt(ctx)
+	case entsession.FieldWorktreeCleanupCompletedAt:
+		return m.OldWorktreeCleanupCompletedAt(ctx)
+	case entsession.FieldWorktreeCleanupErrorCode:
+		return m.OldWorktreeCleanupErrorCode(ctx)
+	case entsession.FieldWorktreeCleanupError:
+		return m.OldWorktreeCleanupError(ctx)
+	case entsession.FieldWorktreeCleanupRetryable:
+		return m.OldWorktreeCleanupRetryable(ctx)
 	case entsession.FieldCodexSessionID:
 		return m.OldCodexSessionID(ctx)
 	case entsession.FieldCodexModel:
@@ -7846,12 +8460,96 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetWorktreePath(v)
 		return nil
+	case entsession.FieldWorktreeBranch:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeBranch(v)
+		return nil
 	case entsession.FieldWorktreeBaseCommit:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetWorktreeBaseCommit(v)
+		return nil
+	case entsession.FieldWorktreeCleanupStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupStatus(v)
+		return nil
+	case entsession.FieldWorktreeCleanupAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupAttempts(v)
+		return nil
+	case entsession.FieldWorktreeOwnershipToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeOwnershipToken(v)
+		return nil
+	case entsession.FieldWorktreeOwnershipConfirmedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeOwnershipConfirmedAt(v)
+		return nil
+	case entsession.FieldWorktreeCleanupRequestedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupRequestedAt(v)
+		return nil
+	case entsession.FieldWorktreeCleanupLastAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupLastAt(v)
+		return nil
+	case entsession.FieldWorktreeCleanupNextAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupNextAt(v)
+		return nil
+	case entsession.FieldWorktreeCleanupCompletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupCompletedAt(v)
+		return nil
+	case entsession.FieldWorktreeCleanupErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupErrorCode(v)
+		return nil
+	case entsession.FieldWorktreeCleanupError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupError(v)
+		return nil
+	case entsession.FieldWorktreeCleanupRetryable:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorktreeCleanupRetryable(v)
 		return nil
 	case entsession.FieldCodexSessionID:
 		v, ok := value.(string)
@@ -8007,13 +8705,21 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *SessionMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addworktree_cleanup_attempts != nil {
+		fields = append(fields, entsession.FieldWorktreeCleanupAttempts)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *SessionMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case entsession.FieldWorktreeCleanupAttempts:
+		return m.AddedWorktreeCleanupAttempts()
+	}
 	return nil, false
 }
 
@@ -8022,6 +8728,13 @@ func (m *SessionMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *SessionMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case entsession.FieldWorktreeCleanupAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWorktreeCleanupAttempts(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Session numeric field %s", name)
 }
@@ -8032,6 +8745,21 @@ func (m *SessionMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(entsession.FieldCloseReason) {
 		fields = append(fields, entsession.FieldCloseReason)
+	}
+	if m.FieldCleared(entsession.FieldWorktreeOwnershipConfirmedAt) {
+		fields = append(fields, entsession.FieldWorktreeOwnershipConfirmedAt)
+	}
+	if m.FieldCleared(entsession.FieldWorktreeCleanupRequestedAt) {
+		fields = append(fields, entsession.FieldWorktreeCleanupRequestedAt)
+	}
+	if m.FieldCleared(entsession.FieldWorktreeCleanupLastAt) {
+		fields = append(fields, entsession.FieldWorktreeCleanupLastAt)
+	}
+	if m.FieldCleared(entsession.FieldWorktreeCleanupNextAt) {
+		fields = append(fields, entsession.FieldWorktreeCleanupNextAt)
+	}
+	if m.FieldCleared(entsession.FieldWorktreeCleanupCompletedAt) {
+		fields = append(fields, entsession.FieldWorktreeCleanupCompletedAt)
 	}
 	if m.FieldCleared(entsession.FieldTodoList) {
 		fields = append(fields, entsession.FieldTodoList)
@@ -8064,6 +8792,21 @@ func (m *SessionMutation) ClearField(name string) error {
 	switch name {
 	case entsession.FieldCloseReason:
 		m.ClearCloseReason()
+		return nil
+	case entsession.FieldWorktreeOwnershipConfirmedAt:
+		m.ClearWorktreeOwnershipConfirmedAt()
+		return nil
+	case entsession.FieldWorktreeCleanupRequestedAt:
+		m.ClearWorktreeCleanupRequestedAt()
+		return nil
+	case entsession.FieldWorktreeCleanupLastAt:
+		m.ClearWorktreeCleanupLastAt()
+		return nil
+	case entsession.FieldWorktreeCleanupNextAt:
+		m.ClearWorktreeCleanupNextAt()
+		return nil
+	case entsession.FieldWorktreeCleanupCompletedAt:
+		m.ClearWorktreeCleanupCompletedAt()
 		return nil
 	case entsession.FieldTodoList:
 		m.ClearTodoList()
@@ -8112,8 +8855,44 @@ func (m *SessionMutation) ResetField(name string) error {
 	case entsession.FieldWorktreePath:
 		m.ResetWorktreePath()
 		return nil
+	case entsession.FieldWorktreeBranch:
+		m.ResetWorktreeBranch()
+		return nil
 	case entsession.FieldWorktreeBaseCommit:
 		m.ResetWorktreeBaseCommit()
+		return nil
+	case entsession.FieldWorktreeCleanupStatus:
+		m.ResetWorktreeCleanupStatus()
+		return nil
+	case entsession.FieldWorktreeCleanupAttempts:
+		m.ResetWorktreeCleanupAttempts()
+		return nil
+	case entsession.FieldWorktreeOwnershipToken:
+		m.ResetWorktreeOwnershipToken()
+		return nil
+	case entsession.FieldWorktreeOwnershipConfirmedAt:
+		m.ResetWorktreeOwnershipConfirmedAt()
+		return nil
+	case entsession.FieldWorktreeCleanupRequestedAt:
+		m.ResetWorktreeCleanupRequestedAt()
+		return nil
+	case entsession.FieldWorktreeCleanupLastAt:
+		m.ResetWorktreeCleanupLastAt()
+		return nil
+	case entsession.FieldWorktreeCleanupNextAt:
+		m.ResetWorktreeCleanupNextAt()
+		return nil
+	case entsession.FieldWorktreeCleanupCompletedAt:
+		m.ResetWorktreeCleanupCompletedAt()
+		return nil
+	case entsession.FieldWorktreeCleanupErrorCode:
+		m.ResetWorktreeCleanupErrorCode()
+		return nil
+	case entsession.FieldWorktreeCleanupError:
+		m.ResetWorktreeCleanupError()
+		return nil
+	case entsession.FieldWorktreeCleanupRetryable:
+		m.ResetWorktreeCleanupRetryable()
 		return nil
 	case entsession.FieldCodexSessionID:
 		m.ResetCodexSessionID()

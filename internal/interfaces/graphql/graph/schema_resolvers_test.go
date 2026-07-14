@@ -539,6 +539,9 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 		"session.blocked",
 		"session.completed",
 		"session.closed",
+		"session.worktree_cleanup_requested",
+		"session.worktree_cleanup_completed",
+		"session.worktree_cleanup_failed",
 		"session.config_changed",
 		"session.priority_changed",
 		"session.todo_list_updated",
@@ -676,6 +679,32 @@ func TestMutationResumeSessionForwardsUseCase(t *testing.T) {
 	}
 	if got.ID != "session-1" || got.Status != "running" || got.CodexSessionID != "codex-session-1" {
 		t.Fatalf("ResumeSession() = %#v", got)
+	}
+}
+
+func TestMutationRetrySessionWorktreeCleanupForwardsUseCase(t *testing.T) {
+	now := time.Unix(30, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		retryCleanupResult: sessionapp.DTO{
+			ID:        "session-1",
+			ProjectID: "project-1",
+			Status:    sessiondomain.StatusClosed,
+			WorktreeCleanup: sessionapp.WorktreeCleanupDTO{
+				Status:   sessiondomain.WorktreeCleanupPending,
+				Attempts: 2,
+			},
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.RetrySessionWorktreeCleanup(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("RetrySessionWorktreeCleanup() error = %v", err)
+	}
+	if sessions.gotRetryCleanupID != "session-1" || got.WorktreeCleanup == nil || got.WorktreeCleanup.Status != "pending" || got.WorktreeCleanup.Attempts != 2 {
+		t.Fatalf("RetrySessionWorktreeCleanup() = %#v id=%q", got, sessions.gotRetryCleanupID)
 	}
 }
 
@@ -1387,6 +1416,8 @@ type fakeSessionUseCase struct {
 	appendResult           sessionapp.PromptAppendDTO
 	gotUpdateAppend        sessionapp.UpdatePromptAppendInput
 	updateAppendResult     sessionapp.PromptAppendDTO
+	gotRetryCleanupID      sessiondomain.ID
+	retryCleanupResult     sessionapp.DTO
 }
 
 func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.CreateSessionInput) (sessionapp.DTO, error) {
@@ -1460,6 +1491,11 @@ func (f *fakeSessionUseCase) UpdatePromptAppend(_ context.Context, input session
 func (f *fakeSessionUseCase) UpdateSessionConfig(_ context.Context, input sessionapp.UpdateSessionConfigInput) (sessionapp.DTO, error) {
 	f.gotUpdateConfig = input
 	return f.updateConfigResult, f.err
+}
+
+func (f *fakeSessionUseCase) RetryWorktreeCleanup(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
+	f.gotRetryCleanupID = id
+	return f.retryCleanupResult, f.err
 }
 
 func strPtr(value string) *string {

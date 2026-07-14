@@ -146,29 +146,30 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		ActivateWorkflowDefinition func(childComplexity int, id string) int
-		AppendPrompt               func(childComplexity int, input model.AppendPromptInput) int
-		CloseSession               func(childComplexity int, input model.CloseSessionInput) int
-		CreateProject              func(childComplexity int, input model.CreateProjectInput) int
-		CreateQuickCommand         func(childComplexity int, input model.CreateQuickCommandInput) int
-		CreateSession              func(childComplexity int, input model.CreateSessionInput) int
-		DeleteQuickCommand         func(childComplexity int, id string) int
-		DeleteSessionAttachment    func(childComplexity int, id string) int
-		DeleteStagedAttachment     func(childComplexity int, id string) int
-		ExecuteSession             func(childComplexity int, id string, force *bool) int
-		RemoveProject              func(childComplexity int, id string) int
-		ResumeSession              func(childComplexity int, id string, force *bool) int
-		SaveWorkflowDefinition     func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
-		SetDefaultWorkflow         func(childComplexity int, input model.SetDefaultWorkflowInput) int
-		SetSessionPriority         func(childComplexity int, input model.SetSessionPriorityInput) int
-		StageAttachment            func(childComplexity int, file graphql.Upload) int
-		StartSession               func(childComplexity int, id string, force *bool) int
-		StopSession                func(childComplexity int, id string) int
-		SubmitQuestionBatch        func(childComplexity int, input model.SubmitQuestionBatchInput) int
-		SubmitWorkflowApproval     func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
-		UpdateProjectSettings      func(childComplexity int, input model.UpdateProjectSettingsInput) int
-		UpdatePromptAppend         func(childComplexity int, input model.UpdatePromptAppendInput) int
-		UpdateSessionConfig        func(childComplexity int, input model.UpdateSessionConfigInput) int
+		ActivateWorkflowDefinition  func(childComplexity int, id string) int
+		AppendPrompt                func(childComplexity int, input model.AppendPromptInput) int
+		CloseSession                func(childComplexity int, input model.CloseSessionInput) int
+		CreateProject               func(childComplexity int, input model.CreateProjectInput) int
+		CreateQuickCommand          func(childComplexity int, input model.CreateQuickCommandInput) int
+		CreateSession               func(childComplexity int, input model.CreateSessionInput) int
+		DeleteQuickCommand          func(childComplexity int, id string) int
+		DeleteSessionAttachment     func(childComplexity int, id string) int
+		DeleteStagedAttachment      func(childComplexity int, id string) int
+		ExecuteSession              func(childComplexity int, id string, force *bool) int
+		RemoveProject               func(childComplexity int, id string) int
+		ResumeSession               func(childComplexity int, id string, force *bool) int
+		RetrySessionWorktreeCleanup func(childComplexity int, id string) int
+		SaveWorkflowDefinition      func(childComplexity int, input model.SaveWorkflowDefinitionInput) int
+		SetDefaultWorkflow          func(childComplexity int, input model.SetDefaultWorkflowInput) int
+		SetSessionPriority          func(childComplexity int, input model.SetSessionPriorityInput) int
+		StageAttachment             func(childComplexity int, file graphql.Upload) int
+		StartSession                func(childComplexity int, id string, force *bool) int
+		StopSession                 func(childComplexity int, id string) int
+		SubmitQuestionBatch         func(childComplexity int, input model.SubmitQuestionBatchInput) int
+		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
+		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
+		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
+		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
 	}
 
 	PageInfo struct {
@@ -282,6 +283,7 @@ type ComplexityRoot struct {
 		Status           func(childComplexity int) int
 		UpdatedAt        func(childComplexity int) int
 		WorktreeBranch   func(childComplexity int) int
+		WorktreeCleanup  func(childComplexity int) int
 		WorktreePath     func(childComplexity int) int
 	}
 
@@ -361,6 +363,7 @@ type ComplexityRoot struct {
 		Status           func(childComplexity int) int
 		UpdatedAt        func(childComplexity int) int
 		WorktreeBranch   func(childComplexity int) int
+		WorktreeCleanup  func(childComplexity int) int
 		WorktreePath     func(childComplexity int) int
 	}
 
@@ -554,6 +557,20 @@ type ComplexityRoot struct {
 		SessionID     func(childComplexity int) int
 		Status        func(childComplexity int) int
 	}
+
+	WorktreeCleanup struct {
+		Attempts    func(childComplexity int) int
+		CompletedAt func(childComplexity int) int
+		Error       func(childComplexity int) int
+		RequestedAt func(childComplexity int) int
+		Status      func(childComplexity int) int
+	}
+
+	WorktreeCleanupError struct {
+		Code      func(childComplexity int) int
+		Message   func(childComplexity int) int
+		Retryable func(childComplexity int) int
+	}
 }
 
 type MutationResolver interface {
@@ -571,6 +588,7 @@ type MutationResolver interface {
 	StopSession(ctx context.Context, id string) (*model.Session, error)
 	ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	CloseSession(ctx context.Context, input model.CloseSessionInput) (*model.Session, error)
+	RetrySessionWorktreeCleanup(ctx context.Context, id string) (*model.Session, error)
 	AppendPrompt(ctx context.Context, input model.AppendPromptInput) (*model.PromptAppend, error)
 	UpdatePromptAppend(ctx context.Context, input model.UpdatePromptAppendInput) (*model.PromptAppend, error)
 	StageAttachment(ctx context.Context, file graphql.Upload) (*model.Attachment, error)
@@ -1111,6 +1129,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ResumeSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
+	case "Mutation.retrySessionWorktreeCleanup":
+		if e.ComplexityRoot.Mutation.RetrySessionWorktreeCleanup == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_retrySessionWorktreeCleanup_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RetrySessionWorktreeCleanup(childComplexity, args["id"].(string)), true
 	case "Mutation.saveWorkflowDefinition":
 		if e.ComplexityRoot.Mutation.SaveWorkflowDefinition == nil {
 			break
@@ -1777,6 +1806,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Session.WorktreeBranch(childComplexity), true
+	case "Session.worktreeCleanup":
+		if e.ComplexityRoot.Session.WorktreeCleanup == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Session.WorktreeCleanup(childComplexity), true
 	case "Session.worktreePath":
 		if e.ComplexityRoot.Session.WorktreePath == nil {
 			break
@@ -2132,6 +2167,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.WorktreeBranch(childComplexity), true
+	case "SessionDetail.worktreeCleanup":
+		if e.ComplexityRoot.SessionDetail.WorktreeCleanup == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.WorktreeCleanup(childComplexity), true
 	case "SessionDetail.worktreePath":
 		if e.ComplexityRoot.SessionDetail.WorktreePath == nil {
 			break
@@ -2829,6 +2870,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.WorkflowRun.Status(childComplexity), true
 
+	case "WorktreeCleanup.attempts":
+		if e.ComplexityRoot.WorktreeCleanup.Attempts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanup.Attempts(childComplexity), true
+	case "WorktreeCleanup.completedAt":
+		if e.ComplexityRoot.WorktreeCleanup.CompletedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanup.CompletedAt(childComplexity), true
+	case "WorktreeCleanup.error":
+		if e.ComplexityRoot.WorktreeCleanup.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanup.Error(childComplexity), true
+	case "WorktreeCleanup.requestedAt":
+		if e.ComplexityRoot.WorktreeCleanup.RequestedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanup.RequestedAt(childComplexity), true
+	case "WorktreeCleanup.status":
+		if e.ComplexityRoot.WorktreeCleanup.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanup.Status(childComplexity), true
+
+	case "WorktreeCleanupError.code":
+		if e.ComplexityRoot.WorktreeCleanupError.Code == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanupError.Code(childComplexity), true
+	case "WorktreeCleanupError.message":
+		if e.ComplexityRoot.WorktreeCleanupError.Message == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanupError.Message(childComplexity), true
+	case "WorktreeCleanupError.retryable":
+		if e.ComplexityRoot.WorktreeCleanupError.Retryable == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorktreeCleanupError.Retryable(childComplexity), true
+
 	}
 	return 0, false
 }
@@ -3000,6 +3091,7 @@ type Mutation {
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
+  retrySessionWorktreeCleanup(id: ID!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
@@ -3108,6 +3200,7 @@ type Session {
   baseBranch: String!
   worktreeBranch: String!
   worktreePath: String!
+  worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
   config: SessionConfig!
   availableActions: [String!]!
@@ -3167,6 +3260,7 @@ type SessionDetail {
   currentNodeTitle: String!
   pendingApproval: PendingApproval
   worktreePath: String!
+  worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
   config: SessionConfig!
   attachments: [SessionAttachment!]!
@@ -3176,6 +3270,20 @@ type SessionDetail {
   lastRunAt: Time
   createdAt: Time!
   updatedAt: Time!
+}
+
+type WorktreeCleanup {
+  status: String!
+  attempts: Int!
+  requestedAt: Time
+  completedAt: Time
+  error: WorktreeCleanupError
+}
+
+type WorktreeCleanupError {
+  code: String!
+  message: String!
+  retryable: Boolean!
 }
 
 type PendingApproval {
@@ -3862,6 +3970,17 @@ func (ec *executionContext) field_Mutation_resumeSession_args(ctx context.Contex
 		return nil, err
 	}
 	args["force"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_retrySessionWorktreeCleanup_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -6369,6 +6488,8 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6442,6 +6563,8 @@ func (ec *executionContext) fieldContext_Mutation_setSessionPriority(ctx context
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6515,6 +6638,8 @@ func (ec *executionContext) fieldContext_Mutation_updateSessionConfig(ctx contex
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6588,6 +6713,8 @@ func (ec *executionContext) fieldContext_Mutation_executeSession(ctx context.Con
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6661,6 +6788,8 @@ func (ec *executionContext) fieldContext_Mutation_startSession(ctx context.Conte
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6734,6 +6863,8 @@ func (ec *executionContext) fieldContext_Mutation_stopSession(ctx context.Contex
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6807,6 +6938,8 @@ func (ec *executionContext) fieldContext_Mutation_resumeSession(ctx context.Cont
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6880,6 +7013,8 @@ func (ec *executionContext) fieldContext_Mutation_closeSession(ctx context.Conte
 				return ec.fieldContext_Session_worktreeBranch(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_Session_codexSessionId(ctx, field)
 			case "config":
@@ -6904,6 +7039,81 @@ func (ec *executionContext) fieldContext_Mutation_closeSession(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_closeSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_retrySessionWorktreeCleanup(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_retrySessionWorktreeCleanup,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RetrySessionWorktreeCleanup(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_retrySessionWorktreeCleanup(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Session_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_Session_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_Session_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Session_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_Session_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_Session_config(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_Session_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_Session_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_retrySessionWorktreeCleanup_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8403,6 +8613,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_pendingApproval(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_SessionDetail_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_SessionDetail_codexSessionId(ctx, field)
 			case "config":
@@ -9992,6 +10204,47 @@ func (ec *executionContext) fieldContext_Session_worktreePath(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Session_worktreeCleanup(ctx context.Context, field graphql.CollectedField, obj *model.Session) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Session_worktreeCleanup,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreeCleanup, nil
+		},
+		nil,
+		ec.marshalNWorktreeCleanup2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorktreeCleanup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Session_worktreeCleanup(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Session",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "status":
+				return ec.fieldContext_WorktreeCleanup_status(ctx, field)
+			case "attempts":
+				return ec.fieldContext_WorktreeCleanup_attempts(ctx, field)
+			case "requestedAt":
+				return ec.fieldContext_WorktreeCleanup_requestedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_WorktreeCleanup_completedAt(ctx, field)
+			case "error":
+				return ec.fieldContext_WorktreeCleanup_error(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorktreeCleanup", field.Name)
 		},
 	}
 	return fc, nil
@@ -11744,6 +11997,47 @@ func (ec *executionContext) fieldContext_SessionDetail_worktreePath(_ context.Co
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionDetail_worktreeCleanup(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_worktreeCleanup,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreeCleanup, nil
+		},
+		nil,
+		ec.marshalNWorktreeCleanup2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorktreeCleanup,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_worktreeCleanup(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "status":
+				return ec.fieldContext_WorktreeCleanup_status(ctx, field)
+			case "attempts":
+				return ec.fieldContext_WorktreeCleanup_attempts(ctx, field)
+			case "requestedAt":
+				return ec.fieldContext_WorktreeCleanup_requestedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_WorktreeCleanup_completedAt(ctx, field)
+			case "error":
+				return ec.fieldContext_WorktreeCleanup_error(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorktreeCleanup", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionDetail_codexSessionId(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12401,6 +12695,8 @@ func (ec *executionContext) fieldContext_SessionStateStreamItem_session(_ contex
 				return ec.fieldContext_SessionDetail_pendingApproval(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_SessionDetail_worktreeCleanup(ctx, field)
 			case "codexSessionId":
 				return ec.fieldContext_SessionDetail_codexSessionId(ctx, field)
 			case "config":
@@ -15567,6 +15863,246 @@ func (ec *executionContext) fieldContext_WorkflowRun_context(_ context.Context, 
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanup_status(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanup_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanup_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanup_attempts(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanup_attempts,
+		func(ctx context.Context) (any, error) {
+			return obj.Attempts, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanup_attempts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanup_requestedAt(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanup_requestedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.RequestedAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanup_requestedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanup_completedAt(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanup_completedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CompletedAt, nil
+		},
+		nil,
+		ec.marshalOTime2ᚖtimeᚐTime,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanup_completedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanup_error(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanup_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalOWorktreeCleanupError2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorktreeCleanupError,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanup_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "code":
+				return ec.fieldContext_WorktreeCleanupError_code(ctx, field)
+			case "message":
+				return ec.fieldContext_WorktreeCleanupError_message(ctx, field)
+			case "retryable":
+				return ec.fieldContext_WorktreeCleanupError_retryable(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorktreeCleanupError", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanupError_code(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanupError) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanupError_code,
+		func(ctx context.Context) (any, error) {
+			return obj.Code, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanupError_code(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanupError",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanupError_message(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanupError) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanupError_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanupError_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanupError",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorktreeCleanupError_retryable(ctx context.Context, field graphql.CollectedField, obj *model.WorktreeCleanupError) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorktreeCleanupError_retryable,
+		func(ctx context.Context) (any, error) {
+			return obj.Retryable, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorktreeCleanupError_retryable(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorktreeCleanupError",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -19527,6 +20063,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "retrySessionWorktreeCleanup":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_retrySessionWorktreeCleanup(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "appendPrompt":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_appendPrompt(ctx, field)
@@ -20634,6 +21177,11 @@ func (ec *executionContext) _Session(ctx context.Context, sel ast.SelectionSet, 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "worktreeCleanup":
+			out.Values[i] = ec._Session_worktreeCleanup(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "codexSessionId":
 			out.Values[i] = ec._Session_codexSessionId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -21123,6 +21671,11 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._SessionDetail_pendingApproval(ctx, field, obj)
 		case "worktreePath":
 			out.Values[i] = ec._SessionDetail_worktreePath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "worktreeCleanup":
+			out.Values[i] = ec._SessionDetail_worktreeCleanup(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -22588,6 +23141,105 @@ func (ec *executionContext) _WorkflowRun(ctx context.Context, sel ast.SelectionS
 			}
 		case "context":
 			out.Values[i] = ec._WorkflowRun_context(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var worktreeCleanupImplementors = []string{"WorktreeCleanup"}
+
+func (ec *executionContext) _WorktreeCleanup(ctx context.Context, sel ast.SelectionSet, obj *model.WorktreeCleanup) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, worktreeCleanupImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorktreeCleanup")
+		case "status":
+			out.Values[i] = ec._WorktreeCleanup_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "attempts":
+			out.Values[i] = ec._WorktreeCleanup_attempts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requestedAt":
+			out.Values[i] = ec._WorktreeCleanup_requestedAt(ctx, field, obj)
+		case "completedAt":
+			out.Values[i] = ec._WorktreeCleanup_completedAt(ctx, field, obj)
+		case "error":
+			out.Values[i] = ec._WorktreeCleanup_error(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var worktreeCleanupErrorImplementors = []string{"WorktreeCleanupError"}
+
+func (ec *executionContext) _WorktreeCleanupError(ctx context.Context, sel ast.SelectionSet, obj *model.WorktreeCleanupError) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, worktreeCleanupErrorImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WorktreeCleanupError")
+		case "code":
+			out.Values[i] = ec._WorktreeCleanupError_code(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._WorktreeCleanupError_message(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "retryable":
+			out.Values[i] = ec._WorktreeCleanupError_retryable(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -24370,6 +25022,16 @@ func (ec *executionContext) marshalNWorkflowRun2ᚖgithubᚗcomᚋnzlovᚋanycod
 	return ec._WorkflowRun(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNWorktreeCleanup2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorktreeCleanup(ctx context.Context, sel ast.SelectionSet, v *model.WorktreeCleanup) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WorktreeCleanup(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
 	return ec.___Directive(ctx, sel, &v)
 }
@@ -24859,6 +25521,13 @@ func (ec *executionContext) unmarshalOWorkflowOutputFieldInput2ᚕᚖgithubᚗco
 		}
 	}
 	return res, nil
+}
+
+func (ec *executionContext) marshalOWorktreeCleanupError2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorktreeCleanupError(ctx context.Context, sel ast.SelectionSet, v *model.WorktreeCleanupError) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._WorktreeCleanupError(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

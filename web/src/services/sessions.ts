@@ -22,6 +22,20 @@ export type SessionStatus =
   | 'completed'
   | 'closed';
 export type SessionPriority = 'high' | 'medium' | 'low';
+export type WorktreeCleanupStatus =
+  'not_applicable' | 'provisioning' | 'active' | 'pending' | 'failed' | 'cleaned';
+
+export interface WorktreeCleanup {
+  status: WorktreeCleanupStatus;
+  attempts: number;
+  requestedAt?: string | null;
+  completedAt?: string | null;
+  error?: {
+    code: string;
+    message: string;
+    retryable: boolean;
+  } | null;
+}
 
 export interface SessionCard {
   id: string;
@@ -70,6 +84,7 @@ export interface SessionDetail extends SessionCard {
   promptAppends: PromptAppend[];
   availableActions: string[];
   canResume: boolean;
+  worktreeCleanup: WorktreeCleanup;
 }
 
 export interface PromptAppend {
@@ -246,6 +261,7 @@ interface GraphQLSessionDetail {
   closeReason?: string | null;
   baseBranch: string;
   worktreeBranch: string;
+  worktreeCleanup: WorktreeCleanup;
   currentNodeTitle: string;
   pendingApproval?: GraphQLPendingApproval | null;
   config: SessionConfig;
@@ -285,6 +301,7 @@ interface GraphQLSession {
   priority: string;
   baseBranch: string;
   worktreeBranch: string;
+  worktreeCleanup: WorktreeCleanup;
   config: SessionConfig;
   availableActions?: string[];
   lastRunAt: string | null;
@@ -348,6 +365,17 @@ const sessionDetailFields = `
   closeReason
   baseBranch
   worktreeBranch
+  worktreeCleanup {
+    status
+    attempts
+    requestedAt
+    completedAt
+    error {
+      code
+      message
+      retryable
+    }
+  }
   currentNodeTitle
   pendingApproval {
     workflowRunId
@@ -393,6 +421,17 @@ const sessionFields = `
   priority
   baseBranch
   worktreeBranch
+  worktreeCleanup {
+    status
+    attempts
+    requestedAt
+    completedAt
+    error {
+      code
+      message
+      retryable
+    }
+  }
   config {
     codexModel
     reasoningEffort
@@ -689,6 +728,20 @@ export async function closeSession(sessionId: string) {
   });
 }
 
+export async function retrySessionWorktreeCleanup(sessionId: string) {
+  const data = await graphqlFetch<{ retrySessionWorktreeCleanup: GraphQLSession }, { id: string }>({
+    query: `
+      mutation RetrySessionWorktreeCleanup($id: ID!) {
+        retrySessionWorktreeCleanup(id: $id) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+  });
+  return normalizeSession(data.retrySessionWorktreeCleanup);
+}
+
 export async function updateSessionPriority(sessionId: string, priority: SessionPriority) {
   const data = await graphqlFetch<
     { setSessionPriority: GraphQLSession },
@@ -914,6 +967,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     promptAppends: (session.promptAppends ?? []).map(normalizePromptAppend),
     availableActions: normalizeAvailableActions(session.availableActions),
     canResume: session.canResume,
+    worktreeCleanup: session.worktreeCleanup,
   };
 }
 

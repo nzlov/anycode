@@ -104,9 +104,69 @@ func WorktreePath(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreePath, v))
 }
 
+// WorktreeBranch applies equality check predicate on the "worktree_branch" field. It's identical to WorktreeBranchEQ.
+func WorktreeBranch(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeBranch, v))
+}
+
 // WorktreeBaseCommit applies equality check predicate on the "worktree_base_commit" field. It's identical to WorktreeBaseCommitEQ.
 func WorktreeBaseCommit(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeCleanupStatus applies equality check predicate on the "worktree_cleanup_status" field. It's identical to WorktreeCleanupStatusEQ.
+func WorktreeCleanupStatus(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupAttempts applies equality check predicate on the "worktree_cleanup_attempts" field. It's identical to WorktreeCleanupAttemptsEQ.
+func WorktreeCleanupAttempts(v int) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeOwnershipToken applies equality check predicate on the "worktree_ownership_token" field. It's identical to WorktreeOwnershipTokenEQ.
+func WorktreeOwnershipToken(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipConfirmedAt applies equality check predicate on the "worktree_ownership_confirmed_at" field. It's identical to WorktreeOwnershipConfirmedAtEQ.
+func WorktreeOwnershipConfirmedAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeCleanupRequestedAt applies equality check predicate on the "worktree_cleanup_requested_at" field. It's identical to WorktreeCleanupRequestedAtEQ.
+func WorktreeCleanupRequestedAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupLastAt applies equality check predicate on the "worktree_cleanup_last_at" field. It's identical to WorktreeCleanupLastAtEQ.
+func WorktreeCleanupLastAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupNextAt applies equality check predicate on the "worktree_cleanup_next_at" field. It's identical to WorktreeCleanupNextAtEQ.
+func WorktreeCleanupNextAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupCompletedAt applies equality check predicate on the "worktree_cleanup_completed_at" field. It's identical to WorktreeCleanupCompletedAtEQ.
+func WorktreeCleanupCompletedAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupErrorCode applies equality check predicate on the "worktree_cleanup_error_code" field. It's identical to WorktreeCleanupErrorCodeEQ.
+func WorktreeCleanupErrorCode(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupError applies equality check predicate on the "worktree_cleanup_error" field. It's identical to WorktreeCleanupErrorEQ.
+func WorktreeCleanupError(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupRetryable applies equality check predicate on the "worktree_cleanup_retryable" field. It's identical to WorktreeCleanupRetryableEQ.
+func WorktreeCleanupRetryable(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupRetryable, v))
 }
 
 // CodexSessionID applies equality check predicate on the "codex_session_id" field. It's identical to CodexSessionIDEQ.
@@ -739,6 +799,71 @@ func WorktreePathContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldWorktreePath, v))
 }
 
+// WorktreeBranchEQ applies the EQ predicate on the "worktree_branch" field.
+func WorktreeBranchEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchNEQ applies the NEQ predicate on the "worktree_branch" field.
+func WorktreeBranchNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchIn applies the In predicate on the "worktree_branch" field.
+func WorktreeBranchIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeBranch, vs...))
+}
+
+// WorktreeBranchNotIn applies the NotIn predicate on the "worktree_branch" field.
+func WorktreeBranchNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeBranch, vs...))
+}
+
+// WorktreeBranchGT applies the GT predicate on the "worktree_branch" field.
+func WorktreeBranchGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchGTE applies the GTE predicate on the "worktree_branch" field.
+func WorktreeBranchGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchLT applies the LT predicate on the "worktree_branch" field.
+func WorktreeBranchLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchLTE applies the LTE predicate on the "worktree_branch" field.
+func WorktreeBranchLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchContains applies the Contains predicate on the "worktree_branch" field.
+func WorktreeBranchContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchHasPrefix applies the HasPrefix predicate on the "worktree_branch" field.
+func WorktreeBranchHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchHasSuffix applies the HasSuffix predicate on the "worktree_branch" field.
+func WorktreeBranchHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchEqualFold applies the EqualFold predicate on the "worktree_branch" field.
+func WorktreeBranchEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeBranch, v))
+}
+
+// WorktreeBranchContainsFold applies the ContainsFold predicate on the "worktree_branch" field.
+func WorktreeBranchContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeBranch, v))
+}
+
 // WorktreeBaseCommitEQ applies the EQ predicate on the "worktree_base_commit" field.
 func WorktreeBaseCommitEQ(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreeBaseCommit, v))
@@ -802,6 +927,566 @@ func WorktreeBaseCommitEqualFold(v string) predicate.Session {
 // WorktreeBaseCommitContainsFold applies the ContainsFold predicate on the "worktree_base_commit" field.
 func WorktreeBaseCommitContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeCleanupStatusEQ applies the EQ predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusNEQ applies the NEQ predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusIn applies the In predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupStatus, vs...))
+}
+
+// WorktreeCleanupStatusNotIn applies the NotIn predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupStatus, vs...))
+}
+
+// WorktreeCleanupStatusGT applies the GT predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusGTE applies the GTE predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusLT applies the LT predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusLTE applies the LTE predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusContains applies the Contains predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusHasPrefix applies the HasPrefix predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusHasSuffix applies the HasSuffix predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusEqualFold applies the EqualFold predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupStatusContainsFold applies the ContainsFold predicate on the "worktree_cleanup_status" field.
+func WorktreeCleanupStatusContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeCleanupStatus, v))
+}
+
+// WorktreeCleanupAttemptsEQ applies the EQ predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsEQ(v int) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeCleanupAttemptsNEQ applies the NEQ predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsNEQ(v int) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeCleanupAttemptsIn applies the In predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsIn(vs ...int) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupAttempts, vs...))
+}
+
+// WorktreeCleanupAttemptsNotIn applies the NotIn predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsNotIn(vs ...int) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupAttempts, vs...))
+}
+
+// WorktreeCleanupAttemptsGT applies the GT predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsGT(v int) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeCleanupAttemptsGTE applies the GTE predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsGTE(v int) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeCleanupAttemptsLT applies the LT predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsLT(v int) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeCleanupAttemptsLTE applies the LTE predicate on the "worktree_cleanup_attempts" field.
+func WorktreeCleanupAttemptsLTE(v int) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupAttempts, v))
+}
+
+// WorktreeOwnershipTokenEQ applies the EQ predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenNEQ applies the NEQ predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenIn applies the In predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeOwnershipToken, vs...))
+}
+
+// WorktreeOwnershipTokenNotIn applies the NotIn predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeOwnershipToken, vs...))
+}
+
+// WorktreeOwnershipTokenGT applies the GT predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenGTE applies the GTE predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenLT applies the LT predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenLTE applies the LTE predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenContains applies the Contains predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenHasPrefix applies the HasPrefix predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenHasSuffix applies the HasSuffix predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenEqualFold applies the EqualFold predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipTokenContainsFold applies the ContainsFold predicate on the "worktree_ownership_token" field.
+func WorktreeOwnershipTokenContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeOwnershipToken, v))
+}
+
+// WorktreeOwnershipConfirmedAtEQ applies the EQ predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeOwnershipConfirmedAtNEQ applies the NEQ predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeOwnershipConfirmedAtIn applies the In predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeOwnershipConfirmedAt, vs...))
+}
+
+// WorktreeOwnershipConfirmedAtNotIn applies the NotIn predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeOwnershipConfirmedAt, vs...))
+}
+
+// WorktreeOwnershipConfirmedAtGT applies the GT predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeOwnershipConfirmedAtGTE applies the GTE predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeOwnershipConfirmedAtLT applies the LT predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeOwnershipConfirmedAtLTE applies the LTE predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeOwnershipConfirmedAt, v))
+}
+
+// WorktreeOwnershipConfirmedAtIsNil applies the IsNil predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorktreeOwnershipConfirmedAt))
+}
+
+// WorktreeOwnershipConfirmedAtNotNil applies the NotNil predicate on the "worktree_ownership_confirmed_at" field.
+func WorktreeOwnershipConfirmedAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorktreeOwnershipConfirmedAt))
+}
+
+// WorktreeCleanupRequestedAtEQ applies the EQ predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupRequestedAtNEQ applies the NEQ predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupRequestedAtIn applies the In predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupRequestedAt, vs...))
+}
+
+// WorktreeCleanupRequestedAtNotIn applies the NotIn predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupRequestedAt, vs...))
+}
+
+// WorktreeCleanupRequestedAtGT applies the GT predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupRequestedAtGTE applies the GTE predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupRequestedAtLT applies the LT predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupRequestedAtLTE applies the LTE predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupRequestedAt, v))
+}
+
+// WorktreeCleanupRequestedAtIsNil applies the IsNil predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorktreeCleanupRequestedAt))
+}
+
+// WorktreeCleanupRequestedAtNotNil applies the NotNil predicate on the "worktree_cleanup_requested_at" field.
+func WorktreeCleanupRequestedAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorktreeCleanupRequestedAt))
+}
+
+// WorktreeCleanupLastAtEQ applies the EQ predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupLastAtNEQ applies the NEQ predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupLastAtIn applies the In predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupLastAt, vs...))
+}
+
+// WorktreeCleanupLastAtNotIn applies the NotIn predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupLastAt, vs...))
+}
+
+// WorktreeCleanupLastAtGT applies the GT predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupLastAtGTE applies the GTE predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupLastAtLT applies the LT predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupLastAtLTE applies the LTE predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupLastAt, v))
+}
+
+// WorktreeCleanupLastAtIsNil applies the IsNil predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorktreeCleanupLastAt))
+}
+
+// WorktreeCleanupLastAtNotNil applies the NotNil predicate on the "worktree_cleanup_last_at" field.
+func WorktreeCleanupLastAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorktreeCleanupLastAt))
+}
+
+// WorktreeCleanupNextAtEQ applies the EQ predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupNextAtNEQ applies the NEQ predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupNextAtIn applies the In predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupNextAt, vs...))
+}
+
+// WorktreeCleanupNextAtNotIn applies the NotIn predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupNextAt, vs...))
+}
+
+// WorktreeCleanupNextAtGT applies the GT predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupNextAtGTE applies the GTE predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupNextAtLT applies the LT predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupNextAtLTE applies the LTE predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupNextAt, v))
+}
+
+// WorktreeCleanupNextAtIsNil applies the IsNil predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorktreeCleanupNextAt))
+}
+
+// WorktreeCleanupNextAtNotNil applies the NotNil predicate on the "worktree_cleanup_next_at" field.
+func WorktreeCleanupNextAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorktreeCleanupNextAt))
+}
+
+// WorktreeCleanupCompletedAtEQ applies the EQ predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupCompletedAtNEQ applies the NEQ predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupCompletedAtIn applies the In predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupCompletedAt, vs...))
+}
+
+// WorktreeCleanupCompletedAtNotIn applies the NotIn predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupCompletedAt, vs...))
+}
+
+// WorktreeCleanupCompletedAtGT applies the GT predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupCompletedAtGTE applies the GTE predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupCompletedAtLT applies the LT predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupCompletedAtLTE applies the LTE predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupCompletedAt, v))
+}
+
+// WorktreeCleanupCompletedAtIsNil applies the IsNil predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorktreeCleanupCompletedAt))
+}
+
+// WorktreeCleanupCompletedAtNotNil applies the NotNil predicate on the "worktree_cleanup_completed_at" field.
+func WorktreeCleanupCompletedAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorktreeCleanupCompletedAt))
+}
+
+// WorktreeCleanupErrorCodeEQ applies the EQ predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeNEQ applies the NEQ predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeIn applies the In predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupErrorCode, vs...))
+}
+
+// WorktreeCleanupErrorCodeNotIn applies the NotIn predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupErrorCode, vs...))
+}
+
+// WorktreeCleanupErrorCodeGT applies the GT predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeGTE applies the GTE predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeLT applies the LT predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeLTE applies the LTE predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeContains applies the Contains predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeHasPrefix applies the HasPrefix predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeHasSuffix applies the HasSuffix predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeEqualFold applies the EqualFold predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorCodeContainsFold applies the ContainsFold predicate on the "worktree_cleanup_error_code" field.
+func WorktreeCleanupErrorCodeContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeCleanupErrorCode, v))
+}
+
+// WorktreeCleanupErrorEQ applies the EQ predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorNEQ applies the NEQ predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorIn applies the In predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeCleanupError, vs...))
+}
+
+// WorktreeCleanupErrorNotIn applies the NotIn predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeCleanupError, vs...))
+}
+
+// WorktreeCleanupErrorGT applies the GT predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorGTE applies the GTE predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorLT applies the LT predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorLTE applies the LTE predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorContains applies the Contains predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorHasPrefix applies the HasPrefix predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorHasSuffix applies the HasSuffix predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorEqualFold applies the EqualFold predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupErrorContainsFold applies the ContainsFold predicate on the "worktree_cleanup_error" field.
+func WorktreeCleanupErrorContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeCleanupError, v))
+}
+
+// WorktreeCleanupRetryableEQ applies the EQ predicate on the "worktree_cleanup_retryable" field.
+func WorktreeCleanupRetryableEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupRetryable, v))
+}
+
+// WorktreeCleanupRetryableNEQ applies the NEQ predicate on the "worktree_cleanup_retryable" field.
+func WorktreeCleanupRetryableNEQ(v bool) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupRetryable, v))
 }
 
 // CodexSessionIDEQ applies the EQ predicate on the "codex_session_id" field.

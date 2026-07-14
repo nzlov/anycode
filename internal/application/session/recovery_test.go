@@ -3,12 +3,15 @@ package session
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
+	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
+	"github.com/nzlov/anycode/internal/infra/entstore"
 )
 
 func TestRecoverInterruptedSessionsQueuesResumeAndSettlesStopping(t *testing.T) {
@@ -270,6 +273,62 @@ func TestRecoverInterruptedSessionCompletesPreparedClose(t *testing.T) {
 	got := repo.sessions[session.ID]
 	if got.Status != domain.StatusClosed || got.CloseReason == nil || *got.CloseReason != reason || got.ClosedAt == nil {
 		t.Fatalf("recovered close session = %#v", got)
+	}
+}
+
+func TestRecoverInterruptedSessionCompletesPreparedCloseWithPendingQuestion(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	now := time.Date(2026, 7, 14, 14, 0, 0, 0, time.UTC)
+	reason := domain.CloseReasonUserClosed
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusStopping,
+		CloseReason: &reason, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	batch := questiondomain.Batch{
+		ID: "batch-1", SessionID: "session-1", Status: questiondomain.BatchPending,
+		DeliveryStatus: questiondomain.DeliveryNone, CreatedAt: now,
+		Questions: []questiondomain.Question{{
+			ID: "question-1", BatchID: "batch-1", Title: "Choose", Body: "Continue?", Type: "choice", Status: string(questiondomain.BatchPending),
+		}},
+	}
+	if err := store.Questions().CreateBatch(ctx, batch); err != nil {
+		t.Fatalf("create question batch: %v", err)
+	}
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"), WithEvents(store.Events()), WithUnitOfWork(store))
+	service.now = func() time.Time { return now.Add(time.Minute) }
+
+	count, err := service.RecoverInterruptedSessions(ctx)
+	if err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("RecoverInterruptedSessions() = %d, want 1", count)
+	}
+	got, err := store.Sessions().Find(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	if got.Status != domain.StatusClosed || got.CloseReason == nil || *got.CloseReason != reason || got.ClosedAt == nil {
+		t.Fatalf("recovered close session = %#v", got)
+	}
+	gotBatch, err := store.Questions().FindBatch(ctx, batch.ID)
+	if err != nil {
+		t.Fatalf("find question batch: %v", err)
+	}
+	if gotBatch.Status != questiondomain.BatchCancelled {
+		t.Fatalf("question batch status = %q", gotBatch.Status)
 	}
 }
 

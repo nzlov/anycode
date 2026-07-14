@@ -115,6 +115,7 @@ func mapSession(dto sessionapp.DTO) *model.Session {
 		BaseBranch:       dto.BaseBranch,
 		WorktreeBranch:   dto.WorktreeBranch,
 		WorktreePath:     dto.WorktreePath,
+		WorktreeCleanup:  mapWorktreeCleanup(dto.WorktreeCleanup),
 		CodexSessionID:   dto.CodexSessionID,
 		Config:           mapSessionConfig(dto.Config),
 		AvailableActions: dto.AvailableActions,
@@ -212,6 +213,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		CurrentNodeTitle: dto.CurrentNodeTitle,
 		PendingApproval:  mapPendingApproval(dto.PendingApproval),
 		WorktreePath:     dto.WorktreePath,
+		WorktreeCleanup:  mapWorktreeCleanup(dto.WorktreeCleanup),
 		CodexSessionID:   dto.CodexSessionID,
 		Config:           mapSessionConfig(dto.Config),
 		Attachments:      attachments,
@@ -222,6 +224,23 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		CreatedAt:        dto.CreatedAt,
 		UpdatedAt:        dto.UpdatedAt,
 	}
+}
+
+func mapWorktreeCleanup(dto sessionapp.WorktreeCleanupDTO) *model.WorktreeCleanup {
+	cleanup := &model.WorktreeCleanup{
+		Status:      string(dto.Status),
+		Attempts:    dto.Attempts,
+		RequestedAt: dto.RequestedAt,
+		CompletedAt: dto.CompletedAt,
+	}
+	if dto.Error != nil {
+		cleanup.Error = &model.WorktreeCleanupError{
+			Code:      dto.Error.Code,
+			Message:   dto.Error.Message,
+			Retryable: dto.Error.Retryable,
+		}
+	}
+	return cleanup
 }
 
 func mapSessionConfig(config sessiondomain.Config) *model.SessionConfig {

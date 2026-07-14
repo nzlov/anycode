@@ -38,6 +38,7 @@ type Mutation {
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
+  retrySessionWorktreeCleanup(id: ID!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!
@@ -146,6 +147,7 @@ type Session {
   baseBranch: String!
   worktreeBranch: String!
   worktreePath: String!
+  worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
   config: SessionConfig!
   availableActions: [String!]!
@@ -205,6 +207,7 @@ type SessionDetail {
   currentNodeTitle: String!
   pendingApproval: PendingApproval
   worktreePath: String!
+  worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
   config: SessionConfig!
   attachments: [SessionAttachment!]!
@@ -214,6 +217,20 @@ type SessionDetail {
   lastRunAt: Time
   createdAt: Time!
   updatedAt: Time!
+}
+
+type WorktreeCleanup {
+  status: String!
+  attempts: Int!
+  requestedAt: Time
+  completedAt: Time
+  error: WorktreeCleanupError
+}
+
+type WorktreeCleanupError {
+  code: String!
+  message: String!
+  retryable: Boolean!
 }
 
 type PendingApproval {

@@ -26,6 +26,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 
 	repo := store.Sessions()
 	now := time.Now().UTC()
+	ownershipConfirmedAt := now.Add(-3 * time.Minute)
+	cleanupRequestedAt := now.Add(-2 * time.Minute)
+	cleanupNextAt := now.Add(time.Minute)
 	projectID := session.ProjectID("project-1")
 	oldProjectID := session.ProjectID("project-2")
 	input := session.Session{
@@ -36,6 +39,19 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		Status:         session.StatusRunning,
 		BaseBranch:     "main",
 		WorktreePath:   "/worktrees/session-1",
+		WorktreeBranch: "session-1",
+		WorktreeCleanup: session.WorktreeCleanup{
+			Status:               session.WorktreeCleanupFailed,
+			Attempts:             2,
+			OwnershipToken:       "owner-token",
+			OwnershipConfirmedAt: &ownershipConfirmedAt,
+			RequestedAt:          &cleanupRequestedAt,
+			LastAt:               &now,
+			NextAt:               &cleanupNextAt,
+			ErrorCode:            "branch_checked_out",
+			Error:                "branch is checked out",
+			Retryable:            true,
+		},
 		CodexSessionID: "codex-1",
 		Config: session.Config{
 			CodexModel:      "gpt-5.4",
@@ -67,6 +83,12 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		t.Fatalf("find session: %v", err)
 	}
 	assertSessionEqual(t, found, input)
+	if found.WorktreeCleanup.RequestedAt == nil || !found.WorktreeCleanup.RequestedAt.Equal(cleanupRequestedAt) ||
+		found.WorktreeCleanup.OwnershipConfirmedAt == nil || !found.WorktreeCleanup.OwnershipConfirmedAt.Equal(ownershipConfirmedAt) ||
+		found.WorktreeCleanup.LastAt == nil || !found.WorktreeCleanup.LastAt.Equal(now) ||
+		found.WorktreeCleanup.NextAt == nil || !found.WorktreeCleanup.NextAt.Equal(cleanupNextAt) {
+		t.Fatalf("worktree cleanup timestamps = %#v", found.WorktreeCleanup)
+	}
 	if !found.Queue.InitialStart {
 		t.Fatalf("queue initial start = false, want true: %#v", found.Queue)
 	}
@@ -426,6 +448,50 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 }
 
+func TestSessionRepositoryListsWorktreeCleanupDue(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	now := time.Now().UTC()
+	past := now.Add(-time.Minute)
+	future := now.Add(time.Minute)
+	repo := store.Sessions()
+	for _, input := range []session.Session{
+		{ID: "provisioning", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusFailed, WorktreeCleanup: session.WorktreeCleanup{Status: session.WorktreeCleanupProvisioning}, CreatedAt: now, UpdatedAt: now},
+		{ID: "pending", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusClosed, WorktreeCleanup: session.WorktreeCleanup{Status: session.WorktreeCleanupPending}, CreatedAt: now, UpdatedAt: now},
+		{ID: "failed-due", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusClosed, WorktreeCleanup: session.WorktreeCleanup{Status: session.WorktreeCleanupFailed, Retryable: true, NextAt: &past}, CreatedAt: now, UpdatedAt: now},
+		{ID: "failed-future", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusClosed, WorktreeCleanup: session.WorktreeCleanup{Status: session.WorktreeCleanupFailed, Retryable: true, NextAt: &future}, CreatedAt: now, UpdatedAt: now},
+		{ID: "failed-terminal", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusClosed, WorktreeCleanup: session.WorktreeCleanup{Status: session.WorktreeCleanupFailed, Retryable: false}, CreatedAt: now, UpdatedAt: now},
+		{ID: "active", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusStopped, WorktreeCleanup: session.WorktreeCleanup{Status: session.WorktreeCleanupActive}, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := repo.Save(ctx, input); err != nil {
+			t.Fatalf("save session %s: %v", input.ID, err)
+		}
+	}
+
+	due, err := repo.ListWorktreeCleanupDue(ctx, now, 10)
+	if err != nil {
+		t.Fatalf("ListWorktreeCleanupDue() error = %v", err)
+	}
+	if len(due) != 2 || due[0].ID != "pending" || due[1].ID != "failed-due" {
+		t.Fatalf("ListWorktreeCleanupDue() = %#v", due)
+	}
+	provisioning, err := repo.ListProvisioningWorktrees(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListProvisioningWorktrees() error = %v", err)
+	}
+	if len(provisioning) != 1 || provisioning[0].ID != "provisioning" {
+		t.Fatalf("ListProvisioningWorktrees() = %#v", provisioning)
+	}
+}
+
 func TestSessionRepositoryUpdatesOnlyMatchingPendingPromptAppendBody(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
@@ -723,6 +789,14 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.Status != want.Status ||
 		got.BaseBranch != want.BaseBranch ||
 		got.WorktreePath != want.WorktreePath ||
+		got.WorktreeBranch != want.WorktreeBranch ||
+		got.WorktreeCleanup.Status != want.WorktreeCleanup.Status ||
+		got.WorktreeCleanup.Attempts != want.WorktreeCleanup.Attempts ||
+		got.WorktreeCleanup.OwnershipToken != want.WorktreeCleanup.OwnershipToken ||
+		!equalTimePtr(got.WorktreeCleanup.OwnershipConfirmedAt, want.WorktreeCleanup.OwnershipConfirmedAt) ||
+		got.WorktreeCleanup.ErrorCode != want.WorktreeCleanup.ErrorCode ||
+		got.WorktreeCleanup.Error != want.WorktreeCleanup.Error ||
+		got.WorktreeCleanup.Retryable != want.WorktreeCleanup.Retryable ||
 		got.CodexSessionID != want.CodexSessionID ||
 		got.Config != want.Config ||
 		len(got.TodoList.Items) != len(want.TodoList.Items) {
@@ -736,4 +810,11 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 	if got.LastRunAt == nil || !got.LastRunAt.Equal(*want.LastRunAt) {
 		t.Fatalf("last run mismatch: got=%v want=%v", got.LastRunAt, want.LastRunAt)
 	}
+}
+
+func equalTimePtr(left *time.Time, right *time.Time) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right)
 }
