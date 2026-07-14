@@ -15,10 +15,31 @@
 
       <q-separator />
 
+      <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
+        <q-tab name="projects" icon="folder" label="项目" />
+        <q-tab name="quick_commands" icon="bolt" label="快捷指令" />
+      </q-tabs>
+
       <div class="global-settings-grid">
-        <nav class="global-settings-nav" aria-label="全局设置分类">
+        <nav class="global-settings-nav gt-xs" aria-label="全局设置分类">
           <q-list padding>
-            <q-item clickable active active-class="global-settings-nav__active">
+            <q-item
+              clickable
+              :active="activeSection === 'projects'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'projects'"
+            >
+              <q-item-section avatar>
+                <q-icon name="folder" />
+              </q-item-section>
+              <q-item-section>项目</q-item-section>
+            </q-item>
+            <q-item
+              clickable
+              :active="activeSection === 'quick_commands'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'quick_commands'"
+            >
               <q-item-section avatar>
                 <q-icon name="bolt" />
               </q-item-section>
@@ -27,7 +48,93 @@
           </q-list>
         </nav>
 
-        <section class="global-settings-panel">
+        <section v-if="activeSection === 'projects'" class="global-settings-panel">
+          <div class="global-settings-panel__header">
+            <div class="text-subtitle2 text-weight-bold">项目</div>
+          </div>
+
+          <q-linear-progress v-if="projectsLoading" indeterminate color="primary" />
+          <q-list v-if="projects.length" bordered separator class="global-project-list">
+            <q-item
+              v-for="project in projects"
+              :key="project.id"
+              clickable
+              :disable="projectsLoading || removingProject"
+              @click="openProjectOverview(project.id)"
+            >
+              <q-item-section avatar>
+                <q-icon :name="project.isGit ? 'folder_open' : 'folder'" color="primary" />
+              </q-item-section>
+              <q-item-section class="global-project-list__content">
+                <q-item-label>{{ project.name }}</q-item-label>
+                <q-item-label caption lines="1" class="global-project-list__path">
+                  {{ project.path }}
+                </q-item-label>
+              </q-item-section>
+              <q-item-section v-if="project.isGit" side class="global-project-list__git">
+                <q-badge outline color="positive" label="Git" />
+              </q-item-section>
+              <q-item-section side>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
+                  icon="more_vert"
+                  :aria-label="`${project.name} 项目操作`"
+                  @click.stop
+                >
+                  <q-menu>
+                    <q-list dense class="project-menu app-touch-list">
+                      <q-item v-close-popup clickable @click.stop="openProjectSettings(project)">
+                        <q-item-section avatar>
+                          <q-icon name="settings" />
+                        </q-item-section>
+                        <q-item-section>设置</q-item-section>
+                      </q-item>
+                      <q-item v-close-popup clickable @click.stop="openWorkflowConfig(project.id)">
+                        <q-item-section avatar>
+                          <q-icon name="account_tree" />
+                        </q-item-section>
+                        <q-item-section>流程配置</q-item-section>
+                      </q-item>
+                      <q-item
+                        v-close-popup
+                        clickable
+                        class="text-negative"
+                        @click.stop="confirmRemoveProject(project.id, project.name)"
+                      >
+                        <q-item-section avatar>
+                          <q-icon name="playlist_remove" />
+                        </q-item-section>
+                        <q-item-section>移除项目</q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-menu>
+                </q-btn>
+              </q-item-section>
+            </q-item>
+          </q-list>
+          <div v-else class="global-settings-empty">
+            <q-spinner v-if="projectsLoading" color="primary" size="24px" />
+            <template v-else>暂无项目</template>
+          </div>
+
+          <q-btn
+            fab
+            class="global-settings-add-fab"
+            color="positive"
+            text-color="dark"
+            icon="add"
+            aria-label="新增项目"
+            :disable="projectsLoading"
+            @click="directoryDialogOpen = true"
+          >
+            <q-tooltip>新增项目</q-tooltip>
+          </q-btn>
+        </section>
+
+        <section v-else class="global-settings-panel">
           <div class="global-settings-panel__header">
             <div class="text-subtitle2 text-weight-bold">快捷指令</div>
           </div>
@@ -153,15 +260,70 @@
           </q-btn>
         </section>
       </div>
+
+      <project-directory-dialog v-model="directoryDialogOpen" />
+      <project-settings-dialog v-model="projectSettingsOpen" :project="settingsProject" />
+
+      <q-dialog v-model="removeProjectDialogOpen">
+        <q-card class="confirm-dialog">
+          <q-card-section class="row items-center q-pb-sm">
+            <div class="text-subtitle1 text-weight-bold">移除项目</div>
+            <q-space />
+            <q-btn
+              v-close-popup
+              flat
+              round
+              dense
+              class="app-icon-btn"
+              icon="close"
+              aria-label="关闭"
+            >
+              <q-tooltip>关闭</q-tooltip>
+            </q-btn>
+          </q-card-section>
+          <q-separator />
+          <q-card-section>
+            <div class="text-body2">确认移除项目“{{ removingProjectName }}”？</div>
+          </q-card-section>
+          <q-card-actions align="right">
+            <q-btn
+              v-close-popup
+              flat
+              round
+              class="app-icon-btn"
+              icon="close"
+              color="primary"
+              aria-label="取消"
+            >
+              <q-tooltip>取消</q-tooltip>
+            </q-btn>
+            <q-btn
+              unelevated
+              class="app-command-btn"
+              color="negative"
+              icon="playlist_remove"
+              label="移除"
+              no-caps
+              :loading="removingProject"
+              @click="removeSelectedProject"
+            />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
     </q-card>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import AppPagination from '@/components/AppPagination.vue';
+import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue';
+import { useProjects } from '@/composables/useProjects';
 import { useQuickCommands } from '@/composables/useQuickCommands';
+import type { ProjectSummary } from '@/services/projects';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -171,6 +333,17 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
 
+const route = useRoute();
+const router = useRouter();
+const activeSection = ref<'projects' | 'quick_commands'>('projects');
+const directoryDialogOpen = ref(false);
+const projectSettingsOpen = ref(false);
+const settingsProject = ref<ProjectSummary | null>(null);
+const removeProjectDialogOpen = ref(false);
+const removingProjectId = ref('');
+const removingProjectName = ref('');
+const removingProject = ref(false);
+const { projects, loading: projectsLoading, loadProjects, removeProjectById } = useProjects();
 const {
   quickCommands,
   quickCommandsLoading,
@@ -189,6 +362,43 @@ const commandInputRef = ref<{ focus: () => void } | null>(null);
 const quickCommandPageMax = computed(() =>
   Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
 );
+
+function openProjectOverview(projectId: string) {
+  emit('update:modelValue', false);
+  void router.push({ name: 'overview', query: { projectId } });
+}
+
+function openProjectSettings(project: ProjectSummary) {
+  settingsProject.value = project;
+  projectSettingsOpen.value = true;
+}
+
+function openWorkflowConfig(projectId: string) {
+  emit('update:modelValue', false);
+  void router.push({ name: 'workflow-config', params: { projectId } });
+}
+
+function confirmRemoveProject(projectId: string, projectName: string) {
+  removingProjectId.value = projectId;
+  removingProjectName.value = projectName;
+  removeProjectDialogOpen.value = true;
+}
+
+async function removeSelectedProject() {
+  if (!removingProjectId.value) return;
+  const projectId = removingProjectId.value;
+  removingProject.value = true;
+  try {
+    await removeProjectById(projectId);
+    removeProjectDialogOpen.value = false;
+    if (route.query.projectId === projectId || route.params.projectId === projectId) {
+      emit('update:modelValue', false);
+      await router.push({ name: 'overview' });
+    }
+  } finally {
+    removingProject.value = false;
+  }
+}
 
 function startAdd() {
   adding.value = true;
@@ -233,13 +443,16 @@ function changeQuickCommandPage(page: number) {
 }
 
 onMounted(() => {
+  void loadProjects();
   void loadQuickCommands().catch(() => undefined);
 });
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) refreshQuickCommands();
+    if (!open) return;
+    void loadProjects();
+    refreshQuickCommands();
   },
 );
 </script>

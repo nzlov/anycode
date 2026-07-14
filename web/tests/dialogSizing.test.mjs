@@ -72,8 +72,11 @@ test('all content dialogs use the shared card class and Quasar mobile maximizati
 });
 
 test('compact confirmation dialogs do not use the content dialog contract', () => {
-  assert.equal((layoutSource.match(/class="confirm-dialog"/g) ?? []).length, 2);
-  assert.doesNotMatch(layoutSource, /class="[^"]*confirm-dialog[^"]*app-content-dialog/);
+  assert.equal((layoutSource.match(/class="confirm-dialog"/g) ?? []).length, 1);
+  assert.equal((globalSettingsSource.match(/class="confirm-dialog"/g) ?? []).length, 1);
+  for (const source of [layoutSource, globalSettingsSource]) {
+    assert.doesNotMatch(source, /class="[^"]*confirm-dialog[^"]*app-content-dialog/);
+  }
 });
 
 test('semantic dialog styles no longer own fixed dialog widths or old mobile breakpoints', () => {

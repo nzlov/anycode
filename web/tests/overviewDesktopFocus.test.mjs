@@ -28,22 +28,15 @@ test('desktop overview replaces the create FAB with the persistent create panel'
   assert.match(newSessionSource, /const dialogVisible = computed/);
 });
 
-test('desktop overview keeps only latest cards and links history from the section heading', () => {
-  assert.match(indexSource, /v-if="section\.id === 'latest' && showDesktopFocusLayout"/);
+test('overview keeps only latest cards and links history from the filter toolbar', () => {
+  assert.match(indexSource, /class="overview-filter-toolbar"/);
   assert.match(indexSource, /icon="history"/);
-  assert.match(indexSource, /label="历史卡片"/);
+  assert.match(indexSource, /aria-label="历史卡片"/);
+  assert.doesNotMatch(indexSource, /\slabel="历史卡片"/);
   assert.match(indexSource, /:to="sessionsRoute"/);
   assert.match(indexSource, /const showDesktopFocusLayout = computed/);
-  assert.match(
-    indexSource,
-    /showDesktopFocusLayout\.value\s*\? \[latestSection\]\s*:\s*\[latestSection, historySection\]/s,
-  );
-  assert.match(indexSource, /v-if="!hasAnyCards"/);
-  assert.match(
-    indexSource,
-    /const hasAnyCards = computed\([\s\S]*latestCards\.value\.length > 0 \|\| historyCards\.value\.length > 0/,
-  );
-  assert.doesNotMatch(indexSource, /v-if="!hasVisibleCards"/);
+  assert.match(indexSource, /v-for="card in visibleLatestCards"/);
+  assert.doesNotMatch(indexSource, /historySection|historyCards|hasMoreHistory/);
 });
 
 test('desktop create panel uses one project row within its reserved maximum height', () => {
@@ -75,6 +68,8 @@ test('desktop create panel uses one project row within its reserved maximum heig
     newSessionSource,
     /label="项目"[\s\S]*class="branch-picker"[\s\S]*label="优先级"[\s\S]*class="new-session-mode"/,
   );
-  assert.match(stylesSource, /@media \(min-width: 700px\) and \(max-width: 1023\.98px\)/);
-  assert.match(stylesSource, /@media \(min-width: 1024px\)/);
+  assert.match(
+    stylesSource,
+    /@media \(min-width: 700px\)[\s\S]*?\.new-session-dialog--panel\s*{[^}]*left:\s*24px/s,
+  );
 });

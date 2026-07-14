@@ -33,7 +33,7 @@ test('overview card actions use a context menu without a visible trigger', () =>
   assert.match(source, /@keyup\.space\.self\.prevent=/);
 });
 
-test('overview requests latest and history ranges instead of dated buckets', () => {
+test('overview requests only the latest range instead of dated buckets', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
   const oldLatestRange = ['recent', '3d'].join('');
   const oldHistoryRange = ['history', '7d'].join('');
@@ -41,16 +41,13 @@ test('overview requests latest and history ranges instead of dated buckets', () 
   assert.equal(source.includes(`range: '${oldLatestRange}'`), false);
   assert.equal(source.includes(`range: '${oldHistoryRange}'`), false);
   assert.equal(source.includes("range: 'latest'"), true);
-  assert.equal(source.includes("range: 'history'"), true);
+  assert.equal(source.includes("range: 'history'"), false);
 });
 
-test('overview keeps closed cards out of latest and folds them into history', () => {
+test('overview keeps closed cards out of latest without loading history cards', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
 
-  assert.equal(
-    source.includes('createOverviewCardGroups(latestRows.value, historyRows.value)'),
-    true,
-  );
+  assert.equal(source.includes('createOverviewCardGroups(latestRows.value, [])'), true);
 });
 
 test('overview groups latest and history cards by closed state and last operation', () => {

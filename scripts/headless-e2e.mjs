@@ -53,8 +53,7 @@ try {
   await evaluate(`localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)});`);
   await navigate('/');
   browserState.clear();
-  await waitForText('AnyCode');
-  await waitForText('总揽');
+  await waitForText('暂无卡片');
   await assertNoHorizontalOverflow('desktop overview');
   await screenshot('01-overview-desktop.png');
 
@@ -76,10 +75,9 @@ try {
   const gitSession = await runGitSession(gitProject.id);
 
   await navigate('/');
-  await waitForText('最新');
-  await waitForText('历史');
   await waitForText('提交 ');
-  await assertSessionCardDoesNotShowProject('ANYCODE_GIT_E2E_OK', gitProject.name);
+  await assertSessionCardShowsProject('ANYCODE_GIT_E2E_OK', gitProject.name);
+  await assertProjectChipPersistence(gitProject.id, gitProject.name, 'ANYCODE_GIT_E2E_OK');
   await assertNoHorizontalOverflow('overview branch lanes');
   await screenshot('02-overview-branch-lanes.png');
 
@@ -140,7 +138,7 @@ try {
 
   await setViewport(390, 844);
   await navigate('/');
-  await waitForText('AnyCode');
+  await waitForVisibleSelector('.overview-filter-toolbar');
   await assertNoHorizontalOverflow('mobile overview');
   await screenshot('08-overview-mobile.png');
 
@@ -502,10 +500,11 @@ async function clickAria(label) {
 
 async function closeVisibleDialog() {
   const closed = await evaluate(`(() => {
-    const dialog = Array.from(document.querySelectorAll('.q-dialog')).find((element) => {
+    const dialogs = Array.from(document.querySelectorAll('.q-dialog')).filter((element) => {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0;
     });
+    const dialog = dialogs.at(-1);
     const target = dialog?.querySelector('[aria-label="关闭"], [aria-label="取消"]');
     if (!target) return false;
     target.click();
@@ -515,9 +514,9 @@ async function closeVisibleDialog() {
   await sleep(300);
 }
 
-async function assertSessionCardDoesNotShowProject(marker, projectName) {
+async function assertSessionCardShowsProject(marker, projectName) {
   const result = await evaluate(`(() => {
-    const card = Array.from(document.querySelectorAll('.lane-session-card'))
+    const card = Array.from(document.querySelectorAll('.overview-session-card'))
       .find((element) => element.innerText.includes(${JSON.stringify(marker)}));
     return {
       found: Boolean(card),
@@ -525,7 +524,24 @@ async function assertSessionCardDoesNotShowProject(marker, projectName) {
     };
   })()`);
   assert(result.found, `overview card not found for ${marker}`);
-  assert(!result.cardText.includes(projectName), `card still shows project name ${projectName}: ${result.cardText}`);
+  assert(result.cardText.includes(projectName), `card is missing project name ${projectName}: ${result.cardText}`);
+}
+
+async function assertProjectChipPersistence(projectId, projectName, marker) {
+  await clickAria(`隐藏 ${projectName} 项目卡片`);
+  const hidden = await evaluate(`(() => ({
+    chipVisible: Boolean(document.querySelector('[aria-label=${JSON.stringify(`显示 ${projectName} 项目卡片`)}]')),
+    cardVisible: Array.from(document.querySelectorAll('.overview-session-card'))
+      .some((card) => card.innerText && card.innerText.includes(${JSON.stringify(marker)})),
+    stored: JSON.parse(localStorage.getItem('anycode.overview.hidden-projects.v1') || '[]'),
+  }))()`);
+  assert(hidden.chipVisible, `${projectName} hidden-state chip is missing`);
+  assert(!hidden.cardVisible, `${projectName} card remained visible after hiding`);
+  assert(hidden.stored.includes(projectId), `${projectName} hidden state was not persisted`);
+
+  await navigate('/');
+  await clickAria(`显示 ${projectName} 项目卡片`);
+  await waitForText(marker);
 }
 
 async function assertSessionsTableProjectName(marker, projectName, projectId) {
@@ -544,7 +560,7 @@ async function assertSessionsTableProjectName(marker, projectName, projectId) {
 
 async function assertNewSessionDefaultProject({ route, expectedProjectName, label, screenshotName, withAttachments = false }) {
   await navigate(route);
-  await waitForText('AnyCode');
+  await waitForVisibleSelector('.overview-filter-toolbar');
   await clickAria('新建卡片');
   await waitForText('新建卡片');
   if (withAttachments) {
@@ -594,10 +610,14 @@ async function attachNewSessionFixtureFiles() {
 }
 
 async function screenshotDirectoryDialog() {
-  await clickAria('选择项目目录');
+  await clickAria('更多操作');
+  await clickText('全局设置');
+  await waitForText('全局设置');
+  await clickAria('新增项目');
   await waitForText('选择项目目录');
   await waitForText('当前路径');
   await screenshot('10-directory-dialog.png');
+  await closeVisibleDialog();
   await closeVisibleDialog();
 }
 

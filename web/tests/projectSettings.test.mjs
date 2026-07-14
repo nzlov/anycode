@@ -12,7 +12,10 @@ test('project settings API preserves the worktree init command', () => {
 });
 
 test('project menu opens settings before workflow configuration and removal', () => {
-  const source = readFileSync(new URL('../src/layouts/MainLayout.vue', import.meta.url), 'utf8');
+  const source = readFileSync(
+    new URL('../src/components/GlobalSettingsDialog.vue', import.meta.url),
+    'utf8',
+  );
   const settings = source.indexOf('<q-item-section>设置</q-item-section>');
   const workflow = source.indexOf('<q-item-section>流程配置</q-item-section>');
   const remove = source.indexOf('<q-item-section>移除项目</q-item-section>');

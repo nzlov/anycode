@@ -3,28 +3,46 @@
     class="workbench-page page-shell"
     :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
   >
-    <div class="page-heading">
-      <div class="text-h5 text-weight-bold">{{ pageTitle }}</div>
+    <div class="overview-filter-toolbar">
+      <div
+        v-if="projectChips.length"
+        class="overview-project-filters"
+        role="group"
+        aria-label="项目卡片显示筛选"
+      >
+        <q-chip
+          v-for="project in projectChips"
+          :key="project.id"
+          clickable
+          :outline="!isProjectVisible(project.id)"
+          :color="isProjectVisible(project.id) ? 'positive' : 'grey-4'"
+          :text-color="isProjectVisible(project.id) ? 'dark' : 'grey-8'"
+          :icon="isProjectVisible(project.id) ? 'visibility' : 'visibility_off'"
+          :aria-pressed="isProjectVisible(project.id)"
+          :aria-label="`${isProjectVisible(project.id) ? '隐藏' : '显示'} ${project.name} 项目卡片`"
+          @click="toggleProjectVisibility(project.id)"
+        >
+          {{ project.name }}
+        </q-chip>
+      </div>
+      <q-space />
+      <q-btn
+        flat
+        round
+        dense
+        class="overview-history-link app-icon-btn"
+        icon="history"
+        aria-label="历史卡片"
+        :to="sessionsRoute"
+      >
+        <q-tooltip>历史卡片</q-tooltip>
+      </q-btn>
     </div>
 
-    <section v-for="section in cardSections" :key="section.id" class="overview-card-section">
-      <div class="overview-card-section__heading">
-        <div class="text-subtitle1 text-weight-bold">{{ section.title }}</div>
-        <q-btn
-          v-if="section.id === 'latest' && showDesktopFocusLayout"
-          flat
-          dense
-          no-caps
-          class="overview-history-link app-command-btn"
-          icon="history"
-          label="历史卡片"
-          :to="sessionsRoute"
-        />
-      </div>
-
-      <div v-if="section.cards.length > 0" class="overview-card-grid">
+    <section class="overview-card-section">
+      <div v-if="visibleLatestCards.length > 0" class="overview-card-grid">
         <q-card
-          v-for="card in section.cards"
+          v-for="card in visibleLatestCards"
           :key="card.id"
           flat
           bordered
@@ -83,11 +101,7 @@
             </div>
 
             <div class="overview-card-footer">
-              <div
-                class="overview-card-secondary-actions"
-                @contextmenu.stop
-                @touchstart.stop
-              >
+              <div class="overview-card-secondary-actions" @contextmenu.stop @touchstart.stop>
                 <q-btn
                   v-if="card.todoList"
                   flat
@@ -240,16 +254,17 @@
             </q-list>
           </q-menu>
         </q-card>
-
-        <router-link v-if="section.showMore" class="overview-more-card" :to="sessionsRoute">
-          <q-icon name="history" />
-          <span>更多历史进入表格</span>
-        </router-link>
       </div>
-      <q-banner v-else dense rounded class="empty-lane-banner">暂无{{ section.title }}</q-banner>
     </section>
 
-    <q-banner v-if="!hasAnyCards" rounded class="empty-lane-banner q-mt-md">
+    <q-banner
+      v-if="latestCards.length > 0 && visibleLatestCards.length === 0"
+      rounded
+      class="empty-lane-banner q-mt-md"
+    >
+      当前没有显示的卡片
+    </q-banner>
+    <q-banner v-else-if="latestCards.length === 0" rounded class="empty-lane-banner q-mt-md">
       暂无卡片
     </q-banner>
 
@@ -398,6 +413,7 @@ const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
+const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
 const showDesktopFocusLayout = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
@@ -416,56 +432,33 @@ const {
   sort: 'updated_at desc',
   loadAll: true,
 });
-const {
-  rows: historyRows,
-  projectId: historyProjectId,
-  loadSessions: loadHistorySessions,
-} = useSessionsPage({
-  projectId: projectScopeId.value,
-  range: 'history',
-  page: 1,
-  pageSize: 100,
-  sort: 'updated_at desc',
-  loadAll: true,
-});
 const { projects, loadProjects } = useProjects();
 
 const diffSummariesBySessionId = ref<Record<string, SessionDiffSummary>>({});
-const overviewCardGroups = computed(() =>
-  createOverviewCardGroups(latestRows.value, historyRows.value),
-);
+const hiddenProjectIds = ref(readHiddenProjectIds());
+const overviewCardGroups = computed(() => createOverviewCardGroups(latestRows.value, []));
 const latestCards = computed(() => overviewCardGroups.value.latestCards.map(withDiffSummary));
-const uniqueHistoryCards = computed(() => overviewCardGroups.value.historyCards);
-const historyCards = computed(() => uniqueHistoryCards.value.slice(0, 10).map(withDiffSummary));
-const hasMoreHistory = computed(() => uniqueHistoryCards.value.length > historyCards.value.length);
-const scopedProject = computed(() =>
-  projects.value.find((project) => project.id === projectScopeId.value),
+const projectChips = computed(() => {
+  const seen = new Set<string>();
+  return latestCards.value
+    .filter((card: SessionCard) => {
+      if (seen.has(card.projectId)) return false;
+      seen.add(card.projectId);
+      return true;
+    })
+    .map((card: SessionCard) => ({
+      id: card.projectId,
+      name: card.projectName || card.projectId,
+    }));
+});
+const visibleLatestCards = computed(() =>
+  latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
 );
-const pageTitle = computed(() => scopedProject.value?.name ?? '总揽');
 const sessionsRoute = computed(() =>
   projectScopeId.value
     ? { name: 'sessions', query: { projectId: projectScopeId.value, scope: 'closed' } }
     : { name: 'sessions', query: { scope: 'closed' } },
 );
-const cardSections = computed(() => {
-  const latestSection = {
-    id: 'latest',
-    title: '最新',
-    cards: latestCards.value,
-    showMore: false,
-  };
-  const historySection = {
-    id: 'history',
-    title: '历史',
-    cards: historyCards.value,
-    showMore: hasMoreHistory.value,
-  };
-  return showDesktopFocusLayout.value ? [latestSection] : [latestSection, historySection];
-});
-const hasAnyCards = computed(
-  () => latestCards.value.length > 0 || historyCards.value.length > 0,
-);
-const visibleCards = computed(() => cardSections.value.flatMap((section) => section.cards));
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
@@ -529,7 +522,7 @@ const diffSummaryController = createOverviewDiffSummaryController({
     for (const summary of summaries) next[summary.sessionId] = summary;
     diffSummariesBySessionId.value = next;
   },
-  getVisibleCards: () => visibleCards.value,
+  getVisibleCards: () => visibleLatestCards.value,
   isPageVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
 });
 
@@ -547,7 +540,6 @@ onUnmounted(() => {
 
 watch(projectScopeId, (value) => {
   latestProjectId.value = value;
-  historyProjectId.value = value;
   diffSummariesBySessionId.value = {};
   void loadOverviewSessions();
   if (!liveStopped) {
@@ -555,17 +547,23 @@ watch(projectScopeId, (value) => {
   }
 });
 
+watch(
+  () => projects.value.map((project) => project.id).join('\0'),
+  () => pruneHiddenProjectIds(),
+);
+
 async function startOverview() {
   await loadProjects();
+  pruneHiddenProjectIds();
   await loadOverviewSessions();
   diffSummaryController.start();
   startOverviewLiveUpdates();
 }
 
 async function loadOverviewSessions() {
-  await Promise.all([loadLatestSessions(), loadHistorySessions()]);
+  await loadLatestSessions();
   await diffSummaryController
-    .refresh(visibleCards.value.map((card) => card.id))
+    .refresh(visibleLatestCards.value.map((card: SessionCard) => card.id))
     .catch(() => undefined);
   diffSummaryController.syncPolling();
 }
@@ -578,10 +576,62 @@ function withDiffSummary(card: SessionCard): SessionCard {
   };
 }
 
+function readHiddenProjectIds() {
+  if (typeof window === 'undefined') return new Set<string>();
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(hiddenProjectStorageKey) ?? '[]');
+    if (!Array.isArray(stored)) return new Set<string>();
+    return new Set(stored.filter((id): id is string => typeof id === 'string' && id !== ''));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function persistHiddenProjectIds() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      hiddenProjectStorageKey,
+      JSON.stringify([...hiddenProjectIds.value]),
+    );
+  } catch {
+    // Browser storage can be unavailable; filtering still works for the current page.
+  }
+}
+
+function pruneHiddenProjectIds() {
+  const projectIds = new Set(projects.value.map((project) => project.id));
+  const next = new Set(
+    [...hiddenProjectIds.value].filter((projectId) => projectIds.has(projectId)),
+  );
+  if (next.size === hiddenProjectIds.value.size) return;
+  hiddenProjectIds.value = next;
+  persistHiddenProjectIds();
+}
+
+function isProjectVisible(projectId: string) {
+  return !hiddenProjectIds.value.has(projectId);
+}
+
+function toggleProjectVisibility(projectId: string) {
+  const next = new Set(hiddenProjectIds.value);
+  if (next.has(projectId)) {
+    next.delete(projectId);
+  } else {
+    next.add(projectId);
+  }
+  hiddenProjectIds.value = next;
+  persistHiddenProjectIds();
+  void diffSummaryController
+    .refresh(visibleLatestCards.value.map((card: SessionCard) => card.id))
+    .catch(() => undefined);
+  diffSummaryController.syncPolling();
+}
+
 function handleVisibilityChange() {
   if (document.visibilityState === 'visible') {
     void diffSummaryController
-      .refresh(activeOverviewDiffSessionIds(visibleCards.value))
+      .refresh(activeOverviewDiffSessionIds(visibleLatestCards.value))
       .catch(() => undefined);
   }
   diffSummaryController.syncPolling();
