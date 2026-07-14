@@ -1,5 +1,5 @@
 :root {
-  --overview-create-panel-height: min(420px, calc(100dvh - 104px));
+  --overview-create-panel-height: min(320px, calc(100dvh - 104px));
   --ac-surface: #ffffff;
   --ac-surface-muted: #f6f8fb;
   --ac-surface-raised: #ffffff;
@@ -839,7 +839,38 @@ a {
 
 .new-session-dialog--panel .new-session-body {
   flex: 1 1 auto;
+  gap: 0;
+  padding: 0;
   overflow-y: auto;
+}
+
+.new-session-dialog--panel .new-session-config-error {
+  order: 0;
+  margin: 8px 8px 0;
+}
+
+.new-session-dialog--panel .prompt-shell {
+  order: 1;
+  border: 0;
+  border-radius: var(--ac-radius) var(--ac-radius) 0 0;
+  background: var(--ac-surface);
+}
+
+.new-session-dialog--panel .prompt-toolbar {
+  padding: 6px 8px 8px;
+  background: var(--ac-surface);
+}
+
+.new-session-dialog--panel .new-session-context {
+  order: 2;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--ac-border);
+  background: var(--ac-surface-muted);
 }
 
 .new-session-body {
@@ -1498,6 +1529,39 @@ a {
     left: 24px;
     width: auto !important;
     max-width: none !important;
+  }
+
+  .new-session-dialog--panel .new-session-context > .q-field {
+    min-width: 180px;
+    flex: 1 1 240px;
+  }
+
+  .new-session-dialog--panel .new-session-context .branch-picker {
+    width: auto;
+    min-width: 210px;
+    flex: 0 1 240px;
+  }
+
+  .new-session-dialog--panel .new-session-context .new-session-priority {
+    width: auto;
+    min-width: 112px;
+    flex: 0 0 128px;
+  }
+
+  .new-session-dialog--panel .new-session-context .new-session-mode {
+    width: auto;
+    min-width: 220px;
+    flex: 0 1 260px;
+  }
+
+  .new-session-dialog--panel .new-session-context .q-field__control,
+  .new-session-dialog--panel .new-session-context .q-field__marginal {
+    min-height: 38px;
+    height: 38px;
+  }
+
+  .new-session-dialog--panel .new-session-context .q-btn-toggle .q-btn {
+    min-height: 38px;
   }
 }
 

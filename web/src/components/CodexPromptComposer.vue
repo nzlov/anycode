@@ -23,12 +23,15 @@
     <template #actions>
       <q-btn
         flat
-        no-caps
-        class="quick-reply-btn app-command-btn"
+        :round="compact"
+        :no-caps="!compact"
+        :class="compact ? 'quick-reply-btn app-icon-btn' : 'quick-reply-btn app-command-btn'"
         icon="bolt"
-        label="快捷回复"
+        :label="compact ? undefined : '快捷回复'"
+        :aria-label="compact ? '快捷回复' : undefined"
         :disable="disabled"
       >
+        <q-tooltip v-if="compact">快捷回复</q-tooltip>
         <q-menu
           class="quick-reply-menu"
           anchor="top right"

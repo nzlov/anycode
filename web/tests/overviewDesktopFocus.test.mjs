@@ -42,7 +42,7 @@ test('overview keeps only latest cards and links history from the filter toolbar
 test('desktop create panel uses one project row within its reserved maximum height', () => {
   assert.match(
     stylesSource,
-    /:root\s*{[^}]*--overview-create-panel-height:\s*min\(420px, calc\(100dvh - 104px\)\)/s,
+    /:root\s*{[^}]*--overview-create-panel-height:\s*min\(320px, calc\(100dvh - 104px\)\)/s,
   );
   assert.match(
     stylesSource,
@@ -71,5 +71,33 @@ test('desktop create panel uses one project row within its reserved maximum heig
   assert.match(
     stylesSource,
     /@media \(min-width: 700px\)[\s\S]*?\.new-session-dialog--panel\s*{[^}]*left:\s*24px/s,
+  );
+});
+
+test('desktop create panel presents the prompt before a compact context row', () => {
+  assert.match(
+    newSessionSource,
+    /<q-card-section\s+v-if="!panel"\s+class="new-session-dialog__header/s,
+  );
+  assert.match(newSessionSource, /<q-separator v-if="!panel"/);
+  assert.match(newSessionSource, /class="new-session-grid new-session-context"/);
+  assert.match(newSessionSource, /:outlined="!panel"[\s\S]*?:borderless="panel"/);
+  assert.match(newSessionSource, /:title="panel \? '' : '提示词'"/);
+  assert.match(newSessionSource, /:show-badge="!panel"/);
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*gap:\s*0[^}]*padding:\s*0/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.prompt-shell\s*{[^}]*order:\s*1[^}]*border:\s*0/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-context\s*{[^}]*order:\s*2[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s,
+  );
+  assert.match(
+    stylesSource,
+    /@media \(min-width:\s*700px\)[\s\S]*?\.new-session-dialog--panel \.new-session-context \.q-field__control[^}]*min-height:\s*38px/s,
   );
 });
