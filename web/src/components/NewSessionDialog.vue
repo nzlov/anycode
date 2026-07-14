@@ -80,6 +80,7 @@
             outlined
             dense
             label="优先级"
+            class="new-session-priority"
             emit-value
             map-options
             :disable="creating"
@@ -90,6 +91,7 @@
             v-model="mode"
             spread
             no-caps
+            class="new-session-mode"
             toggle-color="dark"
             :disable="creating || workflowAvailabilityLoading"
             :options="modeOptions"
