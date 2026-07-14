@@ -377,6 +377,114 @@ func TestCodexTranscriptProjectorCorrelatesCustomExecBatchOutput(t *testing.T) {
 	}
 }
 
+func TestCodexTranscriptProjectorNamesNestedExecTool(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantName string
+	}{
+		{
+			name:     "nested tool call",
+			input:    `const result = await tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "string and comment are ignored",
+			input:    "const note = \"tools.fake()\"; // tools.comment()\nconst result = tools.update_plan({plan: []});",
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "plain exec input",
+			input:    `npm test`,
+			wantName: "exec",
+		},
+		{
+			name:     "template expression",
+			input:    "const label = `${await tools.update_plan({plan: []})}`;",
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "regex after control condition is ignored",
+			input:    `if (ready) /tools.fake()/.test(input); const result = tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "dynamic command still exposes tool name",
+			input:    `const result = tools.exec_command({cmd: command});`,
+			wantName: "tools.exec_command",
+		},
+		{
+			name:     "regex after block is ignored",
+			input:    `if (ready) {} /tools.fake()/.test(input); const result = tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "automatic semicolon after call",
+			input:    "notify(\"starting\")\ntools.update_plan({plan: []})",
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "division after object literal",
+			input:    `const ratio = {value: 1} / tools.update_plan({plan: []}) / 2;`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "comment before control block",
+			input:    `if (ready) /* block */ {} /tools.fake()/.test(input); tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "regex after function block",
+			input:    `function helper(input = {}) {} /tools.fake()/.test(input); tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "regex after class block",
+			input:    `class Helper {} /tools.fake()/.test(input); tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "switch catch and arrow blocks",
+			input:    `try { switch (value) {} } catch (err) {} const helper = () => {}; /tools.fake()/.test(input); tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "case and label blocks",
+			input:    `switch (value) { case ready ? 1 : 2: label: {} /tools.fake()/.test(input); break; } tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "declaration keywords used as property keys",
+			input:    `const meta = {class: true, function: true, ratio: {value: 1} / tools.update_plan({plan: []}) / 2};`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "case expression object and nullish coalescing",
+			input:    `switch (value) { case ({key: primary ?? fallback}).key: {} /tools.fake()/.test(input); break; } tools.update_plan({plan: []});`,
+			wantName: "tools.update_plan",
+		},
+		{
+			name:     "case keywords used as property keys",
+			input:    `const meta = {case: {value: 1} / tools.update_plan({plan: []}) / 2, default: true};`,
+			wantName: "tools.update_plan",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			raw := `{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec","name":"exec","input":` + strconv.Quote(test.input) + `}}`
+			events := parseSessionLogLine([]byte(raw), "/workspace/project", "rollout.jsonl", 0)
+			if len(events) != 1 {
+				t.Fatalf("events = %d, want 1", len(events))
+			}
+			tool, ok := events[0].Content.(process.CodexToolContent)
+			if !ok || tool.QualifiedName != test.wantName {
+				t.Fatalf("content = %#v, want tool name %q", events[0].Content, test.wantName)
+			}
+		})
+	}
+}
+
 func TestResumeBuildsResumeCommandInWorkdir(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args")

@@ -5,6 +5,7 @@ import {
   formatTokenCount,
   sessionTextPresentation,
   statusLabel,
+  toolLabel,
 } from '../src/services/sessionTimelinePresentation.ts';
 
 test('statusLabel describes durable answer_user suspension events', () => {
@@ -20,6 +21,19 @@ test('formatTokenCount converts token counts to compact decimal units', () => {
   assert.equal(formatTokenCount(999_999), '1M');
   assert.equal(formatTokenCount(2_000_000), '2M');
   assert.equal(formatTokenCount(1_500_000_000), '1.5B');
+});
+
+test('toolLabel displays the structured qualified tool name', () => {
+  const content = {
+    qualifiedName: 'tools.update_plan',
+    category: 'generic',
+    input: { format: 'plain', text: 'const result = await tools.update_plan({ plan: [] });' },
+    output: { format: 'plain', text: '' },
+    images: [],
+  };
+
+  assert.equal(toolLabel(content), 'tools.update_plan');
+  assert.equal(toolLabel({ ...content, qualifiedName: 'mcp.exec' }), 'mcp.exec');
 });
 
 test('sessionTextPresentation folds injected runtime context', () => {

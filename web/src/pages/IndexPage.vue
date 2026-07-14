@@ -25,18 +25,6 @@
           {{ project.name }}
         </q-chip>
       </div>
-      <q-space />
-      <q-btn
-        flat
-        round
-        dense
-        class="overview-history-link app-icon-btn"
-        icon="history"
-        aria-label="历史卡片"
-        :to="sessionsRoute"
-      >
-        <q-tooltip>历史卡片</q-tooltip>
-      </q-btn>
     </div>
 
     <section class="overview-card-section">
@@ -223,6 +211,21 @@
             @click.stop
           >
             <q-list dense class="overview-card-menu app-touch-list">
+              <q-item
+                v-close-popup
+                clickable
+                tag="a"
+                :href="router.resolve({ name: 'session-detail', params: { id: card.id } }).href"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click.stop
+              >
+                <q-item-section avatar>
+                  <q-icon name="open_in_new" />
+                </q-item-section>
+                <q-item-section>在新标签页中打开</q-item-section>
+              </q-item>
+              <q-separator />
               <q-item-label header>优先级</q-item-label>
               <q-item
                 v-for="priority in priorities"
@@ -453,11 +456,6 @@ const projectChips = computed(() => {
 });
 const visibleLatestCards = computed(() =>
   latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
-);
-const sessionsRoute = computed(() =>
-  projectScopeId.value
-    ? { name: 'sessions', query: { projectId: projectScopeId.value, scope: 'closed' } }
-    : { name: 'sessions', query: { scope: 'closed' } },
 );
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');

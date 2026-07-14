@@ -28,6 +28,9 @@ test('overview card actions use a context menu without a visible trigger', () =>
   assert.match(source, /@click="openSessionCard\(card\.id\)"/);
   assert.match(source, /@touchend="releaseCardContextMenuTouch\(card\.id\)"/);
   assert.match(source, /@before-show="handleCardContextMenuBeforeShow\(card\.id, \$event\)"/);
+  assert.match(source, /在新标签页中打开/);
+  assert.match(source, /target="_blank"/);
+  assert.match(source, /rel="noopener noreferrer"/);
   assert.match(source, /GLUE: suppress Quasar's synthetic post-long-press click/);
   assert.match(source, /@keyup\.enter\.self=/);
   assert.match(source, /@keyup\.space\.self\.prevent=/);
@@ -75,8 +78,8 @@ test('overview groups latest and history cards by closed state and last operatio
 });
 
 test('history more link opens the sessions table with closed scope', () => {
-  const overviewSource = readFileSync(
-    new URL('../src/pages/IndexPage.vue', import.meta.url),
+  const layoutSource = readFileSync(
+    new URL('../src/layouts/MainLayout.vue', import.meta.url),
     'utf8',
   );
   const sessionsSource = readFileSync(
@@ -84,7 +87,7 @@ test('history more link opens the sessions table with closed scope', () => {
     'utf8',
   );
 
-  assert.equal(overviewSource.includes("scope: 'closed'"), true);
+  assert.equal(layoutSource.includes("scope: 'closed'"), true);
   assert.equal(sessionsSource.includes("{ label: '已关闭', value: 'closed' }"), true);
   assert.match(sessionsSource, /route\.query\.scope/);
 });

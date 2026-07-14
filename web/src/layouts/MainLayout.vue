@@ -2,7 +2,11 @@
   <q-layout view="hHh lpR fFf" class="app-layout">
     <q-header bordered class="app-header">
       <q-toolbar>
+        <q-toolbar-title v-if="$route.name === 'overview'" class="app-header__title">
+          AnyCode
+        </q-toolbar-title>
         <q-btn
+          v-else
           flat
           round
           dense
@@ -13,8 +17,23 @@
         >
           <q-tooltip>总揽</q-tooltip>
         </q-btn>
-        <q-space />
+        <q-toolbar-title v-if="$route.name === 'session-detail'" class="app-header__title">
+          {{ sessionTitle || '会话详情' }}
+        </q-toolbar-title>
+        <q-space v-if="$route.name !== 'overview' && $route.name !== 'session-detail'" />
 
+        <q-btn
+          v-if="$route.name === 'overview'"
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="history"
+          aria-label="历史卡片"
+          :to="sessionsRoute"
+        >
+          <q-tooltip>历史卡片</q-tooltip>
+        </q-btn>
         <q-btn flat round dense class="app-icon-btn" icon="more_vert" aria-label="更多操作">
           <q-menu>
             <q-list dense class="app-touch-list">
@@ -61,6 +80,7 @@
       <router-view
         :key="`${$route.fullPath}:${pageRefreshKey}`"
         @create-session="newSessionOpen = true"
+        @session-title="sessionTitle = $event"
       />
     </q-page-container>
 
@@ -123,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -141,6 +161,7 @@ const { themeMode, themeModes } = useThemeMode();
 const route = useRoute();
 const router = useRouter();
 const pageRefreshKey = ref(0);
+const sessionTitle = ref('');
 const showOverviewCreatePanel = computed(
   () => route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth,
 );
@@ -148,6 +169,19 @@ const newSessionDefaultProjectId = computed(() => {
   const queryProjectId = route.query.projectId;
   return typeof queryProjectId === 'string' ? queryProjectId : '';
 });
+const sessionsRoute = computed(() => {
+  const projectId = route.query.projectId;
+  return typeof projectId === 'string'
+    ? { name: 'sessions', query: { projectId, scope: 'closed' } }
+    : { name: 'sessions', query: { scope: 'closed' } };
+});
+
+watch(
+  () => route.fullPath,
+  () => {
+    sessionTitle.value = '';
+  },
+);
 
 function handleSessionCreated() {
   pageRefreshKey.value += 1;

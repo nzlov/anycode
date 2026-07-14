@@ -574,6 +574,9 @@ import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 
+const emit = defineEmits<{
+  'session-title': [title: string];
+}>();
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
 const appendText = ref('');
@@ -685,6 +688,12 @@ const composerConfigDirty = computed(() => {
     current.config.fastMode !== composerFast.value
   );
 });
+
+watch(
+  () => session.value?.title,
+  (title) => emit('session-title', title ?? ''),
+  { immediate: true },
+);
 const canSavePromptAppendEdit = computed(() => {
   const target = promptEditTarget.value;
   const body = promptEditBody.value.trim();

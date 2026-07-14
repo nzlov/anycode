@@ -312,7 +312,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
 });
 
-test('exec events render selectable command code separately from terminal output', () => {
+test('exec events keep the first command in the header and expose additional commands', () => {
   const componentSource = readFileSync(
     new URL('../src/components/SessionCommandEvent.vue', import.meta.url),
     'utf8',
@@ -322,13 +322,18 @@ test('exec events render selectable command code separately from terminal output
     'utf8',
   );
 
-  assert.match(componentSource, /<pre[^>]*class="command-event__command"[^>]*>/);
-  assert.match(componentSource, /v-for="\(command, index\) in content\.commands"/);
+  assert.match(componentSource, /content\.value\.commands\.slice\(1\)/);
+  assert.match(componentSource, /v-for="\(command, index\) in additionalCommands"/);
+  assert.match(componentSource, /命令 \{\{ index \+ 2 \}\}/);
   assert.match(componentSource, /<code>\{\{ command\.command \}\}<\/code>/);
   assert.match(componentSource, /`\+\$\{additionalCommandCount\} 条`/);
-  assert.match(componentSource, /content\.commands\.length > 1 \? `命令 \$\{index \+ 1\}` : '命令'/);
   assert.match(componentSource, /class="command-event__workdir">\{\{ command\.workdir \}\}/);
   assert.match(componentSource, /<StaticAnsiOutput :text="content\.output"/);
+  assert.match(componentSource, /:disabled="!canExpand"/);
+  assert.match(componentSource, /firstCommand\.value\?\.workdir/);
+  assert.match(componentSource, /class="command-event__title"/);
+  assert.doesNotMatch(componentSource, /\.command-event__header span/);
+  assert.match(componentSource, /\.command-event__header:not\(:disabled\):hover/);
   assert.doesNotMatch(componentSource, /SessionTerminalOutput/);
   assert.match(ansiSource, /Anser\.ansiToJson/);
   assert.match(ansiSource, /user-select:\s*text/);
