@@ -36,7 +36,6 @@
             <router-link class="table-link" :to="`/sessions/${props.row.id}`">
               {{ props.row.title }}
             </router-link>
-            <div class="text-caption text-muted">{{ props.row.summary }}</div>
           </q-td>
         </template>
 
