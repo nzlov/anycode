@@ -3,7 +3,9 @@ package entstore
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +14,103 @@ import (
 	"github.com/nzlov/anycode/internal/domain/project"
 )
 
-func TestProjectRepositoryWithLocalSQLite(t *testing.T) {
+func TestDatabaseTargetForOptions(t *testing.T) {
+	tests := []struct {
+		name       string
+		opts       OpenOptions
+		wantDriver string
+		wantURL    string
+		wantToken  string
+		wantErr    string
+	}{
+		{
+			name:    "legacy file URL is rejected",
+			opts:    OpenOptions{DatabaseURL: "file:/tmp/anycode.db"},
+			wantErr: "file: URLs are not supported",
+		},
+		{
+			name:       "local path uses turso",
+			opts:       OpenOptions{DatabaseURL: "/tmp/anycode.db"},
+			wantDriver: tursoDriverName,
+			wantURL:    "/tmp/anycode.db",
+		},
+		{
+			name:       "empty URL uses data directory",
+			opts:       OpenOptions{DataDir: "/tmp/anycode-data"},
+			wantDriver: tursoDriverName,
+			wantURL:    "/tmp/anycode-data/anycode.turso.db",
+		},
+		{
+			name: "remote turso uses libsql",
+			opts: OpenOptions{
+				DatabaseURL: "libsql://anycode-example.turso.io",
+				AuthToken:   "secret-token",
+			},
+			wantDriver: libsqlDriverName,
+			wantURL:    "libsql://anycode-example.turso.io",
+			wantToken:  "secret-token",
+		},
+		{
+			name: "remote scheme is case insensitive",
+			opts: OpenOptions{
+				DatabaseURL: "LIBSQL://anycode-example.turso.io",
+				AuthToken:   "secret-token",
+			},
+			wantDriver: libsqlDriverName,
+			wantURL:    "libsql://anycode-example.turso.io",
+			wantToken:  "secret-token",
+		},
+		{
+			name:    "remote turso requires token",
+			opts:    OpenOptions{DatabaseURL: "https://anycode-example.turso.io"},
+			wantErr: "TURSO_AUTH_TOKEN is required",
+		},
+		{
+			name:    "insecure remote URL is rejected",
+			opts:    OpenOptions{DatabaseURL: "http://anycode-example.turso.io", AuthToken: "secret-token"},
+			wantErr: "insecure http database URL is not supported",
+		},
+		{
+			name:    "unknown scheme is rejected",
+			opts:    OpenOptions{DatabaseURL: "postgres://database.example/anycode"},
+			wantErr: "unsupported database URL scheme",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target, err := databaseTargetForOptions(tt.opts)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("databaseTargetForOptions() error = %v, want containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("databaseTargetForOptions() error = %v", err)
+			}
+			if target.DriverName != tt.wantDriver || target.DatabaseURL != tt.wantURL || target.AuthToken != tt.wantToken {
+				t.Fatalf("databaseTargetForOptions() = %#v", target)
+			}
+		})
+	}
+}
+
+func TestOpenCreatesLocalTursoDataDir(t *testing.T) {
+	ctx := context.Background()
+	dataDir := filepath.Join(t.TempDir(), "nested", "data")
+	store, err := Open(ctx, OpenOptions{DataDir: dataDir})
+	if err != nil {
+		t.Fatalf("open local Turso store: %v", err)
+	}
+	defer store.Close()
+
+	if _, err := os.Stat(filepath.Join(dataDir, "anycode.turso.db")); err != nil {
+		t.Fatalf("stat local Turso database: %v", err)
+	}
+}
+
+func TestProjectRepositoryWithLocalTurso(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
 		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),

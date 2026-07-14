@@ -572,12 +572,12 @@ func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	}
 }
 
-func TestSessionRepositoryMigrateAddsFieldsToExistingSessions(t *testing.T) {
+func TestSessionRepositoryMigrateAddsFieldsToExistingTursoSessions(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "anycode.db")
-	db, err := sql.Open(sqliteDriverName, dbPath)
+	db, err := sql.Open(tursoDriverName, dbPath)
 	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+		t.Fatalf("open local turso: %v", err)
 	}
 	now := time.Now().UTC()
 	if _, err := db.ExecContext(ctx, `CREATE TABLE sessions (

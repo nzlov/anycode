@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,10 +21,14 @@ import (
 	"github.com/nzlov/anycode/internal/domain/setting"
 	"github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
-	_ "modernc.org/sqlite"
+	"github.com/tursodatabase/libsql-client-go/libsql"
+	_ "turso.tech/database/tursogo"
 )
 
-const sqliteDriverName = "sqlite"
+const (
+	tursoDriverName  = "turso"
+	libsqlDriverName = "libsql"
+)
 
 type OpenOptions struct {
 	DatabaseURL string
@@ -34,6 +39,12 @@ type OpenOptions struct {
 type Store struct {
 	client *ent.Client
 	db     *sql.DB
+}
+
+type databaseTarget struct {
+	DriverName  string
+	DatabaseURL string
+	AuthToken   string
 }
 
 var _ port.UnitOfWork = (*Store)(nil)
@@ -47,22 +58,22 @@ func OpenFromEnv(ctx context.Context) (*Store, error) {
 }
 
 func Open(ctx context.Context, opts OpenOptions) (*Store, error) {
-	dsn, err := sqliteDSN(opts)
+	target, err := databaseTargetForOptions(opts)
 	if err != nil {
 		return nil, err
 	}
-	db, err := sql.Open(sqliteDriverName, dsn)
+	db, err := openDatabase(target)
 	if err != nil {
-		return nil, fmt.Errorf("open sqlite database: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("ping sqlite database: %w", err)
+		return nil, fmt.Errorf("ping database: %w", err)
 	}
 	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("enable sqlite foreign keys: %w", err)
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 	drv := entsql.OpenDB(dialect.SQLite, db)
 	return &Store{
@@ -235,46 +246,81 @@ func (t transaction) Events() event.Store {
 	return NewEventStore(t.client)
 }
 
-func sqliteDSN(opts OpenOptions) (string, error) {
-	url := strings.TrimSpace(opts.DatabaseURL)
-	switch {
-	case url == "":
+func databaseTargetForOptions(opts OpenOptions) (databaseTarget, error) {
+	databaseURL := strings.TrimSpace(opts.DatabaseURL)
+	if databaseURL == "" {
 		dataDir := opts.DataDir
 		if dataDir == "" {
 			dataDir = "./data"
 		}
-		if err := os.MkdirAll(dataDir, 0o755); err != nil {
-			return "", fmt.Errorf("create data dir: %w", err)
+		return databaseTarget{
+			DriverName:  tursoDriverName,
+			DatabaseURL: filepath.Join(dataDir, "anycode.turso.db"),
+		}, nil
+	}
+	if databaseURL == ":memory:" || strings.HasPrefix(databaseURL, ":memory:?") {
+		return databaseTarget{DriverName: tursoDriverName, DatabaseURL: databaseURL}, nil
+	}
+
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		return databaseTarget{}, fmt.Errorf("parse database URL: %w", err)
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "":
+		return databaseTarget{DriverName: tursoDriverName, DatabaseURL: databaseURL}, nil
+	case "file":
+		return databaseTarget{}, errors.New("entstore: file: URLs are not supported for local Turso; use a plain filesystem path")
+	case "libsql", "https":
+		if parsed.Host == "" {
+			return databaseTarget{}, errors.New("entstore: remote Turso database URL host is required")
 		}
-		return withForeignKeys(filepath.Join(dataDir, "anycode.db")), nil
-	case isRemoteLibSQLURL(url):
-		if opts.AuthToken == "" {
-			return "", errors.New("entstore: TURSO_AUTH_TOKEN is required for remote libSQL/Turso database")
+		if strings.TrimSpace(opts.AuthToken) == "" {
+			return databaseTarget{}, errors.New("entstore: TURSO_AUTH_TOKEN is required for remote libSQL/Turso database")
 		}
-		return "", errors.New("entstore: remote libSQL/Turso driver is not linked in this build")
-	case strings.HasPrefix(url, "file:"):
-		return withForeignKeys(url), nil
+		parsed.Scheme = scheme
+		return databaseTarget{
+			DriverName:  libsqlDriverName,
+			DatabaseURL: parsed.String(),
+			AuthToken:   opts.AuthToken,
+		}, nil
+	case "http":
+		return databaseTarget{}, errors.New("entstore: insecure http database URL is not supported; use libsql:// or https://")
 	default:
-		return withForeignKeys(url), nil
+		return databaseTarget{}, fmt.Errorf("entstore: unsupported database URL scheme %q", parsed.Scheme)
 	}
 }
 
-func isRemoteLibSQLURL(url string) bool {
-	return strings.HasPrefix(url, "libsql://") ||
-		strings.HasPrefix(url, "https://") ||
-		strings.HasPrefix(url, "http://")
+func openDatabase(target databaseTarget) (*sql.DB, error) {
+	switch target.DriverName {
+	case libsqlDriverName:
+		connector, err := libsql.NewConnector(target.DatabaseURL, libsql.WithAuthToken(target.AuthToken))
+		if err != nil {
+			return nil, err
+		}
+		return sql.OpenDB(connector), nil
+	case tursoDriverName:
+		if err := ensureLocalDatabaseDir(target.DatabaseURL); err != nil {
+			return nil, err
+		}
+		return sql.Open(tursoDriverName, target.DatabaseURL)
+	default:
+		return nil, fmt.Errorf("unsupported database driver %q", target.DriverName)
+	}
 }
 
-func withForeignKeys(dsn string) string {
-	if strings.Contains(dsn, "_fk=") {
-		return dsn
+func ensureLocalDatabaseDir(dsn string) error {
+	databasePath, _, _ := strings.Cut(dsn, "?")
+	if databasePath == ":memory:" {
+		return nil
 	}
-	if !strings.HasPrefix(dsn, "file:") && dsn != ":memory:" {
-		dsn = "file:" + dsn
+	dir := filepath.Dir(databasePath)
+	if dir == "." || dir == "" {
+		return nil
 	}
-	sep := "?"
-	if strings.Contains(dsn, "?") {
-		sep = "&"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create local Turso database directory: %w", err)
 	}
-	return dsn + sep + "_fk=1"
+	return nil
 }
