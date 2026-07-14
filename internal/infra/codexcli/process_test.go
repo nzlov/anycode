@@ -20,9 +20,11 @@ func TestStartBuildsExecCommandAndStreamsSessionLogEvents(t *testing.T) {
 	codexHome := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
 	pwdFile := filepath.Join(dir, "pwd")
+	stdinFile := filepath.Join(dir, "stdin")
 	bin := fakeCodex(t, `#!/bin/sh
 printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 pwd > "$CODEX_PWD_FILE"
+cat > "$CODEX_STDIN_FILE"
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-codex-session-1.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-1","id":"codex-session-1","cwd":"$PWD","originator":"codex_exec"}}
@@ -33,6 +35,7 @@ EOF
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_PWD_FILE", pwdFile)
+	t.Setenv("CODEX_STDIN_FILE", stdinFile)
 	t.Setenv("CODEX_HOME", codexHome)
 
 	handle, err := New(bin).Start(context.Background(), process.CodexStartInput{
@@ -102,9 +105,12 @@ EOF
 	}
 
 	args := strings.TrimSpace(readFile(t, argsFile))
-	want := `exec --json --skip-git-repo-check -C ` + dir + ` -m gpt-test -c model_reasoning_effort="medium" -c service_tier="priority" --sandbox workspace-write -i /kept/in/input.png implement adapter`
+	want := `exec --json --skip-git-repo-check -C ` + dir + ` -m gpt-test -c model_reasoning_effort="medium" -c service_tier="priority" --sandbox workspace-write -i /kept/in/input.png -`
 	if args != want {
 		t.Fatalf("args = %q, want %q", args, want)
+	}
+	if got := readFile(t, stdinFile); got != "implement adapter" {
+		t.Fatalf("stdin = %q, want prompt", got)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {
 		t.Fatalf("pwd = %q, want %q", gotDir, dir)
@@ -362,12 +368,15 @@ func TestResumeBuildsResumeCommandInWorkdir(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
 	pwdFile := filepath.Join(dir, "pwd")
+	stdinFile := filepath.Join(dir, "stdin")
 	bin := fakeCodex(t, `#!/bin/sh
 printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 pwd > "$CODEX_PWD_FILE"
+cat > "$CODEX_STDIN_FILE"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_PWD_FILE", pwdFile)
+	t.Setenv("CODEX_STDIN_FILE", stdinFile)
 
 	handle, err := New(bin).Resume(context.Background(), process.CodexResumeInput{
 		ProcessRunID:    "process-run-2",
@@ -389,9 +398,12 @@ pwd > "$CODEX_PWD_FILE"
 	waitForFile(t, argsFile)
 	waitForFile(t, pwdFile)
 
-	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" -c service_tier="priority" codex-session-1 next node`
+	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" -c service_tier="priority" codex-session-1 -`
 	if args := strings.TrimSpace(readFile(t, argsFile)); args != wantArgs {
 		t.Fatalf("args = %q", args)
+	}
+	if got := readFile(t, stdinFile); got != "next node" {
+		t.Fatalf("stdin = %q, want prompt", got)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {
 		t.Fatalf("pwd = %q, want %q", gotDir, dir)
@@ -863,7 +875,8 @@ func TestEventsBindConcurrentSameWorkdirProcessesToStdoutThreadID(t *testing.T) 
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-case "$*" in
+prompt=$(cat)
+case "$prompt" in
   *first*) id=a ;;
   *second*) id=b ;;
   *) exit 2 ;;

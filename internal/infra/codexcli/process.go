@@ -69,15 +69,15 @@ var processRegistry sync.Map
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
 	args := c.buildStartArgs(input)
-	return c.start(ctx, input.ProcessRunID, args, input.Workdir, "")
+	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, "")
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	args := c.buildResumeArgs(input)
-	return c.start(ctx, input.ProcessRunID, args, input.Workdir, input.CodexSessionID)
+	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.CodexSessionID)
 }
 
-func (c *Client) start(ctx context.Context, runID process.RunID, args []string, workdir string, codexSessionID string) (process.CodexHandle, error) {
+func (c *Client) start(ctx context.Context, runID process.RunID, args []string, prompt string, workdir string, codexSessionID string) (process.CodexHandle, error) {
 	if runID == "" {
 		return process.CodexHandle{}, errors.New("process run id is required")
 	}
@@ -88,6 +88,9 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 	baseline := sessionLogOffsets(codexHome)
 	cmd := exec.CommandContext(context.Background(), c.Bin(), args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if prompt != "" {
+		cmd.Stdin = strings.NewReader(prompt)
+	}
 	env := os.Environ()
 	if codexHome != "" {
 		env = upsertEnv(env, "CODEX_HOME", codexHome)
@@ -2512,7 +2515,7 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 		}
 	}
 	if input.Prompt != "" {
-		args = append(args, input.Prompt)
+		args = append(args, "-")
 	}
 	return args
 }
@@ -2525,7 +2528,7 @@ func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 		args = append(args, input.CodexSessionID)
 	}
 	if input.Prompt != "" {
-		args = append(args, input.Prompt)
+		args = append(args, "-")
 	}
 	return args
 }
