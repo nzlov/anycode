@@ -14,7 +14,7 @@ import (
 
 func TestClaimExecutionConcurrentOnlyOneClaimed(t *testing.T) {
 	ctx := context.Background()
-	databaseURL := "file:" + filepath.Join(t.TempDir(), "anycode.db") + "?_pragma=busy_timeout(5000)"
+	databaseURL := filepath.Join(t.TempDir(), "anycode.db")
 	store, err := Open(ctx, OpenOptions{DatabaseURL: databaseURL})
 	if err != nil {
 		t.Fatalf("open store: %v", err)
@@ -202,7 +202,7 @@ func TestClaimExecutionReturnsAtCapacityWithoutCreatingRun(t *testing.T) {
 
 func TestClaimExecutionConcurrentDifferentSessionsHonorsCapacity(t *testing.T) {
 	ctx := context.Background()
-	databaseURL := "file:" + filepath.Join(t.TempDir(), "anycode.db") + "?_pragma=busy_timeout(5000)"
+	databaseURL := filepath.Join(t.TempDir(), "anycode.db")
 	store, err := Open(ctx, OpenOptions{DatabaseURL: databaseURL})
 	if err != nil {
 		t.Fatalf("open store: %v", err)

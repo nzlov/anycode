@@ -4189,7 +4189,7 @@ func TestCloseSessionRemovesWorktreeBeforeSavingClosed(t *testing.T) {
 
 func TestCloseSessionRejectsExecutionClaimBeforeWorktreeCleanup(t *testing.T) {
 	ctx := context.Background()
-	databaseURL := "file:" + filepath.Join(t.TempDir(), "anycode.db") + "?_pragma=busy_timeout(5000)"
+	databaseURL := filepath.Join(t.TempDir(), "anycode.db")
 	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: databaseURL})
 	if err != nil {
 		t.Fatalf("open store: %v", err)
