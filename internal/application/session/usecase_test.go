@@ -2204,13 +2204,14 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
-		ID:           "session-1",
-		ProjectID:    "project-1",
-		Requirement:  "ship feature",
-		Mode:         domain.ModeWorkflow,
-		Status:       domain.StatusStopped,
-		BaseBranch:   "main",
-		WorktreePath: "/workspace/project-1",
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "ship feature",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusStopped,
+		BaseBranch:     "main",
+		WorktreePath:   "/workspace/project-1",
+		CodexSessionID: "codex-session-old",
 	}
 	workflowID := projectdomain.WorkflowDefinitionID("workflow-1")
 	projects := newFakeProjectRepository()
@@ -2248,7 +2249,8 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 		},
 	}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 123, CodexSessionID: "codex-session-2"}, events: stream}
 	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes}}
 	service := New(repo, projects, WithWorkflows(workflows), WithProcesses(processes, codex), WithUnitOfWork(uow))
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
@@ -2268,14 +2270,297 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
 	queued := repo.sessions["session-1"]
-	if queued.Status != domain.StatusQueued || queued.Queue.InitialStart {
+	if queued.Status != domain.StatusQueued || queued.Queue.InitialStart || queued.Queue.Kind != domain.QueueKindStart {
 		t.Fatalf("restarted workflow queued session = %#v", queued)
+	}
+	if queued.CodexSessionID != "" || queued.Queue.ResumeCodexSessionID != "" {
+		t.Fatalf("restarted workflow reused stale Codex session = %#v", queued)
 	}
 	if _, err := service.DrainQueuedSessions(ctx); err != nil {
 		t.Fatalf("DrainQueuedSessions() error = %v", err)
 	}
 	if codex.startInput.Prompt != "Verify build" {
 		t.Fatalf("restarted workflow prompt = %q", codex.startInput.Prompt)
+	}
+	consumerDone, ok := service.processConsumerDone(codex.startInput.ProcessRunID)
+	if !ok {
+		t.Fatal("restarted workflow consumer was not registered")
+	}
+	close(stream)
+	select {
+	case <-consumerDone:
+	case <-time.After(time.Second):
+		t.Fatal("restarted workflow consumer did not stop")
+	}
+}
+
+func TestSubmitWorkflowApprovalResumesExistingCodexSessionForNextNode(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "ship feature",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusWaitingApproval,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/project-1",
+	}
+	nextNodeRunID := domain.NodeRunID("node-run-2")
+	workflows := &fakeWorkflowStarter{
+		approvalResult: domain.WorkflowApprovalResult{
+			Run: domain.WorkflowRunSnapshot{
+				ID:            "workflow-run-1",
+				SessionID:     "session-1",
+				Status:        "running",
+				CurrentNodeID: "verify",
+			},
+			Advance: domain.WorkflowAdvance{
+				WorkflowRunID:    "workflow-run-1",
+				NodeRunID:        &nextNodeRunID,
+				CurrentNodeID:    "verify",
+				CurrentNodeTitle: "Verify",
+				Status:           "running",
+				RequiresCodex:    true,
+				Prompt:           "Verify build",
+			},
+		},
+	}
+	events := &fakeEventStore{}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithWorkflows(workflows),
+		WithEvents(events),
+		WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}),
+	)
+	service.now = func() time.Time { return time.Unix(51, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-1", nil }
+
+	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeID:        "plan",
+		Approved:      true,
+	}); err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	queued := repo.sessions["session-1"]
+	if queued.Status != domain.StatusQueued || queued.Queue.Kind != domain.QueueKindResume {
+		t.Fatalf("queued session = %#v", queued)
+	}
+	if queued.Queue.ResumeCodexSessionID != "codex-session-1" || queued.Queue.Prompt != "Verify build" {
+		t.Fatalf("queued resume = %#v", queued.Queue)
+	}
+	if queued.Queue.NodeRunID == nil || *queued.Queue.NodeRunID != "node-run-2" {
+		t.Fatalf("queued node run = %#v", queued.Queue.NodeRunID)
+	}
+
+	previousRunID := processdomain.RunID("process-run-1")
+	processes := newFakeProcessRepository()
+	processes.created = []processdomain.Run{{
+		ID:             previousRunID,
+		SessionID:      "session-1",
+		Status:         processdomain.StatusExited,
+		CodexSessionID: "codex-session-1",
+	}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{
+		resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"},
+		events:       stream,
+	}
+	executor := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	executor.now = func() time.Time { return time.Unix(52, 0).UTC() }
+	executor.generateID = func() (domain.ID, error) { return "process-run-2", nil }
+
+	started, err := executor.startQueuedSession(ctx, queued, true)
+	if err != nil {
+		t.Fatalf("startQueuedSession() error = %v", err)
+	}
+	if started.Status != domain.StatusRunning || !codex.resumeCalled || codex.startCalled {
+		t.Fatalf("started session = %#v start=%v resume=%v", started, codex.startCalled, codex.resumeCalled)
+	}
+	if codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != "Verify build" {
+		t.Fatalf("Codex Resume input = %#v", codex.resumeInput)
+	}
+	if len(processes.created) != 2 || processes.created[1].ResumeOf == nil || *processes.created[1].ResumeOf != previousRunID {
+		t.Fatalf("process runs = %#v", processes.created)
+	}
+	consumerDone, ok := executor.processConsumerDone("process-run-2")
+	if !ok {
+		t.Fatal("workflow resume consumer was not registered")
+	}
+	stopping := repo.sessions["session-1"]
+	stopping.Status = domain.StatusStopping
+	repo.sessions["session-1"] = stopping
+	close(stream)
+	select {
+	case <-consumerDone:
+	case <-time.After(time.Second):
+		t.Fatal("workflow resume consumer did not stop")
+	}
+}
+
+func TestWorkflowResumeExitWithoutPromptAcknowledgementWaitsForResumeAction(t *testing.T) {
+	nodeRunID := processdomain.NodeRunID("node-run-2")
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusRunning,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/project-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{
+		ID:             "process-run-2",
+		SessionID:      "session-1",
+		NodeRunID:      &nodeRunID,
+		Status:         processdomain.StatusRunning,
+		CodexSessionID: "codex-session-1",
+	}
+	processes.hasActive = true
+	workflows := &fakeWorkflowStarter{resumeSnapshot: domain.WorkflowRunSnapshot{
+		ID: "workflow-run-1", SessionID: "session-1", Status: "waiting_resume_action", CurrentNodeID: "verify",
+	}}
+	events := &fakeEventStore{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithWorkflows(workflows), WithEvents(events), WithUnitOfWork(uow))
+	service.now = func() time.Time { return time.Unix(53, 0).UTC() }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	exitCode := 0
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-2", CodexSessionID: "codex-session-1"},
+		codexStartOptions{
+			workflowRunID:        "workflow-run-1",
+			nodeRunID:            &nodeRunID,
+			resumeCodexSessionID: "codex-session-1",
+		},
+		processdomain.ExitResult{ExitCode: &exitCode, FinishedAt: time.Unix(53, 0).UTC()},
+		nil,
+	)
+
+	if got := repo.sessions["session-1"].Status; got != domain.StatusResumeFailed {
+		t.Fatalf("session status = %q", got)
+	}
+	if workflows.resumeInput.SessionID != "session-1" || workflows.resumeInput.Code != "resume_failed" {
+		t.Fatalf("workflow resume failure = %#v", workflows.resumeInput)
+	}
+	if workflows.failInput.NodeRunID != "" || workflows.recoverInput.NodeRunID != "" {
+		t.Fatalf("workflow node was advanced: fail=%#v recover=%#v", workflows.failInput, workflows.recoverInput)
+	}
+	if processes.exitedID != "process-run-2" {
+		t.Fatalf("exited process = %q", processes.exitedID)
+	}
+	if processes.exitedResult.FailureReason != "Codex resume exited before acknowledging the workflow node prompt" {
+		t.Fatalf("process failure reason = %q", processes.exitedResult.FailureReason)
+	}
+	if uow.calls == 0 {
+		t.Fatal("workflow resume failure did not use the unit of work")
+	}
+	waitForEventType(t, events, "process.resume_failed")
+	waitForEventType(t, events, "session.resume_failed")
+}
+
+func TestWorkflowResumeStoppedBeforePromptAcknowledgementStaysStopped(t *testing.T) {
+	nodeRunID := processdomain.NodeRunID("node-run-2")
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusStopping,
+		CodexSessionID: "codex-session-1", WorktreePath: "/workspace/project-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-2", SessionID: "session-1", NodeRunID: &nodeRunID, Status: processdomain.StatusStopping}
+	processes.hasActive = true
+	workflows := &fakeWorkflowStarter{}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithWorkflows(workflows), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(55, 0).UTC() }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	exitCode := 143
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-2", CodexSessionID: "codex-session-1"},
+		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &nodeRunID, resumeCodexSessionID: "codex-session-1"},
+		processdomain.ExitResult{ExitCode: &exitCode, FailureReason: "terminated", FinishedAt: time.Unix(55, 0).UTC()},
+		nil,
+	)
+
+	if got := repo.sessions["session-1"].Status; got != domain.StatusStopped {
+		t.Fatalf("session status = %q", got)
+	}
+	if workflows.resumeInput.SessionID != "" || workflows.failInput.NodeRunID != "" || workflows.recoverInput.NodeRunID != "" {
+		t.Fatalf("workflow was advanced after stop: resume=%#v fail=%#v recover=%#v", workflows.resumeInput, workflows.failInput, workflows.recoverInput)
+	}
+	waitForEventType(t, events, "session.stopped")
+}
+
+func TestWorkflowResumeFailureAfterPromptAcknowledgementFailsNode(t *testing.T) {
+	nodeRunID := processdomain.NodeRunID("node-run-2")
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning,
+		CodexSessionID: "codex-session-1", WorktreePath: "/workspace/project-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-2", SessionID: "session-1", NodeRunID: &nodeRunID, Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	workflows := &fakeWorkflowStarter{failAdvance: domain.WorkflowAdvance{
+		WorkflowRunID: "workflow-run-1", Blocked: true, BlockedReason: "node failed after start",
+	}}
+	eventStream := make(chan processdomain.CodexEvent, 2)
+	eventStream <- processdomain.CodexEvent{EventID: "turn-started", Type: "turn.started"}
+	eventStream <- processdomain.CodexEvent{
+		EventID: "process-exit",
+		Type:    "process.exit",
+		Payload: map[string]any{"exitCode": 1, "failureReason": "node command failed"},
+	}
+	codex := &fakeCodexProcess{events: eventStream}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithWorkflows(workflows), WithEvents(&fakeEventStore{}))
+	service.now = func() time.Time { return time.Unix(54, 0).UTC() }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+	handle := processdomain.CodexHandle{ProcessRunID: "process-run-2", CodexSessionID: "codex-session-1"}
+	service.consumeCodexEvents(
+		handle,
+		repo.sessions["session-1"],
+		codexStartOptions{
+			workflowRunID:        "workflow-run-1",
+			nodeRunID:            &nodeRunID,
+			resumeCodexSessionID: "codex-session-1",
+		},
+		"/workspace/project-1",
+	)
+	consumerDone, ok := service.processConsumerDone(handle.ProcessRunID)
+	if !ok {
+		t.Fatal("workflow resume consumer was not registered")
+	}
+	close(eventStream)
+	select {
+	case <-consumerDone:
+	case <-time.After(time.Second):
+		t.Fatal("workflow resume consumer did not stop")
+	}
+
+	if got := repo.sessions["session-1"].Status; got != domain.StatusBlocked {
+		t.Fatalf("session status = %q", got)
+	}
+	if workflows.failInput.NodeRunID != domain.NodeRunID(nodeRunID) || workflows.resumeInput.SessionID != "" {
+		t.Fatalf("workflow failure routing: fail=%#v resume=%#v", workflows.failInput, workflows.resumeInput)
 	}
 }
 
@@ -2337,12 +2622,13 @@ func TestSubmitWorkflowApprovalRejectsAfterRunWithPromptAppend(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
-		ID:           "session-1",
-		ProjectID:    "project-1",
-		Requirement:  "ship feature",
-		Mode:         domain.ModeWorkflow,
-		Status:       domain.StatusWaitingApproval,
-		WorktreePath: "/workspace/project-1",
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "ship feature",
+		Mode:           domain.ModeWorkflow,
+		Status:         domain.StatusWaitingApproval,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/project-1",
 	}
 	nodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{
@@ -2397,6 +2683,9 @@ func TestSubmitWorkflowApprovalRejectsAfterRunWithPromptAppend(t *testing.T) {
 	}
 	if queued.Queue.Prompt != "Build" {
 		t.Fatalf("queued prompt = %q", queued.Queue.Prompt)
+	}
+	if queued.Queue.Kind != domain.QueueKindResume || queued.Queue.ResumeCodexSessionID != "codex-session-1" {
+		t.Fatalf("queued resume = %#v", queued.Queue)
 	}
 	if len(processes.created) != 0 || codex.startCalled {
 		t.Fatalf("process should be queued, created=%#v start=%v", processes.created, codex.startCalled)
@@ -9817,6 +10106,11 @@ func (s *fakeWorkflowStarter) MarkResumeFailedForSession(_ context.Context, inpu
 		return domain.WorkflowRunSnapshot{}, s.resumeErr
 	}
 	return s.resumeSnapshot, nil
+}
+
+func (s *fakeWorkflowStarter) MarkResumeFailedForSessionWithRepositories(ctx context.Context, input domain.WorkflowResumeFailureInput, _ workflowdomain.Repository, _ eventdomain.Store) (domain.WorkflowRunSnapshot, []eventdomain.DomainEvent, error) {
+	result, err := s.MarkResumeFailedForSession(ctx, input)
+	return result, nil, err
 }
 
 func (s *fakeWorkflowStarter) ResumeCurrentNodeForSession(_ context.Context, input domain.WorkflowResumeCurrentNodeInput) (domain.WorkflowAdvance, error) {
