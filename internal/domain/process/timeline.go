@@ -49,8 +49,13 @@ type CodexReasoningContent struct {
 
 func (CodexReasoningContent) isCodexEventContent() {}
 
+type CodexCommandInvocation struct {
+	Command string
+	Workdir string
+}
+
 type CodexCommandContent struct {
-	Command    string
+	Commands   []CodexCommandInvocation
 	Output     string
 	ExitCode   *int
 	DurationMS *int

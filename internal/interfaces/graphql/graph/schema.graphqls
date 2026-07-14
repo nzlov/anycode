@@ -336,10 +336,15 @@ type TranscriptReasoningContent {
 }
 
 type TranscriptCommandContent {
-  command: String!
+  commands: [TranscriptCommandInvocation!]!
   output: String!
   exitCode: Int
   durationMs: Int
+}
+
+type TranscriptCommandInvocation {
+  command: String!
+  workdir: String!
 }
 
 type TranscriptToolContent {

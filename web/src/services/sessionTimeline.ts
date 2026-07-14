@@ -36,10 +36,15 @@ export interface TranscriptReasoningContent {
 
 export interface TranscriptCommandContent {
   __typename: 'TranscriptCommandContent';
-  command: string;
+  commands: TranscriptCommandInvocation[];
   output: string;
   exitCode: number | null;
   durationMs: number | null;
+}
+
+export interface TranscriptCommandInvocation {
+  command: string;
+  workdir: string;
 }
 
 export interface TranscriptToolContent {
@@ -134,7 +139,12 @@ const transcriptEventFields = `
       images { src detail }
     }
     ... on TranscriptReasoningContent { text }
-    ... on TranscriptCommandContent { command output exitCode durationMs }
+    ... on TranscriptCommandContent {
+      commands { command workdir }
+      output
+      exitCode
+      durationMs
+    }
     ... on TranscriptToolContent {
       qualifiedName
       category
