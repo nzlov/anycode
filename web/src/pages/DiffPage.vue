@@ -122,4 +122,14 @@ watch(
 .state-banner {
   margin-bottom: 16px;
 }
+
+@media (min-width: 1024px) {
+  .diff-page :deep(.diff-files) {
+    position: sticky;
+    top: 66px;
+    max-height: calc(100dvh - 82px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
 </style>
