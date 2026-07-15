@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -16,11 +17,24 @@ type mcpHandler struct {
 	sessions sessionapp.UseCase
 }
 
+const mcpTransportHeader = "X-AnyCode-MCP-Transport"
+
 func newMCPHandler(sessions sessionapp.UseCase) http.Handler {
 	return mcpHandler{sessions: sessions}
 }
 
 func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if batchID := strings.TrimSpace(r.PathValue("batchID")); batchID != "" {
+		switch r.PathValue("action") {
+		case "fail":
+			h.failDelivery(w, r, batchID)
+		case "", "ack":
+			h.acknowledgeDelivery(w, r, batchID)
+		default:
+			http.NotFound(w, r)
+		}
+		return
+	}
 	var req mcpRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeMCPError(w, nil, -32700, "parse error")
@@ -32,7 +46,7 @@ func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.Method {
 	case "initialize":
-		writeMCPResult(w, req.ID, map[string]any{
+		_ = writeMCPResult(w, req.ID, map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]any{
 				"tools": map[string]any{},
@@ -40,56 +54,132 @@ func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"serverInfo": map[string]any{"name": "anycode", "version": "0.1.0"},
 		})
 	case "tools/list":
-		writeMCPResult(w, req.ID, map[string]any{"tools": []map[string]any{answerUserTool()}})
+		_ = writeMCPResult(w, req.ID, map[string]any{"tools": []map[string]any{answerUserTool()}})
 	case "tools/call":
-		result, err := h.callTool(r.Context(), r.PathValue("sessionID"), req.Params)
+		result, batchID, directDelivery, err := h.callTool(r.Context(), r.PathValue("sessionID"), req.Params)
 		if err != nil {
 			writeMCPApplicationError(w, req.ID, -32602, err)
 			return
 		}
-		writeMCPResult(w, req.ID, result)
+		if err := writeMCPResult(w, req.ID, result); err != nil {
+			if directDelivery {
+				h.failDirectDelivery(r, batchID)
+			}
+			return
+		}
+		if directDelivery && r.Header.Get(mcpTransportHeader) != "stdio" {
+			if err := http.NewResponseController(w).Flush(); err != nil {
+				h.failDirectDelivery(r, batchID)
+				return
+			}
+			if err := h.sessions.AcknowledgeUserAnswerDelivery(context.WithoutCancel(r.Context()), sessionapp.AcknowledgeUserAnswerDeliveryInput{
+				SessionID: sessiondomain.ID(strings.TrimSpace(r.PathValue("sessionID"))),
+				BatchID:   questiondomain.BatchID(batchID),
+			}); err != nil {
+				log.Printf("acknowledge direct MCP answer_user delivery: %v", err)
+			}
+		}
 	default:
 		writeMCPError(w, req.ID, -32601, "method not found")
 	}
 }
 
-func (h mcpHandler) callTool(ctx context.Context, sessionID string, raw json.RawMessage) (map[string]any, error) {
+func (h mcpHandler) failDelivery(w http.ResponseWriter, r *http.Request, batchID string) {
 	if h.sessions == nil {
-		return nil, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "session service unavailable").WithRetryable(true)
+		http.Error(w, "session service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	err := h.sessions.FailUserAnswerDelivery(context.WithoutCancel(r.Context()), sessionapp.FailUserAnswerDeliveryInput{
+		SessionID: sessiondomain.ID(strings.TrimSpace(r.PathValue("sessionID"))),
+		BatchID:   questiondomain.BatchID(batchID),
+		Kind:      sessionapp.UserAnswerDeliveryTransportClosed,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h mcpHandler) failDirectDelivery(r *http.Request, batchID questiondomain.BatchID) {
+	err := h.sessions.FailUserAnswerDelivery(context.WithoutCancel(r.Context()), sessionapp.FailUserAnswerDeliveryInput{
+		SessionID: sessiondomain.ID(strings.TrimSpace(r.PathValue("sessionID"))),
+		BatchID:   batchID,
+		Kind:      sessionapp.UserAnswerDeliveryTransportClosed,
+	})
+	if err != nil {
+		log.Printf("fail direct MCP answer_user delivery: %v", err)
+	}
+}
+
+func (h mcpHandler) callTool(ctx context.Context, sessionID string, raw json.RawMessage) (map[string]any, questiondomain.BatchID, bool, error) {
+	if h.sessions == nil {
+		return nil, "", false, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "session service unavailable").WithRetryable(true)
 	}
 	var params mcpToolCallParams
 	if err := json.Unmarshal(raw, &params); err != nil {
-		return nil, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "invalid tool call params")
+		return nil, "", false, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "invalid tool call params")
 	}
 	if params.Name != "answer_user" {
-		return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unknown tool").WithDetails(map[string]any{"tool": params.Name})
+		return nil, "", false, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unknown tool").WithDetails(map[string]any{"tool": params.Name})
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session id is required")
+		return nil, "", false, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session id is required")
 	}
 	questions, err := buildQuestions(params.Arguments.Questions)
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 	batch, err := h.sessions.RequestUserAnswer(ctx, sessionapp.RequestUserAnswerInput{
 		SessionID: sessiondomain.ID(sessionID),
 		Questions: questions,
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
-	payload, err := json.Marshal(map[string]any{
-		"batchId": string(batch.ID),
-		"status":  "suspended",
-	})
+	directDelivery := batch.Status == questiondomain.BatchAnswered && batch.DeliveryStatus == questiondomain.DeliveryInflight
+	resultPayload := map[string]any{"batchId": string(batch.ID), "status": "suspended"}
+	if directDelivery {
+		resultPayload["status"] = "answered"
+		answers := make([]map[string]any, 0, len(batch.Questions))
+		for _, question := range batch.Questions {
+			answer := map[string]any{
+				"questionId":   question.ID,
+				"customAnswer": question.CustomAnswer,
+				"payload":      question.Answer,
+			}
+			if question.SelectedOptionID != nil {
+				answer["selectedOptionId"] = *question.SelectedOptionID
+			}
+			answers = append(answers, answer)
+		}
+		resultPayload["answers"] = answers
+	}
+	payload, err := json.Marshal(resultPayload)
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 	return map[string]any{
 		"content": []map[string]any{{"type": "text", "text": string(payload)}},
 		"isError": false,
-	}, nil
+	}, batch.ID, directDelivery, nil
+}
+
+func (h mcpHandler) acknowledgeDelivery(w http.ResponseWriter, r *http.Request, batchID string) {
+	if h.sessions == nil {
+		http.Error(w, "session service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	err := h.sessions.AcknowledgeUserAnswerDelivery(context.WithoutCancel(r.Context()), sessionapp.AcknowledgeUserAnswerDeliveryInput{
+		SessionID: sessiondomain.ID(strings.TrimSpace(r.PathValue("sessionID"))),
+		BatchID:   questiondomain.BatchID(batchID),
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func buildQuestions(inputs []mcpQuestionInput) ([]questiondomain.Question, error) {
@@ -204,8 +294,8 @@ type mcpOptionInput struct {
 	Payload     map[string]any `json:"payload"`
 }
 
-func writeMCPResult(w http.ResponseWriter, id json.RawMessage, result any) {
-	writeMCPResponse(w, map[string]any{
+func writeMCPResult(w http.ResponseWriter, id json.RawMessage, result any) error {
+	return writeMCPResponse(w, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      json.RawMessage(id),
 		"result":  result,
@@ -213,7 +303,7 @@ func writeMCPResult(w http.ResponseWriter, id json.RawMessage, result any) {
 }
 
 func writeMCPError(w http.ResponseWriter, id json.RawMessage, code int, message string) {
-	writeMCPResponse(w, map[string]any{
+	_ = writeMCPResponse(w, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      json.RawMessage(id),
 		"error": map[string]any{
@@ -237,7 +327,7 @@ func writeMCPApplicationError(w http.ResponseWriter, id json.RawMessage, code in
 	if details := appErr.PublicDetails(); len(details) > 0 {
 		data["details"] = details
 	}
-	writeMCPResponse(w, map[string]any{
+	_ = writeMCPResponse(w, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      json.RawMessage(id),
 		"error": map[string]any{
@@ -248,7 +338,7 @@ func writeMCPApplicationError(w http.ResponseWriter, id json.RawMessage, code in
 	})
 }
 
-func writeMCPResponse(w http.ResponseWriter, response map[string]any) {
+func writeMCPResponse(w http.ResponseWriter, response map[string]any) error {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(response)
+	return json.NewEncoder(w).Encode(response)
 }

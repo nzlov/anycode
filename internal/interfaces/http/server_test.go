@@ -489,7 +489,7 @@ func TestMCPRequiresBearerAndListsAnswerUserTool(t *testing.T) {
 	}
 }
 
-func TestMCPAnswerUserCreatesDurableSuspension(t *testing.T) {
+func TestMCPAnswerUserReturnsDirectAnswerBeforeDeliveryAck(t *testing.T) {
 	sessions := &fakeMCPSessionUseCase{}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Sessions: sessions}))
 	body := `{
@@ -511,6 +511,7 @@ func TestMCPAnswerUserCreatesDurableSuspension(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set(mcpTransportHeader, "stdio")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -536,8 +537,42 @@ func TestMCPAnswerUserCreatesDurableSuspension(t *testing.T) {
 	if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "text" {
 		t.Fatalf("mcp content = %#v", response.Result.Content)
 	}
-	if !strings.Contains(response.Result.Content[0].Text, `"batchId":"batch-1"`) || !strings.Contains(response.Result.Content[0].Text, `"status":"suspended"`) {
+	if !strings.Contains(response.Result.Content[0].Text, `"batchId":"batch-1"`) || !strings.Contains(response.Result.Content[0].Text, `"status":"answered"`) {
 		t.Fatalf("mcp answer text = %s", response.Result.Content[0].Text)
+	}
+	if sessions.ackInput.SessionID != "" || sessions.ackInput.BatchID != "" {
+		t.Fatalf("stdio call acknowledged before proxy delivery: %#v", sessions.ackInput)
+	}
+
+	ackReq := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1/deliveries/batch-1/ack", nil)
+	ackReq.Header.Set("Authorization", "Bearer secret")
+	ackRec := httptest.NewRecorder()
+	handler.ServeHTTP(ackRec, ackReq)
+	if ackRec.Code != http.StatusNoContent {
+		t.Fatalf("delivery ack status = %d, want %d; body: %s", ackRec.Code, http.StatusNoContent, ackRec.Body.String())
+	}
+	if sessions.ackInput.SessionID != "session-1" || sessions.ackInput.BatchID != "batch-1" {
+		t.Fatalf("delivery ack = %#v", sessions.ackInput)
+	}
+}
+
+func TestMCPAnswerUserWriteFailureFallsBackDelivery(t *testing.T) {
+	sessions := &fakeMCPSessionUseCase{}
+	handler := newMCPHandler(sessions)
+	body := `{
+		"jsonrpc":"2.0",
+		"id":1,
+		"method":"tools/call",
+		"params":{"name":"answer_user","arguments":{"questions":[{"title":"Continue?","options":[{"id":"yes","label":"Yes"}]}]}}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1", strings.NewReader(body))
+	req.SetPathValue("sessionID", "session-1")
+	handler.ServeHTTP(&failingResponseWriter{header: make(http.Header)}, req)
+	if sessions.failInput.SessionID != "session-1" || sessions.failInput.BatchID != "batch-1" || sessions.failInput.Kind != sessionapp.UserAnswerDeliveryTransportClosed {
+		t.Fatalf("delivery fallback = %#v", sessions.failInput)
+	}
+	if sessions.ackInput.BatchID != "" {
+		t.Fatalf("delivery was acknowledged after failed write: %#v", sessions.ackInput)
 	}
 }
 
@@ -727,11 +762,32 @@ type fakeQuestionUseCase struct {
 type fakeMCPSessionUseCase struct {
 	sessionapp.UseCase
 	requestInput sessionapp.RequestUserAnswerInput
+	ackInput     sessionapp.AcknowledgeUserAnswerDeliveryInput
+	failInput    sessionapp.FailUserAnswerDeliveryInput
 }
+
+type failingResponseWriter struct {
+	header http.Header
+}
+
+func (w *failingResponseWriter) Header() http.Header       { return w.header }
+func (w *failingResponseWriter) WriteHeader(int)           {}
+func (w *failingResponseWriter) Write([]byte) (int, error) { return 0, errors.New("connection closed") }
 
 func (u *fakeMCPSessionUseCase) RequestUserAnswer(_ context.Context, input sessionapp.RequestUserAnswerInput) (questionapp.BatchDTO, error) {
 	u.requestInput = input
-	return questionapp.BatchDTO{ID: "batch-1", SessionID: questiondomain.SessionID(input.SessionID), Status: questiondomain.BatchPending, Questions: input.Questions}, nil
+	delivery := questiondomain.ProcessRunID("process-1")
+	return questionapp.BatchDTO{ID: "batch-1", SessionID: questiondomain.SessionID(input.SessionID), Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryInflight, DeliveryProcessRunID: &delivery, Questions: input.Questions}, nil
+}
+
+func (u *fakeMCPSessionUseCase) AcknowledgeUserAnswerDelivery(_ context.Context, input sessionapp.AcknowledgeUserAnswerDeliveryInput) error {
+	u.ackInput = input
+	return nil
+}
+
+func (u *fakeMCPSessionUseCase) FailUserAnswerDelivery(_ context.Context, input sessionapp.FailUserAnswerDeliveryInput) error {
+	u.failInput = input
+	return nil
 }
 
 func (u *fakeQuestionUseCase) CreateBatch(_ context.Context, input questionapp.CreateBatchInput) (questionapp.BatchDTO, error) {
