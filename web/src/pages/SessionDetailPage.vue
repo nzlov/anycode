@@ -349,7 +349,7 @@
               </div>
             </q-tab-panel>
 
-            <q-tab-panel name="changes">
+            <q-tab-panel name="changes" class="detail-diff-panel">
               <q-btn
                 class="full-width q-mb-md app-command-btn"
                 outline
@@ -359,91 +359,7 @@
                 no-caps
                 :to="allDiffRoute"
               />
-
-              <q-banner
-                v-if="diff && !diff.available"
-                dense
-                class="state-block bg-grey-2 text-grey-8 q-mb-md"
-              >
-                <template #avatar>
-                  <q-icon name="block" />
-                </template>
-                当前会话没有可用 worktree Diff，可能是非 git 项目或会话尚未创建 worktree。
-              </q-banner>
-
-              <q-list v-if="diff?.available" bordered separator class="changes-list">
-                <q-item-label header class="changes-header">
-                  <span>{{ fileCountLabel }}</span>
-                  <q-btn
-                    flat
-                    round
-                    dense
-                    class="app-icon-btn"
-                    icon="refresh"
-                    aria-label="刷新 Diff"
-                    :loading="diffLoading"
-                    @click="loadChangeList"
-                  >
-                    <q-tooltip>刷新 Diff</q-tooltip>
-                  </q-btn>
-                </q-item-label>
-
-                <q-item v-if="diffLoading && !diff.files.length">
-                  <q-item-section avatar>
-                    <q-spinner color="primary" size="24px" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label>正在读取变更文件</q-item-label>
-                  </q-item-section>
-                </q-item>
-
-                <q-item v-else-if="!diffLoading && diff.files.length === 0">
-                  <q-item-section avatar>
-                    <q-icon name="task_alt" color="positive" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label>暂无文件变更</q-item-label>
-                  </q-item-section>
-                </q-item>
-
-                <q-item
-                  v-for="file in diff.files"
-                  :key="file.path"
-                  clickable
-                  :disable="fileDiffLoading"
-                  @click="openFileDiff(file.path)"
-                >
-                  <q-item-section avatar>
-                    <q-icon :name="fileIcon(file.status)" :color="fileColor(file.status)" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label class="file-path">{{ file.path }}</q-item-label>
-                    <q-item-label caption>
-                      <span class="text-positive">+{{ file.additions }}</span>
-                      <span class="q-mx-xs">/</span>
-                      <span class="text-negative">-{{ file.deletions }}</span>
-                    </q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-icon name="chevron_right" />
-                  </q-item-section>
-                </q-item>
-              </q-list>
-
-              <AppPagination
-                v-if="diff?.available && diffPageMax > 1"
-                v-model="diffPage"
-                class="justify-center q-mt-md"
-                :max="diffPageMax"
-                :disabled="diffLoading"
-              />
-
-              <q-card v-else-if="diffLoading" flat bordered class="state-card">
-                <q-card-section class="state-content">
-                  <q-spinner color="primary" size="28px" />
-                  <div class="text-body2 text-muted">正在读取变更文件</div>
-                </q-card-section>
-              </q-card>
+              <DiffWorkspace v-model="detailDiffWorkspaceState" :target="detailDiffTarget" />
             </q-tab-panel>
 
             <q-tab-panel name="artifacts">
@@ -524,39 +440,6 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
-
-    <q-dialog v-model="fileDiffDialog" :maximized="$q.screen.lt.sm">
-      <q-card class="file-diff-dialog app-content-dialog">
-        <q-card-section class="diff-dialog-header">
-          <div class="file-title">
-            <q-icon
-              v-if="selectedFileDiff"
-              :name="fileIcon(selectedFileDiff.file.status)"
-              :color="fileColor(selectedFileDiff.file.status)"
-            />
-            <span>{{ selectedFilePath || '文件 Diff' }}</span>
-          </div>
-          <q-btn v-close-popup flat round dense class="app-icon-btn" icon="close" aria-label="关闭">
-            <q-tooltip>关闭</q-tooltip>
-          </q-btn>
-        </q-card-section>
-        <q-separator />
-
-        <q-card-section v-if="fileDiffLoading" class="state-content">
-          <q-spinner color="primary" size="32px" />
-          <div class="text-body2 text-muted">正在读取文件 Diff</div>
-        </q-card-section>
-
-        <q-card-section v-else-if="!selectedFileDiff" class="state-content">
-          <q-icon name="data_object" size="32px" color="grey-6" />
-          <div class="text-body2">当前文件没有可展示的 Diff</div>
-        </q-card-section>
-
-        <q-card-section v-else class="file-diff-body">
-          <DiffViewer :file-diffs="[selectedFileDiff]" @expand="expandSelectedFileDiff" />
-        </q-card-section>
-      </q-card>
-    </q-dialog>
   </q-page>
 </template>
 
@@ -566,9 +449,8 @@ import { Notify } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
-import AppPagination from '@/components/AppPagination.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
-import DiffViewer from '@/components/DiffViewer.vue';
+import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
@@ -576,10 +458,8 @@ import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
-import { getSessionDiffFiles, getSessionFileDiff } from '@/services/diff';
-import { expandDiffContext, initialDiffContext } from '@/services/diffViewerState';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
-import type { DiffFile, FileDiff, SessionDiff } from '@/services/diff';
+import type { DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
@@ -618,15 +498,13 @@ const rightPanelTab = computed<'info' | 'changes' | 'artifacts'>({
     detailView.value = value;
   },
 });
-const diff = ref<SessionDiff | null>(null);
-const diffLoading = ref(false);
-const fileDiffDialog = ref(false);
-const selectedFilePath = ref('');
-const selectedFileDiff = ref<FileDiff | null>(null);
-const fileDiffLoading = ref(false);
-const diffPage = ref(1);
-const diffPageSize = 20;
-const selectedDiffContext = ref(initialDiffContext());
+const detailDiffTarget: DiffWorkspaceTarget = { kind: 'session', sessionId };
+const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
+  mode: 'all',
+  filePath: '',
+  page: 1,
+  pageSize: 20,
+});
 let mounted = false;
 let preservingOlderEventScroll = false;
 const {
@@ -822,16 +700,6 @@ const allDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId, mode: 'all' },
 }));
-const fileCountLabel = computed(() => {
-  const info = diff.value?.pageInfo;
-  if (!info) return '等待加载';
-  return `第 ${info.page} 页，共 ${info.total} 个文件`;
-});
-const diffPageMax = computed(() => {
-  const info = diff.value?.pageInfo;
-  if (!info || info.total < 1) return 1;
-  return Math.max(1, Math.ceil(info.total / info.pageSize));
-});
 
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
@@ -871,56 +739,6 @@ function worktreeCleanupColor(status: string) {
   if (status === 'pending' || status === 'provisioning') return 'warning';
   if (status === 'cleaned') return 'positive';
   return 'primary';
-}
-
-async function loadChangeList() {
-  if (!sessionId) return;
-  diffLoading.value = true;
-  try {
-    diff.value = await getSessionDiffFiles({
-      sessionId,
-      mode: 'single',
-      page: diffPage.value,
-      pageSize: diffPageSize,
-    });
-    diffPage.value = diff.value.pageInfo.page;
-  } catch (err) {
-    notifyError(err, '读取 Diff 失败');
-  } finally {
-    diffLoading.value = false;
-  }
-}
-
-async function openFileDiff(path: string) {
-  selectedFilePath.value = path;
-  selectedFileDiff.value = null;
-  selectedDiffContext.value = initialDiffContext();
-  fileDiffDialog.value = true;
-  await loadFileDiff(path);
-}
-
-async function loadFileDiff(path: string) {
-  fileDiffLoading.value = true;
-  try {
-    selectedFileDiff.value = await getSessionFileDiff({
-      sessionId,
-      mode: 'single',
-      filePath: path,
-      page: diffPage.value,
-      pageSize: diffPageSize,
-      contextBefore: selectedDiffContext.value.before,
-      contextAfter: selectedDiffContext.value.after,
-    });
-  } catch (err) {
-    notifyError(err, '读取文件 Diff 失败');
-  } finally {
-    fileDiffLoading.value = false;
-  }
-}
-
-function expandSelectedFileDiff(path: string, direction: 'before' | 'after') {
-  selectedDiffContext.value = expandDiffContext(selectedDiffContext.value, direction);
-  void loadFileDiff(path);
 }
 
 function notifyError(err: unknown, fallback: string) {
@@ -971,20 +789,6 @@ function errorMessage(err: unknown) {
 
 function wasNotified(err: unknown) {
   return Boolean(err && typeof err === 'object' && '__anycodeNotified' in err);
-}
-
-function fileIcon(status: DiffFile['status']) {
-  if (status === 'added') return 'add_circle';
-  if (status === 'deleted') return 'remove_circle';
-  if (status === 'renamed') return 'drive_file_rename_outline';
-  return 'edit';
-}
-
-function fileColor(status: DiffFile['status']) {
-  if (status === 'added') return 'positive';
-  if (status === 'deleted') return 'negative';
-  if (status === 'renamed') return 'warning';
-  return 'primary';
 }
 
 function openPromptAppendEditor(prompt: PromptAppend) {
@@ -1077,18 +881,6 @@ async function retryCurrentWorktreeCleanup() {
 async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
   await submitPendingAnswers(batchId, answers);
 }
-
-watch(rightPanelTab, (value) => {
-  if (value === 'changes' && !diff.value && !diffLoading.value) {
-    void loadChangeList();
-  }
-});
-
-watch(diffPage, () => {
-  if (rightPanelTab.value === 'changes') {
-    void loadChangeList();
-  }
-});
 
 function isEventStreamAtBottom(body: HTMLElement) {
   return body.scrollHeight - body.scrollTop - body.clientHeight <= 1;
@@ -1375,40 +1167,6 @@ async function scrollEventsToBottom() {
   word-break: break-word;
 }
 
-.changes-list {
-  border-color: var(--ac-border);
-  border-radius: var(--ac-radius);
-}
-
-.changes-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--ac-text-muted);
-}
-
-.file-path {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.state-card {
-  background: var(--ac-surface);
-  border-color: var(--ac-border);
-  border-radius: var(--ac-radius);
-}
-
-.state-content {
-  display: grid;
-  min-height: 140px;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  color: var(--ac-text-muted);
-  text-align: center;
-}
-
 .append-history {
   display: grid;
   gap: 10px;
@@ -1478,39 +1236,6 @@ async function scrollEventsToBottom() {
   background: var(--ac-surface-muted);
   border: 1px solid currentColor;
   border-radius: var(--ac-radius);
-}
-
-.file-diff-dialog {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.diff-dialog-header {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.file-title {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.file-title span {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.file-diff-body {
-  min-height: 0;
-  flex: 1 1 auto;
-  overflow: auto;
 }
 
 @media (max-width: 1023.98px) {

@@ -170,7 +170,6 @@
                   class="lane-icon-btn app-icon-btn lane-icon-btn--warning"
                   icon="fact_check"
                   aria-label="人工审核"
-                  :loading="approvalLoading && approvalSessionId === card.id"
                   @click.stop="openApprovalDialog(card)"
                 >
                   <q-tooltip>人工审核</q-tooltip>
@@ -276,11 +275,7 @@
       :batches="pendingQuestionBatches"
       :loading="questionsLoading"
       :submitting="questionsSubmitting"
-      :diff-loading="answerDiffLoading"
-      :diff-error="answerDiffError"
-      :diff-available="answerDiffAvailable"
-      :diffs="answerDiffs"
-      :diff-total="answerDiffTotal"
+      :diff-target="answerDiffTarget"
       :full-diff-route="answerAllDiffRoute"
       @submit="submitAnswers"
     />
@@ -292,7 +287,19 @@
             <q-tab name="output" icon="fact_check" label="审核结果" />
             <q-tab name="diff" icon="difference" label="Diff" />
           </q-tabs>
-          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭人工审核" />
+          <div class="forward-approval-dialog__actions">
+            <q-btn
+              flat
+              round
+              dense
+              icon="open_in_new"
+              aria-label="打开完整 Diff 页面"
+              :to="approvalAllDiffRoute"
+            >
+              <q-tooltip>打开完整 Diff 页面</q-tooltip>
+            </q-btn>
+            <q-btn v-close-popup flat round dense icon="close" aria-label="关闭人工审核" />
+          </div>
         </div>
         <q-separator />
         <q-tab-panels v-model="approvalTab" animated class="forward-approval-dialog__panels">
@@ -303,20 +310,19 @@
             />
           </q-tab-panel>
           <q-tab-panel name="diff" class="forward-approval-dialog__panel">
-            <SessionDiffPreview
-              :loading="approvalLoading"
-              :error="approvalDiffError"
-              :available="approvalDiffAvailable"
-              :file-diffs="approvalDiffs"
-              :total="approvalDiffTotal"
-              :full-diff-route="approvalAllDiffRoute"
+            <DiffWorkspace
+              v-if="approvalDialog"
+              v-model="approvalDiffWorkspaceState"
+              :target="approvalDiffTarget"
             />
           </q-tab-panel>
         </q-tab-panels>
         <q-separator />
         <WorkflowApprovalPanel
           v-if="approvalDialog"
-          :context-available="Boolean(approvalContext) && isPendingApprovalReviewable(approvalPending)"
+          :context-available="
+            Boolean(approvalContext) && isPendingApprovalReviewable(approvalPending)
+          "
           :submitting="approvalSubmitting"
           @submit="submitApproval"
         />
@@ -362,17 +368,14 @@ import { useRoute, useRouter } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
-import SessionDiffPreview from '@/components/SessionDiffPreview.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import {
-  getSessionAllDiff,
   getSessionDiffSummaries,
   type DiffWorkspaceState,
   type DiffWorkspaceTarget,
-  type FileDiff,
   type SessionDiffSummary,
 } from '@/services/diff';
 import {
@@ -456,23 +459,15 @@ const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
 const questionsLoading = ref(false);
 const questionsSubmitting = ref(false);
-const answerDiffLoading = ref(false);
-const answerDiffs = ref<FileDiff[]>([]);
-const answerDiffAvailable = ref(false);
-const answerDiffTotal = ref(0);
-const answerDiffError = ref('');
+let questionRequestGeneration = 0;
 const approvalDialog = ref(false);
 const approvalTab = ref<'output' | 'diff'>('output');
-const approvalLoading = ref(false);
 const approvalSubmitting = ref(false);
 const approvalSessionId = ref('');
 const approvalContext = ref<ApprovalContext | null>(null);
 const approvalPending = ref<PendingApproval | null>(null);
 let approvalContextGeneration = 0;
-const approvalDiffs = ref<FileDiff[]>([]);
-const approvalDiffAvailable = ref(false);
-const approvalDiffTotal = ref(0);
-const approvalDiffError = ref('');
+const approvalDiffWorkspaceState = ref<DiffWorkspaceState>(initialDiffWorkspaceState());
 const diffDialog = ref(false);
 const diffDialogSessionId = ref('');
 const diffDialogWorkspaceState = ref<DiffWorkspaceState>({
@@ -490,9 +485,17 @@ const answerAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: activeQuestionSessionId.value, mode: 'all' },
 }));
+const answerDiffTarget = computed<DiffWorkspaceTarget>(() => ({
+  kind: 'session',
+  sessionId: activeQuestionSessionId.value,
+}));
 const approvalAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: approvalSessionId.value, mode: 'all' },
+}));
+const approvalDiffTarget = computed<DiffWorkspaceTarget>(() => ({
+  kind: 'session',
+  sessionId: approvalSessionId.value,
 }));
 const diffDialogAllDiffRoute = computed(() => ({
   path: '/diff',
@@ -841,31 +844,26 @@ async function closeCard(card: SessionCard) {
 }
 
 async function openAnswerDialog(sessionId: string) {
+  const requestGeneration = ++questionRequestGeneration;
   activeQuestionSessionId.value = sessionId;
+  pendingQuestionBatches.value = [];
   questionsLoading.value = true;
-  answerDiffLoading.value = true;
-  answerDiffs.value = [];
-  answerDiffAvailable.value = false;
-  answerDiffTotal.value = 0;
-  answerDiffError.value = '';
+  answerDialog.value = true;
   try {
-    const [questionsResult, diffResult] = await Promise.allSettled([
-      getPendingQuestionBatches(sessionId),
-      getSessionAllDiff({ sessionId, mode: 'all', page: 1, pageSize: 20 }),
-    ]);
-    if (questionsResult.status === 'rejected') throw questionsResult.reason;
-    pendingQuestionBatches.value = questionsResult.value;
-    if (diffResult.status === 'fulfilled') {
-      answerDiffAvailable.value = diffResult.value.available;
-      answerDiffs.value = diffResult.value.allDiff;
-      answerDiffTotal.value = diffResult.value.pageInfo.total;
-    } else {
-      answerDiffError.value = 'Diff 加载失败，请稍后刷新重试';
+    const batches = await getPendingQuestionBatches(sessionId);
+    if (
+      requestGeneration === questionRequestGeneration &&
+      activeQuestionSessionId.value === sessionId
+    ) {
+      pendingQuestionBatches.value = batches;
     }
-    answerDialog.value = true;
   } finally {
-    questionsLoading.value = false;
-    answerDiffLoading.value = false;
+    if (
+      requestGeneration === questionRequestGeneration &&
+      activeQuestionSessionId.value === sessionId
+    ) {
+      questionsLoading.value = false;
+    }
   }
 }
 
@@ -883,37 +881,16 @@ async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
   }
 }
 
-async function openApprovalDialog(card: SessionCard) {
-  const sessionId = card.id;
-  const requestGeneration = ++approvalContextGeneration;
-  approvalSessionId.value = sessionId;
-  approvalLoading.value = true;
+function openApprovalDialog(card: SessionCard) {
+  approvalContextGeneration += 1;
+  approvalSessionId.value = card.id;
   approvalTab.value = 'output';
   approvalContext.value = card.pendingApproval
     ? { workflowRunId: card.pendingApproval.workflowRunId, nodeId: card.pendingApproval.nodeId }
     : null;
   approvalPending.value = card.pendingApproval ?? null;
-  approvalDiffs.value = [];
-  approvalDiffAvailable.value = false;
-  approvalDiffTotal.value = 0;
-  approvalDiffError.value = '';
+  approvalDiffWorkspaceState.value = initialDiffWorkspaceState();
   approvalDialog.value = true;
-  try {
-    try {
-      const diff = await getSessionAllDiff({ sessionId, mode: 'all', page: 1, pageSize: 20 });
-      if (!isCurrentApprovalContext(requestGeneration, sessionId)) return;
-      approvalDiffAvailable.value = diff.available;
-      approvalDiffs.value = diff.allDiff;
-      approvalDiffTotal.value = diff.pageInfo.total;
-    } catch {
-      if (!isCurrentApprovalContext(requestGeneration, sessionId)) return;
-      approvalDiffError.value = 'Diff 加载失败，请稍后刷新重试';
-    }
-  } finally {
-    if (isCurrentApprovalContext(requestGeneration, sessionId)) {
-      approvalLoading.value = false;
-    }
-  }
 }
 
 function isCurrentApprovalContext(requestGeneration: number, sessionId: string) {
@@ -924,6 +901,10 @@ function openDiffDialog(card: SessionCard) {
   diffDialogSessionId.value = card.id;
   diffDialogWorkspaceState.value = { mode: 'all', filePath: '', page: 1, pageSize: 20 };
   diffDialog.value = true;
+}
+
+function initialDiffWorkspaceState(): DiffWorkspaceState {
+  return { mode: 'all', filePath: '', page: 1, pageSize: 20 };
 }
 
 function handleDiffDialogClosed() {
@@ -938,7 +919,8 @@ async function submitApproval(approved: boolean, comment: string) {
     !approvalContext.value ||
     !approvalSessionId.value ||
     !isPendingApprovalReviewable(approvalPending.value)
-  ) return;
+  )
+    return;
   const requestGeneration = approvalContextGeneration;
   const sessionId = approvalSessionId.value;
   const workflowRunId = approvalContext.value.workflowRunId;

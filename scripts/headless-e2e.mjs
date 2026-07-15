@@ -118,7 +118,7 @@ try {
   await waitForText('当前变更');
   await clickText('当前变更');
   await waitForText('e2e-codex-output.txt');
-  await screenshotFileDiffDialog('e2e-codex-output.txt');
+  await screenshotSessionDiffWorkspace('e2e-codex-output.txt');
   await assertSessionDetailReadableLayout('git session detail layout');
   await assertNoHorizontalOverflow('git session detail');
   await screenshot('05-git-session-detail.png');
@@ -175,7 +175,7 @@ try {
       '10-directory-dialog.png',
       '11-new-session-dialog.png',
       '12-answer-user-dialog.png',
-      '13-file-diff-dialog.png',
+      '13-session-diff-workspace.png',
     ].map((name) => `${screenshotDir}/${name}`),
   }, null, 2));
 } catch (error) {
@@ -621,19 +621,14 @@ async function screenshotDirectoryDialog() {
   await closeVisibleDialog();
 }
 
-async function screenshotFileDiffDialog(filePath) {
-  const opened = await evaluate(`(() => {
-    const panel = document.querySelector('.right-panel-card');
-    const row = Array.from(panel?.querySelectorAll('.changes-list .q-item') || [])
-      .find((element) => element.innerText && element.innerText.includes(${JSON.stringify(filePath)}));
-    if (!row) return false;
-    row.click();
-    return true;
-  })()`);
-  assert(opened, `diff file row not found: ${filePath}`);
-  await waitForVisibleSelector('.file-diff-dialog');
-  await screenshot('13-file-diff-dialog.png');
-  await closeVisibleDialog();
+async function screenshotSessionDiffWorkspace(filePath) {
+  await waitForVisibleSelector('.detail-diff-panel .diff-workspace');
+  await waitForCondition(
+    `Array.from(document.querySelectorAll('.detail-diff-panel .diff-file-card'))
+      .some((element) => element.innerText.includes(${JSON.stringify(filePath)}))`,
+    `session detail diff contains ${filePath}`,
+  );
+  await screenshot('13-session-diff-workspace.png');
 }
 
 async function assertSessionDetailReadableLayout(label) {

@@ -63,6 +63,24 @@
       </q-btn>
     </div>
 
+    <q-banner v-if="error" rounded class="diff-workspace__error bg-negative text-white">
+      <template #avatar>
+        <q-icon name="error_outline" />
+      </template>
+      {{ error }}
+      <template #action>
+        <q-btn
+          flat
+          dense
+          no-caps
+          icon="refresh"
+          label="重试"
+          :loading="loading"
+          @click="loadDiff"
+        />
+      </template>
+    </q-banner>
+
     <q-banner v-if="diff && !diff.available" rounded class="state-banner bg-grey-2 text-grey-8">
       <template #avatar>
         <q-icon name="block" />
@@ -184,7 +202,6 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { Notify } from 'quasar';
 import { useRouter } from 'vue-router';
 
 import AppPagination from '@/components/AppPagination.vue';
@@ -232,6 +249,7 @@ const pageSizeOptions = [
 ];
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
+const error = ref('');
 const sessionPrefixMap = ref<Record<string, string>>({});
 const diffContext = ref(initialDiffContext());
 const requestGeneration = ref(0);
@@ -312,6 +330,7 @@ function requestSignature(state = props.modelValue) {
 async function loadDiff() {
   const generation = ++requestGeneration.value;
   loading.value = true;
+  error.value = '';
   try {
     const input = {
       mode: props.modelValue.mode,
@@ -343,7 +362,7 @@ async function loadDiff() {
       await loadSessionPrefixMap(generation);
     }
   } catch (err) {
-    if (generation === requestGeneration.value) notifyError(err, '读取 Diff 失败');
+    if (generation === requestGeneration.value) error.value = errorMessage(err, '读取 Diff 失败');
   } finally {
     if (generation === requestGeneration.value) loading.value = false;
   }
@@ -444,16 +463,8 @@ async function openPrefixedSession(path: string) {
   await router.push({ name: 'session-detail', params: { id: sessionId } });
 }
 
-function notifyError(err: unknown, fallback: string) {
-  if (err && typeof err === 'object' && '__anycodeNotified' in err) return;
-  Notify.create({
-    type: 'negative',
-    icon: 'error',
-    position: 'top-right',
-    message: err instanceof Error ? err.message || fallback : fallback,
-    timeout: 5000,
-    actions: [{ icon: 'close', color: 'white', round: true }],
-  });
+function errorMessage(err: unknown, fallback: string) {
+  return err instanceof Error ? err.message || fallback : fallback;
 }
 
 function fileIcon(status: DiffFile['status']) {
@@ -478,6 +489,7 @@ watch(
     collapseState.value = syncDiffCollapseTarget(collapseState.value, targetKey.value);
     diffContext.value = initialDiffContext();
     diff.value = null;
+    error.value = '';
     sessionPrefixMap.value = {};
   },
   { immediate: true },
@@ -502,6 +514,7 @@ onUnmounted(() => {
 
 <style scoped>
 .diff-workspace {
+  container-type: inline-size;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -520,6 +533,10 @@ onUnmounted(() => {
 
 .diff-workspace__page-size {
   width: 132px;
+}
+
+.diff-workspace__error {
+  flex: 0 0 auto;
 }
 
 .diff-workspace__layout {
@@ -574,13 +591,42 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
 }
 
-@media (max-width: 1023.98px) {
+@media (min-width: 1024px) {
   .diff-workspace__layout {
-    grid-template-columns: 1fr;
+    flex: 1 1 auto;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .diff-files {
+    position: sticky;
+    top: 0;
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 
-@media (max-width: 599.98px) {
+@container (max-width: 1023px) {
+  .diff-workspace__layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    align-items: start;
+    overflow-y: visible;
+  }
+
+  .diff-files {
+    position: static;
+    height: auto;
+    max-height: none;
+    overflow-y: visible;
+    overscroll-behavior: auto;
+  }
+}
+
+@container (max-width: 599px) {
   .diff-workspace__page-size,
   .diff-workspace__toolbar :deep(.q-btn-toggle) {
     width: 100%;

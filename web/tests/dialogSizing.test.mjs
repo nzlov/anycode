@@ -12,6 +12,7 @@ const globalSettingsSource = readSource('../src/components/GlobalSettingsDialog.
 const projectSettingsSource = readSource('../src/components/ProjectSettingsDialog.vue');
 const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
 const answerSource = readSource('../src/components/AnswerUserDialog.vue');
+const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const composerSource = readSource('../src/components/PromptComposer.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
 const detailSource = readSource('../src/pages/SessionDetailPage.vue');
@@ -27,7 +28,6 @@ const contentDialogs = [
   [indexSource, 'overview-diff-dialog'],
   [composerSource, 'attachment-preview-card'],
   [detailSource, 'prompt-edit-dialog'],
-  [detailSource, 'file-diff-dialog'],
 ];
 
 test('one shared class owns content dialog sizing at the 600px breakpoint', () => {
@@ -67,7 +67,7 @@ test('all content dialogs use the shared card class and Quasar mobile maximizati
   }
   assert.equal(
     (detailSource.match(/<q-dialog[^>]*:maximized="\$q\.screen\.lt\.sm"/g) ?? []).length,
-    2,
+    1,
   );
 });
 
@@ -86,7 +86,7 @@ test('semantic dialog styles no longer own fixed dialog widths or old mobile bre
     assert.doesNotMatch(block, /(?:width|max-width):[^;]*(?:560|680|760|880|900|920|960|1100)px/);
   }
   assert.doesNotMatch(answerSource, /@media \(max-width:\s*699px\)/);
-  assert.doesNotMatch(detailSource, /@media \(max-width:\s*699px\)[\s\S]*?\.file-diff-dialog/);
+  assert.doesNotMatch(detailSource, /file-diff-dialog/);
 });
 
 test('long content dialogs keep one explicit scrolling content area', () => {
@@ -97,7 +97,8 @@ test('long content dialogs keep one explicit scrolling content area', () => {
   assert.match(stylesSource, /\.quick-command-list\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(answerSource, /\.answer-dialog__body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
-  assert.match(detailSource, /\.file-diff-body\s*{[^}]*overflow:\s*auto/s);
+  assert.match(diffWorkspaceSource, /\.diff-files\s*{[^}]*overflow-y:\s*auto/s);
+  assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);
 });
 
 test('desktop new session panel is capped to the viewport and scrolls its body', () => {

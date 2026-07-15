@@ -128,7 +128,7 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /<q-tab name="output"[^>]*label="审核结果"/);
   assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
   assert.doesNotMatch(overviewSource, /getSessionTranscriptPage/);
-  assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId, mode: 'all'/);
+  assert.doesNotMatch(overviewSource, /getSessionAllDiff/);
   assert.match(overviewSource, /card\.pendingApproval/);
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
   assert.doesNotMatch(overviewSource, /approvalOutputError/);
@@ -140,17 +140,12 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /const requestGeneration = approvalContextGeneration/);
   assert.match(overviewSource, /approvalContext\.value\?\.workflowRunId === workflowRunId/);
   assert.match(overviewSource, /approvalContext\.value\?\.nodeId === nodeId/);
-  assert.ok(
-    overviewSource.indexOf('approvalDialog.value = true') <
-      overviewSource.indexOf('await getSessionAllDiff'),
-  );
-  assert.match(overviewSource, /const requestGeneration = \+\+approvalContextGeneration/);
-  assert.match(overviewSource, /isCurrentApprovalContext\(requestGeneration, sessionId\)/);
-  assert.match(
+  assert.match(overviewSource, /<DiffWorkspace[\s\S]*v-model="approvalDiffWorkspaceState"/);
+  assert.match(overviewSource, /:target="approvalDiffTarget"/);
+  assert.doesNotMatch(
     overviewSource,
-    /if \(isCurrentApprovalContext\(requestGeneration, sessionId\)\) \{\s*approvalLoading\.value = false/s,
+    /approvalDiffs|approvalDiffAvailable|approvalDiffTotal|approvalDiffError/,
   );
-  assert.match(overviewSource, /<SessionDiffPreview[\s\S]*:file-diffs="approvalDiffs"/);
   assert.match(overviewSource, /<WorkflowApprovalPanel/);
   assert.match(overviewSource, /aria-label="关闭人工审核"/);
   assert.match(
@@ -196,29 +191,27 @@ test('overview waiting answer dialog shows questions and diff before submit', ()
   assert.match(answerDialogSource, /<q-tab name="questions"[^>]*label="问题"/);
   assert.match(answerDialogSource, /<q-tab name="diff"[^>]*label="Diff"/);
   assert.match(answerDialogSource, /<AnswerUserPanel/);
-  assert.match(answerDialogSource, /<SessionDiffPreview[\s\S]*:file-diffs="diffs"/);
-  assert.match(answerDialogSource, /:full-diff-route="fullDiffRoute"/);
-  assert.match(overviewSource, /<AnswerUserDialog[\s\S]*:diffs="answerDiffs"/);
+  assert.match(answerDialogSource, /<DiffWorkspace[\s\S]*v-model="diffWorkspaceState"/);
+  assert.match(answerDialogSource, /:target="diffTarget"/);
+  assert.match(answerDialogSource, /:to="fullDiffRoute"/);
+  assert.match(overviewSource, /<AnswerUserDialog[\s\S]*:diff-target="answerDiffTarget"/);
   assert.match(overviewSource, /getPendingQuestionBatches\(sessionId\)/);
-  assert.match(
-    overviewSource,
-    /getSessionAllDiff\(\{ sessionId, mode: 'all', page: 1, pageSize: 20 \}\)/,
-  );
-  assert.match(overviewSource, /const \[questionsResult, diffResult\] = await Promise\.allSettled/);
-  assert.match(overviewSource, /answerDiffError\.value = 'Diff 加载失败，请稍后刷新重试'/);
+  assert.match(overviewSource, /const requestGeneration = \+\+questionRequestGeneration/);
+  assert.match(overviewSource, /activeQuestionSessionId\.value === sessionId/);
+  assert.doesNotMatch(overviewSource, /answerDiffLoading|answerDiffs|answerDiffError/);
   assert.match(
     overviewSource,
     /query: \{ sessionId: activeQuestionSessionId\.value, mode: 'all' \}/,
   );
 });
 
-test('overview cards expose batch-backed diff previews without triggering card navigation', () => {
+test('all current diff surfaces reuse one workspace without triggering card navigation', () => {
   const overviewSource = readFileSync(
     new URL('../src/pages/IndexPage.vue', import.meta.url),
     'utf8',
   );
-  const previewSource = readFileSync(
-    new URL('../src/components/SessionDiffPreview.vue', import.meta.url),
+  const answerDialogSource = readFileSync(
+    new URL('../src/components/AnswerUserDialog.vue', import.meta.url),
     'utf8',
   );
   const workspaceSource = readFileSync(
@@ -262,10 +255,6 @@ test('overview cards expose batch-backed diff previews without triggering card n
     overviewSource,
     /diffDialogDiffs|diffDialogLoading|diffDialogRequestGeneration/,
   );
-  assert.match(previewSource, /<DiffViewer :file-diffs="fileDiffs"/);
-  assert.match(previewSource, /当前会话没有可用 Diff/);
-  assert.match(previewSource, /当前会话没有变更/);
-  assert.match(previewSource, /label="完整 Diff"/);
   assert.match(workspaceSource, /class="diff-workspace"/);
   assert.match(workspaceSource, /<AppPagination/);
   assert.match(workspaceSource, /<DiffViewer/);
@@ -280,9 +269,13 @@ test('overview cards expose batch-backed diff previews without triggering card n
   assert.doesNotMatch(diffPageSource, /<AppPagination|<DiffViewer/);
   assert.doesNotMatch(diffPageSource, /getSessionAllDiff|getBranchAllDiff/);
   assert.doesNotMatch(stylesSource, /\.diff-layout/);
-  for (const source of [previewSource, detailSource, fileChangeSource]) {
-    assert.doesNotMatch(source, /collapsible|collapsed-paths|toggle-collapse/);
-  }
+  assert.match(answerDialogSource, /<DiffWorkspace/);
+  assert.match(detailSource, /<DiffWorkspace[\s\S]*:target="detailDiffTarget"/);
+  assert.doesNotMatch(detailSource, /<DiffViewer|getSessionDiffFiles|getSessionFileDiff/);
+  assert.match(fileChangeSource, /<DiffViewer[^>]*:file-diffs="diffFileChanges"/);
+  assert.doesNotMatch(fileChangeSource, /<DiffWorkspace|getSessionAllDiff|getSessionSingleDiff/);
+  assert.doesNotMatch(answerDialogSource, /SessionDiffPreview/);
+  assert.equal(overviewSource.includes('SessionDiffPreview'), false);
   assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
   assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);
   assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*hidden/s);

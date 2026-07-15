@@ -11,9 +11,29 @@
           <q-tab name="questions" icon="quiz" label="问题" />
           <q-tab name="diff" icon="difference" label="Diff" />
         </q-tabs>
-        <q-btn flat round dense icon="close" :disable="submitting" v-close-popup>
-          <q-tooltip>关闭</q-tooltip>
-        </q-btn>
+        <div class="answer-dialog__actions">
+          <q-btn
+            flat
+            round
+            dense
+            icon="open_in_new"
+            aria-label="打开完整 Diff 页面"
+            :to="fullDiffRoute"
+          >
+            <q-tooltip>打开完整 Diff 页面</q-tooltip>
+          </q-btn>
+          <q-btn
+            v-close-popup
+            flat
+            round
+            dense
+            icon="close"
+            aria-label="关闭"
+            :disable="submitting"
+          >
+            <q-tooltip>关闭</q-tooltip>
+          </q-btn>
+        </div>
       </div>
       <q-separator />
 
@@ -30,14 +50,7 @@
           />
         </q-tab-panel>
         <q-tab-panel name="diff" class="answer-dialog__panel">
-          <SessionDiffPreview
-            :loading="diffLoading"
-            :error="diffError"
-            :available="diffAvailable"
-            :file-diffs="diffs"
-            :total="diffTotal"
-            :full-diff-route="fullDiffRoute"
-          />
+          <DiffWorkspace v-if="modelValue" v-model="diffWorkspaceState" :target="diffTarget" />
         </q-tab-panel>
       </q-tab-panels>
     </q-card>
@@ -49,9 +62,9 @@ import { ref, watch } from 'vue';
 import type { RouteLocationRaw } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
-import SessionDiffPreview from '@/components/SessionDiffPreview.vue';
+import DiffWorkspace from '@/components/DiffWorkspace.vue';
 
-import type { FileDiff } from '@/services/diff';
+import type { DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import type { QuestionAnswerInput, QuestionBatch } from '@/services/sessions';
 
 const props = defineProps<{
@@ -59,11 +72,7 @@ const props = defineProps<{
   batches: QuestionBatch[];
   loading?: boolean;
   submitting?: boolean;
-  diffLoading: boolean;
-  diffError: string;
-  diffAvailable: boolean;
-  diffs: FileDiff[];
-  diffTotal: number;
+  diffTarget: DiffWorkspaceTarget;
   fullDiffRoute: RouteLocationRaw;
 }>();
 
@@ -73,11 +82,18 @@ const emit = defineEmits<{
 }>();
 
 const activeTab = ref<'questions' | 'diff'>('questions');
+const diffWorkspaceState = ref<DiffWorkspaceState>(initialDiffWorkspaceState());
+
+function initialDiffWorkspaceState(): DiffWorkspaceState {
+  return { mode: 'all', filePath: '', page: 1, pageSize: 20 };
+}
 
 watch(
   () => props.modelValue,
   (modelValue) => {
-    if (modelValue) activeTab.value = 'questions';
+    if (!modelValue) return;
+    activeTab.value = 'questions';
+    diffWorkspaceState.value = initialDiffWorkspaceState();
   },
 );
 </script>
@@ -97,6 +113,12 @@ watch(
   padding-right: 8px;
 }
 
+.answer-dialog__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .answer-dialog__panels,
 .answer-dialog__body {
   min-height: 0;
@@ -111,6 +133,10 @@ watch(
 .answer-dialog__panel--questions {
   padding: 0;
   overflow: hidden;
+}
+
+.answer-dialog__panel :deep(.diff-workspace) {
+  height: 100%;
 }
 
 .answer-dialog__body {

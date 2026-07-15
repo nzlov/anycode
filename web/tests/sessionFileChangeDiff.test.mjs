@@ -38,6 +38,7 @@ test('file change component delegates unified diff rendering to DiffViewer', () 
 
   assert.match(source, /import DiffViewer from '@\/components\/DiffViewer\.vue'/);
   assert.match(source, /<DiffViewer[^>]*:file-diffs="diffFileChanges"/);
+  assert.doesNotMatch(source, /DiffWorkspace|getSessionAllDiff|getSessionSingleDiff/);
   assert.doesNotMatch(source, /<pre v-if="change\.unifiedDiff"/);
   assert.match(source, /fileChangePresentations\.value\.flatMap\(\(\{ change, diff \}\)/);
 });
