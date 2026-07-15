@@ -27,6 +27,7 @@ import {
   type SessionConfigInput,
   type SessionDetailData,
 } from '@/services/sessions';
+import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 import {
   getSessionTranscriptPage,
   subscribeSessionTranscript,
@@ -301,9 +302,12 @@ export function useSessionDetail(sessionId: string) {
   }
 
   async function submitApproval(approved: boolean, comment: string) {
+    if (approvalSubmitting.value) return;
     const approval = session.value?.pendingApproval;
-    if (!approval) {
-      error.value = '未找到当前审批上下文，请刷新后重试';
+    if (!isPendingApprovalReviewable(approval)) {
+      error.value = approval
+        ? '执行后审批缺少节点结果，请刷新后重试'
+        : '未找到当前审批上下文，请刷新后重试';
       return;
     }
     approvalSubmitting.value = true;

@@ -2369,6 +2369,16 @@ func QueueAnswerBatchIDContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldQueueAnswerBatchID, v))
 }
 
+// AppliedSystemCommandsIsNil applies the IsNil predicate on the "applied_system_commands" field.
+func AppliedSystemCommandsIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldAppliedSystemCommands))
+}
+
+// AppliedSystemCommandsNotNil applies the NotNil predicate on the "applied_system_commands" field.
+func AppliedSystemCommandsNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldAppliedSystemCommands))
+}
+
 // LastRunAtEQ applies the EQ predicate on the "last_run_at" field.
 func LastRunAtEQ(v time.Time) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldLastRunAt, v))

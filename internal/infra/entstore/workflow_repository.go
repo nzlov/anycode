@@ -112,7 +112,11 @@ func (r *WorkflowRepository) FindLatestNodeRun(ctx context.Context, runID workfl
 	if err != nil {
 		return workflow.NodeRun{}, fmt.Errorf("find latest node run: %w", err)
 	}
-	return toDomainNodeRun(row), nil
+	nodeRun, err := toDomainNodeRun(row)
+	if err != nil {
+		return workflow.NodeRun{}, err
+	}
+	return nodeRun, nil
 }
 
 func (r *WorkflowRepository) MarkNodeWaitingUser(ctx context.Context, runID workflow.RunID, nodeRunID workflow.NodeRunID) error {
@@ -288,13 +292,17 @@ func (r *WorkflowRepository) CompleteNodeAndAdvance(ctx context.Context, complet
 		}
 		return nil
 	}
+	result, err := resultToMap(completedNodeRun.Result)
+	if err != nil {
+		return fmt.Errorf("encode completed node result: %w", err)
+	}
 	tx, err := r.client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin workflow advance transaction: %w", err)
 	}
 	updateNode := tx.NodeRun.UpdateOneID(string(completedNodeRun.ID)).
 		SetStatus(string(completedNodeRun.Status)).
-		SetOutput(payloadOrEmpty(completedNodeRun.Output))
+		SetOutput(result)
 	if completedNodeRun.FinishedAt != nil {
 		updateNode.SetFinishedAt(*completedNodeRun.FinishedAt)
 	}
@@ -332,6 +340,10 @@ func (r *WorkflowRepository) MarkRunFailed(ctx context.Context, runID workflow.R
 		}
 		return markNodeRunFailed(ctx, r.client, nodeRunID, failure, finishedAt)
 	}
+	result, err := resultToMap(failureResult(failure))
+	if err != nil {
+		return fmt.Errorf("encode failed node result: %w", err)
+	}
 	tx, err := r.client.Tx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin workflow failure transaction: %w", err)
@@ -346,12 +358,7 @@ func (r *WorkflowRepository) MarkRunFailed(ctx context.Context, runID workflow.R
 	if err := tx.NodeRun.UpdateOneID(string(nodeRunID)).
 		SetStatus(string(workflow.NodeFailed)).
 		SetFinishedAt(finishedAt).
-		SetOutput(map[string]any{
-			"failure": map[string]any{
-				"code":    failure.Code,
-				"message": failure.Message,
-			},
-		}).
+		SetOutput(result).
 		Exec(ctx); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("mark node run failed: %w", err)
@@ -383,13 +390,17 @@ func createWorkflowRun(ctx context.Context, client *ent.Client, run workflow.Run
 }
 
 func createNodeRun(ctx context.Context, client *ent.Client, run workflow.NodeRun) error {
+	result, err := resultToMap(run.Result)
+	if err != nil {
+		return fmt.Errorf("encode node result: %w", err)
+	}
 	create := client.NodeRun.Create().
 		SetID(string(run.ID)).
 		SetWorkflowRunID(string(run.WorkflowRunID)).
 		SetNodeID(run.NodeID).
 		SetStatus(string(run.Status)).
 		SetAttempt(run.Attempt).
-		SetOutput(payloadOrEmpty(run.Output))
+		SetOutput(result)
 	if run.ProcessRunID != nil {
 		create.SetProcessRunID(string(*run.ProcessRunID))
 	}
@@ -420,9 +431,13 @@ func updateWorkflowRun(ctx context.Context, client *ent.Client, run workflow.Run
 }
 
 func updateNodeRunComplete(ctx context.Context, client *ent.Client, completedNodeRun workflow.NodeRun) error {
+	result, err := resultToMap(completedNodeRun.Result)
+	if err != nil {
+		return fmt.Errorf("encode completed node result: %w", err)
+	}
 	updateNode := client.NodeRun.UpdateOneID(string(completedNodeRun.ID)).
 		SetStatus(string(completedNodeRun.Status)).
-		SetOutput(payloadOrEmpty(completedNodeRun.Output))
+		SetOutput(result)
 	if completedNodeRun.FinishedAt != nil {
 		updateNode.SetFinishedAt(*completedNodeRun.FinishedAt)
 	}
@@ -443,15 +458,14 @@ func markWorkflowRunFailed(ctx context.Context, client *ent.Client, runID workfl
 }
 
 func markNodeRunFailed(ctx context.Context, client *ent.Client, nodeRunID workflow.NodeRunID, failure workflow.NodeFailure, finishedAt time.Time) error {
+	result, err := resultToMap(failureResult(failure))
+	if err != nil {
+		return fmt.Errorf("encode failed node result: %w", err)
+	}
 	if err := client.NodeRun.UpdateOneID(string(nodeRunID)).
 		SetStatus(string(workflow.NodeFailed)).
 		SetFinishedAt(finishedAt).
-		SetOutput(map[string]any{
-			"failure": map[string]any{
-				"code":    failure.Code,
-				"message": failure.Message,
-			},
-		}).
+		SetOutput(result).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("mark node run failed: %w", err)
 	}
@@ -530,11 +544,15 @@ func toDomainWorkflowRun(row *ent.WorkflowRun) workflow.Run {
 	}
 }
 
-func toDomainNodeRun(row *ent.NodeRun) workflow.NodeRun {
+func toDomainNodeRun(row *ent.NodeRun) (workflow.NodeRun, error) {
 	var processRunID *workflow.ProcessRunID
 	if row.ProcessRunID != nil {
 		value := workflow.ProcessRunID(*row.ProcessRunID)
 		processRunID = &value
+	}
+	result, err := resultFromMap(row.Output)
+	if err != nil {
+		return workflow.NodeRun{}, fmt.Errorf("decode node run result: %w", err)
 	}
 	return workflow.NodeRun{
 		ID:            workflow.NodeRunID(row.ID),
@@ -545,8 +563,8 @@ func toDomainNodeRun(row *ent.NodeRun) workflow.NodeRun {
 		ProcessRunID:  processRunID,
 		StartedAt:     row.StartedAt,
 		FinishedAt:    row.FinishedAt,
-		Output:        payloadOrEmpty(row.Output),
-	}
+		Result:        result,
+	}, nil
 }
 
 func latestNodeRunQuery(client *ent.Client, workflowRunID workflow.RunID) *ent.NodeRunQuery {
@@ -556,5 +574,51 @@ func latestNodeRunQuery(client *ent.Client, workflowRunID workflow.RunID) *ent.N
 }
 
 var _ = toDomainWorkflowRun
-var _ = toDomainNodeRun
 var _ = latestNodeRunQuery
+
+func resultToMap(result *workflow.Result) (map[string]any, error) {
+	if result == nil {
+		return map[string]any{}, nil
+	}
+	canonical := *result
+	canonical.Normalize()
+	data, err := json.Marshal(canonical)
+	if err != nil {
+		return nil, err
+	}
+	var output map[string]any
+	if err := json.Unmarshal(data, &output); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+func resultFromMap(output map[string]any) (*workflow.Result, error) {
+	if len(output) == 0 {
+		return nil, nil
+	}
+	data, err := json.Marshal(output)
+	if err != nil {
+		return nil, err
+	}
+	var result workflow.Result
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	result.Normalize()
+	if err := result.Validate(); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func failureResult(failure workflow.NodeFailure) *workflow.Result {
+	return &workflow.Result{
+		Version: workflow.ResultVersion,
+		Outcome: workflow.ResultFailure,
+		Summary: failure.Message,
+		Data: map[string]any{
+			"failure": map[string]any{"code": failure.Code, "message": failure.Message},
+		},
+	}
+}

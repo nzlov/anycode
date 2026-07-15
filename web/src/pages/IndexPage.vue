@@ -283,7 +283,7 @@
       <q-card class="forward-approval-dialog app-content-dialog">
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
-            <q-tab name="output" icon="smart_toy" label="模型输出" />
+            <q-tab name="output" icon="fact_check" label="审核结果" />
             <q-tab name="diff" icon="difference" label="Diff" />
           </q-tabs>
           <q-btn v-close-popup flat round dense icon="close" aria-label="关闭人工审核" />
@@ -291,22 +291,10 @@
         <q-separator />
         <q-tab-panels v-model="approvalTab" animated class="forward-approval-dialog__panels">
           <q-tab-panel name="output" class="forward-approval-dialog__panel">
-            <q-banner
-              v-if="approvalOutputError"
-              dense
-              rounded
-              class="state-banner bg-negative text-white"
-            >
-              {{ approvalOutputError }}
-            </q-banner>
-            <div v-else-if="approvalMessages.length === 0" class="text-muted">暂无模型输出</div>
-            <div v-else class="forward-approval-output">
-              <SessionEventMessage
-                v-for="message in approvalMessages"
-                :key="message.id"
-                :event="message"
-              />
-            </div>
+            <WorkflowResultReview
+              :phase="approvalPending?.phase ?? null"
+              :result="approvalPending?.result ?? null"
+            />
           </q-tab-panel>
           <q-tab-panel name="diff" class="forward-approval-dialog__panel">
             <SessionDiffPreview
@@ -322,7 +310,7 @@
         <q-separator />
         <WorkflowApprovalPanel
           v-if="approvalDialog"
-          :context-available="Boolean(approvalContext)"
+          :context-available="Boolean(approvalContext) && isPendingApprovalReviewable(approvalPending)"
           :submitting="approvalSubmitting"
           @submit="submitApproval"
         />
@@ -369,7 +357,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import SessionDiffPreview from '@/components/SessionDiffPreview.vue';
-import SessionEventMessage from '@/components/SessionEventMessage.vue';
+import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
@@ -392,8 +380,6 @@ import {
   createOverviewDiffSummaryController,
 } from '@/services/overviewDiffSummary';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
-import { getSessionTranscriptPage, type TranscriptItem } from '@/services/sessionTimeline';
-import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
 import {
   closeSession,
@@ -406,11 +392,13 @@ import {
   updateSessionPriority,
   type QuestionAnswerInput,
   type QuestionBatch,
+  type PendingApproval,
   type SessionCard,
   type SessionMode,
   type SessionPriority,
   type SessionStatus,
 } from '@/services/sessions';
+import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 
 const route = useRoute();
 const router = useRouter();
@@ -468,8 +456,8 @@ const approvalLoading = ref(false);
 const approvalSubmitting = ref(false);
 const approvalSessionId = ref('');
 const approvalContext = ref<ApprovalContext | null>(null);
-const approvalMessages = ref<TranscriptItem[]>([]);
-const approvalOutputError = ref('');
+const approvalPending = ref<PendingApproval | null>(null);
+let approvalContextGeneration = 0;
 const approvalDiffs = ref<FileDiff[]>([]);
 const approvalDiffAvailable = ref(false);
 const approvalDiffTotal = ref(0);
@@ -863,39 +851,40 @@ async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
 }
 
 async function openApprovalDialog(card: SessionCard) {
-  approvalSessionId.value = card.id;
+  const sessionId = card.id;
+  const requestGeneration = ++approvalContextGeneration;
+  approvalSessionId.value = sessionId;
   approvalLoading.value = true;
   approvalTab.value = 'output';
   approvalContext.value = card.pendingApproval
     ? { workflowRunId: card.pendingApproval.workflowRunId, nodeId: card.pendingApproval.nodeId }
     : null;
-  approvalMessages.value = [];
-  approvalOutputError.value = '';
+  approvalPending.value = card.pendingApproval ?? null;
   approvalDiffs.value = [];
   approvalDiffAvailable.value = false;
   approvalDiffTotal.value = 0;
   approvalDiffError.value = '';
+  approvalDialog.value = true;
   try {
-    const [timelineResult, diffResult] = await Promise.allSettled([
-      getSessionTranscriptPage(card.id, '', 10, 'assistant'),
-      getSessionAllDiff({ sessionId: card.id, mode: 'all', page: 1, pageSize: 20 }),
-    ]);
-    if (timelineResult.status === 'fulfilled') {
-      approvalMessages.value = reduceTranscriptEvents(timelineResult.value.items);
-    } else {
-      approvalOutputError.value = '模型输出加载失败，请稍后刷新重试';
-    }
-    if (diffResult.status === 'fulfilled') {
-      approvalDiffAvailable.value = diffResult.value.available;
-      approvalDiffs.value = diffResult.value.allDiff;
-      approvalDiffTotal.value = diffResult.value.pageInfo.total;
-    } else {
+    try {
+      const diff = await getSessionAllDiff({ sessionId, mode: 'all', page: 1, pageSize: 20 });
+      if (!isCurrentApprovalContext(requestGeneration, sessionId)) return;
+      approvalDiffAvailable.value = diff.available;
+      approvalDiffs.value = diff.allDiff;
+      approvalDiffTotal.value = diff.pageInfo.total;
+    } catch {
+      if (!isCurrentApprovalContext(requestGeneration, sessionId)) return;
       approvalDiffError.value = 'Diff 加载失败，请稍后刷新重试';
     }
-    approvalDialog.value = true;
   } finally {
-    approvalLoading.value = false;
+    if (isCurrentApprovalContext(requestGeneration, sessionId)) {
+      approvalLoading.value = false;
+    }
   }
+}
+
+function isCurrentApprovalContext(requestGeneration: number, sessionId: string) {
+  return approvalContextGeneration === requestGeneration && approvalSessionId.value === sessionId;
 }
 
 function openDiffDialog(card: SessionCard) {
@@ -911,16 +900,31 @@ function handleDiffDialogClosed() {
 }
 
 async function submitApproval(approved: boolean, comment: string) {
-  if (!approvalContext.value || !approvalSessionId.value) return;
+  if (approvalSubmitting.value) return;
+  if (
+    !approvalContext.value ||
+    !approvalSessionId.value ||
+    !isPendingApprovalReviewable(approvalPending.value)
+  ) return;
+  const requestGeneration = approvalContextGeneration;
+  const sessionId = approvalSessionId.value;
+  const workflowRunId = approvalContext.value.workflowRunId;
+  const nodeId = approvalContext.value.nodeId;
   approvalSubmitting.value = true;
   try {
     await submitWorkflowApproval({
-      workflowRunId: approvalContext.value.workflowRunId,
-      nodeId: approvalContext.value.nodeId,
+      workflowRunId,
+      nodeId,
       approved,
       comment,
     });
-    approvalDialog.value = false;
+    if (
+      isCurrentApprovalContext(requestGeneration, sessionId) &&
+      approvalContext.value?.workflowRunId === workflowRunId &&
+      approvalContext.value?.nodeId === nodeId
+    ) {
+      approvalDialog.value = false;
+    }
     await loadOverviewSessions();
   } finally {
     approvalSubmitting.value = false;

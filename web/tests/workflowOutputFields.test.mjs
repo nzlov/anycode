@@ -4,18 +4,18 @@ import { test } from 'node:test';
 
 import { completeOutputFields, systemOutputFields } from '../src/services/workflowOutputFields.js';
 
-test('removes stale system approval output when approval is turned off', () => {
+test('keeps workflow approval outside node output fields', () => {
   const withApproval = completeOutputFields(
     [{ key: 'status', description: '节点执行结果', valueType: 'string' }],
-    systemOutputFields('codex', true, false),
+    systemOutputFields('codex', false),
   );
 
   assert.deepEqual(
     withApproval.map((field) => field.key),
-    ['status', 'approval.approved'],
+    ['status'],
   );
 
-  const withoutApproval = completeOutputFields(withApproval, systemOutputFields('codex', false, false));
+  const withoutApproval = completeOutputFields(withApproval, systemOutputFields('codex', false));
 
   assert.deepEqual(withoutApproval, [{ key: 'status', description: '节点执行结果', valueType: 'string' }]);
 });
@@ -26,12 +26,11 @@ test('preserves custom fields while replacing active system fields', () => {
       { key: 'result', description: '自定义结果', valueType: 'string' },
       { key: 'approval.approved', description: 'old label', valueType: 'string' },
     ],
-    systemOutputFields('codex', true, false),
+    systemOutputFields('codex', false),
   );
 
   assert.deepEqual(fields, [
     { key: 'result', description: '自定义结果', valueType: 'string' },
-    { key: 'approval.approved', description: '人工审批是否通过', valueType: 'boolean' },
   ]);
 });
 

@@ -170,6 +170,8 @@ func mapPendingApproval(dto *sessionapp.PendingApprovalDTO) *model.PendingApprov
 		NodeID:           dto.NodeID,
 		NodeRunID:        dto.NodeRunID,
 		CurrentNodeTitle: dto.CurrentNodeTitle,
+		Phase:            dto.Phase,
+		Result:           dto.Result,
 	}
 }
 

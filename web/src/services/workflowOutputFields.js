@@ -2,15 +2,8 @@ export const workflowValueTypeOptions = ['string', 'number', 'boolean', 'object'
 
 const systemOutputFieldKeys = new Set(['approval.approved', 'merge.status', 'merge.failureCode', 'merge.failureReason']);
 
-export function systemOutputFields(type, approvalBeforeRun, hasMerge) {
+export function systemOutputFields(type, hasMerge) {
   const fields = [];
-  if (type === 'approval' || approvalBeforeRun) {
-    fields.push({
-      key: 'approval.approved',
-      description: '人工审批是否通过',
-      valueType: 'boolean',
-    });
-  }
   if (type === 'merge' || hasMerge) {
     fields.push(
       {

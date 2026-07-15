@@ -72,7 +72,7 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 		Attempt:       1,
 		ProcessRunID:  &processRunID,
 		StartedAt:     &startedAt,
-		Output:        map[string]any{"ok": true},
+		Result:        &workflow.Result{Version: workflow.ResultVersion, Outcome: workflow.ResultSuccess, Summary: "completed", Data: map[string]any{"ok": true}},
 	}
 	if err := repo.SaveNodeRun(ctx, nodeRun); err != nil {
 		t.Fatalf("save node run: %v", err)
@@ -141,7 +141,8 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	if persistedNodeRun.WorkflowRunID != string(run.ID) || persistedNodeRun.ProcessRunID == nil || *persistedNodeRun.ProcessRunID != string(processRunID) {
 		t.Fatalf("node run mismatch: %#v", persistedNodeRun)
 	}
-	if persistedNodeRun.Output["ok"] != true {
+	data, ok := persistedNodeRun.Output["data"].(map[string]any)
+	if !ok || data["ok"] != true {
 		t.Fatalf("node run output mismatch: %#v", persistedNodeRun.Output)
 	}
 }

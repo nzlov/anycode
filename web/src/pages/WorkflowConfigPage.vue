@@ -292,10 +292,10 @@ const mergeStrategy = ref('merge');
 const selectedEdgeIndex = ref<number | null>(null);
 const edgePriority = ref(0);
 const conditionMode = ref<'always' | 'field' | 'expr'>('always');
-const conditionField = ref('results.status');
+const conditionField = ref('results.outcome');
 const conditionOp = ref('eq');
 const conditionValue = ref('');
-const conditionExpr = ref('results.status == "passed"');
+const conditionExpr = ref('results.outcome == "success"');
 const flowNodes = ref<ReturnType<typeof buildFlowNode>[]>([]);
 const flowEdges = ref<ReturnType<typeof buildFlowEdge>[]>([]);
 const graph = reactive<WorkflowGraph>(defaultGraph());
@@ -332,19 +332,25 @@ const conditionFieldOptions = computed(() => {
   const fields = (source?.outputFields ?? [])
     .filter((field) => field.key.trim())
     .map((field) => ({
-      label: `results.${field.key} · ${field.description || field.valueType || 'output'}`,
-      value: `results.${field.key}`,
+      label: `results.data.${field.key} · ${field.description || field.valueType || 'output'}`,
+      value: `results.data.${field.key}`,
     }));
-  return [{ label: 'last.status', value: 'last.status' }, ...fields];
+  const approval = source && (source.type === 'approval' || source.approval.beforeRun || source.approval.afterRun)
+    ? [{ label: 'approval.approved · 人工审批结果', value: 'approval.approved' }]
+    : [];
+  return [
+    { label: 'results.outcome', value: 'results.outcome' },
+    { label: 'last.status', value: 'last.status' },
+    ...fields,
+    ...approval,
+  ];
 });
 const systemOutputFieldKeys = computed(() => {
-  const approvalEnabled = requiresApproval.value || requiresForwardApproval.value || nodeType.value === 'approval';
-  return new Set(systemOutputFields(nodeType.value, approvalEnabled, nodeType.value === 'merge').map((field) => field.key));
+  return new Set(systemOutputFields(nodeType.value, nodeType.value === 'merge').map((field) => field.key));
 });
 
-watch([nodeType, requiresApproval, requiresForwardApproval], () => {
-  const approvalEnabled = requiresApproval.value || requiresForwardApproval.value || nodeType.value === 'approval';
-  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalEnabled, nodeType.value === 'merge'));
+watch(nodeType, () => {
+  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, nodeType.value === 'merge'));
 });
 
 onMounted(async () => {
@@ -435,7 +441,7 @@ function applyNodeEdit() {
   const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
   const approvalAfterRun = requiresForwardApproval.value && nodeType.value !== 'approval' && nodeType.value !== 'close';
   const merge = nodeType.value === 'merge' ? { strategy: mergeStrategy.value } : null;
-  node.outputFields = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, approvalBeforeRun || approvalAfterRun, Boolean(merge)));
+  node.outputFields = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, Boolean(merge)));
   node.retry.maxAttempts = Math.max(0, Number(retry.value) || 0);
   node.approval.beforeRun = approvalBeforeRun;
   node.approval.afterRun = approvalAfterRun;
@@ -627,7 +633,7 @@ function loadSelectedEdge() {
   conditionField.value = edge.condition.field || conditionFieldOptions.value[0]?.value || 'last.status';
   conditionOp.value = edge.condition.op || 'eq';
   conditionValue.value = conditionValueToInput(edge.condition.value);
-  conditionExpr.value = edge.condition.expr || 'results.status == "passed"';
+  conditionExpr.value = edge.condition.expr || 'results.outcome == "success"';
 }
 
 function applyEdgeEdit() {
@@ -699,7 +705,7 @@ function defaultNodePrompt(type: string) {
 
 function defaultOutputFields(type: string): WorkflowOutputField[] {
   if (type === 'close') return [];
-  const fields = systemOutputFields(type, type === 'approval', type === 'merge');
+  const fields = systemOutputFields(type, type === 'merge');
   if (fields.length > 0) return fields;
   return [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }];
 }
@@ -721,7 +727,7 @@ function normalizeNode(node: Partial<WorkflowNode> & { id: string }): WorkflowNo
     title: node.title || node.id,
     prompt: node.prompt || '',
     position: normalizePosition(node.position),
-    outputFields: completeOutputFields(node.outputFields ?? [], systemOutputFields(type, approvalBeforeRun, type === 'merge' || Boolean(merge))),
+    outputFields: completeOutputFields(node.outputFields ?? [], systemOutputFields(type, type === 'merge' || Boolean(merge))),
     approval: {
       beforeRun: approvalBeforeRun,
       afterRun: Boolean(node.approval?.afterRun),

@@ -89,6 +89,8 @@ const (
 	FieldQueueResumeOfProcessRunID = "queue_resume_of_process_run_id"
 	// FieldQueueAnswerBatchID holds the string denoting the queue_answer_batch_id field in the database.
 	FieldQueueAnswerBatchID = "queue_answer_batch_id"
+	// FieldAppliedSystemCommands holds the string denoting the applied_system_commands field in the database.
+	FieldAppliedSystemCommands = "applied_system_commands"
 	// FieldLastRunAt holds the string denoting the last_run_at field in the database.
 	FieldLastRunAt = "last_run_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -142,6 +144,7 @@ var Columns = []string{
 	FieldQueueResumeCodexSessionID,
 	FieldQueueResumeOfProcessRunID,
 	FieldQueueAnswerBatchID,
+	FieldAppliedSystemCommands,
 	FieldLastRunAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,

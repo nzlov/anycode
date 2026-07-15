@@ -529,6 +529,12 @@ func (_c *SessionCreate) SetNillableQueueAnswerBatchID(v *string) *SessionCreate
 	return _c
 }
 
+// SetAppliedSystemCommands sets the "applied_system_commands" field.
+func (_c *SessionCreate) SetAppliedSystemCommands(v map[string]bool) *SessionCreate {
+	_c.mutation.SetAppliedSystemCommands(v)
+	return _c
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (_c *SessionCreate) SetLastRunAt(v time.Time) *SessionCreate {
 	_c.mutation.SetLastRunAt(v)
@@ -1036,6 +1042,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.QueueAnswerBatchID(); ok {
 		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
 		_node.QueueAnswerBatchID = value
+	}
+	if value, ok := _c.mutation.AppliedSystemCommands(); ok {
+		_spec.SetField(entsession.FieldAppliedSystemCommands, field.TypeJSON, value)
+		_node.AppliedSystemCommands = value
 	}
 	if value, ok := _c.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)

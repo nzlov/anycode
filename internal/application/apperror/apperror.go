@@ -26,7 +26,7 @@ const (
 	CodeAttachmentFailed      = "attachment_failed"
 	CodeAnswerUserCancelled   = "answer_user_cancelled"
 	CodeWorkflowBlocked       = "workflow_blocked"
-	CodeWorkflowJSONRequired  = "workflow_json_required"
+	CodeWorkflowResultInvalid = "workflow_result_invalid"
 	CodeAuthFailed            = "auth_failed"
 	CodePermissionDenied      = "permission_denied"
 	CodeDiffUnavailable       = "diff_unavailable"
