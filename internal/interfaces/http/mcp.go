@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -153,6 +154,7 @@ func (h mcpHandler) callAnswerUser(ctx context.Context, sessionID string, argume
 		Questions: questions,
 	})
 	if err != nil {
+		logMCPToolFailure("request_user_answer", sessionID, err)
 		return nil, "", false, err
 	}
 	directDelivery := batch.Status == questiondomain.BatchAnswered && batch.DeliveryStatus == questiondomain.DeliveryInflight
@@ -181,6 +183,14 @@ func (h mcpHandler) callAnswerUser(ctx context.Context, sessionID string, argume
 		"content": []map[string]any{{"type": "text", "text": string(payload)}},
 		"isError": false,
 	}, batch.ID, directDelivery, nil
+}
+
+func logMCPToolFailure(stage string, sessionID string, err error) {
+	appErr, ok := apperror.From(err)
+	if !ok {
+		appErr = apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "request failed")
+	}
+	log.Printf("mcp tool failed: pid=%d session_id=%s stage=%s code=%s category=%s retryable=%t", os.Getpid(), sessionID, stage, appErr.Code, appErr.Category, appErr.Retryable)
 }
 
 func (h mcpHandler) acknowledgeDelivery(w http.ResponseWriter, r *http.Request, batchID string) {

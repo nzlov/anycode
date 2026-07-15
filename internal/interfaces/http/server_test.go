@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -686,6 +687,33 @@ func TestMCPAnswerUserWritesStructuredApplicationError(t *testing.T) {
 	}
 }
 
+func TestMCPAnswerUserLogsSafeRequestFailure(t *testing.T) {
+	sessions := &fakeMCPSessionUseCase{requestErr: errors.New("read /private/project token=secret question=private")}
+	handler := newMCPHandler(sessions)
+	var logs bytes.Buffer
+	previousOutput := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousOutput) })
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"answer_user","arguments":{"questions":[{"title":"private question"}]}}}`
+	req := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1", strings.NewReader(body))
+	req.SetPathValue("sessionID", "session-1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	got := logs.String()
+	for _, want := range []string{"mcp tool failed", "session_id=session-1", "stage=request_user_answer", "code=internal_error", "category=infra_error"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("safe MCP diagnostic %q missing %q", got, want)
+		}
+	}
+	for _, secret := range []string{"/private/project", "token=secret", "private question"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("safe MCP diagnostic leaked %q: %s", secret, got)
+		}
+	}
+}
+
 func TestMCPApplicationErrorPreservesFields(t *testing.T) {
 	err := apperror.Wrap(errors.New("read /home/nzlov/workspaces/github/project authorization=Bearer secret"), apperror.CodeInternal, apperror.CategoryInfraError, "").
 		WithDetails(map[string]any{
@@ -836,6 +864,7 @@ type fakeQuestionUseCase struct {
 type fakeMCPSessionUseCase struct {
 	sessionapp.UseCase
 	requestInput sessionapp.RequestUserAnswerInput
+	requestErr   error
 	ackInput     sessionapp.AcknowledgeUserAnswerDeliveryInput
 	failInput    sessionapp.FailUserAnswerDeliveryInput
 }
@@ -850,6 +879,9 @@ func (w *failingResponseWriter) Write([]byte) (int, error) { return 0, errors.Ne
 
 func (u *fakeMCPSessionUseCase) RequestUserAnswer(_ context.Context, input sessionapp.RequestUserAnswerInput) (questionapp.BatchDTO, error) {
 	u.requestInput = input
+	if u.requestErr != nil {
+		return questionapp.BatchDTO{}, u.requestErr
+	}
 	delivery := questiondomain.ProcessRunID("process-1")
 	return questionapp.BatchDTO{ID: "batch-1", SessionID: questiondomain.SessionID(input.SessionID), Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryInflight, DeliveryProcessRunID: &delivery, Questions: input.Questions}, nil
 }

@@ -1283,7 +1283,7 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 
-	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp.sock", "secret")).Start(context.Background(), process.CodexStartInput{
+	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp-2000.sock", "secret")).Start(context.Background(), process.CodexStartInput{
 		ProcessRunID:   "process-run-mcp-profile",
 		SessionID:      "session-1",
 		Workdir:        dir,
@@ -1296,13 +1296,14 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 	waitForFile(t, argsFile)
 	args := strings.TrimSpace(readFile(t, argsFile))
 	for _, want := range []string{
+		`-c mcp_servers.anycode.args=["mcp-stdio","--session-id","session-1","--socket","/tmp/anycode-1000/mcp-2000.sock"]`,
 		`-c mcp_servers.anycode.tool_timeout_sec=86400`,
 		`-c features.network_proxy.enabled=true`,
 		`-c default_permissions="anycode-mcp"`,
 		`-c permissions.anycode-mcp.extends=":workspace"`,
 		`-c permissions.anycode-mcp.network.enabled=true`,
 		`-c permissions.anycode-mcp.network.mode="limited"`,
-		`-c permissions.anycode-mcp.network.unix_sockets={"/tmp/anycode-1000/mcp.sock"="allow"}`,
+		`-c permissions.anycode-mcp.network.unix_sockets={"/tmp/anycode-1000/mcp-2000.sock"="allow"}`,
 	} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("args %q missing %q", args, want)
@@ -1321,7 +1322,7 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 
-	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp.sock", "secret")).Resume(context.Background(), process.CodexResumeInput{
+	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp-2000.sock", "secret")).Resume(context.Background(), process.CodexResumeInput{
 		ProcessRunID:   "process-run-mcp-profile-resume",
 		SessionID:      "session-1",
 		CodexSessionID: "codex-session-1",
@@ -1335,13 +1336,14 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 	waitForFile(t, argsFile)
 	args := strings.TrimSpace(readFile(t, argsFile))
 	for _, want := range []string{
+		`-c mcp_servers.anycode.args=["mcp-stdio","--session-id","session-1","--socket","/tmp/anycode-1000/mcp-2000.sock"]`,
 		`-c mcp_servers.anycode.tool_timeout_sec=86400`,
 		`-c features.network_proxy.enabled=true`,
 		`-c default_permissions="anycode-mcp"`,
 		`-c permissions.anycode-mcp.extends=":workspace"`,
 		`-c permissions.anycode-mcp.network.enabled=true`,
 		`-c permissions.anycode-mcp.network.mode="limited"`,
-		`-c permissions.anycode-mcp.network.unix_sockets={"/tmp/anycode-1000/mcp.sock"="allow"}`,
+		`-c permissions.anycode-mcp.network.unix_sockets={"/tmp/anycode-1000/mcp-2000.sock"="allow"}`,
 	} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("args %q missing %q", args, want)

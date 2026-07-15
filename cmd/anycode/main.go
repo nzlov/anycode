@@ -75,7 +75,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("resolve executable: %s", err.Error())
 	}
-	mcpSocket := localMCPSocketPath()
+	mcpSocket := localMCPSocketPath(os.Getuid(), os.Getpid())
 	useCases, err := newGraphQLUseCases(store, cfg, executable, mcpSocket)
 	if err != nil {
 		log.Fatalf("wire graphql usecases: %s", err.Error())
@@ -272,13 +272,19 @@ func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath s
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		return nil, err
 	}
-	_ = os.Remove(socketPath)
+	if err := os.Chmod(filepath.Dir(socketPath), 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		return nil, err
 	}
 	if err := os.Chmod(socketPath, 0o600); err != nil {
-		listener.Close()
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
 		return nil, err
 	}
 	mux := http.NewServeMux()
@@ -291,6 +297,7 @@ func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath s
 			log.Printf("mcp unix server stopped: %s", err.Error())
 		}
 	}()
+	log.Printf("mcp unix server listening: pid=%d socket=%s", os.Getpid(), filepath.Base(socketPath))
 	return func() {
 		_ = server.Close()
 		_ = listener.Close()
@@ -340,6 +347,6 @@ func localHTTPBaseURL(addr string) string {
 	return "http://" + addr
 }
 
-func localMCPSocketPath() string {
-	return filepath.Join(os.TempDir(), fmt.Sprintf("anycode-%d", os.Getuid()), "mcp.sock")
+func localMCPSocketPath(uid int, pid int) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("anycode-%d", uid), fmt.Sprintf("mcp-%d.sock", pid))
 }
