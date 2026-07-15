@@ -34,8 +34,6 @@ function readWorkspaceState(): DiffWorkspaceState {
   return {
     mode: normalizeMode(stringQuery(route.query.mode)),
     filePath: stringQuery(route.query.filePath),
-    page: positiveIntQuery(route.query.page, 1),
-    pageSize: positiveIntQuery(route.query.pageSize, 20),
   };
 }
 
@@ -44,22 +42,12 @@ function stringQuery(value: unknown) {
   return typeof value === 'string' ? value : '';
 }
 
-function positiveIntQuery(value: unknown, fallback: number) {
-  const parsed = Number.parseInt(stringQuery(value), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function normalizeMode(mode: string): DiffMode {
   return mode === 'all' ? 'all' : 'single';
 }
 
 function sameWorkspaceState(left: DiffWorkspaceState, right: DiffWorkspaceState) {
-  return (
-    left.mode === right.mode &&
-    left.filePath === right.filePath &&
-    left.page === right.page &&
-    left.pageSize === right.pageSize
-  );
+  return left.mode === right.mode && left.filePath === right.filePath;
 }
 
 function syncRouteQuery(state: DiffWorkspaceState) {
@@ -71,8 +59,8 @@ function syncRouteQuery(state: DiffWorkspaceState) {
     branch: target.value.kind === 'branch' ? target.value.branch : undefined,
     mode: state.mode,
     filePath: state.mode === 'single' && state.filePath ? state.filePath : undefined,
-    page: String(state.page),
-    pageSize: String(state.pageSize),
+    page: undefined,
+    pageSize: undefined,
   };
   if (JSON.stringify(route.query) !== JSON.stringify(nextQuery)) {
     void router.replace({ query: nextQuery });
@@ -94,8 +82,6 @@ watch(
     route.query.branch,
     route.query.mode,
     route.query.filePath,
-    route.query.page,
-    route.query.pageSize,
   ],
   () => {
     const next = readWorkspaceState();
@@ -112,6 +98,11 @@ watch(
 
 .state-banner {
   margin-bottom: 16px;
+}
+
+.diff-page :deep(.diff-workspace) {
+  height: calc(100dvh - 112px);
+  min-height: 360px;
 }
 
 @media (min-width: 1024px) {

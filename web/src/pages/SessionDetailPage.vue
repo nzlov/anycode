@@ -359,7 +359,11 @@
                 no-caps
                 :to="allDiffRoute"
               />
-              <DiffWorkspace v-model="detailDiffWorkspaceState" :target="detailDiffTarget" />
+              <DiffWorkspace
+                v-model="detailDiffWorkspaceState"
+                :target="detailDiffTarget"
+                :show-file-navigation="false"
+              />
             </q-tab-panel>
 
             <q-tab-panel name="artifacts">
@@ -502,8 +506,6 @@ const detailDiffTarget: DiffWorkspaceTarget = { kind: 'session', sessionId };
 const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
   mode: 'all',
   filePath: '',
-  page: 1,
-  pageSize: 20,
 });
 let mounted = false;
 let preservingOlderEventScroll = false;
@@ -1089,6 +1091,19 @@ async function scrollEventsToBottom() {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
+
+.detail-diff-panel {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-diff-panel :deep(.diff-workspace) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .detail-composer {

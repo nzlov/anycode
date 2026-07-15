@@ -4,9 +4,9 @@ import { test } from 'node:test';
 import {
   DEFAULT_DIFF_CONTEXT,
   DIFF_EXPAND_STEP,
-  collapseCurrentDiffPage,
+  collapseDiffFiles,
   expandDiffContext,
-  expandCurrentDiffPage,
+  expandDiffFiles,
   initialDiffCollapseState,
   initialDiffContext,
   isDiffFileCollapsed,
@@ -40,16 +40,16 @@ test('diff files start expanded and single-file mode never collapses content', (
   assert.deepEqual(toggleDiffFileCollapsed(state, 'single', 'a.txt'), state);
 });
 
-test('diff files toggle independently and current-page controls only affect loaded paths', () => {
+test('diff files toggle independently and bulk controls affect all loaded paths', () => {
   let state = initialDiffCollapseState('session:one');
   state = toggleDiffFileCollapsed(state, 'all', 'a.txt');
   assert.equal(isDiffFileCollapsed(state, 'all', 'a.txt'), true);
   assert.equal(isDiffFileCollapsed(state, 'all', 'b.txt'), false);
 
-  state = collapseCurrentDiffPage(state, 'all', ['b.txt', 'c.txt']);
+  state = collapseDiffFiles(state, 'all', ['b.txt', 'c.txt']);
   assert.deepEqual(state.collapsedPaths, ['a.txt', 'b.txt', 'c.txt']);
 
-  state = expandCurrentDiffPage(state, 'all', ['b.txt', 'c.txt']);
+  state = expandDiffFiles(state, 'all', ['b.txt', 'c.txt']);
   assert.deepEqual(state.collapsedPaths, ['a.txt']);
 
   state = toggleDiffFileCollapsed(state, 'all', 'a.txt');

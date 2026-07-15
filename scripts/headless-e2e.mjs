@@ -782,7 +782,7 @@ async function runGitSession(projectId) {
 
   const diff = await sessionDiff(session.id, 'all');
   assert(diff.available === true, 'git session diff should be available');
-  assert(diff.files.items.some((file) => file.path === 'e2e-codex-output.txt'), 'git diff missing e2e-codex-output.txt');
+  assert(diff.files.some((file) => file.path === 'e2e-codex-output.txt'), 'git diff missing e2e-codex-output.txt');
   const outputDiff = diff.allDiff.find((fileDiff) => fileDiff.file.path === 'e2e-codex-output.txt');
   assert(outputDiff, 'allDiff missing e2e-codex-output.txt');
   const diffText = outputDiff.hunks.flatMap((hunk) => hunk.lines.map((line) => line.content)).join('\n');
@@ -1080,10 +1080,7 @@ async function sessionDiff(sessionId, mode) {
       sessionDiff(input: $input) {
         mode
         available
-        files {
-          items { path status additions deletions }
-          pageInfo { page pageSize total nextCursor }
-        }
+        files { path status additions deletions }
         allDiff {
           file { path status additions deletions }
           hunks {
@@ -1093,7 +1090,7 @@ async function sessionDiff(sessionId, mode) {
         }
       }
     }
-  `, { input: { sessionId, mode, page: 1, pageSize: 50 } })).sessionDiff;
+  `, { input: { sessionId, mode } })).sessionDiff;
 }
 
 async function assertSessionEventsDoNotContain(sessionId, text) {

@@ -25,8 +25,6 @@ type SessionDiffInput struct {
 	SessionID       session.ID
 	Mode            string
 	FilePath        string
-	Page            int
-	PageSize        int
 	IncludeFileDiff bool
 	IncludeAllDiff  bool
 	ContextBefore   int
@@ -38,8 +36,6 @@ type BranchDiffInput struct {
 	Branch          string
 	Mode            string
 	FilePath        string
-	Page            int
-	PageSize        int
 	IncludeFileDiff bool
 	IncludeAllDiff  bool
 	ContextBefore   int
@@ -68,7 +64,7 @@ type SessionDiffSummaryDTO struct {
 type SessionDiffDTO struct {
 	Mode      string
 	FilePath  string
-	Files     port.Page[gitdiff.DiffFile]
+	Files     []gitdiff.DiffFile
 	FileDiff  *gitdiff.FileDiff
 	AllDiff   []gitdiff.FileDiff
 	Available bool
@@ -121,11 +117,10 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 		return SessionDiffDTO{}, errors.New("diff port is required")
 	}
 	mode := normalizeMode(input.Mode)
-	page, pageSize := normalizePage(input.Page, input.PageSize)
 	dto := SessionDiffDTO{
 		Mode:      mode,
 		FilePath:  strings.TrimSpace(input.FilePath),
-		Files:     emptyPage(page, pageSize),
+		Files:     []gitdiff.DiffFile{},
 		Available: false,
 	}
 
@@ -152,7 +147,8 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 	if err != nil {
 		return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "list session diff files failed").WithRetryable(true)
 	}
-	dto = applyDiffFiles(dto, files)
+	dto.Files = files
+	dto.Available = true
 	if len(files) == 0 {
 		return dto, nil
 	}
@@ -164,8 +160,8 @@ func (s *Service) GetSessionDiff(ctx context.Context, input SessionDiffInput) (S
 		if !input.IncludeAllDiff {
 			return dto, nil
 		}
-		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
-		for _, file := range dto.Files.Items {
+		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files))
+		for _, file := range dto.Files {
 			fileDiff, err := s.diff.FileDiff(ctx, gitdiff.FileDiffInput{
 				DiffInput:     diffInput,
 				FilePath:      file.Path,
@@ -247,7 +243,7 @@ sendJobs:
 
 func (s *Service) getSessionDiffSummary(ctx context.Context, sessionID session.ID) SessionDiffSummaryDTO {
 	summary := SessionDiffSummaryDTO{SessionID: sessionID, State: SessionDiffSummaryError}
-	dto, err := s.GetSessionDiff(ctx, SessionDiffInput{SessionID: sessionID, Page: 1, PageSize: 1})
+	dto, err := s.GetSessionDiff(ctx, SessionDiffInput{SessionID: sessionID})
 	if err != nil {
 		return summary
 	}
@@ -255,12 +251,12 @@ func (s *Service) getSessionDiffSummary(ctx context.Context, sessionID session.I
 		summary.State = SessionDiffSummaryUnavailable
 		return summary
 	}
-	if dto.Files.Total == 0 {
+	if len(dto.Files) == 0 {
 		summary.State = SessionDiffSummaryClean
 		return summary
 	}
 	summary.State = SessionDiffSummaryChanged
-	summary.FilesChanged = dto.Files.Total
+	summary.FilesChanged = len(dto.Files)
 	return summary
 }
 
@@ -294,11 +290,10 @@ func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (Ses
 		return SessionDiffDTO{}, errors.New("diff port is required")
 	}
 	mode := normalizeMode(input.Mode)
-	page, pageSize := normalizePage(input.Page, input.PageSize)
 	dto := SessionDiffDTO{
 		Mode:      mode,
 		FilePath:  strings.TrimSpace(input.FilePath),
-		Files:     emptyPage(page, pageSize),
+		Files:     []gitdiff.DiffFile{},
 		Available: false,
 	}
 
@@ -329,7 +324,8 @@ func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (Ses
 		}
 	}
 
-	dto = applyDiffFiles(dto, files)
+	dto.Files = files
+	dto.Available = true
 	if len(files) == 0 {
 		return dto, nil
 	}
@@ -341,8 +337,8 @@ func (s *Service) GetBranchDiff(ctx context.Context, input BranchDiffInput) (Ses
 		if !input.IncludeAllDiff {
 			return dto, nil
 		}
-		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files.Items))
-		for _, file := range dto.Files.Items {
+		dto.AllDiff = make([]gitdiff.FileDiff, 0, len(dto.Files))
+		for _, file := range dto.Files {
 			fileDiff, err := s.branchFileDiff(ctx, sources[file.Path], input.ContextBefore, input.ContextAfter)
 			if err != nil {
 				return SessionDiffDTO{}, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "read branch file diff failed").WithDetails(map[string]any{"filePath": file.Path}).WithRetryable(true)
@@ -575,19 +571,6 @@ func (s *Service) GetCommitHistory(ctx context.Context, input CommitHistoryInput
 	return dto, nil
 }
 
-func applyDiffFiles(dto SessionDiffDTO, files []gitdiff.DiffFile) SessionDiffDTO {
-	pageItems := slicePage(files, dto.Files.Page, dto.Files.PageSize)
-	dto.Files = port.Page[gitdiff.DiffFile]{
-		Items:      pageItems,
-		Page:       dto.Files.Page,
-		PageSize:   dto.Files.PageSize,
-		Total:      len(files),
-		NextCursor: nextCursor(dto.Files.Page, dto.Files.PageSize, len(files)),
-	}
-	dto.Available = true
-	return dto
-}
-
 func normalizeMode(mode string) string {
 	switch strings.TrimSpace(mode) {
 	case modeAll:
@@ -608,10 +591,6 @@ func normalizePage(page int, pageSize int) (int, int) {
 		pageSize = maxPageSize
 	}
 	return page, pageSize
-}
-
-func emptyPage(page int, pageSize int) port.Page[gitdiff.DiffFile] {
-	return port.Page[gitdiff.DiffFile]{Items: []gitdiff.DiffFile{}, Page: page, PageSize: pageSize}
 }
 
 func emptyCommitPage(page int, pageSize int) port.Page[gitdiff.CommitRecord] {

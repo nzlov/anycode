@@ -453,7 +453,7 @@ type EventScope {
 type SessionDiff {
   mode: String!
   filePath: String!
-  files: DiffFilePage!
+  files: [DiffFile!]!
   fileDiff: FileDiff
   allDiff: [FileDiff!]!
   available: Boolean!
@@ -470,11 +470,6 @@ type SessionDiffSummary {
   sessionId: ID!
   state: SessionDiffSummaryState!
   filesChanged: Int!
-}
-
-type DiffFilePage {
-  items: [DiffFile!]!
-  pageInfo: PageInfo!
 }
 
 type DiffFile {
@@ -710,8 +705,6 @@ input SessionDiffInput {
   sessionId: ID!
   mode: String
   filePath: String
-  page: Int
-  pageSize: Int
   contextBefore: Int
   contextAfter: Int
 }
@@ -721,8 +714,6 @@ input BranchDiffInput {
   branch: String!
   mode: String
   filePath: String
-  page: Int
-  pageSize: Int
   contextBefore: Int
   contextAfter: Int
 }

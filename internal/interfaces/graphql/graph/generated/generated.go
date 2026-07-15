@@ -84,11 +84,6 @@ type ComplexityRoot struct {
 		Status    func(childComplexity int) int
 	}
 
-	DiffFilePage struct {
-		Items    func(childComplexity int) int
-		PageInfo func(childComplexity int) int
-	}
-
 	DiffHunk struct {
 		CanExpandAfter  func(childComplexity int) int
 		CanExpandBefore func(childComplexity int) int
@@ -839,19 +834,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.DiffFile.Status(childComplexity), true
-
-	case "DiffFilePage.items":
-		if e.ComplexityRoot.DiffFilePage.Items == nil {
-			break
-		}
-
-		return e.ComplexityRoot.DiffFilePage.Items(childComplexity), true
-	case "DiffFilePage.pageInfo":
-		if e.ComplexityRoot.DiffFilePage.PageInfo == nil {
-			break
-		}
-
-		return e.ComplexityRoot.DiffFilePage.PageInfo(childComplexity), true
 
 	case "DiffHunk.canExpandAfter":
 		if e.ComplexityRoot.DiffHunk.CanExpandAfter == nil {
@@ -3726,7 +3708,7 @@ type EventScope {
 type SessionDiff {
   mode: String!
   filePath: String!
-  files: DiffFilePage!
+  files: [DiffFile!]!
   fileDiff: FileDiff
   allDiff: [FileDiff!]!
   available: Boolean!
@@ -3743,11 +3725,6 @@ type SessionDiffSummary {
   sessionId: ID!
   state: SessionDiffSummaryState!
   filesChanged: Int!
-}
-
-type DiffFilePage {
-  items: [DiffFile!]!
-  pageInfo: PageInfo!
 }
 
 type DiffFile {
@@ -3983,8 +3960,6 @@ input SessionDiffInput {
   sessionId: ID!
   mode: String
   filePath: String
-  page: Int
-  pageSize: Int
   contextBefore: Int
   contextAfter: Int
 }
@@ -3994,8 +3969,6 @@ input BranchDiffInput {
   branch: String!
   mode: String
   filePath: String
-  page: Int
-  pageSize: Int
   contextBefore: Int
   contextAfter: Int
 }
@@ -5456,84 +5429,6 @@ func (ec *executionContext) fieldContext_DiffFile_deletions(_ context.Context, f
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _DiffFilePage_items(ctx context.Context, field graphql.CollectedField, obj *model.DiffFilePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_DiffFilePage_items,
-		func(ctx context.Context) (any, error) {
-			return obj.Items, nil
-		},
-		nil,
-		ec.marshalNDiffFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐDiffFileᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_DiffFilePage_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "DiffFilePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "path":
-				return ec.fieldContext_DiffFile_path(ctx, field)
-			case "status":
-				return ec.fieldContext_DiffFile_status(ctx, field)
-			case "additions":
-				return ec.fieldContext_DiffFile_additions(ctx, field)
-			case "deletions":
-				return ec.fieldContext_DiffFile_deletions(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type DiffFile", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _DiffFilePage_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.DiffFilePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_DiffFilePage_pageInfo,
-		func(ctx context.Context) (any, error) {
-			return obj.PageInfo, nil
-		},
-		nil,
-		ec.marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_DiffFilePage_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "DiffFilePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "page":
-				return ec.fieldContext_PageInfo_page(ctx, field)
-			case "pageSize":
-				return ec.fieldContext_PageInfo_pageSize(ctx, field)
-			case "total":
-				return ec.fieldContext_PageInfo_total(ctx, field)
-			case "nextCursor":
-				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
 		},
 	}
 	return fc, nil
@@ -12919,7 +12814,7 @@ func (ec *executionContext) _SessionDiff_files(ctx context.Context, field graphq
 			return obj.Files, nil
 		},
 		nil,
-		ec.marshalNDiffFilePage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐDiffFilePage,
+		ec.marshalNDiffFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐDiffFileᚄ,
 		true,
 		true,
 	)
@@ -12933,12 +12828,16 @@ func (ec *executionContext) fieldContext_SessionDiff_files(_ context.Context, fi
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "items":
-				return ec.fieldContext_DiffFilePage_items(ctx, field)
-			case "pageInfo":
-				return ec.fieldContext_DiffFilePage_pageInfo(ctx, field)
+			case "path":
+				return ec.fieldContext_DiffFile_path(ctx, field)
+			case "status":
+				return ec.fieldContext_DiffFile_status(ctx, field)
+			case "additions":
+				return ec.fieldContext_DiffFile_additions(ctx, field)
+			case "deletions":
+				return ec.fieldContext_DiffFile_deletions(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type DiffFilePage", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type DiffFile", field.Name)
 		},
 	}
 	return fc, nil
@@ -18850,7 +18749,7 @@ func (ec *executionContext) unmarshalInputBranchDiffInput(ctx context.Context, o
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "branch", "mode", "filePath", "page", "pageSize", "contextBefore", "contextAfter"}
+	fieldsInOrder := [...]string{"projectId", "branch", "mode", "filePath", "contextBefore", "contextAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -18885,20 +18784,6 @@ func (ec *executionContext) unmarshalInputBranchDiffInput(ctx context.Context, o
 				return it, err
 			}
 			it.FilePath = data
-		case "page":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Page = data
-		case "pageSize":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.PageSize = data
 		case "contextBefore":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextBefore"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -19617,7 +19502,7 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "mode", "filePath", "page", "pageSize", "contextBefore", "contextAfter"}
+	fieldsInOrder := [...]string{"sessionId", "mode", "filePath", "contextBefore", "contextAfter"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -19645,20 +19530,6 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 				return it, err
 			}
 			it.FilePath = data
-		case "page":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Page = data
-		case "pageSize":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.PageSize = data
 		case "contextBefore":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contextBefore"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -20704,50 +20575,6 @@ func (ec *executionContext) _DiffFile(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "deletions":
 			out.Values[i] = ec._DiffFile_deletions(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var diffFilePageImplementors = []string{"DiffFilePage"}
-
-func (ec *executionContext) _DiffFilePage(ctx context.Context, sel ast.SelectionSet, obj *model.DiffFilePage) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, diffFilePageImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("DiffFilePage")
-		case "items":
-			out.Values[i] = ec._DiffFilePage_items(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "pageInfo":
-			out.Values[i] = ec._DiffFilePage_pageInfo(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -25310,16 +25137,6 @@ func (ec *executionContext) marshalNDiffFile2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._DiffFile(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNDiffFilePage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐDiffFilePage(ctx context.Context, sel ast.SelectionSet, v *model.DiffFilePage) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._DiffFilePage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNDiffHunk2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐDiffHunkᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.DiffHunk) graphql.Marshaler {

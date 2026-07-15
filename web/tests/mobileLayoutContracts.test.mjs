@@ -20,6 +20,7 @@ const indexSource = readSource('../src/pages/IndexPage.vue');
 const detailSource = readSource('../src/pages/SessionDetailPage.vue');
 const diffPageSource = readSource('../src/pages/DiffPage.vue');
 const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
+const diffViewerSource = readSource('../src/components/DiffViewer.vue');
 const commitHistorySource = readSource('../src/pages/CommitHistoryPage.vue');
 const headlessE2ESource = readSource('../../scripts/headless-e2e.mjs');
 const stylesSource = readSource('../src/css/app.scss');
@@ -128,7 +129,7 @@ test('mobile overview keeps the compact two-column metadata shape', () => {
   assert.match(mobileStyles, /\.overview-card-actions\s*{[^}]*flex-wrap:\s*wrap/s);
 });
 
-test('pagination has one responsive component owner on every affected page', () => {
+test('shared pagination remains available outside the unpaginated diff workspace', () => {
   assert.match(paginationSource, /:max-pages="\$q\.screen\.lt\.sm \? 3 : 5"/);
   assert.match(paginationSource, /:boundary-numbers="!\$q\.screen\.lt\.sm"/);
   assert.match(paginationSource, /class="app-pagination"/);
@@ -137,26 +138,38 @@ test('pagination has one responsive component owner on every affected page', () 
     stylesSource,
     /\.app-pagination \.q-btn\s*{[^}]*min-width:\s*44px\s*!important[^}]*min-height:\s*44px\s*!important/s,
   );
-  for (const pageSource of [diffWorkspaceSource, commitHistorySource]) {
-    assert.match(pageSource, /import AppPagination/);
-    assert.match(pageSource, /<AppPagination/);
-    assert.doesNotMatch(pageSource, /<q-pagination/);
-  }
+  assert.match(commitHistorySource, /import AppPagination/);
+  assert.match(commitHistorySource, /<AppPagination/);
+  assert.doesNotMatch(commitHistorySource, /<q-pagination/);
+  assert.doesNotMatch(diffWorkspaceSource, /import AppPagination|<AppPagination|modelValue\.page/);
   assert.match(diffPageSource, /<DiffWorkspace/);
   assert.doesNotMatch(diffPageSource, /import AppPagination|<AppPagination/);
 });
 
-test('desktop diff page keeps the file list visible while diff content scrolls', () => {
+test('diff workspace keeps file navigation fixed while content scrolls with sticky file titles', () => {
   assert.match(
     diffWorkspaceSource,
-    /@media \(min-width:\s*1024px\)[\s\S]*?\.diff-workspace__layout\s*{[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)[^}]*overflow-y:\s*auto[^}]*}[\s\S]*?\.diff-files\s*{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*height:\s*100%[^}]*overflow-y:\s*auto/s,
+    /\.diff-workspace__layout\s*{[^}]*grid-template-columns:\s*320px\s+minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)/s,
   );
   assert.match(
     diffWorkspaceSource,
-    /@container \(max-width:\s*1023px\)[\s\S]*?\.diff-files\s*{[^}]*position:\s*static[^}]*overflow-y:\s*visible/s,
+    /\.diff-content\s*{[^}]*min-height:\s*0[^}]*overflow-y:\s*auto[^}]*overscroll-behavior:\s*contain/s,
   );
+  assert.match(
+    diffWorkspaceSource,
+    /\.diff-files\s*{[^}]*height:\s*100%[^}]*overflow-y:\s*auto[^}]*overscroll-behavior:\s*contain/s,
+  );
+  assert.match(
+    diffWorkspaceSource,
+    /@container \(max-width:\s*1023px\)[\s\S]*?grid-template-rows:\s*minmax\(120px,\s*35%\)\s+minmax\(0,\s*1fr\)/s,
+  );
+  assert.match(
+    diffViewerSource,
+    /\.diff-file-header\s*{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*z-index:\s*1/s,
+  );
+  assert.match(diffViewerSource, /\.diff-file-card\s*{[^}]*overflow:\s*visible/s);
   assert.match(diffPageSource, /height:\s*calc\(100dvh\s*-\s*150px\)/);
-  assert.doesNotMatch(diffPageSource, /position:\s*sticky/);
+  assert.match(detailSource, /:show-file-navigation="false"/);
 });
 
 test('session detail mobile navigation shows one scroll owner at a time', () => {

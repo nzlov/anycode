@@ -125,8 +125,8 @@ func TestGetSessionDiffReturnsUnavailableForNonGitProject(t *testing.T) {
 	if got.Available {
 		t.Fatal("GetSessionDiff() Available = true")
 	}
-	if got.Files.Page != 1 || got.Files.PageSize != 20 || got.Files.Total != 0 {
-		t.Fatalf("GetSessionDiff() files page = %#v", got.Files)
+	if len(got.Files) != 0 {
+		t.Fatalf("GetSessionDiff() files = %#v", got.Files)
 	}
 }
 
@@ -140,6 +140,26 @@ func TestGetSessionDiffReturnsStructuredNotFound(t *testing.T) {
 	appErr, ok := apperror.From(err)
 	if !ok || appErr.Code != apperror.CodeNotFound || appErr.Details["sessionId"] != "missing" {
 		t.Fatalf("GetSessionDiff() app error = %#v", err)
+	}
+}
+
+func TestGetSessionDiffReturnsAllChangedFiles(t *testing.T) {
+	files := make([]gitdiff.DiffFile, 0, 101)
+	for index := range 101 {
+		files = append(files, gitdiff.DiffFile{Path: fmt.Sprintf("file-%03d.go", index)})
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", BaseBranch: "main", WorktreeBaseCommit: "base"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
+		&fakeDiffPort{files: files},
+	)
+
+	got, err := service.GetSessionDiff(context.Background(), SessionDiffInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("GetSessionDiff() error = %v", err)
+	}
+	if len(got.Files) != len(files) || got.Files[100].Path != "file-100.go" {
+		t.Fatalf("GetSessionDiff() returned %d files, want all %d", len(got.Files), len(files))
 	}
 }
 
@@ -164,8 +184,6 @@ func TestGetSessionDiffReadsSelectedFile(t *testing.T) {
 		SessionID:       "session-1",
 		Mode:            "single",
 		FilePath:        "b.go",
-		Page:            1,
-		PageSize:        1,
 		IncludeFileDiff: true,
 	})
 	if err != nil {
@@ -174,8 +192,8 @@ func TestGetSessionDiffReadsSelectedFile(t *testing.T) {
 	if !got.Available || got.FileDiff == nil || got.FileDiff.File.Path != "b.go" {
 		t.Fatalf("GetSessionDiff() file diff = %#v", got.FileDiff)
 	}
-	if got.Files.Total != 2 || len(got.Files.Items) != 1 || got.Files.NextCursor != "2" {
-		t.Fatalf("GetSessionDiff() files page = %#v", got.Files)
+	if len(got.Files) != 2 {
+		t.Fatalf("GetSessionDiff() files = %#v", got.Files)
 	}
 	if diffPort.lastBaseRef != "base" || diffPort.lastWorktreePath != "/repo" {
 		t.Fatalf("diff input path/base = %q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef)
@@ -242,7 +260,7 @@ func TestGetSessionDiffReturnsUnavailableWhenNoSourceCanBeResolved(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetSessionDiff() error = %v", err)
 	}
-	if got.Available || got.Files.Total != 0 {
+	if got.Available || len(got.Files) != 0 {
 		t.Fatalf("GetSessionDiff() = %#v", got)
 	}
 	if len(diffPort.changedFileCalls) != 0 {
@@ -360,7 +378,7 @@ func TestGetSessionDiffUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSessionDiff() error = %v", err)
 	}
-	if !got.Available || got.Files.Total != 1 || got.Files.Items[0].Path != "live.go" {
+	if !got.Available || len(got.Files) != 1 || got.Files[0].Path != "live.go" {
 		t.Fatalf("GetSessionDiff() = %#v", got)
 	}
 	if diffPort.lastWorktreePath != "/live-worktree" || diffPort.lastBaseRef != "stored-base" || diffPort.lastHeadRef != "" {
@@ -418,8 +436,6 @@ func TestGetSessionDiffSkipsFileContentWhenNotRequested(t *testing.T) {
 	got, err := service.GetSessionDiff(ctx, SessionDiffInput{
 		SessionID: "session-1",
 		Mode:      "single",
-		Page:      1,
-		PageSize:  20,
 	})
 	if err != nil {
 		t.Fatalf("GetSessionDiff() error = %v", err)
@@ -427,7 +443,7 @@ func TestGetSessionDiffSkipsFileContentWhenNotRequested(t *testing.T) {
 	if !got.Available || got.FileDiff != nil || len(got.AllDiff) != 0 {
 		t.Fatalf("GetSessionDiff() should return only files, got %#v", got)
 	}
-	if got.Files.Total != 2 || len(got.Files.Items) != 2 {
+	if len(got.Files) != 2 {
 		t.Fatalf("GetSessionDiff() files = %#v", got.Files)
 	}
 	if len(diffPort.fileDiffCalls) != 0 {
@@ -461,7 +477,7 @@ func TestGetSessionDiffFallsBackToFirstFileWhenSelectedFileIsMissing(t *testing.
 	}
 }
 
-func TestGetSessionDiffAllModeUsesCurrentPageFiles(t *testing.T) {
+func TestGetSessionDiffAllModeUsesAllFiles(t *testing.T) {
 	ctx := context.Background()
 	diffPort := &fakeDiffPort{
 		files: []gitdiff.DiffFile{
@@ -470,6 +486,8 @@ func TestGetSessionDiffAllModeUsesCurrentPageFiles(t *testing.T) {
 			{Path: "c.go", Status: "deleted"},
 		},
 		fileDiffs: map[string]gitdiff.FileDiff{
+			"a.go": {File: gitdiff.DiffFile{Path: "a.go", Status: "modified"}},
+			"b.go": {File: gitdiff.DiffFile{Path: "b.go", Status: "added"}},
 			"c.go": {File: gitdiff.DiffFile{Path: "c.go", Status: "deleted"}},
 		},
 	}
@@ -479,14 +497,14 @@ func TestGetSessionDiffAllModeUsesCurrentPageFiles(t *testing.T) {
 		diffPort,
 	)
 
-	got, err := service.GetSessionDiff(ctx, SessionDiffInput{SessionID: "session-1", Mode: "all", Page: 2, PageSize: 2, IncludeAllDiff: true})
+	got, err := service.GetSessionDiff(ctx, SessionDiffInput{SessionID: "session-1", Mode: "all", IncludeAllDiff: true})
 	if err != nil {
 		t.Fatalf("GetSessionDiff() error = %v", err)
 	}
-	if got.Mode != "all" || len(got.AllDiff) != 1 || got.AllDiff[0].File.Path != "c.go" {
+	if got.Mode != "all" || len(got.AllDiff) != 3 || got.AllDiff[2].File.Path != "c.go" {
 		t.Fatalf("GetSessionDiff() all diff = %#v", got)
 	}
-	if !reflect.DeepEqual(diffPort.fileDiffCalls, []string{"c.go"}) {
+	if !reflect.DeepEqual(diffPort.fileDiffCalls, []string{"a.go", "b.go", "c.go"}) {
 		t.Fatalf("file diff calls = %#v", diffPort.fileDiffCalls)
 	}
 }
@@ -565,7 +583,7 @@ func TestGetSessionDiffMergeRecordSkipsRangeHunksWhenNotRequested(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetSessionDiff() error = %v", err)
 	}
-	if !got.Available || got.Files.Total != 1 || got.FileDiff != nil || len(got.AllDiff) != 0 {
+	if !got.Available || len(got.Files) != 1 || got.FileDiff != nil || len(got.AllDiff) != 0 {
 		t.Fatalf("GetSessionDiff() = %#v", got)
 	}
 	if diffPort.lastRangeRepoPath != "" {
@@ -605,11 +623,11 @@ func TestGetBranchDiffAggregatesSessionWorktreesForProjectBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBranchDiff() error = %v", err)
 	}
-	if !got.Available || got.Files.Total != 2 || len(got.AllDiff) != 2 {
+	if !got.Available || len(got.Files) != 2 || len(got.AllDiff) != 2 {
 		t.Fatalf("GetBranchDiff() = %#v", got)
 	}
-	if got.Files.Items[0].Path != "session-1: a.go" || got.Files.Items[1].Path != "session-2: b.go" {
-		t.Fatalf("prefixed files = %#v", got.Files.Items)
+	if got.Files[0].Path != "session-1: a.go" || got.Files[1].Path != "session-2: b.go" {
+		t.Fatalf("prefixed files = %#v", got.Files)
 	}
 	if !reflect.DeepEqual(diffPort.changedFileCalls, []string{"/worktrees/session-1", "/worktrees/session-2"}) {
 		t.Fatalf("changed file calls = %#v", diffPort.changedFileCalls)
@@ -639,7 +657,7 @@ func TestGetBranchDiffUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBranchDiff() error = %v", err)
 	}
-	if !got.Available || got.Files.Total != 1 {
+	if !got.Available || len(got.Files) != 1 {
 		t.Fatalf("GetBranchDiff() = %#v", got)
 	}
 	if diffPort.lastWorktreePath != "/worktrees/session-1" || diffPort.lastBaseRef != "base-commit" || diffPort.lastHeadRef != "" {
@@ -721,7 +739,7 @@ func TestGetBranchDiffIgnoresOtherBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBranchDiff() error = %v", err)
 	}
-	if !got.Available || got.Files.Total != 0 {
+	if !got.Available || len(got.Files) != 0 {
 		t.Fatalf("GetBranchDiff() = %#v", got)
 	}
 	if len(diffPort.changedFileCalls) != 0 {

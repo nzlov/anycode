@@ -36,4 +36,10 @@ test('full diff service queries request only the needed diff shape', () => {
   assert.doesNotMatch(branchSingle, /allDiff\s*\{/);
   assert.match(branchAll, /allDiff\s*\{/);
   assert.doesNotMatch(branchAll, /fileDiff\s*\{/);
+
+  for (const body of [sessionSingle, sessionAll, branchSingle, branchAll]) {
+    assert.match(body, /files\s*{\s*path\s+status\s+additions\s+deletions/s);
+    assert.doesNotMatch(body, /pageInfo|pageSize|\bpage:/);
+    assert.doesNotMatch(body, /files\s*{\s*items\s*{/s);
+  }
 });

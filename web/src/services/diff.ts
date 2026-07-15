@@ -11,8 +11,6 @@ export type DiffWorkspaceTarget =
 export interface DiffWorkspaceState {
   mode: DiffMode;
   filePath: string;
-  page: number;
-  pageSize: number;
 }
 
 export interface SessionDiffSummary {
@@ -56,7 +54,6 @@ export interface SessionDiff {
   mode: DiffMode;
   filePath: string;
   files: DiffFile[];
-  pageInfo: PageInfo;
   fileDiff: FileDiff | null;
   allDiff: FileDiff[];
   available: boolean;
@@ -66,8 +63,6 @@ export interface GetSessionDiffInput {
   sessionId: string;
   mode: DiffMode;
   filePath?: string;
-  page: number;
-  pageSize: number;
   contextBefore?: number;
   contextAfter?: number;
 }
@@ -77,8 +72,6 @@ export interface GetBranchDiffInput {
   branch: string;
   mode: DiffMode;
   filePath?: string;
-  page: number;
-  pageSize: number;
   contextBefore?: number;
   contextAfter?: number;
 }
@@ -128,10 +121,7 @@ interface GraphQLSessionDiff {
   mode: string;
   filePath: string;
   available: boolean;
-  files: {
-    items: GraphQLDiffFile[];
-    pageInfo: PageInfo;
-  };
+  files: GraphQLDiffFile[];
   fileDiff?: GraphQLFileDiff | null;
   allDiff?: GraphQLFileDiff[];
 }
@@ -179,15 +169,11 @@ export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<
     sessionId: string;
     mode: DiffMode;
     filePath?: string;
-    page: number;
-    pageSize: number;
     contextBefore?: number;
     contextAfter?: number;
   } = {
     sessionId: input.sessionId,
     mode: input.mode,
-    page: input.page,
-    pageSize: input.pageSize,
   };
   if (input.filePath) {
     variablesInput.filePath = input.filePath;
@@ -206,8 +192,6 @@ export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<
         sessionId: string;
         mode: DiffMode;
         filePath?: string;
-        page: number;
-        pageSize: number;
         contextBefore?: number;
         contextAfter?: number;
       };
@@ -220,18 +204,10 @@ export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<
           filePath
           available
           files {
-            items {
-              path
-              status
-              additions
-              deletions
-            }
-            pageInfo {
-              page
-              pageSize
-              total
-              nextCursor
-            }
+            path
+            status
+            additions
+            deletions
           }
           fileDiff {
             file {
@@ -267,15 +243,11 @@ export async function getSessionAllDiff(input: GetSessionDiffInput): Promise<Ses
   const variablesInput: {
     sessionId: string;
     mode: DiffMode;
-    page: number;
-    pageSize: number;
     contextBefore?: number;
     contextAfter?: number;
   } = {
     sessionId: input.sessionId,
     mode: 'all',
-    page: input.page,
-    pageSize: input.pageSize,
   };
   if (input.contextBefore) {
     variablesInput.contextBefore = input.contextBefore;
@@ -295,18 +267,10 @@ export async function getSessionAllDiff(input: GetSessionDiffInput): Promise<Ses
           filePath
           available
           files {
-            items {
-              path
-              status
-              additions
-              deletions
-            }
-            pageInfo {
-              page
-              pageSize
-              total
-              nextCursor
-            }
+            path
+            status
+            additions
+            deletions
           }
           allDiff {
             file {
@@ -344,16 +308,12 @@ export async function getBranchSingleDiff(input: GetBranchDiffInput): Promise<Se
     branch: string;
     mode: DiffMode;
     filePath?: string;
-    page: number;
-    pageSize: number;
     contextBefore?: number;
     contextAfter?: number;
   } = {
     projectId: input.projectId,
     branch: input.branch,
     mode: input.mode,
-    page: input.page,
-    pageSize: input.pageSize,
   };
   if (input.filePath) {
     variablesInput.filePath = input.filePath;
@@ -376,18 +336,10 @@ export async function getBranchSingleDiff(input: GetBranchDiffInput): Promise<Se
           filePath
           available
           files {
-            items {
-              path
-              status
-              additions
-              deletions
-            }
-            pageInfo {
-              page
-              pageSize
-              total
-              nextCursor
-            }
+            path
+            status
+            additions
+            deletions
           }
           fileDiff {
             file {
@@ -424,16 +376,12 @@ export async function getBranchAllDiff(input: GetBranchDiffInput): Promise<Sessi
     projectId: string;
     branch: string;
     mode: DiffMode;
-    page: number;
-    pageSize: number;
     contextBefore?: number;
     contextAfter?: number;
   } = {
     projectId: input.projectId,
     branch: input.branch,
     mode: 'all',
-    page: input.page,
-    pageSize: input.pageSize,
   };
   if (input.contextBefore) {
     variablesInput.contextBefore = input.contextBefore;
@@ -453,18 +401,10 @@ export async function getBranchAllDiff(input: GetBranchDiffInput): Promise<Sessi
           filePath
           available
           files {
-            items {
-              path
-              status
-              additions
-              deletions
-            }
-            pageInfo {
-              page
-              pageSize
-              total
-              nextCursor
-            }
+            path
+            status
+            additions
+            deletions
           }
           allDiff {
             file {
@@ -542,8 +482,7 @@ function normalizeSessionDiff(diff: GraphQLSessionDiff): SessionDiff {
     mode: diff.mode === 'all' ? 'all' : 'single',
     filePath: diff.filePath,
     available: diff.available,
-    files: diff.files.items,
-    pageInfo: diff.files.pageInfo,
+    files: diff.files,
     fileDiff: diff.fileDiff ? normalizeFileDiff(diff.fileDiff) : null,
     allDiff: (diff.allDiff ?? []).map(normalizeFileDiff),
   };

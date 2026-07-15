@@ -85,7 +85,7 @@ const activeTab = ref<'questions' | 'diff'>('questions');
 const diffWorkspaceState = ref<DiffWorkspaceState>(initialDiffWorkspaceState());
 
 function initialDiffWorkspaceState(): DiffWorkspaceState {
-  return { mode: 'all', filePath: '', page: 1, pageSize: 20 };
+  return { mode: 'all', filePath: '' };
 }
 
 watch(
