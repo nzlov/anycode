@@ -90,7 +90,10 @@ test('semantic dialog styles no longer own fixed dialog widths or old mobile bre
 });
 
 test('long content dialogs keep one explicit scrolling content area', () => {
-  assert.match(stylesSource, /\.new-session-body\s*{[^}]*overflow-y:\s*auto/s);
+  assert.match(
+    stylesSource,
+    /\.new-session-body\s*{[^}]*align-content:\s*start[^}]*overflow-y:\s*auto/s,
+  );
   assert.match(stylesSource, /\.quick-command-list\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(answerSource, /\.answer-dialog__body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
