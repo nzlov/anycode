@@ -39,7 +39,8 @@ ENV PATH=/usr/local/nvm/current/bin:$PATH
 WORKDIR /app
 COPY --from=build /out/anycode /usr/local/bin/anycode
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less go chromium ttf-dejavu catatonit \
+RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less \
+  go chromium ttf-dejavu wqy-microhei catatonit \
   && pacman -Scc --noconfirm \
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \
