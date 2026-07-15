@@ -189,7 +189,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
-  create: [];
 }>();
 
 const $q = useQuasar();
@@ -444,7 +443,6 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     rememberLaunchMode(input.mode);
     files.value = [];
     prompt.value = '';
-    emit('create');
     emit('update:modelValue', false);
   } catch (error) {
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);

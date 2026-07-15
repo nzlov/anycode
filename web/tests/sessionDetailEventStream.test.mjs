@@ -237,16 +237,19 @@ test('session detail never drops distinct transcript events by content or timest
   assert.equal(pageSource.includes('< 1500'), false);
 });
 
-test('session route changes remount the detail page and release its operations', () => {
+test('session creation preserves the overview page while route changes still remount it', () => {
   const layoutSource = readFileSync(
     new URL('../src/layouts/MainLayout.vue', import.meta.url),
     'utf8',
   );
-
-  assert.match(
-    layoutSource,
-    /<router-view\s+:key="`\$\{\$route\.fullPath\}:\$\{pageRefreshKey\}`"/,
+  const newSessionSource = readFileSync(
+    new URL('../src/components/NewSessionDialog.vue', import.meta.url),
+    'utf8',
   );
+
+  assert.match(layoutSource, /<router-view\s+:key="\$route\.fullPath"/);
+  assert.doesNotMatch(layoutSource, /pageRefreshKey|handleSessionCreated|@create=/);
+  assert.doesNotMatch(newSessionSource, /emit\('create'\)/);
 });
 
 test('subscription close before acknowledgement still releases the snapshot gate', () => {
