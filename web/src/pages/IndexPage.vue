@@ -276,6 +276,12 @@
       :batches="pendingQuestionBatches"
       :loading="questionsLoading"
       :submitting="questionsSubmitting"
+      :diff-loading="answerDiffLoading"
+      :diff-error="answerDiffError"
+      :diff-available="answerDiffAvailable"
+      :diffs="answerDiffs"
+      :diff-total="answerDiffTotal"
+      :full-diff-route="answerAllDiffRoute"
       @submit="submitAnswers"
     />
 
@@ -462,6 +468,11 @@ const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
 const questionsLoading = ref(false);
 const questionsSubmitting = ref(false);
+const answerDiffLoading = ref(false);
+const answerDiffs = ref<FileDiff[]>([]);
+const answerDiffAvailable = ref(false);
+const answerDiffTotal = ref(0);
+const answerDiffError = ref('');
 const approvalDialog = ref(false);
 const approvalTab = ref<'output' | 'diff'>('output');
 const approvalLoading = ref(false);
@@ -487,6 +498,10 @@ const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
 const activeCloseSessionId = ref('');
 const priorities: SessionPriority[] = ['high', 'medium', 'low'];
+const answerAllDiffRoute = computed(() => ({
+  path: '/diff',
+  query: { sessionId: activeQuestionSessionId.value, mode: 'all' },
+}));
 const approvalAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: approvalSessionId.value, mode: 'all' },
@@ -840,11 +855,29 @@ async function closeCard(card: SessionCard) {
 async function openAnswerDialog(sessionId: string) {
   activeQuestionSessionId.value = sessionId;
   questionsLoading.value = true;
+  answerDiffLoading.value = true;
+  answerDiffs.value = [];
+  answerDiffAvailable.value = false;
+  answerDiffTotal.value = 0;
+  answerDiffError.value = '';
   try {
-    pendingQuestionBatches.value = await getPendingQuestionBatches(sessionId);
+    const [questionsResult, diffResult] = await Promise.allSettled([
+      getPendingQuestionBatches(sessionId),
+      getSessionAllDiff({ sessionId, mode: 'all', page: 1, pageSize: 20 }),
+    ]);
+    if (questionsResult.status === 'rejected') throw questionsResult.reason;
+    pendingQuestionBatches.value = questionsResult.value;
+    if (diffResult.status === 'fulfilled') {
+      answerDiffAvailable.value = diffResult.value.available;
+      answerDiffs.value = diffResult.value.allDiff;
+      answerDiffTotal.value = diffResult.value.pageInfo.total;
+    } else {
+      answerDiffError.value = 'Diff 加载失败，请稍后刷新重试';
+    }
     answerDialog.value = true;
   } finally {
     questionsLoading.value = false;
+    answerDiffLoading.value = false;
   }
 }
 

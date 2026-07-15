@@ -163,6 +163,35 @@ test('overview waiting approval dialog shows model output and diff before submit
   );
 });
 
+test('overview waiting answer dialog shows questions and diff before submit', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+  const answerDialogSource = readFileSync(
+    new URL('../src/components/AnswerUserDialog.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(answerDialogSource, /<q-tab name="questions"[^>]*label="问题"/);
+  assert.match(answerDialogSource, /<q-tab name="diff"[^>]*label="Diff"/);
+  assert.match(answerDialogSource, /<AnswerUserPanel/);
+  assert.match(answerDialogSource, /<SessionDiffPreview[\s\S]*:file-diffs="diffs"/);
+  assert.match(answerDialogSource, /:full-diff-route="fullDiffRoute"/);
+  assert.match(overviewSource, /<AnswerUserDialog[\s\S]*:diffs="answerDiffs"/);
+  assert.match(overviewSource, /getPendingQuestionBatches\(sessionId\)/);
+  assert.match(
+    overviewSource,
+    /getSessionAllDiff\(\{ sessionId, mode: 'all', page: 1, pageSize: 20 \}\)/,
+  );
+  assert.match(overviewSource, /const \[questionsResult, diffResult\] = await Promise\.allSettled/);
+  assert.match(overviewSource, /answerDiffError\.value = 'Diff 加载失败，请稍后刷新重试'/);
+  assert.match(
+    overviewSource,
+    /query: \{ sessionId: activeQuestionSessionId\.value, mode: 'all' \}/,
+  );
+});
+
 test('overview cards expose batch-backed diff previews without triggering card navigation', () => {
   const overviewSource = readFileSync(
     new URL('../src/pages/IndexPage.vue', import.meta.url),
