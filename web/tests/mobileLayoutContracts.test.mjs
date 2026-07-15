@@ -35,7 +35,7 @@ test('prompt runtime controls have one shared component owner', () => {
   assert.match(configControlsSource, /update:permission/);
   assert.match(composerSource, /import PromptConfigControls/);
   assert.match(composerSource, /class="prompt-config-menu"/);
-  assert.match(composerSource, /v-if="!compact \|\| !\$q\.screen\.lt\.md"/);
+  assert.match(composerSource, /v-if="!forceConfigMenu && \(!compact \|\| !\$q\.screen\.lt\.md\)"/);
   assert.doesNotMatch(composerSource, /<q-select/);
 });
 

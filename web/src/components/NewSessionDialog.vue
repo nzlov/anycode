@@ -118,6 +118,7 @@
           </template>
         </q-banner>
 
+        <!-- GLUE: Half-width panels use the existing menu until the viewport is wide enough for inline controls. -->
         <CodexPromptComposer
           v-model:prompt="prompt"
           v-model:files="files"
@@ -128,6 +129,7 @@
           :title="panel ? '' : '提示词'"
           :compact="panel"
           :show-badge="!panel"
+          :force-config-menu="panel && $q.screen.width < overviewInlineConfigMinWidth"
           :disabled="creating || runConfigLoading || Boolean(runConfigError)"
         >
           <template #actions>
@@ -201,6 +203,7 @@ const workflowAvailable = ref(false);
 const workflowAvailabilityToken = ref(0);
 const lastConfigRequestToken = ref(0);
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
+const overviewInlineConfigMinWidth = 1536;
 const dialogVisible = computed(() => Boolean(props.panel || props.modelValue));
 
 const branchOptions = computed(() => {
