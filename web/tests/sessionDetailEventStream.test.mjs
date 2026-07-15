@@ -328,7 +328,7 @@ test('exec events keep the first command in the header and expose additional com
   assert.match(componentSource, /<code>\{\{ command\.command \}\}<\/code>/);
   assert.match(componentSource, /`\+\$\{additionalCommandCount\} 条`/);
   assert.match(componentSource, /class="command-event__workdir">\{\{ command\.workdir \}\}/);
-  assert.match(componentSource, /<StaticAnsiOutput :text="content\.output"/);
+  assert.match(componentSource, /<StaticAnsiOutput :text="content\.output" appearance="surface"/);
   assert.match(componentSource, /:disabled="!canExpand"/);
   assert.match(componentSource, /firstCommand\.value\?\.workdir/);
   assert.match(componentSource, /class="command-event__title"/);
@@ -350,6 +350,11 @@ test('static ANSI rendering uses theme colors and preserves extended RGB colors'
   assert.match(ansiSource, /value\.replaceAll\(' ', ''\)/);
   assert.match(ansiSource, /themedColors\[normalized\] \?\? `rgb\(\$\{normalized\}\)`/);
   assert.match(ansiSource, /var\(--ac-ansi-bright-cyan\)/);
+  assert.match(ansiSource, /appearance\?: 'terminal' \| 'surface'/);
+  assert.match(
+    ansiSource,
+    /\.static-ansi-output--surface\s*{[^}]*background:\s*var\(--ac-surface\);[^}]*color:\s*var\(--ac-text\);/s,
+  );
   assert.match(ansiSource, /segment\.decorations/);
   assert.match(ansiSource, /decorations\.has\('bold'\)/);
   const styled = Anser.ansiToJson('\x1b[1;3;4mstyled').find(

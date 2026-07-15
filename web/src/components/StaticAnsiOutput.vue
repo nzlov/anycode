@@ -1,5 +1,5 @@
 <template>
-  <pre class="static-ansi-output"><span
+  <pre class="static-ansi-output" :class="`static-ansi-output--${appearance}`"><span
     v-for="(segment, index) in segments"
     :key="index"
     :style="segmentStyle(segment)"
@@ -20,7 +20,9 @@ interface AnsiSegment {
   decorations?: string[];
 }
 
-const props = defineProps<{ text: string }>();
+const props = withDefaults(defineProps<{ text: string; appearance?: 'terminal' | 'surface' }>(), {
+  appearance: 'terminal',
+});
 
 const segments = computed(
   () => Anser.ansiToJson(stripUnsupportedAnsiControls(props.text || '')) as AnsiSegment[],
@@ -84,5 +86,10 @@ function ansiColor(value: string) {
   tab-size: 2;
   user-select: text;
   white-space: pre;
+}
+
+.static-ansi-output--surface {
+  background: var(--ac-surface);
+  color: var(--ac-text);
 }
 </style>
