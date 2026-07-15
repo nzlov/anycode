@@ -77,6 +77,25 @@ func TestRunUsesAuthTokenFromEnv(t *testing.T) {
 	}
 }
 
+func TestRunClassifiesSocketConnectionFailureWithoutLeakingRequest(t *testing.T) {
+	dir := t.TempDir()
+	socketPath := filepath.Join(dir, "missing.sock")
+	request := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"answer_user","arguments":{"questions":[{"title":"private question"}]}}}`
+	err := Run(context.Background(), strings.NewReader(frame(request)), &bytes.Buffer{}, Config{
+		SessionID: "session-1",
+		Socket:    socketPath,
+		AuthToken: "secret-token",
+	})
+	if err == nil || !strings.Contains(err.Error(), "connect_socket") {
+		t.Fatalf("Run() error = %v", err)
+	}
+	for _, secret := range []string{"secret-token", "private question"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("Run() error leaked %q: %v", secret, err)
+		}
+	}
+}
+
 func TestRunDoesNotWriteResponseForNotification(t *testing.T) {
 	dir := t.TempDir()
 	socketPath := filepath.Join(dir, "mcp.sock")
