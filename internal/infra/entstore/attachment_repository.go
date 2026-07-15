@@ -369,6 +369,47 @@ func (r *AttachmentRepository) ListSessionArtifacts(ctx context.Context, query d
 	return artifacts, total, nil
 }
 
+func (r *AttachmentRepository) ResolveLatestSessionArtifactsByLogicalPaths(ctx context.Context, sessionID domainsession.ID, logicalPaths []string) ([]domainsession.SessionFile, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("resolve session artifacts: database connection unavailable")
+	}
+	if len(logicalPaths) == 0 {
+		return []domainsession.SessionFile{}, nil
+	}
+	placeholders := make([]string, len(logicalPaths))
+	args := make([]any, 0, len(logicalPaths)+1)
+	args = append(args, string(sessionID))
+	for index, logicalPath := range logicalPaths {
+		placeholders[index] = "?"
+		args = append(args, logicalPath)
+	}
+	rows, err := r.db.QueryContext(ctx, sessionFileSelect+` WHERE session_id = ? AND role = 'artifact' AND deleted_at IS NULL AND logical_path IN (`+strings.Join(placeholders, ",")+`) AND id = (
+		SELECT latest.id FROM session_attachments AS latest
+		WHERE latest.session_id = session_attachments.session_id
+			AND latest.role = 'artifact'
+			AND latest.deleted_at IS NULL
+			AND latest.logical_path = session_attachments.logical_path
+		ORDER BY latest.created_at DESC, latest.id DESC
+		LIMIT 1
+	) ORDER BY logical_path ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("resolve session artifacts: %w", err)
+	}
+	defer rows.Close()
+	resolved := make([]domainsession.SessionFile, 0, len(logicalPaths))
+	for rows.Next() {
+		artifact, err := scanSessionFile(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan resolved session artifact: %w", err)
+		}
+		resolved = append(resolved, artifact)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("resolve session artifacts rows: %w", err)
+	}
+	return resolved, nil
+}
+
 func (r *AttachmentRepository) SumSessionArtifactSize(ctx context.Context, sessionID domainsession.ID) (int64, error) {
 	if r.db == nil {
 		return 0, fmt.Errorf("sum session artifacts: database connection unavailable")

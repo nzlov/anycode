@@ -206,23 +206,24 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		BranchDiff             func(childComplexity int, input model.BranchDiffInput) int
-		BrowseDirectory        func(childComplexity int, input model.BrowseDirectoryInput) int
-		CodexModelOptions      func(childComplexity int) int
-		LastSessionConfig      func(childComplexity int, projectID string) int
-		PendingQuestionBatches func(childComplexity int, sessionID string) int
-		ProjectGitState        func(childComplexity int, projectID string, refresh bool) int
-		Projects               func(childComplexity int) int
-		QuestionBatch          func(childComplexity int, id string) int
-		QuickCommands          func(childComplexity int, input *model.ListQuickCommandsInput) int
-		Session                func(childComplexity int, id string) int
-		SessionCommitHistory   func(childComplexity int, input model.SessionCommitHistoryInput) int
-		SessionDiff            func(childComplexity int, input model.SessionDiffInput) int
-		SessionDiffSummaries   func(childComplexity int, sessionIds []string) int
-		SessionFiles           func(childComplexity int, input model.ListSessionFilesInput) int
-		SessionTranscript      func(childComplexity int, input model.ListTranscriptEventsInput) int
-		Sessions               func(childComplexity int, input *model.ListSessionsInput) int
-		WorkflowDefinition     func(childComplexity int, id string) int
+		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
+		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
+		CodexModelOptions       func(childComplexity int) int
+		LastSessionConfig       func(childComplexity int, projectID string) int
+		PendingQuestionBatches  func(childComplexity int, sessionID string) int
+		ProjectGitState         func(childComplexity int, projectID string, refresh bool) int
+		Projects                func(childComplexity int) int
+		QuestionBatch           func(childComplexity int, id string) int
+		QuickCommands           func(childComplexity int, input *model.ListQuickCommandsInput) int
+		ResolveSessionArtifacts func(childComplexity int, input model.ResolveSessionArtifactsInput) int
+		Session                 func(childComplexity int, id string) int
+		SessionCommitHistory    func(childComplexity int, input model.SessionCommitHistoryInput) int
+		SessionDiff             func(childComplexity int, input model.SessionDiffInput) int
+		SessionDiffSummaries    func(childComplexity int, sessionIds []string) int
+		SessionFiles            func(childComplexity int, input model.ListSessionFilesInput) int
+		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
+		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
+		WorkflowDefinition      func(childComplexity int, id string) int
 	}
 
 	Question struct {
@@ -262,6 +263,11 @@ type ComplexityRoot struct {
 	QuickCommandPage struct {
 		Items    func(childComplexity int) int
 		PageInfo func(childComplexity int) int
+	}
+
+	ResolvedSessionArtifact struct {
+		File        func(childComplexity int) int
+		LogicalPath func(childComplexity int) int
 	}
 
 	RetryConfig struct {
@@ -650,6 +656,7 @@ type QueryResolver interface {
 	QuestionBatch(ctx context.Context, id string) (*model.QuestionBatch, error)
 	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
 	SessionFiles(ctx context.Context, input model.ListSessionFilesInput) (*model.SessionFilePage, error)
+	ResolveSessionArtifacts(ctx context.Context, input model.ResolveSessionArtifactsInput) ([]*model.ResolvedSessionArtifact, error)
 }
 type SubscriptionResolver interface {
 	SessionTranscript(ctx context.Context, sessionID string) (<-chan *model.TranscriptStreamItem, error)
@@ -1543,6 +1550,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.QuickCommands(childComplexity, args["input"].(*model.ListQuickCommandsInput)), true
+	case "Query.resolveSessionArtifacts":
+		if e.ComplexityRoot.Query.ResolveSessionArtifacts == nil {
+			break
+		}
+
+		args, err := ec.field_Query_resolveSessionArtifacts_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ResolveSessionArtifacts(childComplexity, args["input"].(model.ResolveSessionArtifactsInput)), true
 	case "Query.session":
 		if e.ComplexityRoot.Query.Session == nil {
 			break
@@ -1780,6 +1798,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QuickCommandPage.PageInfo(childComplexity), true
+
+	case "ResolvedSessionArtifact.file":
+		if e.ComplexityRoot.ResolvedSessionArtifact.File == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ResolvedSessionArtifact.File(childComplexity), true
+	case "ResolvedSessionArtifact.logicalPath":
+		if e.ComplexityRoot.ResolvedSessionArtifact.LogicalPath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ResolvedSessionArtifact.LogicalPath(childComplexity), true
 
 	case "RetryConfig.maxAttempts":
 		if e.ComplexityRoot.RetryConfig.MaxAttempts == nil {
@@ -3143,6 +3174,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputListTranscriptEventsInput,
 		ec.unmarshalInputMergeConfigInput,
 		ec.unmarshalInputQuestionAnswerInput,
+		ec.unmarshalInputResolveSessionArtifactsInput,
 		ec.unmarshalInputRetryConfigInput,
 		ec.unmarshalInputSaveWorkflowDefinitionInput,
 		ec.unmarshalInputSessionCommitHistoryInput,
@@ -3277,6 +3309,7 @@ type Query {
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
   sessionFiles(input: ListSessionFilesInput!): SessionFilePage!
+  resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
 }
 
 type Mutation {
@@ -3542,6 +3575,16 @@ type SessionFile {
 type SessionFilePage {
   items: [SessionFile!]!
   pageInfo: PageInfo!
+}
+
+type ResolvedSessionArtifact {
+  logicalPath: String!
+  file: SessionFile!
+}
+
+input ResolveSessionArtifactsInput {
+  sessionId: ID!
+  logicalPaths: [String!]!
 }
 
 input ListSessionFilesInput {
@@ -4457,6 +4500,17 @@ func (ec *executionContext) field_Query_quickCommands_args(ctx context.Context, 
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalOListQuickCommandsInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListQuickCommandsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_resolveSessionArtifacts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNResolveSessionArtifactsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolveSessionArtifactsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -9462,6 +9516,53 @@ func (ec *executionContext) fieldContext_Query_sessionFiles(ctx context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_resolveSessionArtifacts(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_resolveSessionArtifacts,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ResolveSessionArtifacts(ctx, fc.Args["input"].(model.ResolveSessionArtifactsInput))
+		},
+		nil,
+		ec.marshalNResolvedSessionArtifact2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolvedSessionArtifactᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_resolveSessionArtifacts(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "logicalPath":
+				return ec.fieldContext_ResolvedSessionArtifact_logicalPath(ctx, field)
+			case "file":
+				return ec.fieldContext_ResolvedSessionArtifact_file(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ResolvedSessionArtifact", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_resolveSessionArtifacts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10313,6 +10414,102 @@ func (ec *executionContext) fieldContext_QuickCommandPage_pageInfo(_ context.Con
 				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ResolvedSessionArtifact_logicalPath(ctx context.Context, field graphql.CollectedField, obj *model.ResolvedSessionArtifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ResolvedSessionArtifact_logicalPath,
+		func(ctx context.Context) (any, error) {
+			return obj.LogicalPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ResolvedSessionArtifact_logicalPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ResolvedSessionArtifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ResolvedSessionArtifact_file(ctx context.Context, field graphql.CollectedField, obj *model.ResolvedSessionArtifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ResolvedSessionArtifact_file,
+		func(ctx context.Context) (any, error) {
+			return obj.File, nil
+		},
+		nil,
+		ec.marshalNSessionFile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFile,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ResolvedSessionArtifact_file(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ResolvedSessionArtifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SessionFile_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_SessionFile_sessionId(ctx, field)
+			case "role":
+				return ec.fieldContext_SessionFile_role(ctx, field)
+			case "sourceType":
+				return ec.fieldContext_SessionFile_sourceType(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_SessionFile_sourceId(ctx, field)
+			case "artifactKind":
+				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
+			case "logicalPath":
+				return ec.fieldContext_SessionFile_logicalPath(ctx, field)
+			case "filename":
+				return ec.fieldContext_SessionFile_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_SessionFile_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_SessionFile_size(ctx, field)
+			case "sha256":
+				return ec.fieldContext_SessionFile_sha256(ctx, field)
+			case "previewKind":
+				return ec.fieldContext_SessionFile_previewKind(ctx, field)
+			case "processRunId":
+				return ec.fieldContext_SessionFile_processRunId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_SessionFile_correlationId(ctx, field)
+			case "previewUrl":
+				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
+			case "downloadUrl":
+				return ec.fieldContext_SessionFile_downloadUrl(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionFile_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionFile", field.Name)
 		},
 	}
 	return fc, nil
@@ -19322,6 +19519,43 @@ func (ec *executionContext) unmarshalInputQuestionAnswerInput(ctx context.Contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputResolveSessionArtifactsInput(ctx context.Context, obj any) (model.ResolveSessionArtifactsInput, error) {
+	var it model.ResolveSessionArtifactsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "logicalPaths"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "logicalPaths":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("logicalPaths"))
+			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LogicalPaths = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputRetryConfigInput(ctx context.Context, obj any) (model.RetryConfigInput, error) {
 	var it model.RetryConfigInput
 	if obj == nil {
@@ -21910,6 +22144,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "resolveSessionArtifacts":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_resolveSessionArtifacts(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -22202,6 +22458,50 @@ func (ec *executionContext) _QuickCommandPage(ctx context.Context, sel ast.Selec
 			}
 		case "pageInfo":
 			out.Values[i] = ec._QuickCommandPage_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var resolvedSessionArtifactImplementors = []string{"ResolvedSessionArtifact"}
+
+func (ec *executionContext) _ResolvedSessionArtifact(ctx context.Context, sel ast.SelectionSet, obj *model.ResolvedSessionArtifact) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, resolvedSessionArtifactImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ResolvedSessionArtifact")
+		case "logicalPath":
+			out.Values[i] = ec._ResolvedSessionArtifact_logicalPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "file":
+			out.Values[i] = ec._ResolvedSessionArtifact_file(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -25637,6 +25937,37 @@ func (ec *executionContext) marshalNQuickCommandPage2ᚖgithubᚗcomᚋnzlovᚋa
 		return graphql.Null
 	}
 	return ec._QuickCommandPage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNResolveSessionArtifactsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolveSessionArtifactsInput(ctx context.Context, v any) (model.ResolveSessionArtifactsInput, error) {
+	res, err := ec.unmarshalInputResolveSessionArtifactsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNResolvedSessionArtifact2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolvedSessionArtifactᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.ResolvedSessionArtifact) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNResolvedSessionArtifact2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolvedSessionArtifact(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNResolvedSessionArtifact2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolvedSessionArtifact(ctx context.Context, sel ast.SelectionSet, v *model.ResolvedSessionArtifact) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ResolvedSessionArtifact(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRetryConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐRetryConfig(ctx context.Context, sel ast.SelectionSet, v *model.RetryConfig) graphql.Marshaler {

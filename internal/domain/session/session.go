@@ -652,6 +652,7 @@ type AttachmentRepository interface {
 type ArtifactRepository interface {
 	FindArtifactBySourceKey(ctx context.Context, sessionID ID, sourceKey string) (SessionFile, bool, error)
 	ListSessionArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, int, error)
+	ResolveLatestSessionArtifactsByLogicalPaths(ctx context.Context, sessionID ID, logicalPaths []string) ([]SessionFile, error)
 	SumSessionArtifactSize(ctx context.Context, sessionID ID) (int64, error)
 	SoftDeleteArtifact(ctx context.Context, id SessionFileID, deletedAt time.Time) (SessionFile, error)
 	ListArtifactsPendingPhysicalDelete(ctx context.Context, limit int) ([]SessionFile, error)

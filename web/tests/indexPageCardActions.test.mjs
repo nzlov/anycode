@@ -127,6 +127,14 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /openApprovalDialog\(card\)/);
   assert.match(overviewSource, /<q-tab name="output"[^>]*label="审核结果"/);
   assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
+  assert.match(overviewSource, /<q-tab name="artifacts"[^>]*label="产物"/);
+  assert.match(overviewSource, /<SessionArtifactsPanel/);
+  assert.match(overviewSource, /resolveSessionArtifacts/);
+  assert.match(overviewSource, /approvalArtifactFocus/);
+  assert.match(overviewSource, /@open-artifact="openApprovalArtifact"/);
+  assert.match(overviewSource, /@artifact-deleted="refreshApprovalArtifactReferences"/);
+  assert.match(overviewSource, /@artifacts-refreshed="refreshApprovalArtifactReferences"/);
+  assert.match(overviewSource, /approvalContextGeneration === requestGeneration/);
   assert.doesNotMatch(overviewSource, /getSessionTranscriptPage/);
   assert.doesNotMatch(overviewSource, /getSessionAllDiff/);
   assert.match(overviewSource, /card\.pendingApproval/);
@@ -150,7 +158,7 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /aria-label="关闭人工审核"/);
   assert.match(
     overviewSource,
-    /<q-dialog v-model="approvalDialog" :maximized="\$q\.screen\.lt\.sm">/,
+    /<q-dialog[\s\S]*?v-model="approvalDialog"[\s\S]*?:maximized="\$q\.screen\.lt\.sm"[\s\S]*?@hide="handleApprovalDialogClosed"/,
   );
   assert.match(overviewSource, /submitWorkflowApproval\(/);
   assert.doesNotMatch(overviewSource, /approvalRejectPrompt|recentModelOutput/);
