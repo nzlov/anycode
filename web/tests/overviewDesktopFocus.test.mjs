@@ -102,3 +102,30 @@ test('desktop create panel presents the prompt before a compact context row', ()
     /@media \(min-width:\s*700px\)[\s\S]*?\.new-session-dialog--panel \.new-session-context \.q-field__control[^}]*min-height:\s*38px/s,
   );
 });
+
+test('wide desktop create panel is centered at half the viewport width', () => {
+  assert.match(
+    stylesSource,
+    /@media \(min-width:\s*1024px\)[\s\S]*?\.new-session-dialog--panel\s*{[^}]*left:\s*25vw[^}]*right:\s*25vw/s,
+  );
+  assert.match(
+    stylesSource,
+    /@media \(min-width:\s*700px\)[\s\S]*?\.new-session-dialog--panel\s*{[^}]*left:\s*24px[^}]*width:\s*auto\s*!important/s,
+  );
+});
+
+test('half-width create panel uses the existing config menu below wide desktop', () => {
+  assert.match(
+    newSessionSource,
+    /:force-config-menu="panel && \$q\.screen\.width < overviewInlineConfigMinWidth"/,
+  );
+  assert.match(newSessionSource, /const overviewInlineConfigMinWidth = 1536/);
+  assert.match(
+    readSource('../src/components/CodexPromptComposer.vue'),
+    /:force-config-menu="forceConfigMenu"/,
+  );
+  assert.match(
+    readSource('../src/components/PromptComposer.vue'),
+    /!forceConfigMenu && \(!compact \|\| !\$q\.screen\.lt\.md\)/,
+  );
+});

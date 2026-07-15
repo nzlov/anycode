@@ -11,6 +11,7 @@
     :disabled="disabled"
     :compact="compact"
     :show-badge="showBadge"
+    :force-config-menu="forceConfigMenu"
     :readonly-config="readonlyConfig"
     :model-options="modelOptions"
     @update:prompt="emit('update:prompt', $event)"
@@ -111,6 +112,7 @@ const props = withDefaults(
     disabled?: boolean;
     compact?: boolean;
     showBadge?: boolean;
+    forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
   }>(),
   {
@@ -119,6 +121,7 @@ const props = withDefaults(
     disabled: false,
     compact: false,
     showBadge: true,
+    forceConfigMenu: false,
     readonlyConfig: false,
   },
 );
