@@ -35,10 +35,10 @@ test('switching projects waits for refreshed branches before creating a session'
   assert.match(source, /<q-inner-loading\s+:showing="branchesLoading"/);
   assert.match(
     source,
-    /async function createSession\(\)[\s\S]*if \(!branchSelectionReady\.value\)/,
+    /async function createSession\(requestedMode: 'workflow' \| 'chat'\)[\s\S]*if \(!branchSelectionReady\.value\)/,
   );
   const createSessionSource = source.match(
-    /async function createSession\(\) \{(?<body>[\s\S]*?)\n\}/,
+    /async function createSession\(requestedMode: 'workflow' \| 'chat'\) \{(?<body>[\s\S]*?)\n\}/,
   )?.groups?.body;
   assert.ok(createSessionSource);
   assert.ok(createSessionSource.indexOf('const input: CreateSessionInput') < createSessionSource.indexOf('await stageAttachment'));

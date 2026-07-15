@@ -44,6 +44,7 @@
             label="项目"
             emit-value
             map-options
+            dropdown-icon=""
             :disable="creating"
             :options="projectOptions"
           />
@@ -55,6 +56,7 @@
               dense
               label="基础分支"
               class="branch-picker__select"
+              dropdown-icon=""
               :disable="creating || branchesLoading"
               :loading="branchesLoading"
               :options="branchOptions"
@@ -82,19 +84,9 @@
             class="new-session-priority"
             emit-value
             map-options
+            dropdown-icon=""
             :disable="creating"
             :options="priorityOptions"
-          />
-          <q-btn-toggle
-            v-if="canUseWorkflowMode"
-            v-model="mode"
-            spread
-            no-caps
-            :dense="panel"
-            class="new-session-mode"
-            toggle-color="dark"
-            :disable="creating || workflowAvailabilityLoading"
-            :options="modeOptions"
           />
         </div>
 
@@ -131,19 +123,37 @@
           :show-badge="!panel"
           :force-config-menu="panel && $q.screen.width < overviewInlineConfigMinWidth"
           :disabled="creating || runConfigLoading || Boolean(runConfigError)"
+          @submit="createSession(preferredAvailableMode)"
         >
           <template #actions>
             <q-btn
+              v-if="canUseWorkflowMode"
               unelevated
-              class="app-command-btn"
-              color="positive"
-              text-color="dark"
-              icon="send"
-              label="创建卡片"
+              class="app-command-btn new-session-launch-btn"
+              :class="{
+                'new-session-launch-btn--preferred': preferredAvailableMode === 'workflow',
+              }"
+              :color="preferredAvailableMode === 'workflow' ? 'positive' : undefined"
+              :text-color="preferredAvailableMode === 'workflow' ? 'dark' : undefined"
+              icon="account_tree"
+              label="流程模式"
               no-caps
               :disable="creating || !branchSelectionReady"
-              :loading="creating"
-              @click="createSession"
+              :loading="launchingMode === 'workflow'"
+              @click="createSession('workflow')"
+            />
+            <q-btn
+              unelevated
+              class="app-command-btn new-session-launch-btn"
+              :class="{ 'new-session-launch-btn--preferred': preferredAvailableMode === 'chat' }"
+              :color="preferredAvailableMode === 'chat' ? 'positive' : undefined"
+              :text-color="preferredAvailableMode === 'chat' ? 'dark' : undefined"
+              icon="forum"
+              label="会话模式"
+              no-caps
+              :disable="creating || !branchSelectionReady"
+              :loading="launchingMode === 'chat'"
+              @click="createSession('chat')"
             />
           </template>
         </CodexPromptComposer>
@@ -185,9 +195,12 @@ const emit = defineEmits<{
 const $q = useQuasar();
 const { projects, projectOptions, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
+const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
+const lastLaunchModeStorageKey = 'anycode.lastNewSessionLaunchMode';
+const overviewInlineConfigMinWidth = 1536;
 const projectId = ref(projects.value[0]?.id ?? '');
 const branch = ref('');
-const mode = ref<'workflow' | 'chat'>('chat');
+const preferredMode = ref<'workflow' | 'chat'>(storedLaunchMode());
 const priority = ref<SessionPriority>('medium');
 const prompt = ref('');
 const files = ref<File[]>([]);
@@ -196,14 +209,12 @@ const effort = ref('');
 const permission = ref(normalizePermissionMode('workspace-write'));
 const fast = ref(false);
 const creating = ref(false);
+const launchingMode = ref<'workflow' | 'chat' | ''>('');
 const runConfigLoading = ref(false);
 const runConfigError = ref('');
-const workflowAvailabilityLoading = ref(false);
 const workflowAvailable = ref(false);
 const workflowAvailabilityToken = ref(0);
 const lastConfigRequestToken = ref(0);
-const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
-const overviewInlineConfigMinWidth = 1536;
 const dialogVisible = computed(() => Boolean(props.panel || props.modelValue));
 
 const branchOptions = computed(() => {
@@ -221,11 +232,9 @@ const branchSelectionReady = computed(() => {
   return !branchesLoading.value && Boolean(state?.branches.includes(branch.value));
 });
 const canUseWorkflowMode = computed(() => workflowAvailable.value);
-
-const modeOptions = [
-  { label: '流程模式', value: 'workflow', icon: 'account_tree' },
-  { label: '会话模式', value: 'chat', icon: 'forum' },
-];
+const preferredAvailableMode = computed<'workflow' | 'chat'>(() =>
+  preferredMode.value === 'workflow' && canUseWorkflowMode.value ? 'workflow' : 'chat',
+);
 
 const priorityOptions = [
   { label: '高', value: 'high', icon: 'keyboard_double_arrow_up' },
@@ -250,6 +259,25 @@ function rememberProjectId(value: string) {
     window.localStorage.setItem(lastProjectStorageKey, value);
   } catch {
     // Ignore storage failures; project selection still works for the current dialog.
+  }
+}
+
+function storedLaunchMode(): 'workflow' | 'chat' {
+  try {
+    return window.localStorage.getItem(lastLaunchModeStorageKey) === 'workflow'
+      ? 'workflow'
+      : 'chat';
+  } catch {
+    return 'chat';
+  }
+}
+
+function rememberLaunchMode(value: 'workflow' | 'chat') {
+  preferredMode.value = value;
+  try {
+    window.localStorage.setItem(lastLaunchModeStorageKey, value);
+  } catch {
+    // Ignore storage failures; the current page still remembers the launch mode.
   }
 }
 
@@ -321,25 +349,15 @@ async function loadWorkflowAvailability() {
   const workflowId = selectedProject.value?.defaultWorkflowId ?? '';
   if (!workflowId) {
     workflowAvailable.value = false;
-    mode.value = 'chat';
     return;
   }
-  workflowAvailabilityLoading.value = true;
   try {
     const definition = await getWorkflowDefinition(workflowId);
     if (workflowAvailabilityToken.value !== token) return;
     workflowAvailable.value = Boolean(definition?.graph.nodes.length);
-    if (!workflowAvailable.value) {
-      mode.value = 'chat';
-    }
   } catch {
     if (workflowAvailabilityToken.value === token) {
       workflowAvailable.value = false;
-      mode.value = 'chat';
-    }
-  } finally {
-    if (workflowAvailabilityToken.value === token) {
-      workflowAvailabilityLoading.value = false;
     }
   }
 }
@@ -374,7 +392,8 @@ async function refreshProjectBranches(value: string) {
   await loadBranchesForProject(value, { refresh: true });
 }
 
-async function createSession() {
+async function createSession(requestedMode: 'workflow' | 'chat') {
+  if (creating.value) return;
   if (!branchSelectionReady.value) {
     Notify.create({
       type: 'negative',
@@ -396,7 +415,7 @@ async function createSession() {
   const input: CreateSessionInput = {
     projectId: projectId.value,
     requirement: prompt.value,
-    mode: canUseWorkflowMode.value ? mode.value : 'chat',
+    mode: requestedMode === 'workflow' && canUseWorkflowMode.value ? 'workflow' : 'chat',
     priority: priority.value,
     config,
   };
@@ -409,6 +428,7 @@ async function createSession() {
   let phase: 'upload' | 'create' = selectedFiles.length > 0 ? 'upload' : 'create';
 
   creating.value = true;
+  launchingMode.value = requestedMode;
   try {
     for (const file of selectedFiles) {
       const attachment = await stageAttachment(file);
@@ -421,6 +441,7 @@ async function createSession() {
     }
     await createSessionRequest(input);
     rememberProjectId(input.projectId);
+    rememberLaunchMode(input.mode);
     files.value = [];
     prompt.value = '';
     emit('create');
@@ -442,6 +463,7 @@ async function createSession() {
     }
   } finally {
     creating.value = false;
+    launchingMode.value = '';
   }
 }
 

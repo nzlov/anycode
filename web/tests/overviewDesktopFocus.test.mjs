@@ -65,10 +65,7 @@ test('desktop create panel uses one project row within its reserved maximum heig
     stylesSource,
     /\.new-session-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*grid-auto-flow:\s*column/s,
   );
-  assert.match(
-    newSessionSource,
-    /label="项目"[\s\S]*class="branch-picker"[\s\S]*label="优先级"[\s\S]*class="new-session-mode"/,
-  );
+  assert.match(newSessionSource, /label="项目"[\s\S]*class="branch-picker"[\s\S]*label="优先级"/);
   assert.match(
     stylesSource,
     /@media \(min-width: 700px\)[\s\S]*?\.new-session-dialog--panel\s*{[^}]*left:\s*24px/s,
