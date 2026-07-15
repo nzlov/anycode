@@ -29,6 +29,7 @@ var (
 
 const (
 	processRunOwnerEnv    = "ANYCODE_PROCESS_RUN_ID"
+	artifactDirEnv        = "ANYCODE_ARTIFACT_DIR"
 	mcpToolTimeoutSeconds = 86400
 )
 
@@ -69,15 +70,15 @@ var processRegistry sync.Map
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
 	args := c.buildStartArgs(input)
-	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, "")
+	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.ArtifactDir, "")
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	args := c.buildResumeArgs(input)
-	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.CodexSessionID)
+	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.ArtifactDir, input.CodexSessionID)
 }
 
-func (c *Client) start(ctx context.Context, runID process.RunID, args []string, prompt string, workdir string, codexSessionID string) (process.CodexHandle, error) {
+func (c *Client) start(ctx context.Context, runID process.RunID, args []string, prompt string, workdir string, artifactDir string, codexSessionID string) (process.CodexHandle, error) {
 	if runID == "" {
 		return process.CodexHandle{}, errors.New("process run id is required")
 	}
@@ -99,6 +100,9 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 		env = upsertEnv(env, "ANYCODE_MCP_TOKEN", c.mcpAuthToken)
 	}
 	env = upsertEnv(env, processRunOwnerEnv, string(runID))
+	if artifactDir != "" {
+		env = upsertEnv(env, artifactDirEnv, artifactDir)
+	}
 	cmd.Env = env
 	if workdir != "" {
 		cmd.Dir = workdir
@@ -1753,7 +1757,9 @@ func applyCodexSemantic(event *process.CodexEvent) {
 		return
 	}
 	if event.Type == "mcp_tool_call_end" {
-		event.Phase = mcpToolPhase(event.Payload["result"])
+		result := mapValue(event.Payload["result"])
+		okResult := mapValue(result["Ok"])
+		event.Phase = mcpToolPhase(result)
 		invocation := mapValue(event.Payload["invocation"])
 		event.Content = process.CodexToolContent{
 			QualifiedName: qualifiedInvocationName(invocation),
@@ -1762,6 +1768,7 @@ func applyCodexSemantic(event *process.CodexEvent) {
 				Format: process.CodexTextJSON,
 				Text:   jsonText(event.Payload["result"]),
 			},
+			Images: codexImages(okResult),
 		}
 		return
 	}
@@ -1890,14 +1897,45 @@ func codexImages(item map[string]any) []process.CodexImage {
 		}
 		for _, part := range parts {
 			entry := mapValue(part)
-			if stringValue(entry, "type") != "input_image" {
+			contentType := stringValue(entry, "type")
+			resource := mapValue(entry["resource"])
+			var source string
+			var mimeType string
+			inlineBlob := false
+			sourceKind := "remote"
+			switch contentType {
+			case "input_image", "output_image", "image":
+				source = firstString(entry["image_url"], entry["url"], entry["data"])
+				mimeType = stringValue(entry, "mime_type", "mimeType")
+			case "input_audio", "audio":
+				source = firstString(entry["data"], entry["audio"])
+				inlineBlob = source != ""
+				if source == "" {
+					source = firstString(entry["url"])
+				}
+				mimeType = stringValue(entry, "mime_type", "mimeType")
+			case "resource", "embedded_resource":
+				source = firstString(resource["blob"], entry["blob"])
+				inlineBlob = source != ""
+				if source == "" {
+					source = firstString(resource["url"], resource["uri"])
+				}
+				mimeType = firstString(resource["mimeType"], resource["mime_type"], entry["mimeType"], entry["mime_type"])
+			default:
 				continue
 			}
-			source := stringValue(entry, "image_url")
 			if source == "" {
 				continue
 			}
-			images = append(images, process.CodexImage{Source: source, Detail: stringValue(entry, "detail")})
+			if strings.HasPrefix(source, "data:") {
+				sourceKind = "inline"
+			} else if inlineBlob {
+				// GLUE: The transcript image carrier also transports inline MCP blobs until GraphQL exposes a generic artifact candidate.
+				sourceKind = "inline_base64"
+			} else if strings.HasPrefix(source, "/") {
+				sourceKind = "managed_file"
+			}
+			images = append(images, process.CodexImage{Source: source, Detail: stringValue(entry, "detail"), SourceKind: sourceKind, MimeType: mimeType})
 		}
 	}
 	return images
@@ -2563,7 +2601,11 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 	if input.Workdir != "" {
 		args = append(args, "-C", input.Workdir)
 	}
+	if input.ArtifactDir != "" {
+		args = append(args, "--add-dir", input.ArtifactDir)
+	}
 	args = c.appendMCPArgs(args, input.SessionID)
+	args = c.appendPlaywrightMCPArgs(args, input.ProcessRunID, input.ArtifactDir)
 	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, true)
 	for _, path := range input.ImagePaths {
 		if path != "" {
@@ -2579,12 +2621,36 @@ func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
 func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
 	args = c.appendMCPArgs(args, input.SessionID)
+	args = c.appendPlaywrightMCPArgs(args, input.ProcessRunID, input.ArtifactDir)
 	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, false)
+	if input.ArtifactDir != "" && input.PermissionMode == "workspace-write" {
+		args = append(args, "-c", fmt.Sprintf("sandbox_workspace_write.writable_roots=[%q]", input.ArtifactDir))
+	}
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}
 	if input.Prompt != "" {
 		args = append(args, "-")
+	}
+	return args
+}
+
+func (c *Client) appendPlaywrightMCPArgs(args []string, runID process.RunID, artifactDir string) []string {
+	if c == nil || c.playwrightBin == "" || runID == "" || artifactDir == "" {
+		return args
+	}
+	outputDir := filepath.Join(artifactDir, "browser", string(runID))
+	playwrightArgs := []string{"--headless", "--isolated", "--image-responses", "allow", "--output-dir", outputDir}
+	if c.chromiumBin != "" {
+		playwrightArgs = append(playwrightArgs, "--executable-path", c.chromiumBin)
+	}
+	args = append(args,
+		"-c", `mcp_servers.playwright.type="stdio"`,
+		"-c", fmt.Sprintf("mcp_servers.playwright.command=%q", c.playwrightBin),
+		"-c", fmt.Sprintf("mcp_servers.playwright.args=%s", tomlStringArray(playwrightArgs)),
+	)
+	if c.mcpToolTimeout {
+		args = append(args, "-c", fmt.Sprintf("mcp_servers.playwright.tool_timeout_sec=%d", mcpToolTimeoutSeconds))
 	}
 	return args
 }

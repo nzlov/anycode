@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+const panel = readFileSync(
+  new URL('../src/components/SessionArtifactsPanel.vue', import.meta.url),
+  'utf8',
+);
+const event = readFileSync(
+  new URL('../src/components/SessionArtifactEvent.vue', import.meta.url),
+  'utf8',
+);
+const service = readFileSync(new URL('../src/services/sessionFiles.ts', import.meta.url), 'utf8');
+const detailPage = readFileSync(
+  new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+  'utf8',
+);
+
+test('session artifacts use backend pagination, filters, and unified file actions', () => {
+  assert.match(panel, /listSessionFiles\(input\)/);
+  assert.match(panel, /input\.kind = kind\.value/);
+  assert.match(panel, /input\.source = source\.value/);
+  assert.match(panel, /input\.sort = sort\.value/);
+  assert.match(panel, /<AppPagination/);
+  assert.match(panel, /useSessionFileAsInput/);
+  assert.match(panel, /deleteSessionFile/);
+  assert.match(panel, /downloadSessionFile/);
+});
+
+test('authenticated previews revoke blob URLs and bound text rendering', () => {
+  assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
+  assert.match(service, /URL\.revokeObjectURL\(url\)/);
+  assert.match(panel, /URL\.revokeObjectURL\(previewURL\.value\)/);
+  assert.match(event, /URL\.revokeObjectURL\(objectUrl\.value\)/);
+  assert.match(panel, /file\.size > 1 << 20/);
+  assert.match(panel, /selected\?\.previewKind === 'image'/);
+  assert.match(panel, /selected\?\.previewKind === 'pdf'/);
+  assert.match(panel, /selected\?\.previewKind === 'video'/);
+  assert.match(panel, /selected\?\.previewKind === 'audio'/);
+  assert.match(panel, /selected\?\.previewKind === 'text'/);
+});
+
+test('artifact requests ignore stale responses and follow live artifact events', () => {
+  assert.match(service, /signal\?: AbortSignal/);
+  assert.match(service, /fetch\(url, \{ headers, signal: signal \?\? null \}\)/);
+  assert.match(panel, /const request = \+\+loadRequest/);
+  assert.match(panel, /request !== loadRequest/);
+  assert.match(panel, /previewController\?\.abort\(\)/);
+  assert.match(event, /previewController\?\.abort\(\)/);
+  assert.match(detailPage, /:refresh-key="artifactRefreshKey"/);
+  assert.match(detailPage, /entry\.content\.rawType\.startsWith\('artifact\.'\)/);
+});

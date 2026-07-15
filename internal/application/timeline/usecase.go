@@ -288,14 +288,15 @@ func (s *Service) statusHistoryEvents(ctx context.Context, current sessiondomain
 	}
 	result := make([]DTO, 0, len(events))
 	for _, item := range events {
-		if !isVisibleStatusEvent(item.Type) {
+		content, visible := storedEventContent(item.Type, item.Payload)
+		if !visible {
 			continue
 		}
 		result = append(result, DTO{
 			ID:         item.ID,
 			OrderKey:   timelineOrderKey(item.CreatedAt, 0, 0, 0, string(item.ID)),
 			Phase:      processdomain.CodexPhaseStandalone,
-			Content:    statusContent(item.Type, item.Payload),
+			Content:    content,
 			OccurredAt: item.CreatedAt.UTC().Format(time.RFC3339Nano),
 		})
 	}
@@ -402,16 +403,27 @@ func fromEventDTO(dto event.DTO, sourceGroup int) (DTO, bool) {
 			OccurredAt:    dto.CreatedAt,
 		}, true
 	}
-	if !isVisibleStatusEvent(dto.Type) {
+	content, visible := storedEventContent(dto.Type, dto.Payload)
+	if !visible {
 		return DTO{}, false
 	}
 	return DTO{
 		ID:         dto.ID,
 		OrderKey:   timelineOrderKey(createdAt, 0, 0, 0, string(dto.ID)),
 		Phase:      processdomain.CodexPhaseStandalone,
-		Content:    statusContent(dto.Type, dto.Payload),
+		Content:    content,
 		OccurredAt: dto.CreatedAt,
 	}, true
+}
+
+func storedEventContent(eventType string, payload map[string]any) (processdomain.CodexEventContent, bool) {
+	if strings.HasPrefix(eventType, "artifact.") {
+		return processdomain.CodexUnknownContent{RawType: eventType, Payload: payload}, true
+	}
+	if isVisibleStatusEvent(eventType) {
+		return statusContent(eventType, payload), true
+	}
+	return nil, false
 }
 
 func canonicalCorrelationID(codexSessionID string, correlationID string) string {

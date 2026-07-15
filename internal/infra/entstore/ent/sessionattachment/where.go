@@ -69,6 +69,11 @@ func SessionID(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldSessionID, v))
 }
 
+// Role applies equality check predicate on the "role" field. It's identical to RoleEQ.
+func Role(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldRole, v))
+}
+
 // SourceType applies equality check predicate on the "source_type" field. It's identical to SourceTypeEQ.
 func SourceType(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldSourceType, v))
@@ -79,9 +84,29 @@ func SourceID(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldSourceID, v))
 }
 
+// SourceKey applies equality check predicate on the "source_key" field. It's identical to SourceKeyEQ.
+func SourceKey(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldSourceKey, v))
+}
+
 // Kind applies equality check predicate on the "kind" field. It's identical to KindEQ.
 func Kind(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldKind, v))
+}
+
+// ArtifactKind applies equality check predicate on the "artifact_kind" field. It's identical to ArtifactKindEQ.
+func ArtifactKind(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldArtifactKind, v))
+}
+
+// LogicalPath applies equality check predicate on the "logical_path" field. It's identical to LogicalPathEQ.
+func LogicalPath(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldLogicalPath, v))
+}
+
+// SourceModifiedAt applies equality check predicate on the "source_modified_at" field. It's identical to SourceModifiedAtEQ.
+func SourceModifiedAt(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldSourceModifiedAt, v))
 }
 
 // Filename applies equality check predicate on the "filename" field. It's identical to FilenameEQ.
@@ -104,14 +129,44 @@ func Size(v int64) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldSize, v))
 }
 
+// Sha256 applies equality check predicate on the "sha256" field. It's identical to Sha256EQ.
+func Sha256(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldSha256, v))
+}
+
 // Previewable applies equality check predicate on the "previewable" field. It's identical to PreviewableEQ.
 func Previewable(v bool) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldPreviewable, v))
 }
 
+// PreviewKind applies equality check predicate on the "preview_kind" field. It's identical to PreviewKindEQ.
+func PreviewKind(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldPreviewKind, v))
+}
+
+// ProcessRunID applies equality check predicate on the "process_run_id" field. It's identical to ProcessRunIDEQ.
+func ProcessRunID(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldProcessRunID, v))
+}
+
+// NodeRunID applies equality check predicate on the "node_run_id" field. It's identical to NodeRunIDEQ.
+func NodeRunID(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldNodeRunID, v))
+}
+
+// CorrelationID applies equality check predicate on the "correlation_id" field. It's identical to CorrelationIDEQ.
+func CorrelationID(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldCorrelationID, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldCreatedAt, v))
+}
+
+// DeletedAt applies equality check predicate on the "deleted_at" field. It's identical to DeletedAtEQ.
+func DeletedAt(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldDeletedAt, v))
 }
 
 // SessionIDEQ applies the EQ predicate on the "session_id" field.
@@ -177,6 +232,71 @@ func SessionIDEqualFold(v string) predicate.SessionAttachment {
 // SessionIDContainsFold applies the ContainsFold predicate on the "session_id" field.
 func SessionIDContainsFold(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldContainsFold(FieldSessionID, v))
+}
+
+// RoleEQ applies the EQ predicate on the "role" field.
+func RoleEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldRole, v))
+}
+
+// RoleNEQ applies the NEQ predicate on the "role" field.
+func RoleNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldRole, v))
+}
+
+// RoleIn applies the In predicate on the "role" field.
+func RoleIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldRole, vs...))
+}
+
+// RoleNotIn applies the NotIn predicate on the "role" field.
+func RoleNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldRole, vs...))
+}
+
+// RoleGT applies the GT predicate on the "role" field.
+func RoleGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldRole, v))
+}
+
+// RoleGTE applies the GTE predicate on the "role" field.
+func RoleGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldRole, v))
+}
+
+// RoleLT applies the LT predicate on the "role" field.
+func RoleLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldRole, v))
+}
+
+// RoleLTE applies the LTE predicate on the "role" field.
+func RoleLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldRole, v))
+}
+
+// RoleContains applies the Contains predicate on the "role" field.
+func RoleContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldRole, v))
+}
+
+// RoleHasPrefix applies the HasPrefix predicate on the "role" field.
+func RoleHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldRole, v))
+}
+
+// RoleHasSuffix applies the HasSuffix predicate on the "role" field.
+func RoleHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldRole, v))
+}
+
+// RoleEqualFold applies the EqualFold predicate on the "role" field.
+func RoleEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldRole, v))
+}
+
+// RoleContainsFold applies the ContainsFold predicate on the "role" field.
+func RoleContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldRole, v))
 }
 
 // SourceTypeEQ applies the EQ predicate on the "source_type" field.
@@ -309,6 +429,71 @@ func SourceIDContainsFold(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldContainsFold(FieldSourceID, v))
 }
 
+// SourceKeyEQ applies the EQ predicate on the "source_key" field.
+func SourceKeyEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldSourceKey, v))
+}
+
+// SourceKeyNEQ applies the NEQ predicate on the "source_key" field.
+func SourceKeyNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldSourceKey, v))
+}
+
+// SourceKeyIn applies the In predicate on the "source_key" field.
+func SourceKeyIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldSourceKey, vs...))
+}
+
+// SourceKeyNotIn applies the NotIn predicate on the "source_key" field.
+func SourceKeyNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldSourceKey, vs...))
+}
+
+// SourceKeyGT applies the GT predicate on the "source_key" field.
+func SourceKeyGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldSourceKey, v))
+}
+
+// SourceKeyGTE applies the GTE predicate on the "source_key" field.
+func SourceKeyGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldSourceKey, v))
+}
+
+// SourceKeyLT applies the LT predicate on the "source_key" field.
+func SourceKeyLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldSourceKey, v))
+}
+
+// SourceKeyLTE applies the LTE predicate on the "source_key" field.
+func SourceKeyLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldSourceKey, v))
+}
+
+// SourceKeyContains applies the Contains predicate on the "source_key" field.
+func SourceKeyContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldSourceKey, v))
+}
+
+// SourceKeyHasPrefix applies the HasPrefix predicate on the "source_key" field.
+func SourceKeyHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldSourceKey, v))
+}
+
+// SourceKeyHasSuffix applies the HasSuffix predicate on the "source_key" field.
+func SourceKeyHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldSourceKey, v))
+}
+
+// SourceKeyEqualFold applies the EqualFold predicate on the "source_key" field.
+func SourceKeyEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldSourceKey, v))
+}
+
+// SourceKeyContainsFold applies the ContainsFold predicate on the "source_key" field.
+func SourceKeyContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldSourceKey, v))
+}
+
 // KindEQ applies the EQ predicate on the "kind" field.
 func KindEQ(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldKind, v))
@@ -372,6 +557,186 @@ func KindEqualFold(v string) predicate.SessionAttachment {
 // KindContainsFold applies the ContainsFold predicate on the "kind" field.
 func KindContainsFold(v string) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldContainsFold(FieldKind, v))
+}
+
+// ArtifactKindEQ applies the EQ predicate on the "artifact_kind" field.
+func ArtifactKindEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldArtifactKind, v))
+}
+
+// ArtifactKindNEQ applies the NEQ predicate on the "artifact_kind" field.
+func ArtifactKindNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldArtifactKind, v))
+}
+
+// ArtifactKindIn applies the In predicate on the "artifact_kind" field.
+func ArtifactKindIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldArtifactKind, vs...))
+}
+
+// ArtifactKindNotIn applies the NotIn predicate on the "artifact_kind" field.
+func ArtifactKindNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldArtifactKind, vs...))
+}
+
+// ArtifactKindGT applies the GT predicate on the "artifact_kind" field.
+func ArtifactKindGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldArtifactKind, v))
+}
+
+// ArtifactKindGTE applies the GTE predicate on the "artifact_kind" field.
+func ArtifactKindGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldArtifactKind, v))
+}
+
+// ArtifactKindLT applies the LT predicate on the "artifact_kind" field.
+func ArtifactKindLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldArtifactKind, v))
+}
+
+// ArtifactKindLTE applies the LTE predicate on the "artifact_kind" field.
+func ArtifactKindLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldArtifactKind, v))
+}
+
+// ArtifactKindContains applies the Contains predicate on the "artifact_kind" field.
+func ArtifactKindContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldArtifactKind, v))
+}
+
+// ArtifactKindHasPrefix applies the HasPrefix predicate on the "artifact_kind" field.
+func ArtifactKindHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldArtifactKind, v))
+}
+
+// ArtifactKindHasSuffix applies the HasSuffix predicate on the "artifact_kind" field.
+func ArtifactKindHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldArtifactKind, v))
+}
+
+// ArtifactKindEqualFold applies the EqualFold predicate on the "artifact_kind" field.
+func ArtifactKindEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldArtifactKind, v))
+}
+
+// ArtifactKindContainsFold applies the ContainsFold predicate on the "artifact_kind" field.
+func ArtifactKindContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldArtifactKind, v))
+}
+
+// LogicalPathEQ applies the EQ predicate on the "logical_path" field.
+func LogicalPathEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldLogicalPath, v))
+}
+
+// LogicalPathNEQ applies the NEQ predicate on the "logical_path" field.
+func LogicalPathNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldLogicalPath, v))
+}
+
+// LogicalPathIn applies the In predicate on the "logical_path" field.
+func LogicalPathIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldLogicalPath, vs...))
+}
+
+// LogicalPathNotIn applies the NotIn predicate on the "logical_path" field.
+func LogicalPathNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldLogicalPath, vs...))
+}
+
+// LogicalPathGT applies the GT predicate on the "logical_path" field.
+func LogicalPathGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldLogicalPath, v))
+}
+
+// LogicalPathGTE applies the GTE predicate on the "logical_path" field.
+func LogicalPathGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldLogicalPath, v))
+}
+
+// LogicalPathLT applies the LT predicate on the "logical_path" field.
+func LogicalPathLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldLogicalPath, v))
+}
+
+// LogicalPathLTE applies the LTE predicate on the "logical_path" field.
+func LogicalPathLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldLogicalPath, v))
+}
+
+// LogicalPathContains applies the Contains predicate on the "logical_path" field.
+func LogicalPathContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldLogicalPath, v))
+}
+
+// LogicalPathHasPrefix applies the HasPrefix predicate on the "logical_path" field.
+func LogicalPathHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldLogicalPath, v))
+}
+
+// LogicalPathHasSuffix applies the HasSuffix predicate on the "logical_path" field.
+func LogicalPathHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldLogicalPath, v))
+}
+
+// LogicalPathEqualFold applies the EqualFold predicate on the "logical_path" field.
+func LogicalPathEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldLogicalPath, v))
+}
+
+// LogicalPathContainsFold applies the ContainsFold predicate on the "logical_path" field.
+func LogicalPathContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldLogicalPath, v))
+}
+
+// SourceModifiedAtEQ applies the EQ predicate on the "source_modified_at" field.
+func SourceModifiedAtEQ(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldSourceModifiedAt, v))
+}
+
+// SourceModifiedAtNEQ applies the NEQ predicate on the "source_modified_at" field.
+func SourceModifiedAtNEQ(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldSourceModifiedAt, v))
+}
+
+// SourceModifiedAtIn applies the In predicate on the "source_modified_at" field.
+func SourceModifiedAtIn(vs ...time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldSourceModifiedAt, vs...))
+}
+
+// SourceModifiedAtNotIn applies the NotIn predicate on the "source_modified_at" field.
+func SourceModifiedAtNotIn(vs ...time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldSourceModifiedAt, vs...))
+}
+
+// SourceModifiedAtGT applies the GT predicate on the "source_modified_at" field.
+func SourceModifiedAtGT(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldSourceModifiedAt, v))
+}
+
+// SourceModifiedAtGTE applies the GTE predicate on the "source_modified_at" field.
+func SourceModifiedAtGTE(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldSourceModifiedAt, v))
+}
+
+// SourceModifiedAtLT applies the LT predicate on the "source_modified_at" field.
+func SourceModifiedAtLT(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldSourceModifiedAt, v))
+}
+
+// SourceModifiedAtLTE applies the LTE predicate on the "source_modified_at" field.
+func SourceModifiedAtLTE(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldSourceModifiedAt, v))
+}
+
+// SourceModifiedAtIsNil applies the IsNil predicate on the "source_modified_at" field.
+func SourceModifiedAtIsNil() predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIsNull(FieldSourceModifiedAt))
+}
+
+// SourceModifiedAtNotNil applies the NotNil predicate on the "source_modified_at" field.
+func SourceModifiedAtNotNil() predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotNull(FieldSourceModifiedAt))
 }
 
 // FilenameEQ applies the EQ predicate on the "filename" field.
@@ -609,6 +974,71 @@ func SizeLTE(v int64) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldLTE(FieldSize, v))
 }
 
+// Sha256EQ applies the EQ predicate on the "sha256" field.
+func Sha256EQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldSha256, v))
+}
+
+// Sha256NEQ applies the NEQ predicate on the "sha256" field.
+func Sha256NEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldSha256, v))
+}
+
+// Sha256In applies the In predicate on the "sha256" field.
+func Sha256In(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldSha256, vs...))
+}
+
+// Sha256NotIn applies the NotIn predicate on the "sha256" field.
+func Sha256NotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldSha256, vs...))
+}
+
+// Sha256GT applies the GT predicate on the "sha256" field.
+func Sha256GT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldSha256, v))
+}
+
+// Sha256GTE applies the GTE predicate on the "sha256" field.
+func Sha256GTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldSha256, v))
+}
+
+// Sha256LT applies the LT predicate on the "sha256" field.
+func Sha256LT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldSha256, v))
+}
+
+// Sha256LTE applies the LTE predicate on the "sha256" field.
+func Sha256LTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldSha256, v))
+}
+
+// Sha256Contains applies the Contains predicate on the "sha256" field.
+func Sha256Contains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldSha256, v))
+}
+
+// Sha256HasPrefix applies the HasPrefix predicate on the "sha256" field.
+func Sha256HasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldSha256, v))
+}
+
+// Sha256HasSuffix applies the HasSuffix predicate on the "sha256" field.
+func Sha256HasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldSha256, v))
+}
+
+// Sha256EqualFold applies the EqualFold predicate on the "sha256" field.
+func Sha256EqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldSha256, v))
+}
+
+// Sha256ContainsFold applies the ContainsFold predicate on the "sha256" field.
+func Sha256ContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldSha256, v))
+}
+
 // PreviewableEQ applies the EQ predicate on the "previewable" field.
 func PreviewableEQ(v bool) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldEQ(FieldPreviewable, v))
@@ -617,6 +1047,266 @@ func PreviewableEQ(v bool) predicate.SessionAttachment {
 // PreviewableNEQ applies the NEQ predicate on the "previewable" field.
 func PreviewableNEQ(v bool) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldNEQ(FieldPreviewable, v))
+}
+
+// PreviewKindEQ applies the EQ predicate on the "preview_kind" field.
+func PreviewKindEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldPreviewKind, v))
+}
+
+// PreviewKindNEQ applies the NEQ predicate on the "preview_kind" field.
+func PreviewKindNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldPreviewKind, v))
+}
+
+// PreviewKindIn applies the In predicate on the "preview_kind" field.
+func PreviewKindIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldPreviewKind, vs...))
+}
+
+// PreviewKindNotIn applies the NotIn predicate on the "preview_kind" field.
+func PreviewKindNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldPreviewKind, vs...))
+}
+
+// PreviewKindGT applies the GT predicate on the "preview_kind" field.
+func PreviewKindGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldPreviewKind, v))
+}
+
+// PreviewKindGTE applies the GTE predicate on the "preview_kind" field.
+func PreviewKindGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldPreviewKind, v))
+}
+
+// PreviewKindLT applies the LT predicate on the "preview_kind" field.
+func PreviewKindLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldPreviewKind, v))
+}
+
+// PreviewKindLTE applies the LTE predicate on the "preview_kind" field.
+func PreviewKindLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldPreviewKind, v))
+}
+
+// PreviewKindContains applies the Contains predicate on the "preview_kind" field.
+func PreviewKindContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldPreviewKind, v))
+}
+
+// PreviewKindHasPrefix applies the HasPrefix predicate on the "preview_kind" field.
+func PreviewKindHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldPreviewKind, v))
+}
+
+// PreviewKindHasSuffix applies the HasSuffix predicate on the "preview_kind" field.
+func PreviewKindHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldPreviewKind, v))
+}
+
+// PreviewKindEqualFold applies the EqualFold predicate on the "preview_kind" field.
+func PreviewKindEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldPreviewKind, v))
+}
+
+// PreviewKindContainsFold applies the ContainsFold predicate on the "preview_kind" field.
+func PreviewKindContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldPreviewKind, v))
+}
+
+// ProcessRunIDEQ applies the EQ predicate on the "process_run_id" field.
+func ProcessRunIDEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldProcessRunID, v))
+}
+
+// ProcessRunIDNEQ applies the NEQ predicate on the "process_run_id" field.
+func ProcessRunIDNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldProcessRunID, v))
+}
+
+// ProcessRunIDIn applies the In predicate on the "process_run_id" field.
+func ProcessRunIDIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldProcessRunID, vs...))
+}
+
+// ProcessRunIDNotIn applies the NotIn predicate on the "process_run_id" field.
+func ProcessRunIDNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldProcessRunID, vs...))
+}
+
+// ProcessRunIDGT applies the GT predicate on the "process_run_id" field.
+func ProcessRunIDGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldProcessRunID, v))
+}
+
+// ProcessRunIDGTE applies the GTE predicate on the "process_run_id" field.
+func ProcessRunIDGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldProcessRunID, v))
+}
+
+// ProcessRunIDLT applies the LT predicate on the "process_run_id" field.
+func ProcessRunIDLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldProcessRunID, v))
+}
+
+// ProcessRunIDLTE applies the LTE predicate on the "process_run_id" field.
+func ProcessRunIDLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldProcessRunID, v))
+}
+
+// ProcessRunIDContains applies the Contains predicate on the "process_run_id" field.
+func ProcessRunIDContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldProcessRunID, v))
+}
+
+// ProcessRunIDHasPrefix applies the HasPrefix predicate on the "process_run_id" field.
+func ProcessRunIDHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldProcessRunID, v))
+}
+
+// ProcessRunIDHasSuffix applies the HasSuffix predicate on the "process_run_id" field.
+func ProcessRunIDHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldProcessRunID, v))
+}
+
+// ProcessRunIDEqualFold applies the EqualFold predicate on the "process_run_id" field.
+func ProcessRunIDEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldProcessRunID, v))
+}
+
+// ProcessRunIDContainsFold applies the ContainsFold predicate on the "process_run_id" field.
+func ProcessRunIDContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldProcessRunID, v))
+}
+
+// NodeRunIDEQ applies the EQ predicate on the "node_run_id" field.
+func NodeRunIDEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldNodeRunID, v))
+}
+
+// NodeRunIDNEQ applies the NEQ predicate on the "node_run_id" field.
+func NodeRunIDNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldNodeRunID, v))
+}
+
+// NodeRunIDIn applies the In predicate on the "node_run_id" field.
+func NodeRunIDIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldNodeRunID, vs...))
+}
+
+// NodeRunIDNotIn applies the NotIn predicate on the "node_run_id" field.
+func NodeRunIDNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldNodeRunID, vs...))
+}
+
+// NodeRunIDGT applies the GT predicate on the "node_run_id" field.
+func NodeRunIDGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldNodeRunID, v))
+}
+
+// NodeRunIDGTE applies the GTE predicate on the "node_run_id" field.
+func NodeRunIDGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldNodeRunID, v))
+}
+
+// NodeRunIDLT applies the LT predicate on the "node_run_id" field.
+func NodeRunIDLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldNodeRunID, v))
+}
+
+// NodeRunIDLTE applies the LTE predicate on the "node_run_id" field.
+func NodeRunIDLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldNodeRunID, v))
+}
+
+// NodeRunIDContains applies the Contains predicate on the "node_run_id" field.
+func NodeRunIDContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldNodeRunID, v))
+}
+
+// NodeRunIDHasPrefix applies the HasPrefix predicate on the "node_run_id" field.
+func NodeRunIDHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldNodeRunID, v))
+}
+
+// NodeRunIDHasSuffix applies the HasSuffix predicate on the "node_run_id" field.
+func NodeRunIDHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldNodeRunID, v))
+}
+
+// NodeRunIDEqualFold applies the EqualFold predicate on the "node_run_id" field.
+func NodeRunIDEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldNodeRunID, v))
+}
+
+// NodeRunIDContainsFold applies the ContainsFold predicate on the "node_run_id" field.
+func NodeRunIDContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldNodeRunID, v))
+}
+
+// CorrelationIDEQ applies the EQ predicate on the "correlation_id" field.
+func CorrelationIDEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldCorrelationID, v))
+}
+
+// CorrelationIDNEQ applies the NEQ predicate on the "correlation_id" field.
+func CorrelationIDNEQ(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldCorrelationID, v))
+}
+
+// CorrelationIDIn applies the In predicate on the "correlation_id" field.
+func CorrelationIDIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldCorrelationID, vs...))
+}
+
+// CorrelationIDNotIn applies the NotIn predicate on the "correlation_id" field.
+func CorrelationIDNotIn(vs ...string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldCorrelationID, vs...))
+}
+
+// CorrelationIDGT applies the GT predicate on the "correlation_id" field.
+func CorrelationIDGT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldCorrelationID, v))
+}
+
+// CorrelationIDGTE applies the GTE predicate on the "correlation_id" field.
+func CorrelationIDGTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldCorrelationID, v))
+}
+
+// CorrelationIDLT applies the LT predicate on the "correlation_id" field.
+func CorrelationIDLT(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldCorrelationID, v))
+}
+
+// CorrelationIDLTE applies the LTE predicate on the "correlation_id" field.
+func CorrelationIDLTE(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldCorrelationID, v))
+}
+
+// CorrelationIDContains applies the Contains predicate on the "correlation_id" field.
+func CorrelationIDContains(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContains(FieldCorrelationID, v))
+}
+
+// CorrelationIDHasPrefix applies the HasPrefix predicate on the "correlation_id" field.
+func CorrelationIDHasPrefix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasPrefix(FieldCorrelationID, v))
+}
+
+// CorrelationIDHasSuffix applies the HasSuffix predicate on the "correlation_id" field.
+func CorrelationIDHasSuffix(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldHasSuffix(FieldCorrelationID, v))
+}
+
+// CorrelationIDEqualFold applies the EqualFold predicate on the "correlation_id" field.
+func CorrelationIDEqualFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEqualFold(FieldCorrelationID, v))
+}
+
+// CorrelationIDContainsFold applies the ContainsFold predicate on the "correlation_id" field.
+func CorrelationIDContainsFold(v string) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldContainsFold(FieldCorrelationID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -657,6 +1347,56 @@ func CreatedAtLT(v time.Time) predicate.SessionAttachment {
 // CreatedAtLTE applies the LTE predicate on the "created_at" field.
 func CreatedAtLTE(v time.Time) predicate.SessionAttachment {
 	return predicate.SessionAttachment(sql.FieldLTE(FieldCreatedAt, v))
+}
+
+// DeletedAtEQ applies the EQ predicate on the "deleted_at" field.
+func DeletedAtEQ(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldEQ(FieldDeletedAt, v))
+}
+
+// DeletedAtNEQ applies the NEQ predicate on the "deleted_at" field.
+func DeletedAtNEQ(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNEQ(FieldDeletedAt, v))
+}
+
+// DeletedAtIn applies the In predicate on the "deleted_at" field.
+func DeletedAtIn(vs ...time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIn(FieldDeletedAt, vs...))
+}
+
+// DeletedAtNotIn applies the NotIn predicate on the "deleted_at" field.
+func DeletedAtNotIn(vs ...time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotIn(FieldDeletedAt, vs...))
+}
+
+// DeletedAtGT applies the GT predicate on the "deleted_at" field.
+func DeletedAtGT(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGT(FieldDeletedAt, v))
+}
+
+// DeletedAtGTE applies the GTE predicate on the "deleted_at" field.
+func DeletedAtGTE(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldGTE(FieldDeletedAt, v))
+}
+
+// DeletedAtLT applies the LT predicate on the "deleted_at" field.
+func DeletedAtLT(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLT(FieldDeletedAt, v))
+}
+
+// DeletedAtLTE applies the LTE predicate on the "deleted_at" field.
+func DeletedAtLTE(v time.Time) predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldLTE(FieldDeletedAt, v))
+}
+
+// DeletedAtIsNil applies the IsNil predicate on the "deleted_at" field.
+func DeletedAtIsNil() predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldIsNull(FieldDeletedAt))
+}
+
+// DeletedAtNotNil applies the NotNil predicate on the "deleted_at" field.
+func DeletedAtNotNil() predicate.SessionAttachment {
+	return predicate.SessionAttachment(sql.FieldNotNull(FieldDeletedAt))
 }
 
 // And groups predicates with the AND operator between them.

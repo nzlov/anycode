@@ -148,6 +148,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.client.Schema.Create(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateSessionFileColumns(ctx); err != nil {
+		return err
+	}
 	// GLUE: Backfill queues written before queue_initial_start; remove after legacy databases no longer need upgrading.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sessions
 		SET queue_initial_start = CASE
@@ -217,7 +220,16 @@ func (s *Store) Sessions() *SessionRepository {
 }
 
 func (s *Store) Attachments() *AttachmentRepository {
-	return NewAttachmentRepository(s.client)
+	return NewAttachmentRepository(s.client, s.db)
+}
+
+func (s *Store) migrateSessionFileColumns(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS session_attachments_session_source_key
+		ON session_attachments(session_id, source_key)
+		WHERE role = 'artifact' AND source_key <> ''`); err != nil {
+		return fmt.Errorf("create session artifact source key index: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) Events() *EventStore {

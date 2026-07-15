@@ -59,10 +59,7 @@ export function statusColor(content: TranscriptStatusContent) {
   return 'blue-grey';
 }
 
-const phasePresentation: Record<
-  TranscriptPhase,
-  { icon: string; color: string; label: string }
-> = {
+const phasePresentation: Record<TranscriptPhase, { icon: string; color: string; label: string }> = {
   standalone: { icon: 'info_outline', color: 'blue-grey', label: '独立事件' },
   started: { icon: 'pending', color: 'primary', label: '执行中' },
   progress: { icon: 'pending', color: 'primary', label: '执行中' },
@@ -144,8 +141,13 @@ const answerUserPromptGuidance =
   'AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。';
 const worktreePromptGuidance =
   '当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。';
+const artifactPromptGuidance =
+  '本卡片生成的图片、截图、PDF、音视频、压缩包和其他产物统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。';
 const anyCodeGuidanceSuffixes = [
+  `${artifactPromptGuidance}\n\n${answerUserPromptGuidance}\n\n${worktreePromptGuidance}`,
+  `${artifactPromptGuidance}\n\n${answerUserPromptGuidance}`,
   `${answerUserPromptGuidance}\n\n${worktreePromptGuidance}`,
+  artifactPromptGuidance,
   answerUserPromptGuidance,
   worktreePromptGuidance,
 ];
@@ -260,13 +262,12 @@ function isRebuiltSessionPrompt(text: string, knownPrompts: readonly string[]) {
   for (let appendCount = 0; appendCount <= appends.length; appendCount += 1) {
     const knownContext = [
       ...sections,
-      ...appends
-        .slice(0, appendCount)
-        .map((append) => `${appendedRequirementPrefix}${append}`),
+      ...appends.slice(0, appendCount).map((append) => `${appendedRequirementPrefix}${append}`),
     ].join('\n\n');
     if (text === knownContext) return true;
     const nodePromptOffset = `${knownContext}\n\n${currentNodePromptPrefix}`;
-    if (text.startsWith(nodePromptOffset) && text.slice(nodePromptOffset.length).trim()) return true;
+    if (text.startsWith(nodePromptOffset) && text.slice(nodePromptOffset.length).trim())
+      return true;
   }
   return false;
 }

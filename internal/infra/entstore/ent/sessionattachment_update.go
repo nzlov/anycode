@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -41,6 +42,20 @@ func (_u *SessionAttachmentUpdate) SetNillableSessionID(v *string) *SessionAttac
 	return _u
 }
 
+// SetRole sets the "role" field.
+func (_u *SessionAttachmentUpdate) SetRole(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetRole(v)
+	return _u
+}
+
+// SetNillableRole sets the "role" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableRole(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetRole(*v)
+	}
+	return _u
+}
+
 // SetSourceType sets the "source_type" field.
 func (_u *SessionAttachmentUpdate) SetSourceType(v string) *SessionAttachmentUpdate {
 	_u.mutation.SetSourceType(v)
@@ -69,6 +84,20 @@ func (_u *SessionAttachmentUpdate) SetNillableSourceID(v *string) *SessionAttach
 	return _u
 }
 
+// SetSourceKey sets the "source_key" field.
+func (_u *SessionAttachmentUpdate) SetSourceKey(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetSourceKey(v)
+	return _u
+}
+
+// SetNillableSourceKey sets the "source_key" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableSourceKey(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetSourceKey(*v)
+	}
+	return _u
+}
+
 // SetKind sets the "kind" field.
 func (_u *SessionAttachmentUpdate) SetKind(v string) *SessionAttachmentUpdate {
 	_u.mutation.SetKind(v)
@@ -80,6 +109,54 @@ func (_u *SessionAttachmentUpdate) SetNillableKind(v *string) *SessionAttachment
 	if v != nil {
 		_u.SetKind(*v)
 	}
+	return _u
+}
+
+// SetArtifactKind sets the "artifact_kind" field.
+func (_u *SessionAttachmentUpdate) SetArtifactKind(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetArtifactKind(v)
+	return _u
+}
+
+// SetNillableArtifactKind sets the "artifact_kind" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableArtifactKind(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetArtifactKind(*v)
+	}
+	return _u
+}
+
+// SetLogicalPath sets the "logical_path" field.
+func (_u *SessionAttachmentUpdate) SetLogicalPath(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetLogicalPath(v)
+	return _u
+}
+
+// SetNillableLogicalPath sets the "logical_path" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableLogicalPath(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetLogicalPath(*v)
+	}
+	return _u
+}
+
+// SetSourceModifiedAt sets the "source_modified_at" field.
+func (_u *SessionAttachmentUpdate) SetSourceModifiedAt(v time.Time) *SessionAttachmentUpdate {
+	_u.mutation.SetSourceModifiedAt(v)
+	return _u
+}
+
+// SetNillableSourceModifiedAt sets the "source_modified_at" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableSourceModifiedAt(v *time.Time) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetSourceModifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearSourceModifiedAt clears the value of the "source_modified_at" field.
+func (_u *SessionAttachmentUpdate) ClearSourceModifiedAt() *SessionAttachmentUpdate {
+	_u.mutation.ClearSourceModifiedAt()
 	return _u
 }
 
@@ -146,6 +223,20 @@ func (_u *SessionAttachmentUpdate) AddSize(v int64) *SessionAttachmentUpdate {
 	return _u
 }
 
+// SetSha256 sets the "sha256" field.
+func (_u *SessionAttachmentUpdate) SetSha256(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetSha256(v)
+	return _u
+}
+
+// SetNillableSha256 sets the "sha256" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableSha256(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetSha256(*v)
+	}
+	return _u
+}
+
 // SetPreviewable sets the "previewable" field.
 func (_u *SessionAttachmentUpdate) SetPreviewable(v bool) *SessionAttachmentUpdate {
 	_u.mutation.SetPreviewable(v)
@@ -157,6 +248,82 @@ func (_u *SessionAttachmentUpdate) SetNillablePreviewable(v *bool) *SessionAttac
 	if v != nil {
 		_u.SetPreviewable(*v)
 	}
+	return _u
+}
+
+// SetPreviewKind sets the "preview_kind" field.
+func (_u *SessionAttachmentUpdate) SetPreviewKind(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetPreviewKind(v)
+	return _u
+}
+
+// SetNillablePreviewKind sets the "preview_kind" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillablePreviewKind(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetPreviewKind(*v)
+	}
+	return _u
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (_u *SessionAttachmentUpdate) SetProcessRunID(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetProcessRunID(v)
+	return _u
+}
+
+// SetNillableProcessRunID sets the "process_run_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableProcessRunID(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetProcessRunID(*v)
+	}
+	return _u
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (_u *SessionAttachmentUpdate) SetNodeRunID(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetNodeRunID(v)
+	return _u
+}
+
+// SetNillableNodeRunID sets the "node_run_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableNodeRunID(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetNodeRunID(*v)
+	}
+	return _u
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (_u *SessionAttachmentUpdate) SetCorrelationID(v string) *SessionAttachmentUpdate {
+	_u.mutation.SetCorrelationID(v)
+	return _u
+}
+
+// SetNillableCorrelationID sets the "correlation_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableCorrelationID(v *string) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetCorrelationID(*v)
+	}
+	return _u
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (_u *SessionAttachmentUpdate) SetDeletedAt(v time.Time) *SessionAttachmentUpdate {
+	_u.mutation.SetDeletedAt(v)
+	return _u
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_u *SessionAttachmentUpdate) SetNillableDeletedAt(v *time.Time) *SessionAttachmentUpdate {
+	if v != nil {
+		_u.SetDeletedAt(*v)
+	}
+	return _u
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (_u *SessionAttachmentUpdate) ClearDeletedAt() *SessionAttachmentUpdate {
+	_u.mutation.ClearDeletedAt()
 	return _u
 }
 
@@ -237,14 +404,32 @@ func (_u *SessionAttachmentUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Role(); ok {
+		_spec.SetField(sessionattachment.FieldRole, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.SourceType(); ok {
 		_spec.SetField(sessionattachment.FieldSourceType, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SourceID(); ok {
 		_spec.SetField(sessionattachment.FieldSourceID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.SourceKey(); ok {
+		_spec.SetField(sessionattachment.FieldSourceKey, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Kind(); ok {
 		_spec.SetField(sessionattachment.FieldKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ArtifactKind(); ok {
+		_spec.SetField(sessionattachment.FieldArtifactKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LogicalPath(); ok {
+		_spec.SetField(sessionattachment.FieldLogicalPath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceModifiedAt(); ok {
+		_spec.SetField(sessionattachment.FieldSourceModifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.SourceModifiedAtCleared() {
+		_spec.ClearField(sessionattachment.FieldSourceModifiedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Filename(); ok {
 		_spec.SetField(sessionattachment.FieldFilename, field.TypeString, value)
@@ -261,8 +446,29 @@ func (_u *SessionAttachmentUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.AddedSize(); ok {
 		_spec.AddField(sessionattachment.FieldSize, field.TypeInt64, value)
 	}
+	if value, ok := _u.mutation.Sha256(); ok {
+		_spec.SetField(sessionattachment.FieldSha256, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Previewable(); ok {
 		_spec.SetField(sessionattachment.FieldPreviewable, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PreviewKind(); ok {
+		_spec.SetField(sessionattachment.FieldPreviewKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProcessRunID(); ok {
+		_spec.SetField(sessionattachment.FieldProcessRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NodeRunID(); ok {
+		_spec.SetField(sessionattachment.FieldNodeRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CorrelationID(); ok {
+		_spec.SetField(sessionattachment.FieldCorrelationID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeletedAt(); ok {
+		_spec.SetField(sessionattachment.FieldDeletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DeletedAtCleared() {
+		_spec.ClearField(sessionattachment.FieldDeletedAt, field.TypeTime)
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -298,6 +504,20 @@ func (_u *SessionAttachmentUpdateOne) SetNillableSessionID(v *string) *SessionAt
 	return _u
 }
 
+// SetRole sets the "role" field.
+func (_u *SessionAttachmentUpdateOne) SetRole(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetRole(v)
+	return _u
+}
+
+// SetNillableRole sets the "role" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableRole(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetRole(*v)
+	}
+	return _u
+}
+
 // SetSourceType sets the "source_type" field.
 func (_u *SessionAttachmentUpdateOne) SetSourceType(v string) *SessionAttachmentUpdateOne {
 	_u.mutation.SetSourceType(v)
@@ -326,6 +546,20 @@ func (_u *SessionAttachmentUpdateOne) SetNillableSourceID(v *string) *SessionAtt
 	return _u
 }
 
+// SetSourceKey sets the "source_key" field.
+func (_u *SessionAttachmentUpdateOne) SetSourceKey(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetSourceKey(v)
+	return _u
+}
+
+// SetNillableSourceKey sets the "source_key" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableSourceKey(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetSourceKey(*v)
+	}
+	return _u
+}
+
 // SetKind sets the "kind" field.
 func (_u *SessionAttachmentUpdateOne) SetKind(v string) *SessionAttachmentUpdateOne {
 	_u.mutation.SetKind(v)
@@ -337,6 +571,54 @@ func (_u *SessionAttachmentUpdateOne) SetNillableKind(v *string) *SessionAttachm
 	if v != nil {
 		_u.SetKind(*v)
 	}
+	return _u
+}
+
+// SetArtifactKind sets the "artifact_kind" field.
+func (_u *SessionAttachmentUpdateOne) SetArtifactKind(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetArtifactKind(v)
+	return _u
+}
+
+// SetNillableArtifactKind sets the "artifact_kind" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableArtifactKind(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetArtifactKind(*v)
+	}
+	return _u
+}
+
+// SetLogicalPath sets the "logical_path" field.
+func (_u *SessionAttachmentUpdateOne) SetLogicalPath(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetLogicalPath(v)
+	return _u
+}
+
+// SetNillableLogicalPath sets the "logical_path" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableLogicalPath(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetLogicalPath(*v)
+	}
+	return _u
+}
+
+// SetSourceModifiedAt sets the "source_modified_at" field.
+func (_u *SessionAttachmentUpdateOne) SetSourceModifiedAt(v time.Time) *SessionAttachmentUpdateOne {
+	_u.mutation.SetSourceModifiedAt(v)
+	return _u
+}
+
+// SetNillableSourceModifiedAt sets the "source_modified_at" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableSourceModifiedAt(v *time.Time) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetSourceModifiedAt(*v)
+	}
+	return _u
+}
+
+// ClearSourceModifiedAt clears the value of the "source_modified_at" field.
+func (_u *SessionAttachmentUpdateOne) ClearSourceModifiedAt() *SessionAttachmentUpdateOne {
+	_u.mutation.ClearSourceModifiedAt()
 	return _u
 }
 
@@ -403,6 +685,20 @@ func (_u *SessionAttachmentUpdateOne) AddSize(v int64) *SessionAttachmentUpdateO
 	return _u
 }
 
+// SetSha256 sets the "sha256" field.
+func (_u *SessionAttachmentUpdateOne) SetSha256(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetSha256(v)
+	return _u
+}
+
+// SetNillableSha256 sets the "sha256" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableSha256(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetSha256(*v)
+	}
+	return _u
+}
+
 // SetPreviewable sets the "previewable" field.
 func (_u *SessionAttachmentUpdateOne) SetPreviewable(v bool) *SessionAttachmentUpdateOne {
 	_u.mutation.SetPreviewable(v)
@@ -414,6 +710,82 @@ func (_u *SessionAttachmentUpdateOne) SetNillablePreviewable(v *bool) *SessionAt
 	if v != nil {
 		_u.SetPreviewable(*v)
 	}
+	return _u
+}
+
+// SetPreviewKind sets the "preview_kind" field.
+func (_u *SessionAttachmentUpdateOne) SetPreviewKind(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetPreviewKind(v)
+	return _u
+}
+
+// SetNillablePreviewKind sets the "preview_kind" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillablePreviewKind(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetPreviewKind(*v)
+	}
+	return _u
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (_u *SessionAttachmentUpdateOne) SetProcessRunID(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetProcessRunID(v)
+	return _u
+}
+
+// SetNillableProcessRunID sets the "process_run_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableProcessRunID(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetProcessRunID(*v)
+	}
+	return _u
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (_u *SessionAttachmentUpdateOne) SetNodeRunID(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetNodeRunID(v)
+	return _u
+}
+
+// SetNillableNodeRunID sets the "node_run_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableNodeRunID(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetNodeRunID(*v)
+	}
+	return _u
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (_u *SessionAttachmentUpdateOne) SetCorrelationID(v string) *SessionAttachmentUpdateOne {
+	_u.mutation.SetCorrelationID(v)
+	return _u
+}
+
+// SetNillableCorrelationID sets the "correlation_id" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableCorrelationID(v *string) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetCorrelationID(*v)
+	}
+	return _u
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (_u *SessionAttachmentUpdateOne) SetDeletedAt(v time.Time) *SessionAttachmentUpdateOne {
+	_u.mutation.SetDeletedAt(v)
+	return _u
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_u *SessionAttachmentUpdateOne) SetNillableDeletedAt(v *time.Time) *SessionAttachmentUpdateOne {
+	if v != nil {
+		_u.SetDeletedAt(*v)
+	}
+	return _u
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (_u *SessionAttachmentUpdateOne) ClearDeletedAt() *SessionAttachmentUpdateOne {
+	_u.mutation.ClearDeletedAt()
 	return _u
 }
 
@@ -524,14 +896,32 @@ func (_u *SessionAttachmentUpdateOne) sqlSave(ctx context.Context) (_node *Sessi
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Role(); ok {
+		_spec.SetField(sessionattachment.FieldRole, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.SourceType(); ok {
 		_spec.SetField(sessionattachment.FieldSourceType, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SourceID(); ok {
 		_spec.SetField(sessionattachment.FieldSourceID, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.SourceKey(); ok {
+		_spec.SetField(sessionattachment.FieldSourceKey, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Kind(); ok {
 		_spec.SetField(sessionattachment.FieldKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ArtifactKind(); ok {
+		_spec.SetField(sessionattachment.FieldArtifactKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LogicalPath(); ok {
+		_spec.SetField(sessionattachment.FieldLogicalPath, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceModifiedAt(); ok {
+		_spec.SetField(sessionattachment.FieldSourceModifiedAt, field.TypeTime, value)
+	}
+	if _u.mutation.SourceModifiedAtCleared() {
+		_spec.ClearField(sessionattachment.FieldSourceModifiedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Filename(); ok {
 		_spec.SetField(sessionattachment.FieldFilename, field.TypeString, value)
@@ -548,8 +938,29 @@ func (_u *SessionAttachmentUpdateOne) sqlSave(ctx context.Context) (_node *Sessi
 	if value, ok := _u.mutation.AddedSize(); ok {
 		_spec.AddField(sessionattachment.FieldSize, field.TypeInt64, value)
 	}
+	if value, ok := _u.mutation.Sha256(); ok {
+		_spec.SetField(sessionattachment.FieldSha256, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.Previewable(); ok {
 		_spec.SetField(sessionattachment.FieldPreviewable, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PreviewKind(); ok {
+		_spec.SetField(sessionattachment.FieldPreviewKind, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProcessRunID(); ok {
+		_spec.SetField(sessionattachment.FieldProcessRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NodeRunID(); ok {
+		_spec.SetField(sessionattachment.FieldNodeRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CorrelationID(); ok {
+		_spec.SetField(sessionattachment.FieldCorrelationID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.DeletedAt(); ok {
+		_spec.SetField(sessionattachment.FieldDeletedAt, field.TypeTime, value)
+	}
+	if _u.mutation.DeletedAtCleared() {
+		_spec.ClearField(sessionattachment.FieldDeletedAt, field.TypeTime)
 	}
 	_node = &SessionAttachment{config: _u.config}
 	_spec.Assign = _node.assignValues

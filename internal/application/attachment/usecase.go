@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
 	domain "github.com/nzlov/anycode/internal/domain/session"
@@ -47,9 +48,13 @@ type AttachmentDTO struct {
 }
 
 type Stream struct {
-	Filename string
-	MimeType string
-	Reader   io.ReadCloser
+	Filename   string
+	MimeType   string
+	Size       int64
+	ETag       string
+	ModifiedAt time.Time
+	Reader     io.ReadCloser
+	Seeker     io.ReadSeeker
 }
 
 type Service struct {
@@ -161,6 +166,9 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 	if err != nil {
 		return Stream{}, apperror.Wrap(fmt.Errorf("%w: %v", ErrAttachmentNotFound, err), apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
 	}
+	if attachment.DeletedAt != nil {
+		return Stream{}, apperror.Wrap(ErrAttachmentNotFound, apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
+	}
 	if mode == OpenPreview && !attachment.Previewable {
 		return Stream{}, apperror.Wrap(ErrNotPreviewable, apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "attachment is not previewable")
 	}
@@ -169,9 +177,13 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 		return Stream{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "open attachment file failed").WithRetryable(true)
 	}
 	return Stream{
-		Filename: stream.Filename,
-		MimeType: stream.MimeType,
-		Reader:   stream.Reader,
+		Filename:   attachment.Filename,
+		MimeType:   attachment.MimeType,
+		Size:       attachment.Size,
+		ETag:       attachment.SHA256,
+		ModifiedAt: attachment.CreatedAt,
+		Reader:     stream.Reader,
+		Seeker:     stream.Seeker,
 	}, nil
 }
 

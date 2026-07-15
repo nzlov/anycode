@@ -173,6 +173,16 @@ type ListQuickCommandsInput struct {
 	PageSize *int `json:"pageSize,omitempty"`
 }
 
+type ListSessionFilesInput struct {
+	SessionID string  `json:"sessionId"`
+	Page      *int    `json:"page,omitempty"`
+	PageSize  *int    `json:"pageSize,omitempty"`
+	Kind      *string `json:"kind,omitempty"`
+	Source    *string `json:"source,omitempty"`
+	Filter    *string `json:"filter,omitempty"`
+	Sort      *string `json:"sort,omitempty"`
+}
+
 type ListSessionsInput struct {
 	ProjectID *string `json:"projectId,omitempty"`
 	Scope     *string `json:"scope,omitempty"`
@@ -433,6 +443,32 @@ type SessionDiffSummary struct {
 	SessionID    string                  `json:"sessionId"`
 	State        SessionDiffSummaryState `json:"state"`
 	FilesChanged int                     `json:"filesChanged"`
+}
+
+type SessionFile struct {
+	ID            string    `json:"id"`
+	SessionID     string    `json:"sessionId"`
+	Role          string    `json:"role"`
+	SourceType    string    `json:"sourceType"`
+	SourceID      string    `json:"sourceId"`
+	ArtifactKind  string    `json:"artifactKind"`
+	LogicalPath   string    `json:"logicalPath"`
+	Filename      string    `json:"filename"`
+	MimeType      string    `json:"mimeType"`
+	Size          int64     `json:"size"`
+	Sha256        string    `json:"sha256"`
+	PreviewKind   string    `json:"previewKind"`
+	ProcessRunID  *string   `json:"processRunId,omitempty"`
+	NodeRunID     *string   `json:"nodeRunId,omitempty"`
+	CorrelationID string    `json:"correlationId"`
+	PreviewURL    *string   `json:"previewUrl,omitempty"`
+	DownloadURL   string    `json:"downloadUrl"`
+	CreatedAt     time.Time `json:"createdAt"`
+}
+
+type SessionFilePage struct {
+	Items    []*SessionFile `json:"items"`
+	PageInfo *PageInfo      `json:"pageInfo"`
 }
 
 type SessionStateStreamItem struct {

@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrSessionAlreadyExists    = errors.New("session already exists")
+	ErrSessionNotFound         = errors.New("session not found")
 	ErrInvalidStatusTransition = errors.New("invalid session status transition")
 	ErrInvalidQueueIntent      = errors.New("invalid session queue intent")
 	ErrInvalidWorktreeCleanup  = errors.New("invalid worktree cleanup transition")
@@ -24,13 +25,50 @@ type WorkflowRunID string
 type NodeRunID string
 type AttachmentID string
 type StagedAttachmentID string
-type SessionAttachmentID string
+type SessionFileID string
+type SessionAttachmentID = SessionFileID
 
 type AttachmentSourceType string
 
 const (
 	AttachmentSourceRequirement  AttachmentSourceType = "requirement"
 	AttachmentSourcePromptAppend AttachmentSourceType = "prompt_append"
+	AttachmentSourceCodex        AttachmentSourceType = "codex_artifact"
+	AttachmentSourceMCP          AttachmentSourceType = "mcp_artifact"
+	AttachmentSourcePlaywright   AttachmentSourceType = "playwright_artifact"
+	AttachmentSourcePublished    AttachmentSourceType = "published_artifact"
+	AttachmentSourceReconciled   AttachmentSourceType = "reconciled_artifact"
+	AttachmentSourceArtifactCopy AttachmentSourceType = "artifact_input"
+)
+
+type FileRole string
+
+const (
+	FileRoleInput    FileRole = "input"
+	FileRoleArtifact FileRole = "artifact"
+)
+
+type ArtifactKind string
+
+const (
+	ArtifactKindImage   ArtifactKind = "image"
+	ArtifactKindPDF     ArtifactKind = "pdf"
+	ArtifactKindVideo   ArtifactKind = "video"
+	ArtifactKindAudio   ArtifactKind = "audio"
+	ArtifactKindArchive ArtifactKind = "archive"
+	ArtifactKindText    ArtifactKind = "text"
+	ArtifactKindFile    ArtifactKind = "file"
+)
+
+type PreviewKind string
+
+const (
+	PreviewKindImage PreviewKind = "image"
+	PreviewKindPDF   PreviewKind = "pdf"
+	PreviewKindVideo PreviewKind = "video"
+	PreviewKindAudio PreviewKind = "audio"
+	PreviewKindText  PreviewKind = "text"
+	PreviewKindNone  PreviewKind = "none"
 )
 
 type Mode string
@@ -422,18 +460,82 @@ func (l TodoList) Completed() int {
 	return count
 }
 
-type SessionAttachment struct {
-	ID          SessionAttachmentID
-	SessionID   ID
-	SourceType  AttachmentSourceType
-	SourceID    string
-	Kind        string
-	Filename    string
-	Path        string
-	MimeType    string
-	Size        int64
-	Previewable bool
-	CreatedAt   time.Time
+type SessionFile struct {
+	ID               SessionFileID
+	SessionID        ID
+	Role             FileRole
+	SourceType       AttachmentSourceType
+	SourceID         string
+	SourceKey        string
+	Kind             string
+	ArtifactKind     ArtifactKind
+	LogicalPath      string
+	SourceModifiedAt *time.Time
+	Filename         string
+	Path             string
+	MimeType         string
+	Size             int64
+	SHA256           string
+	Previewable      bool
+	PreviewKind      PreviewKind
+	ProcessRunID     string
+	NodeRunID        string
+	CorrelationID    string
+	CreatedAt        time.Time
+	DeletedAt        *time.Time
+}
+
+func (f SessionFile) IsArtifact() bool {
+	return f.Role == FileRoleArtifact
+}
+
+// SessionAttachment is the input-file projection kept for existing attachment workflows.
+type SessionAttachment = SessionFile
+
+type ArtifactQuery struct {
+	SessionID ID
+	Page      int
+	PageSize  int
+	Kind      ArtifactKind
+	Source    AttachmentSourceType
+	Filter    string
+	Sort      string
+}
+
+type ArtifactScanRequest struct {
+	SessionID    ID
+	SourceType   AttachmentSourceType
+	SourceID     string
+	ProcessRunID string
+	NodeRunID    string
+}
+
+type InlineArtifactRequest struct {
+	SessionID     ID
+	Data          []byte
+	Filename      string
+	MimeType      string
+	SourceType    AttachmentSourceType
+	SourceID      string
+	SourceKey     string
+	ProcessRunID  string
+	NodeRunID     string
+	CorrelationID string
+}
+
+type ArtifactPublisher interface {
+	PublishInlineArtifact(ctx context.Context, input InlineArtifactRequest) (SessionFile, error)
+}
+
+type ArtifactQuarantine struct {
+	SessionID  ID
+	Path       string
+	ModifiedAt time.Time
+}
+
+type ArtifactOutputDirectory struct {
+	SessionID  ID
+	ModifiedAt time.Time
 }
 
 type StagedAttachment struct {
@@ -459,6 +561,7 @@ type AttachmentStream struct {
 	Filename string
 	MimeType string
 	Reader   io.ReadCloser
+	Seeker   io.ReadSeeker
 }
 
 type PromptAppendStatus string
@@ -541,6 +644,17 @@ type AttachmentRepository interface {
 	DeleteSessionAttachment(ctx context.Context, id SessionAttachmentID) error
 }
 
+type ArtifactRepository interface {
+	FindArtifactBySourceKey(ctx context.Context, sessionID ID, sourceKey string) (SessionFile, bool, error)
+	ListSessionArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, int, error)
+	SumSessionArtifactSize(ctx context.Context, sessionID ID) (int64, error)
+	SoftDeleteArtifact(ctx context.Context, id SessionFileID, deletedAt time.Time) (SessionFile, error)
+	ListArtifactsPendingPhysicalDelete(ctx context.Context, limit int) ([]SessionFile, error)
+	MarkArtifactPhysicalDeleted(ctx context.Context, id SessionFileID) error
+	SaveSessionAttachment(ctx context.Context, attachment SessionFile) error
+	FindSessionAttachment(ctx context.Context, id SessionFileID) (SessionFile, error)
+}
+
 type Policy interface {
 	CanStart(session Session) error
 	CanStop(session Session) error
@@ -558,6 +672,47 @@ type AttachmentStore interface {
 	DeleteStaged(ctx context.Context, id StagedAttachmentID) error
 	DeleteSession(ctx context.Context, id SessionAttachmentID) error
 	Open(ctx context.Context, path string) (AttachmentStream, error)
+}
+
+type ArchiveArtifactInput struct {
+	SessionID     ID
+	SourcePath    string
+	LogicalPath   string
+	SourceType    AttachmentSourceType
+	SourceID      string
+	SourceKey     string
+	ProcessRunID  string
+	NodeRunID     string
+	CorrelationID string
+	MaxBytes      int64
+}
+
+type ArchiveInlineArtifactInput struct {
+	SessionID     ID
+	Data          []byte
+	Filename      string
+	DeclaredMIME  string
+	SourceType    AttachmentSourceType
+	SourceID      string
+	SourceKey     string
+	ProcessRunID  string
+	NodeRunID     string
+	CorrelationID string
+	MaxBytes      int64
+}
+
+type ArtifactStore interface {
+	EnsureArtifactDir(ctx context.Context, sessionID ID) (string, error)
+	ArtifactDir(sessionID ID) string
+	ArchiveArtifact(ctx context.Context, input ArchiveArtifactInput) (SessionFile, error)
+	ArchiveInlineArtifact(ctx context.Context, input ArchiveInlineArtifactInput) (SessionFile, error)
+	QuarantineArtifactDir(ctx context.Context, sessionID ID, token string) (string, error)
+	RestoreArtifactDir(ctx context.Context, sessionID ID, quarantinePath string) error
+	DeleteQuarantine(ctx context.Context, quarantinePath string) error
+	ListArtifactQuarantines(ctx context.Context) ([]ArtifactQuarantine, error)
+	ListArtifactOutputDirectories(ctx context.Context) ([]ArtifactOutputDirectory, error)
+	DeleteArtifactOutputDirectory(ctx context.Context, sessionID ID) error
+	CopyArtifactToInput(ctx context.Context, artifact SessionFile) (SessionFile, error)
 }
 
 type WorktreeManager interface {

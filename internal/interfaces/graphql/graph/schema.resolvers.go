@@ -7,8 +7,10 @@ package graph
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/99designs/gqlgen/graphql"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -313,6 +315,29 @@ func (r *mutationResolver) DeleteSessionAttachment(ctx context.Context, id strin
 	return true, nil
 }
 
+// DeleteSessionFile is the resolver for the deleteSessionFile field.
+func (r *mutationResolver) DeleteSessionFile(ctx context.Context, id string) (bool, error) {
+	if r.UseCases.Artifacts == nil {
+		return false, missingUseCase("artifacts")
+	}
+	if _, err := r.UseCases.Artifacts.Delete(ctx, sessiondomain.SessionAttachmentID(id)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// UseSessionFileAsInput is the resolver for the useSessionFileAsInput field.
+func (r *mutationResolver) UseSessionFileAsInput(ctx context.Context, id string) (*model.SessionAttachment, error) {
+	if r.UseCases.Artifacts == nil {
+		return nil, missingUseCase("artifacts")
+	}
+	input, err := r.UseCases.Artifacts.UseAsInput(ctx, sessiondomain.SessionAttachmentID(id))
+	if err != nil {
+		return nil, err
+	}
+	return mapSessionAttachment(input), nil
+}
+
 // SaveWorkflowDefinition is the resolver for the saveWorkflowDefinition field.
 func (r *mutationResolver) SaveWorkflowDefinition(ctx context.Context, input model.SaveWorkflowDefinitionInput) (*model.WorkflowDefinition, error) {
 	if r.UseCases.Workflows == nil {
@@ -605,6 +630,37 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 		batches = append(batches, mapQuestionBatch(dto))
 	}
 	return batches, nil
+}
+
+// SessionFiles is the resolver for the sessionFiles field.
+func (r *queryResolver) SessionFiles(ctx context.Context, input model.ListSessionFilesInput) (*model.SessionFilePage, error) {
+	if r.UseCases.Artifacts == nil {
+		return nil, missingUseCase("artifacts")
+	}
+	page := intValue(input.Page, 1)
+	pageSize := intValue(input.PageSize, 50)
+	page, pageSize = artifactapp.NormalizePage(page, pageSize)
+	files, total, err := r.UseCases.Artifacts.List(ctx, sessiondomain.ArtifactQuery{
+		SessionID: sessiondomain.ID(input.SessionID),
+		Page:      page,
+		PageSize:  pageSize,
+		Kind:      sessiondomain.ArtifactKind(stringValue(input.Kind, "")),
+		Source:    sessiondomain.AttachmentSourceType(stringValue(input.Source, "")),
+		Filter:    stringValue(input.Filter, ""),
+		Sort:      stringValue(input.Sort, ""),
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*model.SessionFile, 0, len(files))
+	for _, file := range files {
+		items = append(items, mapSessionFile(file))
+	}
+	nextCursor := ""
+	if page*pageSize < total {
+		nextCursor = strconv.Itoa(page + 1)
+	}
+	return &model.SessionFilePage{Items: items, PageInfo: mapPageInfo(page, pageSize, total, nextCursor)}, nil
 }
 
 // SessionTranscript is the resolver for the sessionTranscript field.

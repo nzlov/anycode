@@ -158,9 +158,10 @@ test('session detail mobile navigation shows one scroll owner at a time', () => 
   assert.match(detailSource, /q-tab name="session"/);
   assert.match(detailSource, /q-tab name="info"/);
   assert.match(detailSource, /q-tab name="changes"/);
+  assert.match(detailSource, /q-tab name="artifacts"/);
   assert.match(
     detailSource,
-    /const detailView = ref<'session' \| 'info' \| 'changes'>\('session'\)/,
+    /const detailView = ref<'session' \| 'info' \| 'changes' \| 'artifacts'>\('session'\)/,
   );
   assert.match(detailSource, /const rightPanelTab = computed/);
   assert.match(detailSource, /GLUE: mobile detail navigation/);

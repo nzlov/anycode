@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/gorilla/websocket"
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
@@ -353,7 +355,7 @@ func TestAttachmentPreviewRequiresBearer(t *testing.T) {
 	useCase := &fakeAttachmentUseCase{}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithAttachmentUseCase(useCase))
 
-	req := httptest.NewRequest(http.MethodGet, "/attachments/attachment-1/preview", nil)
+	req := httptest.NewRequest(http.MethodGet, "/files/attachment-1/preview", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -376,7 +378,7 @@ func TestAttachmentPreviewStreamsContent(t *testing.T) {
 	}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithAttachmentUseCase(useCase))
 
-	req := httptest.NewRequest(http.MethodGet, "/attachments/attachment-1/preview", nil)
+	req := httptest.NewRequest(http.MethodGet, "/files/attachment-1/preview", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -408,7 +410,7 @@ func TestAttachmentDownloadSetsContentDisposition(t *testing.T) {
 	}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithAttachmentUseCase(useCase))
 
-	req := httptest.NewRequest(http.MethodGet, "/attachments/attachment-1/download", nil)
+	req := httptest.NewRequest(http.MethodGet, "/files/attachment-1/download", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -424,11 +426,39 @@ func TestAttachmentDownloadSetsContentDisposition(t *testing.T) {
 	}
 }
 
+func TestFileDownloadSupportsRangeAndETag(t *testing.T) {
+	reader := &testReadSeekCloser{Reader: strings.NewReader("0123456789")}
+	useCase := &fakeAttachmentUseCase{
+		stream: attachmentapp.Stream{
+			Filename:   "video.mp4",
+			MimeType:   "video/mp4",
+			Size:       10,
+			ETag:       "sha256-value",
+			ModifiedAt: time.Unix(100, 0).UTC(),
+			Reader:     reader,
+			Seeker:     reader,
+		},
+	}
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithAttachmentUseCase(useCase))
+	req := httptest.NewRequest(http.MethodGet, "/files/artifact-1/download", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Range", "bytes=2-5")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusPartialContent || rec.Body.String() != "2345" {
+		t.Fatalf("range response status=%d body=%q", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Content-Range") != "bytes 2-5/10" || rec.Header().Get("ETag") != `"sha256-value"` {
+		t.Fatalf("range headers = %#v", rec.Header())
+	}
+}
+
 func TestAttachmentPreviewWritesStructuredApplicationError(t *testing.T) {
 	useCase := &fakeAttachmentUseCase{err: attachmentapp.ErrNotPreviewable}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithAttachmentUseCase(useCase))
 
-	req := httptest.NewRequest(http.MethodGet, "/attachments/attachment-1/preview", nil)
+	req := httptest.NewRequest(http.MethodGet, "/files/attachment-1/preview", nil)
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -486,6 +516,50 @@ func TestMCPRequiresBearerAndListsAnswerUserTool(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"answer_user"`) {
 		t.Fatalf("mcp tools/list missing answer_user: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"publish_artifact"`) {
+		t.Fatalf("mcp tools/list missing publish_artifact: %s", rec.Body.String())
+	}
+}
+
+func TestMCPPublishArtifactReturnsStoredMetadata(t *testing.T) {
+	artifacts := &fakeArtifactUseCase{}
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Artifacts: artifacts}))
+	body := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"publish_artifact","arguments":{"path":"screens/home.png","logicalPath":"home.png","correlationId":"group-1"}}}`
+	req := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer secret")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("publish artifact status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if artifacts.publishInput.SessionID != "session-1" || artifacts.publishInput.Path != "screens/home.png" || artifacts.publishInput.SourceType != sessiondomain.AttachmentSourceMCP || artifacts.publishInput.CorrelationID != "group-1" {
+		t.Fatalf("publish input = %#v", artifacts.publishInput)
+	}
+	if !strings.Contains(rec.Body.String(), `\"id\":\"artifact-1\"`) || !strings.Contains(rec.Body.String(), `\"sha256\":\"hash\"`) || !strings.Contains(rec.Body.String(), `"type":"image"`) || !strings.Contains(rec.Body.String(), `"data":"cG5n"`) {
+		t.Fatalf("publish artifact response = %s", rec.Body.String())
+	}
+}
+
+func TestMCPPublishArtifactRejectsAbsoluteAndParentPaths(t *testing.T) {
+	for _, path := range []string{"/tmp/result.png", "../result.png"} {
+		t.Run(path, func(t *testing.T) {
+			artifacts := &fakeArtifactUseCase{}
+			handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Artifacts: artifacts}))
+			body := fmt.Sprintf(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"publish_artifact","arguments":{"path":%q}}}`, path)
+			req := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1", strings.NewReader(body))
+			req.Header.Set("Authorization", "Bearer secret")
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"code":"validation_failed"`) {
+				t.Fatalf("publish artifact status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if artifacts.publishInput.SessionID != "" {
+				t.Fatalf("publish was called with %#v", artifacts.publishInput)
+			}
+		})
 	}
 }
 
@@ -773,6 +847,51 @@ func (u *fakeQuestionUseCase) QuestionBatchUpdates(context.Context, questiondoma
 func (u *fakeQuestionUseCase) CancelPendingBySession(context.Context, questiondomain.SessionID, string) error {
 	return nil
 }
+
+type testReadSeekCloser struct {
+	*strings.Reader
+}
+
+type fakeArtifactUseCase struct {
+	publishInput artifactapp.PublishInput
+}
+
+func (u *fakeArtifactUseCase) Publish(_ context.Context, input artifactapp.PublishInput) (sessiondomain.SessionAttachment, error) {
+	u.publishInput = input
+	return sessiondomain.SessionAttachment{
+		ID: "artifact-1", SessionID: input.SessionID, Role: sessiondomain.FileRoleArtifact,
+		ArtifactKind: sessiondomain.ArtifactKindImage, PreviewKind: sessiondomain.PreviewKindImage,
+		Filename: "home.png", LogicalPath: "home.png", MimeType: "image/png", Size: 12, SHA256: "hash",
+	}, nil
+}
+
+func (u *fakeArtifactUseCase) Scan(context.Context, artifactapp.ScanInput) ([]sessiondomain.SessionAttachment, error) {
+	return nil, nil
+}
+
+func (u *fakeArtifactUseCase) List(context.Context, sessiondomain.ArtifactQuery) ([]sessiondomain.SessionAttachment, int, error) {
+	return nil, 0, nil
+}
+
+func (u *fakeArtifactUseCase) Delete(context.Context, sessiondomain.SessionAttachmentID) (sessiondomain.SessionAttachment, error) {
+	return sessiondomain.SessionAttachment{}, nil
+}
+
+func (u *fakeArtifactUseCase) UseAsInput(context.Context, sessiondomain.SessionAttachmentID) (sessiondomain.SessionAttachment, error) {
+	return sessiondomain.SessionAttachment{}, nil
+}
+
+func (u *fakeArtifactUseCase) ReadMCPContent(context.Context, sessiondomain.SessionFileID) (artifactapp.MCPContent, bool, error) {
+	return artifactapp.MCPContent{Type: "image", MIMEType: "image/png", Data: []byte("png")}, true, nil
+}
+
+func (u *fakeArtifactUseCase) ReconcileQuarantines(context.Context) (int, error) { return 0, nil }
+func (u *fakeArtifactUseCase) ReconcileOutputs(context.Context) (int, error)     { return 0, nil }
+func (u *fakeArtifactUseCase) ReconcileDeletedArtifacts(context.Context) (int, error) {
+	return 0, nil
+}
+
+func (r *testReadSeekCloser) Close() error { return nil }
 
 type fakeAttachmentUseCase struct {
 	stream     attachmentapp.Stream

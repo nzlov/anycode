@@ -52,6 +52,14 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 			CreatedAt: time.Unix(10, 0).UTC(),
 		},
 		{
+			ID:        "artifact-1",
+			Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
+			SessionID: &sessionID,
+			Type:      "artifact.published",
+			Payload:   map[string]any{"id": "file-1", "filename": "result.png", "downloadUrl": "/files/file-1/download"},
+			CreatedAt: time.Unix(12, 0).UTC(),
+		},
+		{
 			ID:        "internal-1",
 			Scope:     eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID},
 			SessionID: &sessionID,
@@ -68,17 +76,21 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
-	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"status-1", "codex:codex-session-1:codex-event-1"}) {
+	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"status-1", "artifact-1", "codex:codex-session-1:codex-event-1"}) {
 		t.Fatalf("items = %#v", gotIDs)
 	}
-	if got.Total != 2 || got.Usage == nil || got.Usage.TotalTokens != 14 {
+	if got.Total != 3 || got.Usage == nil || got.Usage.TotalTokens != 14 {
 		t.Fatalf("page metadata = total %d, usage %#v", got.Total, got.Usage)
 	}
 	status, ok := got.Items[0].Content.(process.CodexStatusContent)
 	if !ok || status.Code != "session.running" {
 		t.Fatalf("status content = %#v", got.Items[0].Content)
 	}
-	codex := got.Items[1]
+	artifact, ok := got.Items[1].Content.(process.CodexUnknownContent)
+	if !ok || artifact.RawType != "artifact.published" || artifact.Payload["filename"] != "result.png" {
+		t.Fatalf("artifact content = %#v", got.Items[1].Content)
+	}
+	codex := got.Items[2]
 	if codex.Phase != process.CodexPhaseStandalone || codex.CorrelationID != "codex:codex-session-1:call-1" || codex.OccurredAt != "1970-01-01T00:00:20Z" {
 		t.Fatalf("codex event = %#v", codex)
 	}

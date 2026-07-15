@@ -334,15 +334,26 @@ var (
 	SessionAttachmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
+		{Name: "role", Type: field.TypeString, Default: "input"},
 		{Name: "source_type", Type: field.TypeString},
 		{Name: "source_id", Type: field.TypeString},
+		{Name: "source_key", Type: field.TypeString, Default: ""},
 		{Name: "kind", Type: field.TypeString, Default: "file"},
+		{Name: "artifact_kind", Type: field.TypeString, Default: ""},
+		{Name: "logical_path", Type: field.TypeString, Default: ""},
+		{Name: "source_modified_at", Type: field.TypeTime, Nullable: true},
 		{Name: "filename", Type: field.TypeString},
 		{Name: "path", Type: field.TypeString},
 		{Name: "mime_type", Type: field.TypeString, Default: "application/octet-stream"},
 		{Name: "size", Type: field.TypeInt64, Default: 0},
+		{Name: "sha256", Type: field.TypeString, Default: ""},
 		{Name: "previewable", Type: field.TypeBool, Default: false},
+		{Name: "preview_kind", Type: field.TypeString, Default: "none"},
+		{Name: "process_run_id", Type: field.TypeString, Default: ""},
+		{Name: "node_run_id", Type: field.TypeString, Default: ""},
+		{Name: "correlation_id", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
 	}
 	// SessionAttachmentsTable holds the schema information for the "session_attachments" table.
 	SessionAttachmentsTable = &schema.Table{
@@ -358,12 +369,17 @@ var (
 			{
 				Name:    "sessionattachment_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[10]},
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[20]},
 			},
 			{
 				Name:    "sessionattachment_session_id_source_type_source_id",
 				Unique:  false,
-				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[2], SessionAttachmentsColumns[3]},
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[3], SessionAttachmentsColumns[4]},
+			},
+			{
+				Name:    "sessionattachment_session_id_role_deleted_at_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SessionAttachmentsColumns[1], SessionAttachmentsColumns[2], SessionAttachmentsColumns[21], SessionAttachmentsColumns[20]},
 			},
 		},
 	}

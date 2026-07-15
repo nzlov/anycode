@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
@@ -635,6 +636,70 @@ func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	}
 	if err := repo.DeleteSessionAttachment(ctx, attachment.ID); err != nil {
 		t.Fatalf("delete session attachment: %v", err)
+	}
+}
+
+func TestArtifactMetadataAndEventsCommitAtomically(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo := store.Attachments()
+	now := time.Now().UTC()
+	sessionID := eventdomain.SessionID("session-1")
+	artifact := session.SessionAttachment{
+		ID: "artifact-1", SessionID: "session-1", Role: session.FileRoleArtifact,
+		SourceType: session.AttachmentSourceCodex, SourceKey: "source-1", ArtifactKind: session.ArtifactKindImage,
+		Filename: "result.png", Path: "/archive/result.png", MimeType: "image/png", PreviewKind: session.PreviewKindImage,
+		CreatedAt: now,
+	}
+	published := eventdomain.DomainEvent{
+		ID: "artifact.published:artifact-1", Scope: eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
+		SessionID: &sessionID, Type: "artifact.published", Payload: map[string]any{"id": "artifact-1"}, CreatedAt: now,
+	}
+	if err := repo.SaveArtifactWithEvent(ctx, artifact, published); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := repo.FindSessionAttachment(ctx, artifact.ID); err != nil || found.ID != artifact.ID {
+		t.Fatalf("stored artifact = %#v err=%v", found, err)
+	}
+	events, err := store.Events().List(ctx, eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"})
+	if err != nil || len(events) != 1 || events[0].Type != "artifact.published" {
+		t.Fatalf("published events = %#v err=%v", events, err)
+	}
+	deletedAt := now.Add(time.Second)
+	artifact.DeletedAt = &deletedAt
+	deleted := eventdomain.DomainEvent{
+		ID: "artifact.deleted:artifact-1", Scope: published.Scope, SessionID: &sessionID,
+		Type: "artifact.deleted", Payload: map[string]any{"id": "artifact-1"}, CreatedAt: deletedAt,
+	}
+	if err := repo.DeleteArtifactWithEvent(ctx, artifact, deleted); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := repo.FindSessionAttachment(ctx, artifact.ID); err != nil || found.DeletedAt == nil {
+		t.Fatalf("deleted artifact = %#v err=%v", found, err)
+	}
+
+	conflict := published
+	conflict.ID = "artifact.published:artifact-conflict"
+	conflict.Type = "other.event"
+	if err := store.Events().Append(ctx, conflict); err != nil {
+		t.Fatal(err)
+	}
+	artifact.ID = "artifact-conflict"
+	artifact.SourceKey = "source-conflict"
+	artifact.DeletedAt = nil
+	published.ID = "artifact.published:artifact-conflict"
+	if err := repo.SaveArtifactWithEvent(ctx, artifact, published); err == nil {
+		t.Fatal("conflicting event transaction succeeded")
+	}
+	if _, err := repo.FindSessionAttachment(ctx, artifact.ID); err == nil {
+		t.Fatal("artifact from rolled back transaction exists")
 	}
 }
 

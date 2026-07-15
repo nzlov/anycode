@@ -762,6 +762,44 @@ func mapPageInfo(page int, pageSize int, total int, nextCursor string) *model.Pa
 	return &model.PageInfo{Page: page, PageSize: pageSize, Total: total, NextCursor: nextCursor}
 }
 
+func mapSessionFile(file sessiondomain.SessionAttachment) *model.SessionFile {
+	downloadURL := "/files/" + string(file.ID) + "/download"
+	var previewURL *string
+	if file.PreviewKind != sessiondomain.PreviewKindNone {
+		value := "/files/" + string(file.ID) + "/preview"
+		previewURL = &value
+	}
+	var processRunID, nodeRunID *string
+	if file.ProcessRunID != "" {
+		value := file.ProcessRunID
+		processRunID = &value
+	}
+	if file.NodeRunID != "" {
+		value := file.NodeRunID
+		nodeRunID = &value
+	}
+	return &model.SessionFile{
+		ID:            string(file.ID),
+		SessionID:     string(file.SessionID),
+		Role:          string(file.Role),
+		SourceType:    string(file.SourceType),
+		SourceID:      file.SourceID,
+		ArtifactKind:  string(file.ArtifactKind),
+		LogicalPath:   file.LogicalPath,
+		Filename:      file.Filename,
+		MimeType:      file.MimeType,
+		Size:          file.Size,
+		Sha256:        file.SHA256,
+		PreviewKind:   string(file.PreviewKind),
+		ProcessRunID:  processRunID,
+		NodeRunID:     nodeRunID,
+		CorrelationID: file.CorrelationID,
+		PreviewURL:    previewURL,
+		DownloadURL:   downloadURL,
+		CreatedAt:     file.CreatedAt,
+	}
+}
+
 func stringPtr[T ~string](value *T) *string {
 	if value == nil {
 		return nil

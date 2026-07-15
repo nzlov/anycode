@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/nzlov/anycode/internal/domain/process"
@@ -24,6 +25,8 @@ type Client struct {
 	mcpAuthToken    string
 	detached        detachedProcessOps
 	mcpToolTimeout  bool
+	playwrightBin   string
+	chromiumBin     string
 }
 
 type Option func(*Client)
@@ -70,6 +73,13 @@ func WithMCPStdio(command string, socket string, authToken string) Option {
 func WithCodexHome(path string) Option {
 	return func(c *Client) {
 		c.codexHome = strings.TrimSpace(path)
+	}
+}
+
+func WithPlaywrightMCP(command string, chromium string) Option {
+	return func(c *Client) {
+		c.playwrightBin = strings.TrimSpace(command)
+		c.chromiumBin = strings.TrimSpace(chromium)
 	}
 }
 
@@ -129,14 +139,37 @@ func (c *Client) Probe(ctx context.Context) (process.CodexCapabilities, error) {
 	}
 
 	supportsMCPToolTimeout := commandWorks(ctx, bin, "exec", "--help", "--strict-config", "-c", fmt.Sprintf("mcp_servers.anycode.tool_timeout_sec=%d", mcpToolTimeoutSeconds))
+	imageGenerationStatus, supportsImageGeneration := probeFeature(ctx, bin, "image_generation")
 	c.mcpToolTimeout = supportsMCPToolTimeout
 	return process.CodexCapabilities{
-		Version:                firstLine(version),
-		SupportsExec:           commandWorks(ctx, bin, "exec", "--help"),
-		SupportsResume:         commandWorks(ctx, bin, "exec", "resume", "--help"),
-		SupportsMCPToolTimeout: supportsMCPToolTimeout,
-		Models:                 models,
+		Version:                 firstLine(version),
+		SupportsExec:            commandWorks(ctx, bin, "exec", "--help"),
+		SupportsResume:          commandWorks(ctx, bin, "exec", "resume", "--help"),
+		SupportsMCPToolTimeout:  supportsMCPToolTimeout,
+		SupportsImageGeneration: supportsImageGeneration,
+		ImageGenerationStatus:   imageGenerationStatus,
+		Models:                  models,
 	}, nil
+}
+
+func probeFeature(ctx context.Context, bin string, name string) (string, bool) {
+	output, err := runText(ctx, bin, "features", "list")
+	if err != nil {
+		return "unsupported", false
+	}
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || fields[0] != name {
+			continue
+		}
+		status := fields[1]
+		enabled, err := strconv.ParseBool(fields[len(fields)-1])
+		if err != nil {
+			return status, false
+		}
+		return status, enabled
+	}
+	return "unavailable", false
 }
 
 type modelCatalog struct {

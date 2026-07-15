@@ -33,6 +33,12 @@ func (s *EventStore) Append(ctx context.Context, domainEvent event.DomainEvent) 
 		create.SetCreatedAt(domainEvent.CreatedAt)
 	}
 	if err := create.Exec(ctx); err != nil {
+		if ent.IsConstraintError(err) {
+			existing, findErr := s.client.EventRecord.Get(ctx, string(domainEvent.ID))
+			if findErr == nil && existing.Type == domainEvent.Type {
+				return nil
+			}
+		}
 		return fmt.Errorf("append event: %w", err)
 	}
 	return nil

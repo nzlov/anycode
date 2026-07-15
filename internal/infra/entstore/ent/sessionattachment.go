@@ -19,12 +19,22 @@ type SessionAttachment struct {
 	ID string `json:"id,omitempty"`
 	// SessionID holds the value of the "session_id" field.
 	SessionID string `json:"session_id,omitempty"`
+	// Role holds the value of the "role" field.
+	Role string `json:"role,omitempty"`
 	// SourceType holds the value of the "source_type" field.
 	SourceType string `json:"source_type,omitempty"`
 	// SourceID holds the value of the "source_id" field.
 	SourceID string `json:"source_id,omitempty"`
+	// SourceKey holds the value of the "source_key" field.
+	SourceKey string `json:"source_key,omitempty"`
 	// Kind holds the value of the "kind" field.
 	Kind string `json:"kind,omitempty"`
+	// ArtifactKind holds the value of the "artifact_kind" field.
+	ArtifactKind string `json:"artifact_kind,omitempty"`
+	// LogicalPath holds the value of the "logical_path" field.
+	LogicalPath string `json:"logical_path,omitempty"`
+	// SourceModifiedAt holds the value of the "source_modified_at" field.
+	SourceModifiedAt *time.Time `json:"source_modified_at,omitempty"`
 	// Filename holds the value of the "filename" field.
 	Filename string `json:"filename,omitempty"`
 	// Path holds the value of the "path" field.
@@ -33,10 +43,22 @@ type SessionAttachment struct {
 	MimeType string `json:"mime_type,omitempty"`
 	// Size holds the value of the "size" field.
 	Size int64 `json:"size,omitempty"`
+	// Sha256 holds the value of the "sha256" field.
+	Sha256 string `json:"sha256,omitempty"`
 	// Previewable holds the value of the "previewable" field.
 	Previewable bool `json:"previewable,omitempty"`
+	// PreviewKind holds the value of the "preview_kind" field.
+	PreviewKind string `json:"preview_kind,omitempty"`
+	// ProcessRunID holds the value of the "process_run_id" field.
+	ProcessRunID string `json:"process_run_id,omitempty"`
+	// NodeRunID holds the value of the "node_run_id" field.
+	NodeRunID string `json:"node_run_id,omitempty"`
+	// CorrelationID holds the value of the "correlation_id" field.
+	CorrelationID string `json:"correlation_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
-	CreatedAt    time.Time `json:"created_at,omitempty"`
+	CreatedAt time.Time `json:"created_at,omitempty"`
+	// DeletedAt holds the value of the "deleted_at" field.
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -49,9 +71,9 @@ func (*SessionAttachment) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case sessionattachment.FieldSize:
 			values[i] = new(sql.NullInt64)
-		case sessionattachment.FieldID, sessionattachment.FieldSessionID, sessionattachment.FieldSourceType, sessionattachment.FieldSourceID, sessionattachment.FieldKind, sessionattachment.FieldFilename, sessionattachment.FieldPath, sessionattachment.FieldMimeType:
+		case sessionattachment.FieldID, sessionattachment.FieldSessionID, sessionattachment.FieldRole, sessionattachment.FieldSourceType, sessionattachment.FieldSourceID, sessionattachment.FieldSourceKey, sessionattachment.FieldKind, sessionattachment.FieldArtifactKind, sessionattachment.FieldLogicalPath, sessionattachment.FieldFilename, sessionattachment.FieldPath, sessionattachment.FieldMimeType, sessionattachment.FieldSha256, sessionattachment.FieldPreviewKind, sessionattachment.FieldProcessRunID, sessionattachment.FieldNodeRunID, sessionattachment.FieldCorrelationID:
 			values[i] = new(sql.NullString)
-		case sessionattachment.FieldCreatedAt:
+		case sessionattachment.FieldSourceModifiedAt, sessionattachment.FieldCreatedAt, sessionattachment.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -80,6 +102,12 @@ func (_m *SessionAttachment) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.SessionID = value.String
 			}
+		case sessionattachment.FieldRole:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field role", values[i])
+			} else if value.Valid {
+				_m.Role = value.String
+			}
 		case sessionattachment.FieldSourceType:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field source_type", values[i])
@@ -92,11 +120,36 @@ func (_m *SessionAttachment) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.SourceID = value.String
 			}
+		case sessionattachment.FieldSourceKey:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_key", values[i])
+			} else if value.Valid {
+				_m.SourceKey = value.String
+			}
 		case sessionattachment.FieldKind:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field kind", values[i])
 			} else if value.Valid {
 				_m.Kind = value.String
+			}
+		case sessionattachment.FieldArtifactKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field artifact_kind", values[i])
+			} else if value.Valid {
+				_m.ArtifactKind = value.String
+			}
+		case sessionattachment.FieldLogicalPath:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field logical_path", values[i])
+			} else if value.Valid {
+				_m.LogicalPath = value.String
+			}
+		case sessionattachment.FieldSourceModifiedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field source_modified_at", values[i])
+			} else if value.Valid {
+				_m.SourceModifiedAt = new(time.Time)
+				*_m.SourceModifiedAt = value.Time
 			}
 		case sessionattachment.FieldFilename:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -122,17 +175,54 @@ func (_m *SessionAttachment) assignValues(columns []string, values []any) error 
 			} else if value.Valid {
 				_m.Size = value.Int64
 			}
+		case sessionattachment.FieldSha256:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sha256", values[i])
+			} else if value.Valid {
+				_m.Sha256 = value.String
+			}
 		case sessionattachment.FieldPreviewable:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field previewable", values[i])
 			} else if value.Valid {
 				_m.Previewable = value.Bool
 			}
+		case sessionattachment.FieldPreviewKind:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field preview_kind", values[i])
+			} else if value.Valid {
+				_m.PreviewKind = value.String
+			}
+		case sessionattachment.FieldProcessRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field process_run_id", values[i])
+			} else if value.Valid {
+				_m.ProcessRunID = value.String
+			}
+		case sessionattachment.FieldNodeRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field node_run_id", values[i])
+			} else if value.Valid {
+				_m.NodeRunID = value.String
+			}
+		case sessionattachment.FieldCorrelationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field correlation_id", values[i])
+			} else if value.Valid {
+				_m.CorrelationID = value.String
+			}
 		case sessionattachment.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
 				_m.CreatedAt = value.Time
+			}
+		case sessionattachment.FieldDeletedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field deleted_at", values[i])
+			} else if value.Valid {
+				_m.DeletedAt = new(time.Time)
+				*_m.DeletedAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -173,14 +263,31 @@ func (_m *SessionAttachment) String() string {
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)
 	builder.WriteString(", ")
+	builder.WriteString("role=")
+	builder.WriteString(_m.Role)
+	builder.WriteString(", ")
 	builder.WriteString("source_type=")
 	builder.WriteString(_m.SourceType)
 	builder.WriteString(", ")
 	builder.WriteString("source_id=")
 	builder.WriteString(_m.SourceID)
 	builder.WriteString(", ")
+	builder.WriteString("source_key=")
+	builder.WriteString(_m.SourceKey)
+	builder.WriteString(", ")
 	builder.WriteString("kind=")
 	builder.WriteString(_m.Kind)
+	builder.WriteString(", ")
+	builder.WriteString("artifact_kind=")
+	builder.WriteString(_m.ArtifactKind)
+	builder.WriteString(", ")
+	builder.WriteString("logical_path=")
+	builder.WriteString(_m.LogicalPath)
+	builder.WriteString(", ")
+	if v := _m.SourceModifiedAt; v != nil {
+		builder.WriteString("source_modified_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("filename=")
 	builder.WriteString(_m.Filename)
@@ -194,11 +301,31 @@ func (_m *SessionAttachment) String() string {
 	builder.WriteString("size=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Size))
 	builder.WriteString(", ")
+	builder.WriteString("sha256=")
+	builder.WriteString(_m.Sha256)
+	builder.WriteString(", ")
 	builder.WriteString("previewable=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Previewable))
 	builder.WriteString(", ")
+	builder.WriteString("preview_kind=")
+	builder.WriteString(_m.PreviewKind)
+	builder.WriteString(", ")
+	builder.WriteString("process_run_id=")
+	builder.WriteString(_m.ProcessRunID)
+	builder.WriteString(", ")
+	builder.WriteString("node_run_id=")
+	builder.WriteString(_m.NodeRunID)
+	builder.WriteString(", ")
+	builder.WriteString("correlation_id=")
+	builder.WriteString(_m.CorrelationID)
+	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
+	builder.WriteString(", ")
+	if v := _m.DeletedAt; v != nil {
+		builder.WriteString("deleted_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

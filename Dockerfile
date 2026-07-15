@@ -47,7 +47,7 @@ RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p
   && if [ -n "$NPM_MIRROR" ]; then \
   npm config set registry "$NPM_MIRROR" ;\
   fi \
-  && npm install -g @openai/codex@latest \
+  && npm install -g @openai/codex@latest @playwright/mcp@0.0.78 \
   && npm cache clean --force \
   && groupadd --gid "$ANYCODE_GID" anycode \
   && useradd --uid "$ANYCODE_UID" --gid anycode --create-home --home-dir /home/anycode --shell /bin/bash anycode \
@@ -55,6 +55,8 @@ RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p
   && git config --system --add safe.directory '/workspaces/*' \
   && chown anycode:anycode /usr/local/bin/anycode && chmod +x /usr/local/bin/docker-entrypoint.sh
 ENV HOME=/home/anycode
+ENV PLAYWRIGHT_MCP_BIN=playwright-mcp
+ENV CHROMIUM_BIN=/usr/bin/chromium
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
 ENTRYPOINT ["docker-entrypoint.sh"]
