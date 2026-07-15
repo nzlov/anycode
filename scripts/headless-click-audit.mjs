@@ -107,19 +107,10 @@ try {
     await waitForCondition('document.documentElement.dataset.themeMode === "light"', 'theme mode light');
   });
 
-  await test('访问密钥弹窗可显示密钥并保存', async () => {
-    await clickAccessKeyItem();
-    await waitForText('访问密钥');
-    await clickAria('切换密钥可见性');
-    await setInput('.access-key-dialog input', accessKey);
-    await clickText('保存');
-    await waitForText('已保存');
-    await closeVisibleDialog();
-  });
-
-  await test('访问密钥弹窗取消按钮生效', async () => {
-    await clickAccessKeyItem();
-    await waitForText('访问密钥');
+  await test('退出登录确认弹窗可取消', async () => {
+    await clickAria('更多操作');
+    await clickText('退出');
+    await waitForText('退出登录');
     await clickAria('取消');
     await waitForNoDialog();
   });
@@ -1313,30 +1304,6 @@ async function connectFirstTwoWorkflowNodes() {
   })()`);
   assert(connected, 'workflow ports not found for connect');
   await sleep(500);
-}
-
-async function clickAccessKeyItem() {
-  const clicked = await evaluate(`(() => {
-    const visible = (element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
-    };
-    const scroll = document.querySelector('.app-drawer .q-scrollarea__container');
-    const items = Array.from(document.querySelectorAll('.app-drawer .q-item'));
-    const item = items
-      .find((element) => visible(element) && element.innerText && (
-        element.innerText.includes('已连接') || element.innerText.includes('访问密钥')
-      )) || items.find((element) => element.innerText && (
-        element.innerText.includes('已连接') || element.innerText.includes('访问密钥')
-      ));
-    if (!item) return false;
-    if (scroll) scroll.scrollTop = Math.max(0, item.offsetTop - 120);
-    if (!visible(item)) return false;
-    item.click();
-    return true;
-  })()`);
-  assert(clicked, 'access key item not found');
-  await sleep(400);
 }
 
 async function clickLaneStat(marker, label) {

@@ -1,6 +1,6 @@
 <template>
   <div class="artifact-event">
-    <q-icon :name="icon" size="22px" :color="deleted ? 'grey-6' : 'primary'" />
+    <q-icon :name="icon" size="22px" :class="deleted ? 'text-muted' : 'text-primary'" />
     <div class="artifact-event__content">
       <div class="artifact-event__name" :class="{ 'text-strike text-muted': deleted }">
         {{ filename }}

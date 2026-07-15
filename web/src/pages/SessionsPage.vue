@@ -80,7 +80,7 @@
               round
               dense
               icon="difference"
-              color="secondary"
+              color="primary"
               aria-label="查看 Diff"
               :to="{ path: '/diff', query: { sessionId: props.row.id, mode: 'all' } }"
             >

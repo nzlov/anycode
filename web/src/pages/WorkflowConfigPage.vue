@@ -13,7 +13,7 @@
         <q-btn
           unelevated
           color="positive"
-          text-color="dark"
+          class="app-on-positive"
           icon="save"
           label="保存"
           no-caps

@@ -176,7 +176,7 @@ function lineClass(kind: DiffLineKind) {
   overflow-x: auto;
   padding: 0;
   border-radius: 0 0 var(--ac-radius) var(--ac-radius);
-  background: #0f172a;
+  background: var(--ac-diff-bg);
 }
 
 .diff-line {
@@ -196,30 +196,30 @@ function lineClass(kind: DiffLineKind) {
 
 .line-number {
   padding: 4px 8px;
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
-  color: #94a3b8;
+  border-right: 1px solid var(--ac-border);
+  color: var(--ac-diff-gutter);
   text-align: right;
   user-select: none;
 }
 
 .line-context {
-  color: #dbeafe;
+  color: var(--ac-diff-context);
 }
 
 .line-add {
-  color: #bbf7d0;
-  background: rgba(22, 101, 52, 0.32);
+  color: var(--ac-diff-added-text);
+  background: var(--ac-diff-added-bg);
 }
 
 .line-delete {
-  color: #fecaca;
-  background: rgba(127, 29, 29, 0.32);
+  color: var(--ac-diff-removed-text);
+  background: var(--ac-diff-removed-bg);
 }
 
 .line-header,
 .diff-expand-row {
-  color: #bfdbfe;
-  background: rgba(30, 64, 175, 0.3);
+  color: var(--ac-diff-hunk-text);
+  background: var(--ac-diff-hunk-bg);
 }
 
 .diff-expand-row {
@@ -228,7 +228,7 @@ function lineClass(kind: DiffLineKind) {
 }
 
 .diff-expand-row :deep(.q-btn) {
-  color: #bfdbfe;
+  color: var(--ac-diff-hunk-text);
 }
 
 @media (max-width: 720px) {

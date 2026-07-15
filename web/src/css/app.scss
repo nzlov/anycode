@@ -1,63 +1,15 @@
+@use './theme';
+
 :root {
   --overview-create-panel-height: min(320px, calc(100dvh - 104px));
-  --ac-surface: #ffffff;
-  --ac-surface-muted: #f6f8fb;
-  --ac-surface-raised: #ffffff;
-  --ac-border: #d9e0ea;
-  --ac-text: #0f172a;
-  --ac-text-muted: #64748b;
-  --ac-terminal-bg: #111827;
-  --ac-terminal-fg: #e2e8f0;
-  --ac-ansi-black: #64748b;
-  --ac-ansi-red: #f87171;
-  --ac-ansi-green: #4ade80;
-  --ac-ansi-yellow: #facc15;
-  --ac-ansi-blue: #60a5fa;
-  --ac-ansi-magenta: #c084fc;
-  --ac-ansi-cyan: #22d3ee;
-  --ac-ansi-white: #e2e8f0;
-  --ac-ansi-bright-black: #64748b;
-  --ac-ansi-bright-red: #e53935;
-  --ac-ansi-bright-green: #00875a;
-  --ac-ansi-bright-yellow: #b7791f;
-  --ac-ansi-bright-blue: #2563eb;
-  --ac-ansi-bright-magenta: #a855f7;
-  --ac-ansi-bright-cyan: #0891b2;
-  --ac-ansi-bright-white: #f8fafc;
   --ac-radius: 8px;
   --ac-transition: 180ms ease;
 }
 
-.body--dark {
-  --ac-surface: #111827;
-  --ac-surface-muted: #0f172a;
-  --ac-surface-raised: #172033;
-  --ac-border: #263449;
-  --ac-text: #e2e8f0;
-  --ac-text-muted: #94a3b8;
-  --ac-terminal-bg: #020617;
-  --ac-terminal-fg: #e2e8f0;
-  --ac-ansi-black: #475569;
-  --ac-ansi-red: #f87171;
-  --ac-ansi-green: #4ade80;
-  --ac-ansi-yellow: #facc15;
-  --ac-ansi-blue: #60a5fa;
-  --ac-ansi-magenta: #c084fc;
-  --ac-ansi-cyan: #22d3ee;
-  --ac-ansi-white: #e2e8f0;
-  --ac-ansi-bright-black: #94a3b8;
-  --ac-ansi-bright-red: #fca5a5;
-  --ac-ansi-bright-green: #86efac;
-  --ac-ansi-bright-yellow: #fde047;
-  --ac-ansi-bright-blue: #93c5fd;
-  --ac-ansi-bright-magenta: #d8b4fe;
-  --ac-ansi-bright-cyan: #67e8f9;
-  --ac-ansi-bright-white: #ffffff;
-}
-
 body {
-  background: var(--ac-surface-muted);
+  background: var(--ac-page);
   color: var(--ac-text);
+  font-family: Roboto, 'Noto Sans CJK SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', Arial, sans-serif;
 }
 
 html,
@@ -68,13 +20,13 @@ body,
 }
 
 a {
-  color: var(--q-primary);
+  color: var(--ac-link);
   text-decoration: none;
 }
 
 .app-layout,
 .workbench-page {
-  background: var(--ac-surface-muted);
+  background: var(--ac-page);
 }
 
 .app-header {
@@ -237,6 +189,18 @@ a {
   white-space: nowrap;
 }
 
+.overview-project-chip--visible {
+  color: var(--ac-status-success-text);
+  background: var(--ac-status-success-bg);
+  border-color: var(--ac-status-success-border);
+}
+
+.overview-project-chip--hidden {
+  color: var(--ac-text-muted);
+  background: var(--ac-surface-muted);
+  border-color: var(--ac-border-strong);
+}
+
 .overview-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -255,17 +219,17 @@ a {
 }
 
 .overview-session-card--running {
-  background: #dcfce7;
+  background: var(--ac-status-success-bg);
 }
 
 .overview-session-card--waiting_user {
-  background: #eeaa00;
+  background: var(--ac-status-warning-bg);
 }
 
 .overview-session-card:hover,
 .overview-session-card:focus-within {
   border-color: var(--q-primary);
-  box-shadow: 0 12px 28px rgb(15 23 42 / 10%);
+  box-shadow: var(--ac-shadow-card);
   transform: translateY(-1px);
 }
 
@@ -352,8 +316,8 @@ a {
   padding: 0 8px;
   border: 1px solid var(--ac-border);
   border-radius: 7px;
-  color: #334155;
-  background: #ffffff;
+  color: var(--ac-text);
+  background: var(--ac-surface-raised);
   font-size: 12px;
   font-weight: 800;
 }
@@ -365,8 +329,8 @@ a {
   padding: 0 10px;
   border: 1px solid var(--ac-border);
   border-radius: 7px;
-  color: var(--q-primary);
-  background: #ffffff;
+  color: var(--ac-link);
+  background: var(--ac-surface-raised);
   font-size: 12px;
   font-weight: 800;
 }
@@ -469,14 +433,14 @@ a {
 }
 
 .lane-status-chip {
-  color: #334155;
-  background: #f1f5f9;
+  color: var(--ac-status-neutral-text);
+  background: var(--ac-status-neutral-bg);
 }
 
 .lane-status-chip--running,
 .lane-status-chip--completed {
-  color: #166534;
-  background: #dcfce7;
+  color: var(--ac-status-success-text);
+  background: var(--ac-status-success-bg);
 }
 
 .lane-status-chip--waiting_user,
@@ -484,20 +448,20 @@ a {
 .lane-status-chip--stopping,
 .lane-status-chip--queued,
 .lane-status-chip--starting {
-  color: #92400e;
-  background: #fef3c7;
+  color: var(--ac-status-warning-text);
+  background: var(--ac-status-warning-bg);
 }
 
 .lane-status-chip--failed,
 .lane-status-chip--resume_failed,
 .lane-status-chip--blocked {
-  color: #991b1b;
-  background: #fee2e2;
+  color: var(--ac-status-danger-text);
+  background: var(--ac-status-danger-bg);
 }
 
 .lane-mode-chip {
-  color: #3730a3;
-  background: #eef2ff;
+  color: var(--ac-status-mode-text);
+  background: var(--ac-status-mode-bg);
 }
 
 .lane-card-title {
@@ -528,13 +492,13 @@ a {
 .lane-icon-btn {
   border: 1px solid var(--ac-border);
   border-radius: 7px;
-  background: #ffffff;
+  background: var(--ac-surface-raised);
 }
 
 .lane-icon-btn--warning {
-  color: #92400e;
-  background: #fef3c7;
-  border-color: #fde68a;
+  color: var(--ac-status-warning-text);
+  background: var(--ac-status-warning-bg);
+  border-color: var(--ac-status-warning-border);
 }
 
 .lane-more-card {
@@ -834,7 +798,7 @@ a {
   margin: 0;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius) !important;
-  box-shadow: 0 18px 46px rgb(15 23 42 / 18%);
+  box-shadow: var(--ac-shadow-dialog);
   z-index: 1;
 }
 
@@ -940,8 +904,8 @@ a {
 }
 
 .global-settings-nav__active {
-  color: var(--q-primary);
-  background: color-mix(in srgb, var(--q-primary) 10%, var(--ac-surface));
+  color: var(--ac-link);
+  background: color-mix(in srgb, var(--ac-link) 10%, var(--ac-surface));
 }
 
 .global-settings-panel {
@@ -1176,6 +1140,12 @@ a {
   background: var(--ac-surface-muted);
 }
 
+.attachment-count-badge {
+  color: var(--ac-status-info-text);
+  background: var(--ac-status-info-bg);
+  border: 1px solid var(--ac-status-info-border);
+}
+
 .attachment-zone {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1206,8 +1176,8 @@ a {
   margin: 0;
   border: 1px solid var(--ac-border);
   border-radius: 6px;
-  background: #f8fafc;
-  color: #334155;
+  background: var(--ac-surface-muted);
+  color: var(--ac-text);
 }
 
 .attachment-preview-card {
