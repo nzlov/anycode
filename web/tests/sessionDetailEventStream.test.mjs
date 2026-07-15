@@ -166,20 +166,24 @@ test('session detail replaces the prompt composer with the shared inline approva
   );
 
   assert.match(pageSource, /<q-card v-if="isWaitingForAnswer"/);
-  assert.match(pageSource, /<WorkflowApprovalPanel\s+v-else-if="isWaitingForApproval"/);
+  assert.match(pageSource, /<div v-else-if="isWaitingForApproval" class="detail-approval-review">/);
+  assert.match(pageSource, /<WorkflowResultReview/);
+  assert.match(pageSource, /:phase="session\?\.pendingApproval\?\.phase \?\? null"/);
+  assert.match(pageSource, /:result="session\?\.pendingApproval\?\.result \?\? null"/);
   assert.match(pageSource, /:key="approvalPanelKey"/);
   assert.match(
     pageSource,
     /`\$\{approval\.workflowRunId\}:\$\{approval\.nodeId\}:\$\{approval\.nodeRunId\}`/,
   );
   assert.match(pageSource, /<CodexPromptComposer\s+v-else/);
-  assert.match(pageSource, /Boolean\(session\?\.pendingApproval\)/);
+  assert.match(pageSource, /isPendingApprovalReviewable\(session\?\.pendingApproval\)/);
   assert.match(composableSource, /submitWorkflowApproval as submitWorkflowApprovalRequest/);
   assert.match(
     composableSource,
     /async function submitApproval\(approved: boolean, comment: string\)/,
   );
   assert.match(composableSource, /await loadSessionState\(\)/);
+  assert.match(composableSource, /if \(!isPendingApprovalReviewable\(approval\)\)/);
   assert.doesNotMatch(approvalPanelSource, /SessionEventMessage|DiffViewer|模型输出|Diff/);
 });
 

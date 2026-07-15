@@ -202,8 +202,9 @@ func evalExprCondition(condition Condition, context Context) (bool, error) {
 func exprEnv(context Context) map[string]any {
 	values := context.Values
 	return map[string]any{
-		"results": mapValue(values, "results"),
-		"params":  mapValue(values, "params"),
+		"results":  mapValue(values, "results"),
+		"params":   mapValue(values, "params"),
+		"approval": mapValue(values, "approval"),
 	}
 }
 

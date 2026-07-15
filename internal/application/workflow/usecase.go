@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -117,6 +118,9 @@ func (s *Service) GetDefinition(ctx context.Context, id domain.DefinitionID) (De
 		return DefinitionDTO{}, err
 	}
 	definition.Graph = completeSystemOutputFields(definition.Graph)
+	if err := validateGraph(definition.Graph); err != nil {
+		return DefinitionDTO{}, workflowValidationError(err.Error())
+	}
 	return toDefinitionDTO(definition), nil
 }
 
@@ -173,6 +177,9 @@ func validateGraph(graph domain.Graph) error {
 			return fmt.Errorf("workflow node %q is duplicated", id)
 		}
 		nodes[id] = struct{}{}
+		if isApprovalNode(node) && node.Approval.AfterRun {
+			return fmt.Errorf("workflow approval node %q cannot require after-run approval", id)
+		}
 		for _, field := range node.OutputFields {
 			if strings.TrimSpace(field.Key) == "" {
 				return fmt.Errorf("workflow node %q output field key is required", id)
@@ -211,13 +218,11 @@ func completeSystemOutputFields(graph domain.Graph) domain.Graph {
 }
 
 func completeNodeOutputFields(node domain.Node) []domain.OutputField {
-	fields := append([]domain.OutputField(nil), node.OutputFields...)
-	if requiresApproval(node) || node.Approval.AfterRun {
-		fields = ensureOutputField(fields, domain.OutputField{
-			Key:         "approval.approved",
-			Description: "Whether the human approval passed.",
-			ValueType:   "boolean",
-		})
+	fields := make([]domain.OutputField, 0, len(node.OutputFields))
+	for _, field := range node.OutputFields {
+		if strings.TrimSpace(field.Key) != "approval.approved" {
+			fields = append(fields, field)
+		}
 	}
 	if mergeRequest(node) != nil {
 		fields = ensureOutputField(fields, domain.OutputField{
@@ -335,12 +340,15 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 	if err != nil {
 		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
+	if err := validateGraph(definition.Graph); err != nil {
+		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, workflowValidationError(err.Error())
+	}
 	node, err := findNode(definition.Graph, run.CurrentNodeID)
 	if err != nil {
 		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
 	now := s.now()
-	output := outputWithApproval(nodeRun.Output, approved, comment)
+	approval := approvalValue(approved, comment)
 	if isAfterRunApproval(node, nodeRun) && !approved {
 		failedNodeRun := domain.NodeRun{
 			ID:            nodeRun.ID,
@@ -351,9 +359,9 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 			ProcessRunID:  nodeRun.ProcessRunID,
 			StartedAt:     nodeRun.StartedAt,
 			FinishedAt:    &now,
-			Output:        output,
+			Result:        nodeRun.Result,
 		}
-		run.Context = contextAfterFailedNode(run.Context, output)
+		run.Context = contextWithApproval(contextAfterFailedNode(run.Context, nodeRun.Result), approval)
 		nextNodeRun, advance, err := s.nextNodeRunForNode(&run, node, nodeRun.Attempt+1, now, false, true)
 		if err != nil {
 			return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
@@ -370,10 +378,31 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 		return advancedRun, advance, true, nil
 	}
 	if isBeforeRunApproval(node, nodeRun) && approved {
+		if isCloseNode(node) {
+			nodeRun.Status = domain.NodeSucceeded
+			nodeRun.FinishedAt = &now
+			run.Status = domain.RunCompleted
+			run.StoppedAt = &now
+			run.Context = contextWithApproval(run.Context, approval)
+			nodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
+			advance := sessiondomain.WorkflowAdvance{
+				WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
+				NodeRunID:        &nodeRunID,
+				CurrentNodeID:    node.ID,
+				CurrentNodeTitle: node.Title,
+				Status:           string(run.Status),
+				Close:            true,
+			}
+			if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
+				return repo.CompleteNodeAndAdvance(ctx, nodeRun, run, nil)
+			}); err != nil {
+				return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
+			}
+			return run, advance, false, nil
+		}
 		nodeRun.Status = domain.NodeRunning
-		nodeRun.Output = output
 		run.Status = domain.RunRunning
-		run.Context = contextAfterBeforeApproval(run.Context, output)
+		run.Context = contextWithApproval(run.Context, approval)
 		nodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
 		advance := sessiondomain.WorkflowAdvance{
 			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
@@ -403,9 +432,8 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 	if !approved {
 		nodeRun.Status = domain.NodeFailed
 		nodeRun.FinishedAt = &now
-		nodeRun.Output = output
 		run.Status = domain.RunBlocked
-		run.Context = contextAfterNode(run.Context, output)
+		run.Context = contextWithApproval(run.Context, approval)
 		run.Context.Values["blockedReason"] = "approval rejected"
 		advance := sessiondomain.WorkflowAdvance{
 			WorkflowRunID: sessiondomain.WorkflowRunID(run.ID),
@@ -420,7 +448,8 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 		}
 		return run, advance, false, nil
 	}
-	advance, err := s.completeNodeWithOptions(ctx, run, nodeRun.ID, output, completeNodeOptions{skipAfterRunApproval: isAfterRunApproval(node, nodeRun)})
+	run.Context = contextWithApproval(run.Context, approval)
+	advance, err := s.completeNodeWithOptions(ctx, run, nodeRun.ID, nodeRun.Result, completeNodeOptions{skipAfterRunApproval: isAfterRunApproval(node, nodeRun)})
 	if err != nil {
 		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
@@ -462,13 +491,13 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 	merge := mergeRequest(node)
 	params := map[string]any{"requirement": strings.TrimSpace(input.Requirement)}
 	expr := exprRequest(node, params)
-	if closeNode {
-		runStatus = domain.RunCompleted
-		nodeStatus = domain.NodeSucceeded
-		requiresCodex = false
-	} else if requiresApproval(node) {
+	if requiresApproval(node) {
 		runStatus = domain.RunWaitingApproval
 		nodeStatus = domain.NodeWaitingApproval
+		requiresCodex = false
+	} else if closeNode {
+		runStatus = domain.RunCompleted
+		nodeStatus = domain.NodeSucceeded
 		requiresCodex = false
 	} else if merge != nil {
 		requiresCodex = false
@@ -493,7 +522,7 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		Context:              contextValue,
 		StartedAt:            &now,
 	}
-	if closeNode {
+	if closeNode && runStatus == domain.RunCompleted {
 		run.StoppedAt = &now
 	}
 	nodeRun := domain.NodeRun{
@@ -504,7 +533,7 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		Attempt:       1,
 		StartedAt:     &now,
 	}
-	if closeNode {
+	if closeNode && nodeStatus == domain.NodeSucceeded {
 		nodeRun.FinishedAt = &now
 	}
 	resultNodeRunID := sessiondomain.NodeRunID(nodeRun.ID)
@@ -518,7 +547,12 @@ func (s *Service) StartForSession(ctx context.Context, input sessiondomain.Workf
 		Prompt:           nodePrompt(input.Requirement, node, params),
 		Merge:            merge,
 		Expr:             expr,
-		Close:            closeNode,
+		Close:            closeNode && runStatus == domain.RunCompleted,
+	}
+	if runStatus == domain.RunWaitingApproval {
+		start.ApprovalPhase = "before_run"
+		start.Merge = nil
+		start.Expr = nil
 	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromStart(start), func(ctx context.Context, repo domain.Repository) error {
 		return repo.CreateInitialRun(ctx, run, nodeRun)
@@ -777,6 +811,16 @@ func (s *Service) CompleteNode(ctx context.Context, input sessiondomain.Workflow
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
+	if run.Status != domain.RunRunning {
+		return s.workflowAdvanceFromPersistedRun(ctx, run)
+	}
+	nodeRun, err := s.repo.FindLatestNodeRun(ctx, run.ID, run.CurrentNodeID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	if nodeRun.ID != domain.NodeRunID(input.NodeRunID) || (nodeRun.Status != domain.NodeRunning && nodeRun.Status != domain.NodeWaitingUser) {
+		return s.workflowAdvanceFromPersistedRun(ctx, run)
+	}
 	return s.completeNode(ctx, run, domain.NodeRunID(input.NodeRunID), input.Output)
 }
 
@@ -899,6 +943,17 @@ func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domai
 	advance.NodeRunID = &nodeRunID
 	advance.CurrentNodeID = node.ID
 	advance.CurrentNodeTitle = node.Title
+	if run.Status == domain.RunWaitingApproval {
+		advance.RequiresCodex = false
+		advance.ApprovalPhase = "before_run"
+		if nodeRun.Result != nil {
+			advance.ApprovalPhase = "after_run"
+			advance.Result = resultMap(nodeRun.Result)
+		} else {
+			advance.Result = nil
+		}
+		return advance, nil
+	}
 	advance.RequiresCodex = run.Status == domain.RunRunning
 	advance.Prompt = nodePrompt("", node, paramsFromContext(run.Context))
 	advance.Merge = mergeRequest(node)
@@ -910,14 +965,6 @@ func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domai
 }
 
 func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any) (sessiondomain.WorkflowAdvance, error) {
-	return s.completeNodeWithOptions(ctx, run, nodeRunID, output, completeNodeOptions{})
-}
-
-type completeNodeOptions struct {
-	skipAfterRunApproval bool
-}
-
-func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any, options completeNodeOptions) (sessiondomain.WorkflowAdvance, error) {
 	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
@@ -926,21 +973,41 @@ func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, n
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
-	if isCodexNode(currentNode) && hasOutgoingEdges(definition.Graph, run.CurrentNodeID) && !hasWorkflowResults(output) {
-		if boolOutputValue(output, "jsonRetry") {
-			return sessiondomain.WorkflowAdvance{}, apperror.New(apperror.CodeWorkflowJSONRequired, apperror.CategoryWorkflowError, "workflow node output JSON is required")
+	result, err := decodeWorkflowResult(output, currentNode)
+	if err != nil {
+		if !isCodexNode(currentNode) {
+			return sessiondomain.WorkflowAdvance{}, apperror.Wrap(err, apperror.CodeWorkflowResultInvalid, apperror.CategoryWorkflowError, "workflow node result is invalid")
+		}
+		if boolOutputValue(output, "resultRetry") {
+			return sessiondomain.WorkflowAdvance{}, apperror.Wrap(err, apperror.CodeWorkflowResultInvalid, apperror.CategoryWorkflowError, "workflow node result is invalid after correction")
 		}
 		resultNodeRunID := sessiondomain.NodeRunID(nodeRunID)
 		return sessiondomain.WorkflowAdvance{
-			WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
-			NodeRunID:        &resultNodeRunID,
-			CurrentNodeID:    currentNode.ID,
-			CurrentNodeTitle: currentNode.Title,
-			Status:           string(domain.RunRunning),
-			RequiresCodex:    true,
-			RequireJSONRetry: true,
-			Prompt:           jsonRetryPrompt(currentNode),
+			WorkflowRunID:      sessiondomain.WorkflowRunID(run.ID),
+			NodeRunID:          &resultNodeRunID,
+			CurrentNodeID:      currentNode.ID,
+			CurrentNodeTitle:   currentNode.Title,
+			Status:             string(domain.RunRunning),
+			RequiresCodex:      true,
+			RequireResultRetry: true,
+			Prompt:             resultRetryPrompt(currentNode, err),
 		}, nil
+	}
+	return s.completeNodeWithOptions(ctx, run, nodeRunID, result, completeNodeOptions{})
+}
+
+type completeNodeOptions struct {
+	skipAfterRunApproval bool
+}
+
+func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, result *domain.Result, options completeNodeOptions) (sessiondomain.WorkflowAdvance, error) {
+	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
+	}
+	currentNode, err := findNode(definition.Graph, run.CurrentNodeID)
+	if err != nil {
+		return sessiondomain.WorkflowAdvance{}, err
 	}
 	now := s.now()
 	completedNodeRun := domain.NodeRun{
@@ -949,9 +1016,9 @@ func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, n
 		NodeID:        run.CurrentNodeID,
 		Status:        domain.NodeSucceeded,
 		FinishedAt:    &now,
-		Output:        payloadOrEmpty(output),
+		Result:        result,
 	}
-	contextValue := contextAfterNode(run.Context, completedNodeRun.Output)
+	contextValue := contextAfterNode(run.Context, completedNodeRun.Result)
 	if currentNode.Approval.AfterRun && !options.skipAfterRunApproval {
 		completedNodeRun.Status = domain.NodeWaitingApproval
 		completedNodeRun.FinishedAt = nil
@@ -965,6 +1032,8 @@ func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, n
 			CurrentNodeTitle: currentNode.Title,
 			Status:           string(run.Status),
 			RequiresCodex:    false,
+			ApprovalPhase:    "after_run",
+			Result:           resultMap(completedNodeRun.Result),
 		}
 		if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
 			return repo.CompleteNodeAndAdvance(ctx, completedNodeRun, run, nil)
@@ -1014,7 +1083,7 @@ func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, n
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
-	if isCloseNode(node) {
+	if isCloseNode(node) && !requiresApproval(node) {
 		nextNodeRunID, err := s.generateID()
 		if err != nil {
 			return sessiondomain.WorkflowAdvance{}, fmt.Errorf("generate workflow node run id: %w", err)
@@ -1088,6 +1157,11 @@ func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, n
 		Merge:            merge,
 		Expr:             expr,
 	}
+	if run.Status == domain.RunWaitingApproval {
+		advance.ApprovalPhase = "before_run"
+		advance.Merge = nil
+		advance.Expr = nil
+	}
 	if err := s.saveWorkflowMutation(ctx, definition, run, workflowEventInputFromAdvance(advance), func(ctx context.Context, repo domain.Repository) error {
 		return repo.CompleteNodeAndAdvance(ctx, completedNodeRun, run, &nextNodeRun)
 	}); err != nil {
@@ -1113,7 +1187,7 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run is on node run %q, not %q", nodeRun.ID, nodeRunID)
 	}
 	now := s.now()
-	failureOutput := failureNodeOutput(failure, output)
+	failureResult := failureNodeResult(failure, output)
 	failedNodeRun := domain.NodeRun{
 		ID:            nodeRun.ID,
 		WorkflowRunID: run.ID,
@@ -1121,9 +1195,9 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 		Status:        domain.NodeFailed,
 		Attempt:       nodeRun.Attempt,
 		FinishedAt:    &now,
-		Output:        failureOutput,
+		Result:        failureResult,
 	}
-	contextValue := contextAfterFailedNode(run.Context, failureOutput)
+	contextValue := contextAfterFailedNode(run.Context, failureResult)
 	planner := domain.DefaultPlanner{}
 	run.Context = contextValue
 	if planner.ShouldRetry(node, nodeRun.Attempt, failure) {
@@ -1164,17 +1238,22 @@ func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain
 	return advance, nil
 }
 
-func failureNodeOutput(failure domain.NodeFailure, output map[string]any) map[string]any {
-	failureOutput := map[string]any{
-		"failure": map[string]any{
-			"code":    failure.Code,
-			"message": failure.Message,
-		},
+func failureNodeResult(failure domain.NodeFailure, output map[string]any) *domain.Result {
+	data := map[string]any{
+		"failure": map[string]any{"code": failure.Code, "message": failure.Message},
 	}
-	for key, value := range output {
-		failureOutput[key] = value
+	if raw, ok := output["results"].(map[string]any); ok {
+		if nested, ok := raw["data"].(map[string]any); ok {
+			for key, value := range nested {
+				data[key] = value
+			}
+		}
 	}
-	return failureOutput
+	summary := strings.TrimSpace(failure.Message)
+	if summary == "" {
+		summary = "Workflow node failed"
+	}
+	return &domain.Result{Version: domain.ResultVersion, Outcome: domain.ResultFailure, Summary: summary, Data: data}
 }
 
 func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt int, now time.Time, updateCurrentNode bool, skipBeforeApproval bool) (domain.NodeRun, sessiondomain.WorkflowAdvance, error) {
@@ -1186,7 +1265,7 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 		run.CurrentNodeID = node.ID
 		run.Context = contextForNextNode(run.Context)
 	}
-	if isCloseNode(node) {
+	if isCloseNode(node) && (!requiresApproval(node) || skipBeforeApproval) {
 		run.Status = domain.RunCompleted
 		run.StoppedAt = &now
 		nextNodeRun := domain.NodeRun{
@@ -1231,7 +1310,7 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 		StartedAt:     &now,
 	}
 	resultNodeRunID := sessiondomain.NodeRunID(nextNodeRun.ID)
-	return nextNodeRun, sessiondomain.WorkflowAdvance{
+	advance := sessiondomain.WorkflowAdvance{
 		WorkflowRunID:    sessiondomain.WorkflowRunID(run.ID),
 		NodeRunID:        &resultNodeRunID,
 		CurrentNodeID:    node.ID,
@@ -1241,7 +1320,13 @@ func (s *Service) nextNodeRunForNode(run *domain.Run, node domain.Node, attempt 
 		Prompt:           nodePrompt("", node, paramsFromContext(run.Context)),
 		Merge:            merge,
 		Expr:             expr,
-	}, nil
+	}
+	if run.Status == domain.RunWaitingApproval {
+		advance.ApprovalPhase = "before_run"
+		advance.Merge = nil
+		advance.Expr = nil
+	}
+	return nextNodeRun, advance, nil
 }
 
 type workflowEventInput struct {
@@ -1251,16 +1336,18 @@ type workflowEventInput struct {
 
 func workflowEventInputFromStart(start sessiondomain.WorkflowStart) workflowEventInput {
 	advance := sessiondomain.WorkflowAdvance{
-		WorkflowRunID:    start.WorkflowRunID,
-		NodeRunID:        start.NodeRunID,
-		CurrentNodeID:    start.CurrentNodeID,
-		CurrentNodeTitle: start.CurrentNodeTitle,
-		Status:           start.Status,
-		RequiresCodex:    start.RequiresCodex,
-		RequireJSONRetry: start.RequireJSONRetry,
-		Merge:            start.Merge,
-		Expr:             start.Expr,
-		Close:            start.Close,
+		WorkflowRunID:      start.WorkflowRunID,
+		NodeRunID:          start.NodeRunID,
+		CurrentNodeID:      start.CurrentNodeID,
+		CurrentNodeTitle:   start.CurrentNodeTitle,
+		Status:             start.Status,
+		RequiresCodex:      start.RequiresCodex,
+		RequireResultRetry: start.RequireResultRetry,
+		ApprovalPhase:      start.ApprovalPhase,
+		Result:             start.Result,
+		Merge:              start.Merge,
+		Expr:               start.Expr,
+		Close:              start.Close,
 	}
 	return workflowEventInputFromAdvance(advance)
 }
@@ -1296,7 +1383,11 @@ func workflowEventInputFromAdvance(advance sessiondomain.WorkflowAdvance) workfl
 	case advance.Merge != nil:
 		payload["strategy"] = advance.Merge.Strategy
 		return workflowEventInput{eventType: "workflow.merge_ready", payload: payload}
+	case advance.Expr != nil:
+		return workflowEventInput{eventType: "workflow.expr_ready", payload: payload}
 	case !advance.RequiresCodex:
+		payload["approvalPhase"] = advance.ApprovalPhase
+		payload["result"] = advance.Result
 		return workflowEventInput{eventType: "workflow.waiting_approval", payload: payload}
 	default:
 		return workflowEventInput{eventType: "workflow.started", payload: payload}
@@ -1431,9 +1522,20 @@ func (s *Service) definitionForStart(ctx context.Context, input sessiondomain.Wo
 		if definition.ProjectID != domain.ProjectID(input.ProjectID) {
 			return domain.Definition{}, errors.New("workflow definition does not belong to project")
 		}
-		return definition, nil
+		return validatedDefinition(definition)
 	}
-	return s.repo.FindActive(ctx, domain.ProjectID(input.ProjectID))
+	definition, err := s.repo.FindActive(ctx, domain.ProjectID(input.ProjectID))
+	if err != nil {
+		return domain.Definition{}, err
+	}
+	return validatedDefinition(definition)
+}
+
+func validatedDefinition(definition domain.Definition) (domain.Definition, error) {
+	if err := validateGraph(definition.Graph); err != nil {
+		return domain.Definition{}, workflowValidationError(err.Error())
+	}
+	return definition, nil
 }
 
 func firstNode(graph domain.Graph) (domain.Node, error) {
@@ -1465,22 +1567,12 @@ func findNode(graph domain.Graph, id string) (domain.Node, error) {
 	return domain.Node{}, fmt.Errorf("workflow node %q was not found", id)
 }
 
-func contextAfterNode(contextValue domain.Context, output map[string]any) domain.Context {
+func contextAfterNode(contextValue domain.Context, result *domain.Result) domain.Context {
 	values := map[string]any{}
 	for key, value := range contextValue.Values {
 		values[key] = value
 	}
-	fullOutput := payloadOrEmpty(output)
-	results := fullOutput
-	if nested, ok := output["results"].(map[string]any); ok {
-		results = copyMap(payloadOrEmpty(nested))
-		if approval, exists := fullOutput["approval"]; exists {
-			results["approval"] = approval
-		}
-	}
-	if approval, exists := fullOutput["approval"]; exists {
-		values["approval"] = approval
-	}
+	results := resultMap(result)
 	values["results"] = results
 	values["last"] = map[string]any{
 		"status": "succeeded",
@@ -1489,12 +1581,12 @@ func contextAfterNode(contextValue domain.Context, output map[string]any) domain
 	return domain.Context{Values: values}
 }
 
-func contextAfterFailedNode(contextValue domain.Context, output map[string]any) domain.Context {
+func contextAfterFailedNode(contextValue domain.Context, result *domain.Result) domain.Context {
 	values := map[string]any{}
 	for key, value := range contextValue.Values {
 		values[key] = value
 	}
-	results := payloadOrEmpty(output)
+	results := resultMap(result)
 	values["results"] = results
 	values["last"] = map[string]any{
 		"status": "failed",
@@ -1503,14 +1595,12 @@ func contextAfterFailedNode(contextValue domain.Context, output map[string]any) 
 	return domain.Context{Values: values}
 }
 
-func contextAfterBeforeApproval(contextValue domain.Context, output map[string]any) domain.Context {
+func contextWithApproval(contextValue domain.Context, approval map[string]any) domain.Context {
 	values := map[string]any{}
 	for key, value := range contextValue.Values {
 		values[key] = value
 	}
-	if approval, exists := output["approval"]; exists {
-		values["approval"] = approval
-	}
+	values["approval"] = approval
 	return domain.Context{Values: values}
 }
 
@@ -1520,6 +1610,7 @@ func contextForNextNode(contextValue domain.Context) domain.Context {
 		values[key] = value
 	}
 	values["params"] = paramsFromResults(values)
+	delete(values, "approval")
 	return domain.Context{Values: values}
 }
 
@@ -1592,24 +1683,22 @@ func payloadOrEmpty(payload map[string]any) map[string]any {
 	return payload
 }
 
-func outputWithApproval(output map[string]any, approved bool, comment string) map[string]any {
-	next := copyMap(payloadOrEmpty(output))
-	next["approval"] = map[string]any{
+func approvalValue(approved bool, comment string) map[string]any {
+	return map[string]any{
 		"approved": approved,
 		"comment":  strings.TrimSpace(comment),
 	}
-	return next
 }
 
 func isAfterRunApproval(node domain.Node, nodeRun domain.NodeRun) bool {
-	return node.Approval.AfterRun && (len(nodeRun.Output) > 0 || !requiresApproval(node))
+	return node.Approval.AfterRun && (nodeRun.Result != nil || !requiresApproval(node))
 }
 
 func isBeforeRunApproval(node domain.Node, nodeRun domain.NodeRun) bool {
 	if isApprovalNode(node) {
 		return false
 	}
-	return node.Approval.BeforeRun && len(nodeRun.Output) == 0
+	return node.Approval.BeforeRun && nodeRun.Result == nil
 }
 
 func requiresApproval(node domain.Node) bool {
@@ -1661,35 +1750,20 @@ func mergeRequest(node domain.Node) *sessiondomain.WorkflowMerge {
 	return &sessiondomain.WorkflowMerge{Strategy: strategy}
 }
 
-func hasOutgoingEdges(graph domain.Graph, nodeID string) bool {
-	for _, edge := range graph.Edges {
-		if edge.From == nodeID {
-			return true
-		}
-	}
-	return false
-}
-
-func hasWorkflowResults(output map[string]any) bool {
-	if output == nil {
-		return false
-	}
-	_, ok := output["results"].(map[string]any)
-	return ok
-}
-
 func boolOutputValue(output map[string]any, key string) bool {
 	value, ok := output[key].(bool)
 	return ok && value
 }
 
-func jsonRetryPrompt(node domain.Node) string {
+func resultRetryPrompt(node domain.Node, reason error) string {
 	var builder strings.Builder
-	builder.WriteString("ANYCODE_WORKFLOW_JSON_RETRY\n")
-	builder.WriteString("Your previous response did not include the required workflow JSON result.\n")
-	builder.WriteString("Return only one valid JSON object with a top-level `results` object. Do not include Markdown fences or extra text.")
+	builder.WriteString("ANYCODE_WORKFLOW_RESULT_RETRY\n")
+	builder.WriteString("Your previous response did not satisfy the workflow result protocol: ")
+	builder.WriteString(reason.Error())
+	builder.WriteString("\nIf any question, uncertainty, approval, or user decision remains, call `answer_user` now and wait for the answer before finishing.\n")
+	builder.WriteString(workflowResultContract(node))
 	if len(node.OutputFields) > 0 {
-		builder.WriteString("\n\nRequired `results` fields:\n")
+		builder.WriteString("\n\nRequired `results.data` fields:\n")
 		builder.WriteString(outputFieldList(node.OutputFields))
 	}
 	return builder.String()
@@ -1706,8 +1780,12 @@ func nodePrompt(requirement string, node domain.Node, params map[string]any) str
 		sections = append(sections, "User requirement:\n"+requirement)
 	}
 	sections = append(sections, "Workflow input params JSON:\n"+jsonBlock(payloadOrEmpty(params)))
-	if len(node.OutputFields) > 0 {
-		sections = append(sections, "Workflow output contract:\nReturn a final JSON object with a top-level `results` object. `results` must contain these fields:\n"+outputFieldList(node.OutputFields))
+	if isCodexNode(node) {
+		contract := workflowResultContract(node)
+		if len(node.OutputFields) > 0 {
+			contract += "\n\nRequired `results.data` fields:\n" + outputFieldList(node.OutputFields)
+		}
+		sections = append(sections, contract)
 	}
 	if len(sections) == 0 {
 		return ""
@@ -1737,6 +1815,126 @@ func outputFieldList(fields []domain.OutputField) string {
 		lines = append(lines, fmt.Sprintf("- `%s` (%s): %s", field.Key, valueType, description))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func workflowResultContract(node domain.Node) string {
+	return "Workflow result contract:\nBefore finishing, resolve every question, uncertainty, approval, or user decision through `answer_user`. Do not describe pending questions in the final result.\nReturn only one JSON object with exactly this shape and no extra fields:\n" +
+		`{"results":{"version":1,"outcome":"success|partial|failure","summary":"concise review summary","data":{},"checks":[{"id":"...","label":"...","status":"passed|warning|failed","detail":"...","source":"agent"}],"warnings":[{"code":"...","message":"..."}],"artifacts":[{"kind":"...","label":"...","ref":"..."}]}}` +
+		"\nThe workflow owns human approval. Never return `approval`, `approved`, `questions`, `pendingQuestions`, or `needs_input` in `results`."
+}
+
+func decodeWorkflowResult(output map[string]any, node domain.Node) (*domain.Result, error) {
+	raw, ok := output["results"]
+	if !ok {
+		return nil, errors.New("top-level results object is required")
+	}
+	rawMap, ok := raw.(map[string]any)
+	if !ok {
+		return nil, errors.New("top-level results must be an object")
+	}
+	for _, key := range []string{"version", "outcome", "summary", "data", "checks", "warnings", "artifacts"} {
+		if _, exists := rawMap[key]; !exists {
+			return nil, fmt.Errorf("results.%s is required", key)
+		}
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return nil, fmt.Errorf("encode workflow result: %w", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var result domain.Result
+	if err := decoder.Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode workflow result: %w", err)
+	}
+	result.Normalize()
+	if err := result.Validate(); err != nil {
+		return nil, err
+	}
+	source := "system"
+	if isCodexNode(node) {
+		source = "agent"
+	}
+	for index := range result.Checks {
+		result.Checks[index].Source = source
+	}
+	if err := validateResultData(result.Data, node.OutputFields); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func validateResultData(data map[string]any, fields []domain.OutputField) error {
+	for _, field := range fields {
+		value, ok := lookupResultField(data, strings.TrimSpace(field.Key))
+		if !ok {
+			return fmt.Errorf("results.data.%s is required", field.Key)
+		}
+		if !matchesResultType(value, strings.TrimSpace(field.ValueType)) {
+			return fmt.Errorf("results.data.%s must be %s", field.Key, field.ValueType)
+		}
+	}
+	return nil
+}
+
+func lookupResultField(data map[string]any, key string) (any, bool) {
+	var current any = data
+	for _, part := range strings.Split(key, ".") {
+		mapped, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current, ok = mapped[part]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+func matchesResultType(value any, valueType string) bool {
+	switch valueType {
+	case "", "any":
+		return true
+	case "string":
+		_, ok := value.(string)
+		return ok
+	case "number":
+		switch value.(type) {
+		case float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			return true
+		default:
+			return false
+		}
+	case "boolean":
+		_, ok := value.(bool)
+		return ok
+	case "object":
+		_, ok := value.(map[string]any)
+		return ok
+	case "array":
+		_, ok := value.([]any)
+		return ok
+	default:
+		return false
+	}
+}
+
+func resultMap(result *domain.Result) map[string]any {
+	if result == nil {
+		return map[string]any{}
+	}
+	canonical := *result
+	canonical.Normalize()
+	data, err := json.Marshal(canonical)
+	if err != nil {
+		return map[string]any{}
+	}
+	var mapped map[string]any
+	if json.Unmarshal(data, &mapped) != nil {
+		return map[string]any{}
+	}
+	return mapped
 }
 
 func toDefinitionDTO(definition domain.Definition) DefinitionDTO {

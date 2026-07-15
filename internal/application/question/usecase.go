@@ -25,6 +25,7 @@ type UseCase interface {
 }
 
 type CreateBatchInput struct {
+	BatchID            domain.BatchID
 	SessionID          domain.SessionID
 	WorkflowRunID      *domain.WorkflowRunID
 	OriginProcessRunID *domain.ProcessRunID
@@ -45,6 +46,7 @@ type BatchDTO struct {
 	DeliveryStatus       domain.DeliveryStatus
 	DeliveryProcessRunID *domain.ProcessRunID
 	Questions            []domain.Question
+	Created              bool
 }
 
 type Service struct {
@@ -78,9 +80,13 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 	if len(input.Questions) == 0 {
 		return BatchDTO{}, errors.New("questions are required")
 	}
-	batchID, err := s.generateID()
-	if err != nil {
-		return BatchDTO{}, fmt.Errorf("generate question batch id: %w", err)
+	batchID := string(input.BatchID)
+	if batchID == "" {
+		var err error
+		batchID, err = s.generateID()
+		if err != nil {
+			return BatchDTO{}, fmt.Errorf("generate question batch id: %w", err)
+		}
 	}
 	questions := make([]domain.Question, len(input.Questions))
 	for i, item := range input.Questions {
@@ -105,9 +111,16 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 		CreatedAt:          s.now(),
 	}
 	if err := s.repo.CreateBatch(ctx, batch); err != nil {
+		if input.BatchID != "" {
+			existing, findErr := s.repo.FindBatch(ctx, input.BatchID)
+			if findErr == nil && existing.SessionID == input.SessionID && existing.Status == domain.BatchPending {
+				return toDTO(existing), nil
+			}
+		}
 		return BatchDTO{}, fmt.Errorf("create question batch: %w", err)
 	}
 	dto := toDTO(batch)
+	dto.Created = true
 	s.publish(dto)
 	return dto, nil
 }

@@ -67,13 +67,20 @@
               @submit="submitAnswers"
             />
           </q-card>
-          <WorkflowApprovalPanel
-            v-else-if="isWaitingForApproval"
-            :key="approvalPanelKey"
-            :context-available="Boolean(session?.pendingApproval)"
-            :submitting="approvalSubmitting"
-            @submit="submitApproval"
-          />
+          <div v-else-if="isWaitingForApproval" class="detail-approval-review">
+            <div class="detail-approval-review__result">
+              <WorkflowResultReview
+                :phase="session?.pendingApproval?.phase ?? null"
+                :result="session?.pendingApproval?.result ?? null"
+              />
+            </div>
+            <WorkflowApprovalPanel
+              :key="approvalPanelKey"
+              :context-available="isPendingApprovalReviewable(session?.pendingApproval)"
+              :submitting="approvalSubmitting"
+              @submit="submitApproval"
+            />
+          </div>
           <CodexPromptComposer
             v-else
             v-model:prompt="appendText"
@@ -558,6 +565,7 @@ import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
+import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
@@ -573,6 +581,7 @@ import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
+import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 
 const emit = defineEmits<{
   'session-title': [title: string];
@@ -1295,6 +1304,16 @@ async function scrollEventsToBottom() {
   gap: 12px;
   padding: 12px 14px;
   background: var(--ac-surface-muted);
+}
+
+.detail-approval-review {
+  max-height: min(60vh, 640px);
+  overflow: auto;
+}
+
+.detail-approval-review__result {
+  padding: 16px;
+  border-bottom: 1px solid var(--ac-border);
 }
 
 .detail-composer__primary-btn {

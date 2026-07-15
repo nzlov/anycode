@@ -127,7 +127,7 @@ type NodeRun struct {
 	ProcessRunID  *ProcessRunID
 	StartedAt     *time.Time
 	FinishedAt    *time.Time
-	Output        map[string]any
+	Result        *Result
 }
 
 type Context struct {

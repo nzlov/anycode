@@ -593,6 +593,36 @@ func TestMergeToBaseRejectsDirtyWorktree(t *testing.T) {
 	}
 }
 
+func TestMergeToBaseRetryAfterSuccessKeepsSameMergeCommit(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	runGit(t, repo, "switch", "-c", "feature/card-1")
+	writeFile(t, repo, "feature.txt", "feature\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "feature")
+	runGit(t, repo, "switch", "main")
+	writeFile(t, repo, "main.txt", "main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "main")
+	runGit(t, repo, "switch", "feature/card-1")
+
+	client := New("")
+	first, err := client.MergeToBase(ctx, gitdiff.MergeInput{WorktreePath: repo, BaseBranch: "main"})
+	if err != nil || first.Status != "merged" {
+		t.Fatalf("first MergeToBase() = %#v, %v", first, err)
+	}
+	second, err := client.MergeToBase(ctx, gitdiff.MergeInput{WorktreePath: repo, BaseBranch: "main"})
+	if err != nil || second.Status != "merged" || second.MergeCommit != first.MergeCommit {
+		t.Fatalf("second MergeToBase() = %#v, %v; first = %#v", second, err, first)
+	}
+	if got := gitOutput(t, repo, "rev-parse", "main"); got != first.MergeCommit {
+		t.Fatalf("main = %q, want %q", got, first.MergeCommit)
+	}
+}
+
 func TestRebaseOntoBaseUpdatesBaseBranch(t *testing.T) {
 	ctx := context.Background()
 	repo := initRepo(t)
@@ -613,6 +643,33 @@ func TestRebaseOntoBaseUpdatesBaseBranch(t *testing.T) {
 	}
 	if mainHead := gitOutput(t, repo, "rev-parse", "main"); mainHead != got.MergeCommit {
 		t.Fatalf("main head = %q, want %q", mainHead, got.MergeCommit)
+	}
+}
+
+func TestRebaseOntoBaseRetryAfterSuccessKeepsSameCommit(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	runGit(t, repo, "switch", "-c", "feature/card-1")
+	writeFile(t, repo, "feature.txt", "feature\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "feature")
+	runGit(t, repo, "switch", "main")
+	writeFile(t, repo, "main.txt", "main\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "main")
+	runGit(t, repo, "switch", "feature/card-1")
+
+	client := New("")
+	first, err := client.RebaseOntoBase(ctx, gitdiff.RebaseInput{WorktreePath: repo, BaseBranch: "main"})
+	if err != nil || first.Status != "merged" {
+		t.Fatalf("first RebaseOntoBase() = %#v, %v", first, err)
+	}
+	second, err := client.RebaseOntoBase(ctx, gitdiff.RebaseInput{WorktreePath: repo, BaseBranch: "main"})
+	if err != nil || second.Status != "merged" || second.MergeCommit != first.MergeCommit {
+		t.Fatalf("second RebaseOntoBase() = %#v, %v; first = %#v", second, err, first)
 	}
 }
 
