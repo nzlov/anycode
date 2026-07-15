@@ -185,6 +185,8 @@ type ComplexityRoot struct {
 		CurrentNodeTitle func(childComplexity int) int
 		NodeID           func(childComplexity int) int
 		NodeRunID        func(childComplexity int) int
+		Phase            func(childComplexity int) int
+		Result           func(childComplexity int) int
 		WorkflowRunID    func(childComplexity int) int
 	}
 
@@ -1364,6 +1366,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.PendingApproval.NodeRunID(childComplexity), true
+	case "PendingApproval.phase":
+		if e.ComplexityRoot.PendingApproval.Phase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PendingApproval.Phase(childComplexity), true
+	case "PendingApproval.result":
+		if e.ComplexityRoot.PendingApproval.Result == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PendingApproval.Result(childComplexity), true
 	case "PendingApproval.workflowRunId":
 		if e.ComplexityRoot.PendingApproval.WorkflowRunID == nil {
 			break
@@ -3500,6 +3514,8 @@ type PendingApproval {
   nodeId: ID!
   nodeRunId: ID!
   currentNodeTitle: String!
+  phase: String!
+  result: JSON
 }
 
 type SessionConfig {
@@ -8176,6 +8192,64 @@ func (ec *executionContext) fieldContext_PendingApproval_currentNodeTitle(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _PendingApproval_phase(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PendingApproval_phase,
+		func(ctx context.Context) (any, error) {
+			return obj.Phase, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PendingApproval_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PendingApproval",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PendingApproval_result(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PendingApproval_result,
+		func(ctx context.Context) (any, error) {
+			return obj.Result, nil
+		},
+		nil,
+		ec.marshalOJSON2map,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_PendingApproval_result(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PendingApproval",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Project_id(ctx context.Context, field graphql.CollectedField, obj *model.Project) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11447,6 +11521,10 @@ func (ec *executionContext) fieldContext_SessionCard_pendingApproval(_ context.C
 				return ec.fieldContext_PendingApproval_nodeRunId(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_PendingApproval_currentNodeTitle(ctx, field)
+			case "phase":
+				return ec.fieldContext_PendingApproval_phase(ctx, field)
+			case "result":
+				return ec.fieldContext_PendingApproval_result(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PendingApproval", field.Name)
 		},
@@ -12391,6 +12469,10 @@ func (ec *executionContext) fieldContext_SessionDetail_pendingApproval(_ context
 				return ec.fieldContext_PendingApproval_nodeRunId(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_PendingApproval_currentNodeTitle(ctx, field)
+			case "phase":
+				return ec.fieldContext_PendingApproval_phase(ctx, field)
+			case "result":
+				return ec.fieldContext_PendingApproval_result(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type PendingApproval", field.Name)
 		},
@@ -21449,6 +21531,13 @@ func (ec *executionContext) _PendingApproval(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "phase":
+			out.Values[i] = ec._PendingApproval_phase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "result":
+			out.Values[i] = ec._PendingApproval_result(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

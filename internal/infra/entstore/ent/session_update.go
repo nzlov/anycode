@@ -622,6 +622,18 @@ func (_u *SessionUpdate) SetNillableQueueAnswerBatchID(v *string) *SessionUpdate
 	return _u
 }
 
+// SetAppliedSystemCommands sets the "applied_system_commands" field.
+func (_u *SessionUpdate) SetAppliedSystemCommands(v map[string]bool) *SessionUpdate {
+	_u.mutation.SetAppliedSystemCommands(v)
+	return _u
+}
+
+// ClearAppliedSystemCommands clears the value of the "applied_system_commands" field.
+func (_u *SessionUpdate) ClearAppliedSystemCommands() *SessionUpdate {
+	_u.mutation.ClearAppliedSystemCommands()
+	return _u
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (_u *SessionUpdate) SetLastRunAt(v time.Time) *SessionUpdate {
 	_u.mutation.SetLastRunAt(v)
@@ -884,6 +896,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
 		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AppliedSystemCommands(); ok {
+		_spec.SetField(entsession.FieldAppliedSystemCommands, field.TypeJSON, value)
+	}
+	if _u.mutation.AppliedSystemCommandsCleared() {
+		_spec.ClearField(entsession.FieldAppliedSystemCommands, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)
@@ -1513,6 +1531,18 @@ func (_u *SessionUpdateOne) SetNillableQueueAnswerBatchID(v *string) *SessionUpd
 	return _u
 }
 
+// SetAppliedSystemCommands sets the "applied_system_commands" field.
+func (_u *SessionUpdateOne) SetAppliedSystemCommands(v map[string]bool) *SessionUpdateOne {
+	_u.mutation.SetAppliedSystemCommands(v)
+	return _u
+}
+
+// ClearAppliedSystemCommands clears the value of the "applied_system_commands" field.
+func (_u *SessionUpdateOne) ClearAppliedSystemCommands() *SessionUpdateOne {
+	_u.mutation.ClearAppliedSystemCommands()
+	return _u
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (_u *SessionUpdateOne) SetLastRunAt(v time.Time) *SessionUpdateOne {
 	_u.mutation.SetLastRunAt(v)
@@ -1805,6 +1835,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
 		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.AppliedSystemCommands(); ok {
+		_spec.SetField(entsession.FieldAppliedSystemCommands, field.TypeJSON, value)
+	}
+	if _u.mutation.AppliedSystemCommandsCleared() {
+		_spec.ClearField(entsession.FieldAppliedSystemCommands, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.LastRunAt(); ok {
 		_spec.SetField(entsession.FieldLastRunAt, field.TypeTime, value)

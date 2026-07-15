@@ -119,6 +119,48 @@ func TestCreateBatchAndGetBatch(t *testing.T) {
 	}
 }
 
+func TestCreateBatchWithStableIDReturnsExistingBatch(t *testing.T) {
+	repo := newFakeRepository()
+	service := New(repo)
+	service.generateID = sequenceIDs("question-1", "question-2")
+	input := CreateBatchInput{
+		BatchID:   "merge-failure-command-1",
+		SessionID: "session-1",
+		Questions: []domain.Question{{Title: "Resolve merge?", AllowCustom: true}},
+	}
+	first, err := service.CreateBatch(context.Background(), input)
+	if err != nil {
+		t.Fatalf("first CreateBatch() error = %v", err)
+	}
+	second, err := service.CreateBatch(context.Background(), input)
+	if err != nil {
+		t.Fatalf("second CreateBatch() error = %v", err)
+	}
+	if first.ID != input.BatchID || second.ID != first.ID || second.Questions[0].ID != first.Questions[0].ID {
+		t.Fatalf("first=%#v second=%#v", first, second)
+	}
+}
+
+func TestCreateBatchWithStableIDRejectsNonPendingExistingBatch(t *testing.T) {
+	repo := newFakeRepository()
+	service := New(repo)
+	service.generateID = sequenceIDs("question-1", "question-2")
+	input := CreateBatchInput{
+		BatchID:   "merge-failure-command-1",
+		SessionID: "session-1",
+		Questions: []domain.Question{{Title: "Resolve merge?", AllowCustom: true}},
+	}
+	if _, err := service.CreateBatch(context.Background(), input); err != nil {
+		t.Fatalf("first CreateBatch() error = %v", err)
+	}
+	existing := repo.batches[input.BatchID]
+	existing.Status = domain.BatchCancelled
+	repo.batches[input.BatchID] = existing
+	if _, err := service.CreateBatch(context.Background(), input); err == nil {
+		t.Fatal("CreateBatch() should reject a cancelled stable batch")
+	}
+}
+
 func TestGetBatchReturnsStructuredNotFound(t *testing.T) {
 	service := New(newFakeRepository())
 	_, err := service.GetBatch(context.Background(), "missing")
@@ -262,6 +304,9 @@ func newFakeRepository() *fakeRepository {
 func (r *fakeRepository) CreateBatch(_ context.Context, batch domain.Batch) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.batches[batch.ID]; exists {
+		return errors.New("duplicate batch")
+	}
 	r.batches[batch.ID] = batch
 	return nil
 }

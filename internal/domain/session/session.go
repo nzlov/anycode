@@ -141,27 +141,28 @@ const (
 )
 
 type Session struct {
-	ID                 ID
-	ProjectID          ProjectID
-	Requirement        string
-	Mode               Mode
-	Status             Status
-	Priority           Priority
-	CloseReason        *CloseReason
-	BaseBranch         string
-	WorktreePath       string
-	WorktreeBranch     string
-	WorktreeBaseCommit string
-	WorktreeCleanup    WorktreeCleanup
-	CodexSessionID     string
-	Config             Config
-	TodoList           TodoList
-	QueuedAt           *time.Time
-	Queue              QueueIntent
-	LastRunAt          *time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	ClosedAt           *time.Time
+	ID                    ID
+	ProjectID             ProjectID
+	Requirement           string
+	Mode                  Mode
+	Status                Status
+	Priority              Priority
+	CloseReason           *CloseReason
+	BaseBranch            string
+	WorktreePath          string
+	WorktreeBranch        string
+	WorktreeBaseCommit    string
+	WorktreeCleanup       WorktreeCleanup
+	CodexSessionID        string
+	Config                Config
+	TodoList              TodoList
+	QueuedAt              *time.Time
+	Queue                 QueueIntent
+	AppliedSystemCommands map[string]bool
+	LastRunAt             *time.Time
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	ClosedAt              *time.Time
 }
 
 type WorktreeCleanup struct {
@@ -633,6 +634,10 @@ type Repository interface {
 	LatestSuccessfulMergeRecord(ctx context.Context, sessionID ID) (MergeRecord, bool, error)
 }
 
+type MergeCommandRepository interface {
+	FindMergeRecord(ctx context.Context, id string) (MergeRecord, bool, error)
+}
+
 type AttachmentRepository interface {
 	SaveStagedAttachment(ctx context.Context, attachment StagedAttachment) error
 	FindStagedAttachment(ctx context.Context, id StagedAttachmentID) (StagedAttachment, error)
@@ -753,17 +758,19 @@ type WorkflowStartInput struct {
 }
 
 type WorkflowStart struct {
-	WorkflowRunID    WorkflowRunID
-	NodeRunID        *NodeRunID
-	CurrentNodeID    string
-	CurrentNodeTitle string
-	Status           string
-	RequiresCodex    bool
-	RequireJSONRetry bool
-	Prompt           string
-	Merge            *WorkflowMerge
-	Expr             *WorkflowExpr
-	Close            bool
+	WorkflowRunID      WorkflowRunID
+	NodeRunID          *NodeRunID
+	CurrentNodeID      string
+	CurrentNodeTitle   string
+	Status             string
+	RequiresCodex      bool
+	RequireResultRetry bool
+	ApprovalPhase      string
+	Result             map[string]any
+	Prompt             string
+	Merge              *WorkflowMerge
+	Expr               *WorkflowExpr
+	Close              bool
 }
 
 type WorkflowStartFailureInput struct {
@@ -800,6 +807,7 @@ type WorkflowNodeFailInput struct {
 type WorkflowNodeCompleteInput struct {
 	WorkflowRunID WorkflowRunID
 	NodeRunID     NodeRunID
+	CommandID     string
 	Output        map[string]any
 }
 
@@ -834,22 +842,25 @@ type WorkflowApprovalResult struct {
 }
 
 type WorkflowAdvance struct {
-	WorkflowRunID    WorkflowRunID
-	NodeRunID        *NodeRunID
-	CurrentNodeID    string
-	CurrentNodeTitle string
-	Status           string
-	RequiresCodex    bool
-	RequireJSONRetry bool
-	Prompt           string
-	Merge            *WorkflowMerge
-	Expr             *WorkflowExpr
-	Close            bool
-	Completed        bool
-	Blocked          bool
-	BlockedReason    string
-	BlockedCode      string
-	BlockedMessage   string
+	WorkflowRunID      WorkflowRunID
+	NodeRunID          *NodeRunID
+	CurrentNodeID      string
+	CurrentNodeTitle   string
+	Status             string
+	RequiresCodex      bool
+	RequireResultRetry bool
+	ApprovalPhase      string
+	Result             map[string]any
+	Prompt             string
+	Merge              *WorkflowMerge
+	Expr               *WorkflowExpr
+	Close              bool
+	Completed          bool
+	Blocked            bool
+	BlockedReason      string
+	BlockedCode        string
+	BlockedMessage     string
+	CommandID          string
 }
 
 type WorkflowMerge struct {

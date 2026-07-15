@@ -59,6 +59,29 @@ func (f *fakeArtifactUseCase) List(_ context.Context, query sessiondomain.Artifa
 	return []sessiondomain.SessionFile{}, f.total, nil
 }
 
+func TestMapPendingApprovalIncludesResultProjection(t *testing.T) {
+	got := mapPendingApproval(&sessionapp.PendingApprovalDTO{
+		WorkflowRunID:    "workflow-run-1",
+		NodeID:           "build",
+		NodeRunID:        "node-run-1",
+		CurrentNodeTitle: "Build",
+		Phase:            "after_run",
+		Result:           map[string]any{"version": 1, "outcome": "success", "summary": "done", "data": map[string]any{}},
+	})
+	if got == nil || got.Phase != "after_run" || got.Result["outcome"] != "success" {
+		t.Fatalf("mapPendingApproval() = %#v", got)
+	}
+}
+
+func TestMapPendingApprovalKeepsBeforeRunResultNull(t *testing.T) {
+	got := mapPendingApproval(&sessionapp.PendingApprovalDTO{
+		WorkflowRunID: "workflow-run-1", NodeID: "build", NodeRunID: "node-run-1", Phase: "before_run",
+	})
+	if got == nil || got.Result != nil {
+		t.Fatalf("mapPendingApproval() = %#v", got)
+	}
+}
+
 func TestQuerySessionDiffSummariesForwardsBatchInput(t *testing.T) {
 	diffs := &fakeDiffUseCase{summaries: []diffapp.SessionDiffSummaryDTO{
 		{SessionID: "session-1", State: diffapp.SessionDiffSummaryChanged, FilesChanged: 3},

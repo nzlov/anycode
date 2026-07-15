@@ -241,6 +241,8 @@ type PendingApproval {
   nodeId: ID!
   nodeRunId: ID!
   currentNodeTitle: String!
+  phase: String!
+  result: JSON
 }
 
 type SessionConfig {

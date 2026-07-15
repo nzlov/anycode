@@ -125,15 +125,31 @@ test('overview waiting approval dialog shows model output and diff before submit
 
   assert.match(overviewSource, /card\.status === 'waiting_approval'/);
   assert.match(overviewSource, /openApprovalDialog\(card\)/);
-  assert.match(overviewSource, /<q-tab name="output"[^>]*label="模型输出"/);
+  assert.match(overviewSource, /<q-tab name="output"[^>]*label="审核结果"/);
   assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
-  assert.match(overviewSource, /getSessionTranscriptPage\(card\.id, '', 10, 'assistant'\)/);
-  assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId: card\.id, mode: 'all'/);
+  assert.doesNotMatch(overviewSource, /getSessionTranscriptPage/);
+  assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId, mode: 'all'/);
   assert.match(overviewSource, /card\.pendingApproval/);
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
-  assert.match(overviewSource, /Promise\.allSettled/);
-  assert.match(overviewSource, /approvalOutputError/);
-  assert.match(overviewSource, /<SessionEventMessage[^>]*:event="message"/);
+  assert.doesNotMatch(overviewSource, /approvalOutputError/);
+  assert.match(overviewSource, /:phase="approvalPending\?\.phase \?\? null"/);
+  assert.match(overviewSource, /:result="approvalPending\?\.result \?\? null"/);
+  assert.match(overviewSource, /isPendingApprovalReviewable\(approvalPending\)/);
+  assert.match(overviewSource, /!isPendingApprovalReviewable\(approvalPending\.value\)/);
+  assert.match(overviewSource, /if \(approvalSubmitting\.value\) return;/);
+  assert.match(overviewSource, /const requestGeneration = approvalContextGeneration/);
+  assert.match(overviewSource, /approvalContext\.value\?\.workflowRunId === workflowRunId/);
+  assert.match(overviewSource, /approvalContext\.value\?\.nodeId === nodeId/);
+  assert.ok(
+    overviewSource.indexOf('approvalDialog.value = true') <
+      overviewSource.indexOf('await getSessionAllDiff'),
+  );
+  assert.match(overviewSource, /const requestGeneration = \+\+approvalContextGeneration/);
+  assert.match(overviewSource, /isCurrentApprovalContext\(requestGeneration, sessionId\)/);
+  assert.match(
+    overviewSource,
+    /if \(isCurrentApprovalContext\(requestGeneration, sessionId\)\) \{\s*approvalLoading\.value = false/s,
+  );
   assert.match(overviewSource, /<SessionDiffPreview[\s\S]*:file-diffs="approvalDiffs"/);
   assert.match(overviewSource, /<WorkflowApprovalPanel/);
   assert.match(overviewSource, /aria-label="关闭人工审核"/);
@@ -151,6 +167,10 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(sessionsSource, /pendingApproval\s*\{/);
   assert.match(sessionsSource, /workflowRunId/);
   assert.match(sessionsSource, /normalizePendingApproval/);
+  assert.match(sessionsSource, /phase: approval\.phase/);
+  assert.match(sessionsSource, /result: unknown/);
+  assert.match(sessionsSource, /normalizeWorkflowNodeResult\(approval\.result\)/);
+  assert.match(sessionsSource, /result,\s*\n\s*};/);
   assert.match(sessionsSource, /mutation SubmitWorkflowApproval/);
 
   assert.match(approvalPanelSource, /mode === 'reject'/);

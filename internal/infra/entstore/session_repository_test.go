@@ -71,9 +71,10 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 			ResumeOfProcessRunID: "process-run-1",
 			AnswerBatchID:        "batch-1",
 		},
-		LastRunAt: &now,
-		CreatedAt: now.Add(-10 * time.Minute),
-		UpdatedAt: now.Add(-25 * time.Minute),
+		AppliedSystemCommands: map[string]bool{"command-1": true},
+		LastRunAt:             &now,
+		CreatedAt:             now.Add(-10 * time.Minute),
+		UpdatedAt:             now.Add(-25 * time.Minute),
 	}
 	if err := repo.Save(ctx, input); err != nil {
 		t.Fatalf("save session: %v", err)
@@ -95,6 +96,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 	if found.Queue.ResumeOfProcessRunID != "process-run-1" || found.Queue.AnswerBatchID != "batch-1" {
 		t.Fatalf("answer queue metadata = %#v", found.Queue)
+	}
+	if !found.AppliedSystemCommands["command-1"] {
+		t.Fatalf("applied system commands = %#v", found.AppliedSystemCommands)
 	}
 
 	updatedAt := now.Add(time.Minute)

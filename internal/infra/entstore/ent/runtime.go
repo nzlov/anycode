@@ -350,11 +350,11 @@ func init() {
 	// entsession.DefaultQueueAnswerBatchID holds the default value on creation for the queue_answer_batch_id field.
 	entsession.DefaultQueueAnswerBatchID = entsessionDescQueueAnswerBatchID.Default.(string)
 	// entsessionDescCreatedAt is the schema descriptor for created_at field.
-	entsessionDescCreatedAt := entsessionFields[40].Descriptor()
+	entsessionDescCreatedAt := entsessionFields[41].Descriptor()
 	// entsession.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entsession.DefaultCreatedAt = entsessionDescCreatedAt.Default.(func() time.Time)
 	// entsessionDescUpdatedAt is the schema descriptor for updated_at field.
-	entsessionDescUpdatedAt := entsessionFields[41].Descriptor()
+	entsessionDescUpdatedAt := entsessionFields[42].Descriptor()
 	// entsession.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

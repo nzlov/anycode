@@ -74,6 +74,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
 			SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
 			SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
+		update.SetAppliedSystemCommands(nonNilAppliedSystemCommands(s.AppliedSystemCommands))
 		if s.Queue.NodeRunID == nil {
 			update.SetQueueNodeRunID("")
 		} else {
@@ -169,6 +170,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
 		SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
 		SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
+	create.SetAppliedSystemCommands(nonNilAppliedSystemCommands(s.AppliedSystemCommands))
 	if s.Queue.NodeRunID != nil {
 		create.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
 	}
@@ -535,6 +537,17 @@ func (r *SessionRepository) AddMergeRecord(ctx context.Context, record domainses
 	return nil
 }
 
+func (r *SessionRepository) FindMergeRecord(ctx context.Context, id string) (domainsession.MergeRecord, bool, error) {
+	row, err := r.client.MergeRecord.Get(ctx, id)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return domainsession.MergeRecord{}, false, nil
+		}
+		return domainsession.MergeRecord{}, false, fmt.Errorf("find merge record: %w", err)
+	}
+	return toDomainMergeRecord(row), true, nil
+}
+
 func (r *SessionRepository) LatestSuccessfulMergeRecord(ctx context.Context, sessionID domainsession.ID) (domainsession.MergeRecord, bool, error) {
 	row, err := r.client.MergeRecord.Query().
 		Where(
@@ -715,11 +728,19 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			ResumeOfProcessRunID:    row.QueueResumeOfProcessRunID,
 			AnswerBatchID:           row.QueueAnswerBatchID,
 		},
-		LastRunAt: row.LastRunAt,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
-		ClosedAt:  row.ClosedAt,
+		AppliedSystemCommands: nonNilAppliedSystemCommands(row.AppliedSystemCommands),
+		LastRunAt:             row.LastRunAt,
+		CreatedAt:             row.CreatedAt,
+		UpdatedAt:             row.UpdatedAt,
+		ClosedAt:              row.ClosedAt,
 	}
+}
+
+func nonNilAppliedSystemCommands(input map[string]bool) map[string]bool {
+	if input == nil {
+		return map[string]bool{}
+	}
+	return input
 }
 
 func queueInitialStart(row *ent.Session) bool {

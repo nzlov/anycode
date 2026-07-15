@@ -95,6 +95,8 @@ type Session struct {
 	QueueResumeOfProcessRunID string `json:"queue_resume_of_process_run_id,omitempty"`
 	// QueueAnswerBatchID holds the value of the "queue_answer_batch_id" field.
 	QueueAnswerBatchID string `json:"queue_answer_batch_id,omitempty"`
+	// AppliedSystemCommands holds the value of the "applied_system_commands" field.
+	AppliedSystemCommands map[string]bool `json:"applied_system_commands,omitempty"`
 	// LastRunAt holds the value of the "last_run_at" field.
 	LastRunAt *time.Time `json:"last_run_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -111,7 +113,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case entsession.FieldTodoList:
+		case entsession.FieldTodoList, entsession.FieldAppliedSystemCommands:
 			values[i] = new([]byte)
 		case entsession.FieldWorktreeCleanupRetryable, entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
@@ -380,6 +382,14 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.QueueAnswerBatchID = value.String
 			}
+		case entsession.FieldAppliedSystemCommands:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field applied_system_commands", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.AppliedSystemCommands); err != nil {
+					return fmt.Errorf("unmarshal field applied_system_commands: %w", err)
+				}
+			}
 		case entsession.FieldLastRunAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field last_run_at", values[i])
@@ -571,6 +581,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("queue_answer_batch_id=")
 	builder.WriteString(_m.QueueAnswerBatchID)
+	builder.WriteString(", ")
+	builder.WriteString("applied_system_commands=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AppliedSystemCommands))
 	builder.WriteString(", ")
 	if v := _m.LastRunAt; v != nil {
 		builder.WriteString("last_run_at=")

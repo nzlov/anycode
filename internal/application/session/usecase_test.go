@@ -1392,7 +1392,15 @@ func TestWorkflowMergeNodeFailureRecordsAndFailsCurrentNode(t *testing.T) {
 	if workflows.failInput.NodeRunID != "node-run-merge" || workflows.failInput.Code != "dirty_worktree" {
 		t.Fatalf("fail input = %#v", workflows.failInput)
 	}
-	mergeOutput, ok := workflows.failInput.Output["merge"].(map[string]any)
+	results, ok := workflows.failInput.Output["results"].(map[string]any)
+	if !ok {
+		t.Fatalf("result output = %#v", workflows.failInput.Output)
+	}
+	data, ok := results["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("result data = %#v", results)
+	}
+	mergeOutput, ok := data["merge"].(map[string]any)
 	if !ok || mergeOutput["status"] != "failed" || mergeOutput["failureCode"] != "dirty_worktree" || mergeOutput["failureReason"] != "worktree has uncommitted changes" {
 		t.Fatalf("merge output = %#v", workflows.failInput.Output)
 	}
@@ -1515,7 +1523,8 @@ func TestWorkflowExprNodeCompletesWithResults(t *testing.T) {
 		t.Fatalf("StartSession() status = %q", got.Status)
 	}
 	results, ok := workflows.completeInput.Output["results"].(map[string]any)
-	if !ok || results["status"] != "passed" || results["count"] != 2 {
+	data, dataOK := results["data"].(map[string]any)
+	if !ok || !dataOK || data["status"] != "passed" || data["count"] != float64(2) {
 		t.Fatalf("expr results = %#v", workflows.completeInput.Output)
 	}
 	if workflows.completeInput.NodeRunID != "node-run-expr" {
@@ -1747,7 +1756,15 @@ func TestHandleQuestionBatchAnsweredFailsMergeNode(t *testing.T) {
 	if workflows.failInput.NodeRunID != nodeRunID || workflows.failInput.Code != "dirty_worktree" {
 		t.Fatalf("fail input = %#v", workflows.failInput)
 	}
-	mergeOutput, ok := workflows.failInput.Output["merge"].(map[string]any)
+	results, ok := workflows.failInput.Output["results"].(map[string]any)
+	if !ok {
+		t.Fatalf("result output = %#v", workflows.failInput.Output)
+	}
+	data, ok := results["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("result data = %#v", results)
+	}
+	mergeOutput, ok := data["merge"].(map[string]any)
 	if !ok || mergeOutput["status"] != "failed" || mergeOutput["failureCode"] != "dirty_worktree" || mergeOutput["failureReason"] != "worktree has uncommitted changes" {
 		t.Fatalf("merge output = %#v", workflows.failInput.Output)
 	}
@@ -1816,6 +1833,29 @@ func TestAskMergeFailureCancelsQuestionWhenSessionSaveFails(t *testing.T) {
 	}
 	if questions.cancelledSessionID != "session-1" || questions.cancelReason != "merge failure question abandoned" {
 		t.Fatalf("cancelled questions = %q %q", questions.cancelledSessionID, questions.cancelReason)
+	}
+}
+
+func TestAskMergeFailureKeepsStableBatchWhenSessionSaveFails(t *testing.T) {
+	repo := newFakeRepository()
+	repo.saveErr = errors.New("database unavailable")
+	questions := &fakeQuestionCanceller{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithQuestions(questions))
+	nodeRunID := domain.NodeRunID("node-run-merge")
+
+	_, err := service.askMergeFailure(context.Background(), domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning,
+	}, domain.WorkflowAdvance{
+		WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CommandID: "command-merge-1",
+	}, gitdiffdomain.MergeResult{Strategy: "merge", Status: "failed", FailureReason: "conflict"}, "merge_conflict")
+	if err == nil || !strings.Contains(err.Error(), "save session") {
+		t.Fatalf("askMergeFailure() error = %v", err)
+	}
+	if questions.created.BatchID != "merge-failure-command-merge-1" {
+		t.Fatalf("merge failure batch id = %q", questions.created.BatchID)
+	}
+	if questions.cancelledSessionID != "" {
+		t.Fatalf("stable merge failure batch was cancelled for session %q", questions.cancelledSessionID)
 	}
 }
 
@@ -1906,7 +1946,7 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	}
 }
 
-func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testing.T) {
+func TestWorkflowSessionMarksRunFailedWhenResultCorrectionStillInvalid(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -1927,16 +1967,23 @@ func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testin
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
-			NodeRunID:        &nodeRunID,
-			CurrentNodeID:    "build",
-			CurrentNodeTitle: "Build",
-			Status:           "running",
-			RequiresCodex:    true,
-			RequireJSONRetry: true,
-			Prompt:           "ANYCODE_WORKFLOW_JSON_RETRY",
+			WorkflowRunID:      "workflow-run-1",
+			NodeRunID:          &nodeRunID,
+			CurrentNodeID:      "build",
+			CurrentNodeTitle:   "Build",
+			Status:             "running",
+			RequiresCodex:      true,
+			RequireResultRetry: true,
+			Prompt:             "ANYCODE_WORKFLOW_RESULT_RETRY",
 		},
-		completeErr: apperror.New(apperror.CodeWorkflowJSONRequired, apperror.CategoryWorkflowError, "workflow node output JSON is required"),
+		completeErr:  apperror.New(apperror.CodeWorkflowResultInvalid, apperror.CategoryWorkflowError, "workflow node result is invalid"),
+		markFailErrs: []error{errors.New("temporary workflow persistence failure"), nil},
+	}
+	firstMarkStatus := domain.Status("")
+	workflows.markFailHook = func(call int) {
+		if call == 1 {
+			firstMarkStatus = repo.sessions["session-1"].Status
+		}
 	}
 	closedEvents := make(chan processdomain.CodexEvent)
 	close(closedEvents)
@@ -1955,6 +2002,7 @@ func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testin
 		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
 	}
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.processExitDelay = func(int) time.Duration { return 0 }
 
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSessionWithOptions() error = %v", err)
@@ -1966,11 +2014,68 @@ func TestWorkflowSessionMarksRunFailedWhenJSONRetryStillMissingResults(t *testin
 	if workflows.failedInput.WorkflowRunID != "workflow-run-1" || workflows.failedInput.NodeRunID == nil || *workflows.failedInput.NodeRunID != "node-run-1" {
 		t.Fatalf("failed input = %#v", workflows.failedInput)
 	}
-	if workflows.failedInput.Code != apperror.CodeWorkflowJSONRequired {
+	if workflows.failedInput.Code != apperror.CodeWorkflowResultInvalid {
 		t.Fatalf("failed input = %#v", workflows.failedInput)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusFailed {
 		t.Fatalf("session status = %q", repo.sessions["session-1"].Status)
+	}
+	if workflows.markFailCalls != 2 || firstMarkStatus == domain.StatusFailed {
+		t.Fatalf("MarkStartFailed calls = %d, first failure session status = %q", workflows.markFailCalls, firstMarkStatus)
+	}
+}
+
+func TestWorkflowAdvanceAfterProcessExitReturnsMarkStartFailedError(t *testing.T) {
+	nodeRunID := processdomain.NodeRunID("node-run-1")
+	resultErr := apperror.New(apperror.CodeWorkflowResultInvalid, apperror.CategoryWorkflowError, "invalid result")
+	markErr := errors.New("persist workflow failure")
+	workflows := &fakeWorkflowStarter{recoverErr: resultErr, markFailErr: markErr}
+	service := New(newFakeRepository(), newFakeProjectRepository(), WithWorkflows(workflows))
+
+	_, err := service.workflowAdvanceAfterProcessExit(context.Background(), processdomain.CodexHandle{ProcessRunID: "process-run-1"}, codexStartOptions{
+		workflowRunID: "workflow-run-1",
+		nodeRunID:     &nodeRunID,
+	}, processdomain.ExitResult{}, nil)
+	if !errors.Is(err, markErr) || !errors.Is(err, resultErr) {
+		t.Fatalf("workflowAdvanceAfterProcessExit() error = %v", err)
+	}
+	if workflows.failedInput.NodeRunID == nil || string(*workflows.failedInput.NodeRunID) != string(nodeRunID) {
+		t.Fatalf("failed input = %#v", workflows.failedInput)
+	}
+}
+
+func TestPendingApprovalFromEventIncludesPersistedResult(t *testing.T) {
+	event := eventdomain.DomainEvent{
+		Type: "session.waiting_approval",
+		Payload: map[string]any{
+			"workflowRunId":    "workflow-run-1",
+			"nodeRunId":        "node-run-1",
+			"currentNodeId":    "build",
+			"currentNodeTitle": "Build",
+			"approvalPhase":    "after_run",
+			"result":           map[string]any{"version": float64(1), "outcome": "success", "summary": "done", "data": map[string]any{}},
+		},
+	}
+	approval := pendingApprovalFromEvent(event)
+	if approval == nil || approval.Phase != "after_run" || approval.Result["outcome"] != "success" {
+		t.Fatalf("pendingApprovalFromEvent() = %#v", approval)
+	}
+}
+
+func TestPendingApprovalFromEventKeepsBeforeRunResultNil(t *testing.T) {
+	event := eventdomain.DomainEvent{
+		Type: "session.waiting_approval",
+		Payload: map[string]any{
+			"workflowRunId": "workflow-run-1",
+			"nodeRunId":     "node-run-1",
+			"currentNodeId": "build",
+			"approvalPhase": "before_run",
+			"result":        nil,
+		},
+	}
+	approval := pendingApprovalFromEvent(event)
+	if approval == nil || approval.Result != nil {
+		t.Fatalf("pendingApprovalFromEvent() = %#v", approval)
 	}
 }
 
@@ -2087,44 +2192,75 @@ func TestCodexProcessFailureCodeClassifiesParameterRejection(t *testing.T) {
 }
 
 func TestWorkflowResultsFromTextExtractsJSONResults(t *testing.T) {
-	got, ok := workflowResultsFromText("summary\n```json\n{\"results\":{\"status\":\"passed\",\"count\":2}}\n```")
+	got, ok := workflowResultsFromText(`{"results":{"status":"passed","count":2}}`)
 	if !ok || got["status"] != "passed" || got["count"] != float64(2) {
 		t.Fatalf("workflowResultsFromText() = %#v, %v", got, ok)
 	}
 }
 
+func TestWorkflowResultsFromTextRejectsNonCanonicalEnvelope(t *testing.T) {
+	tests := []string{
+		"summary\n{\"results\":{\"status\":\"passed\"}}",
+		"```json\n{\"results\":{\"status\":\"passed\"}}\n```",
+		`{"results":{"status":"passed"},"approval":{"approved":true}}`,
+		`{"status":"passed"}`,
+	}
+	for _, input := range tests {
+		if got, ok := workflowResultsFromText(input); ok {
+			t.Fatalf("workflowResultsFromText(%q) = %#v, true", input, got)
+		}
+	}
+}
+
+func TestWorkflowResultsAfterEventUsesOnlyLatestAssistantOutput(t *testing.T) {
+	valid := completedAssistantEvent(`{"results":{"status":"passed"}}`)
+	finalProse := completedAssistantEvent("Should I proceed?")
+	nonAssistant := processdomain.CodexEvent{Type: "command_execution", Payload: map[string]any{"output": "done"}}
+
+	results := workflowResultsAfterEvent(nil, valid)
+	if results["status"] != "passed" {
+		t.Fatalf("valid assistant results = %#v", results)
+	}
+	results = workflowResultsAfterEvent(results, nonAssistant)
+	if results["status"] != "passed" {
+		t.Fatalf("non-assistant event replaced results = %#v", results)
+	}
+	if results = workflowResultsAfterEvent(results, finalProse); results != nil {
+		t.Fatalf("final invalid assistant output retained stale results = %#v", results)
+	}
+	results = workflowResultsAfterEvent(nil, valid)
+	if results = workflowResultsAfterEvent(results, completedAssistantEvent("  \n")); results != nil {
+		t.Fatalf("final blank assistant output retained stale results = %#v", results)
+	}
+}
+
 func TestWorkflowResultsFromEventExtractsCodexAssistantItem(t *testing.T) {
-	got, ok := workflowResultsFromEvent(processdomain.CodexEvent{
-		Type: "item.completed",
-		Payload: map[string]any{
-			"item": map[string]any{
-				"type": "message",
-				"role": "assistant",
-				"content": []any{
-					map[string]any{"type": "output_text", "text": `{"results":{"status":"passed"}}`},
-				},
-			},
-		},
-	})
+	got, ok := workflowResultsFromEvent(completedAssistantEvent(`{"results":{"status":"passed"}}`))
 	if !ok || got["status"] != "passed" {
 		t.Fatalf("workflowResultsFromEvent() = %#v, %v", got, ok)
 	}
 }
 
-func TestWorkflowResultsFromEventExtractsAggregatedOutput(t *testing.T) {
-	got, ok := workflowResultsFromEvent(processdomain.CodexEvent{
-		Type: "item.completed",
-		Payload: map[string]any{
-			"item": map[string]any{
-				"type":              "agent_message",
-				"aggregated_output": `{"results":{"status":"passed"}}`,
-				"status":            "completed",
-			},
-		},
-	})
-	if !ok || got["status"] != "passed" {
-		t.Fatalf("workflowResultsFromEvent() = %#v, %v", got, ok)
+func TestWorkflowResultsFromEventRejectsNonCanonicalAssistantLifecycleEvents(t *testing.T) {
+	result := `{"results":{"status":"passed"}}`
+	tests := []processdomain.CodexEvent{
+		{Type: "agent_message", Payload: map[string]any{"text": result}},
+		{Type: "assistant.delta", Payload: map[string]any{"text": result}},
+		{Type: "item.started", Payload: map[string]any{"normalizedItem": map[string]any{"type": "agent_message", "status": "in_progress", "output": result}}},
+		{Type: "item.completed", Payload: map[string]any{"normalizedItem": map[string]any{"type": "agent_message", "status": "completed", "output": ""}}},
+		{Type: "item.completed", Payload: map[string]any{"item": map[string]any{"type": "agent_message", "aggregated_output": result, "status": "completed"}}},
 	}
+	for _, event := range tests {
+		if got, ok := workflowResultsFromEvent(event); ok {
+			t.Fatalf("workflowResultsFromEvent(%#v) = %#v, true", event, got)
+		}
+	}
+}
+
+func completedAssistantEvent(output string) processdomain.CodexEvent {
+	return processdomain.CodexEvent{Type: "item.completed", Payload: map[string]any{
+		"normalizedItem": map[string]any{"type": "agent_message", "status": "completed", "output": output},
+	}}
 }
 
 func TestWorkflowResultsFromEventIgnoresCommandAggregatedOutput(t *testing.T) {
@@ -2254,6 +2390,86 @@ func TestSubmitWorkflowApprovalStartsNextCodexNode(t *testing.T) {
 	}
 	if codex.startCalled || !repo.sessions["session-1"].Queue.InitialStart || repo.sessions["session-1"].Queue.NodeRunID == nil || *repo.sessions["session-1"].Queue.NodeRunID != "node-run-2" || repo.sessions["session-1"].Queue.Prompt != "Verify build" {
 		t.Fatalf("queued session = %#v codexCalled=%v", repo.sessions["session-1"], codex.startCalled)
+	}
+}
+
+func TestSubmitWorkflowApprovalPersistsNextApprovalProjection(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusWaitingApproval,
+	}
+	nextNodeRunID := domain.NodeRunID("node-run-2")
+	result := map[string]any{"version": float64(1), "outcome": "success", "summary": "done", "data": map[string]any{}}
+	workflows := &fakeWorkflowStarter{approvalResult: domain.WorkflowApprovalResult{
+		Run: domain.WorkflowRunSnapshot{ID: "workflow-run-1", SessionID: "session-1", Status: "waiting_approval", CurrentNodeID: "review"},
+		Advance: domain.WorkflowAdvance{
+			WorkflowRunID: "workflow-run-1", NodeRunID: &nextNodeRunID, CurrentNodeID: "review", CurrentNodeTitle: "Review",
+			Status: "waiting_approval", RequiresCodex: false, ApprovalPhase: "after_run", Result: result,
+		},
+	}}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
+	}
+
+	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{WorkflowRunID: "workflow-run-1", NodeID: "approve", Approved: true}); err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	var waiting eventdomain.DomainEvent
+	for _, event := range events.snapshot() {
+		if event.Type == "session.waiting_approval" {
+			waiting = event
+		}
+	}
+	if waiting.Type == "" || waiting.Payload["approvalPhase"] != "after_run" {
+		t.Fatalf("waiting approval event = %#v", waiting)
+	}
+	gotResult, _ := waiting.Payload["result"].(map[string]any)
+	if gotResult["outcome"] != "success" {
+		t.Fatalf("waiting approval result = %#v", gotResult)
+	}
+}
+
+func TestSubmitWorkflowApprovalAcknowledgesPreviouslyAppliedSystemCommand(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusWaitingApproval,
+		AppliedSystemCommands: map[string]bool{"old-command": true},
+	}
+	workflows := &fakeWorkflowStarter{approvalResult: domain.WorkflowApprovalResult{
+		Run:     domain.WorkflowRunSnapshot{ID: "run-1", SessionID: "session-1", Status: "blocked", CurrentNodeID: "review"},
+		Advance: domain.WorkflowAdvance{WorkflowRunID: "run-1", Blocked: true, BlockedReason: "rejected"},
+	}}
+	eventSessionID := eventdomain.SessionID("session-1")
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+		ID: "old-command", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
+		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("old-node"), Close: true}),
+	}}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
+	}
+
+	if _, err := service.SubmitWorkflowApproval(context.Background(), SubmitWorkflowApprovalInput{
+		WorkflowRunID: "run-1", NodeID: "review", Approved: false, Comment: "stop",
+	}); err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	foundAck := false
+	for _, event := range events.snapshot() {
+		foundAck = foundAck || event.Type == workflowSystemAdvanceCompletedEvent && event.Payload["commandEventId"] == "old-command"
+	}
+	if !foundAck {
+		t.Fatalf("old command was not acknowledged before new approval: %#v", events.snapshot())
+	}
+	if repo.sessions["session-1"].AppliedSystemCommands["old-command"] {
+		t.Fatalf("old command remains in applied ledger: %#v", repo.sessions["session-1"].AppliedSystemCommands)
 	}
 }
 
@@ -2831,7 +3047,7 @@ func TestSubmitWorkflowApprovalExecutesPostCommitExprAdvance(t *testing.T) {
 		NodeID:        "build",
 		Status:        workflowdomain.NodeWaitingApproval,
 		Attempt:       1,
-		Output:        map[string]any{"results": map[string]any{"status": "passed"}},
+		Result:        &workflowdomain.Result{Version: workflowdomain.ResultVersion, Outcome: workflowdomain.ResultSuccess, Summary: "passed", Data: map[string]any{"status": "passed"}},
 		StartedAt:     &now,
 	}
 	if err := store.Workflows().CreateInitialRun(ctx, run, nodeRun); err != nil {
@@ -2873,6 +3089,55 @@ func TestSubmitWorkflowApprovalExecutesPostCommitExprAdvance(t *testing.T) {
 	}
 	if exprRun.Status != workflowdomain.NodeSucceeded {
 		t.Fatalf("expr node run = %#v", exprRun)
+	}
+}
+
+func TestSubmitWorkflowApprovalRejectsAfterRunSystemNodeWithoutStartingCodex(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusWaitingApproval}
+	nodeRunID := domain.NodeRunID("node-run-expr-2")
+	workflows := &fakeWorkflowStarter{
+		approvalResult: domain.WorkflowApprovalResult{
+			Run: domain.WorkflowRunSnapshot{ID: "workflow-run-1", SessionID: "session-1", Status: "running", CurrentNodeID: "expr"},
+			Advance: domain.WorkflowAdvance{
+				WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
+				Expr: &domain.WorkflowExpr{Script: `{status: "ready"}`},
+			},
+			RejectedAfterRun: true,
+		},
+		advance: domain.WorkflowAdvance{
+			WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
+			Status: "waiting_approval", ApprovalPhase: "after_run", Result: map[string]any{"outcome": "success"},
+		},
+	}
+	events := &fakeEventStore{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithEvents(events), WithUnitOfWork(uow))
+	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+
+	if _, err := service.SubmitWorkflowApproval(context.Background(), SubmitWorkflowApprovalInput{
+		WorkflowRunID: "workflow-run-1", NodeID: "expr", Approved: false, Comment: "run again",
+	}); err != nil {
+		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
+	}
+	if workflows.completeCalls != 1 {
+		t.Fatalf("CompleteNode calls = %d", workflows.completeCalls)
+	}
+	if len(repo.appends) != 0 || repo.sessions["session-1"].Status != domain.StatusWaitingApproval || repo.sessions["session-1"].Queue.Kind != "" {
+		t.Fatalf("session=%#v appends=%#v", repo.sessions["session-1"], repo.appends)
+	}
+	var pending, completed bool
+	for _, event := range events.snapshot() {
+		pending = pending || event.Type == workflowSystemAdvancePendingEvent
+		completed = completed || event.Type == workflowSystemAdvanceCompletedEvent
+	}
+	if !pending || !completed {
+		t.Fatalf("system advance events = %#v", events.snapshot())
 	}
 }
 
@@ -2930,7 +3195,7 @@ func TestSubmitWorkflowApprovalRejectsAfterRunRollsBackWhenPromptAppendFails(t *
 		NodeID:        "build",
 		Status:        workflowdomain.NodeWaitingApproval,
 		Attempt:       1,
-		Output:        map[string]any{"results": map[string]any{"status": "failed"}},
+		Result:        &workflowdomain.Result{Version: workflowdomain.ResultVersion, Outcome: workflowdomain.ResultSuccess, Summary: "review required", Data: map[string]any{"status": "failed"}},
 		StartedAt:     &now,
 	}
 	if err := store.Workflows().CreateInitialRun(ctx, run, nodeRun); err != nil {
@@ -9284,6 +9549,316 @@ func TestMarkInterruptedSessionsRecoverableDefersPendingWorkflowSideEffect(t *te
 	}
 }
 
+func TestMarkInterruptedSessionsRecoverableExecutesPersistedSystemAdvances(t *testing.T) {
+	cases := []struct {
+		name    string
+		advance domain.WorkflowAdvance
+		setup   func(*Service, *fakeRepository)
+		verify  func(*testing.T, *Service, *fakeRepository)
+	}{
+		{
+			name: "expr",
+			advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", CurrentNodeID: "expr", Expr: &domain.WorkflowExpr{
+				Script: `{status: "ready"}`, Params: map[string]any{"input": "value"},
+			}},
+			setup: func(service *Service, _ *fakeRepository) {
+				service.workflows = &fakeWorkflowStarter{advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Completed: true}}
+			},
+			verify: func(t *testing.T, service *Service, _ *fakeRepository) {
+				if service.workflows.(*fakeWorkflowStarter).completeCalls != 1 {
+					t.Fatalf("CompleteNode calls = %d", service.workflows.(*fakeWorkflowStarter).completeCalls)
+				}
+			},
+		},
+		{
+			name:    "close",
+			advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", CurrentNodeID: "close", Close: true},
+		},
+		{
+			name: "merge",
+			advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", CurrentNodeID: "merge", Merge: &domain.WorkflowMerge{
+				Strategy: "merge",
+			}},
+			setup: func(service *Service, repo *fakeRepository) {
+				service.merge = &fakeMergePort{result: gitdiffdomain.MergeResult{Status: "merged", Strategy: "merge", BaseBranch: "master"}}
+				service.workflows = &fakeWorkflowStarter{advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Completed: true}}
+				session := repo.sessions["session-1"]
+				session.BaseBranch = "master"
+				session.WorktreePath = "/tmp/worktree"
+				session.WorktreeBranch = "session-1"
+				session.WorktreeCleanup = domain.WorktreeCleanup{Status: domain.WorktreeCleanupActive, OwnershipToken: "owner"}
+				repo.sessions[session.ID] = session
+			},
+			verify: func(t *testing.T, service *Service, _ *fakeRepository) {
+				if !service.merge.(*fakeMergePort).mergeCalled {
+					t.Fatal("merge was not executed")
+				}
+			},
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newFakeRepository()
+			session := domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning}
+			repo.sessions[session.ID] = session
+			repo.listSessions = []domain.Session{session}
+			repo.listTotal = 1
+			nodeRunID := domain.NodeRunID("node-run-1")
+			tt.advance.NodeRunID = &nodeRunID
+			eventSessionID := eventdomain.SessionID(session.ID)
+			events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+				ID: "command-1", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
+				Payload: workflowAdvancePendingPayload(tt.advance),
+			}}}
+			service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(newFakeProcessRepository(), nil))
+			service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+			service.generateID = func() (domain.ID, error) { return "completed-1", nil }
+			if tt.setup != nil {
+				tt.setup(service, repo)
+			}
+
+			count, err := service.MarkInterruptedSessionsRecoverable(context.Background())
+			if err != nil {
+				t.Fatalf("MarkInterruptedSessionsRecoverable() error = %v", err)
+			}
+			if count != 1 {
+				t.Fatalf("recovered count = %d", count)
+			}
+			if tt.verify != nil {
+				tt.verify(t, service, repo)
+			}
+			foundCompleted := false
+			for _, event := range events.snapshot() {
+				if event.Type == workflowSystemAdvanceCompletedEvent && event.Payload["commandEventId"] == "command-1" {
+					foundCompleted = true
+				}
+			}
+			if !foundCompleted {
+				t.Fatalf("completion event missing: %#v", events.snapshot())
+			}
+		})
+	}
+}
+
+func TestPendingSystemAdvancesReturnsEveryUnacknowledgedCommandInOrder(t *testing.T) {
+	sessionID := eventdomain.SessionID("session-1")
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{
+		{ID: "command-1", SessionID: &sessionID, Type: workflowSystemAdvancePendingEvent, Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{
+			WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-1"), CurrentNodeID: "expr-1", Expr: &domain.WorkflowExpr{Script: `{ok: true}`},
+		})},
+		{ID: "command-2", SessionID: &sessionID, Type: workflowSystemAdvancePendingEvent, Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{
+			WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-2"), CurrentNodeID: "close", Close: true,
+		})},
+		{ID: "completed-2", SessionID: &sessionID, Type: workflowSystemAdvanceCompletedEvent, Payload: map[string]any{"commandEventId": "command-2"}},
+		{ID: "command-3", SessionID: &sessionID, Type: workflowSystemAdvancePendingEvent, Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{
+			WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-3"), CurrentNodeID: "expr-3", Expr: &domain.WorkflowExpr{Script: `{ok: true}`},
+		})},
+	}}
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithEvents(events))
+
+	commands, err := service.pendingSystemAdvances(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("pendingSystemAdvances() error = %v", err)
+	}
+	if len(commands) != 2 || commands[0].commandEventID != "command-1" || commands[1].commandEventID != "command-3" {
+		t.Fatalf("pendingSystemAdvances() = %#v", commands)
+	}
+}
+
+func TestAppliedSystemCommandSkipsProjectionAfterAckFailure(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning}
+	nodeRunID := domain.NodeRunID("node-1")
+	workflows := &fakeWorkflowStarter{advance: domain.WorkflowAdvance{WorkflowRunID: "run-1", Completed: true}}
+	events := &fakeEventStore{appendErrs: []error{nil, errors.New("ack unavailable")}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
+	}
+	pending := workflowApprovalPostCommitAdvance{
+		session: repo.sessions["session-1"], commandEventID: "command-1",
+		advance: domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", Expr: &domain.WorkflowExpr{Script: `{ok: true}`}},
+	}
+
+	if err := service.executePendingSystemAdvance(context.Background(), pending); err == nil || !strings.Contains(err.Error(), "ack unavailable") {
+		t.Fatalf("first executePendingSystemAdvance() error = %v", err)
+	}
+	if !repo.sessions["session-1"].AppliedSystemCommands["command-1"] || workflows.completeCalls != 1 {
+		t.Fatalf("session=%#v completeCalls=%d", repo.sessions["session-1"], workflows.completeCalls)
+	}
+	session := repo.sessions["session-1"]
+	session.Status = domain.StatusRunning
+	repo.sessions[session.ID] = session
+	pending.session = session
+	if err := service.executePendingSystemAdvance(context.Background(), pending); err != nil {
+		t.Fatalf("retry executePendingSystemAdvance() error = %v", err)
+	}
+	if workflows.completeCalls != 1 {
+		t.Fatalf("applied command replayed projection: completeCalls=%d", workflows.completeCalls)
+	}
+	foundAck := false
+	for _, event := range events.snapshot() {
+		foundAck = foundAck || event.Type == workflowSystemAdvanceCompletedEvent && event.Payload["commandEventId"] == "command-1"
+	}
+	if !foundAck {
+		t.Fatalf("completion ack missing: %#v", events.snapshot())
+	}
+}
+
+func TestCloseSystemCommandPersistsLedgerOnlyWithFinalClosedProjection(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning}
+	var stages []domain.Session
+	repo.saveHook = func(session domain.Session) error {
+		stages = append(stages, session)
+		return nil
+	}
+	events := &fakeEventStore{}
+	processes := newFakeProcessRepository()
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(processes, nil), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
+	}
+
+	if _, err := service.closeWorkflowSession(context.Background(), CloseSessionInput{SessionID: "session-1", Reason: domain.CloseReasonWorkflowClosed, appliedSystemCommandID: "command-close"}); err != nil {
+		t.Fatalf("closeWorkflowSession() error = %v", err)
+	}
+	var stopping, closed *domain.Session
+	for index := range stages {
+		stage := &stages[index]
+		if stage.Status == domain.StatusStopping {
+			stopping = stage
+		}
+		if stage.Status == domain.StatusClosed {
+			closed = stage
+		}
+	}
+	if stopping == nil || stopping.AppliedSystemCommands["command-close"] {
+		t.Fatalf("stopping stage contains applied ledger: %#v", stopping)
+	}
+	if closed == nil || !closed.AppliedSystemCommands["command-close"] {
+		t.Fatalf("closed stage lacks applied ledger: %#v", closed)
+	}
+}
+
+func TestRecoverCloseSystemCommandAfterPreparedStoppingCrash(t *testing.T) {
+	repo := newFakeRepository()
+	reason := domain.CloseReasonWorkflowClosed
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow,
+		Status: domain.StatusStopping, CloseReason: &reason,
+	}
+	repo.sessions[session.ID] = session
+	repo.listSessions = []domain.Session{session}
+	eventSessionID := eventdomain.SessionID(session.ID)
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+		ID: "command-close", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
+		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-close"), Close: true}),
+	}}}
+	processes := newFakeProcessRepository()
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(processes, nil), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
+	}
+
+	handled, err := service.recoverAllPendingSystemAdvances(context.Background())
+	if err != nil {
+		t.Fatalf("recoverAllPendingSystemAdvances() error = %v", err)
+	}
+	recovered := repo.sessions[session.ID]
+	if !handled[session.ID] || recovered.Status != domain.StatusClosed || recovered.CloseReason == nil || *recovered.CloseReason != reason {
+		t.Fatalf("handled=%#v session=%#v", handled, recovered)
+	}
+	if recovered.AppliedSystemCommands["command-close"] {
+		t.Fatalf("acknowledged command remains in applied ledger: %#v", recovered.AppliedSystemCommands)
+	}
+	foundAck := false
+	for _, event := range events.snapshot() {
+		foundAck = foundAck || event.Type == workflowSystemAdvanceCompletedEvent && event.Payload["commandEventId"] == "command-close"
+	}
+	if !foundAck {
+		t.Fatalf("completion ack missing: %#v", events.snapshot())
+	}
+}
+
+func TestRecoverAllPendingSystemAdvancesUsesStableSnapshotOverPageSize(t *testing.T) {
+	repo := newFakeRepository()
+	events := &fakeEventStore{}
+	for index := 0; index < maxPageSize+1; index++ {
+		id := domain.ID(fmt.Sprintf("session-%03d", index))
+		session := domain.Session{ID: id, ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusCompleted, AppliedSystemCommands: map[string]bool{fmt.Sprintf("command-%03d", index): true}}
+		repo.sessions[id] = session
+		repo.listSessions = append(repo.listSessions, session)
+		eventSessionID := eventdomain.SessionID(id)
+		events.events = append(events.events, eventdomain.DomainEvent{
+			ID: eventdomain.ID(fmt.Sprintf("command-%03d", index)), SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
+			Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-1"), Close: true}),
+		})
+	}
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("ack-%03d", sequence)), nil
+	}
+
+	handled, err := service.recoverAllPendingSystemAdvances(context.Background())
+	if err != nil {
+		t.Fatalf("recoverAllPendingSystemAdvances() error = %v", err)
+	}
+	if len(handled) != maxPageSize+1 {
+		t.Fatalf("handled sessions = %d", len(handled))
+	}
+}
+
+func TestConsecutiveMergeNodesUseDistinctPendingCommands(t *testing.T) {
+	repo := newFakeRepository()
+	session := domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning, WorktreePath: "/tmp/worktree", BaseBranch: "main"}
+	repo.sessions[session.ID] = session
+	node1, node2 := domain.NodeRunID("node-1"), domain.NodeRunID("node-2")
+	workflows := &fakeWorkflowStarter{completeAdvances: []domain.WorkflowAdvance{
+		{WorkflowRunID: "run-1", NodeRunID: &node2, CurrentNodeID: "merge-2", Merge: &domain.WorkflowMerge{Strategy: "merge"}},
+		{WorkflowRunID: "run-1", Completed: true},
+	}}
+	merge := &fakeMergePort{result: gitdiffdomain.MergeResult{Status: "merged", Strategy: "merge", BaseBranch: "main", MergeCommit: "merge"}}
+	eventSessionID := eventdomain.SessionID(session.ID)
+	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
+		ID: "command-1", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
+		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: &node1, CurrentNodeID: "merge-1", Merge: &domain.WorkflowMerge{Strategy: "merge"}}),
+	}}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithMergePort(merge), WithEvents(events), WithProcesses(newFakeProcessRepository(), nil), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events, processes: newFakeProcessRepository()}}))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
+	}
+
+	if _, err := service.recoverPendingSystemAdvance(context.Background(), session); err != nil {
+		t.Fatalf("recoverPendingSystemAdvance() error = %v", err)
+	}
+	if merge.mergeCalls != 2 || len(repo.mergeRecords) != 2 || repo.mergeRecords[0].ID == repo.mergeRecords[1].ID {
+		t.Fatalf("mergeCalls=%d records=%#v", merge.mergeCalls, repo.mergeRecords)
+	}
+	pendingIDs := []eventdomain.ID{}
+	for _, event := range events.snapshot() {
+		if event.Type == workflowSystemAdvancePendingEvent {
+			pendingIDs = append(pendingIDs, event.ID)
+		}
+	}
+	if len(pendingIDs) != 2 || pendingIDs[0] == pendingIDs[1] {
+		t.Fatalf("pending command IDs = %#v", pendingIDs)
+	}
+}
+
+func nodeRunIDPtr(value domain.NodeRunID) *domain.NodeRunID { return &value }
+
 func TestMarkInterruptedSessionsRecoverableAppliesPersistedWorkflowFailure(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -9772,7 +10347,19 @@ func (r *fakeRepository) ListCards(_ context.Context, query domain.ListQuery) ([
 	if total == 0 {
 		total = len(filtered)
 	}
-	return append([]domain.Session(nil), filtered...), total, nil
+	page, pageSize := query.Page, query.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = len(filtered)
+	}
+	start := (page - 1) * pageSize
+	if start >= len(filtered) {
+		return []domain.Session{}, total, nil
+	}
+	end := min(start+pageSize, len(filtered))
+	return append([]domain.Session(nil), filtered[start:end]...), total, nil
 }
 
 func (r *fakeRepository) ListQueued(context.Context) ([]domain.Session, error) {
@@ -9941,6 +10528,15 @@ func (r *fakeRepository) AddMergeRecord(_ context.Context, record domain.MergeRe
 	}
 	r.mergeRecords = append(r.mergeRecords, record)
 	return nil
+}
+
+func (r *fakeRepository) FindMergeRecord(_ context.Context, id string) (domain.MergeRecord, bool, error) {
+	for _, record := range r.mergeRecords {
+		if record.ID == id {
+			return record, true, nil
+		}
+	}
+	return domain.MergeRecord{}, false, nil
 }
 
 func (r *fakeRepository) LatestSuccessfulMergeRecord(context.Context, domain.ID) (domain.MergeRecord, bool, error) {
@@ -10315,6 +10911,7 @@ type fakeMergePort struct {
 	result       gitdiffdomain.MergeResult
 	err          error
 	mergeCalled  bool
+	mergeCalls   int
 	rebaseCalled bool
 	abortPath    string
 	abortErr     error
@@ -10322,6 +10919,7 @@ type fakeMergePort struct {
 
 func (m *fakeMergePort) MergeToBase(_ context.Context, input gitdiffdomain.MergeInput) (gitdiffdomain.MergeResult, error) {
 	m.mergeCalled = true
+	m.mergeCalls++
 	m.mergeInput = input
 	return m.result, m.err
 }
@@ -10343,8 +10941,12 @@ type fakeWorkflowStarter struct {
 	err               error
 	failedInput       domain.WorkflowStartFailureInput
 	markFailErr       error
+	markFailCalls     int
+	markFailErrs      []error
+	markFailHook      func(int)
 	completeInput     domain.WorkflowNodeCompleteInput
 	advance           domain.WorkflowAdvance
+	completeAdvances  []domain.WorkflowAdvance
 	completeErr       error
 	completeHook      func()
 	completeCalls     int
@@ -10378,6 +10980,15 @@ func (s *fakeWorkflowStarter) StartForSession(_ context.Context, input domain.Wo
 
 func (s *fakeWorkflowStarter) MarkStartFailed(_ context.Context, input domain.WorkflowStartFailureInput) error {
 	s.failedInput = input
+	s.markFailCalls++
+	if s.markFailHook != nil {
+		s.markFailHook(s.markFailCalls)
+	}
+	if len(s.markFailErrs) > 0 {
+		err := s.markFailErrs[0]
+		s.markFailErrs = s.markFailErrs[1:]
+		return err
+	}
 	return s.markFailErr
 }
 
@@ -10418,6 +11029,11 @@ func (s *fakeWorkflowStarter) CompleteNode(_ context.Context, input domain.Workf
 	}
 	if s.completeErr != nil {
 		return domain.WorkflowAdvance{}, s.completeErr
+	}
+	if len(s.completeAdvances) > 0 {
+		advance := s.completeAdvances[0]
+		s.completeAdvances = s.completeAdvances[1:]
+		return advance, nil
 	}
 	return s.advance, nil
 }
@@ -10662,6 +11278,7 @@ func (c *fakeQuestionCanceller) CreateBatch(_ context.Context, input questionapp
 			WorkflowRunID: input.WorkflowRunID,
 			Status:        questiondomain.BatchPending,
 			Questions:     input.Questions,
+			Created:       true,
 		}
 	}
 	return c.batch, nil
@@ -10963,8 +11580,19 @@ func (s *fakeEventStore) Append(_ context.Context, event eventdomain.DomainEvent
 	return nil
 }
 
-func (s *fakeEventStore) List(_ context.Context, _ eventdomain.Scope) ([]eventdomain.DomainEvent, error) {
-	return s.snapshot(), nil
+func (s *fakeEventStore) List(_ context.Context, scope eventdomain.Scope) ([]eventdomain.DomainEvent, error) {
+	events := s.snapshot()
+	filtered := make([]eventdomain.DomainEvent, 0, len(events))
+	for _, event := range events {
+		if scope.SessionID != nil && (event.SessionID == nil || *event.SessionID != *scope.SessionID) {
+			continue
+		}
+		if scope.ProjectID != "" && event.Scope.ProjectID != scope.ProjectID {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered, nil
 }
 
 func (s *fakeEventStore) After(_ context.Context, _ eventdomain.Scope, _ eventdomain.ID) ([]eventdomain.DomainEvent, error) {

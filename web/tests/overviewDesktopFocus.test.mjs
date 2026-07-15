@@ -114,7 +114,7 @@ test('wide desktop create panel is centered at half the viewport width', () => {
 test('half-width create panel uses the existing config menu below wide desktop', () => {
   assert.match(
     newSessionSource,
-    /:force-config-menu="panel && \$q\.screen\.width < overviewInlineConfigMinWidth"/,
+    /:force-config-menu="\s*\$q\.screen\.lt\.md \|\| \(panel && \$q\.screen\.width < overviewInlineConfigMinWidth\)\s*"/,
   );
   assert.match(newSessionSource, /const overviewInlineConfigMinWidth = 1536/);
   assert.match(

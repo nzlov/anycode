@@ -19,6 +19,11 @@ test('launch mode buttons replace the separate mode toggle and create command', 
   assert.match(dialogSource, /label="会话模式"[\s\S]*@click="createSession\('chat'\)"/);
   assert.match(dialogSource, /preferredAvailableMode === 'workflow' \? 'positive'/);
   assert.match(dialogSource, /preferredAvailableMode === 'chat' \? 'positive'/);
+  assert.match(dialogSource, /class="new-session-launch-group" role="group" aria-label="启动模式"/);
+  assert.match(
+    stylesSource,
+    /\.new-session-launch-group\s*{[^}]*grid-auto-columns:\s*minmax\(116px,\s*1fr\)[^}]*gap:\s*1px/s,
+  );
 });
 
 test('successful launches remember the mode without project availability changing it', () => {
@@ -64,4 +69,10 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
     /\.toolbar-file-picker \.q-field__prepend\s*{[^}]*justify-content:\s*center/s,
   );
   assert.match(stylesSource, /\.permission-select\s*{[^}]*width:\s*44px/s);
+  assert.match(controlsSource, /class="compact-select model-select"/);
+  assert.match(controlsSource, /class="compact-select effort-select"/);
+  assert.match(
+    dialogSource,
+    /:force-config-menu="\s*\$q\.screen\.lt\.md \|\| \(panel && \$q\.screen\.width < overviewInlineConfigMinWidth\)\s*"/,
+  );
 });

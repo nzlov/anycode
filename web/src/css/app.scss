@@ -862,8 +862,27 @@ a {
 }
 
 .new-session-dialog--panel .prompt-toolbar {
-  padding: 6px 8px 8px;
+  gap: 6px;
+  padding: 7px 8px;
   background: var(--ac-surface);
+}
+
+.new-session-dialog--panel .prompt-config-controls {
+  gap: 4px;
+}
+
+.new-session-dialog--panel .model-select {
+  width: 142px;
+  min-width: 142px;
+}
+
+.new-session-dialog--panel .effort-select {
+  width: 108px;
+  min-width: 108px;
+}
+
+.new-session-dialog--panel .prompt-fast-checkbox {
+  padding: 0 6px;
 }
 
 .new-session-dialog--panel .new-session-context {
@@ -872,8 +891,8 @@ a {
   min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  padding: 4px 8px;
+  gap: 4px 12px;
+  padding: 5px 10px;
   border-top: 1px solid var(--ac-border);
   background: var(--ac-surface-muted);
 }
@@ -882,6 +901,7 @@ a {
   display: grid;
   min-height: 0;
   flex: 1 1 auto;
+  align-content: start;
   gap: 16px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1052,11 +1072,6 @@ a {
 .forward-approval-dialog__panel {
   height: 100%;
   overflow: auto;
-}
-
-.forward-approval-output {
-  display: grid;
-  gap: 12px;
 }
 
 .overview-diff-dialog {
@@ -1373,9 +1388,29 @@ a {
 }
 
 .new-session-launch-btn:not(.new-session-launch-btn--preferred) {
-  border: 1px solid var(--ac-border);
   background: var(--ac-surface-muted);
   color: var(--ac-text);
+}
+
+.new-session-launch-group {
+  display: grid;
+  grid-auto-columns: minmax(116px, 1fr);
+  grid-auto-flow: column;
+  gap: 1px;
+  padding: 1px;
+  border-radius: var(--ac-radius);
+  background: var(--ac-border);
+  overflow: hidden;
+}
+
+.new-session-launch-btn {
+  min-width: 116px;
+  border-radius: calc(var(--ac-radius) - 1px);
+  padding: 0 12px;
+}
+
+.new-session-launch-btn .q-icon {
+  font-size: 20px;
 }
 
 .prompt-fast-checkbox {
@@ -1558,7 +1593,8 @@ a {
 
   .new-session-dialog--panel .new-session-context > .q-field {
     min-width: 180px;
-    flex: 1 1 240px;
+    max-width: 280px;
+    flex: 0 1 240px;
   }
 
   .new-session-dialog--panel .new-session-context .branch-picker {
@@ -1761,6 +1797,15 @@ a {
     width: 44px;
     max-width: 44px;
     flex: 0 0 44px;
+  }
+
+  .new-session-launch-group {
+    grid-auto-columns: minmax(102px, 1fr);
+  }
+
+  .new-session-launch-btn {
+    min-width: 102px;
+    padding: 0 8px;
   }
 
   .new-session-actions {

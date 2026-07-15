@@ -54,6 +54,7 @@ func (Session) Fields() []ent.Field {
 		field.String("queue_resume_codex_session_id").Default(""),
 		field.String("queue_resume_of_process_run_id").Default(""),
 		field.String("queue_answer_batch_id").Default(""),
+		field.JSON("applied_system_commands", map[string]bool{}).Optional(),
 		field.Time("last_run_at").Optional().Nillable(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 		field.Time("updated_at").Default(time.Now).UpdateDefault(time.Now),

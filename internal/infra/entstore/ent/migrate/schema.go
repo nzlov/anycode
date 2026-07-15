@@ -287,6 +287,7 @@ var (
 		{Name: "queue_resume_codex_session_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_of_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_answer_batch_id", Type: field.TypeString, Default: ""},
+		{Name: "applied_system_commands", Type: field.TypeJSON, Nullable: true},
 		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
@@ -306,12 +307,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[41]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[42]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[39]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[40]},
 			},
 			{
 				Name:    "session_status",
@@ -326,7 +327,7 @@ var (
 			{
 				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[41]},
+				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[42]},
 			},
 		},
 	}

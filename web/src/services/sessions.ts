@@ -5,6 +5,7 @@ import {
 } from '@/services/graphqlClient';
 import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
 import type { TranscriptEvent } from '@/services/sessionTimeline';
+import { normalizeWorkflowNodeResult } from '@/services/workflowApprovalReview';
 
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
@@ -65,6 +66,24 @@ export interface PendingApproval {
   nodeId: string;
   nodeRunId: string;
   currentNodeTitle: string;
+  phase: 'before_run' | 'after_run';
+  result: WorkflowNodeResult | null;
+}
+
+export interface WorkflowNodeResult {
+  version: 1;
+  outcome: 'success' | 'partial' | 'failure';
+  summary: string;
+  data: Record<string, unknown>;
+  checks: Array<{
+    id: string;
+    label: string;
+    status: 'passed' | 'warning' | 'failed';
+    detail?: string;
+    source: 'agent' | 'system';
+  }>;
+  warnings: Array<{ code: string; message: string }>;
+  artifacts: Array<{ kind: string; label: string; ref: string }>;
 }
 
 export interface SessionTodoList {
@@ -238,6 +257,8 @@ interface GraphQLPendingApproval {
   nodeId: string;
   nodeRunId: string;
   currentNodeTitle: string;
+  phase: 'before_run' | 'after_run';
+  result: unknown;
 }
 
 interface GraphQLSessionTodoList {
@@ -339,6 +360,8 @@ const sessionCardFields = `
     nodeId
     nodeRunId
     currentNodeTitle
+    phase
+    result
   }
   pendingQuestion
   todoList {
@@ -382,6 +405,8 @@ const sessionDetailFields = `
     nodeId
     nodeRunId
     currentNodeTitle
+    phase
+    result
   }
   config {
     codexModel
@@ -907,11 +932,14 @@ function normalizePendingApproval(
   approval?: GraphQLPendingApproval | null,
 ): PendingApproval | null {
   if (!approval) return null;
+  const result = normalizeWorkflowNodeResult(approval.result);
   return {
     workflowRunId: approval.workflowRunId,
     nodeId: approval.nodeId,
     nodeRunId: approval.nodeRunId,
     currentNodeTitle: approval.currentNodeTitle,
+    phase: approval.phase,
+    result,
   };
 }
 

@@ -36,7 +36,7 @@
       emit-value
       map-options
       aria-label="Codex 模型"
-      class="compact-select"
+      class="compact-select model-select"
       dropdown-icon=""
       :disable="disabled"
       :options="modelOptions"
@@ -56,7 +56,7 @@
       emit-value
       map-options
       aria-label="思考强度"
-      class="compact-select"
+      class="compact-select effort-select"
       dropdown-icon=""
       :disable="disabled"
       :options="reasoningEffortOptions"

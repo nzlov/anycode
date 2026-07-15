@@ -6260,6 +6260,7 @@ type SessionMutation struct {
 	queue_resume_codex_session_id    *string
 	queue_resume_of_process_run_id   *string
 	queue_answer_batch_id            *string
+	applied_system_commands          *map[string]bool
 	last_run_at                      *time.Time
 	created_at                       *time.Time
 	updated_at                       *time.Time
@@ -7879,6 +7880,55 @@ func (m *SessionMutation) ResetQueueAnswerBatchID() {
 	m.queue_answer_batch_id = nil
 }
 
+// SetAppliedSystemCommands sets the "applied_system_commands" field.
+func (m *SessionMutation) SetAppliedSystemCommands(value map[string]bool) {
+	m.applied_system_commands = &value
+}
+
+// AppliedSystemCommands returns the value of the "applied_system_commands" field in the mutation.
+func (m *SessionMutation) AppliedSystemCommands() (r map[string]bool, exists bool) {
+	v := m.applied_system_commands
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAppliedSystemCommands returns the old "applied_system_commands" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldAppliedSystemCommands(ctx context.Context) (v map[string]bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAppliedSystemCommands is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAppliedSystemCommands requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAppliedSystemCommands: %w", err)
+	}
+	return oldValue.AppliedSystemCommands, nil
+}
+
+// ClearAppliedSystemCommands clears the value of the "applied_system_commands" field.
+func (m *SessionMutation) ClearAppliedSystemCommands() {
+	m.applied_system_commands = nil
+	m.clearedFields[entsession.FieldAppliedSystemCommands] = struct{}{}
+}
+
+// AppliedSystemCommandsCleared returns if the "applied_system_commands" field was cleared in this mutation.
+func (m *SessionMutation) AppliedSystemCommandsCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldAppliedSystemCommands]
+	return ok
+}
+
+// ResetAppliedSystemCommands resets all changes to the "applied_system_commands" field.
+func (m *SessionMutation) ResetAppliedSystemCommands() {
+	m.applied_system_commands = nil
+	delete(m.clearedFields, entsession.FieldAppliedSystemCommands)
+}
+
 // SetLastRunAt sets the "last_run_at" field.
 func (m *SessionMutation) SetLastRunAt(t time.Time) {
 	m.last_run_at = &t
@@ -8083,7 +8133,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 42)
+	fields := make([]string, 0, 43)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -8198,6 +8248,9 @@ func (m *SessionMutation) Fields() []string {
 	if m.queue_answer_batch_id != nil {
 		fields = append(fields, entsession.FieldQueueAnswerBatchID)
 	}
+	if m.applied_system_commands != nil {
+		fields = append(fields, entsession.FieldAppliedSystemCommands)
+	}
 	if m.last_run_at != nil {
 		fields = append(fields, entsession.FieldLastRunAt)
 	}
@@ -8294,6 +8347,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.QueueResumeOfProcessRunID()
 	case entsession.FieldQueueAnswerBatchID:
 		return m.QueueAnswerBatchID()
+	case entsession.FieldAppliedSystemCommands:
+		return m.AppliedSystemCommands()
 	case entsession.FieldLastRunAt:
 		return m.LastRunAt()
 	case entsession.FieldCreatedAt:
@@ -8387,6 +8442,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldQueueResumeOfProcessRunID(ctx)
 	case entsession.FieldQueueAnswerBatchID:
 		return m.OldQueueAnswerBatchID(ctx)
+	case entsession.FieldAppliedSystemCommands:
+		return m.OldAppliedSystemCommands(ctx)
 	case entsession.FieldLastRunAt:
 		return m.OldLastRunAt(ctx)
 	case entsession.FieldCreatedAt:
@@ -8670,6 +8727,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetQueueAnswerBatchID(v)
 		return nil
+	case entsession.FieldAppliedSystemCommands:
+		v, ok := value.(map[string]bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAppliedSystemCommands(v)
+		return nil
 	case entsession.FieldLastRunAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -8770,6 +8834,9 @@ func (m *SessionMutation) ClearedFields() []string {
 	if m.FieldCleared(entsession.FieldQueueInitialStart) {
 		fields = append(fields, entsession.FieldQueueInitialStart)
 	}
+	if m.FieldCleared(entsession.FieldAppliedSystemCommands) {
+		fields = append(fields, entsession.FieldAppliedSystemCommands)
+	}
 	if m.FieldCleared(entsession.FieldLastRunAt) {
 		fields = append(fields, entsession.FieldLastRunAt)
 	}
@@ -8816,6 +8883,9 @@ func (m *SessionMutation) ClearField(name string) error {
 		return nil
 	case entsession.FieldQueueInitialStart:
 		m.ClearQueueInitialStart()
+		return nil
+	case entsession.FieldAppliedSystemCommands:
+		m.ClearAppliedSystemCommands()
 		return nil
 	case entsession.FieldLastRunAt:
 		m.ClearLastRunAt()
@@ -8944,6 +9014,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldQueueAnswerBatchID:
 		m.ResetQueueAnswerBatchID()
+		return nil
+	case entsession.FieldAppliedSystemCommands:
+		m.ResetAppliedSystemCommands()
 		return nil
 	case entsession.FieldLastRunAt:
 		m.ResetLastRunAt()
