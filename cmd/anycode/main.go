@@ -283,6 +283,8 @@ func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath s
 	}
 	mux := http.NewServeMux()
 	mux.Handle("POST /mcp/sessions/{sessionID}", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
 	server := &http.Server{Handler: mux}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

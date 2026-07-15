@@ -158,6 +158,24 @@ func (r *QuestionRepository) FindPendingByOriginProcessRun(ctx context.Context, 
 	return batch, err == nil, err
 }
 
+func (r *QuestionRepository) FindInflightByDeliveryProcessRun(ctx context.Context, processRunID question.ProcessRunID) (question.Batch, bool, error) {
+	row, err := r.client.QuestionBatch.Query().
+		Where(
+			entquestionbatch.DeliveryProcessRunIDEQ(string(processRunID)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+		).
+		First(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return question.Batch{}, false, nil
+		}
+		return question.Batch{}, false, fmt.Errorf("find inflight question batch by process run: %w", err)
+	}
+	batch, err := toDomainQuestionBatch(row)
+	return batch, err == nil, err
+}
+
 func (r *QuestionRepository) FindAwaitingDeliveryBySession(ctx context.Context, sessionID question.SessionID) (question.Batch, bool, error) {
 	row, err := r.client.QuestionBatch.Query().
 		Where(
@@ -230,7 +248,7 @@ func (r *QuestionRepository) MarkDeliveryAwaitingResume(ctx context.Context, id 
 		Where(
 			entquestionbatch.IDEQ(string(id)),
 			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
-			entquestionbatch.DeliveryStatusIn(string(question.DeliveryNone), string(question.DeliveryAwaitingResume)),
+			entquestionbatch.DeliveryStatusIn(string(question.DeliveryNone), string(question.DeliveryAwaitingResume), string(question.DeliveryInflight)),
 		).
 		SetDeliveryStatus(string(question.DeliveryAwaitingResume)).
 		SetDeliveryProcessRunID("").
@@ -250,7 +268,7 @@ func (r *QuestionRepository) MarkDeliveryInflight(ctx context.Context, id questi
 		Where(
 			entquestionbatch.IDEQ(string(id)),
 			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
-			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryAwaitingResume)),
+			entquestionbatch.DeliveryStatusIn(string(question.DeliveryNone), string(question.DeliveryAwaitingResume)),
 		).
 		SetDeliveryStatus(string(question.DeliveryInflight)).
 		SetDeliveryProcessRunID(string(processRunID)).
@@ -268,6 +286,33 @@ func (r *QuestionRepository) MarkDeliveryInflight(ctx context.Context, id questi
 		}
 	}
 	return nil
+}
+
+func (r *QuestionRepository) MarkDeliveryDelivered(ctx context.Context, id question.BatchID, processRunID question.ProcessRunID, deliveredAt time.Time) (question.Batch, bool, error) {
+	updated, err := r.client.QuestionBatch.Update().
+		Where(
+			entquestionbatch.IDEQ(string(id)),
+			entquestionbatch.StatusEQ(string(question.BatchAnswered)),
+			entquestionbatch.DeliveryStatusEQ(string(question.DeliveryInflight)),
+			entquestionbatch.DeliveryProcessRunIDEQ(string(processRunID)),
+		).
+		SetDeliveryStatus(string(question.DeliveryDelivered)).
+		SetDeliveredAt(deliveredAt).
+		Save(ctx)
+	if err != nil {
+		return question.Batch{}, false, fmt.Errorf("mark question delivery delivered: %w", err)
+	}
+	batch, err := r.FindBatch(ctx, id)
+	if err != nil {
+		return question.Batch{}, false, err
+	}
+	if updated == 0 {
+		if batch.DeliveryStatus == question.DeliveryDelivered && batch.DeliveryProcessRunID != nil && *batch.DeliveryProcessRunID == processRunID {
+			return batch, false, nil
+		}
+		return batch, false, fmt.Errorf("question batch %s cannot complete direct delivery", id)
+	}
+	return batch, true, nil
 }
 
 func (r *QuestionRepository) MarkDeliveryDeliveredByProcessRun(ctx context.Context, processRunID question.ProcessRunID, deliveredAt time.Time) ([]question.Batch, error) {

@@ -90,11 +90,13 @@ type AgentRepository interface {
 	CancelPendingBatch(ctx context.Context, id BatchID, reason string) (Batch, bool, error)
 	FindLatestBySession(ctx context.Context, sessionID SessionID) (Batch, bool, error)
 	FindPendingByOriginProcessRun(ctx context.Context, processRunID ProcessRunID) (Batch, bool, error)
+	FindInflightByDeliveryProcessRun(ctx context.Context, processRunID ProcessRunID) (Batch, bool, error)
 	FindAwaitingDeliveryBySession(ctx context.Context, sessionID SessionID) (Batch, bool, error)
 	ListAgentBatchesForRecovery(ctx context.Context) ([]Batch, error)
 	SetOriginProcessRun(ctx context.Context, id BatchID, processRunID ProcessRunID) error
 	MarkDeliveryAwaitingResume(ctx context.Context, id BatchID) error
 	MarkDeliveryInflight(ctx context.Context, id BatchID, processRunID ProcessRunID) error
+	MarkDeliveryDelivered(ctx context.Context, id BatchID, processRunID ProcessRunID, deliveredAt time.Time) (Batch, bool, error)
 	MarkDeliveryDeliveredByProcessRun(ctx context.Context, processRunID ProcessRunID, deliveredAt time.Time) ([]Batch, error)
 	ResetDeliveryAwaitingResume(ctx context.Context, id BatchID) error
 	ResetDeliveryAwaitingResumeByProcessRun(ctx context.Context, processRunID ProcessRunID) ([]Batch, error)

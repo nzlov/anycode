@@ -11293,6 +11293,560 @@ func (c *fakeQuestionCanceller) CancelPendingBySession(_ context.Context, sessio
 	return c.cancelErr
 }
 
+func TestRequestUserAnswerReturnsDirectAnswerWithoutStoppingOrigin(t *testing.T) {
+	store, service, codex := newAnswerUserWaitTestService(t)
+	timeout := make(chan time.Time)
+	service.answerUserTimer = func(duration time.Duration) (<-chan time.Time, func()) {
+		if duration != answerUserWarmWaitTimeout {
+			t.Fatalf("answer_user timeout = %s", duration)
+		}
+		return timeout, func() {}
+	}
+
+	result := make(chan questionapp.BatchDTO, 1)
+	errs := make(chan error, 1)
+	go func() {
+		batch, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		result <- batch
+		errs <- err
+	}()
+
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	answered, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+		BatchID: pending.ID,
+		Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answered.DeliveryStatus != questiondomain.DeliveryInflight {
+		t.Fatalf("answered batch = %#v", answered)
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	returned := <-result
+	if returned.Status != questiondomain.BatchAnswered || returned.DeliveryStatus != questiondomain.DeliveryInflight {
+		t.Fatalf("returned batch = %#v", returned)
+	}
+	if codex.stoppedID != "" || codex.resumeCalled {
+		t.Fatalf("direct answer stopped or resumed origin: stop=%q resume=%v", codex.stoppedID, codex.resumeCalled)
+	}
+	if err := service.AcknowledgeUserAnswerDelivery(context.Background(), AcknowledgeUserAnswerDeliveryInput{SessionID: "session-1", BatchID: pending.ID}); err != nil {
+		t.Fatal(err)
+	}
+	session, err := store.Sessions().Find(context.Background(), "session-1")
+	if err != nil || session.Status != domain.StatusRunning {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	run, err := store.Processes().FindRun(context.Background(), "process-1")
+	if err != nil || run.Status != processdomain.StatusRunning {
+		t.Fatalf("process = %#v, %v", run, err)
+	}
+	delivered, err := store.Questions().FindBatch(context.Background(), pending.ID)
+	if err != nil || delivered.DeliveryStatus != questiondomain.DeliveryDelivered {
+		t.Fatalf("delivered batch = %#v, %v", delivered, err)
+	}
+}
+
+func TestRequestUserAnswerTimeoutStopsOriginAndKeepsQuestionPending(t *testing.T) {
+	store, service, codex := newAnswerUserWaitTestService(t)
+	timeout := make(chan time.Time, 1)
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return timeout, func() {} }
+
+	done := make(chan questionapp.BatchDTO, 1)
+	errs := make(chan error, 1)
+	go func() {
+		batch, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		done <- batch
+		errs <- err
+	}()
+	pending := waitForAnswerUserBatch(t, store)
+	timeout <- time.Now()
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	if batch := <-done; batch.ID != pending.ID || batch.Status != questiondomain.BatchPending {
+		t.Fatalf("timeout batch = %#v", batch)
+	}
+	if codex.stoppedID != "process-1" {
+		t.Fatalf("stopped process = %q", codex.stoppedID)
+	}
+	run, err := store.Processes().FindRun(context.Background(), "process-1")
+	if err != nil || run.Status != processdomain.StatusExited {
+		t.Fatalf("process = %#v, %v", run, err)
+	}
+	stillPending, err := store.Questions().ListPendingBySession(context.Background(), "session-1")
+	if err != nil || len(stillPending) != 1 {
+		t.Fatalf("pending batches = %#v, %v", stillPending, err)
+	}
+	option := questiondomain.OptionID("yes")
+	answered, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+		BatchID: pending.ID,
+		Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answered.DeliveryStatus != questiondomain.DeliveryAwaitingResume {
+		t.Fatalf("answered batch = %#v", answered)
+	}
+	session, err := store.Sessions().Find(context.Background(), "session-1")
+	if err != nil || session.Status != domain.StatusQueued || session.Queue.Kind != domain.QueueKindAnswerUser || session.Queue.ResumeOfProcessRunID != "process-1" {
+		t.Fatalf("queued session = %#v, %v", session, err)
+	}
+}
+
+func TestRequestUserAnswerTimeoutReturnsAnswerCommittedBeforeTimeout(t *testing.T) {
+	store, service, codex := newAnswerUserWaitTestService(t)
+	timeout := make(chan time.Time, 1)
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return timeout, func() {} }
+	quiet := &quietAnswerQuestions{Service: questionapp.New(store.Questions()), updates: make(chan questionapp.BatchDTO)}
+	service.questions = quiet
+
+	result := make(chan questionapp.BatchDTO, 1)
+	errs := make(chan error, 1)
+	go func() {
+		batch, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		result <- batch
+		errs <- err
+	}()
+
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	if _, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+		BatchID: pending.ID,
+		Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	timeout <- time.Now()
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	returned := <-result
+	if returned.Status != questiondomain.BatchAnswered || returned.DeliveryStatus != questiondomain.DeliveryInflight {
+		t.Fatalf("timeout race returned batch = %#v", returned)
+	}
+	if codex.stoppedID != "" {
+		t.Fatalf("answered origin was stopped: %q", codex.stoppedID)
+	}
+}
+
+func TestSubmitQuestionBatchPublishesInflightBeforeFallbackSnapshot(t *testing.T) {
+	store, service, _ := newAnswerUserWaitTestService(t)
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+	questions := &orderedAnswerQuestions{
+		Service:         questionapp.New(store.Questions()),
+		inflightEntered: make(chan struct{}),
+		releaseInflight: make(chan struct{}),
+	}
+	service.questions = questions
+	requestDone := make(chan error, 1)
+	go func() {
+		_, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		requestDone <- err
+	}()
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	submitDone := make(chan error, 1)
+	go func() {
+		_, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+			BatchID: pending.ID,
+			Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+		})
+		submitDone <- err
+	}()
+	<-questions.inflightEntered
+	fallbackDone := make(chan error, 1)
+	go func() {
+		fallbackDone <- service.fallbackUserAnswer(context.Background(), "session-1", pending.ID, answerUserFallbackTransport)
+	}()
+	close(questions.releaseInflight)
+	if err := <-submitDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-requestDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-fallbackDone; err != nil {
+		t.Fatal(err)
+	}
+	statuses := questions.snapshot()
+	inflightIndex := slices.Index(statuses, questiondomain.DeliveryInflight)
+	awaitingIndex := slices.Index(statuses, questiondomain.DeliveryAwaitingResume)
+	if inflightIndex < 0 || awaitingIndex < 0 || inflightIndex > awaitingIndex {
+		t.Fatalf("delivery publication order = %#v", statuses)
+	}
+}
+
+func TestWaitForUserAnswerReturnsWhenOriginAlreadyExited(t *testing.T) {
+	store, service, _ := newAnswerUserWaitTestService(t)
+	batch, origin, err := service.requestUserAnswer(context.Background(), RequestUserAnswerInput{
+		SessionID: "session-1",
+		Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().MarkExited(context.Background(), origin.ID, processdomain.ExitResult{FinishedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	returned, err := service.waitForUserAnswer(context.Background(), batch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if returned.ID != batch.ID || time.Since(started) > time.Second {
+		t.Fatalf("wait returned %#v after %s", returned, time.Since(started))
+	}
+}
+
+func TestDirectAnswerTransportCloseFallsBackToResume(t *testing.T) {
+	store, service, codex := newAnswerUserWaitTestService(t)
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+	done := make(chan error, 1)
+	go func() {
+		_, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		done <- err
+	}()
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	if _, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+		BatchID: pending.ID,
+		Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	stopEntered := make(chan struct{})
+	releaseStop := make(chan struct{})
+	codex.stopHook = func(context.Context, processdomain.RunID) error {
+		close(stopEntered)
+		<-releaseStop
+		return nil
+	}
+	fallbackDone := make(chan error, 1)
+	go func() {
+		fallbackDone <- service.fallbackUserAnswer(context.Background(), "session-1", pending.ID, answerUserFallbackTransport)
+	}()
+	<-stopEntered
+	if err := service.AcknowledgeUserAnswerDelivery(context.Background(), AcknowledgeUserAnswerDeliveryInput{SessionID: "session-1", BatchID: pending.ID}); err == nil {
+		t.Fatal("late delivery ACK unexpectedly reversed fallback claim")
+	}
+	close(releaseStop)
+	if err := <-fallbackDone; err != nil {
+		t.Fatal(err)
+	}
+	if codex.stoppedID != "process-1" {
+		t.Fatalf("stopped process = %q", codex.stoppedID)
+	}
+	batch, err := store.Questions().FindBatch(context.Background(), pending.ID)
+	if err != nil || batch.DeliveryStatus != questiondomain.DeliveryAwaitingResume {
+		t.Fatalf("fallback batch = %#v, %v", batch, err)
+	}
+	session, err := store.Sessions().Find(context.Background(), "session-1")
+	if err != nil || session.Status != domain.StatusQueued || session.Queue.Kind != domain.QueueKindAnswerUser {
+		t.Fatalf("fallback session = %#v, %v", session, err)
+	}
+}
+
+func TestAnswerDeliveryCommandsRejectWrongSessionWithoutStoppingOrigin(t *testing.T) {
+	store, service, codex := newAnswerUserWaitTestService(t)
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+	result := make(chan questionapp.BatchDTO, 1)
+	errs := make(chan error, 1)
+	go func() {
+		batch, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		result <- batch
+		errs <- err
+	}()
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	if _, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+		BatchID: pending.ID,
+		Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	<-result
+	if err := service.AcknowledgeUserAnswerDelivery(context.Background(), AcknowledgeUserAnswerDeliveryInput{SessionID: "wrong-session", BatchID: pending.ID}); err == nil {
+		t.Fatal("wrong-session ACK unexpectedly succeeded")
+	}
+	if err := service.FailUserAnswerDelivery(context.Background(), FailUserAnswerDeliveryInput{SessionID: "wrong-session", BatchID: pending.ID, Kind: UserAnswerDeliveryTransportClosed}); err == nil {
+		t.Fatal("wrong-session delivery failure unexpectedly succeeded")
+	}
+	if codex.stoppedID != "" {
+		t.Fatalf("wrong-session command stopped origin %q", codex.stoppedID)
+	}
+	run, err := store.Processes().FindRun(context.Background(), "process-1")
+	if err != nil || run.Status != processdomain.StatusWaitingUser {
+		t.Fatalf("origin after wrong-session commands = %#v, %v", run, err)
+	}
+	batch, err := store.Questions().FindBatch(context.Background(), pending.ID)
+	if err != nil || batch.DeliveryStatus != questiondomain.DeliveryInflight {
+		t.Fatalf("delivery after wrong-session commands = %#v, %v", batch, err)
+	}
+}
+
+func TestWorkflowAnswerStopFailureRollsBackSessionAndEventsWhenWorkflowUpdateFails(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	initial := domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusWaitingUser, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now}
+	if err := store.Sessions().Save(ctx, initial); err != nil {
+		t.Fatal(err)
+	}
+	workflows := &fakeWorkflowStarter{resumeErr: errors.New("workflow persistence failed")}
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"), WithEvents(store.Events()), WithUnitOfWork(store), WithWorkflows(workflows))
+	err = service.persistAnswerFallbackStopFailure(ctx, initial.ID, "batch-1", "process-1", errors.New("stop unavailable"))
+	if err == nil || !strings.Contains(err.Error(), "workflow persistence failed") {
+		t.Fatalf("stop failure persistence error = %v", err)
+	}
+	saved, err := store.Sessions().Find(ctx, initial.ID)
+	if err != nil || saved.Status != domain.StatusWaitingUser {
+		t.Fatalf("session after workflow rollback = %#v, %v", saved, err)
+	}
+	count, err := store.Client().EventRecord.Query().Count(ctx)
+	if err != nil || count != 0 {
+		t.Fatalf("events after workflow rollback = %d, %v", count, err)
+	}
+}
+
+func TestInflightAnswerProcessExitMarksResumeFailedWhenResumeCannotBeQueued(t *testing.T) {
+	store, service, _ := newAnswerUserWaitTestService(t)
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+	result := make(chan questionapp.BatchDTO, 1)
+	errs := make(chan error, 1)
+	go func() {
+		batch, err := service.RequestUserAnswer(context.Background(), RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		result <- batch
+		errs <- err
+	}()
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	if _, err := service.SubmitQuestionBatch(context.Background(), questionapp.SubmitBatchInput{
+		BatchID: pending.ID,
+		Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	<-result
+	if _, err := store.Client().ProcessRun.UpdateOneID("process-1").SetCodexSessionID("").Save(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := service.persistCodexProcessExit(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1", PID: 1234}, codexStartOptions{}, processdomain.ExitResult{FinishedAt: time.Now().UTC()}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, findErr := store.Processes().FindRun(context.Background(), "process-1")
+	if findErr != nil || run.Status != processdomain.StatusExited {
+		t.Fatalf("process after resume failure = %#v, %v", run, findErr)
+	}
+	batch, findErr := store.Questions().FindBatch(context.Background(), pending.ID)
+	if findErr != nil || batch.DeliveryStatus != questiondomain.DeliveryAwaitingResume || batch.DeliveryProcessRunID != nil {
+		t.Fatalf("delivery after resume failure = %#v, %v", batch, findErr)
+	}
+	session, findErr := store.Sessions().Find(context.Background(), "session-1")
+	if findErr != nil || session.Status != domain.StatusResumeFailed {
+		t.Fatalf("session after resume failure = %#v, %v", session, findErr)
+	}
+}
+
+func TestWorkflowDirectAnswerAckRestoresSameNodeRun(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	definition := workflowdomain.Definition{
+		ID: "workflow-1", ProjectID: "project-1", Name: "Default", Version: 1,
+		Graph:     workflowdomain.Graph{Nodes: []workflowdomain.Node{{ID: "build", Type: "codex", Title: "Build", Prompt: "build"}}},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Workflows().SaveDefinition(ctx, definition); err != nil {
+		t.Fatal(err)
+	}
+	workflowRun := workflowdomain.Run{ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: definition.ID, Status: workflowdomain.RunRunning, CurrentNodeID: "build", StartedAt: &now}
+	if err := store.Workflows().CreateRun(ctx, workflowRun); err != nil {
+		t.Fatal(err)
+	}
+	workflowProcessID := workflowdomain.ProcessRunID("process-1")
+	nodeRun := workflowdomain.NodeRun{ID: "node-run-1", WorkflowRunID: workflowRun.ID, NodeID: "build", Status: workflowdomain.NodeRunning, Attempt: 1, ProcessRunID: &workflowProcessID, StartedAt: &now}
+	if err := store.Workflows().SaveNodeRun(ctx, nodeRun); err != nil {
+		t.Fatal(err)
+	}
+	pid := 1234
+	processNodeID := processdomain.NodeRunID(nodeRun.ID)
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{ID: "process-1", SessionID: "session-1", NodeRunID: &processNodeID, Status: processdomain.StatusRunning, PID: &pid, CodexSessionID: "codex-1", StartedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	questions := questionapp.New(store.Questions())
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"),
+		WithProcesses(store.Processes(), &fakeCodexProcess{}), WithEvents(store.Events()), WithQuestions(questions),
+		WithUnitOfWork(store), WithSessionLocker(NewMemorySessionLocker()))
+	service.answerUserTimer = func(time.Duration) (<-chan time.Time, func()) { return make(chan time.Time), func() {} }
+
+	result := make(chan questionapp.BatchDTO, 1)
+	errs := make(chan error, 1)
+	go func() {
+		batch, err := service.RequestUserAnswer(ctx, RequestUserAnswerInput{SessionID: "session-1", Questions: []questiondomain.Question{{Title: "Continue?", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}}})
+		result <- batch
+		errs <- err
+	}()
+	pending := waitForAnswerUserBatch(t, store)
+	option := questiondomain.OptionID("yes")
+	if _, err := service.SubmitQuestionBatch(ctx, questionapp.SubmitBatchInput{BatchID: pending.ID, Answers: []questiondomain.Answer{{QuestionID: pending.Questions[0].ID, SelectedOptionID: &option}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	answered := <-result
+	if err := service.AcknowledgeUserAnswerDelivery(ctx, AcknowledgeUserAnswerDeliveryInput{SessionID: "session-1", BatchID: answered.ID}); err != nil {
+		t.Fatal(err)
+	}
+	gotNode, err := store.Workflows().FindLatestNodeRun(ctx, workflowRun.ID, "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotNode.ID != nodeRun.ID || gotNode.Attempt != 1 || gotNode.Status != workflowdomain.NodeRunning || gotNode.ProcessRunID == nil || *gotNode.ProcessRunID != workflowProcessID {
+		t.Fatalf("node run after direct ACK = %#v", gotNode)
+	}
+	count, err := store.Client().ProcessRun.Query().Count(ctx)
+	if err != nil || count != 1 {
+		t.Fatalf("process run count = %d, %v", count, err)
+	}
+}
+
+func newAnswerUserWaitTestService(t *testing.T) (*entstore.Store, *Service, *fakeCodexProcess) {
+	t.Helper()
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := store.Sessions().Save(ctx, domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning, CodexSessionID: "codex-1", CreatedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	pid := 1234
+	if err := store.Processes().CreateRun(ctx, processdomain.Run{ID: "process-1", SessionID: "session-1", Status: processdomain.StatusRunning, PID: &pid, CodexSessionID: "codex-1", StartedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	codex := &fakeCodexProcess{}
+	questions := questionapp.New(store.Questions())
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"),
+		WithProcesses(store.Processes(), codex), WithEvents(store.Events()), WithQuestions(questions),
+		WithUnitOfWork(store), WithSessionLocker(NewMemorySessionLocker()))
+	return store, service, codex
+}
+
+type quietAnswerQuestions struct {
+	*questionapp.Service
+	updates chan questionapp.BatchDTO
+}
+
+func (q *quietAnswerQuestions) QuestionBatchUpdates(context.Context, questiondomain.SessionID) (<-chan questionapp.BatchDTO, error) {
+	return q.updates, nil
+}
+
+func (q *quietAnswerQuestions) PublishBatch(questionapp.BatchDTO) {}
+
+type orderedAnswerQuestions struct {
+	*questionapp.Service
+	inflightEntered chan struct{}
+	releaseInflight chan struct{}
+	once            sync.Once
+	mu              sync.Mutex
+	statuses        []questiondomain.DeliveryStatus
+}
+
+func (q *orderedAnswerQuestions) PublishBatch(batch questionapp.BatchDTO) {
+	if batch.DeliveryStatus == questiondomain.DeliveryInflight {
+		q.once.Do(func() {
+			close(q.inflightEntered)
+			<-q.releaseInflight
+		})
+	}
+	q.mu.Lock()
+	q.statuses = append(q.statuses, batch.DeliveryStatus)
+	q.mu.Unlock()
+	q.Service.PublishBatch(batch)
+}
+
+func (q *orderedAnswerQuestions) snapshot() []questiondomain.DeliveryStatus {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]questiondomain.DeliveryStatus(nil), q.statuses...)
+}
+
+func waitForAnswerUserBatch(t *testing.T, store *entstore.Store) questiondomain.Batch {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		batches, err := store.Questions().ListPendingBySession(context.Background(), "session-1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(batches) == 1 {
+			return batches[0]
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("answer_user batch was not created")
+	return questiondomain.Batch{}
+}
+
 type fakeCodexProcess struct {
 	startCalled   bool
 	startInput    processdomain.CodexStartInput
