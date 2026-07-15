@@ -3,9 +3,11 @@ package entstore
 import (
 	"context"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/workflow"
 )
 
@@ -181,5 +183,168 @@ func TestWorkflowRepositoryTransitionsNodeThroughAnswerUserResume(t *testing.T) 
 	}
 	if got.Status != workflow.NodeRunning || got.Attempt != 1 || got.ProcessRunID == nil || *got.ProcessRunID != "process-run-resume" {
 		t.Fatalf("node run = %#v", got)
+	}
+}
+
+func TestMigrateCanonicalizesWorkflowApprovalFieldsAndPreservesAuditData(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Date(2026, 7, 15, 6, 0, 0, 0, time.UTC)
+	repo := store.Workflows()
+	definition := workflow.Definition{
+		ID: "workflow-legacy", ProjectID: "project-1", Name: "Legacy", Version: 7, Active: true,
+		CreatedAt: now, UpdatedAt: now,
+		Graph: workflow.Graph{Nodes: []workflow.Node{
+			{
+				ID: "plan", Type: "codex", Approval: workflow.ApprovalConfig{AfterRun: true},
+				OutputFields: []workflow.OutputField{
+					{Key: "approval.approved", ValueType: "boolean"},
+					{Key: "approval.note", ValueType: "string"},
+					{Key: "planPath", ValueType: "string"},
+				},
+			},
+			{
+				ID: "merge", Type: "merge",
+				OutputFields: []workflow.OutputField{{Key: "merge.status", Description: "legacy", ValueType: "number"}},
+			},
+		}},
+	}
+	if err := repo.SaveDefinition(ctx, definition); err != nil {
+		t.Fatal(err)
+	}
+	runContext := workflow.Context{Values: map[string]any{"results": map[string]any{"data": map[string]any{"approval": map[string]any{"approved": true}}}}}
+	if err := repo.CreateRun(ctx, workflow.Run{
+		ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: definition.ID,
+		Status: workflow.RunCompleted, CurrentNodeID: "plan", Context: runContext, StartedAt: &now, StoppedAt: &now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	historicalResult := &workflow.Result{
+		Version: workflow.ResultVersion, Outcome: workflow.ResultSuccess, Summary: "legacy",
+		Data: map[string]any{"approval": map[string]any{"approved": true}},
+	}
+	if err := repo.SaveNodeRun(ctx, workflow.NodeRun{
+		ID: "node-run-1", WorkflowRunID: "run-1", NodeID: "plan", Status: workflow.NodeSucceeded,
+		Attempt: 1, StartedAt: &now, FinishedAt: &now, Result: historicalResult,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	eventSessionID := eventdomain.SessionID("session-1")
+	event := eventdomain.DomainEvent{
+		ID: "event-1", Scope: eventdomain.Scope{ProjectID: "project-1", SessionID: &eventSessionID},
+		Type: "workflow.exit_pending", Payload: map[string]any{"results": map[string]any{"data": map[string]any{"approval": map[string]any{"approved": true}}}}, CreatedAt: now,
+	}
+	if err := store.Events().Append(ctx, event); err != nil {
+		t.Fatal(err)
+	}
+	rawGraph := map[string]any{
+		"Nodes": []any{map[string]any{
+			"ID": "raw-node",
+			"OutputFields": []any{
+				map[string]any{"Key": "approval.approved", "ValueType": "boolean", "UnknownField": "remove-with-field"},
+				map[string]any{"Key": "result", "ValueType": "string", "UnknownField": "keep-with-field"},
+			},
+			"UnknownNodeField": map[string]any{"keep": true},
+		}},
+		"UnknownGraphField": []any{"keep"},
+	}
+	if err := store.Client().WorkflowDefinition.Create().
+		SetID("workflow-raw").SetProjectID("project-1").SetName("Raw").SetGraph(rawGraph).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate legacy workflow fields: %v", err)
+	}
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("repeat migration: %v", err)
+	}
+
+	got, err := repo.FindDefinition(ctx, definition.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != definition.Version || got.Active != definition.Active || !got.CreatedAt.Equal(now) || !got.UpdatedAt.Equal(now) {
+		t.Fatalf("definition metadata changed: %#v", got)
+	}
+	wantFields := []workflow.OutputField{{Key: "planPath", ValueType: "string"}}
+	if !reflect.DeepEqual(got.Graph.Nodes[0].OutputFields, wantFields) {
+		t.Fatalf("migrated output fields = %#v, want %#v", got.Graph.Nodes[0].OutputFields, wantFields)
+	}
+	wantMergeFields := []workflow.OutputField{{Key: "merge.status", Description: "legacy", ValueType: "number"}}
+	if !reflect.DeepEqual(got.Graph.Nodes[1].OutputFields, wantMergeFields) {
+		t.Fatalf("migration changed unrelated merge fields = %#v, want %#v", got.Graph.Nodes[1].OutputFields, wantMergeFields)
+	}
+	raw, err := store.Client().WorkflowDefinition.Get(ctx, "workflow-raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRawGraph := map[string]any{
+		"Nodes": []any{map[string]any{
+			"ID": "raw-node",
+			"OutputFields": []any{
+				map[string]any{"Key": "result", "ValueType": "string", "UnknownField": "keep-with-field"},
+			},
+			"UnknownNodeField": map[string]any{"keep": true},
+		}},
+		"UnknownGraphField": []any{"keep"},
+	}
+	if !reflect.DeepEqual(raw.Graph, wantRawGraph) {
+		t.Fatalf("migration changed unrelated raw graph data = %#v, want %#v", raw.Graph, wantRawGraph)
+	}
+	gotRun, err := repo.FindRun(ctx, "run-1")
+	if err != nil || !reflect.DeepEqual(gotRun.Context, runContext) {
+		t.Fatalf("historical workflow context changed: %#v, err=%v", gotRun.Context, err)
+	}
+	gotNodeRun, err := repo.FindLatestNodeRun(ctx, "run-1", "plan")
+	if err != nil || !reflect.DeepEqual(gotNodeRun.Result.Data, historicalResult.Data) {
+		t.Fatalf("historical node result changed: %#v, err=%v", gotNodeRun.Result, err)
+	}
+	events, err := store.Events().After(ctx, event.Scope, "")
+	if err != nil || len(events) != 1 || !reflect.DeepEqual(events[0].Payload, event.Payload) {
+		t.Fatalf("historical event changed: %#v, err=%v", events, err)
+	}
+}
+
+func TestMigrateDoesNotPartiallyCanonicalizeInvalidWorkflowDefinitions(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo := store.Workflows()
+	legacy := workflow.Definition{
+		ID: "workflow-a", ProjectID: "project-1", Name: "Legacy",
+		Graph: workflow.Graph{Nodes: []workflow.Node{{ID: "plan", OutputFields: []workflow.OutputField{{Key: "approval.approved", ValueType: "boolean"}}}}},
+	}
+	if err := repo.SaveDefinition(ctx, legacy); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Client().WorkflowDefinition.Create().
+		SetID("workflow-b").SetProjectID("project-1").SetName("Invalid").SetGraph(map[string]any{"Nodes": "invalid"}).Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Migrate(ctx); err == nil {
+		t.Fatal("Migrate() succeeded with an invalid workflow definition")
+	}
+	got, err := repo.FindDefinition(ctx, legacy.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Graph.Nodes[0].OutputFields) != 1 || got.Graph.Nodes[0].OutputFields[0].Key != "approval.approved" {
+		t.Fatalf("legacy definition was partially migrated: %#v", got.Graph)
 	}
 }

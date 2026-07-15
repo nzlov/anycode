@@ -317,6 +317,65 @@ func TestGetDefinitionKeepsApprovalOutsideNodeOutputFields(t *testing.T) {
 	}
 }
 
+func TestLegacyAfterRunApprovalDoesNotBecomeAgentResultData(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{
+				{
+					ID: "plan", Type: "codex", Title: "Plan",
+					Approval: domain.ApprovalConfig{AfterRun: true},
+					OutputFields: []domain.OutputField{
+						{Key: "approval.approved", Description: "Whether the human approval passed.", ValueType: "boolean"},
+						{Key: "planPath", Description: "Plan path.", ValueType: "string"},
+					},
+				},
+				{ID: "build", Type: "codex", Title: "Build"},
+			},
+			Edges: []domain.Edge{{From: "plan", To: "build"}},
+		},
+	}
+	service := New(repo)
+	ids := []string{"workflow-run-1", "node-run-1"}
+	service.generateID = func() (string, error) {
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	start, err := service.StartForSession(ctx, sessiondomain.WorkflowStartInput{
+		ProjectID: "project-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Requirement: "write a plan",
+	})
+	if err != nil {
+		t.Fatalf("StartForSession() error = %v", err)
+	}
+	if strings.Contains(start.Prompt, "approval.approved") || strings.Contains(start.Prompt, "Whether the human approval passed") {
+		t.Fatalf("start prompt exposes workflow approval as agent output: %q", start.Prompt)
+	}
+	if !strings.Contains(start.Prompt, "Workflow-managed before-run or after-run approval") {
+		t.Fatalf("start prompt does not distinguish workflow approval: %q", start.Prompt)
+	}
+
+	advance, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
+		WorkflowRunID: "workflow-run-1",
+		NodeRunID:     "node-run-1",
+		Output:        resultOutput(map[string]any{"planPath": "docs/plan/example.md"}),
+	})
+	if err != nil {
+		t.Fatalf("CompleteNode() error = %v", err)
+	}
+	if advance.RequireResultRetry || advance.Status != string(domain.RunWaitingApproval) || advance.ApprovalPhase != "after_run" {
+		t.Fatalf("CompleteNode() = %#v", advance)
+	}
+	if len(repo.nodeRuns) != 1 || repo.nodeRuns[0].Result == nil || repo.nodeRuns[0].Result.Data["approval"] != nil {
+		t.Fatalf("node result contains agent approval data: %#v", repo.nodeRuns)
+	}
+}
+
 func TestStartForSessionWaitsWhenStartNodeRequiresApproval(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()

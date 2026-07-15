@@ -1,6 +1,6 @@
 export const workflowValueTypeOptions = ['string', 'number', 'boolean', 'object', 'array', 'any'];
 
-const systemOutputFieldKeys = new Set(['approval.approved', 'merge.status', 'merge.failureCode', 'merge.failureReason']);
+const systemOutputFieldKeys = new Set(['merge.status', 'merge.failureCode', 'merge.failureReason']);
 
 export function systemOutputFields(type, hasMerge) {
   const fields = [];
@@ -31,7 +31,7 @@ export function completeOutputFields(fields, required) {
   const normalized = fields
     .map(normalizeOutputField)
     .filter((field) => field.key)
-    .filter((field) => requiredKeys.has(field.key) || !systemOutputFieldKeys.has(field.key));
+    .filter((field) => requiredKeys.has(field.key) || !isReservedOutputField(field.key));
   required.forEach((requiredField) => {
     const index = normalized.findIndex((field) => field.key === requiredField.key);
     if (index >= 0) {
@@ -41,6 +41,10 @@ export function completeOutputFields(fields, required) {
     normalized.push({ ...requiredField });
   });
   return normalized;
+}
+
+function isReservedOutputField(key) {
+  return key === 'approval' || key.startsWith('approval.') || systemOutputFieldKeys.has(key);
 }
 
 function normalizeOutputField(field) {
