@@ -44,7 +44,7 @@
         label="排序"
         aria-label="产物排序"
       />
-      <q-btn flat round dense icon="refresh" aria-label="刷新产物" :loading="loading" @click="load">
+      <q-btn flat round dense icon="refresh" aria-label="刷新产物" :loading="loading" @click="refresh">
         <q-tooltip>刷新产物</q-tooltip>
       </q-btn>
     </div>
@@ -65,7 +65,13 @@
           <q-item-label>暂无产物</q-item-label>
         </q-item-section>
       </q-item>
-      <q-item v-for="file in files" :key="file.id" clickable @click="openPreview(file)">
+      <q-item
+        v-for="file in files"
+        :key="file.id"
+        clickable
+        :active="focusedId === file.id"
+        @click="openPreview(file)"
+      >
         <q-item-section avatar>
           <q-icon :name="fileIcon(file)" color="primary" />
         </q-item-section>
@@ -205,11 +211,21 @@ import {
   listSessionFiles,
   useSessionFileAsInput,
   type SessionFile,
+  type SessionArtifactFocusRequest,
 } from '@/services/sessionFiles';
 
-const props = withDefaults(defineProps<{ sessionId: string; refreshKey?: string }>(), {
-  refreshKey: '',
-});
+const props = withDefaults(
+  defineProps<{
+    sessionId: string;
+    refreshKey?: string;
+    focusRequest?: SessionArtifactFocusRequest | null;
+  }>(),
+  { refreshKey: '', focusRequest: null },
+);
+const emit = defineEmits<{
+  artifactDeleted: [logicalPath: string];
+  artifactsRefreshed: [];
+}>();
 const files = ref<SessionFile[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -229,6 +245,7 @@ const previewLoading = ref(false);
 const previewError = ref('');
 const previewURL = ref('');
 const previewText = ref('');
+const focusedId = ref('');
 let loadRequest = 0;
 let previewController: AbortController | null = null;
 const pageMax = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
@@ -292,6 +309,11 @@ async function load() {
   } finally {
     if (request === loadRequest) loading.value = false;
   }
+}
+
+async function refresh() {
+  await load();
+  emit('artifactsRefreshed');
 }
 
 async function openPreview(file: SessionFile) {
@@ -366,12 +388,24 @@ async function remove(file: SessionFile) {
   try {
     await deleteSessionFile(file.id);
     if (selected.value?.id === file.id) previewOpen.value = false;
+    if (focusedId.value === file.id) focusedId.value = '';
     await load();
+    emit('artifactDeleted', file.logicalPath);
   } catch (err) {
     Notify.create({ type: 'negative', message: errorMessage(err, '删除文件失败') });
   } finally {
     deletingId.value = '';
   }
+}
+
+async function applyFocus(request: SessionArtifactFocusRequest) {
+  filter.value = request.file.logicalPath;
+  kind.value = null;
+  source.value = null;
+  sort.value = 'created_at_desc';
+  page.value = 1;
+  focusedId.value = request.file.id;
+  await openPreview(request.file);
 }
 
 function clearPreviewResource() {
@@ -426,6 +460,14 @@ watch(
   (next, previous) => {
     if (next && next !== previous) void load();
   },
+);
+watch(
+  () => props.focusRequest?.token,
+  () => {
+    const request = props.focusRequest;
+    if (request) void applyFocus(request);
+  },
+  { immediate: true },
 );
 onMounted(() => void load());
 onBeforeUnmount(() => {

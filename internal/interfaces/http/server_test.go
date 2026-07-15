@@ -961,6 +961,10 @@ func (u *fakeArtifactUseCase) List(context.Context, sessiondomain.ArtifactQuery)
 	return nil, 0, nil
 }
 
+func (u *fakeArtifactUseCase) Resolve(context.Context, sessiondomain.ID, []string) ([]sessiondomain.SessionAttachment, error) {
+	return nil, nil
+}
+
 func (u *fakeArtifactUseCase) Delete(context.Context, sessiondomain.SessionAttachmentID) (sessiondomain.SessionAttachment, error) {
 	return sessiondomain.SessionAttachment{}, nil
 }

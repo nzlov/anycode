@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
+import { normalizeArtifactLogicalPath } from '../src/services/artifactLogicalPath.ts';
+
 const panel = readFileSync(
   new URL('../src/components/SessionArtifactsPanel.vue', import.meta.url),
   'utf8',
@@ -49,4 +51,23 @@ test('artifact requests ignore stale responses and follow live artifact events',
   assert.match(event, /previewController\?\.abort\(\)/);
   assert.match(detailPage, /:refresh-key="artifactRefreshKey"/);
   assert.match(detailPage, /entry\.content\.rawType\.startsWith\('artifact\.'\)/);
+});
+
+test('artifact references normalize only safe relative logical paths', () => {
+  assert.equal(normalizeArtifactLogicalPath(' reports\\result.txt '), 'reports/result.txt');
+  assert.equal(normalizeArtifactLogicalPath('reports//result.txt'), 'reports/result.txt');
+  assert.equal(normalizeArtifactLogicalPath('/absolute.txt'), null);
+  assert.equal(normalizeArtifactLogicalPath('../escape.txt'), null);
+  assert.equal(normalizeArtifactLogicalPath('a/../escape.txt'), null);
+});
+
+test('artifact panel supports controlled focus without replacing file actions', () => {
+  assert.match(panel, /focusRequest/);
+  assert.match(panel, /props\.focusRequest\?\.token/);
+  assert.match(panel, /void applyFocus\(request\)/);
+  assert.match(panel, /\{ immediate: true \}/);
+  assert.match(panel, /emit\('artifactDeleted', file\.logicalPath\)/);
+  assert.match(panel, /emit\('artifactsRefreshed'\)/);
+  assert.match(panel, /@click="refresh"/);
+  assert.match(panel, /openPreview\(request\.file\)/);
 });

@@ -59,7 +59,12 @@
     <section v-if="normalizedResult.artifacts.length" class="workflow-result-review__section">
       <div class="text-subtitle2 text-weight-bold">产物</div>
       <q-list dense separator class="workflow-result-review__list">
-        <q-item v-for="(artifact, index) in normalizedResult.artifacts" :key="`${artifact.kind}:${artifact.ref}:${index}`">
+        <q-item
+          v-for="(artifact, index) in normalizedResult.artifacts"
+          :key="`${artifact.kind}:${artifact.ref}:${index}`"
+          :clickable="Boolean(resolvedArtifact(artifact.ref))"
+          @click="openArtifact(artifact.ref)"
+        >
           <q-item-section>
             <q-item-label>{{ artifact.label }}</q-item-label>
             <q-item-label caption class="text-mono">{{ artifact.ref }}</q-item-label>
@@ -77,17 +82,25 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+
+import { normalizeArtifactLogicalPath } from '@/services/artifactLogicalPath';
+import type { SessionFile } from '@/services/sessionFiles';
 import type { PendingApproval, WorkflowNodeResult } from '@/services/sessions';
 import {
   flattenWorkflowResultData,
   normalizeWorkflowNodeResult,
 } from '@/services/workflowApprovalReview';
 
-const props = defineProps<{
-  phase: PendingApproval['phase'] | null;
-  result: WorkflowNodeResult | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    phase: PendingApproval['phase'] | null;
+    result: WorkflowNodeResult | null;
+    resolvedArtifacts?: Record<string, SessionFile>;
+  }>(),
+  { resolvedArtifacts: () => ({}) },
+);
 
+const emit = defineEmits<{ openArtifact: [file: SessionFile] }>();
 const normalizedResult = computed(() => normalizeWorkflowNodeResult(props.result));
 const outcomePresentation = computed(() => {
   if (normalizedResult.value?.outcome === 'success') return { label: '成功', color: 'positive' };
@@ -96,6 +109,16 @@ const outcomePresentation = computed(() => {
 });
 const dataProjection = computed(() => flattenWorkflowResultData(normalizedResult.value?.data ?? {}));
 const formattedResult = computed(() => safeJSONStringify(normalizedResult.value, '原始结果层级过深，无法格式化展示。'));
+
+function resolvedArtifact(reference: string) {
+  const logicalPath = normalizeArtifactLogicalPath(reference);
+  return logicalPath ? props.resolvedArtifacts[logicalPath] : undefined;
+}
+
+function openArtifact(reference: string) {
+  const file = resolvedArtifact(reference);
+  if (file) emit('openArtifact', file);
+}
 
 function formatValue(value: unknown) {
   if (value == null) return '-';

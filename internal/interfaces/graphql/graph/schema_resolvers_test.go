@@ -48,15 +48,45 @@ func TestQuerySessionFilesNormalizesPagination(t *testing.T) {
 	}
 }
 
+func TestResolveSessionArtifactsMapsSafeFiles(t *testing.T) {
+	artifacts := &fakeArtifactUseCase{resolved: []sessiondomain.SessionFile{{
+		ID: "artifact-1", SessionID: "session-1", Role: sessiondomain.FileRoleArtifact,
+		LogicalPath: "reports/result.txt", Filename: "result.txt", Path: "/private/result.txt",
+		PreviewKind: sessiondomain.PreviewKindText,
+	}}}
+	got, err := NewResolver(UseCases{Artifacts: artifacts}).Query().ResolveSessionArtifacts(context.Background(), model.ResolveSessionArtifactsInput{
+		SessionID: "session-1", LogicalPaths: []string{"reports/result.txt", "missing.txt"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(artifacts.resolvePaths, []string{"reports/result.txt", "missing.txt"}) {
+		t.Fatalf("resolve paths = %#v", artifacts.resolvePaths)
+	}
+	if len(got) != 1 || got[0].LogicalPath != "reports/result.txt" || got[0].File.ID != "artifact-1" {
+		t.Fatalf("resolved artifacts = %#v", got)
+	}
+	if got[0].File.PreviewURL == nil || *got[0].File.PreviewURL != "/files/artifact-1/preview" || got[0].File.DownloadURL != "/files/artifact-1/download" {
+		t.Fatalf("resolved file URLs = %#v", got[0].File)
+	}
+}
+
 type fakeArtifactUseCase struct {
 	artifactapp.UseCase
-	query sessiondomain.ArtifactQuery
-	total int
+	query        sessiondomain.ArtifactQuery
+	total        int
+	resolvePaths []string
+	resolved     []sessiondomain.SessionFile
 }
 
 func (f *fakeArtifactUseCase) List(_ context.Context, query sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, int, error) {
 	f.query = query
 	return []sessiondomain.SessionFile{}, f.total, nil
+}
+
+func (f *fakeArtifactUseCase) Resolve(_ context.Context, _ sessiondomain.ID, logicalPaths []string) ([]sessiondomain.SessionFile, error) {
+	f.resolvePaths = append([]string(nil), logicalPaths...)
+	return f.resolved, nil
 }
 
 func TestMapPendingApprovalIncludesResultProjection(t *testing.T) {
