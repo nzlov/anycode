@@ -78,7 +78,7 @@
 
     <q-page-container :class="{ 'page-container--detail': $route.name === 'session-detail' }">
       <router-view
-        :key="`${$route.fullPath}:${pageRefreshKey}`"
+        :key="$route.fullPath"
         @create-session="newSessionOpen = true"
         @session-title="sessionTitle = $event"
       />
@@ -106,7 +106,6 @@
       v-model="newSessionOpen"
       :default-project-id="newSessionDefaultProjectId"
       :panel="showOverviewCreatePanel"
-      @create="handleSessionCreated"
     />
     <GlobalSettingsDialog v-model="settingsDialogOpen" />
 
@@ -160,7 +159,6 @@ const logoutDialogOpen = ref(false);
 const { themeMode, themeModes } = useThemeMode();
 const route = useRoute();
 const router = useRouter();
-const pageRefreshKey = ref(0);
 const sessionTitle = ref('');
 const showOverviewCreatePanel = computed(
   () => route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth,
@@ -182,10 +180,6 @@ watch(
     sessionTitle.value = '';
   },
 );
-
-function handleSessionCreated() {
-  pageRefreshKey.value += 1;
-}
 
 async function logout() {
   clearGraphQLAccessKey();
