@@ -47,7 +47,9 @@
             dropdown-icon=""
             :disable="creating"
             :options="projectOptions"
-          />
+          >
+            <q-tooltip>项目：{{ selectedProject?.name }}</q-tooltip>
+          </q-select>
           <div v-if="selectedProject?.isGit" class="branch-picker">
             <q-select
               v-model="branch"
@@ -60,7 +62,9 @@
               :disable="creating || branchesLoading"
               :loading="branchesLoading"
               :options="branchOptions"
-            />
+            >
+              <q-tooltip>基础分支：{{ branch }}</q-tooltip>
+            </q-select>
             <q-btn
               flat
               round

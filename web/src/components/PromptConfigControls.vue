@@ -26,7 +26,7 @@
 
     <div v-if="readonlyConfig" class="prompt-config-chip">
       <span>{{ modelLabel }}</span>
-      <q-tooltip>Codex 模型</q-tooltip>
+      <q-tooltip>Codex 模型：{{ modelLabel }}</q-tooltip>
     </div>
     <q-select
       v-else
@@ -41,12 +41,12 @@
       :disable="disabled"
       :options="modelOptions"
     >
-      <q-tooltip>Codex 模型</q-tooltip>
+      <q-tooltip>Codex 模型：{{ modelLabel }}</q-tooltip>
     </q-select>
 
     <div v-if="readonlyConfig" class="prompt-config-chip">
       <span>{{ effortLabel }}</span>
-      <q-tooltip>思考强度</q-tooltip>
+      <q-tooltip>思考强度：{{ effortLabel }}</q-tooltip>
     </div>
     <q-select
       v-else
@@ -61,7 +61,7 @@
       :disable="disabled"
       :options="reasoningEffortOptions"
     >
-      <q-tooltip>思考强度</q-tooltip>
+      <q-tooltip>思考强度：{{ effortLabel }}</q-tooltip>
     </q-select>
 
     <q-checkbox

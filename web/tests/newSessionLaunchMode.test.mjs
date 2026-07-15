@@ -22,7 +22,15 @@ test('launch mode buttons replace the separate mode toggle and create command', 
   assert.match(dialogSource, /class="new-session-launch-group" role="group" aria-label="启动模式"/);
   assert.match(
     stylesSource,
-    /\.new-session-launch-group\s*{[^}]*grid-auto-columns:\s*minmax\(116px,\s*1fr\)[^}]*gap:\s*1px/s,
+    /\.new-session-launch-group\s*{[^}]*grid-auto-columns:\s*minmax\(116px,\s*1fr\)[^}]*gap:\s*0/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-launch-btn:first-child\s*{[^}]*border-radius:\s*calc\(var\(--ac-radius\)\s*-\s*1px\)\s+0\s+0\s+calc\(var\(--ac-radius\)\s*-\s*1px\)/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-launch-btn:last-child\s*{[^}]*border-radius:\s*0\s+calc\(var\(--ac-radius\)\s*-\s*1px\)\s+calc\(var\(--ac-radius\)\s*-\s*1px\)\s+0/s,
   );
 });
 
@@ -68,9 +76,24 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
     stylesSource,
     /\.toolbar-file-picker \.q-field__prepend\s*{[^}]*justify-content:\s*center/s,
   );
+  assert.match(
+    stylesSource,
+    /\.toolbar-file-picker\s*{[^}]*border:\s*0[^}]*background:\s*transparent/s,
+  );
   assert.match(stylesSource, /\.permission-select\s*{[^}]*width:\s*44px/s);
   assert.match(controlsSource, /class="compact-select model-select"/);
   assert.match(controlsSource, /class="compact-select effort-select"/);
+  assert.match(
+    stylesSource,
+    /\.compact-select\s*{[^}]*width:\s*max-content[^}]*max-width:\s*20ch/s,
+  );
+  assert.doesNotMatch(stylesSource, /\.compact-select\s*{[^}]*min-width:\s*150px/s);
+  assert.doesNotMatch(
+    stylesSource,
+    /\.new-session-dialog--panel \.(?:model|effort)-select\s*{[^}]*(?:width|min-width):/s,
+  );
+  assert.match(controlsSource, /Codex 模型：\{\{ modelLabel \}\}/);
+  assert.match(controlsSource, /思考强度：\{\{ effortLabel \}\}/);
   assert.match(
     dialogSource,
     /:force-config-menu="\s*\$q\.screen\.lt\.md \|\| \(panel && \$q\.screen\.width < overviewInlineConfigMinWidth\)\s*"/,
