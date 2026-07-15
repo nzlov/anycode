@@ -249,24 +249,22 @@ try {
     await clickText('全部 Diff');
     await waitForRouteIncludes('mode=all');
     await waitForRouteExcludes('filePath=');
-    await selectDiffPageSize(10);
-    await waitForRouteIncludes('pageSize=10');
-    await waitForRouteIncludes('page=1');
-    await clickDiffPage(2);
-    await waitForRouteIncludes('page=2');
+    await waitForCondition(
+      `!document.querySelector('.diff-workspace__page-size') && !document.querySelector('.app-pagination')`,
+      'diff pagination controls absent',
+    );
     await clickDiffRefreshButton();
-    await waitForRouteIncludes('page=2');
     await waitForCondition(
       `document.querySelector('.diff-file-card .file-title--collapsible')?.getAttribute('aria-expanded') === 'true'`,
       'diff file starts expanded',
     );
     await clickFirstDiffFileTitle();
     await waitForFirstDiffFileExpanded(false);
-    await clickAria('展开当前页全部文件');
+    await clickAria('展开全部文件');
     await waitForFirstDiffFileExpanded(true);
-    await clickAria('折叠当前页全部文件');
+    await clickAria('折叠全部文件');
     await waitForAllDiffFilesExpanded(false);
-    await clickAria('展开当前页全部文件');
+    await clickAria('展开全部文件');
     await waitForAllDiffFilesExpanded(true);
     await toggleFirstDiffFileWithKey('Enter');
     await waitForFirstDiffFileExpanded(false);
@@ -320,6 +318,8 @@ try {
       await navigate(`/#/diff?sessionId=${auditData.session.id}&mode=all&page=1&pageSize=10`);
       await waitForText(auditData.diffFile);
       await waitForDiffIdle();
+      await waitForRouteExcludes('page=');
+      await waitForRouteExcludes('pageSize=');
       await assertNoHorizontalOverflow('.diff-page');
       await waitForCondition(
         width >= 1024
@@ -527,12 +527,12 @@ async function loadAuditData() {
   const project = normalizeProject(preferredProject);
   const session = await createDiffAuditSession(project);
   const diff = await sessionDiff(session.id);
-  assert(diff.available && diff.files.items.length > 0, 'Fresh git audit session has no available diff.');
+  assert(diff.available && diff.files.length > 0, 'Fresh git audit session has no available diff.');
   return {
     project,
     session,
     marker: session.requirementSummary,
-    diffFile: diff.files.items[0].path,
+    diffFile: diff.files[0].path,
   };
 }
 
@@ -630,10 +630,10 @@ async function sessionDiff(sessionId) {
     query SessionDiff($input: SessionDiffInput!) {
       sessionDiff(input: $input) {
         available
-        files { items { path } }
+        files { path }
       }
     }
-  `, { input: { sessionId, mode: 'all', page: 1, pageSize: 20 } });
+  `, { input: { sessionId, mode: 'all' } });
   return data.sessionDiff;
 }
 
@@ -1081,51 +1081,6 @@ async function waitForDiffIdle() {
     })()`,
     'diff workspace idle',
   );
-}
-
-async function selectDiffPageSize(pageSize) {
-  await waitForCondition(
-    `document.querySelectorAll('.diff-file-card').length === 12 &&
-      !document.querySelector('.diff-workspace__page-size')?.classList.contains('q-field--disabled')`,
-    'diff page size selector enabled',
-  );
-  const opened = await evaluate(`(() => {
-    const field = document.querySelector('.diff-workspace__page-size');
-    if (!field) return false;
-    (field.querySelector('.q-field__control') || field).click();
-    return true;
-  })()`);
-  assert(opened, 'diff page size selector not found');
-  await sleep(250);
-  const selected = await evaluate(`(() => {
-    const visible = (element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    };
-    const option = Array.from(document.querySelectorAll('[role="option"]'))
-      .find((element) => visible(element) && element.textContent.trim() === ${JSON.stringify(String(pageSize))});
-    if (!option) return false;
-    option.click();
-    return true;
-  })()`);
-  assert(selected, `diff page size option not found: ${pageSize}`);
-  await sleep(500);
-}
-
-async function clickDiffPage(pageNumber) {
-  await waitForCondition(
-    `document.querySelectorAll('.app-pagination .q-btn').length > 0`,
-    'diff pagination visible',
-  );
-  const clicked = await evaluate(`(() => {
-    const button = Array.from(document.querySelectorAll('.app-pagination .q-btn'))
-      .find((element) => element.textContent.trim() === ${JSON.stringify(String(pageNumber))});
-    if (!button) return false;
-    button.click();
-    return true;
-  })()`);
-  assert(clicked, `diff page button not found: ${pageNumber}`);
-  await sleep(500);
 }
 
 async function clickFirstDiffFileTitle() {

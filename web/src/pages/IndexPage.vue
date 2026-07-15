@@ -473,8 +473,6 @@ const diffDialogSessionId = ref('');
 const diffDialogWorkspaceState = ref<DiffWorkspaceState>({
   mode: 'all',
   filePath: '',
-  page: 1,
-  pageSize: 20,
 });
 const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
@@ -899,12 +897,12 @@ function isCurrentApprovalContext(requestGeneration: number, sessionId: string) 
 
 function openDiffDialog(card: SessionCard) {
   diffDialogSessionId.value = card.id;
-  diffDialogWorkspaceState.value = { mode: 'all', filePath: '', page: 1, pageSize: 20 };
+  diffDialogWorkspaceState.value = { mode: 'all', filePath: '' };
   diffDialog.value = true;
 }
 
 function initialDiffWorkspaceState(): DiffWorkspaceState {
-  return { mode: 'all', filePath: '', page: 1, pageSize: 20 };
+  return { mode: 'all', filePath: '' };
 }
 
 function handleDiffDialogClosed() {

@@ -1,20 +1,9 @@
 <template>
   <div class="diff-workspace">
     <div class="diff-workspace__toolbar">
-      <q-select
-        :model-value="modelValue.pageSize"
-        dense
-        outlined
-        emit-value
-        map-options
-        class="diff-workspace__page-size"
-        :options="pageSizeOptions"
-        :disable="loading"
-        label="每页文件"
-        @update:model-value="setPageSize"
-      />
       <q-btn-toggle
-        :model-value="modelValue.mode"
+        v-if="showFileNavigation"
+        :model-value="workspaceMode"
         no-caps
         unelevated
         toggle-color="dark"
@@ -26,28 +15,28 @@
         @update:model-value="setMode"
       />
       <q-space />
-      <template v-if="modelValue.mode === 'all'">
+      <template v-if="workspaceMode === 'all'">
         <q-btn
           flat
           round
           dense
           icon="unfold_more"
-          aria-label="展开当前页全部文件"
-          :disable="loading || currentPagePaths.length === 0 || !hasCollapsedCurrentPageFile"
-          @click="expandCurrentPage"
+          aria-label="展开全部文件"
+          :disable="loading || allFilePaths.length === 0 || !hasCollapsedFile"
+          @click="expandAllFiles"
         >
-          <q-tooltip>展开当前页全部文件</q-tooltip>
+          <q-tooltip>展开全部文件</q-tooltip>
         </q-btn>
         <q-btn
           flat
           round
           dense
           icon="unfold_less"
-          aria-label="折叠当前页全部文件"
-          :disable="loading || currentPagePaths.length === 0 || allCurrentPageFilesCollapsed"
-          @click="collapseCurrentPage"
+          aria-label="折叠全部文件"
+          :disable="loading || allFilePaths.length === 0 || allFilesCollapsed"
+          @click="collapseAllFiles"
         >
-          <q-tooltip>折叠当前页全部文件</q-tooltip>
+          <q-tooltip>折叠全部文件</q-tooltip>
         </q-btn>
       </template>
       <q-btn
@@ -88,8 +77,12 @@
       当前范围没有可用 Diff，可能是非 git 项目、项目当前未检出该分支，或没有工作区变更。
     </q-banner>
 
-    <div v-if="!diff || diff.available" class="diff-workspace__layout">
-      <q-card flat bordered class="diff-files">
+    <div
+      v-if="!diff || diff.available"
+      class="diff-workspace__layout"
+      :class="{ 'diff-workspace__layout--content-only': !showFileNavigation }"
+    >
+      <q-card v-if="showFileNavigation" flat bordered class="diff-files">
         <q-inner-loading :showing="loading">
           <q-spinner color="primary" size="32px" />
         </q-inner-loading>
@@ -143,16 +136,6 @@
             </q-item-section>
           </q-item>
         </q-list>
-
-        <q-separator v-if="showPagination" />
-        <q-card-actions v-if="showPagination" align="center" class="files-pagination">
-          <AppPagination
-            :model-value="modelValue.page"
-            :max="pageMax"
-            :disabled="loading"
-            @update:model-value="setPage"
-          />
-        </q-card-actions>
       </q-card>
 
       <section class="diff-content">
@@ -172,7 +155,7 @@
 
         <DiffViewer
           :file-diffs="visibleDiffs"
-          :collapsible="modelValue.mode === 'all'"
+          :collapsible="workspaceMode === 'all'"
           :collapsed-paths="collapseState.collapsedPaths"
           @expand="expandDiff"
           @toggle-collapse="toggleFileCollapsed"
@@ -204,7 +187,6 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import AppPagination from '@/components/AppPagination.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import {
   getBranchAllDiff,
@@ -213,8 +195,8 @@ import {
   getSessionSingleDiff,
 } from '@/services/diff';
 import {
-  collapseCurrentDiffPage,
-  expandCurrentDiffPage,
+  collapseDiffFiles,
+  expandDiffFiles,
   expandDiffContext,
   initialDiffCollapseState,
   initialDiffContext,
@@ -232,21 +214,20 @@ import type {
 } from '@/services/diff';
 import { listSessions } from '@/services/sessions';
 
-const props = defineProps<{
-  target: DiffWorkspaceTarget;
-  modelValue: DiffWorkspaceState;
-}>();
+const props = withDefaults(
+  defineProps<{
+    target: DiffWorkspaceTarget;
+    modelValue: DiffWorkspaceState;
+    showFileNavigation?: boolean;
+  }>(),
+  { showFileNavigation: true },
+);
 
 const emit = defineEmits<{
   'update:modelValue': [state: DiffWorkspaceState];
 }>();
 
 const router = useRouter();
-const pageSizeOptions = [
-  { label: '10', value: 10 },
-  { label: '20', value: 20 },
-  { label: '50', value: 50 },
-];
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
 const error = ref('');
@@ -261,62 +242,45 @@ const targetKey = computed(() =>
     : `branch:${props.target.projectId}:${props.target.branch}`,
 );
 const collapseState = ref(initialDiffCollapseState(targetKey.value));
+const workspaceMode = computed<DiffMode>(() =>
+  props.showFileNavigation ? props.modelValue.mode : 'all',
+);
 const visibleDiffs = computed<FileDiff[]>(() => {
   if (!diff.value?.available) return [];
-  return props.modelValue.mode === 'all'
+  return workspaceMode.value === 'all'
     ? diff.value.allDiff
     : diff.value.fileDiff
       ? [diff.value.fileDiff]
       : [];
 });
-const currentPagePaths = computed(() => diff.value?.allDiff.map((item) => item.file.path) ?? []);
-const hasCollapsedCurrentPageFile = computed(() =>
-  currentPagePaths.value.some((path) =>
-    isDiffFileCollapsed(collapseState.value, props.modelValue.mode, path),
+const allFilePaths = computed(() => diff.value?.allDiff.map((item) => item.file.path) ?? []);
+const hasCollapsedFile = computed(() =>
+  allFilePaths.value.some((path) =>
+    isDiffFileCollapsed(collapseState.value, workspaceMode.value, path),
   ),
 );
-const allCurrentPageFilesCollapsed = computed(
+const allFilesCollapsed = computed(
   () =>
-    currentPagePaths.value.length > 0 &&
-    currentPagePaths.value.every((path) =>
-      isDiffFileCollapsed(collapseState.value, props.modelValue.mode, path),
+    allFilePaths.value.length > 0 &&
+    allFilePaths.value.every((path) =>
+      isDiffFileCollapsed(collapseState.value, workspaceMode.value, path),
     ),
 );
-const pageMax = computed(() => {
-  const info = diff.value?.pageInfo;
-  if (!info || info.total < 1) return 1;
-  return Math.max(1, Math.ceil(info.total / info.pageSize));
-});
-const showPagination = computed(() => pageMax.value > 1);
 const fileCountLabel = computed(() => {
-  const info = diff.value?.pageInfo;
-  if (!info) return '等待加载';
-  return `第 ${info.page} 页，共 ${info.total} 个文件`;
+  if (!diff.value) return '等待加载';
+  return `共 ${diff.value.files.length} 个文件`;
 });
 
 function updateState(patch: Partial<DiffWorkspaceState>) {
   const next = { ...props.modelValue, ...patch };
-  if (
-    next.mode === props.modelValue.mode &&
-    next.filePath === props.modelValue.filePath &&
-    next.page === props.modelValue.page &&
-    next.pageSize === props.modelValue.pageSize
-  ) {
+  if (next.mode === props.modelValue.mode && next.filePath === props.modelValue.filePath) {
     return;
   }
   emit('update:modelValue', next);
 }
 
 function setMode(value: DiffMode) {
-  updateState({ mode: value, page: 1 });
-}
-
-function setPage(value: number) {
-  updateState({ page: value });
-}
-
-function setPageSize(value: number) {
-  updateState({ page: 1, pageSize: value });
+  updateState({ mode: value });
 }
 
 function selectFile(path: string) {
@@ -324,7 +288,8 @@ function selectFile(path: string) {
 }
 
 function requestSignature(state = props.modelValue) {
-  return [targetKey.value, state.mode, state.filePath, state.page, state.pageSize].join('|');
+  const mode = props.showFileNavigation ? state.mode : 'all';
+  return [targetKey.value, mode, state.filePath].join('|');
 }
 
 async function loadDiff() {
@@ -333,12 +298,10 @@ async function loadDiff() {
   error.value = '';
   try {
     const input = {
-      mode: props.modelValue.mode,
-      page: props.modelValue.page,
-      pageSize: props.modelValue.pageSize,
+      mode: workspaceMode.value,
       contextBefore: diffContext.value.before,
       contextAfter: diffContext.value.after,
-      ...(props.modelValue.mode === 'single' && props.modelValue.filePath
+      ...(workspaceMode.value === 'single' && props.modelValue.filePath
         ? { filePath: props.modelValue.filePath }
         : {}),
     };
@@ -347,10 +310,9 @@ async function loadDiff() {
     diff.value = nextDiff;
     const normalizedState: DiffWorkspaceState = {
       ...props.modelValue,
-      page: nextDiff.pageInfo.page,
-      pageSize: nextDiff.pageInfo.pageSize,
+      mode: workspaceMode.value,
       filePath:
-        props.modelValue.mode === 'single'
+        workspaceMode.value === 'single'
           ? nextDiff.filePath || nextDiff.fileDiff?.file.path || nextDiff.files[0]?.path || ''
           : props.modelValue.filePath,
     };
@@ -371,8 +333,6 @@ async function loadDiff() {
 function requestDiff(input: {
   mode: DiffMode;
   filePath?: string;
-  page: number;
-  pageSize: number;
   contextBefore: number;
   contextAfter: number;
 }) {
@@ -396,26 +356,22 @@ function expandDiff(_filePath: string, direction: 'before' | 'after') {
 }
 
 function toggleFileCollapsed(filePath: string) {
-  collapseState.value = toggleDiffFileCollapsed(
+  collapseState.value = toggleDiffFileCollapsed(collapseState.value, workspaceMode.value, filePath);
+}
+
+function expandAllFiles() {
+  collapseState.value = expandDiffFiles(
     collapseState.value,
-    props.modelValue.mode,
-    filePath,
+    workspaceMode.value,
+    allFilePaths.value,
   );
 }
 
-function expandCurrentPage() {
-  collapseState.value = expandCurrentDiffPage(
+function collapseAllFiles() {
+  collapseState.value = collapseDiffFiles(
     collapseState.value,
-    props.modelValue.mode,
-    currentPagePaths.value,
-  );
-}
-
-function collapseCurrentPage() {
-  collapseState.value = collapseCurrentDiffPage(
-    collapseState.value,
-    props.modelValue.mode,
-    currentPagePaths.value,
+    workspaceMode.value,
+    allFilePaths.value,
   );
 }
 
@@ -531,10 +487,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.diff-workspace__page-size {
-  width: 132px;
-}
-
 .diff-workspace__error {
   flex: 0 0 auto;
 }
@@ -542,19 +494,22 @@ onUnmounted(() => {
 .diff-workspace__layout {
   display: grid;
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
   grid-template-columns: 320px minmax(0, 1fr);
-  align-items: start;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: 16px;
 }
 
-.diff-workspace__files-header,
-.files-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.diff-workspace__layout--content-only {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .diff-workspace__files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 12px 16px;
 }
@@ -585,6 +540,13 @@ onUnmounted(() => {
   border-radius: var(--ac-radius);
 }
 
+.diff-content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .session-prefix-link {
   min-height: 24px;
   padding: 0 6px;
@@ -592,17 +554,7 @@ onUnmounted(() => {
 }
 
 @media (min-width: 1024px) {
-  .diff-workspace__layout {
-    flex: 1 1 auto;
-    grid-template-rows: minmax(0, 1fr);
-    align-items: stretch;
-    min-height: 0;
-    overflow-y: auto;
-  }
-
   .diff-files {
-    position: sticky;
-    top: 0;
     height: 100%;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -612,22 +564,21 @@ onUnmounted(() => {
 @container (max-width: 1023px) {
   .diff-workspace__layout {
     grid-template-columns: 1fr;
-    grid-template-rows: none;
-    align-items: start;
-    overflow-y: visible;
+    grid-template-rows: minmax(120px, 35%) minmax(0, 1fr);
+  }
+
+  .diff-workspace__layout--content-only {
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .diff-files {
-    position: static;
-    height: auto;
-    max-height: none;
-    overflow-y: visible;
-    overscroll-behavior: auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 
 @container (max-width: 599px) {
-  .diff-workspace__page-size,
   .diff-workspace__toolbar :deep(.q-btn-toggle) {
     width: 100%;
   }

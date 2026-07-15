@@ -131,18 +131,22 @@ function lineClass(kind: DiffLineKind) {
 }
 
 .diff-file-card {
-  overflow: hidden;
+  overflow: visible;
   background: var(--ac-surface);
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
 }
 
 .diff-file-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
+  background: var(--ac-surface);
 }
 
 .file-title {
@@ -171,6 +175,7 @@ function lineClass(kind: DiffLineKind) {
 .diff-code {
   overflow-x: auto;
   padding: 0;
+  border-radius: 0 0 var(--ac-radius) var(--ac-radius);
   background: #0f172a;
 }
 

@@ -35,7 +35,7 @@ export function toggleDiffFileCollapsed(state, mode, filePath) {
   return { ...state, collapsedPaths: [...state.collapsedPaths, filePath] };
 }
 
-export function collapseCurrentDiffPage(state, mode, filePaths) {
+export function collapseDiffFiles(state, mode, filePaths) {
   if (mode !== 'all') return state;
   return {
     ...state,
@@ -43,11 +43,11 @@ export function collapseCurrentDiffPage(state, mode, filePaths) {
   };
 }
 
-export function expandCurrentDiffPage(state, mode, filePaths) {
+export function expandDiffFiles(state, mode, filePaths) {
   if (mode !== 'all') return state;
-  const currentPagePaths = new Set(filePaths);
+  const expandedPaths = new Set(filePaths);
   return {
     ...state,
-    collapsedPaths: state.collapsedPaths.filter((path) => !currentPagePaths.has(path)),
+    collapsedPaths: state.collapsedPaths.filter((path) => !expandedPaths.has(path)),
   };
 }

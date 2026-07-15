@@ -256,12 +256,12 @@ test('all current diff surfaces reuse one workspace without triggering card navi
     /diffDialogDiffs|diffDialogLoading|diffDialogRequestGeneration/,
   );
   assert.match(workspaceSource, /class="diff-workspace"/);
-  assert.match(workspaceSource, /<AppPagination/);
+  assert.doesNotMatch(workspaceSource, /<AppPagination|showPagination|modelValue\.page/);
   assert.match(workspaceSource, /<DiffViewer/);
   assert.match(workspaceSource, /getSessionAllDiff/);
   assert.match(workspaceSource, /getBranchAllDiff/);
-  assert.match(workspaceSource, /aria-label="展开当前页全部文件"/);
-  assert.match(workspaceSource, /aria-label="折叠当前页全部文件"/);
+  assert.match(workspaceSource, /aria-label="展开全部文件"/);
+  assert.match(workspaceSource, /aria-label="折叠全部文件"/);
   assert.match(workspaceSource, /GLUE: branch Diff paths encode their source session/);
   assert.doesNotMatch(workspaceSource, /sessionPrefixTargetKey/);
   assert.match(diffPageSource, /<DiffWorkspace/);
@@ -271,6 +271,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.doesNotMatch(stylesSource, /\.diff-layout/);
   assert.match(answerDialogSource, /<DiffWorkspace/);
   assert.match(detailSource, /<DiffWorkspace[\s\S]*:target="detailDiffTarget"/);
+  assert.match(detailSource, /:show-file-navigation="false"/);
   assert.doesNotMatch(detailSource, /<DiffViewer|getSessionDiffFiles|getSessionFileDiff/);
   assert.match(fileChangeSource, /<DiffViewer[^>]*:file-diffs="diffFileChanges"/);
   assert.doesNotMatch(fileChangeSource, /<DiffWorkspace|getSessionAllDiff|getSessionSingleDiff/);
@@ -278,5 +279,6 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.equal(overviewSource.includes('SessionDiffPreview'), false);
   assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
   assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);
+  assert.match(stylesSource, /\.overview-diff-dialog\s*{[^}]*height:\s*90dvh/s);
   assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*hidden/s);
 });

@@ -443,7 +443,7 @@ func mapSessionDiff(dto diffapp.SessionDiffDTO) *model.SessionDiff {
 	return &model.SessionDiff{
 		Mode:      dto.Mode,
 		FilePath:  dto.FilePath,
-		Files:     mapDiffFilePage(dto.Files),
+		Files:     mapDiffFiles(dto.Files),
 		FileDiff:  mapFileDiffPtr(dto.FileDiff),
 		AllDiff:   allDiff,
 		Available: dto.Available,
@@ -484,12 +484,12 @@ func mapCommitRecordPage(page port.Page[gitdiff.CommitRecord]) *model.CommitReco
 	return &model.CommitRecordPage{Items: items, PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor)}
 }
 
-func mapDiffFilePage(page port.Page[gitdiff.DiffFile]) *model.DiffFilePage {
-	items := make([]*model.DiffFile, 0, len(page.Items))
-	for _, item := range page.Items {
+func mapDiffFiles(files []gitdiff.DiffFile) []*model.DiffFile {
+	items := make([]*model.DiffFile, 0, len(files))
+	for _, item := range files {
 		items = append(items, mapDiffFile(item))
 	}
-	return &model.DiffFilePage{Items: items, PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor)}
+	return items
 }
 
 func mapFileDiffPtr(diff *gitdiff.FileDiff) *model.FileDiff {
