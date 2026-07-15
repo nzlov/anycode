@@ -96,8 +96,30 @@ test('desktop create panel presents the prompt before a compact context row', ()
   );
   assert.match(
     stylesSource,
-    /@media \(min-width:\s*700px\)[\s\S]*?\.new-session-dialog--panel \.new-session-context \.q-field__control[^}]*min-height:\s*38px/s,
+    /@media \(min-width:\s*700px\)[\s\S]*?\.new-session-dialog--panel \.new-session-context \.q-field__control[^}]*min-height:\s*44px/s,
   );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-context > \.q-field\s*{[^}]*width:\s*max-content[^}]*min-width:\s*44px[^}]*max-width:\s*24ch[^}]*flex:\s*0\s+1\s+auto/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-context \.branch-picker\s*{[^}]*width:\s*max-content[^}]*max-width:\s*calc\(24ch \+ 50px\)[^}]*flex:\s*0\s+1\s+auto/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-context \.branch-picker__select\s*{[^}]*width:\s*max-content[^}]*min-width:\s*44px[^}]*max-width:\s*24ch/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-context \.new-session-priority\s*{[^}]*width:\s*max-content[^}]*min-width:\s*44px[^}]*max-width:\s*12ch/s,
+  );
+  assert.doesNotMatch(
+    stylesSource,
+    /\.new-session-dialog--panel \.new-session-context > \.q-field\s*{[^}]*flex:\s*0\s+1\s+240px/s,
+  );
+  assert.match(newSessionSource, /<q-tooltip>项目：\{\{ selectedProject\?\.name \}\}<\/q-tooltip>/);
+  assert.match(newSessionSource, /<q-tooltip>基础分支：\{\{ branch \}\}<\/q-tooltip>/);
 });
 
 test('wide desktop create panel is centered at half the viewport width', () => {
