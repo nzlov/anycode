@@ -110,6 +110,7 @@
           </template>
         </q-banner>
 
+        <!-- GLUE: Half-width panels use the existing menu until the viewport is wide enough for inline controls. -->
         <CodexPromptComposer
           v-model:prompt="prompt"
           v-model:files="files"
@@ -120,6 +121,7 @@
           :title="panel ? '' : '提示词'"
           :compact="panel"
           :show-badge="!panel"
+          :force-config-menu="panel && $q.screen.width < overviewInlineConfigMinWidth"
           :disabled="creating || runConfigLoading || Boolean(runConfigError)"
           @submit="createSession(preferredAvailableMode)"
         >
@@ -195,6 +197,7 @@ const { projects, projectOptions, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
 const lastLaunchModeStorageKey = 'anycode.lastNewSessionLaunchMode';
+const overviewInlineConfigMinWidth = 1536;
 const projectId = ref(projects.value[0]?.id ?? '');
 const branch = ref('');
 const preferredMode = ref<'workflow' | 'chat'>(storedLaunchMode());

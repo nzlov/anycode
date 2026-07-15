@@ -6,6 +6,7 @@
     @dragover.prevent="onDragOver"
     @dragleave.prevent="onDragLeave"
     @drop.prevent="onDrop"
+    @paste="onPaste"
   >
     <div v-if="title || showBadge" class="prompt-shell__header">
       <div class="text-subtitle2 text-weight-bold">{{ title }}</div>
@@ -48,7 +49,6 @@
       class="prompt-input"
       :placeholder="placeholder"
       :disable="disabled"
-      @paste="onPaste"
       @keydown.shift.enter.prevent="emit('submit')"
     />
 
@@ -70,7 +70,7 @@
         <q-tooltip>添加附件</q-tooltip>
       </q-file>
       <PromptConfigControls
-        v-if="!compact || !$q.screen.lt.md"
+        v-if="!forceConfigMenu && (!compact || !$q.screen.lt.md)"
         :model="model"
         :effort="effort"
         :permission="permission"
@@ -171,6 +171,7 @@ const props = withDefaults(
     disabled?: boolean;
     compact?: boolean;
     showBadge?: boolean;
+    forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
     modelOptions?: CodexModelOption[];
   }>(),
@@ -180,6 +181,7 @@ const props = withDefaults(
     disabled: false,
     compact: false,
     showBadge: true,
+    forceConfigMenu: false,
     readonlyConfig: false,
     modelOptions: () => [],
   },
