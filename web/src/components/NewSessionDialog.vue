@@ -121,40 +121,44 @@
           :title="panel ? '' : '提示词'"
           :compact="panel"
           :show-badge="!panel"
-          :force-config-menu="panel && $q.screen.width < overviewInlineConfigMinWidth"
+          :force-config-menu="
+            $q.screen.lt.md || (panel && $q.screen.width < overviewInlineConfigMinWidth)
+          "
           :disabled="creating || runConfigLoading || Boolean(runConfigError)"
           @submit="createSession(preferredAvailableMode)"
         >
           <template #actions>
-            <q-btn
-              v-if="canUseWorkflowMode"
-              unelevated
-              class="app-command-btn new-session-launch-btn"
-              :class="{
-                'new-session-launch-btn--preferred': preferredAvailableMode === 'workflow',
-              }"
-              :color="preferredAvailableMode === 'workflow' ? 'positive' : undefined"
-              :text-color="preferredAvailableMode === 'workflow' ? 'dark' : undefined"
-              icon="account_tree"
-              label="流程模式"
-              no-caps
-              :disable="creating || !branchSelectionReady"
-              :loading="launchingMode === 'workflow'"
-              @click="createSession('workflow')"
-            />
-            <q-btn
-              unelevated
-              class="app-command-btn new-session-launch-btn"
-              :class="{ 'new-session-launch-btn--preferred': preferredAvailableMode === 'chat' }"
-              :color="preferredAvailableMode === 'chat' ? 'positive' : undefined"
-              :text-color="preferredAvailableMode === 'chat' ? 'dark' : undefined"
-              icon="forum"
-              label="会话模式"
-              no-caps
-              :disable="creating || !branchSelectionReady"
-              :loading="launchingMode === 'chat'"
-              @click="createSession('chat')"
-            />
+            <div class="new-session-launch-group" role="group" aria-label="启动模式">
+              <q-btn
+                v-if="canUseWorkflowMode"
+                unelevated
+                class="app-command-btn new-session-launch-btn"
+                :class="{
+                  'new-session-launch-btn--preferred': preferredAvailableMode === 'workflow',
+                }"
+                :color="preferredAvailableMode === 'workflow' ? 'positive' : undefined"
+                :text-color="preferredAvailableMode === 'workflow' ? 'dark' : undefined"
+                icon="account_tree"
+                label="流程模式"
+                no-caps
+                :disable="creating || !branchSelectionReady"
+                :loading="launchingMode === 'workflow'"
+                @click="createSession('workflow')"
+              />
+              <q-btn
+                unelevated
+                class="app-command-btn new-session-launch-btn"
+                :class="{ 'new-session-launch-btn--preferred': preferredAvailableMode === 'chat' }"
+                :color="preferredAvailableMode === 'chat' ? 'positive' : undefined"
+                :text-color="preferredAvailableMode === 'chat' ? 'dark' : undefined"
+                icon="forum"
+                label="会话模式"
+                no-caps
+                :disable="creating || !branchSelectionReady"
+                :loading="launchingMode === 'chat'"
+                @click="createSession('chat')"
+              />
+            </div>
           </template>
         </CodexPromptComposer>
       </q-card-section>
