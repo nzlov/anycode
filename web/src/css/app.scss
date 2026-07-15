@@ -1124,20 +1124,12 @@ a {
 }
 
 .branch-picker {
-  display: flex;
   width: 220px;
   min-width: 0;
-  align-items: center;
-  gap: 6px;
 }
 
 .new-session-priority {
   width: 160px;
-}
-
-.branch-picker__select {
-  min-width: 0;
-  flex: 1 1 auto;
 }
 
 .new-session-grid .q-field__control,
@@ -1640,15 +1632,8 @@ a {
 
   .new-session-dialog--panel .new-session-context .branch-picker {
     width: max-content;
-    min-width: 0;
-    max-width: calc(24ch + 50px);
-    flex: 0 1 auto;
-  }
-
-  .new-session-dialog--panel .new-session-context .branch-picker__select {
-    width: max-content;
     min-width: 44px;
-    max-width: 24ch;
+    max-width: calc(24ch + 50px);
     flex: 0 1 auto;
   }
 
