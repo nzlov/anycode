@@ -9,8 +9,14 @@ import {
 } from '../src/services/sessionTimelinePresentation.ts';
 
 test('statusLabel describes durable answer_user suspension events', () => {
-  assert.equal(statusLabel({ code: 'process.suspended_for_user', level: 'info' }), '已挂起等待回答');
-  assert.equal(statusLabel({ code: 'session.answer_resume_queued', level: 'info' }), '答案已提交，等待恢复');
+  assert.equal(
+    statusLabel({ code: 'process.suspended_for_user', level: 'info' }),
+    '已挂起等待回答',
+  );
+  assert.equal(
+    statusLabel({ code: 'session.answer_resume_queued', level: 'info' }),
+    '答案已提交，等待恢复',
+  );
   assert.equal(statusLabel({ code: 'question.cancelled', level: 'info' }), '待回答问题已取消');
 });
 
@@ -109,7 +115,22 @@ test('sessionTextPresentation separates AnyCode guidance from user text', () => 
     'AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。';
   const worktreeGuidance =
     '当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。';
+  const artifactGuidance =
+    '本卡片生成的图片、截图、PDF、音视频、压缩包和其他产物统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。';
   const guidance = `${answerUserGuidance}\n\n${worktreeGuidance}`;
+
+  assert.deepEqual(
+    sessionTextPresentation(
+      'user',
+      `继续处理\n\n${artifactGuidance}\n\n${answerUserGuidance}\n\n${worktreeGuidance}`,
+      ['继续处理'],
+    ),
+    {
+      text: '继续处理',
+      foldedLabel: 'AnyCode 附加说明',
+      foldedText: `${artifactGuidance}\n\n${answerUserGuidance}\n\n${worktreeGuidance}`,
+    },
+  );
 
   assert.deepEqual(
     sessionTextPresentation('user', `合并到基础分支并推送\n\n${guidance}`, [
@@ -183,11 +204,11 @@ test('sessionTextPresentation separates AnyCode guidance from user text', () => 
     '追加描述：\n开始吧',
   ].join('\n\n');
   assert.deepEqual(
-    sessionTextPresentation(
-      'user',
-      `${rebuilt}\n\n${guidance}`,
-      ['分析会话内容', '只前端处理隐藏或折叠可以吗？', '开始吧'],
-    ),
+    sessionTextPresentation('user', `${rebuilt}\n\n${guidance}`, [
+      '分析会话内容',
+      '只前端处理隐藏或折叠可以吗？',
+      '开始吧',
+    ]),
     {
       text: rebuilt,
       foldedLabel: 'AnyCode 附加说明',
@@ -196,11 +217,12 @@ test('sessionTextPresentation separates AnyCode guidance from user text', () => 
   );
 
   assert.deepEqual(
-    sessionTextPresentation(
-      'user',
-      `${rebuilt}\n\n${guidance}`,
-      ['分析会话内容', '只前端处理隐藏或折叠可以吗？', '开始吧', '后来新增的描述'],
-    ),
+    sessionTextPresentation('user', `${rebuilt}\n\n${guidance}`, [
+      '分析会话内容',
+      '只前端处理隐藏或折叠可以吗？',
+      '开始吧',
+      '后来新增的描述',
+    ]),
     {
       text: rebuilt,
       foldedLabel: 'AnyCode 附加说明',
@@ -210,11 +232,11 @@ test('sessionTextPresentation separates AnyCode guidance from user text', () => 
 
   const rebuiltWorkflow = `${rebuilt}\n\n当前流程节点提示词：\n复查当前实现`;
   assert.deepEqual(
-    sessionTextPresentation(
-      'user',
-      `${rebuiltWorkflow}\n\n${guidance}`,
-      ['分析会话内容', '只前端处理隐藏或折叠可以吗？', '开始吧'],
-    ),
+    sessionTextPresentation('user', `${rebuiltWorkflow}\n\n${guidance}`, [
+      '分析会话内容',
+      '只前端处理隐藏或折叠可以吗？',
+      '开始吧',
+    ]),
     {
       text: rebuiltWorkflow,
       foldedLabel: 'AnyCode 附加说明',

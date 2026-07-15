@@ -543,6 +543,91 @@ func TestBuildArgsOmitServiceTierWhenFastModeIsDisabled(t *testing.T) {
 	}
 }
 
+func TestArtifactDirectoryIsWritableAndInjectedAcrossStartAndResume(t *testing.T) {
+	client := New("codex")
+	artifactDir := "/data/attachments/outputs/session-1"
+	startArgs := strings.Join(client.buildStartArgs(process.CodexStartInput{
+		Workdir: "/workspace", ArtifactDir: artifactDir,
+	}), " ")
+	if !strings.Contains(startArgs, "--add-dir "+artifactDir) {
+		t.Fatalf("start args = %q", startArgs)
+	}
+	resumeArgs := strings.Join(client.buildResumeArgs(process.CodexResumeInput{
+		CodexSessionID: "codex-session-1", ArtifactDir: artifactDir, PermissionMode: "workspace-write",
+	}), " ")
+	if !strings.Contains(resumeArgs, `sandbox_workspace_write.writable_roots=["`+artifactDir+`"]`) {
+		t.Fatalf("resume args = %q", resumeArgs)
+	}
+
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, "artifact-env")
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s' "$ANYCODE_ARTIFACT_DIR" > "$ARTIFACT_ENV_FILE"
+`)
+	t.Setenv("ARTIFACT_ENV_FILE", envFile)
+	if _, err := New(bin).Start(context.Background(), process.CodexStartInput{
+		ProcessRunID: "process-1", ArtifactDir: artifactDir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(t, envFile)
+	if got := readFile(t, envFile); got != artifactDir {
+		t.Fatalf("ANYCODE_ARTIFACT_DIR = %q", got)
+	}
+}
+
+func TestCodexImagesRecognizesInlineOutputImage(t *testing.T) {
+	images := codexImages(map[string]any{
+		"output": []any{map[string]any{
+			"type": "output_image", "image_url": "data:image/png;base64,cG5n", "detail": "high",
+		}},
+	})
+	if len(images) != 1 || images[0].SourceKind != "inline" || images[0].Source != "data:image/png;base64,cG5n" || images[0].Detail != "high" {
+		t.Fatalf("images = %#v", images)
+	}
+}
+
+func TestCodexImagesRecognizesInlineAudioAndEmbeddedResourceBlobs(t *testing.T) {
+	artifacts := codexImages(map[string]any{
+		"output": []any{
+			map[string]any{"type": "audio", "data": "YXVkaW8=", "mimeType": "audio/mpeg"},
+			map[string]any{"type": "resource", "resource": map[string]any{"blob": "cGRm", "mimeType": "application/pdf", "uri": "memory://report"}},
+			map[string]any{"type": "resource", "resource": map[string]any{"uri": "https://example.invalid/report.pdf", "mimeType": "application/pdf"}},
+		},
+	})
+	if len(artifacts) != 3 || artifacts[0].SourceKind != "inline_base64" || artifacts[0].MimeType != "audio/mpeg" {
+		t.Fatalf("audio artifacts = %#v", artifacts)
+	}
+	if artifacts[1].SourceKind != "inline_base64" || artifacts[1].MimeType != "application/pdf" {
+		t.Fatalf("resource artifact = %#v", artifacts[1])
+	}
+	if artifacts[2].SourceKind != "remote" {
+		t.Fatalf("resource link = %#v", artifacts[2])
+	}
+}
+
+func TestBuildArgsInjectsIsolatedPlaywrightOutputPerProcessRun(t *testing.T) {
+	client := New("codex", WithPlaywrightMCP("playwright-mcp", "/usr/bin/chromium"))
+	args := strings.Join(client.buildStartArgs(process.CodexStartInput{
+		ProcessRunID: "process-1", ArtifactDir: "/data/attachments/outputs/session-1",
+	}), " ")
+	for _, expected := range []string{
+		`mcp_servers.playwright.command="playwright-mcp"`,
+		`mcp_servers.playwright.args=["--headless","--isolated","--image-responses","allow","--output-dir","/data/attachments/outputs/session-1/browser/process-1","--executable-path","/usr/bin/chromium"]`,
+		`mcp_servers.playwright.tool_timeout_sec=86400`,
+	} {
+		if !strings.Contains(args, expected) {
+			t.Fatalf("playwright args %q missing %q", args, expected)
+		}
+	}
+	resumeArgs := strings.Join(client.buildResumeArgs(process.CodexResumeInput{
+		ProcessRunID: "process-2", ArtifactDir: "/data/attachments/outputs/session-1", CodexSessionID: "codex-1",
+	}), " ")
+	if !strings.Contains(resumeArgs, "/browser/process-2") {
+		t.Fatalf("resume playwright args = %q", resumeArgs)
+	}
+}
+
 func TestResumeStreamsOnlyNewSessionLogEvents(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1757,6 +1842,18 @@ func TestParseSessionLogLineBuildsTypedTimelineEvents(t *testing.T) {
 			assertValue: func(t *testing.T, content process.CodexEventContent) {
 				if _, ok := content.(process.CodexToolContent); !ok {
 					t.Fatalf("mcp content = %#v", content)
+				}
+			},
+		},
+		{
+			name:      "mcp tool inline audio",
+			raw:       `{"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"mcp_tool_call_end","call_id":"call-audio","invocation":{"server":"media","tool":"render"},"result":{"Ok":{"isError":false,"content":[{"type":"audio","data":"YXVkaW8=","mimeType":"audio/mpeg"}]}}}}`,
+			wantPhase: process.CodexPhaseCompleted,
+			wantID:    "call-audio",
+			assertValue: func(t *testing.T, content process.CodexEventContent) {
+				tool, ok := content.(process.CodexToolContent)
+				if !ok || len(tool.Images) != 1 || tool.Images[0].SourceKind != "inline_base64" || tool.Images[0].MimeType != "audio/mpeg" {
+					t.Fatalf("mcp audio content = %#v", content)
 				}
 			},
 		},

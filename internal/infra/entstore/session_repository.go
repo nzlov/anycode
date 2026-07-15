@@ -216,6 +216,9 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 func (r *SessionRepository) Find(ctx context.Context, id domainsession.ID) (domainsession.Session, error) {
 	row, err := r.client.Session.Get(ctx, string(id))
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return domainsession.Session{}, fmt.Errorf("%w: %s", domainsession.ErrSessionNotFound, id)
+		}
 		return domainsession.Session{}, fmt.Errorf("find session: %w", err)
 	}
 	return toDomainSession(row), nil

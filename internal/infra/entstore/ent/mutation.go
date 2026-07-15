@@ -9085,24 +9085,35 @@ func (m *SessionMutation) ResetEdge(name string) error {
 // SessionAttachmentMutation represents an operation that mutates the SessionAttachment nodes in the graph.
 type SessionAttachmentMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *string
-	session_id    *string
-	source_type   *string
-	source_id     *string
-	kind          *string
-	filename      *string
-	_path         *string
-	mime_type     *string
-	size          *int64
-	addsize       *int64
-	previewable   *bool
-	created_at    *time.Time
-	clearedFields map[string]struct{}
-	done          bool
-	oldValue      func(context.Context) (*SessionAttachment, error)
-	predicates    []predicate.SessionAttachment
+	op                 Op
+	typ                string
+	id                 *string
+	session_id         *string
+	role               *string
+	source_type        *string
+	source_id          *string
+	source_key         *string
+	kind               *string
+	artifact_kind      *string
+	logical_path       *string
+	source_modified_at *time.Time
+	filename           *string
+	_path              *string
+	mime_type          *string
+	size               *int64
+	addsize            *int64
+	sha256             *string
+	previewable        *bool
+	preview_kind       *string
+	process_run_id     *string
+	node_run_id        *string
+	correlation_id     *string
+	created_at         *time.Time
+	deleted_at         *time.Time
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*SessionAttachment, error)
+	predicates         []predicate.SessionAttachment
 }
 
 var _ ent.Mutation = (*SessionAttachmentMutation)(nil)
@@ -9245,6 +9256,42 @@ func (m *SessionAttachmentMutation) ResetSessionID() {
 	m.session_id = nil
 }
 
+// SetRole sets the "role" field.
+func (m *SessionAttachmentMutation) SetRole(s string) {
+	m.role = &s
+}
+
+// Role returns the value of the "role" field in the mutation.
+func (m *SessionAttachmentMutation) Role() (r string, exists bool) {
+	v := m.role
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRole returns the old "role" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldRole(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRole is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRole requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRole: %w", err)
+	}
+	return oldValue.Role, nil
+}
+
+// ResetRole resets all changes to the "role" field.
+func (m *SessionAttachmentMutation) ResetRole() {
+	m.role = nil
+}
+
 // SetSourceType sets the "source_type" field.
 func (m *SessionAttachmentMutation) SetSourceType(s string) {
 	m.source_type = &s
@@ -9317,6 +9364,42 @@ func (m *SessionAttachmentMutation) ResetSourceID() {
 	m.source_id = nil
 }
 
+// SetSourceKey sets the "source_key" field.
+func (m *SessionAttachmentMutation) SetSourceKey(s string) {
+	m.source_key = &s
+}
+
+// SourceKey returns the value of the "source_key" field in the mutation.
+func (m *SessionAttachmentMutation) SourceKey() (r string, exists bool) {
+	v := m.source_key
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceKey returns the old "source_key" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldSourceKey(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceKey is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceKey requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceKey: %w", err)
+	}
+	return oldValue.SourceKey, nil
+}
+
+// ResetSourceKey resets all changes to the "source_key" field.
+func (m *SessionAttachmentMutation) ResetSourceKey() {
+	m.source_key = nil
+}
+
 // SetKind sets the "kind" field.
 func (m *SessionAttachmentMutation) SetKind(s string) {
 	m.kind = &s
@@ -9351,6 +9434,127 @@ func (m *SessionAttachmentMutation) OldKind(ctx context.Context) (v string, err 
 // ResetKind resets all changes to the "kind" field.
 func (m *SessionAttachmentMutation) ResetKind() {
 	m.kind = nil
+}
+
+// SetArtifactKind sets the "artifact_kind" field.
+func (m *SessionAttachmentMutation) SetArtifactKind(s string) {
+	m.artifact_kind = &s
+}
+
+// ArtifactKind returns the value of the "artifact_kind" field in the mutation.
+func (m *SessionAttachmentMutation) ArtifactKind() (r string, exists bool) {
+	v := m.artifact_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArtifactKind returns the old "artifact_kind" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldArtifactKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArtifactKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArtifactKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArtifactKind: %w", err)
+	}
+	return oldValue.ArtifactKind, nil
+}
+
+// ResetArtifactKind resets all changes to the "artifact_kind" field.
+func (m *SessionAttachmentMutation) ResetArtifactKind() {
+	m.artifact_kind = nil
+}
+
+// SetLogicalPath sets the "logical_path" field.
+func (m *SessionAttachmentMutation) SetLogicalPath(s string) {
+	m.logical_path = &s
+}
+
+// LogicalPath returns the value of the "logical_path" field in the mutation.
+func (m *SessionAttachmentMutation) LogicalPath() (r string, exists bool) {
+	v := m.logical_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLogicalPath returns the old "logical_path" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldLogicalPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLogicalPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLogicalPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLogicalPath: %w", err)
+	}
+	return oldValue.LogicalPath, nil
+}
+
+// ResetLogicalPath resets all changes to the "logical_path" field.
+func (m *SessionAttachmentMutation) ResetLogicalPath() {
+	m.logical_path = nil
+}
+
+// SetSourceModifiedAt sets the "source_modified_at" field.
+func (m *SessionAttachmentMutation) SetSourceModifiedAt(t time.Time) {
+	m.source_modified_at = &t
+}
+
+// SourceModifiedAt returns the value of the "source_modified_at" field in the mutation.
+func (m *SessionAttachmentMutation) SourceModifiedAt() (r time.Time, exists bool) {
+	v := m.source_modified_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceModifiedAt returns the old "source_modified_at" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldSourceModifiedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceModifiedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceModifiedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceModifiedAt: %w", err)
+	}
+	return oldValue.SourceModifiedAt, nil
+}
+
+// ClearSourceModifiedAt clears the value of the "source_modified_at" field.
+func (m *SessionAttachmentMutation) ClearSourceModifiedAt() {
+	m.source_modified_at = nil
+	m.clearedFields[sessionattachment.FieldSourceModifiedAt] = struct{}{}
+}
+
+// SourceModifiedAtCleared returns if the "source_modified_at" field was cleared in this mutation.
+func (m *SessionAttachmentMutation) SourceModifiedAtCleared() bool {
+	_, ok := m.clearedFields[sessionattachment.FieldSourceModifiedAt]
+	return ok
+}
+
+// ResetSourceModifiedAt resets all changes to the "source_modified_at" field.
+func (m *SessionAttachmentMutation) ResetSourceModifiedAt() {
+	m.source_modified_at = nil
+	delete(m.clearedFields, sessionattachment.FieldSourceModifiedAt)
 }
 
 // SetFilename sets the "filename" field.
@@ -9517,6 +9721,42 @@ func (m *SessionAttachmentMutation) ResetSize() {
 	m.addsize = nil
 }
 
+// SetSha256 sets the "sha256" field.
+func (m *SessionAttachmentMutation) SetSha256(s string) {
+	m.sha256 = &s
+}
+
+// Sha256 returns the value of the "sha256" field in the mutation.
+func (m *SessionAttachmentMutation) Sha256() (r string, exists bool) {
+	v := m.sha256
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSha256 returns the old "sha256" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldSha256(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSha256 is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSha256 requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSha256: %w", err)
+	}
+	return oldValue.Sha256, nil
+}
+
+// ResetSha256 resets all changes to the "sha256" field.
+func (m *SessionAttachmentMutation) ResetSha256() {
+	m.sha256 = nil
+}
+
 // SetPreviewable sets the "previewable" field.
 func (m *SessionAttachmentMutation) SetPreviewable(b bool) {
 	m.previewable = &b
@@ -9551,6 +9791,150 @@ func (m *SessionAttachmentMutation) OldPreviewable(ctx context.Context) (v bool,
 // ResetPreviewable resets all changes to the "previewable" field.
 func (m *SessionAttachmentMutation) ResetPreviewable() {
 	m.previewable = nil
+}
+
+// SetPreviewKind sets the "preview_kind" field.
+func (m *SessionAttachmentMutation) SetPreviewKind(s string) {
+	m.preview_kind = &s
+}
+
+// PreviewKind returns the value of the "preview_kind" field in the mutation.
+func (m *SessionAttachmentMutation) PreviewKind() (r string, exists bool) {
+	v := m.preview_kind
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPreviewKind returns the old "preview_kind" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldPreviewKind(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPreviewKind is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPreviewKind requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPreviewKind: %w", err)
+	}
+	return oldValue.PreviewKind, nil
+}
+
+// ResetPreviewKind resets all changes to the "preview_kind" field.
+func (m *SessionAttachmentMutation) ResetPreviewKind() {
+	m.preview_kind = nil
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (m *SessionAttachmentMutation) SetProcessRunID(s string) {
+	m.process_run_id = &s
+}
+
+// ProcessRunID returns the value of the "process_run_id" field in the mutation.
+func (m *SessionAttachmentMutation) ProcessRunID() (r string, exists bool) {
+	v := m.process_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProcessRunID returns the old "process_run_id" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldProcessRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProcessRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProcessRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProcessRunID: %w", err)
+	}
+	return oldValue.ProcessRunID, nil
+}
+
+// ResetProcessRunID resets all changes to the "process_run_id" field.
+func (m *SessionAttachmentMutation) ResetProcessRunID() {
+	m.process_run_id = nil
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (m *SessionAttachmentMutation) SetNodeRunID(s string) {
+	m.node_run_id = &s
+}
+
+// NodeRunID returns the value of the "node_run_id" field in the mutation.
+func (m *SessionAttachmentMutation) NodeRunID() (r string, exists bool) {
+	v := m.node_run_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNodeRunID returns the old "node_run_id" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldNodeRunID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNodeRunID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNodeRunID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNodeRunID: %w", err)
+	}
+	return oldValue.NodeRunID, nil
+}
+
+// ResetNodeRunID resets all changes to the "node_run_id" field.
+func (m *SessionAttachmentMutation) ResetNodeRunID() {
+	m.node_run_id = nil
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (m *SessionAttachmentMutation) SetCorrelationID(s string) {
+	m.correlation_id = &s
+}
+
+// CorrelationID returns the value of the "correlation_id" field in the mutation.
+func (m *SessionAttachmentMutation) CorrelationID() (r string, exists bool) {
+	v := m.correlation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCorrelationID returns the old "correlation_id" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldCorrelationID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCorrelationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCorrelationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCorrelationID: %w", err)
+	}
+	return oldValue.CorrelationID, nil
+}
+
+// ResetCorrelationID resets all changes to the "correlation_id" field.
+func (m *SessionAttachmentMutation) ResetCorrelationID() {
+	m.correlation_id = nil
 }
 
 // SetCreatedAt sets the "created_at" field.
@@ -9589,6 +9973,55 @@ func (m *SessionAttachmentMutation) ResetCreatedAt() {
 	m.created_at = nil
 }
 
+// SetDeletedAt sets the "deleted_at" field.
+func (m *SessionAttachmentMutation) SetDeletedAt(t time.Time) {
+	m.deleted_at = &t
+}
+
+// DeletedAt returns the value of the "deleted_at" field in the mutation.
+func (m *SessionAttachmentMutation) DeletedAt() (r time.Time, exists bool) {
+	v := m.deleted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDeletedAt returns the old "deleted_at" field's value of the SessionAttachment entity.
+// If the SessionAttachment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionAttachmentMutation) OldDeletedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDeletedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDeletedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDeletedAt: %w", err)
+	}
+	return oldValue.DeletedAt, nil
+}
+
+// ClearDeletedAt clears the value of the "deleted_at" field.
+func (m *SessionAttachmentMutation) ClearDeletedAt() {
+	m.deleted_at = nil
+	m.clearedFields[sessionattachment.FieldDeletedAt] = struct{}{}
+}
+
+// DeletedAtCleared returns if the "deleted_at" field was cleared in this mutation.
+func (m *SessionAttachmentMutation) DeletedAtCleared() bool {
+	_, ok := m.clearedFields[sessionattachment.FieldDeletedAt]
+	return ok
+}
+
+// ResetDeletedAt resets all changes to the "deleted_at" field.
+func (m *SessionAttachmentMutation) ResetDeletedAt() {
+	m.deleted_at = nil
+	delete(m.clearedFields, sessionattachment.FieldDeletedAt)
+}
+
 // Where appends a list predicates to the SessionAttachmentMutation builder.
 func (m *SessionAttachmentMutation) Where(ps ...predicate.SessionAttachment) {
 	m.predicates = append(m.predicates, ps...)
@@ -9623,9 +10056,12 @@ func (m *SessionAttachmentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionAttachmentMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 21)
 	if m.session_id != nil {
 		fields = append(fields, sessionattachment.FieldSessionID)
+	}
+	if m.role != nil {
+		fields = append(fields, sessionattachment.FieldRole)
 	}
 	if m.source_type != nil {
 		fields = append(fields, sessionattachment.FieldSourceType)
@@ -9633,8 +10069,20 @@ func (m *SessionAttachmentMutation) Fields() []string {
 	if m.source_id != nil {
 		fields = append(fields, sessionattachment.FieldSourceID)
 	}
+	if m.source_key != nil {
+		fields = append(fields, sessionattachment.FieldSourceKey)
+	}
 	if m.kind != nil {
 		fields = append(fields, sessionattachment.FieldKind)
+	}
+	if m.artifact_kind != nil {
+		fields = append(fields, sessionattachment.FieldArtifactKind)
+	}
+	if m.logical_path != nil {
+		fields = append(fields, sessionattachment.FieldLogicalPath)
+	}
+	if m.source_modified_at != nil {
+		fields = append(fields, sessionattachment.FieldSourceModifiedAt)
 	}
 	if m.filename != nil {
 		fields = append(fields, sessionattachment.FieldFilename)
@@ -9648,11 +10096,29 @@ func (m *SessionAttachmentMutation) Fields() []string {
 	if m.size != nil {
 		fields = append(fields, sessionattachment.FieldSize)
 	}
+	if m.sha256 != nil {
+		fields = append(fields, sessionattachment.FieldSha256)
+	}
 	if m.previewable != nil {
 		fields = append(fields, sessionattachment.FieldPreviewable)
 	}
+	if m.preview_kind != nil {
+		fields = append(fields, sessionattachment.FieldPreviewKind)
+	}
+	if m.process_run_id != nil {
+		fields = append(fields, sessionattachment.FieldProcessRunID)
+	}
+	if m.node_run_id != nil {
+		fields = append(fields, sessionattachment.FieldNodeRunID)
+	}
+	if m.correlation_id != nil {
+		fields = append(fields, sessionattachment.FieldCorrelationID)
+	}
 	if m.created_at != nil {
 		fields = append(fields, sessionattachment.FieldCreatedAt)
+	}
+	if m.deleted_at != nil {
+		fields = append(fields, sessionattachment.FieldDeletedAt)
 	}
 	return fields
 }
@@ -9664,12 +10130,22 @@ func (m *SessionAttachmentMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case sessionattachment.FieldSessionID:
 		return m.SessionID()
+	case sessionattachment.FieldRole:
+		return m.Role()
 	case sessionattachment.FieldSourceType:
 		return m.SourceType()
 	case sessionattachment.FieldSourceID:
 		return m.SourceID()
+	case sessionattachment.FieldSourceKey:
+		return m.SourceKey()
 	case sessionattachment.FieldKind:
 		return m.Kind()
+	case sessionattachment.FieldArtifactKind:
+		return m.ArtifactKind()
+	case sessionattachment.FieldLogicalPath:
+		return m.LogicalPath()
+	case sessionattachment.FieldSourceModifiedAt:
+		return m.SourceModifiedAt()
 	case sessionattachment.FieldFilename:
 		return m.Filename()
 	case sessionattachment.FieldPath:
@@ -9678,10 +10154,22 @@ func (m *SessionAttachmentMutation) Field(name string) (ent.Value, bool) {
 		return m.MimeType()
 	case sessionattachment.FieldSize:
 		return m.Size()
+	case sessionattachment.FieldSha256:
+		return m.Sha256()
 	case sessionattachment.FieldPreviewable:
 		return m.Previewable()
+	case sessionattachment.FieldPreviewKind:
+		return m.PreviewKind()
+	case sessionattachment.FieldProcessRunID:
+		return m.ProcessRunID()
+	case sessionattachment.FieldNodeRunID:
+		return m.NodeRunID()
+	case sessionattachment.FieldCorrelationID:
+		return m.CorrelationID()
 	case sessionattachment.FieldCreatedAt:
 		return m.CreatedAt()
+	case sessionattachment.FieldDeletedAt:
+		return m.DeletedAt()
 	}
 	return nil, false
 }
@@ -9693,12 +10181,22 @@ func (m *SessionAttachmentMutation) OldField(ctx context.Context, name string) (
 	switch name {
 	case sessionattachment.FieldSessionID:
 		return m.OldSessionID(ctx)
+	case sessionattachment.FieldRole:
+		return m.OldRole(ctx)
 	case sessionattachment.FieldSourceType:
 		return m.OldSourceType(ctx)
 	case sessionattachment.FieldSourceID:
 		return m.OldSourceID(ctx)
+	case sessionattachment.FieldSourceKey:
+		return m.OldSourceKey(ctx)
 	case sessionattachment.FieldKind:
 		return m.OldKind(ctx)
+	case sessionattachment.FieldArtifactKind:
+		return m.OldArtifactKind(ctx)
+	case sessionattachment.FieldLogicalPath:
+		return m.OldLogicalPath(ctx)
+	case sessionattachment.FieldSourceModifiedAt:
+		return m.OldSourceModifiedAt(ctx)
 	case sessionattachment.FieldFilename:
 		return m.OldFilename(ctx)
 	case sessionattachment.FieldPath:
@@ -9707,10 +10205,22 @@ func (m *SessionAttachmentMutation) OldField(ctx context.Context, name string) (
 		return m.OldMimeType(ctx)
 	case sessionattachment.FieldSize:
 		return m.OldSize(ctx)
+	case sessionattachment.FieldSha256:
+		return m.OldSha256(ctx)
 	case sessionattachment.FieldPreviewable:
 		return m.OldPreviewable(ctx)
+	case sessionattachment.FieldPreviewKind:
+		return m.OldPreviewKind(ctx)
+	case sessionattachment.FieldProcessRunID:
+		return m.OldProcessRunID(ctx)
+	case sessionattachment.FieldNodeRunID:
+		return m.OldNodeRunID(ctx)
+	case sessionattachment.FieldCorrelationID:
+		return m.OldCorrelationID(ctx)
 	case sessionattachment.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
+	case sessionattachment.FieldDeletedAt:
+		return m.OldDeletedAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown SessionAttachment field %s", name)
 }
@@ -9727,6 +10237,13 @@ func (m *SessionAttachmentMutation) SetField(name string, value ent.Value) error
 		}
 		m.SetSessionID(v)
 		return nil
+	case sessionattachment.FieldRole:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRole(v)
+		return nil
 	case sessionattachment.FieldSourceType:
 		v, ok := value.(string)
 		if !ok {
@@ -9741,12 +10258,40 @@ func (m *SessionAttachmentMutation) SetField(name string, value ent.Value) error
 		}
 		m.SetSourceID(v)
 		return nil
+	case sessionattachment.FieldSourceKey:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceKey(v)
+		return nil
 	case sessionattachment.FieldKind:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetKind(v)
+		return nil
+	case sessionattachment.FieldArtifactKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArtifactKind(v)
+		return nil
+	case sessionattachment.FieldLogicalPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLogicalPath(v)
+		return nil
+	case sessionattachment.FieldSourceModifiedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceModifiedAt(v)
 		return nil
 	case sessionattachment.FieldFilename:
 		v, ok := value.(string)
@@ -9776,6 +10321,13 @@ func (m *SessionAttachmentMutation) SetField(name string, value ent.Value) error
 		}
 		m.SetSize(v)
 		return nil
+	case sessionattachment.FieldSha256:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSha256(v)
+		return nil
 	case sessionattachment.FieldPreviewable:
 		v, ok := value.(bool)
 		if !ok {
@@ -9783,12 +10335,47 @@ func (m *SessionAttachmentMutation) SetField(name string, value ent.Value) error
 		}
 		m.SetPreviewable(v)
 		return nil
+	case sessionattachment.FieldPreviewKind:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPreviewKind(v)
+		return nil
+	case sessionattachment.FieldProcessRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProcessRunID(v)
+		return nil
+	case sessionattachment.FieldNodeRunID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNodeRunID(v)
+		return nil
+	case sessionattachment.FieldCorrelationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCorrelationID(v)
+		return nil
 	case sessionattachment.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCreatedAt(v)
+		return nil
+	case sessionattachment.FieldDeletedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDeletedAt(v)
 		return nil
 	}
 	return fmt.Errorf("unknown SessionAttachment field %s", name)
@@ -9834,7 +10421,14 @@ func (m *SessionAttachmentMutation) AddField(name string, value ent.Value) error
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *SessionAttachmentMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(sessionattachment.FieldSourceModifiedAt) {
+		fields = append(fields, sessionattachment.FieldSourceModifiedAt)
+	}
+	if m.FieldCleared(sessionattachment.FieldDeletedAt) {
+		fields = append(fields, sessionattachment.FieldDeletedAt)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -9847,6 +10441,14 @@ func (m *SessionAttachmentMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *SessionAttachmentMutation) ClearField(name string) error {
+	switch name {
+	case sessionattachment.FieldSourceModifiedAt:
+		m.ClearSourceModifiedAt()
+		return nil
+	case sessionattachment.FieldDeletedAt:
+		m.ClearDeletedAt()
+		return nil
+	}
 	return fmt.Errorf("unknown SessionAttachment nullable field %s", name)
 }
 
@@ -9857,14 +10459,29 @@ func (m *SessionAttachmentMutation) ResetField(name string) error {
 	case sessionattachment.FieldSessionID:
 		m.ResetSessionID()
 		return nil
+	case sessionattachment.FieldRole:
+		m.ResetRole()
+		return nil
 	case sessionattachment.FieldSourceType:
 		m.ResetSourceType()
 		return nil
 	case sessionattachment.FieldSourceID:
 		m.ResetSourceID()
 		return nil
+	case sessionattachment.FieldSourceKey:
+		m.ResetSourceKey()
+		return nil
 	case sessionattachment.FieldKind:
 		m.ResetKind()
+		return nil
+	case sessionattachment.FieldArtifactKind:
+		m.ResetArtifactKind()
+		return nil
+	case sessionattachment.FieldLogicalPath:
+		m.ResetLogicalPath()
+		return nil
+	case sessionattachment.FieldSourceModifiedAt:
+		m.ResetSourceModifiedAt()
 		return nil
 	case sessionattachment.FieldFilename:
 		m.ResetFilename()
@@ -9878,11 +10495,29 @@ func (m *SessionAttachmentMutation) ResetField(name string) error {
 	case sessionattachment.FieldSize:
 		m.ResetSize()
 		return nil
+	case sessionattachment.FieldSha256:
+		m.ResetSha256()
+		return nil
 	case sessionattachment.FieldPreviewable:
 		m.ResetPreviewable()
 		return nil
+	case sessionattachment.FieldPreviewKind:
+		m.ResetPreviewKind()
+		return nil
+	case sessionattachment.FieldProcessRunID:
+		m.ResetProcessRunID()
+		return nil
+	case sessionattachment.FieldNodeRunID:
+		m.ResetNodeRunID()
+		return nil
+	case sessionattachment.FieldCorrelationID:
+		m.ResetCorrelationID()
+		return nil
 	case sessionattachment.FieldCreatedAt:
 		m.ResetCreatedAt()
+		return nil
+	case sessionattachment.FieldDeletedAt:
+		m.ResetDeletedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown SessionAttachment field %s", name)

@@ -19,6 +19,7 @@ case "$*" in
   "exec --help") echo "exec help"; exit 0 ;;
   "exec --help --strict-config -c mcp_servers.anycode.tool_timeout_sec=86400") echo "exec timeout config help"; exit 0 ;;
   "exec resume --help") echo "resume help"; exit 0 ;;
+  "features list") echo "image_generation stable true"; exit 0 ;;
   "debug models") echo '{"models":[{"slug":"gpt-5.6-sol","display_name":"GPT-5.6-Sol","default_reasoning_level":"low","supported_reasoning_levels":[{"effort":"low","description":"Fast"},{"effort":"high","description":"Deep"}],"visibility":"list","priority":1}]}'; exit 0 ;;
 esac
 echo "unexpected $*" >&2
@@ -34,6 +35,39 @@ exit 2
 	}
 	if !got.SupportsExec || !got.SupportsResume || !got.SupportsMCPToolTimeout {
 		t.Fatalf("capabilities = %+v", got)
+	}
+	if !got.SupportsImageGeneration || got.ImageGenerationStatus != "stable" {
+		t.Fatalf("image generation capability = %+v", got)
+	}
+}
+
+func TestProbeReportsDisabledOrUnsupportedImageGeneration(t *testing.T) {
+	for _, test := range []struct {
+		name, featureCommand, wantStatus string
+	}{
+		{"disabled", `"features list") echo "image_generation experimental false"; exit 0 ;;`, "experimental"},
+		{"unsupported", `"features list") echo "unknown command" >&2; exit 2 ;;`, "unsupported"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			bin := fakeCodex(t, `#!/bin/sh
+case "$*" in
+  "--version") echo "codex 1.2.3"; exit 0 ;;
+  "exec --help") exit 0 ;;
+  "exec --help --strict-config -c mcp_servers.anycode.tool_timeout_sec=86400") exit 0 ;;
+  "exec resume --help") exit 0 ;;
+  "debug models") echo '{"models":[]}'; exit 0 ;;
+  `+test.featureCommand+`
+esac
+exit 2
+`)
+			got, err := New(bin).Probe(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.SupportsImageGeneration || got.ImageGenerationStatus != test.wantStatus {
+				t.Fatalf("capabilities = %+v", got)
+			}
+		})
 	}
 }
 

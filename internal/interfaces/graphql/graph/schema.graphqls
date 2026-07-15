@@ -21,6 +21,7 @@ type Query {
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
+  sessionFiles(input: ListSessionFilesInput!): SessionFilePage!
 }
 
 type Mutation {
@@ -44,6 +45,8 @@ type Mutation {
   stageAttachment(file: Upload!): Attachment!
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
+  deleteSessionFile(id: ID!): Boolean!
+  useSessionFileAsInput(id: ID!): SessionAttachment!
   saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): WorkflowDefinition!
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
@@ -258,6 +261,42 @@ type SessionAttachment {
   size: Int64!
   previewable: Boolean!
   createdAt: Time!
+}
+
+type SessionFile {
+  id: ID!
+  sessionId: ID!
+  role: String!
+  sourceType: String!
+  sourceId: String!
+  artifactKind: String!
+  logicalPath: String!
+  filename: String!
+  mimeType: String!
+  size: Int64!
+  sha256: String!
+  previewKind: String!
+  processRunId: ID
+  nodeRunId: ID
+  correlationId: String!
+  previewUrl: String
+  downloadUrl: String!
+  createdAt: Time!
+}
+
+type SessionFilePage {
+  items: [SessionFile!]!
+  pageInfo: PageInfo!
+}
+
+input ListSessionFilesInput {
+  sessionId: ID!
+  page: Int
+  pageSize: Int
+  kind: String
+  source: String
+  filter: String
+  sort: String
 }
 
 type Attachment {

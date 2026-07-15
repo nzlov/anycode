@@ -120,6 +120,7 @@ type CodexStartInput struct {
 	ProcessRunID    RunID
 	SessionID       SessionID
 	Workdir         string
+	ArtifactDir     string
 	Prompt          string
 	Model           string
 	ReasoningEffort string
@@ -134,6 +135,7 @@ type CodexResumeInput struct {
 	SessionID       SessionID
 	CodexSessionID  string
 	Workdir         string
+	ArtifactDir     string
 	Prompt          string
 	Model           string
 	ReasoningEffort string
@@ -157,11 +159,13 @@ type DetachedProcessController interface {
 }
 
 type CodexCapabilities struct {
-	Version                string
-	SupportsExec           bool
-	SupportsResume         bool
-	SupportsMCPToolTimeout bool
-	Models                 []CodexModel
+	Version                 string
+	SupportsExec            bool
+	SupportsResume          bool
+	SupportsMCPToolTimeout  bool
+	SupportsImageGeneration bool
+	ImageGenerationStatus   string
+	Models                  []CodexModel
 }
 
 type CodexModel struct {

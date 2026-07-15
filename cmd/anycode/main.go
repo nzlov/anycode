@@ -9,10 +9,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
@@ -37,6 +39,7 @@ import (
 )
 
 const databaseStartupTimeout = 30 * time.Second
+const artifactReconcileInterval = 6 * time.Hour
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp-stdio" {
@@ -46,7 +49,10 @@ func main() {
 		return
 	}
 
-	cfg := config.LoadFromEnv()
+	cfg, err := config.LoadFromEnv()
+	if err != nil {
+		log.Fatalf("load config: %s", err.Error())
+	}
 	ctx := context.Background()
 	databaseCtx, cancelDatabase := context.WithTimeout(ctx, databaseStartupTimeout)
 
@@ -70,7 +76,7 @@ func main() {
 		log.Fatalf("resolve executable: %s", err.Error())
 	}
 	mcpSocket := localMCPSocketPath()
-	useCases, err := newGraphQLUseCases(store, cfg.DataDir, cfg.CodexBin, cfg.HTTPAddr, cfg.AccessKey, cfg.AgentMaxConcurrent, executable, mcpSocket)
+	useCases, err := newGraphQLUseCases(store, cfg, executable, mcpSocket)
 	if err != nil {
 		log.Fatalf("wire graphql usecases: %s", err.Error())
 	}
@@ -83,6 +89,10 @@ func main() {
 	}
 	defer stopMCP()
 
+	if useCases.Artifacts != nil {
+		reconcileArtifactOutputs(ctx, useCases.Artifacts)
+		go runArtifactReconciliation(ctx, useCases.Artifacts)
+	}
 	if err := reconcileInterruptedSessions(ctx, useCases.Sessions); err != nil {
 		log.Fatalf("recover sessions: %s", err.Error())
 	}
@@ -112,6 +122,45 @@ func main() {
 	}
 }
 
+type artifactRecoveryUseCase interface {
+	ReconcileQuarantines(ctx context.Context) (int, error)
+	ReconcileOutputs(ctx context.Context) (int, error)
+	ReconcileDeletedArtifacts(ctx context.Context) (int, error)
+}
+
+func reconcileArtifactOutputs(ctx context.Context, artifacts artifactRecoveryUseCase) {
+	if count, err := artifacts.ReconcileQuarantines(ctx); err != nil {
+		log.Printf("reconcile artifact quarantines: %s", err.Error())
+	} else if count > 0 {
+		log.Printf("reconciled artifact quarantines: count=%d", count)
+	}
+	count, err := artifacts.ReconcileOutputs(ctx)
+	if err != nil {
+		log.Printf("reconcile artifact outputs: %s", err.Error())
+	}
+	if count > 0 {
+		log.Printf("reconciled artifact outputs: count=%d", count)
+	}
+	if count, err := artifacts.ReconcileDeletedArtifacts(ctx); err != nil {
+		log.Printf("reconcile deleted artifacts: %s", err.Error())
+	} else if count > 0 {
+		log.Printf("reconciled deleted artifacts: count=%d", count)
+	}
+}
+
+func runArtifactReconciliation(ctx context.Context, artifacts artifactRecoveryUseCase) {
+	ticker := time.NewTicker(artifactReconcileInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			reconcileArtifactOutputs(ctx, artifacts)
+		}
+	}
+}
+
 func runMCPStdio(args []string) error {
 	flags := flag.NewFlagSet("mcp-stdio", flag.ContinueOnError)
 	sessionID := flags.String("session-id", "", "AnyCode session id")
@@ -125,35 +174,53 @@ func runMCPStdio(args []string) error {
 	})
 }
 
-func newGraphQLUseCases(store *entstore.Store, dataDir string, codexBin string, httpAddr string, accessKey string, maxConcurrentAgents int, mcpCommand string, mcpSocket string) (graph.UseCases, error) {
+func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand string, mcpSocket string) (graph.UseCases, error) {
 	if store == nil {
 		return graph.UseCases{}, errors.New("nil entstore")
 	}
-	files := filestore.New(dataDir)
+	files := filestore.New(cfg.DataDir)
 	attachments := store.Attachments()
-	codex := codexcli.New(codexBin, codexcli.WithMCP(localHTTPBaseURL(httpAddr), accessKey))
+	artifacts := artifactapp.New(attachments, files, files, store.Sessions())
+	artifacts.SetLimits(artifactapp.Limits{MaxFileBytes: cfg.ArtifactMaxFileBytes, MaxSessionBytes: cfg.ArtifactMaxSessionBytes})
+	if cfg.PlaywrightMCPBin != "" {
+		if _, err := exec.LookPath(cfg.PlaywrightMCPBin); err != nil {
+			return graph.UseCases{}, fmt.Errorf("find Playwright MCP executable %q: %w", cfg.PlaywrightMCPBin, err)
+		}
+	}
+	codexOptions := []codexcli.Option{codexcli.WithMCP(localHTTPBaseURL(cfg.HTTPAddr), cfg.AccessKey)}
+	if cfg.PlaywrightMCPBin != "" {
+		codexOptions = append(codexOptions, codexcli.WithPlaywrightMCP(cfg.PlaywrightMCPBin, cfg.ChromiumBin))
+	}
+	codex := codexcli.New(cfg.CodexBin, codexOptions...)
 	if mcpCommand != "" && mcpSocket != "" {
-		codex = codexcli.New(codexBin, codexcli.WithMCPStdio(mcpCommand, mcpSocket, accessKey))
+		codexOptions = []codexcli.Option{codexcli.WithMCPStdio(mcpCommand, mcpSocket, cfg.AccessKey)}
+		if cfg.PlaywrightMCPBin != "" {
+			codexOptions = append(codexOptions, codexcli.WithPlaywrightMCP(cfg.PlaywrightMCPBin, cfg.ChromiumBin))
+		}
+		codex = codexcli.New(cfg.CodexBin, codexOptions...)
 	}
 	capabilities, err := ensureCodexReady(context.Background(), codex)
 	if err != nil {
 		return graph.UseCases{}, err
 	}
+	log.Printf("codex image generation capability: enabled=%t status=%s", capabilities.SupportsImageGeneration, capabilities.ImageGenerationStatus)
 	events := store.Events()
 	eventService := eventapp.New()
+	artifacts.SetEvents(events, eventService)
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes, timelineapp.WithHistory(events))
 	questions := store.Questions()
 	questionService := questionapp.New(questions)
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithWorktrees(gitcli.NewWorktrees(dataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(maxConcurrentAgents), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactScanner(artifacts), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
 	return graph.UseCases{
 		Projects:    projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
 		Sessions:    sessionService,
 		Events:      eventService,
 		Timeline:    timelineService,
 		Attachments: attachmentapp.New(attachments, files),
+		Artifacts:   artifacts,
 		Diff:        diffapp.New(store.Sessions(), store.Projects(), gitdiffClient),
 		Workflows:   workflowService,
 		Questions:   questionService,
@@ -215,9 +282,9 @@ func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath s
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("POST /mcp/sessions/{sessionID}", httpinterface.NewMCPHandler(cfg, useCases.Sessions))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", httpinterface.NewMCPHandler(cfg, useCases.Sessions))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", httpinterface.NewMCPHandler(cfg, useCases.Sessions))
+	mux.Handle("POST /mcp/sessions/{sessionID}", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
 	server := &http.Server{Handler: mux}
 	go func() {
 		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

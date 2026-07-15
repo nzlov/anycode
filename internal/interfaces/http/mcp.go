@@ -2,25 +2,33 @@ package http
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type mcpHandler struct {
-	sessions sessionapp.UseCase
+	sessions  sessionapp.UseCase
+	artifacts artifactapp.UseCase
 }
 
 const mcpTransportHeader = "X-AnyCode-MCP-Transport"
 
-func newMCPHandler(sessions sessionapp.UseCase) http.Handler {
-	return mcpHandler{sessions: sessions}
+func newMCPHandler(sessions sessionapp.UseCase, artifacts ...artifactapp.UseCase) http.Handler {
+	handler := mcpHandler{sessions: sessions}
+	if len(artifacts) > 0 {
+		handler.artifacts = artifacts[0]
+	}
+	return handler
 }
 
 func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +62,7 @@ func (h mcpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"serverInfo": map[string]any{"name": "anycode", "version": "0.1.0"},
 		})
 	case "tools/list":
-		_ = writeMCPResult(w, req.ID, map[string]any{"tools": []map[string]any{answerUserTool()}})
+		_ = writeMCPResult(w, req.ID, map[string]any{"tools": []map[string]any{answerUserTool(), publishArtifactTool()}})
 	case "tools/call":
 		result, batchID, directDelivery, err := h.callTool(r.Context(), r.PathValue("sessionID"), req.Params)
 		if err != nil {
@@ -113,21 +121,30 @@ func (h mcpHandler) failDirectDelivery(r *http.Request, batchID questiondomain.B
 }
 
 func (h mcpHandler) callTool(ctx context.Context, sessionID string, raw json.RawMessage) (map[string]any, questiondomain.BatchID, bool, error) {
-	if h.sessions == nil {
-		return nil, "", false, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "session service unavailable").WithRetryable(true)
-	}
 	var params mcpToolCallParams
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return nil, "", false, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "invalid tool call params")
-	}
-	if params.Name != "answer_user" {
-		return nil, "", false, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unknown tool").WithDetails(map[string]any{"tool": params.Name})
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, "", false, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session id is required")
 	}
-	questions, err := buildQuestions(params.Arguments.Questions)
+	switch params.Name {
+	case "answer_user":
+		return h.callAnswerUser(ctx, sessionID, params.Arguments)
+	case "publish_artifact":
+		result, err := h.callPublishArtifact(ctx, sessionID, params.Arguments)
+		return result, "", false, err
+	default:
+		return nil, "", false, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "unknown tool").WithDetails(map[string]any{"tool": params.Name})
+	}
+}
+
+func (h mcpHandler) callAnswerUser(ctx context.Context, sessionID string, arguments mcpToolArguments) (map[string]any, questiondomain.BatchID, bool, error) {
+	if h.sessions == nil {
+		return nil, "", false, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "session service unavailable").WithRetryable(true)
+	}
+	questions, err := buildQuestions(arguments.Questions)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -180,6 +197,51 @@ func (h mcpHandler) acknowledgeDelivery(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h mcpHandler) callPublishArtifact(ctx context.Context, sessionID string, arguments mcpToolArguments) (map[string]any, error) {
+	if h.artifacts == nil {
+		return nil, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "artifact service unavailable").WithRetryable(true)
+	}
+	path := strings.TrimSpace(arguments.Path)
+	if filepath.IsAbs(path) || path == ".." || strings.HasPrefix(filepath.Clean(path), ".."+string(filepath.Separator)) {
+		return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "artifact path must be relative to ANYCODE_ARTIFACT_DIR")
+	}
+	artifact, err := h.artifacts.Publish(ctx, artifactapp.PublishInput{
+		SessionID:     sessiondomain.ID(sessionID),
+		Path:          path,
+		LogicalPath:   strings.TrimSpace(arguments.LogicalPath),
+		SourceType:    sessiondomain.AttachmentSourceMCP,
+		CorrelationID: strings.TrimSpace(arguments.CorrelationID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"id":           string(artifact.ID),
+		"logicalPath":  artifact.LogicalPath,
+		"filename":     artifact.Filename,
+		"mimeType":     artifact.MimeType,
+		"artifactKind": string(artifact.ArtifactKind),
+		"previewKind":  string(artifact.PreviewKind),
+		"size":         artifact.Size,
+		"sha256":       artifact.SHA256,
+	})
+	if err != nil {
+		return nil, err
+	}
+	content := []map[string]any{{"type": "text", "text": string(payload)}}
+	if media, ok, readErr := h.artifacts.ReadMCPContent(ctx, artifact.ID); readErr == nil && ok {
+		content = append(content, map[string]any{
+			"type":     media.Type,
+			"data":     base64.StdEncoding.EncodeToString(media.Data),
+			"mimeType": media.MIMEType,
+		})
+	}
+	return map[string]any{
+		"content": content,
+		"isError": false,
+	}, nil
 }
 
 func buildQuestions(inputs []mcpQuestionInput) ([]questiondomain.Question, error) {
@@ -263,6 +325,22 @@ func answerUserTool() map[string]any {
 	}
 }
 
+func publishArtifactTool() map[string]any {
+	return map[string]any{
+		"name":        "publish_artifact",
+		"description": "Archive a file from this card's ANYCODE_ARTIFACT_DIR and publish it to the AnyCode timeline.",
+		"inputSchema": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"path":          map[string]any{"type": "string", "description": "Path relative to ANYCODE_ARTIFACT_DIR."},
+				"logicalPath":   map[string]any{"type": "string", "description": "Optional display path relative to ANYCODE_ARTIFACT_DIR."},
+				"correlationId": map[string]any{"type": "string", "description": "Optional identifier grouping related outputs."},
+			},
+			"required": []string{"path"},
+		},
+	}
+}
+
 type mcpRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -276,7 +354,10 @@ type mcpToolCallParams struct {
 }
 
 type mcpToolArguments struct {
-	Questions []mcpQuestionInput `json:"questions"`
+	Questions     []mcpQuestionInput `json:"questions"`
+	Path          string             `json:"path"`
+	LogicalPath   string             `json:"logicalPath"`
+	CorrelationID string             `json:"correlationId"`
 }
 
 type mcpQuestionInput struct {

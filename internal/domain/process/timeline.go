@@ -25,8 +25,10 @@ type CodexEventContent interface {
 }
 
 type CodexImage struct {
-	Source string
-	Detail string
+	Source     string
+	Detail     string
+	SourceKind string
+	MimeType   string
 }
 
 type CodexStructuredText struct {

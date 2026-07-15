@@ -4,6 +4,7 @@
       <q-tab name="session" icon="forum" label="会话" />
       <q-tab name="info" icon="info" label="信息" />
       <q-tab name="changes" icon="difference" label="变更" />
+      <q-tab name="artifacts" icon="inventory_2" label="产物" />
     </q-tabs>
 
     <div class="detail-grid">
@@ -141,6 +142,7 @@
           >
             <q-tab name="info" icon="info" label="会话信息" />
             <q-tab name="changes" icon="difference" label="当前变更" />
+            <q-tab name="artifacts" icon="inventory_2" label="产物" />
           </q-tabs>
           <q-separator class="gt-sm" />
           <q-tab-panels v-model="rightPanelTab" animated>
@@ -443,6 +445,10 @@
                 </q-card-section>
               </q-card>
             </q-tab-panel>
+
+            <q-tab-panel name="artifacts">
+              <SessionArtifactsPanel :session-id="sessionId" :refresh-key="artifactRefreshKey" />
+            </q-tab-panel>
           </q-tab-panels>
         </q-card>
       </aside>
@@ -564,6 +570,7 @@ import AppPagination from '@/components/AppPagination.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffViewer from '@/components/DiffViewer.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
+import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -602,11 +609,11 @@ const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerFast = ref(false);
 const composerConfigReady = ref(false);
-const detailView = ref<'session' | 'info' | 'changes'>('session');
+const detailView = ref<'session' | 'info' | 'changes' | 'artifacts'>('session');
 // GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.
 // Remove this mapping when desktop adopts the same three-view navigation.
-const rightPanelTab = computed<'info' | 'changes'>({
-  get: () => (detailView.value === 'changes' ? 'changes' : 'info'),
+const rightPanelTab = computed<'info' | 'changes' | 'artifacts'>({
+  get: () => (detailView.value === 'session' ? 'info' : detailView.value),
   set: (value) => {
     detailView.value = value;
   },
@@ -709,6 +716,18 @@ const canSavePromptAppendEdit = computed(() => {
   return Boolean(target && body && body !== target.body.trim() && !promptEditSaving.value);
 });
 const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
+const artifactRefreshKey = computed(() => {
+  for (let index = streamEntries.value.length - 1; index >= 0; index--) {
+    const entry = streamEntries.value[index];
+    if (
+      entry?.content.__typename === 'TranscriptUnknownContent' &&
+      entry.content.rawType.startsWith('artifact.')
+    ) {
+      return entry.id;
+    }
+  }
+  return '';
+});
 const latestTokenUsage = computed(() => tokenUsage.value);
 const composerAction = computed(() => {
   const current = session.value;

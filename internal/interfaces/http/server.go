@@ -19,6 +19,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
@@ -33,11 +34,13 @@ import (
 type HandlerOption func(*handlerOptions)
 
 type handlerOptions struct {
-	graphqlHandler http.Handler
-	attachments    attachmentapp.UseCase
-	sessions       sessionapp.UseCase
-	accessKey      string
-	playground     bool
+	graphqlHandler  http.Handler
+	attachments     attachmentapp.UseCase
+	artifacts       artifactapp.UseCase
+	sessions        sessionapp.UseCase
+	accessKey       string
+	playground      bool
+	previewMaxBytes int64
 }
 
 func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
@@ -46,6 +49,7 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 		schema := generated.NewExecutableSchema(generated.Config{Resolvers: resolver})
 		opts.graphqlHandler = newGraphQLServer(schema, opts.accessKey)
 		opts.sessions = useCases.Sessions
+		opts.artifacts = useCases.Artifacts
 	}
 }
 
@@ -69,8 +73,9 @@ func WithAttachmentUseCase(useCase attachmentapp.UseCase) HandlerOption {
 
 func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
-		graphqlHandler: http.HandlerFunc(graphqlNotConfigured),
-		accessKey:      cfg.AccessKey,
+		graphqlHandler:  http.HandlerFunc(graphqlNotConfigured),
+		accessKey:       cfg.AccessKey,
+		previewMaxBytes: cfg.ArtifactPreviewMaxBytes,
 	}
 	for _, option := range options {
 		option(&opts)
@@ -80,12 +85,12 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.Handle("GET /api/healthz", bearerAuth(cfg.AccessKey, http.HandlerFunc(healthz)))
 	mux.Handle("/graphql", graphqlAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
-	attachmentHandler := newAttachmentHandler(opts.attachments)
-	mux.Handle("GET /attachments/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
-	mux.Handle("GET /attachments/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
-	mux.Handle("POST /mcp/sessions/{sessionID}", NewMCPHandler(cfg, opts.sessions))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", NewMCPHandler(cfg, opts.sessions))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", NewMCPHandler(cfg, opts.sessions))
+	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
+	mux.Handle("GET /files/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
+	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
+	mux.Handle("POST /mcp/sessions/{sessionID}", NewMCPHandler(cfg, opts.sessions, opts.artifacts))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", NewMCPHandler(cfg, opts.sessions, opts.artifacts))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", NewMCPHandler(cfg, opts.sessions, opts.artifacts))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
@@ -94,8 +99,8 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	return mux
 }
 
-func NewMCPHandler(cfg config.Config, sessions sessionapp.UseCase) http.Handler {
-	return bearerAuth(cfg.AccessKey, newMCPHandler(sessions))
+func NewMCPHandler(cfg config.Config, sessions sessionapp.UseCase, artifacts ...artifactapp.UseCase) http.Handler {
+	return bearerAuth(cfg.AccessKey, newMCPHandler(sessions, artifacts...))
 }
 
 func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Handler {
@@ -192,11 +197,16 @@ func graphqlNotConfigured(w http.ResponseWriter, _ *http.Request) {
 }
 
 type attachmentHandler struct {
-	useCase attachmentapp.UseCase
+	useCase         attachmentapp.UseCase
+	previewMaxBytes int64
 }
 
-func newAttachmentHandler(useCase attachmentapp.UseCase) attachmentHandler {
-	return attachmentHandler{useCase: useCase}
+func newAttachmentHandler(useCase attachmentapp.UseCase, previewMaxBytes ...int64) attachmentHandler {
+	limit := int64(128 << 20)
+	if len(previewMaxBytes) > 0 && previewMaxBytes[0] > 0 {
+		limit = previewMaxBytes[0]
+	}
+	return attachmentHandler{useCase: useCase, previewMaxBytes: limit}
 }
 
 func (h attachmentHandler) preview() http.Handler {
@@ -222,15 +232,29 @@ func (h attachmentHandler) serve(w http.ResponseWriter, r *http.Request, mode at
 		return
 	}
 	defer stream.Reader.Close()
+	if mode == attachmentapp.OpenPreview && stream.Size > h.previewMaxBytes {
+		writeApplicationError(w, http.StatusRequestEntityTooLarge, apperror.New(apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "file is too large to preview"))
+		return
+	}
 
 	if stream.MimeType != "" {
 		w.Header().Set("Content-Type", stream.MimeType)
 	}
+	if stream.ETag != "" {
+		w.Header().Set("ETag", `"`+stream.ETag+`"`)
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	disposition := "inline"
 	if mode == attachmentapp.OpenDownload {
 		disposition = "attachment"
+	} else {
+		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'")
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": stream.Filename}))
+	if stream.Seeker != nil {
+		http.ServeContent(w, r, stream.Filename, stream.ModifiedAt, stream.Seeker)
+		return
+	}
 	if _, err := io.Copy(w, stream.Reader); err != nil {
 		return
 	}

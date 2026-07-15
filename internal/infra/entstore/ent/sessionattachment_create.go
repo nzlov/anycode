@@ -26,6 +26,20 @@ func (_c *SessionAttachmentCreate) SetSessionID(v string) *SessionAttachmentCrea
 	return _c
 }
 
+// SetRole sets the "role" field.
+func (_c *SessionAttachmentCreate) SetRole(v string) *SessionAttachmentCreate {
+	_c.mutation.SetRole(v)
+	return _c
+}
+
+// SetNillableRole sets the "role" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableRole(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetRole(*v)
+	}
+	return _c
+}
+
 // SetSourceType sets the "source_type" field.
 func (_c *SessionAttachmentCreate) SetSourceType(v string) *SessionAttachmentCreate {
 	_c.mutation.SetSourceType(v)
@@ -35,6 +49,20 @@ func (_c *SessionAttachmentCreate) SetSourceType(v string) *SessionAttachmentCre
 // SetSourceID sets the "source_id" field.
 func (_c *SessionAttachmentCreate) SetSourceID(v string) *SessionAttachmentCreate {
 	_c.mutation.SetSourceID(v)
+	return _c
+}
+
+// SetSourceKey sets the "source_key" field.
+func (_c *SessionAttachmentCreate) SetSourceKey(v string) *SessionAttachmentCreate {
+	_c.mutation.SetSourceKey(v)
+	return _c
+}
+
+// SetNillableSourceKey sets the "source_key" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableSourceKey(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetSourceKey(*v)
+	}
 	return _c
 }
 
@@ -48,6 +76,48 @@ func (_c *SessionAttachmentCreate) SetKind(v string) *SessionAttachmentCreate {
 func (_c *SessionAttachmentCreate) SetNillableKind(v *string) *SessionAttachmentCreate {
 	if v != nil {
 		_c.SetKind(*v)
+	}
+	return _c
+}
+
+// SetArtifactKind sets the "artifact_kind" field.
+func (_c *SessionAttachmentCreate) SetArtifactKind(v string) *SessionAttachmentCreate {
+	_c.mutation.SetArtifactKind(v)
+	return _c
+}
+
+// SetNillableArtifactKind sets the "artifact_kind" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableArtifactKind(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetArtifactKind(*v)
+	}
+	return _c
+}
+
+// SetLogicalPath sets the "logical_path" field.
+func (_c *SessionAttachmentCreate) SetLogicalPath(v string) *SessionAttachmentCreate {
+	_c.mutation.SetLogicalPath(v)
+	return _c
+}
+
+// SetNillableLogicalPath sets the "logical_path" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableLogicalPath(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetLogicalPath(*v)
+	}
+	return _c
+}
+
+// SetSourceModifiedAt sets the "source_modified_at" field.
+func (_c *SessionAttachmentCreate) SetSourceModifiedAt(v time.Time) *SessionAttachmentCreate {
+	_c.mutation.SetSourceModifiedAt(v)
+	return _c
+}
+
+// SetNillableSourceModifiedAt sets the "source_modified_at" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableSourceModifiedAt(v *time.Time) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetSourceModifiedAt(*v)
 	}
 	return _c
 }
@@ -92,6 +162,20 @@ func (_c *SessionAttachmentCreate) SetNillableSize(v *int64) *SessionAttachmentC
 	return _c
 }
 
+// SetSha256 sets the "sha256" field.
+func (_c *SessionAttachmentCreate) SetSha256(v string) *SessionAttachmentCreate {
+	_c.mutation.SetSha256(v)
+	return _c
+}
+
+// SetNillableSha256 sets the "sha256" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableSha256(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetSha256(*v)
+	}
+	return _c
+}
+
 // SetPreviewable sets the "previewable" field.
 func (_c *SessionAttachmentCreate) SetPreviewable(v bool) *SessionAttachmentCreate {
 	_c.mutation.SetPreviewable(v)
@@ -106,6 +190,62 @@ func (_c *SessionAttachmentCreate) SetNillablePreviewable(v *bool) *SessionAttac
 	return _c
 }
 
+// SetPreviewKind sets the "preview_kind" field.
+func (_c *SessionAttachmentCreate) SetPreviewKind(v string) *SessionAttachmentCreate {
+	_c.mutation.SetPreviewKind(v)
+	return _c
+}
+
+// SetNillablePreviewKind sets the "preview_kind" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillablePreviewKind(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetPreviewKind(*v)
+	}
+	return _c
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (_c *SessionAttachmentCreate) SetProcessRunID(v string) *SessionAttachmentCreate {
+	_c.mutation.SetProcessRunID(v)
+	return _c
+}
+
+// SetNillableProcessRunID sets the "process_run_id" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableProcessRunID(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetProcessRunID(*v)
+	}
+	return _c
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (_c *SessionAttachmentCreate) SetNodeRunID(v string) *SessionAttachmentCreate {
+	_c.mutation.SetNodeRunID(v)
+	return _c
+}
+
+// SetNillableNodeRunID sets the "node_run_id" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableNodeRunID(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetNodeRunID(*v)
+	}
+	return _c
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (_c *SessionAttachmentCreate) SetCorrelationID(v string) *SessionAttachmentCreate {
+	_c.mutation.SetCorrelationID(v)
+	return _c
+}
+
+// SetNillableCorrelationID sets the "correlation_id" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableCorrelationID(v *string) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetCorrelationID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *SessionAttachmentCreate) SetCreatedAt(v time.Time) *SessionAttachmentCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -116,6 +256,20 @@ func (_c *SessionAttachmentCreate) SetCreatedAt(v time.Time) *SessionAttachmentC
 func (_c *SessionAttachmentCreate) SetNillableCreatedAt(v *time.Time) *SessionAttachmentCreate {
 	if v != nil {
 		_c.SetCreatedAt(*v)
+	}
+	return _c
+}
+
+// SetDeletedAt sets the "deleted_at" field.
+func (_c *SessionAttachmentCreate) SetDeletedAt(v time.Time) *SessionAttachmentCreate {
+	_c.mutation.SetDeletedAt(v)
+	return _c
+}
+
+// SetNillableDeletedAt sets the "deleted_at" field if the given value is not nil.
+func (_c *SessionAttachmentCreate) SetNillableDeletedAt(v *time.Time) *SessionAttachmentCreate {
+	if v != nil {
+		_c.SetDeletedAt(*v)
 	}
 	return _c
 }
@@ -161,9 +315,25 @@ func (_c *SessionAttachmentCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *SessionAttachmentCreate) defaults() {
+	if _, ok := _c.mutation.Role(); !ok {
+		v := sessionattachment.DefaultRole
+		_c.mutation.SetRole(v)
+	}
+	if _, ok := _c.mutation.SourceKey(); !ok {
+		v := sessionattachment.DefaultSourceKey
+		_c.mutation.SetSourceKey(v)
+	}
 	if _, ok := _c.mutation.Kind(); !ok {
 		v := sessionattachment.DefaultKind
 		_c.mutation.SetKind(v)
+	}
+	if _, ok := _c.mutation.ArtifactKind(); !ok {
+		v := sessionattachment.DefaultArtifactKind
+		_c.mutation.SetArtifactKind(v)
+	}
+	if _, ok := _c.mutation.LogicalPath(); !ok {
+		v := sessionattachment.DefaultLogicalPath
+		_c.mutation.SetLogicalPath(v)
 	}
 	if _, ok := _c.mutation.MimeType(); !ok {
 		v := sessionattachment.DefaultMimeType
@@ -173,9 +343,29 @@ func (_c *SessionAttachmentCreate) defaults() {
 		v := sessionattachment.DefaultSize
 		_c.mutation.SetSize(v)
 	}
+	if _, ok := _c.mutation.Sha256(); !ok {
+		v := sessionattachment.DefaultSha256
+		_c.mutation.SetSha256(v)
+	}
 	if _, ok := _c.mutation.Previewable(); !ok {
 		v := sessionattachment.DefaultPreviewable
 		_c.mutation.SetPreviewable(v)
+	}
+	if _, ok := _c.mutation.PreviewKind(); !ok {
+		v := sessionattachment.DefaultPreviewKind
+		_c.mutation.SetPreviewKind(v)
+	}
+	if _, ok := _c.mutation.ProcessRunID(); !ok {
+		v := sessionattachment.DefaultProcessRunID
+		_c.mutation.SetProcessRunID(v)
+	}
+	if _, ok := _c.mutation.NodeRunID(); !ok {
+		v := sessionattachment.DefaultNodeRunID
+		_c.mutation.SetNodeRunID(v)
+	}
+	if _, ok := _c.mutation.CorrelationID(); !ok {
+		v := sessionattachment.DefaultCorrelationID
+		_c.mutation.SetCorrelationID(v)
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := sessionattachment.DefaultCreatedAt()
@@ -193,6 +383,9 @@ func (_c *SessionAttachmentCreate) check() error {
 			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.session_id": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.Role(); !ok {
+		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "SessionAttachment.role"`)}
+	}
 	if _, ok := _c.mutation.SourceType(); !ok {
 		return &ValidationError{Name: "source_type", err: errors.New(`ent: missing required field "SessionAttachment.source_type"`)}
 	}
@@ -209,8 +402,17 @@ func (_c *SessionAttachmentCreate) check() error {
 			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "SessionAttachment.source_id": %w`, err)}
 		}
 	}
+	if _, ok := _c.mutation.SourceKey(); !ok {
+		return &ValidationError{Name: "source_key", err: errors.New(`ent: missing required field "SessionAttachment.source_key"`)}
+	}
 	if _, ok := _c.mutation.Kind(); !ok {
 		return &ValidationError{Name: "kind", err: errors.New(`ent: missing required field "SessionAttachment.kind"`)}
+	}
+	if _, ok := _c.mutation.ArtifactKind(); !ok {
+		return &ValidationError{Name: "artifact_kind", err: errors.New(`ent: missing required field "SessionAttachment.artifact_kind"`)}
+	}
+	if _, ok := _c.mutation.LogicalPath(); !ok {
+		return &ValidationError{Name: "logical_path", err: errors.New(`ent: missing required field "SessionAttachment.logical_path"`)}
 	}
 	if _, ok := _c.mutation.Filename(); !ok {
 		return &ValidationError{Name: "filename", err: errors.New(`ent: missing required field "SessionAttachment.filename"`)}
@@ -234,8 +436,23 @@ func (_c *SessionAttachmentCreate) check() error {
 	if _, ok := _c.mutation.Size(); !ok {
 		return &ValidationError{Name: "size", err: errors.New(`ent: missing required field "SessionAttachment.size"`)}
 	}
+	if _, ok := _c.mutation.Sha256(); !ok {
+		return &ValidationError{Name: "sha256", err: errors.New(`ent: missing required field "SessionAttachment.sha256"`)}
+	}
 	if _, ok := _c.mutation.Previewable(); !ok {
 		return &ValidationError{Name: "previewable", err: errors.New(`ent: missing required field "SessionAttachment.previewable"`)}
+	}
+	if _, ok := _c.mutation.PreviewKind(); !ok {
+		return &ValidationError{Name: "preview_kind", err: errors.New(`ent: missing required field "SessionAttachment.preview_kind"`)}
+	}
+	if _, ok := _c.mutation.ProcessRunID(); !ok {
+		return &ValidationError{Name: "process_run_id", err: errors.New(`ent: missing required field "SessionAttachment.process_run_id"`)}
+	}
+	if _, ok := _c.mutation.NodeRunID(); !ok {
+		return &ValidationError{Name: "node_run_id", err: errors.New(`ent: missing required field "SessionAttachment.node_run_id"`)}
+	}
+	if _, ok := _c.mutation.CorrelationID(); !ok {
+		return &ValidationError{Name: "correlation_id", err: errors.New(`ent: missing required field "SessionAttachment.correlation_id"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "SessionAttachment.created_at"`)}
@@ -279,6 +496,10 @@ func (_c *SessionAttachmentCreate) createSpec() (*SessionAttachment, *sqlgraph.C
 		_spec.SetField(sessionattachment.FieldSessionID, field.TypeString, value)
 		_node.SessionID = value
 	}
+	if value, ok := _c.mutation.Role(); ok {
+		_spec.SetField(sessionattachment.FieldRole, field.TypeString, value)
+		_node.Role = value
+	}
 	if value, ok := _c.mutation.SourceType(); ok {
 		_spec.SetField(sessionattachment.FieldSourceType, field.TypeString, value)
 		_node.SourceType = value
@@ -287,9 +508,25 @@ func (_c *SessionAttachmentCreate) createSpec() (*SessionAttachment, *sqlgraph.C
 		_spec.SetField(sessionattachment.FieldSourceID, field.TypeString, value)
 		_node.SourceID = value
 	}
+	if value, ok := _c.mutation.SourceKey(); ok {
+		_spec.SetField(sessionattachment.FieldSourceKey, field.TypeString, value)
+		_node.SourceKey = value
+	}
 	if value, ok := _c.mutation.Kind(); ok {
 		_spec.SetField(sessionattachment.FieldKind, field.TypeString, value)
 		_node.Kind = value
+	}
+	if value, ok := _c.mutation.ArtifactKind(); ok {
+		_spec.SetField(sessionattachment.FieldArtifactKind, field.TypeString, value)
+		_node.ArtifactKind = value
+	}
+	if value, ok := _c.mutation.LogicalPath(); ok {
+		_spec.SetField(sessionattachment.FieldLogicalPath, field.TypeString, value)
+		_node.LogicalPath = value
+	}
+	if value, ok := _c.mutation.SourceModifiedAt(); ok {
+		_spec.SetField(sessionattachment.FieldSourceModifiedAt, field.TypeTime, value)
+		_node.SourceModifiedAt = &value
 	}
 	if value, ok := _c.mutation.Filename(); ok {
 		_spec.SetField(sessionattachment.FieldFilename, field.TypeString, value)
@@ -307,13 +544,37 @@ func (_c *SessionAttachmentCreate) createSpec() (*SessionAttachment, *sqlgraph.C
 		_spec.SetField(sessionattachment.FieldSize, field.TypeInt64, value)
 		_node.Size = value
 	}
+	if value, ok := _c.mutation.Sha256(); ok {
+		_spec.SetField(sessionattachment.FieldSha256, field.TypeString, value)
+		_node.Sha256 = value
+	}
 	if value, ok := _c.mutation.Previewable(); ok {
 		_spec.SetField(sessionattachment.FieldPreviewable, field.TypeBool, value)
 		_node.Previewable = value
 	}
+	if value, ok := _c.mutation.PreviewKind(); ok {
+		_spec.SetField(sessionattachment.FieldPreviewKind, field.TypeString, value)
+		_node.PreviewKind = value
+	}
+	if value, ok := _c.mutation.ProcessRunID(); ok {
+		_spec.SetField(sessionattachment.FieldProcessRunID, field.TypeString, value)
+		_node.ProcessRunID = value
+	}
+	if value, ok := _c.mutation.NodeRunID(); ok {
+		_spec.SetField(sessionattachment.FieldNodeRunID, field.TypeString, value)
+		_node.NodeRunID = value
+	}
+	if value, ok := _c.mutation.CorrelationID(); ok {
+		_spec.SetField(sessionattachment.FieldCorrelationID, field.TypeString, value)
+		_node.CorrelationID = value
+	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(sessionattachment.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
+	}
+	if value, ok := _c.mutation.DeletedAt(); ok {
+		_spec.SetField(sessionattachment.FieldDeletedAt, field.TypeTime, value)
+		_node.DeletedAt = &value
 	}
 	return _node, _spec
 }

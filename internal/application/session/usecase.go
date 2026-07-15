@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -293,6 +294,9 @@ type Service struct {
 	projects            projectdomain.Repository
 	attachments         domain.AttachmentRepository
 	files               domain.AttachmentStore
+	artifacts           domain.ArtifactStore
+	artifactScanner     artifactScanner
+	artifactPublisher   domain.ArtifactPublisher
 	worktrees           domain.WorktreeManager
 	worktreeInitializer domain.WorktreeInitializer
 	workflows           domain.WorkflowStarter
@@ -323,6 +327,10 @@ type questionCoordinator interface {
 	CancelPendingBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
 }
 
+type artifactScanner interface {
+	Scan(ctx context.Context, input domain.ArtifactScanRequest) ([]domain.SessionAttachment, error)
+}
+
 type answerQuestionCoordinator interface {
 	questionCoordinator
 	SubmitBatch(ctx context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error)
@@ -345,6 +353,21 @@ func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentSt
 	return func(s *Service) {
 		s.attachments = repo
 		s.files = store
+		if artifacts, ok := store.(domain.ArtifactStore); ok {
+			s.artifacts = artifacts
+		}
+	}
+}
+
+func WithArtifactScanner(scanner artifactScanner) Option {
+	return func(s *Service) {
+		s.artifactScanner = scanner
+	}
+}
+
+func WithArtifactPublisher(publisher domain.ArtifactPublisher) Option {
+	return func(s *Service) {
+		s.artifactPublisher = publisher
 	}
 }
 
@@ -1899,6 +1922,11 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 		}
 		if err := s.repo.Create(ctx, session); err != nil {
 			return DTO{}, fmt.Errorf("create session: %w", err)
+		}
+		if s.artifacts != nil {
+			if _, err := s.artifacts.EnsureArtifactDir(ctx, id); err != nil {
+				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, fmt.Errorf("create session artifact directory: %w", err), "artifact_directory_failed")
+			}
 		}
 
 		if project.IsGit {
@@ -4323,12 +4351,22 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return processdomain.CodexHandle{}, err
 	}
 	prompt := strings.TrimSpace(options.prompt)
+	artifactDir := ""
+	if s.artifacts != nil {
+		var err error
+		artifactDir, err = s.artifacts.EnsureArtifactDir(ctx, session.ID)
+		if err != nil {
+			return processdomain.CodexHandle{}, fmt.Errorf("prepare artifact directory: %w", err)
+		}
+		prompt = promptWithArtifactGuidance(prompt, artifactDir)
+	}
 	if options.resumeCodexSessionID != "" {
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
 			SessionID:       processdomain.SessionID(session.ID),
 			CodexSessionID:  options.resumeCodexSessionID,
 			Workdir:         workdir,
+			ArtifactDir:     artifactDir,
 			Prompt:          prompt,
 			Model:           strings.TrimSpace(session.Config.CodexModel),
 			ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
@@ -4340,6 +4378,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		ProcessRunID:    runID,
 		SessionID:       processdomain.SessionID(session.ID),
 		Workdir:         workdir,
+		ArtifactDir:     artifactDir,
 		Prompt:          promptWithAttachments(promptWithAnyCodeGuidance(prompt, session), attachmentPaths),
 		Model:           strings.TrimSpace(session.Config.CodexModel),
 		ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
@@ -4429,6 +4468,14 @@ func joinPromptParts(parts ...string) string {
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
 const anyCodePromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。\n\nAnyCode 卡片的 TODO List 仅来自 Codex 的结构化计划事件。处理包含多个可执行步骤的任务时，必须调用 `update_plan` 创建计划，并在步骤状态变化后持续调用 `update_plan` 更新状态；不要只在回复中输出 Markdown checklist。单步骤任务或纯问答无需创建计划。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
+const artifactPromptGuidance = "本卡片生成的图片、截图、PDF、音视频、压缩包和其他产物统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。"
+
+func promptWithArtifactGuidance(prompt string, artifactDir string) string {
+	if strings.TrimSpace(artifactDir) == "" {
+		return prompt
+	}
+	return joinPromptParts(prompt, artifactPromptGuidance)
+}
 
 func promptWithAnyCodeGuidance(prompt string, session domain.Session) string {
 	guidance := anyCodePromptGuidance
@@ -4641,7 +4688,160 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
+	extraEvents = append(extraEvents, s.archiveCodexEventImages(ctx, current, handle, &event)...)
 	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, promptDelivered, extraEvents...)
+}
+
+func (s *Service) archiveCodexEventImages(ctx context.Context, current domain.Session, handle processdomain.CodexHandle, event *processdomain.CodexEvent) []sessionEventInput {
+	if event == nil || event.Content == nil {
+		return nil
+	}
+	archive := func(images []processdomain.CodexImage, allowInline bool) ([]processdomain.CodexImage, []sessionEventInput) {
+		if !allowInline || s.artifactPublisher == nil {
+			return nil, nil
+		}
+		stored := make([]processdomain.CodexImage, 0, len(images))
+		failures := make([]sessionEventInput, 0)
+		for index, image := range images {
+			if image.SourceKind != "inline" && image.SourceKind != "inline_base64" && !strings.HasPrefix(image.Source, "data:") {
+				continue
+			}
+			data, mimeType, err := decodeInlineArtifact(image.Source, image.MimeType)
+			if err != nil {
+				failures = append(failures, artifactArchiveFailure(event.EventID, index, image.MimeType))
+				continue
+			}
+			if image.MimeType != "" {
+				mimeType = image.MimeType
+			}
+			artifact, err := s.artifactPublisher.PublishInlineArtifact(ctx, domain.InlineArtifactRequest{
+				SessionID:     current.ID,
+				Data:          data,
+				Filename:      inlineArtifactFilename(event.EventID, index, mimeType),
+				MimeType:      mimeType,
+				SourceType:    domain.AttachmentSourceCodex,
+				SourceID:      event.EventID,
+				SourceKey:     fmt.Sprintf("%s:%s:%d", handle.ProcessRunID, event.EventID, index),
+				ProcessRunID:  string(handle.ProcessRunID),
+				CorrelationID: event.CorrelationID,
+			})
+			if err != nil {
+				failures = append(failures, artifactArchiveFailure(event.EventID, index, mimeType))
+				continue
+			}
+			if artifact.PreviewKind == domain.PreviewKindImage {
+				stored = append(stored, processdomain.CodexImage{
+					Source:     "/files/" + string(artifact.ID) + "/preview",
+					Detail:     image.Detail,
+					SourceKind: "stored",
+					MimeType:   artifact.MimeType,
+				})
+			}
+		}
+		return stored, failures
+	}
+	var failures []sessionEventInput
+	switch content := event.Content.(type) {
+	case processdomain.CodexMessageContent:
+		images, archiveFailures := archive(content.Images, strings.EqualFold(content.Role, "assistant"))
+		content.Images = images
+		event.Content = content
+		failures = append(failures, archiveFailures...)
+	case processdomain.CodexToolContent:
+		content.Output = sanitizeCodexArtifactOutput(content.Output, content.Images)
+		qualifiedName := strings.ToLower(strings.TrimSpace(content.QualifiedName))
+		if strings.Contains(qualifiedName, "anycode") && strings.HasSuffix(qualifiedName, "publish_artifact") {
+			content.Images = nil
+			event.Content = content
+			break
+		}
+		images, archiveFailures := archive(content.Images, true)
+		content.Images = images
+		event.Content = content
+		failures = append(failures, archiveFailures...)
+	case processdomain.CodexUnknownContent:
+		payload, _ := sanitizeCodexPayloadValue(content.Payload, false).(map[string]any)
+		content.Payload = payload
+		event.Content = content
+	}
+	return failures
+}
+
+func sanitizeCodexArtifactOutput(output processdomain.CodexStructuredText, artifacts []processdomain.CodexImage) processdomain.CodexStructuredText {
+	text := strings.TrimSpace(output.Text)
+	if text == "" {
+		return output
+	}
+	var value any
+	if json.Unmarshal([]byte(text), &value) == nil {
+		if encoded, err := json.Marshal(sanitizeCodexPayloadValue(value, false)); err == nil {
+			output.Text = string(encoded)
+			return output
+		}
+	}
+	for _, artifact := range artifacts {
+		if source := strings.TrimSpace(artifact.Source); source != "" {
+			output.Text = strings.ReplaceAll(output.Text, source, "[artifact source omitted]")
+		}
+	}
+	if len(output.Text) > maxPersistedCodexStringBytes {
+		output.Text = "[omitted large value]"
+	}
+	return output
+}
+
+func artifactArchiveFailure(eventID string, index int, mimeType string) sessionEventInput {
+	return sessionEventInput{
+		eventType: "session.artifact_archive_failed",
+		payload: map[string]any{
+			"message":       "Codex 产物归档失败，原始内容未写入会话历史",
+			"codexEventId":  eventID,
+			"artifactIndex": index,
+			"mimeType":      strings.TrimSpace(mimeType),
+		},
+	}
+}
+
+func decodeInlineArtifact(source string, declaredMimeType string) ([]byte, string, error) {
+	header, encoded, ok := strings.Cut(source, ",")
+	if !ok || !strings.HasPrefix(header, "data:") || !strings.HasSuffix(strings.ToLower(header), ";base64") {
+		if strings.TrimSpace(declaredMimeType) == "" {
+			return nil, "", errors.New("unsupported inline artifact encoding")
+		}
+		header = "data:" + strings.TrimSpace(declaredMimeType) + ";base64"
+		encoded = source
+	}
+	if base64.StdEncoding.DecodedLen(len(encoded)) > 25<<20 {
+		return nil, "", errors.New("inline artifact exceeds 25 MiB")
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, "", err
+	}
+	mimeType := strings.TrimSuffix(strings.TrimPrefix(header, "data:"), ";base64")
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	return data, mimeType, nil
+}
+
+func inlineArtifactFilename(eventID string, index int, mimeType string) string {
+	extension := map[string]string{
+		"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif",
+		"application/pdf": ".pdf", "audio/mpeg": ".mp3", "audio/wav": ".wav", "audio/ogg": ".ogg",
+		"video/mp4": ".mp4", "video/webm": ".webm", "application/json": ".json", "text/plain": ".txt",
+	}[strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))]
+	name := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, eventID)
+	name = strings.Trim(name, "-")
+	if name == "" {
+		name = "output"
+	}
+	return fmt.Sprintf("%s-%d%s", name, index+1, extension)
 }
 
 func codexEventAcknowledgesPrompt(event processdomain.CodexEvent) bool {
@@ -4804,6 +5004,21 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	current, err := s.repo.Find(ctx, session.ID)
 	if err != nil {
 		return domain.Session{}, false, fmt.Errorf("find session after process exit: %w", err)
+	}
+	if s.artifactScanner != nil {
+		nodeRunID := ""
+		if options.nodeRunID != nil {
+			nodeRunID = string(*options.nodeRunID)
+		}
+		if _, scanErr := s.artifactScanner.Scan(ctx, domain.ArtifactScanRequest{
+			SessionID:    session.ID,
+			SourceType:   domain.AttachmentSourceCodex,
+			SourceID:     string(handle.ProcessRunID),
+			ProcessRunID: string(handle.ProcessRunID),
+			NodeRunID:    nodeRunID,
+		}); scanErr != nil {
+			log.Printf("scan session artifacts after process exit: session=%s process=%s error=%v", session.ID, handle.ProcessRunID, scanErr)
+		}
 	}
 	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
 	if err != nil {
@@ -6682,7 +6897,11 @@ func (s *Service) publishSessionEvent(ctx context.Context, event eventdomain.Dom
 }
 
 func processEventPayload(event processdomain.CodexEvent) map[string]any {
-	return copyPayload(event.Payload)
+	value, _ := sanitizeCodexPayloadValue(event.Payload, false).(map[string]any)
+	if value == nil {
+		return map[string]any{}
+	}
+	return value
 }
 
 func copyPayload(input map[string]any) map[string]any {
@@ -6691,6 +6910,55 @@ func copyPayload(input map[string]any) map[string]any {
 		payload[key] = value
 	}
 	return payload
+}
+
+const maxPersistedCodexStringBytes = 1 << 20
+
+func sanitizeCodexPayloadValue(value any, artifactContext bool) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		contentType, _ := typed["type"].(string)
+		artifactContext = artifactContext || isArtifactContentType(contentType)
+		result := make(map[string]any, len(typed))
+		for key, child := range typed {
+			if artifactContext && isArtifactSourceField(key) {
+				continue
+			}
+			result[key] = sanitizeCodexPayloadValue(child, artifactContext)
+		}
+		return result
+	case []any:
+		result := make([]any, 0, len(typed))
+		for _, child := range typed {
+			result = append(result, sanitizeCodexPayloadValue(child, artifactContext))
+		}
+		return result
+	case string:
+		if len(typed) > maxPersistedCodexStringBytes {
+			return "[omitted large value]"
+		}
+		return typed
+	default:
+		return value
+	}
+}
+
+func isArtifactContentType(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "input_image", "output_image", "image", "input_audio", "audio", "resource", "embedded_resource":
+		return true
+	default:
+		return false
+	}
+}
+
+func isArtifactSourceField(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "image_url", "imageurl", "data", "blob", "audio", "url", "uri", "path", "text":
+		return true
+	default:
+		return false
+	}
 }
 
 func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bool) {
@@ -6790,11 +7058,39 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	default:
 		return DTO{}, fmt.Errorf("unsupported close preparation status %q", prepared.Status)
 	}
+	quarantinePath := ""
+	releaseClose := func(cause error) error {
+		if quarantinePath != "" && s.artifacts != nil {
+			if restoreErr := s.artifacts.RestoreArtifactDir(context.WithoutCancel(ctx), session.ID, quarantinePath); restoreErr != nil {
+				cause = errors.Join(cause, fmt.Errorf("restore artifact directory: %w", restoreErr))
+			}
+		}
+		return s.releaseClosePreparation(ctx, prepared.Session, cause)
+	}
+	if s.artifactScanner != nil {
+		if _, err := s.artifactScanner.Scan(ctx, domain.ArtifactScanRequest{
+			SessionID:  session.ID,
+			SourceType: domain.AttachmentSourceReconciled,
+			SourceID:   "session_close",
+		}); err != nil {
+			return DTO{}, releaseClose(fmt.Errorf("final artifact scan: %w", err))
+		}
+	}
+	if s.artifacts != nil {
+		token, tokenErr := s.generateID()
+		if tokenErr != nil {
+			return DTO{}, releaseClose(fmt.Errorf("generate artifact quarantine token: %w", tokenErr))
+		}
+		quarantinePath, err = s.artifacts.QuarantineArtifactDir(ctx, session.ID, string(token))
+		if err != nil {
+			return DTO{}, releaseClose(fmt.Errorf("quarantine artifact directory: %w", err))
+		}
+	}
 	if input.appliedSystemCommandID != "" {
 		markSystemCommandApplied(&session, input.appliedSystemCommandID)
 	}
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
-		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
+		return DTO{}, releaseClose(err)
 	}
 	now := s.now()
 	cleanupRequested := false
@@ -6804,7 +7100,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			cleanupRequested = true
 		case domain.WorktreeCleanupActive, domain.WorktreeCleanupProvisioning, domain.WorktreeCleanupFailed:
 			if err := session.RequestWorktreeCleanup(now); err != nil {
-				return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
+				return DTO{}, releaseClose(err)
 			}
 			cleanupRequested = true
 		case domain.WorktreeCleanupCleaned:
@@ -6812,12 +7108,12 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			closeErr := apperror.New(apperror.CodeCloseFailed, apperror.CategoryValidationError, "git session worktree ownership is not persisted").WithDetails(map[string]any{
 				"sessionId": string(session.ID),
 			})
-			return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, closeErr)
+			return DTO{}, releaseClose(closeErr)
 		}
 	}
 	if err := session.Close(reason, now); err != nil {
 		closeErr := fmt.Errorf("close session %s: %w", session.ID, err)
-		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, closeErr)
+		return DTO{}, releaseClose(closeErr)
 	}
 	events := []sessionEventInput{{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}}}
 	if cleanupRequested {
@@ -6828,12 +7124,22 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	committed, err := s.saveSessionWithEvents(ctx, session, events)
 	if err != nil {
 		if committed {
+			if quarantinePath != "" && s.artifacts != nil {
+				if cleanupErr := s.artifacts.DeleteQuarantine(context.WithoutCancel(ctx), quarantinePath); cleanupErr != nil {
+					log.Printf("delete committed session artifact quarantine: session=%s error=%v", session.ID, cleanupErr)
+				}
+			}
 			if cleanupRequested {
 				s.scheduleWorktreeCleanup()
 			}
 			return DTO{}, err
 		}
-		return DTO{}, s.releaseClosePreparation(ctx, prepared.Session, err)
+		return DTO{}, releaseClose(err)
+	}
+	if quarantinePath != "" && s.artifacts != nil {
+		if cleanupErr := s.artifacts.DeleteQuarantine(context.WithoutCancel(ctx), quarantinePath); cleanupErr != nil {
+			log.Printf("delete closed session artifact quarantine: session=%s error=%v", session.ID, cleanupErr)
+		}
 	}
 	if cleanupRequested {
 		s.scheduleWorktreeCleanup()

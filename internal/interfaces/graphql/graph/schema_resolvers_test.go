@@ -10,6 +10,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	"github.com/nzlov/anycode/internal/application/port"
@@ -29,6 +30,34 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 	"github.com/vektah/gqlparser/v2/ast"
 )
+
+func TestQuerySessionFilesNormalizesPagination(t *testing.T) {
+	artifacts := &fakeArtifactUseCase{total: 120}
+	requestedPage, requestedPageSize := -2, 1000
+	page, err := NewResolver(UseCases{Artifacts: artifacts}).Query().SessionFiles(context.Background(), model.ListSessionFilesInput{
+		SessionID: "session-1", Page: &requestedPage, PageSize: &requestedPageSize,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifacts.query.Page != 1 || artifacts.query.PageSize != 50 {
+		t.Fatalf("artifact query pagination = %d/%d", artifacts.query.Page, artifacts.query.PageSize)
+	}
+	if page.PageInfo.Page != 1 || page.PageInfo.PageSize != 50 || page.PageInfo.Total != 120 || page.PageInfo.NextCursor != "2" {
+		t.Fatalf("session file page info = %#v", page.PageInfo)
+	}
+}
+
+type fakeArtifactUseCase struct {
+	artifactapp.UseCase
+	query sessiondomain.ArtifactQuery
+	total int
+}
+
+func (f *fakeArtifactUseCase) List(_ context.Context, query sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, int, error) {
+	f.query = query
+	return []sessiondomain.SessionFile{}, f.total, nil
+}
 
 func TestMapPendingApprovalIncludesResultProjection(t *testing.T) {
 	got := mapPendingApproval(&sessionapp.PendingApprovalDTO{

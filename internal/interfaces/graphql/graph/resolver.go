@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	authapp "github.com/nzlov/anycode/internal/application/auth"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
@@ -29,6 +30,7 @@ type UseCases struct {
 	Events      eventapp.UseCase
 	Timeline    timelineapp.UseCase
 	Attachments attachmentapp.UseCase
+	Artifacts   artifactapp.UseCase
 	Diff        diffapp.UseCase
 	Workflows   workflowapp.UseCase
 	Questions   questionapp.UseCase

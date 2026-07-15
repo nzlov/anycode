@@ -25,6 +25,13 @@
     v-else-if="event.content.__typename === 'TranscriptStatusContent'"
     :event="statusEvent"
   />
+  <SessionArtifactEvent
+    v-else-if="
+      event.content.__typename === 'TranscriptUnknownContent' &&
+      event.content.rawType.startsWith('artifact.')
+    "
+    :event="unknownEvent"
+  />
   <SessionUnknownEvent v-else :event="unknownEvent" />
 </template>
 
@@ -32,6 +39,7 @@
 import { computed } from 'vue';
 
 import SessionCommandEvent from '@/components/SessionCommandEvent.vue';
+import SessionArtifactEvent from '@/components/SessionArtifactEvent.vue';
 import SessionFileChangeEvent from '@/components/SessionFileChangeEvent.vue';
 import SessionReasoningEvent from '@/components/SessionReasoningEvent.vue';
 import SessionStatusEvent from '@/components/SessionStatusEvent.vue';

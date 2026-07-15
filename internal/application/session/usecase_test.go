@@ -26,6 +26,60 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore"
 )
 
+func TestPromptWithArtifactGuidanceDoesNotExposeArtifactPath(t *testing.T) {
+	got := promptWithArtifactGuidance("ship it", "/data/attachments/outputs/session-1")
+	if !strings.Contains(got, "ANYCODE_ARTIFACT_DIR") {
+		t.Fatalf("artifact guidance = %q", got)
+	}
+	if strings.Contains(got, "/data/attachments/outputs/session-1") {
+		t.Fatalf("artifact guidance exposed disk path: %q", got)
+	}
+}
+
+func TestProcessEventPayloadRemovesRawArtifactSources(t *testing.T) {
+	payload := processEventPayload(processdomain.CodexEvent{Payload: map[string]any{
+		"item": map[string]any{
+			"type": "tool_result",
+			"content": []any{
+				map[string]any{"type": "output_image", "image_url": "data:image/png;base64,secret", "path": "/private/image.png", "detail": "high"},
+				map[string]any{"type": "resource", "resource": map[string]any{"blob": "secret-blob", "uri": "file:///private/report.pdf", "mimeType": "application/pdf"}},
+			},
+		},
+		"large": strings.Repeat("x", maxPersistedCodexStringBytes+1),
+	}})
+	item := payload["item"].(map[string]any)
+	content := item["content"].([]any)
+	image := content[0].(map[string]any)
+	if image["image_url"] != nil || image["path"] != nil || image["detail"] != "high" {
+		t.Fatalf("sanitized image payload = %#v", image)
+	}
+	resource := content[1].(map[string]any)["resource"].(map[string]any)
+	if resource["blob"] != nil || resource["uri"] != nil || resource["mimeType"] != "application/pdf" {
+		t.Fatalf("sanitized resource payload = %#v", resource)
+	}
+	if payload["large"] != "[omitted large value]" {
+		t.Fatalf("sanitized large payload = %#v", payload["large"])
+	}
+}
+
+func TestArchiveCodexEventImagesSanitizesUnknownContent(t *testing.T) {
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"))
+	event := processdomain.CodexEvent{
+		EventID: "unknown-1",
+		Content: processdomain.CodexUnknownContent{RawType: "vendor.output", Payload: map[string]any{
+			"content": []any{map[string]any{"type": "audio", "data": "YXVkaW8=", "mimeType": "audio/mpeg"}},
+		}},
+	}
+	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{}, &event); len(failures) != 0 {
+		t.Fatalf("archive failures = %#v", failures)
+	}
+	content := event.Content.(processdomain.CodexUnknownContent)
+	audio := content.Payload["content"].([]any)[0].(map[string]any)
+	if audio["data"] != nil || audio["mimeType"] != "audio/mpeg" {
+		t.Fatalf("unknown content was not sanitized = %#v", content)
+	}
+}
+
 func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -4846,6 +4900,138 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 	if saved.ClosedAt == nil || !saved.ClosedAt.Equal(time.Unix(30, 0).UTC()) {
 		t.Fatalf("CloseSession() ClosedAt = %#v", saved.ClosedAt)
+	}
+}
+
+func TestCloseSessionScansQuarantinesAndDeletesArtifactOutput(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusCreated}
+	artifacts := &fakeSessionArtifactStore{}
+	scanner := &fakeSessionArtifactScanner{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithArtifactScanner(scanner))
+	service.artifacts = artifacts
+	service.generateID = func() (domain.ID, error) { return "close-token", nil }
+	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if len(scanner.inputs) != 1 || scanner.inputs[0].SourceType != domain.AttachmentSourceReconciled {
+		t.Fatalf("artifact scan inputs = %#v", scanner.inputs)
+	}
+	if artifacts.quarantinedToken != "close-token" || artifacts.deletedQuarantine != "/trash/session-1/close-token" || artifacts.restoredQuarantine != "" {
+		t.Fatalf("artifact lifecycle = %#v", artifacts)
+	}
+}
+
+func TestArchiveCodexEventImagesReplacesInlineDataWithStoredReference(t *testing.T) {
+	publisher := &fakeInlineArtifactPublisher{}
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithArtifactPublisher(publisher))
+	event := processdomain.CodexEvent{
+		EventID: "event-1", CorrelationID: "call-1",
+		Content: processdomain.CodexToolContent{Images: []processdomain.CodexImage{
+			{Source: "data:image/png;base64,cG5n", SourceKind: "inline", Detail: "high"},
+			{Source: "https://example.invalid/image.png", SourceKind: "remote"},
+		}},
+	}
+	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event); len(failures) != 0 {
+		t.Fatalf("archive failures = %#v", failures)
+	}
+	if string(publisher.input.Data) != "png" || publisher.input.MimeType != "image/png" || publisher.input.SourceKey != "process-1:event-1:0" {
+		t.Fatalf("inline artifact input = %#v", publisher.input)
+	}
+	content := event.Content.(processdomain.CodexToolContent)
+	if len(content.Images) != 1 || content.Images[0].Source != "/files/artifact-1/preview" || content.Images[0].SourceKind != "stored" {
+		t.Fatalf("stored images = %#v", content.Images)
+	}
+}
+
+func TestArchiveCodexEventImagesArchivesAudioWithoutExposingItAsImage(t *testing.T) {
+	publisher := &fakeInlineArtifactPublisher{previewKind: domain.PreviewKindAudio}
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithArtifactPublisher(publisher))
+	event := processdomain.CodexEvent{
+		EventID: "event-audio",
+		Content: processdomain.CodexToolContent{Images: []processdomain.CodexImage{
+			{Source: "YXVkaW8=", SourceKind: "inline_base64", MimeType: "audio/mpeg"},
+			{Source: "https://example.invalid/audio.mp3", SourceKind: "remote", MimeType: "audio/mpeg"},
+		}},
+	}
+	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event); len(failures) != 0 {
+		t.Fatalf("archive failures = %#v", failures)
+	}
+	if string(publisher.input.Data) != "audio" || publisher.input.MimeType != "audio/mpeg" || publisher.input.Filename != "event-audio-1.mp3" {
+		t.Fatalf("audio artifact input = %#v", publisher.input)
+	}
+	if images := event.Content.(processdomain.CodexToolContent).Images; len(images) != 0 {
+		t.Fatalf("non-image candidate leaked into transcript images = %#v", images)
+	}
+}
+
+func TestArchiveCodexEventImagesIsolatesCandidateFailure(t *testing.T) {
+	publisher := &fakeInlineArtifactPublisher{err: errors.New("storage unavailable at /private/archive")}
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithArtifactPublisher(publisher))
+	event := processdomain.CodexEvent{
+		EventID: "event-failed",
+		Content: processdomain.CodexToolContent{Images: []processdomain.CodexImage{
+			{Source: "data:image/png;base64,cG5n", SourceKind: "inline", MimeType: "image/png"},
+		}},
+	}
+	failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event)
+	if len(failures) != 1 || failures[0].eventType != "session.artifact_archive_failed" {
+		t.Fatalf("archive failures = %#v", failures)
+	}
+	if payload := failures[0].payload; payload["mimeType"] != "image/png" || strings.Contains(fmt.Sprint(payload), "/private/archive") || strings.Contains(fmt.Sprint(payload), "cG5n") {
+		t.Fatalf("failure payload leaked source data = %#v", payload)
+	}
+	if images := event.Content.(processdomain.CodexToolContent).Images; len(images) != 0 {
+		t.Fatalf("failed candidate remained in event = %#v", images)
+	}
+}
+
+func TestArchiveCodexEventImagesDoesNotRepublishPublishArtifactResult(t *testing.T) {
+	publisher := &fakeInlineArtifactPublisher{}
+	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithArtifactPublisher(publisher))
+	event := processdomain.CodexEvent{
+		EventID: "event-publish",
+		Content: processdomain.CodexToolContent{
+			QualifiedName: "mcp__anycode.publish_artifact",
+			Output:        processdomain.CodexStructuredText{Format: processdomain.CodexTextJSON, Text: `{"content":[{"type":"image","data":"cG5n","mimeType":"image/png"}]}`},
+			Images:        []processdomain.CodexImage{{Source: "data:image/png;base64,cG5n", SourceKind: "inline"}},
+		},
+	}
+	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event); len(failures) != 0 {
+		t.Fatalf("archive failures = %#v", failures)
+	}
+	content := event.Content.(processdomain.CodexToolContent)
+	if len(publisher.input.Data) != 0 || len(content.Images) != 0 || strings.Contains(content.Output.Text, "cG5n") {
+		t.Fatalf("publish_artifact result was re-archived: input=%#v event=%#v", publisher.input, event.Content)
+	}
+}
+
+func TestCloseSessionRestoresArtifactOutputWhenFinalSaveFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusCreated}
+	repo.saveHook = func(value domain.Session) error {
+		if value.Status == domain.StatusClosed {
+			return errors.New("save closed failed")
+		}
+		return nil
+	}
+	artifacts := &fakeSessionArtifactStore{}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.artifacts = artifacts
+	service.generateID = func() (domain.ID, error) { return "close-token", nil }
+
+	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err == nil {
+		t.Fatal("CloseSession() expected error")
+	}
+	if artifacts.restoredQuarantine != "/trash/session-1/close-token" || artifacts.deletedQuarantine != "" {
+		t.Fatalf("artifact rollback = %#v", artifacts)
+	}
+	if repo.sessions["session-1"].Status != domain.StatusStopped {
+		t.Fatalf("session status = %q", repo.sessions["session-1"].Status)
 	}
 }
 
@@ -10422,6 +10608,86 @@ type fakeAttachmentStore struct {
 	promoted        map[domain.StagedAttachmentID]bool
 	deletedSessions map[domain.SessionAttachmentID]bool
 	promoteErr      error
+}
+
+type fakeSessionArtifactScanner struct {
+	inputs []domain.ArtifactScanRequest
+}
+
+type fakeInlineArtifactPublisher struct {
+	input       domain.InlineArtifactRequest
+	previewKind domain.PreviewKind
+	err         error
+}
+
+func (p *fakeInlineArtifactPublisher) PublishInlineArtifact(_ context.Context, input domain.InlineArtifactRequest) (domain.SessionAttachment, error) {
+	p.input = input
+	if p.err != nil {
+		return domain.SessionAttachment{}, p.err
+	}
+	previewKind := p.previewKind
+	if previewKind == "" {
+		previewKind = domain.PreviewKindImage
+	}
+	return domain.SessionAttachment{ID: "artifact-1", MimeType: input.MimeType, PreviewKind: previewKind}, nil
+}
+
+func (s *fakeSessionArtifactScanner) Scan(_ context.Context, input domain.ArtifactScanRequest) ([]domain.SessionAttachment, error) {
+	s.inputs = append(s.inputs, input)
+	return nil, nil
+}
+
+type fakeSessionArtifactStore struct {
+	quarantinedToken   string
+	restoredQuarantine string
+	deletedQuarantine  string
+}
+
+func (s *fakeSessionArtifactStore) EnsureArtifactDir(context.Context, domain.ID) (string, error) {
+	return "/outputs/session-1", nil
+}
+
+func (s *fakeSessionArtifactStore) ArtifactDir(domain.ID) string {
+	return "/outputs/session-1"
+}
+
+func (s *fakeSessionArtifactStore) ArchiveArtifact(context.Context, domain.ArchiveArtifactInput) (domain.SessionAttachment, error) {
+	return domain.SessionAttachment{}, errors.New("unexpected ArchiveArtifact call")
+}
+
+func (s *fakeSessionArtifactStore) ArchiveInlineArtifact(context.Context, domain.ArchiveInlineArtifactInput) (domain.SessionFile, error) {
+	return domain.SessionFile{}, errors.New("unexpected ArchiveInlineArtifact call")
+}
+
+func (s *fakeSessionArtifactStore) QuarantineArtifactDir(_ context.Context, sessionID domain.ID, token string) (string, error) {
+	s.quarantinedToken = token
+	return "/trash/" + string(sessionID) + "/" + token, nil
+}
+
+func (s *fakeSessionArtifactStore) RestoreArtifactDir(_ context.Context, _ domain.ID, quarantinePath string) error {
+	s.restoredQuarantine = quarantinePath
+	return nil
+}
+
+func (s *fakeSessionArtifactStore) DeleteQuarantine(_ context.Context, quarantinePath string) error {
+	s.deletedQuarantine = quarantinePath
+	return nil
+}
+
+func (s *fakeSessionArtifactStore) ListArtifactQuarantines(context.Context) ([]domain.ArtifactQuarantine, error) {
+	return nil, nil
+}
+
+func (s *fakeSessionArtifactStore) ListArtifactOutputDirectories(context.Context) ([]domain.ArtifactOutputDirectory, error) {
+	return nil, nil
+}
+
+func (s *fakeSessionArtifactStore) DeleteArtifactOutputDirectory(context.Context, domain.ID) error {
+	return nil
+}
+
+func (s *fakeSessionArtifactStore) CopyArtifactToInput(context.Context, domain.SessionAttachment) (domain.SessionAttachment, error) {
+	return domain.SessionAttachment{}, errors.New("unexpected CopyArtifactToInput call")
 }
 
 func newFakeAttachmentStore() *fakeAttachmentStore {
