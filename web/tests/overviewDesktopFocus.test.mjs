@@ -104,12 +104,9 @@ test('desktop create panel presents the prompt before a compact context row', ()
   );
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel \.new-session-context \.branch-picker\s*{[^}]*width:\s*max-content[^}]*max-width:\s*calc\(24ch \+ 50px\)[^}]*flex:\s*0\s+1\s+auto/s,
+    /\.new-session-dialog--panel \.new-session-context \.branch-picker\s*{[^}]*width:\s*max-content[^}]*min-width:\s*44px[^}]*max-width:\s*calc\(24ch \+ 50px\)[^}]*flex:\s*0\s+1\s+auto/s,
   );
-  assert.match(
-    stylesSource,
-    /\.new-session-dialog--panel \.new-session-context \.branch-picker__select\s*{[^}]*width:\s*max-content[^}]*min-width:\s*44px[^}]*max-width:\s*24ch/s,
-  );
+  assert.doesNotMatch(stylesSource, /\.branch-picker__select/);
   assert.match(
     stylesSource,
     /\.new-session-dialog--panel \.new-session-context \.new-session-priority\s*{[^}]*width:\s*max-content[^}]*min-width:\s*44px[^}]*max-width:\s*12ch/s,

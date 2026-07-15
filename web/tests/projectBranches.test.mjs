@@ -13,10 +13,22 @@ test('project list no longer requests git state for sidebar summaries', () => {
 test('new session dialog refreshes cached branches explicitly', () => {
   const source = readFileSync(new URL('../src/components/NewSessionDialog.vue', import.meta.url), 'utf8');
 
-  assert.match(source, /aria-label="刷新分支"/);
-  assert.match(source, /refreshProjectBranches\(projectId\)/);
+  assert.match(
+    source,
+    /label="基础分支"[\s\S]*hide-dropdown-icon[\s\S]*<template #append>[\s\S]*aria-label="刷新分支"[\s\S]*@click\.stop="refreshProjectBranches\(projectId\)"[\s\S]*<\/template>[\s\S]*<\/q-select>/,
+  );
+  assert.match(
+    source,
+    /<template #selected>\s*<span class="ellipsis">[\s\S]*基础分支：\{\{ branch \}\}[\s\S]*<\/span>\s*<\/template>/,
+  );
+  assert.doesNotMatch(source, /<div v-if="selectedProject\?\.isGit" class="branch-picker">/);
   assert.match(source, /refreshProjectBranches[\s\S]*loadBranchesForProject\(value,\s*\{\s*refresh:\s*true\s*\}/);
   assert.match(source, /loadBranchesForProject[\s\S]*loadProjectBranches\(value,\s*options\)/);
+  assert.match(
+    source,
+    /branch\.value\s*=\s*state\.branches\.includes\(branch\.value\)\s*\?\s*branch\.value\s*:\s*state\.defaultBranch/,
+  );
+  assert.match(source, /message:\s*`获取分支失败：\$\{errorMessage\(error\)\}`/);
 });
 
 test('switching projects waits for refreshed branches before creating a session', () => {
