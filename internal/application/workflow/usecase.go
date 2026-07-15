@@ -113,13 +113,9 @@ func (s *Service) GetDefinition(ctx context.Context, id domain.DefinitionID) (De
 	if id == "" {
 		return DefinitionDTO{}, errors.New("workflow definition id is required")
 	}
-	definition, err := s.repo.FindDefinition(ctx, id)
+	definition, err := s.loadDefinition(ctx, id)
 	if err != nil {
 		return DefinitionDTO{}, err
-	}
-	definition.Graph = completeSystemOutputFields(definition.Graph)
-	if err := validateGraph(definition.Graph); err != nil {
-		return DefinitionDTO{}, workflowValidationError(err.Error())
 	}
 	return toDefinitionDTO(definition), nil
 }
@@ -142,7 +138,7 @@ func (s *Service) SaveDefinition(ctx context.Context, input SaveDefinitionInput)
 	if name == "" {
 		return DefinitionDTO{}, workflowValidationError("workflow definition name is required")
 	}
-	graph := completeSystemOutputFields(input.Graph)
+	graph := domain.CanonicalGraph(input.Graph)
 	if err := validateGraph(graph); err != nil {
 		return DefinitionDTO{}, workflowValidationError(err.Error())
 	}
@@ -206,54 +202,6 @@ func validateGraph(graph domain.Graph) error {
 		}
 	}
 	return nil
-}
-
-func completeSystemOutputFields(graph domain.Graph) domain.Graph {
-	nodes := make([]domain.Node, 0, len(graph.Nodes))
-	for _, node := range graph.Nodes {
-		node.OutputFields = completeNodeOutputFields(node)
-		nodes = append(nodes, node)
-	}
-	return domain.Graph{Nodes: nodes, Edges: append([]domain.Edge(nil), graph.Edges...)}
-}
-
-func completeNodeOutputFields(node domain.Node) []domain.OutputField {
-	fields := make([]domain.OutputField, 0, len(node.OutputFields))
-	for _, field := range node.OutputFields {
-		if strings.TrimSpace(field.Key) != "approval.approved" {
-			fields = append(fields, field)
-		}
-	}
-	if mergeRequest(node) != nil {
-		fields = ensureOutputField(fields, domain.OutputField{
-			Key:         "merge.status",
-			Description: "Merge result status.",
-			ValueType:   "string",
-		})
-		fields = ensureOutputField(fields, domain.OutputField{
-			Key:         "merge.failureCode",
-			Description: "Merge failure code when the merge did not complete.",
-			ValueType:   "string",
-		})
-		fields = ensureOutputField(fields, domain.OutputField{
-			Key:         "merge.failureReason",
-			Description: "Merge failure reason when the merge did not complete.",
-			ValueType:   "string",
-		})
-	}
-	return fields
-}
-
-func ensureOutputField(fields []domain.OutputField, required domain.OutputField) []domain.OutputField {
-	for index, field := range fields {
-		if strings.TrimSpace(field.Key) == required.Key {
-			fields[index].Key = required.Key
-			fields[index].Description = required.Description
-			fields[index].ValueType = required.ValueType
-			return fields
-		}
-	}
-	return append(fields, required)
 }
 
 func (s *Service) ActivateDefinition(ctx context.Context, id domain.DefinitionID) error {
@@ -336,7 +284,7 @@ func (s *Service) submitApproval(ctx context.Context, workflowRunID domain.RunID
 	if nodeRun.Status != domain.NodeWaitingApproval {
 		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, fmt.Errorf("node run cannot accept approval from status %q", nodeRun.Status)
 	}
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return domain.Run{}, sessiondomain.WorkflowAdvance{}, false, err
 	}
@@ -576,7 +524,7 @@ func (s *Service) MarkStartFailed(ctx context.Context, input sessiondomain.Workf
 	if err != nil {
 		return err
 	}
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return err
 	}
@@ -617,7 +565,7 @@ func (s *Service) MarkResumeFailedForSession(ctx context.Context, input sessiond
 	if run.Status == domain.RunWaitingResumeAction {
 		return toSessionWorkflowRunSnapshot(run), nil
 	}
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowRunSnapshot{}, err
 	}
@@ -676,7 +624,7 @@ func (s *Service) ResumeCurrentNodeForSession(ctx context.Context, input session
 	default:
 		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run cannot resume current node from status %q", run.Status)
 	}
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -737,7 +685,7 @@ func (s *Service) RerunCurrentNodeForSession(ctx context.Context, input sessiond
 	if run.Status != domain.RunWaitingResumeAction {
 		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run cannot rerun current node from status %q", run.Status)
 	}
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -897,7 +845,7 @@ func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domai
 			advance.Completed = true
 			return advance, nil
 		}
-		definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+		definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 		if err != nil {
 			return sessiondomain.WorkflowAdvance{}, err
 		}
@@ -927,7 +875,7 @@ func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domai
 	default:
 		return sessiondomain.WorkflowAdvance{}, fmt.Errorf("workflow run cannot recover process exit from status %q", run.Status)
 	}
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -965,7 +913,7 @@ func (s *Service) workflowAdvanceFromPersistedRun(ctx context.Context, run domai
 }
 
 func (s *Service) completeNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, output map[string]any) (sessiondomain.WorkflowAdvance, error) {
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -1001,7 +949,7 @@ type completeNodeOptions struct {
 }
 
 func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, result *domain.Result, options completeNodeOptions) (sessiondomain.WorkflowAdvance, error) {
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -1171,7 +1119,7 @@ func (s *Service) completeNodeWithOptions(ctx context.Context, run domain.Run, n
 }
 
 func (s *Service) failNode(ctx context.Context, run domain.Run, nodeRunID domain.NodeRunID, failure domain.NodeFailure, output map[string]any) (sessiondomain.WorkflowAdvance, error) {
-	definition, err := s.repo.FindDefinition(ctx, run.WorkflowDefinitionID)
+	definition, err := s.loadDefinition(ctx, run.WorkflowDefinitionID)
 	if err != nil {
 		return sessiondomain.WorkflowAdvance{}, err
 	}
@@ -1515,23 +1463,36 @@ func (s *Service) definitionForStart(ctx context.Context, input sessiondomain.Wo
 		return domain.Definition{}, errors.New("session id is required")
 	}
 	if input.WorkflowDefinitionID != "" {
-		definition, err := s.repo.FindDefinition(ctx, domain.DefinitionID(input.WorkflowDefinitionID))
+		definition, err := s.loadDefinition(ctx, domain.DefinitionID(input.WorkflowDefinitionID))
 		if err != nil {
 			return domain.Definition{}, err
 		}
 		if definition.ProjectID != domain.ProjectID(input.ProjectID) {
 			return domain.Definition{}, errors.New("workflow definition does not belong to project")
 		}
-		return validatedDefinition(definition)
+		return definition, nil
 	}
-	definition, err := s.repo.FindActive(ctx, domain.ProjectID(input.ProjectID))
+	return s.loadActiveDefinition(ctx, domain.ProjectID(input.ProjectID))
+}
+
+func (s *Service) loadDefinition(ctx context.Context, id domain.DefinitionID) (domain.Definition, error) {
+	definition, err := s.repo.FindDefinition(ctx, id)
 	if err != nil {
 		return domain.Definition{}, err
 	}
-	return validatedDefinition(definition)
+	return canonicalDefinition(definition)
 }
 
-func validatedDefinition(definition domain.Definition) (domain.Definition, error) {
+func (s *Service) loadActiveDefinition(ctx context.Context, projectID domain.ProjectID) (domain.Definition, error) {
+	definition, err := s.repo.FindActive(ctx, projectID)
+	if err != nil {
+		return domain.Definition{}, err
+	}
+	return canonicalDefinition(definition)
+}
+
+func canonicalDefinition(definition domain.Definition) (domain.Definition, error) {
+	definition.Graph = domain.CanonicalGraph(definition.Graph)
 	if err := validateGraph(definition.Graph); err != nil {
 		return domain.Definition{}, workflowValidationError(err.Error())
 	}
@@ -1760,7 +1721,7 @@ func resultRetryPrompt(node domain.Node, reason error) string {
 	builder.WriteString("ANYCODE_WORKFLOW_RESULT_RETRY\n")
 	builder.WriteString("Your previous response did not satisfy the workflow result protocol: ")
 	builder.WriteString(reason.Error())
-	builder.WriteString("\nIf any question, uncertainty, approval, or user decision remains, call `answer_user` now and wait for the answer before finishing.\n")
+	builder.WriteString("\nIf any question, uncertainty, or user decision within this node's task remains, call `answer_user` now and wait for the answer before finishing.\n")
 	builder.WriteString(workflowResultContract(node))
 	if len(node.OutputFields) > 0 {
 		builder.WriteString("\n\nRequired `results.data` fields:\n")
@@ -1818,7 +1779,7 @@ func outputFieldList(fields []domain.OutputField) string {
 }
 
 func workflowResultContract(node domain.Node) string {
-	return "Workflow result contract:\nBefore finishing, resolve every question, uncertainty, approval, or user decision through `answer_user`. Do not describe pending questions in the final result.\nReturn only one JSON object with exactly this shape and no extra fields:\n" +
+	return "Workflow result contract:\nBefore finishing, resolve every question, uncertainty, or user decision within this node's task through `answer_user`. Do not describe pending questions in the final result. Workflow-managed before-run or after-run approval is handled by the runner after you return `results`; do not call `answer_user` merely to obtain that approval.\nReturn only one JSON object with exactly this shape and no extra fields:\n" +
 		`{"results":{"version":1,"outcome":"success|partial|failure","summary":"concise review summary","data":{},"checks":[{"id":"...","label":"...","status":"passed|warning|failed","detail":"...","source":"agent"}],"warnings":[{"code":"...","message":"..."}],"artifacts":[{"kind":"...","label":"...","ref":"..."}]}}` +
 		"\nThe workflow owns human approval. Never return `approval`, `approved`, `questions`, `pendingQuestions`, or `needs_input` in `results`."
 }

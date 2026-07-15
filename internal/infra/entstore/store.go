@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -148,6 +149,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.client.Schema.Create(ctx); err != nil {
 		return err
 	}
+	if err := s.migrateWorkflowApprovalOutputFields(ctx); err != nil {
+		return err
+	}
 	if err := s.migrateSessionFileColumns(ctx); err != nil {
 		return err
 	}
@@ -209,6 +213,124 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("backfill question origin process run: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) migrateWorkflowApprovalOutputFields(ctx context.Context) error {
+	rows, err := s.client.WorkflowDefinition.Query().All(ctx)
+	if err != nil {
+		return fmt.Errorf("list workflow definitions for approval output migration: %w", err)
+	}
+	type update struct {
+		id        string
+		graph     map[string]any
+		updatedAt time.Time
+	}
+	updates := make([]update, 0)
+	for _, row := range rows {
+		graph, changed, err := workflowGraphWithoutApprovalOutputFields(row.Graph)
+		if err != nil {
+			return fmt.Errorf("inspect workflow definition %q for approval output migration: %w", row.ID, err)
+		}
+		if changed {
+			updates = append(updates, update{id: row.ID, graph: graph, updatedAt: row.UpdatedAt})
+		}
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin workflow approval output migration: %w", err)
+	}
+	defer tx.Rollback()
+	for _, item := range updates {
+		if err := tx.WorkflowDefinition.UpdateOneID(item.id).
+			SetGraph(item.graph).
+			SetUpdatedAt(item.updatedAt).
+			Exec(ctx); err != nil {
+			return fmt.Errorf("migrate workflow definition %q approval output fields: %w", item.id, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit workflow approval output migration: %w", err)
+	}
+	return nil
+}
+
+// GLUE: This map rewrite preserves unknown graph JSON while applying the domain's reserved approval namespace; remove after all supported databases cross this migration.
+func workflowGraphWithoutApprovalOutputFields(graph map[string]any) (map[string]any, bool, error) {
+	nodesKey, nodesValue, ok := workflowGraphField(graph, "Nodes", "nodes")
+	if !ok || nodesValue == nil {
+		return graph, false, nil
+	}
+	nodes, ok := nodesValue.([]any)
+	if !ok {
+		return nil, false, errors.New("workflow graph nodes must be an array")
+	}
+
+	resultNodes := append([]any(nil), nodes...)
+	changed := false
+	for index, rawNode := range nodes {
+		node, ok := rawNode.(map[string]any)
+		if !ok {
+			return nil, false, fmt.Errorf("workflow graph node %d must be an object", index)
+		}
+		fieldsKey, fieldsValue, ok := workflowGraphField(node, "OutputFields", "outputFields")
+		if !ok || fieldsValue == nil {
+			continue
+		}
+		fields, ok := fieldsValue.([]any)
+		if !ok {
+			return nil, false, fmt.Errorf("workflow graph node %d output fields must be an array", index)
+		}
+		kept := make([]any, 0, len(fields))
+		for fieldIndex, rawField := range fields {
+			field, ok := rawField.(map[string]any)
+			if !ok {
+				return nil, false, fmt.Errorf("workflow graph node %d output field %d must be an object", index, fieldIndex)
+			}
+			_, keyValue, hasKey := workflowGraphField(field, "Key", "key")
+			if hasKey {
+				key, ok := keyValue.(string)
+				if !ok {
+					return nil, false, fmt.Errorf("workflow graph node %d output field %d key must be a string", index, fieldIndex)
+				}
+				if workflow.IsApprovalOutputField(key) {
+					changed = true
+					continue
+				}
+			}
+			kept = append(kept, rawField)
+		}
+		if len(kept) == len(fields) {
+			continue
+		}
+		resultNode := make(map[string]any, len(node))
+		for key, value := range node {
+			resultNode[key] = value
+		}
+		resultNode[fieldsKey] = kept
+		resultNodes[index] = resultNode
+	}
+	if !changed {
+		return graph, false, nil
+	}
+	result := make(map[string]any, len(graph))
+	for key, value := range graph {
+		result[key] = value
+	}
+	result[nodesKey] = resultNodes
+	return result, true, nil
+}
+
+func workflowGraphField(value map[string]any, keys ...string) (string, any, bool) {
+	for _, key := range keys {
+		if field, ok := value[key]; ok {
+			return key, field, true
+		}
+	}
+	return "", nil, false
 }
 
 func (s *Store) Projects() *ProjectRepository {

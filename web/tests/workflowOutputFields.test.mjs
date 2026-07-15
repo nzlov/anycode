@@ -34,6 +34,20 @@ test('preserves custom fields while replacing active system fields', () => {
   ]);
 });
 
+test('reserves the complete workflow approval namespace', () => {
+  const fields = completeOutputFields(
+    [
+      { key: 'approval', description: 'legacy object', valueType: 'object' },
+      { key: 'approval.note', description: 'legacy note', valueType: 'string' },
+      { key: ' approval.approved ', description: 'legacy approval', valueType: 'boolean' },
+      { key: 'result', description: 'result', valueType: 'string' },
+    ],
+    systemOutputFields('codex', false),
+  );
+
+  assert.deepEqual(fields, [{ key: 'result', description: 'result', valueType: 'string' }]);
+});
+
 test('workflow config persists after-run forward approval', () => {
   const source = readFileSync(new URL('../src/pages/WorkflowConfigPage.vue', import.meta.url), 'utf8');
 
