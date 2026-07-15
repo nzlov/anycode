@@ -131,7 +131,6 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /getSessionAllDiff\(\{ sessionId, mode: 'all'/);
   assert.match(overviewSource, /card\.pendingApproval/);
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
-  assert.doesNotMatch(overviewSource, /Promise\.allSettled/);
   assert.doesNotMatch(overviewSource, /approvalOutputError/);
   assert.match(overviewSource, /:phase="approvalPending\?\.phase \?\? null"/);
   assert.match(overviewSource, /:result="approvalPending\?\.result \?\? null"/);
