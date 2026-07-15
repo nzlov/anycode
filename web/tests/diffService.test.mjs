@@ -11,15 +11,6 @@ function functionBody(name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-test('getSessionDiffFiles only requests file list data', () => {
-  const body = functionBody('getSessionDiffFiles');
-
-  assert.match(body, /sessionDiff\(input: \$input\)/);
-  assert.match(body, /files\s*\{/);
-  assert.doesNotMatch(body, /fileDiff\s*\{/);
-  assert.doesNotMatch(body, /allDiff\s*\{/);
-});
-
 test('getSessionDiffSummaries requests one normalized batch', () => {
   const body = functionBody('getSessionDiffSummaries');
 
@@ -29,15 +20,6 @@ test('getSessionDiffSummaries requests one normalized batch', () => {
   assert.match(body, /filesChanged/);
   assert.doesNotMatch(body, /Promise\.all/);
   assert.doesNotMatch(body, /sessionDiff\(input:/);
-});
-
-test('getSessionFileDiff requests selected file content with context controls', () => {
-  const body = functionBody('getSessionFileDiff');
-
-  assert.match(body, /contextBefore/);
-  assert.match(body, /contextAfter/);
-  assert.match(body, /fileDiff\s*\{/);
-  assert.doesNotMatch(body, /allDiff\s*\{/);
 });
 
 test('full diff service queries request only the needed diff shape', () => {

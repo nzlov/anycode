@@ -137,7 +137,7 @@ test('pagination has one responsive component owner on every affected page', () 
     stylesSource,
     /\.app-pagination \.q-btn\s*{[^}]*min-width:\s*44px\s*!important[^}]*min-height:\s*44px\s*!important/s,
   );
-  for (const pageSource of [detailSource, diffWorkspaceSource, commitHistorySource]) {
+  for (const pageSource of [diffWorkspaceSource, commitHistorySource]) {
     assert.match(pageSource, /import AppPagination/);
     assert.match(pageSource, /<AppPagination/);
     assert.doesNotMatch(pageSource, /<q-pagination/);
@@ -148,9 +148,15 @@ test('pagination has one responsive component owner on every affected page', () 
 
 test('desktop diff page keeps the file list visible while diff content scrolls', () => {
   assert.match(
-    diffPageSource,
-    /@media \(min-width:\s*1024px\)[\s\S]*?\.diff-page\s+:deep\(\.diff-files\)\s*{[^}]*position:\s*sticky[^}]*top:\s*66px[^}]*max-height:\s*calc\(100dvh\s*-\s*82px\)[^}]*overflow-y:\s*auto/s,
+    diffWorkspaceSource,
+    /@media \(min-width:\s*1024px\)[\s\S]*?\.diff-workspace__layout\s*{[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)[^}]*overflow-y:\s*auto[^}]*}[\s\S]*?\.diff-files\s*{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*height:\s*100%[^}]*overflow-y:\s*auto/s,
   );
+  assert.match(
+    diffWorkspaceSource,
+    /@container \(max-width:\s*1023px\)[\s\S]*?\.diff-files\s*{[^}]*position:\s*static[^}]*overflow-y:\s*visible/s,
+  );
+  assert.match(diffPageSource, /height:\s*calc\(100dvh\s*-\s*150px\)/);
+  assert.doesNotMatch(diffPageSource, /position:\s*sticky/);
 });
 
 test('session detail mobile navigation shows one scroll owner at a time', () => {

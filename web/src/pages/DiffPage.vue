@@ -115,12 +115,9 @@ watch(
 }
 
 @media (min-width: 1024px) {
-  .diff-page :deep(.diff-files) {
-    position: sticky;
-    top: 66px;
-    max-height: calc(100dvh - 82px);
-    overflow-y: auto;
-    overscroll-behavior: contain;
+  .diff-page :deep(.diff-workspace) {
+    height: calc(100dvh - 150px);
+    min-height: 480px;
   }
 }
 </style>

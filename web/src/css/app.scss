@@ -1044,6 +1044,12 @@ a {
   padding-right: 8px;
 }
 
+.forward-approval-dialog__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .forward-approval-dialog__panels {
   min-height: 0;
   overflow: hidden;
@@ -1052,6 +1058,10 @@ a {
 .forward-approval-dialog__panel {
   height: 100%;
   overflow: auto;
+}
+
+.forward-approval-dialog__panel .diff-workspace {
+  height: 100%;
 }
 
 .overview-diff-dialog {
@@ -1085,7 +1095,8 @@ a {
 
 .overview-diff-dialog__body .diff-workspace {
   width: 100%;
-  overflow: auto;
+  height: 100%;
+  overflow: hidden;
 }
 
 .new-session-grid {

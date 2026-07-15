@@ -352,19 +352,18 @@ try {
     await waitForText('会话事件流');
   });
 
-  await test('详情页当前变更、单文件 Diff 弹窗和完整 Diff 按钮生效', async () => {
+  await test('详情页当前变更复用共享工作区且完整 Diff 按钮生效', async () => {
     await navigate(`/#/sessions/${auditData.session.id}`);
     await waitForText('会话事件流');
     await clickText('当前变更');
     await waitForText(auditData.diffFile);
     await clickDetailChangesRefreshButton();
     await clickText(auditData.diffFile);
-    await waitForVisibleSelector('.file-diff-dialog');
-    await closeVisibleDialog();
-    await clickText('查看全部');
-    await waitForRouteIncludes('/diff');
-    await navigate(`/#/sessions/${auditData.session.id}`);
-    await waitForText('会话事件流');
+    await waitForVisibleSelector('.detail-diff-panel .diff-file-card');
+    await waitForCondition(
+      `document.querySelector('.detail-diff-panel .diff-workspace__layout') !== null`,
+      'session detail shared diff workspace',
+    );
     await clickText('完整 Diff');
     await waitForRouteIncludes('/diff');
     await waitForRouteIncludes(auditData.session.id);
@@ -1223,13 +1222,15 @@ async function clickDetailChangesRefreshButton() {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
     };
-    const button = Array.from(document.querySelectorAll('.changes-header button')).find(visible);
+    const button = Array.from(
+      document.querySelectorAll('.detail-diff-panel [aria-label="刷新 Diff"]'),
+    ).find(visible);
     if (!button) return false;
     button.click();
     return true;
   })()`);
   assert(clicked, 'detail changes refresh button not found');
-  await sleep(500);
+  await waitForDiffIdle();
 }
 
 async function clickProjectItem(projectName) {
