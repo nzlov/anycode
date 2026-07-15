@@ -280,15 +280,21 @@
       @submit="submitAnswers"
     />
 
-    <q-dialog v-model="approvalDialog" :maximized="$q.screen.lt.sm">
+    <q-dialog
+      v-model="approvalDialog"
+      :maximized="$q.screen.lt.sm"
+      @hide="handleApprovalDialogClosed"
+    >
       <q-card class="forward-approval-dialog app-content-dialog">
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
             <q-tab name="output" icon="fact_check" label="审核结果" />
             <q-tab name="diff" icon="difference" label="Diff" />
+            <q-tab name="artifacts" icon="inventory_2" label="产物" />
           </q-tabs>
           <div class="forward-approval-dialog__actions">
             <q-btn
+              v-if="approvalTab === 'diff'"
               flat
               round
               dense
@@ -307,6 +313,8 @@
             <WorkflowResultReview
               :phase="approvalPending?.phase ?? null"
               :result="approvalPending?.result ?? null"
+              :resolved-artifacts="approvalResolvedArtifacts"
+              @open-artifact="openApprovalArtifact"
             />
           </q-tab-panel>
           <q-tab-panel name="diff" class="forward-approval-dialog__panel">
@@ -314,6 +322,15 @@
               v-if="approvalDialog"
               v-model="approvalDiffWorkspaceState"
               :target="approvalDiffTarget"
+            />
+          </q-tab-panel>
+          <q-tab-panel name="artifacts" class="forward-approval-dialog__panel">
+            <SessionArtifactsPanel
+              v-if="approvalDialog"
+              :session-id="approvalSessionId"
+              :focus-request="approvalArtifactFocus"
+              @artifact-deleted="refreshApprovalArtifactReferences"
+              @artifacts-refreshed="refreshApprovalArtifactReferences"
             />
           </q-tab-panel>
         </q-tab-panels>
@@ -368,6 +385,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
+import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
@@ -389,6 +407,12 @@ import {
   createOverviewDiffSummaryController,
 } from '@/services/overviewDiffSummary';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
+import { normalizeArtifactLogicalPath } from '@/services/artifactLogicalPath';
+import {
+  resolveSessionArtifacts,
+  type SessionArtifactFocusRequest,
+  type SessionFile,
+} from '@/services/sessionFiles';
 import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
 import {
   closeSession,
@@ -461,12 +485,16 @@ const questionsLoading = ref(false);
 const questionsSubmitting = ref(false);
 let questionRequestGeneration = 0;
 const approvalDialog = ref(false);
-const approvalTab = ref<'output' | 'diff'>('output');
+const approvalTab = ref<'output' | 'diff' | 'artifacts'>('output');
 const approvalSubmitting = ref(false);
 const approvalSessionId = ref('');
 const approvalContext = ref<ApprovalContext | null>(null);
 const approvalPending = ref<PendingApproval | null>(null);
 let approvalContextGeneration = 0;
+let approvalArtifactResolveRequest = 0;
+let approvalArtifactFocusToken = 0;
+const approvalResolvedArtifacts = ref<Record<string, SessionFile>>({});
+const approvalArtifactFocus = ref<SessionArtifactFocusRequest | null>(null);
 const approvalDiffWorkspaceState = ref<DiffWorkspaceState>(initialDiffWorkspaceState());
 const diffDialog = ref(false);
 const diffDialogSessionId = ref('');
@@ -889,8 +917,70 @@ function openApprovalDialog(card: SessionCard) {
     ? { workflowRunId: card.pendingApproval.workflowRunId, nodeId: card.pendingApproval.nodeId }
     : null;
   approvalPending.value = card.pendingApproval ?? null;
+  approvalResolvedArtifacts.value = {};
+  approvalArtifactFocus.value = null;
   approvalDiffWorkspaceState.value = initialDiffWorkspaceState();
   approvalDialog.value = true;
+  void refreshApprovalArtifactReferences();
+}
+
+async function refreshApprovalArtifactReferences() {
+  const requestGeneration = approvalContextGeneration;
+  const request = ++approvalArtifactResolveRequest;
+  const sessionId = approvalSessionId.value;
+  const logicalPaths = approvalArtifactLogicalPaths(approvalPending.value);
+  approvalResolvedArtifacts.value = {};
+  if (!sessionId || logicalPaths.length === 0) return;
+  try {
+    const resolved = await resolveSessionArtifacts(sessionId, logicalPaths);
+    if (
+      request !== approvalArtifactResolveRequest ||
+      approvalContextGeneration !== requestGeneration ||
+      approvalSessionId.value !== sessionId
+    ) {
+      return;
+    }
+    approvalResolvedArtifacts.value = Object.fromEntries(
+      resolved.map((artifact) => [artifact.logicalPath, artifact.file]),
+    );
+  } catch {
+    if (
+      request === approvalArtifactResolveRequest &&
+      approvalContextGeneration === requestGeneration &&
+      approvalSessionId.value === sessionId
+    ) {
+      approvalResolvedArtifacts.value = {};
+    }
+  }
+}
+
+function approvalArtifactLogicalPaths(pending: PendingApproval | null) {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+  for (const artifact of pending?.result?.artifacts ?? []) {
+    const logicalPath = normalizeArtifactLogicalPath(artifact.ref);
+    if (!logicalPath || seen.has(logicalPath)) continue;
+    seen.add(logicalPath);
+    paths.push(logicalPath);
+    if (paths.length === 100) break;
+  }
+  return paths;
+}
+
+function openApprovalArtifact(file: SessionFile) {
+  approvalTab.value = 'artifacts';
+  // GLUE: bridges NodeResult logical refs to SessionFile selection; remove when results store file IDs.
+  approvalArtifactFocus.value = { file, token: ++approvalArtifactFocusToken };
+}
+
+function handleApprovalDialogClosed() {
+  approvalContextGeneration += 1;
+  approvalArtifactResolveRequest += 1;
+  approvalContext.value = null;
+  approvalPending.value = null;
+  approvalSessionId.value = '';
+  approvalResolvedArtifacts.value = {};
+  approvalArtifactFocus.value = null;
 }
 
 function isCurrentApprovalContext(requestGeneration: number, sessionId: string) {

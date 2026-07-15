@@ -707,6 +707,50 @@ func TestArtifactMetadataAndEventsCommitAtomically(t *testing.T) {
 	}
 }
 
+func TestResolveLatestSessionArtifactsByLogicalPaths(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo := store.Attachments()
+	now := time.Now().UTC()
+	deletedAt := now.Add(3 * time.Second)
+	artifacts := []session.SessionFile{
+		{ID: "old", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "old", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now},
+		{ID: "new", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "new", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now.Add(time.Second)},
+		{ID: "deleted", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "deleted", LogicalPath: "image.png", Filename: "image.png", CreatedAt: now.Add(2 * time.Second), DeletedAt: &deletedAt},
+		{ID: "other-session", SessionID: "session-2", Role: session.FileRoleArtifact, SourceKey: "other", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now.Add(4 * time.Second)},
+	}
+	for _, artifact := range artifacts {
+		if err := repo.SaveSessionAttachment(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+	}
+	latest, err := repo.ResolveLatestSessionArtifactsByLogicalPaths(ctx, "session-1", []string{"reports/result.txt"})
+	if err != nil || len(latest) != 1 || latest[0].ID != "new" {
+		t.Fatalf("latest artifact = %#v err=%v", latest, err)
+	}
+	if _, err := repo.SoftDeleteArtifact(ctx, "deleted", deletedAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.SoftDeleteArtifact(ctx, "new", deletedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.ResolveLatestSessionArtifactsByLogicalPaths(ctx, "session-1", []string{"image.png", "reports/result.txt", "missing.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ID != "old" {
+		t.Fatalf("resolved artifacts = %#v", got)
+	}
+}
+
 func TestSessionRepositoryMigrateAddsFieldsToExistingTursoSessions(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "anycode.db")

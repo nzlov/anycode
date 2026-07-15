@@ -296,6 +296,16 @@ type QuickCommandPage struct {
 	PageInfo *PageInfo       `json:"pageInfo"`
 }
 
+type ResolveSessionArtifactsInput struct {
+	SessionID    string   `json:"sessionId"`
+	LogicalPaths []string `json:"logicalPaths"`
+}
+
+type ResolvedSessionArtifact struct {
+	LogicalPath string       `json:"logicalPath"`
+	File        *SessionFile `json:"file"`
+}
+
 type RetryConfig struct {
 	MaxAttempts int `json:"maxAttempts"`
 }

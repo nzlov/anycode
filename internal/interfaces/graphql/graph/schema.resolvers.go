@@ -663,6 +663,22 @@ func (r *queryResolver) SessionFiles(ctx context.Context, input model.ListSessio
 	return &model.SessionFilePage{Items: items, PageInfo: mapPageInfo(page, pageSize, total, nextCursor)}, nil
 }
 
+// ResolveSessionArtifacts is the resolver for the resolveSessionArtifacts field.
+func (r *queryResolver) ResolveSessionArtifacts(ctx context.Context, input model.ResolveSessionArtifactsInput) ([]*model.ResolvedSessionArtifact, error) {
+	if r.UseCases.Artifacts == nil {
+		return nil, missingUseCase("artifacts")
+	}
+	files, err := r.UseCases.Artifacts.Resolve(ctx, sessiondomain.ID(input.SessionID), input.LogicalPaths)
+	if err != nil {
+		return nil, err
+	}
+	resolved := make([]*model.ResolvedSessionArtifact, 0, len(files))
+	for _, file := range files {
+		resolved = append(resolved, &model.ResolvedSessionArtifact{LogicalPath: file.LogicalPath, File: mapSessionFile(file)})
+	}
+	return resolved, nil
+}
+
 // SessionTranscript is the resolver for the sessionTranscript field.
 func (r *subscriptionResolver) SessionTranscript(ctx context.Context, sessionID string) (<-chan *model.TranscriptStreamItem, error) {
 	if r.UseCases.Timeline == nil {
