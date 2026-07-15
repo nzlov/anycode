@@ -46,7 +46,7 @@
       </section>
       <section v-if="content.output">
         <div class="command-event__label">输出</div>
-        <StaticAnsiOutput :text="content.output" />
+        <StaticAnsiOutput :text="content.output" appearance="surface" />
       </section>
     </div>
   </article>
