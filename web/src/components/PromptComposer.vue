@@ -13,8 +13,7 @@
       <q-badge
         v-if="showBadge"
         rounded
-        :color="files.length > 0 ? 'cyan-1' : 'indigo-1'"
-        :text-color="files.length > 0 ? 'cyan-9' : 'indigo-9'"
+        class="attachment-count-badge"
         :label="files.length > 0 ? `${files.length} 个附件` : '可附加上下文'"
       />
     </div>

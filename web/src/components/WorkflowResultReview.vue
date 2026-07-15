@@ -3,7 +3,7 @@
     v-if="phase === 'after_run' && !normalizedResult"
     dense
     rounded
-    class="workflow-result-review__error bg-negative text-white"
+    class="workflow-result-review__error app-feedback app-feedback--danger"
   >
     执行后审批缺少节点结果，请刷新后重试。结果恢复前不能提交审批。
   </q-banner>
@@ -41,13 +41,17 @@
             <q-item-label v-if="check.detail" caption>{{ check.detail }}</q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-badge outline color="grey-7" :label="check.source === 'system' ? '系统验证' : 'Agent 验证'" />
+            <q-badge outline class="text-muted" :label="check.source === 'system' ? '系统验证' : 'Agent 验证'" />
           </q-item-section>
         </q-item>
       </q-list>
     </section>
 
-    <q-banner v-if="normalizedResult.warnings.length" dense class="workflow-result-review__warnings bg-warning text-dark">
+    <q-banner
+      v-if="normalizedResult.warnings.length"
+      dense
+      class="workflow-result-review__warnings app-feedback app-feedback--warning"
+    >
       <div class="text-subtitle2 text-weight-bold">注意事项</div>
       <div v-for="(warning, index) in normalizedResult.warnings" :key="`${warning.code}:${index}`" class="q-mt-xs">{{ warning.message }}</div>
     </q-banner>
@@ -60,7 +64,7 @@
             <q-item-label>{{ artifact.label }}</q-item-label>
             <q-item-label caption class="text-mono">{{ artifact.ref }}</q-item-label>
           </q-item-section>
-          <q-item-section side><q-badge outline color="grey-7" :label="artifact.kind" /></q-item-section>
+          <q-item-section side><q-badge outline class="text-muted" :label="artifact.kind" /></q-item-section>
         </q-item>
       </q-list>
     </section>

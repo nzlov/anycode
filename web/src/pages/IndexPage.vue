@@ -15,8 +15,11 @@
           :key="project.id"
           clickable
           :outline="!isProjectVisible(project.id)"
-          :color="isProjectVisible(project.id) ? 'positive' : 'grey-4'"
-          :text-color="isProjectVisible(project.id) ? 'dark' : 'grey-8'"
+          class="overview-project-chip"
+          :class="{
+            'overview-project-chip--visible': isProjectVisible(project.id),
+            'overview-project-chip--hidden': !isProjectVisible(project.id),
+          }"
           :icon="isProjectVisible(project.id) ? 'visibility' : 'visibility_off'"
           :aria-pressed="isProjectVisible(project.id)"
           :aria-label="`${isProjectVisible(project.id) ? '隐藏' : '显示'} ${project.name} 项目卡片`"
@@ -58,7 +61,7 @@
                 v-if="card.pendingQuestion"
                 rounded
                 color="warning"
-                text-color="dark"
+                class="app-on-warning"
                 label="待回答"
               />
             </div>
@@ -120,7 +123,7 @@
                         <q-item-section avatar>
                           <q-icon
                             :name="item.completed ? 'check_circle' : 'radio_button_unchecked'"
-                            :color="item.completed ? 'positive' : 'grey-6'"
+                            :class="item.completed ? 'text-positive' : 'text-muted'"
                           />
                         </q-item-section>
                         <q-item-section>

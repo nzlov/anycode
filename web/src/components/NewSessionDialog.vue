@@ -139,9 +139,9 @@
                 class="app-command-btn new-session-launch-btn"
                 :class="{
                   'new-session-launch-btn--preferred': preferredAvailableMode === 'workflow',
+                  'app-on-positive': preferredAvailableMode === 'workflow',
                 }"
                 :color="preferredAvailableMode === 'workflow' ? 'positive' : undefined"
-                :text-color="preferredAvailableMode === 'workflow' ? 'dark' : undefined"
                 icon="account_tree"
                 label="流程模式"
                 no-caps
@@ -152,9 +152,11 @@
               <q-btn
                 unelevated
                 class="app-command-btn new-session-launch-btn"
-                :class="{ 'new-session-launch-btn--preferred': preferredAvailableMode === 'chat' }"
+                :class="{
+                  'new-session-launch-btn--preferred': preferredAvailableMode === 'chat',
+                  'app-on-positive': preferredAvailableMode === 'chat',
+                }"
                 :color="preferredAvailableMode === 'chat' ? 'positive' : undefined"
-                :text-color="preferredAvailableMode === 'chat' ? 'dark' : undefined"
                 icon="forum"
                 label="会话模式"
                 no-caps

@@ -101,7 +101,7 @@
       <q-btn
         unelevated
         color="positive"
-        text-color="dark"
+        class="app-on-positive"
         icon="send"
         label="提交全部答案并继续"
         no-caps
@@ -262,19 +262,19 @@ function submit() {
   gap: 8px;
   margin-bottom: 22px;
   padding: 18px;
-  border-color: #fed7aa;
-  background: #fff7ed;
+  border-color: var(--ac-status-warning-border);
+  background: var(--ac-status-warning-bg);
   overflow-wrap: anywhere;
 }
 
 .question-title {
-  color: #9a3412;
+  color: var(--ac-status-warning-text);
   font-size: 16px;
   font-weight: 800;
 }
 
 .question-body {
-  color: #9a3412;
+  color: var(--ac-status-warning-text);
   font-size: 13px;
   white-space: pre-wrap;
 }
@@ -291,8 +291,8 @@ function submit() {
 }
 
 .option-item--custom {
-  border-color: #67e8f9;
-  background: #ecfeff;
+  border-color: var(--ac-status-info-border);
+  background: var(--ac-status-info-bg);
 }
 
 .custom-answer-input {

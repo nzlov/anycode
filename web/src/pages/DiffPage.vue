@@ -4,7 +4,7 @@
       <div class="text-h5 text-weight-bold">当前分支变更</div>
     </div>
 
-    <q-banner v-if="!target" rounded class="state-banner bg-warning text-dark">
+    <q-banner v-if="!target" rounded class="state-banner app-feedback app-feedback--warning">
       请从会话详情进入 Diff 页面，或在地址 query 中提供 projectId 与 branch。
     </q-banner>
 

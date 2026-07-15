@@ -1,0 +1,258 @@
+:root {
+  color-scheme: light;
+  --ac-page: #f6f8fb;
+  --ac-surface: #ffffff;
+  --ac-surface-muted: #f1f5f9;
+  --ac-surface-raised: #ffffff;
+  --ac-overlay: #ffffff;
+  --ac-surface-hover: #eff6ff;
+  --ac-surface-selected: #dbeafe;
+  --ac-backdrop: rgb(15 23 42 / 48%);
+  --ac-text: #0f172a;
+  --ac-text-muted: #475569;
+  --ac-text-inverse: #ffffff;
+  --ac-link: #1d4ed8;
+  --ac-border: #cbd5e1;
+  --ac-border-strong: #64748b;
+  --ac-focus-ring: #1d4ed8;
+  --ac-action-primary-bg: #2563eb;
+  --ac-action-primary-text: #ffffff;
+  --ac-action-primary-hover: #1d4ed8;
+  --ac-on-positive: #052e16;
+  --ac-on-warning: #422006;
+  --ac-status-neutral-bg: #f1f5f9;
+  --ac-status-neutral-text: #334155;
+  --ac-status-neutral-border: #64748b;
+  --ac-status-success-bg: #dcfce7;
+  --ac-status-success-text: #166534;
+  --ac-status-success-border: #15803d;
+  --ac-status-warning-bg: #fef3c7;
+  --ac-status-warning-text: #78350f;
+  --ac-status-warning-border: #b45309;
+  --ac-status-danger-bg: #fee2e2;
+  --ac-status-danger-text: #991b1b;
+  --ac-status-danger-border: #b91c1c;
+  --ac-status-info-bg: #e0f2fe;
+  --ac-status-info-text: #075985;
+  --ac-status-info-border: #0369a1;
+  --ac-status-mode-bg: #eef2ff;
+  --ac-status-mode-text: #3730a3;
+  --ac-status-mode-border: #6366f1;
+  --ac-shadow-card: 0 12px 28px rgb(15 23 42 / 10%);
+  --ac-shadow-dialog: 0 18px 46px rgb(15 23 42 / 18%);
+  --ac-diff-bg: #0f172a;
+  --ac-diff-gutter: #94a3b8;
+  --ac-diff-context: #dbeafe;
+  --ac-diff-added-text: #bbf7d0;
+  --ac-diff-added-bg: rgb(22 101 52 / 32%);
+  --ac-diff-removed-text: #fecaca;
+  --ac-diff-removed-bg: rgb(127 29 29 / 32%);
+  --ac-diff-hunk-text: #bfdbfe;
+  --ac-diff-hunk-bg: rgb(30 64 175 / 30%);
+  --ac-terminal-bg: #111827;
+  --ac-terminal-fg: #e2e8f0;
+  --ac-ansi-black: #64748b;
+  --ac-ansi-red: #f87171;
+  --ac-ansi-green: #4ade80;
+  --ac-ansi-yellow: #facc15;
+  --ac-ansi-blue: #60a5fa;
+  --ac-ansi-magenta: #c084fc;
+  --ac-ansi-cyan: #22d3ee;
+  --ac-ansi-white: #e2e8f0;
+  --ac-ansi-bright-black: #64748b;
+  --ac-ansi-bright-red: #e53935;
+  --ac-ansi-bright-green: #00875a;
+  --ac-ansi-bright-yellow: #b7791f;
+  --ac-ansi-bright-blue: #2563eb;
+  --ac-ansi-bright-magenta: #a855f7;
+  --ac-ansi-bright-cyan: #0891b2;
+  --ac-ansi-bright-white: #f8fafc;
+}
+
+.body--dark {
+  color-scheme: dark;
+  --ac-page: #0b1120;
+  --ac-surface: #111827;
+  --ac-surface-muted: #0f172a;
+  --ac-surface-raised: #172033;
+  --ac-overlay: #1e293b;
+  --ac-surface-hover: #1e293b;
+  --ac-surface-selected: #1e3a5f;
+  --ac-backdrop: rgb(2 6 23 / 72%);
+  --ac-text: #e5edf6;
+  --ac-text-muted: #a8b4c4;
+  --ac-text-inverse: #0f172a;
+  --ac-link: #93c5fd;
+  --ac-border: #475569;
+  --ac-border-strong: #64748b;
+  --ac-focus-ring: #60a5fa;
+  --ac-action-primary-bg: #3b82f6;
+  --ac-action-primary-text: #07111f;
+  --ac-action-primary-hover: #60a5fa;
+  --ac-on-positive: #052e16;
+  --ac-on-warning: #422006;
+  --ac-status-neutral-bg: #263449;
+  --ac-status-neutral-text: #e2e8f0;
+  --ac-status-neutral-border: #94a3b8;
+  --ac-status-success-bg: #123524;
+  --ac-status-success-text: #86efac;
+  --ac-status-success-border: #4ade80;
+  --ac-status-warning-bg: #422f0a;
+  --ac-status-warning-text: #fde68a;
+  --ac-status-warning-border: #fbbf24;
+  --ac-status-danger-bg: #451a1a;
+  --ac-status-danger-text: #fecaca;
+  --ac-status-danger-border: #f87171;
+  --ac-status-info-bg: #082f49;
+  --ac-status-info-text: #bae6fd;
+  --ac-status-info-border: #38bdf8;
+  --ac-status-mode-bg: #312e81;
+  --ac-status-mode-text: #e0e7ff;
+  --ac-status-mode-border: #818cf8;
+  --ac-shadow-card: 0 12px 28px rgb(2 6 23 / 42%);
+  --ac-shadow-dialog: 0 18px 46px rgb(2 6 23 / 64%);
+  --ac-diff-bg: #020617;
+  --ac-diff-gutter: #94a3b8;
+  --ac-diff-context: #dbeafe;
+  --ac-diff-added-text: #bbf7d0;
+  --ac-diff-added-bg: rgb(22 101 52 / 32%);
+  --ac-diff-removed-text: #fecaca;
+  --ac-diff-removed-bg: rgb(127 29 29 / 32%);
+  --ac-diff-hunk-text: #bfdbfe;
+  --ac-diff-hunk-bg: rgb(30 64 175 / 30%);
+  --ac-terminal-bg: #020617;
+  --ac-terminal-fg: #e2e8f0;
+  --ac-ansi-black: #475569;
+  --ac-ansi-red: #f87171;
+  --ac-ansi-green: #4ade80;
+  --ac-ansi-yellow: #facc15;
+  --ac-ansi-blue: #60a5fa;
+  --ac-ansi-magenta: #c084fc;
+  --ac-ansi-cyan: #22d3ee;
+  --ac-ansi-white: #e2e8f0;
+  --ac-ansi-bright-black: #94a3b8;
+  --ac-ansi-bright-red: #fca5a5;
+  --ac-ansi-bright-green: #86efac;
+  --ac-ansi-bright-yellow: #fde047;
+  --ac-ansi-bright-blue: #93c5fd;
+  --ac-ansi-bright-magenta: #d8b4fe;
+  --ac-ansi-bright-cyan: #67e8f9;
+  --ac-ansi-bright-white: #ffffff;
+}
+
+.body--dark .text-primary {
+  color: var(--ac-link) !important;
+}
+
+.body--dark .text-primary *,
+.body--dark .q-item--active,
+.body--dark .q-tab--active:not(.question-tab--active),
+.body--dark .q-field--focused .q-field__label,
+.body--dark .q-field--highlighted .q-field__label {
+  color: var(--ac-link) !important;
+}
+
+.body--dark .text-blue-grey,
+.body--dark .text-grey,
+.body--dark .text-grey-7,
+.body--dark .q-pagination .q-btn {
+  color: var(--ac-text-muted) !important;
+}
+
+.body--dark .text-positive {
+  color: var(--ac-status-success-text) !important;
+}
+
+.body--dark .text-warning {
+  color: var(--ac-status-warning-text) !important;
+}
+
+.body--dark .text-negative {
+  color: var(--ac-status-danger-text) !important;
+}
+
+.body--dark .text-info {
+  color: var(--ac-status-info-text) !important;
+}
+
+.q-dialog .q-card,
+.q-menu {
+  color: var(--ac-text);
+  background: var(--ac-overlay);
+  border-color: var(--ac-border);
+}
+
+.q-dialog__backdrop {
+  background: var(--ac-backdrop);
+}
+
+.q-tooltip {
+  color: var(--ac-text-inverse);
+  background: var(--ac-text);
+}
+
+.q-notification {
+  color: var(--ac-text);
+  background: var(--ac-overlay) !important;
+  border: 1px solid var(--ac-border-strong);
+}
+
+.q-notification.bg-positive {
+  color: var(--ac-status-success-text);
+  background: var(--ac-status-success-bg) !important;
+  border-color: var(--ac-status-success-border);
+}
+
+.q-notification.bg-negative {
+  color: var(--ac-status-danger-text);
+  background: var(--ac-status-danger-bg) !important;
+  border-color: var(--ac-status-danger-border);
+}
+
+.q-notification.bg-warning {
+  color: var(--ac-status-warning-text);
+  background: var(--ac-status-warning-bg) !important;
+  border-color: var(--ac-status-warning-border);
+}
+
+.q-notification.bg-info {
+  color: var(--ac-status-info-text);
+  background: var(--ac-status-info-bg) !important;
+  border-color: var(--ac-status-info-border);
+}
+
+.app-feedback {
+  border: 1px solid var(--ac-border-strong);
+}
+
+.app-feedback--neutral {
+  color: var(--ac-status-neutral-text);
+  background: var(--ac-status-neutral-bg);
+  border-color: var(--ac-status-neutral-border);
+}
+
+.app-feedback--danger {
+  color: var(--ac-status-danger-text);
+  background: var(--ac-status-danger-bg);
+  border-color: var(--ac-status-danger-border);
+}
+
+.app-feedback--warning {
+  color: var(--ac-status-warning-text);
+  background: var(--ac-status-warning-bg);
+  border-color: var(--ac-status-warning-border);
+}
+
+.app-feedback--info {
+  color: var(--ac-status-info-text);
+  background: var(--ac-status-info-bg);
+  border-color: var(--ac-status-info-border);
+}
+
+.app-on-positive {
+  color: var(--ac-on-positive) !important;
+}
+
+.app-on-warning {
+  color: var(--ac-on-warning) !important;
+}

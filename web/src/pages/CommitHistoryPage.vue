@@ -20,7 +20,7 @@
         <div class="text-body2 text-muted">正在加载提交记录</div>
       </q-card-section>
       <q-card-section v-else-if="!history?.available" class="commit-history-empty">
-        <q-icon name="block" color="grey-6" size="32px" />
+        <q-icon name="block" class="text-muted" size="32px" />
         <div>
           <div class="text-subtitle1 text-weight-bold">提交记录不可用</div>
           <div class="text-body2 text-muted">

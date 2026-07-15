@@ -60,7 +60,7 @@
         <q-item-section>正在读取产物</q-item-section>
       </q-item>
       <q-item v-else-if="files.length === 0">
-        <q-item-section avatar><q-icon name="inventory_2" color="grey-6" /></q-item-section>
+        <q-item-section avatar><q-icon name="inventory_2" class="text-muted" /></q-item-section>
         <q-item-section>
           <q-item-label>暂无产物</q-item-label>
         </q-item-section>

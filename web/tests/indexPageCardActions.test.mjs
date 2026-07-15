@@ -100,10 +100,13 @@ test('overview card backgrounds highlight running and waiting answer states only
   const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
 
   assert.match(overviewSource, /overviewCardClass\(card\)/);
-  assert.match(stylesSource, /\.overview-session-card--running\s*{[^}]*background:\s*#dcfce7;/s);
   assert.match(
     stylesSource,
-    /\.overview-session-card--waiting_user\s*{[^}]*background:\s*#eeaa00;/s,
+    /\.overview-session-card--running\s*{[^}]*background:\s*var\(--ac-status-success-bg\);/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.overview-session-card--waiting_user\s*{[^}]*background:\s*var\(--ac-status-warning-bg\);/s,
   );
   assert.doesNotMatch(stylesSource, /\.overview-session-card--(?:stopped|closed)\s*{/);
 });

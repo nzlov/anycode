@@ -122,9 +122,8 @@
 
           <q-btn
             fab
-            class="global-settings-add-fab"
             color="positive"
-            text-color="dark"
+            class="global-settings-add-fab app-on-positive"
             icon="add"
             aria-label="新增项目"
             :disable="projectsLoading"
@@ -185,9 +184,8 @@
                 <q-btn
                   unelevated
                   round
-                  class="app-icon-btn"
                   color="positive"
-                  text-color="dark"
+                  class="app-icon-btn app-on-positive"
                   icon="check"
                   aria-label="保存快捷指令"
                   :loading="saving"
@@ -248,9 +246,8 @@
 
           <q-btn
             fab
-            class="global-settings-add-fab"
             color="positive"
-            text-color="dark"
+            class="global-settings-add-fab app-on-positive"
             icon="add"
             aria-label="新增快捷指令"
             :disable="adding || quickCommandsLoading || quickCommandsMutating > 0"
