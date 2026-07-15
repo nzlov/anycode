@@ -185,16 +185,6 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	if pending.Status != "pending" || pending.OptionID != "continue" {
 		t.Fatalf("pending batch = %#v", pending)
 	}
-	select {
-	case rec := <-mcpDone:
-		if rec.Code != http.StatusOK {
-			t.Fatalf("mcp answer_user status = %d, want 200; body: %s", rec.Code, rec.Body.String())
-		}
-		smokeAssertMCPSuspended(t, rec.Body.Bytes(), pending.ID)
-	case <-time.After(2 * time.Second):
-		t.Fatal("mcp answer_user did not finish durable suspension")
-	}
-
 	answeredStatus := smokeGraphQL[string](t, handler, `mutation($input: SubmitQuestionBatchInput!) {
 		submitQuestionBatch(input: $input) { id status questions { id selectedOptionId status } }
 	}`, map[string]any{"input": map[string]any{
@@ -207,16 +197,17 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	if answeredStatus != "answered" {
 		t.Fatalf("submitQuestionBatch status = %q, want answered", answeredStatus)
 	}
-
-	if _, err := sessions.DrainQueuedSessions(ctx); err != nil {
-		t.Fatalf("drain answer resume queue: %v", err)
+	select {
+	case rec := <-mcpDone:
+		if rec.Code != http.StatusOK {
+			t.Fatalf("mcp answer_user status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+		}
+		smokeAssertMCPStatus(t, rec.Body.Bytes(), pending.ID, "answered")
+	case <-time.After(2 * time.Second):
+		t.Fatal("mcp answer_user did not return the direct answer")
 	}
-	if codex.resumeInput.CodexSessionID != "codex-smoke-session" || !strings.Contains(codex.resumeInput.Prompt, pending.ID) {
-		t.Fatalf("codex Resume input = %#v", codex.resumeInput)
-	}
-
-	if codex.stoppedRunID == "" {
-		t.Fatal("codex Stop was not called")
+	if codex.resumeInput.CodexSessionID != "" || codex.stoppedRunID != "" {
+		t.Fatalf("direct answer unexpectedly stopped or resumed Codex: stop=%q resume=%#v", codex.stoppedRunID, codex.resumeInput)
 	}
 }
 
@@ -253,27 +244,44 @@ func TestAnswerUserStopFailureRestoresRunningLifecycle(t *testing.T) {
 		sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()),
 	)
 
-	_, err = service.RequestUserAnswer(ctx, sessionapp.RequestUserAnswerInput{
-		SessionID: "session-1",
-		Questions: []questiondomain.Question{{Title: "Continue?", Type: "choice", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
-	})
+	waitCtx, cancelWait := context.WithCancel(ctx)
+	waitDone := make(chan error, 1)
+	go func() {
+		_, waitErr := service.RequestUserAnswer(waitCtx, sessionapp.RequestUserAnswerInput{
+			SessionID: "session-1",
+			Questions: []questiondomain.Question{{Title: "Continue?", Type: "choice", Options: []questiondomain.Option{{ID: "yes", Label: "Yes"}}}},
+		})
+		waitDone <- waitErr
+	}()
+	for {
+		pending, findErr := store.Questions().ListPendingBySession(ctx, "session-1")
+		if findErr != nil {
+			t.Fatal(findErr)
+		}
+		if len(pending) == 1 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	cancelWait()
+	err = <-waitDone
 	if err == nil || !strings.Contains(err.Error(), "stop unavailable") {
-		t.Fatalf("RequestUserAnswer() error = %v", err)
+		t.Fatalf("RequestUserAnswer() fallback error = %v", err)
 	}
 	session, err := store.Sessions().Find(ctx, "session-1")
-	if err != nil || session.Status != sessiondomain.StatusRunning {
+	if err != nil || session.Status != sessiondomain.StatusResumeFailed {
 		t.Fatalf("session = %#v, %v", session, err)
 	}
 	run, err := store.Processes().FindRun(ctx, "process-1")
-	if err != nil || run.Status != processdomain.StatusRunning || run.PID == nil || *run.PID != pid || run.CodexSessionID != "codex-1" {
+	if err != nil || run.Status != processdomain.StatusStopping || run.PID == nil || *run.PID != pid || run.CodexSessionID != "codex-1" {
 		t.Fatalf("process = %#v, %v", run, err)
 	}
 	pending, err := store.Questions().ListPendingBySession(ctx, "session-1")
-	if err != nil || len(pending) != 0 {
+	if err != nil || len(pending) != 1 {
 		t.Fatalf("pending batches = %#v, %v", pending, err)
 	}
 	rows, err := store.Client().QuestionBatch.Query().All(ctx)
-	if err != nil || len(rows) != 1 || rows[0].Status != string(questiondomain.BatchCancelled) {
+	if err != nil || len(rows) != 1 || rows[0].Status != string(questiondomain.BatchPending) {
 		t.Fatalf("question rows = %#v, %v", rows, err)
 	}
 }
@@ -672,7 +680,7 @@ func smokeWaitPendingBatch(t *testing.T, handler http.Handler, sessionID string)
 	return smokePendingBatch{}
 }
 
-func smokeAssertMCPSuspended(t *testing.T, body []byte, batchID string) {
+func smokeAssertMCPStatus(t *testing.T, body []byte, batchID string, status string) {
 	t.Helper()
 	var response struct {
 		Result struct {
@@ -694,8 +702,8 @@ func smokeAssertMCPSuspended(t *testing.T, body []byte, batchID string) {
 	if err := json.Unmarshal([]byte(response.Result.Content[0].Text), &payload); err != nil {
 		t.Fatalf("decode mcp content text: %v; text=%s", err, response.Result.Content[0].Text)
 	}
-	if payload.BatchID != batchID || payload.Status != "suspended" {
-		t.Fatalf("mcp suspension payload = %#v, want batch %q", payload, batchID)
+	if payload.BatchID != batchID || payload.Status != status {
+		t.Fatalf("mcp payload = %#v, want batch %q status %q", payload, batchID, status)
 	}
 }
 

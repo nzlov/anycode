@@ -128,19 +128,30 @@ func (r *ProcessRepository) CountActive(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("list active sessions for process count: %w", err)
 	}
-	if len(sessionIDs) == 0 {
-		return 0, nil
+	predicate := entprocessrun.StatusEQ(string(process.StatusStopping))
+	if len(sessionIDs) > 0 {
+		predicate = entprocessrun.Or(
+			predicate,
+			entprocessrun.And(
+				entprocessrun.SessionIDIn(sessionIDs...),
+				entprocessrun.StatusIn(concurrencyProcessStatuses()...),
+			),
+		)
 	}
-	count, err := r.client.ProcessRun.Query().
-		Where(
-			entprocessrun.SessionIDIn(sessionIDs...),
-			entprocessrun.StatusIn(concurrencyProcessStatuses()...),
-		).
-		Count(ctx)
+	count, err := r.client.ProcessRun.Query().Where(predicate).Count(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("count active process runs: %w", err)
 	}
 	return count, nil
+}
+
+func concurrencySessionStatuses() []string {
+	return []string{
+		string(domainsession.StatusStarting),
+		string(domainsession.StatusRunning),
+		string(domainsession.StatusWaitingUser),
+		string(domainsession.StatusStopping),
+	}
 }
 
 func (r *ProcessRepository) MarkWaitingUser(ctx context.Context, id process.RunID) error {
@@ -224,13 +235,7 @@ func concurrencyProcessStatuses() []string {
 	return []string{
 		string(process.StatusStarting),
 		string(process.StatusRunning),
-	}
-}
-
-func concurrencySessionStatuses() []string {
-	return []string{
-		string(domainsession.StatusStarting),
-		string(domainsession.StatusRunning),
+		string(process.StatusWaitingUser),
 	}
 }
 

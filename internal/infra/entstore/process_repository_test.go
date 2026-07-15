@@ -80,6 +80,10 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	if !ok || active.Status != process.StatusStopping {
 		t.Fatalf("stopping run mismatch: ok=%v run=%#v", ok, active)
 	}
+	activeCount, err := repo.CountActive(ctx)
+	if err != nil || activeCount != 1 {
+		t.Fatalf("stopping active count = %d, %v", activeCount, err)
+	}
 	if err := repo.MarkRunning(ctx, run.ID, 1234, "codex-session-1"); err != nil {
 		t.Fatalf("restore running: %v", err)
 	}
@@ -90,12 +94,32 @@ func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	if !ok || active.Status != process.StatusRunning || active.PID == nil || *active.PID != 1234 || active.CodexSessionID != "codex-session-1" {
 		t.Fatalf("running run mismatch: ok=%v run=%#v", ok, active)
 	}
-	activeCount, err := repo.CountActive(ctx)
+	activeCount, err = repo.CountActive(ctx)
 	if err != nil {
 		t.Fatalf("count active: %v", err)
 	}
 	if activeCount != 1 {
 		t.Fatalf("active count = %d", activeCount)
+	}
+	if err := repo.MarkWaitingUser(ctx, run.ID); err != nil {
+		t.Fatalf("mark waiting user: %v", err)
+	}
+	if err := store.Sessions().Save(ctx, session.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusWaitingUser, CreatedAt: startedAt, UpdatedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("save waiting session: %v", err)
+	}
+	activeCount, err = repo.CountActive(ctx)
+	if err != nil || activeCount != 1 {
+		t.Fatalf("warm waiting active count = %d, %v", activeCount, err)
+	}
+	if err := repo.MarkRunning(ctx, run.ID, 1234, "codex-session-1"); err != nil {
+		t.Fatalf("restore running after wait: %v", err)
+	}
+	if err := store.Sessions().Save(ctx, session.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusRunning, CreatedAt: startedAt, UpdatedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("restore running session: %v", err)
 	}
 
 	terminalSessionID := session.ID("session-terminal")

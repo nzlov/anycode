@@ -84,6 +84,8 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("GET /attachments/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
 	mux.Handle("GET /attachments/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
 	mux.Handle("POST /mcp/sessions/{sessionID}", NewMCPHandler(cfg, opts.sessions))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", NewMCPHandler(cfg, opts.sessions))
+	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", NewMCPHandler(cfg, opts.sessions))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
