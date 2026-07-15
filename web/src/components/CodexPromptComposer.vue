@@ -19,6 +19,7 @@
     @update:effort="emit('update:effort', $event)"
     @update:permission="emit('update:permission', $event)"
     @update:fast="emit('update:fast', $event)"
+    @submit="emit('submit')"
   >
     <template #actions>
       <q-btn
@@ -130,6 +131,7 @@ const emit = defineEmits<{
   'update:effort': [value: string];
   'update:permission': [value: string];
   'update:fast': [value: boolean];
+  submit: [];
 }>();
 
 const modelOptions = ref<CodexModelOption[]>([]);

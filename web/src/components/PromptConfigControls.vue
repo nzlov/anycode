@@ -13,18 +13,18 @@
       emit-value
       map-options
       aria-label="运行权限"
-      class="compact-select"
+      class="compact-select permission-select"
+      dropdown-icon=""
       :disable="disabled"
       :options="permissionModeOptions"
     >
       <template #prepend>
         <q-icon :name="permissionIcon" />
       </template>
-      <q-tooltip>运行权限</q-tooltip>
+      <q-tooltip>运行权限：{{ permissionLabel }}</q-tooltip>
     </q-select>
 
     <div v-if="readonlyConfig" class="prompt-config-chip">
-      <q-icon name="smart_toy" />
       <span>{{ modelLabel }}</span>
       <q-tooltip>Codex 模型</q-tooltip>
     </div>
@@ -37,17 +37,14 @@
       map-options
       aria-label="Codex 模型"
       class="compact-select"
+      dropdown-icon=""
       :disable="disabled"
       :options="modelOptions"
     >
-      <template #prepend>
-        <q-icon name="smart_toy" />
-      </template>
       <q-tooltip>Codex 模型</q-tooltip>
     </q-select>
 
     <div v-if="readonlyConfig" class="prompt-config-chip">
-      <q-icon name="psychology" />
       <span>{{ effortLabel }}</span>
       <q-tooltip>思考强度</q-tooltip>
     </div>
@@ -60,12 +57,10 @@
       map-options
       aria-label="思考强度"
       class="compact-select"
+      dropdown-icon=""
       :disable="disabled"
       :options="reasoningEffortOptions"
     >
-      <template #prepend>
-        <q-icon name="psychology" />
-      </template>
       <q-tooltip>思考强度</q-tooltip>
     </q-select>
 

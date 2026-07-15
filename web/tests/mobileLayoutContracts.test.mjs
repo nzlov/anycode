@@ -79,10 +79,7 @@ test('mobile command controls share a 44px touch contract', () => {
   assert.match(stylesSource, /\.app-command-btn\s*{[^}]*min-height:\s*44px/s);
   assert.match(stylesSource, /\.app-touch-list\s+\.q-item\s*{[^}]*min-height:\s*44px/s);
   assert.match(stylesSource, /\.prompt-config-controls \.q-field__control[^}]*min-height:\s*44px/s);
-  assert.match(
-    stylesSource,
-    /\.new-session-grid \.q-btn-toggle \.q-btn\s*{[^}]*min-height:\s*44px/s,
-  );
+  assert.doesNotMatch(stylesSource, /\.new-session-grid \.q-btn-toggle/);
   assert.match(layoutSource, /aria-label="更多操作"/);
   assert.match(layoutSource, /class="app-icon-btn"/);
   assert.doesNotMatch(

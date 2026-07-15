@@ -49,6 +49,7 @@
       :placeholder="placeholder"
       :disable="disabled"
       @paste="onPaste"
+      @keydown.shift.enter.prevent="emit('submit')"
     />
 
     <div class="prompt-toolbar">
@@ -191,6 +192,7 @@ const emit = defineEmits<{
   'update:effort': [value: string];
   'update:permission': [value: string];
   'update:fast': [value: boolean];
+  submit: [];
 }>();
 
 const $q = useQuasar();

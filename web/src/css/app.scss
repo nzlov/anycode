@@ -1101,7 +1101,6 @@ a {
   gap: 12px;
 }
 
-.new-session-grid .q-btn-toggle,
 .new-session-body,
 .new-session-actions {
   min-width: 0;
@@ -1119,20 +1118,9 @@ a {
   width: 160px;
 }
 
-.new-session-mode {
-  width: 320px;
-}
-
 .branch-picker__select {
   min-width: 0;
   flex: 1 1 auto;
-}
-
-.new-session-grid .q-btn-toggle .q-btn {
-  min-width: 0;
-  min-height: 44px;
-  padding-right: 8px;
-  padding-left: 8px;
 }
 
 .new-session-grid .q-field__control,
@@ -1253,7 +1241,13 @@ a {
 }
 
 .toolbar-file-picker .q-field__control {
-  padding: 0 10px;
+  padding: 0;
+}
+
+.toolbar-file-picker .q-field__prepend {
+  width: 100%;
+  justify-content: center;
+  padding: 0;
 }
 
 .toolbar-file-picker .q-field__native,
@@ -1356,6 +1350,32 @@ a {
 
 .compact-select {
   min-width: 150px;
+}
+
+.permission-select {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+}
+
+.permission-select .q-field__control {
+  padding: 0;
+}
+
+.permission-select .q-field__prepend {
+  width: 100%;
+  justify-content: center;
+  padding: 0;
+}
+
+.permission-select .q-field__native {
+  display: none;
+}
+
+.new-session-launch-btn:not(.new-session-launch-btn--preferred) {
+  border: 1px solid var(--ac-border);
+  background: var(--ac-surface-muted);
+  color: var(--ac-text);
 }
 
 .prompt-fast-checkbox {
@@ -1553,21 +1573,12 @@ a {
     flex: 0 0 128px;
   }
 
-  .new-session-dialog--panel .new-session-context .new-session-mode {
-    width: auto;
-    min-width: 220px;
-    flex: 0 1 260px;
-  }
-
   .new-session-dialog--panel .new-session-context .q-field__control,
   .new-session-dialog--panel .new-session-context .q-field__marginal {
     min-height: 38px;
     height: 38px;
   }
 
-  .new-session-dialog--panel .new-session-context .q-btn-toggle .q-btn {
-    min-height: 38px;
-  }
 }
 
 @media (min-width: 700px) and (max-width: 1343.98px) {
@@ -1578,8 +1589,7 @@ a {
   }
 
   .branch-picker,
-  .new-session-priority,
-  .new-session-mode {
+  .new-session-priority {
     width: auto;
   }
 }
@@ -1606,8 +1616,7 @@ a {
   }
 
   .branch-picker,
-  .new-session-priority,
-  .new-session-mode {
+  .new-session-priority {
     width: auto;
   }
 
