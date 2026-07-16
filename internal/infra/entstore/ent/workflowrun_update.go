@@ -90,6 +90,12 @@ func (_u *WorkflowRunUpdate) SetContext(v map[string]interface{}) *WorkflowRunUp
 	return _u
 }
 
+// SetPendingApproval sets the "pending_approval" field.
+func (_u *WorkflowRunUpdate) SetPendingApproval(v map[string]interface{}) *WorkflowRunUpdate {
+	_u.mutation.SetPendingApproval(v)
+	return _u
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_u *WorkflowRunUpdate) SetStartedAt(v time.Time) *WorkflowRunUpdate {
 	_u.mutation.SetStartedAt(v)
@@ -209,6 +215,9 @@ func (_u *WorkflowRunUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if value, ok := _u.mutation.Context(); ok {
 		_spec.SetField(workflowrun.FieldContext, field.TypeJSON, value)
 	}
+	if value, ok := _u.mutation.PendingApproval(); ok {
+		_spec.SetField(workflowrun.FieldPendingApproval, field.TypeJSON, value)
+	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(workflowrun.FieldStartedAt, field.TypeTime, value)
 	}
@@ -300,6 +309,12 @@ func (_u *WorkflowRunUpdateOne) SetNillableCurrentNodeID(v *string) *WorkflowRun
 // SetContext sets the "context" field.
 func (_u *WorkflowRunUpdateOne) SetContext(v map[string]interface{}) *WorkflowRunUpdateOne {
 	_u.mutation.SetContext(v)
+	return _u
+}
+
+// SetPendingApproval sets the "pending_approval" field.
+func (_u *WorkflowRunUpdateOne) SetPendingApproval(v map[string]interface{}) *WorkflowRunUpdateOne {
+	_u.mutation.SetPendingApproval(v)
 	return _u
 }
 
@@ -451,6 +466,9 @@ func (_u *WorkflowRunUpdateOne) sqlSave(ctx context.Context) (_node *WorkflowRun
 	}
 	if value, ok := _u.mutation.Context(); ok {
 		_spec.SetField(workflowrun.FieldContext, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.PendingApproval(); ok {
+		_spec.SetField(workflowrun.FieldPendingApproval, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.StartedAt(); ok {
 		_spec.SetField(workflowrun.FieldStartedAt, field.TypeTime, value)

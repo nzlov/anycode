@@ -568,4 +568,8 @@ func init() {
 	workflowrunDescContext := workflowrunFields[5].Descriptor()
 	// workflowrun.DefaultContext holds the default value on creation for the context field.
 	workflowrun.DefaultContext = workflowrunDescContext.Default.(map[string]interface{})
+	// workflowrunDescPendingApproval is the schema descriptor for pending_approval field.
+	workflowrunDescPendingApproval := workflowrunFields[6].Descriptor()
+	// workflowrun.DefaultPendingApproval holds the default value on creation for the pending_approval field.
+	workflowrun.DefaultPendingApproval = workflowrunDescPendingApproval.Default.(map[string]interface{})
 }

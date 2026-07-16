@@ -28,6 +28,8 @@ type WorkflowRun struct {
 	CurrentNodeID string `json:"current_node_id,omitempty"`
 	// Context holds the value of the "context" field.
 	Context map[string]interface{} `json:"context,omitempty"`
+	// PendingApproval holds the value of the "pending_approval" field.
+	PendingApproval map[string]interface{} `json:"pending_approval,omitempty"`
 	// StartedAt holds the value of the "started_at" field.
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// StoppedAt holds the value of the "stopped_at" field.
@@ -40,7 +42,7 @@ func (*WorkflowRun) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case workflowrun.FieldContext:
+		case workflowrun.FieldContext, workflowrun.FieldPendingApproval:
 			values[i] = new([]byte)
 		case workflowrun.FieldID, workflowrun.FieldSessionID, workflowrun.FieldWorkflowDefinitionID, workflowrun.FieldStatus, workflowrun.FieldCurrentNodeID:
 			values[i] = new(sql.NullString)
@@ -97,6 +99,14 @@ func (_m *WorkflowRun) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Context); err != nil {
 					return fmt.Errorf("unmarshal field context: %w", err)
+				}
+			}
+		case workflowrun.FieldPendingApproval:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field pending_approval", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.PendingApproval); err != nil {
+					return fmt.Errorf("unmarshal field pending_approval: %w", err)
 				}
 			}
 		case workflowrun.FieldStartedAt:
@@ -163,6 +173,9 @@ func (_m *WorkflowRun) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("context=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Context))
+	builder.WriteString(", ")
+	builder.WriteString("pending_approval=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PendingApproval))
 	builder.WriteString(", ")
 	if v := _m.StartedAt; v != nil {
 		builder.WriteString("started_at=")

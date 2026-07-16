@@ -18,6 +18,7 @@ func (WorkflowRun) Fields() []ent.Field {
 		field.String("status").NotEmpty(),
 		field.String("current_node_id").Default(""),
 		field.JSON("context", map[string]any{}).Default(map[string]any{}),
+		field.JSON("pending_approval", map[string]any{}).Default(map[string]any{}),
 		field.Time("started_at").Optional().Nillable(),
 		field.Time("stopped_at").Optional().Nillable(),
 	}

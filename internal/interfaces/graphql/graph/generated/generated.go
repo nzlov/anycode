@@ -3592,7 +3592,7 @@ type WorktreeCleanupError {
 type PendingApproval {
   workflowRunId: ID!
   nodeId: ID!
-  nodeRunId: ID!
+  nodeRunId: ID
   currentNodeTitle: String!
   phase: String!
   result: JSON
@@ -8084,9 +8084,9 @@ func (ec *executionContext) _PendingApproval_nodeRunId(ctx context.Context, fiel
 			return obj.NodeRunID, nil
 		},
 		nil,
-		ec.marshalNID2string,
+		ec.marshalOID2ᚖstring,
 		true,
-		true,
+		false,
 	)
 }
 
@@ -22023,9 +22023,6 @@ func (ec *executionContext) _PendingApproval(ctx context.Context, sel ast.Select
 			}
 		case "nodeRunId":
 			out.Values[i] = ec._PendingApproval_nodeRunId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "currentNodeTitle":
 			out.Values[i] = ec._PendingApproval_currentNodeTitle(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

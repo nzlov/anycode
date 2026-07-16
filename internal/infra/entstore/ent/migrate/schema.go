@@ -466,6 +466,7 @@ var (
 		{Name: "status", Type: field.TypeString},
 		{Name: "current_node_id", Type: field.TypeString, Default: ""},
 		{Name: "context", Type: field.TypeJSON},
+		{Name: "pending_approval", Type: field.TypeJSON},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "stopped_at", Type: field.TypeTime, Nullable: true},
 	}

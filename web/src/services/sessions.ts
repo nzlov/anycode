@@ -66,7 +66,7 @@ export interface SessionCard {
 export interface PendingApproval {
   workflowRunId: string;
   nodeId: string;
-  nodeRunId: string;
+  nodeRunId: string | null;
   currentNodeTitle: string;
   phase: 'before_run' | 'after_run';
   result: WorkflowNodeResult | null;
@@ -259,7 +259,7 @@ interface GraphQLSessionCard {
 interface GraphQLPendingApproval {
   workflowRunId: string;
   nodeId: string;
-  nodeRunId: string;
+  nodeRunId: string | null;
   currentNodeTitle: string;
   phase: 'before_run' | 'after_run';
   result: unknown;

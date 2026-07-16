@@ -96,6 +96,7 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	}
 	run.Status = workflow.RunWaitingResumeAction
 	run.Context.Values["resume"] = map[string]any{"status": "failed"}
+	run.PendingApproval = &workflow.PendingApproval{Phase: workflow.ApprovalBeforeRun, NodeID: "build", Attempt: 2}
 	if err := repo.UpdateRunState(ctx, run); err != nil {
 		t.Fatalf("update run state: %v", err)
 	}
@@ -109,7 +110,11 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	if latestRun.Context.Values["resume"] == nil {
 		t.Fatalf("latest run context missing resume: %#v", latestRun.Context)
 	}
+	if latestRun.PendingApproval == nil || latestRun.PendingApproval.Phase != workflow.ApprovalBeforeRun || latestRun.PendingApproval.Attempt != 2 {
+		t.Fatalf("latest run pending approval mismatch: %#v", latestRun.PendingApproval)
+	}
 	run.Status = workflow.RunRunning
+	run.PendingApproval = nil
 	run.Context.Values["resume"] = map[string]any{"status": "rerun_requested"}
 	nextNodeRun := workflow.NodeRun{
 		ID:            "node-run-2",

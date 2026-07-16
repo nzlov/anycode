@@ -716,7 +716,7 @@ const isWaitingForApproval = computed(
 const approvalPanelKey = computed(() => {
   const approval = session.value?.pendingApproval;
   if (!approval) return 'missing';
-  return `${approval.workflowRunId}:${approval.nodeId}:${approval.nodeRunId}`;
+  return `${approval.workflowRunId}:${approval.nodeId}:${approval.nodeRunId ?? ''}`;
 });
 const composerConfigDirty = computed(() => {
   const current = session.value;

@@ -21,6 +21,8 @@ const (
 	FieldCurrentNodeID = "current_node_id"
 	// FieldContext holds the string denoting the context field in the database.
 	FieldContext = "context"
+	// FieldPendingApproval holds the string denoting the pending_approval field in the database.
+	FieldPendingApproval = "pending_approval"
 	// FieldStartedAt holds the string denoting the started_at field in the database.
 	FieldStartedAt = "started_at"
 	// FieldStoppedAt holds the string denoting the stopped_at field in the database.
@@ -37,6 +39,7 @@ var Columns = []string{
 	FieldStatus,
 	FieldCurrentNodeID,
 	FieldContext,
+	FieldPendingApproval,
 	FieldStartedAt,
 	FieldStoppedAt,
 }
@@ -62,6 +65,8 @@ var (
 	DefaultCurrentNodeID string
 	// DefaultContext holds the default value on creation for the "context" field.
 	DefaultContext map[string]interface{}
+	// DefaultPendingApproval holds the default value on creation for the "pending_approval" field.
+	DefaultPendingApproval map[string]interface{}
 )
 
 // OrderOption defines the ordering options for the WorkflowRun queries.

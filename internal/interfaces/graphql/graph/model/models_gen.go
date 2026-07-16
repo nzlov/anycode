@@ -213,7 +213,7 @@ type PageInfo struct {
 type PendingApproval struct {
 	WorkflowRunID    string         `json:"workflowRunId"`
 	NodeID           string         `json:"nodeId"`
-	NodeRunID        string         `json:"nodeRunId"`
+	NodeRunID        *string        `json:"nodeRunId,omitempty"`
 	CurrentNodeTitle string         `json:"currentNodeTitle"`
 	Phase            string         `json:"phase"`
 	Result           map[string]any `json:"result,omitempty"`

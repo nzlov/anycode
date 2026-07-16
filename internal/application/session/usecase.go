@@ -4394,13 +4394,13 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	if options.resumeCodexSessionID != "" {
 		transcript, found, err := s.processes.FindTranscriptSource(ctx, options.resumeCodexSessionID)
 		if err != nil {
+			if errors.Is(err, processdomain.ErrTranscriptUnavailable) {
+				return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
+			}
 			return processdomain.CodexHandle{}, err
 		}
-		if !found && options.queueKind == domain.QueueKindPromptAppend {
-			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
-		}
 		if !found {
-			return processdomain.CodexHandle{}, processdomain.ErrTranscriptUnavailable
+			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
 		}
 		handle, err := s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
@@ -4416,7 +4416,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			FastMode:        session.Config.FastMode,
 			ImagePaths:      append([]string(nil), options.promptImagePaths...),
 		})
-		if errors.Is(err, processdomain.ErrTranscriptUnavailable) && options.queueKind == domain.QueueKindPromptAppend {
+		if errors.Is(err, processdomain.ErrTranscriptUnavailable) {
 			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
 		}
 		return handle, err
@@ -4497,29 +4497,30 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 		}
 	}
 	prompt := strings.TrimSpace(options.prompt)
+	basePrompt := prompt
+	if options.resumeCodexSessionID != "" {
+		options.fallbackPrompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
+	}
 	if options.queueKind == domain.QueueKindPromptAppend {
 		if len(pendingIDs) == 0 {
 			return codexStartOptions{}, errNoEffectivePromptAppend
 		}
-		options.fallbackPrompt = rebuiltSessionPrompt(session, prompt, true, appends)
 		if options.resumeCodexSessionID != "" {
 			prompt = pendingPrompt
 		} else {
-			prompt = options.fallbackPrompt
+			prompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
 		}
 	} else if options.reviewAfterReuseFailure {
-		prompt = rebuiltSessionPrompt(session, prompt, true, appends)
-	} else if session.Mode == domain.ModeWorkflow {
-		pendingIDs = nil
-		attachmentPaths = nil
-		imagePaths = nil
+		prompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
 	} else if options.resumeCodexSessionID != "" {
 		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && len(pendingIDs) == 0 {
 			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
 		}
-		prompt = joinPromptParts(prompt, pendingPrompt)
+		prompt = joinPromptParts(basePrompt, pendingPrompt)
 	} else if session.Mode != domain.ModeWorkflow {
-		prompt = rebuiltSessionPrompt(session, prompt, options.reviewAfterReuseFailure, appends)
+		prompt = rebuiltSessionPrompt(session, basePrompt, options.reviewAfterReuseFailure, appends)
+	} else {
+		prompt = joinPromptParts(basePrompt, pendingPrompt)
 	}
 	if strings.TrimSpace(prompt) == "" && !options.initialStart {
 		return codexStartOptions{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "Codex 执行提示不能为空")
@@ -7972,6 +7973,11 @@ func (s *Service) submitWorkflowApprovalInTx(ctx context.Context, input SubmitWo
 			}
 			publishEvents = append(publishEvents, approvalEvent)
 		}
+		if approvalResult.Rejected {
+			if err := s.appendApprovalRejectionPrompt(ctx, tx, session, strings.TrimSpace(input.Comment)); err != nil {
+				return err
+			}
+		}
 		switch {
 		case approvalResult.RejectedAfterRun:
 			if workflowAdvanceHasExternalEffects(approvalResult.Advance) {
@@ -7981,7 +7987,7 @@ func (s *Service) submitWorkflowApprovalInTx(ctx context.Context, input SubmitWo
 				}
 				postCommitAdvance = &pending
 			} else {
-				queued, queuedEvent, hasQueuedEvent, err := s.queueApprovalRejectionPrompt(ctx, tx, session, approvalResult.Advance, strings.TrimSpace(input.Comment))
+				queued, queuedEvent, hasQueuedEvent, err := s.queueApprovalAdvance(ctx, tx, session, approvalResult.Advance)
 				if err != nil {
 					return err
 				}
@@ -8249,10 +8255,10 @@ func (s *Service) queueApprovalAdvance(ctx context.Context, tx port.Tx, session 
 	return queued, event, hasEvent, nil
 }
 
-func (s *Service) queueApprovalRejectionPrompt(ctx context.Context, tx port.Tx, session domain.Session, advance domain.WorkflowAdvance, body string) (domain.Session, eventdomain.DomainEvent, bool, error) {
+func (s *Service) appendApprovalRejectionPrompt(ctx context.Context, tx port.Tx, session domain.Session, body string) error {
 	id, err := s.generateID()
 	if err != nil {
-		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("generate prompt append id: %w", err)
+		return fmt.Errorf("generate prompt append id: %w", err)
 	}
 	promptAppend := domain.PromptAppend{
 		ID:        string(id),
@@ -8262,9 +8268,9 @@ func (s *Service) queueApprovalRejectionPrompt(ctx context.Context, tx port.Tx, 
 		CreatedAt: s.now(),
 	}
 	if err := tx.Sessions().AppendPrompt(ctx, promptAppend); err != nil {
-		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("append prompt: %w", err)
+		return fmt.Errorf("append prompt: %w", err)
 	}
-	return s.queueApprovalAdvance(ctx, tx, session, advance)
+	return nil
 }
 
 func workflowCodexStartOptions(session domain.Session, advance domain.WorkflowAdvance, advanceOptions workflowAdvanceOptions) codexStartOptions {

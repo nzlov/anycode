@@ -240,7 +240,7 @@ type WorktreeCleanupError {
 type PendingApproval {
   workflowRunId: ID!
   nodeId: ID!
-  nodeRunId: ID!
+  nodeRunId: ID
   currentNodeTitle: String!
   phase: String!
   result: JSON

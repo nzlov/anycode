@@ -175,7 +175,7 @@ test('session detail replaces the prompt composer with the shared inline approva
   assert.match(pageSource, /:key="approvalPanelKey"/);
   assert.match(
     pageSource,
-    /`\$\{approval\.workflowRunId\}:\$\{approval\.nodeId\}:\$\{approval\.nodeRunId\}`/,
+    /`\$\{approval\.workflowRunId\}:\$\{approval\.nodeId\}:\$\{approval\.nodeRunId \?\? ''\}`/,
   );
   assert.match(pageSource, /<CodexPromptComposer\s+v-else/);
   assert.match(pageSource, /isPendingApprovalReviewable\(session\?\.pendingApproval\)/);
