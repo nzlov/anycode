@@ -456,6 +456,58 @@ func TestCodexTranscriptProjectorCorrelatesCustomExecBatchOutput(t *testing.T) {
 	}
 }
 
+func TestCodexTranscriptProjectorStripsCustomExecTransportSummary(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	started := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec","name":"exec","input":"const result = await tools.exec_command({\"cmd\":\"go test ./...\"}); text(result.output);"}}`), "/workspace/project", "rollout.jsonl", 0)
+	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-exec","output":[{"type":"input_text","text":"Script completed\nWall time 0.3 seconds\nOutput:\n"},{"type":"input_text","text":"all passed\n"}]}}`), "/workspace/project", "rollout.jsonl", 1)
+	projector.project(started)
+	projector.project(completed)
+
+	command, ok := completed[0].Content.(process.CodexCommandContent)
+	if !ok || command.Output != "all passed\n" || command.DurationMS == nil || *command.DurationMS != 300 {
+		t.Fatalf("completed command = %#v", completed[0].Content)
+	}
+}
+
+func TestCodexTranscriptProjectorUnwrapsWriteStdinResult(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	started := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-write","name":"exec","input":"const result = await tools.write_stdin({session_id: 60296, chars: \"\"}); text(result);"}}`), "/workspace/project", "rollout.jsonl", 0)
+	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-write","output":[{"type":"input_text","text":"Script completed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"{\"chunk_id\":\"686ebc\",\"wall_time_seconds\":0.000008804,\"exit_code\":0,\"original_token_count\":44,\"output\":\"remote: Processed 1 reference\\nmaster -> master\\n\"}"}]}}`), "/workspace/project", "rollout.jsonl", 1)
+	projector.project(started)
+	projector.project(completed)
+
+	command, ok := completed[0].Content.(process.CodexCommandContent)
+	if !ok || command.Output != "remote: Processed 1 reference\nmaster -> master\n" || command.ExitCode == nil || *command.ExitCode != 0 {
+		t.Fatalf("write_stdin command = %#v", completed[0].Content)
+	}
+}
+
+func TestCodexTranscriptProjectorKeepsRunningCommandOutput(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	started := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-write","name":"exec","input":"const result = await tools.write_stdin({session_id: 60296, chars: \"\"}); text(result);"}}`), "/workspace/project", "rollout.jsonl", 0)
+	progress := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-write","output":[{"type":"input_text","text":"Script completed\nWall time 10.0 seconds\nOutput:\n"},{"type":"input_text","text":"{\"session_id\":60296,\"wall_time_seconds\":10,\"original_token_count\":2,\"output\":\"still running\\n\"}"}]}}`), "/workspace/project", "rollout.jsonl", 1)
+	projector.project(started)
+	projector.project(progress)
+
+	command, ok := progress[0].Content.(process.CodexCommandContent)
+	if !ok || progress[0].Phase != process.CodexPhaseProgress || command.Output != "still running\n" {
+		t.Fatalf("running command = %#v, phase %q", progress[0].Content, progress[0].Phase)
+	}
+}
+
+func TestNormalizeCustomToolOutputPreservesNonTransportText(t *testing.T) {
+	for _, value := range []any{
+		"Script completed\nWall time 0.3 seconds\nOutput:\nuser-owned text",
+		`{"output":"domain value","kind":"application_result"}`,
+		[]any{map[string]any{"type": "input_text", "text": "Script completed\nWall time unknown\nOutput:\n"}},
+	} {
+		want := textFromValue(value)
+		if got := normalizeCustomToolOutput(value).output; got != want {
+			t.Fatalf("normalizeCustomToolOutput(%#v) = %q, want %q", value, got, want)
+		}
+	}
+}
+
 func TestCodexTranscriptProjectorNamesNestedExecTool(t *testing.T) {
 	tests := []struct {
 		name     string

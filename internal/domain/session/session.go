@@ -107,9 +107,10 @@ const (
 type QueueKind string
 
 const (
-	QueueKindStart      QueueKind = "start"
-	QueueKindResume     QueueKind = "resume"
-	QueueKindAnswerUser QueueKind = "answer_user"
+	QueueKindStart        QueueKind = "start"
+	QueueKindResume       QueueKind = "resume"
+	QueueKindPromptAppend QueueKind = "prompt_append"
+	QueueKindAnswerUser   QueueKind = "answer_user"
 )
 
 type QueuePriority string
@@ -417,7 +418,7 @@ func canTransition(current Status, next Status) bool {
 }
 
 func validQueueKind(kind QueueKind) bool {
-	return kind == QueueKindStart || kind == QueueKindResume || kind == QueueKindAnswerUser
+	return kind == QueueKindStart || kind == QueueKindResume || kind == QueueKindPromptAppend || kind == QueueKindAnswerUser
 }
 
 func validQueuePriority(priority QueuePriority) bool {

@@ -456,6 +456,42 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 }
 
+func TestSessionRepositoryRoundTripsPromptAppendQueue(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	input := session.Session{
+		ID:        "session-prompt-append",
+		ProjectID: "project-1",
+		Mode:      session.ModeWorkflow,
+		Status:    session.StatusQueued,
+		Queue: session.QueueIntent{
+			Kind:                 session.QueueKindPromptAppend,
+			Priority:             session.QueuePriorityHigh,
+			Prompt:               "workflow fallback prompt",
+			ResumeCodexSessionID: "codex-1",
+		},
+	}
+	repo := store.Sessions()
+	if err := repo.Save(ctx, input); err != nil {
+		t.Fatalf("save prompt append queue: %v", err)
+	}
+	found, err := repo.Find(ctx, input.ID)
+	if err != nil {
+		t.Fatalf("find prompt append queue: %v", err)
+	}
+	if found.Queue != input.Queue {
+		t.Fatalf("prompt append queue = %#v, want %#v", found.Queue, input.Queue)
+	}
+}
+
 func TestSessionRepositoryListsWorktreeCleanupDue(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
