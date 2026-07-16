@@ -102,18 +102,25 @@
                   icon="checklist"
                   :label="`${card.todoList.completed}/${card.todoList.total}`"
                   aria-label="查看 TODO List"
-                  @click.stop
+                  @pointerenter="openTodoMenu(card.id, $event)"
+                  @pointerleave="scheduleTodoMenuClose(card.id, $event)"
+                  @click.stop="toggleTodoMenu(card.id)"
                   @contextmenu.stop
                   @touchstart.stop
                   @keyup.enter.stop
                   @keyup.space.stop
                 >
-                  <q-tooltip>TODO List</q-tooltip>
                   <q-menu
+                    no-parent-event
+                    no-focus
                     anchor="top left"
                     self="bottom left"
                     class="overview-todo-menu"
+                    :model-value="activeTodoMenuId === card.id"
+                    @update:model-value="syncTodoMenuModel(card.id, $event)"
                     @click.stop
+                    @pointerenter="openTodoMenu(card.id, $event)"
+                    @pointerleave="scheduleTodoMenuClose(card.id, $event)"
                   >
                     <q-list dense separator class="app-touch-list">
                       <q-item
@@ -469,6 +476,7 @@ const router = useRouter();
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
+const todoMenuHideDelay = 120;
 const showDesktopFocusLayout = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
@@ -508,6 +516,7 @@ const projectChips = computed(() => {
 const visibleLatestCards = computed(() =>
   latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
 );
+const activeTodoMenuId = ref('');
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
@@ -566,6 +575,7 @@ const diffDialogTarget = computed<DiffWorkspaceTarget>(() => ({
 let cardSubscription: ReturnType<typeof subscribeSessionCardChanged> | null = null;
 let cardReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let cardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let todoMenuHideTimer: ReturnType<typeof setTimeout> | null = null;
 let liveStopped = true;
 // GLUE: suppress Quasar's synthetic post-long-press click; remove when QMenu consumes it upstream.
 let suppressedCardClickId = '';
@@ -581,6 +591,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  clearTodoMenuHideTimer();
   clearCardClickSuppression();
   stopOverviewLiveUpdates();
 });
@@ -749,6 +760,41 @@ function statusChipClass(status: SessionStatus) {
 
 function overviewCardClass(card: SessionCard) {
   return `overview-session-card--${card.status}`;
+}
+
+function clearTodoMenuHideTimer() {
+  if (!todoMenuHideTimer) return;
+  clearTimeout(todoMenuHideTimer);
+  todoMenuHideTimer = null;
+}
+
+function openTodoMenu(sessionId: string, event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return;
+  clearTodoMenuHideTimer();
+  activeTodoMenuId.value = sessionId;
+}
+
+function toggleTodoMenu(sessionId: string) {
+  clearTodoMenuHideTimer();
+  activeTodoMenuId.value = activeTodoMenuId.value === sessionId ? '' : sessionId;
+}
+
+function scheduleTodoMenuClose(sessionId: string, event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return;
+  clearTodoMenuHideTimer();
+  todoMenuHideTimer = setTimeout(() => {
+    todoMenuHideTimer = null;
+    if (activeTodoMenuId.value === sessionId) activeTodoMenuId.value = '';
+  }, todoMenuHideDelay);
+}
+
+function syncTodoMenuModel(sessionId: string, showing: boolean) {
+  clearTodoMenuHideTimer();
+  if (showing) {
+    activeTodoMenuId.value = sessionId;
+  } else if (activeTodoMenuId.value === sessionId) {
+    activeTodoMenuId.value = '';
+  }
 }
 
 function openSessionCard(sessionId: string) {

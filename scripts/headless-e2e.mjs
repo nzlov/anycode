@@ -112,6 +112,7 @@ try {
   await assertProjectChipPersistence(gitProject.id, gitProject.name, 'ANYCODE_GIT_E2E_OK');
   await assertNoHorizontalOverflow('overview branch lanes');
   await screenshot('02-overview-branch-lanes.png');
+  await assertOverviewTodoMenuInteractions();
 
   await assertNewSessionDefaultProject({
     route: `/#/?projectId=${gitProject.id}`,
@@ -1369,6 +1370,101 @@ async function publishThemeAuditArtifact(sessionId) {
     correlationId: `theme-audit-${stamp}`,
   });
   assert(response.status === 200, `publish_artifact status = ${response.status}: ${JSON.stringify(response.body)}`);
+}
+
+async function assertOverviewTodoMenuInteractions() {
+  const menuVisible = `Array.from(document.querySelectorAll('.overview-todo-menu')).some((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  })`;
+
+  await setViewport(1440, 900);
+  await navigate('/');
+  const buttonRect = await evaluate(`(() => {
+    const button = document.querySelector('[aria-label="查看 TODO List"]');
+    if (!button) return null;
+    const rect = button.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+  assert(buttonRect, 'overview TODO menu fixture is missing');
+
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: buttonRect.x,
+    y: buttonRect.y,
+  });
+  await waitForCondition(menuVisible, 'overview TODO opens on hover');
+  await waitForCondition(
+    `!Array.from(document.querySelectorAll('.q-tooltip')).some((element) => element.innerText === 'TODO List')`,
+    'overview TODO tooltip removed',
+  );
+
+  const menuRect = await evaluate(`(() => {
+    const menu = Array.from(document.querySelectorAll('.overview-todo-menu')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    if (!menu) return null;
+    const rect = menu.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+  assert(menuRect, 'overview TODO hover menu is missing');
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: menuRect.x,
+    y: menuRect.y,
+  });
+  await sleep(250);
+  assert(await evaluate(menuVisible), 'overview TODO closes while pointer is over the menu');
+
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+  await waitForCondition(`!(${menuVisible})`, 'overview TODO closes after pointer leaves');
+
+  await clickAria('查看 TODO List');
+  await waitForCondition(menuVisible, 'overview TODO opens on click');
+  await clickAria('查看 TODO List');
+  await waitForCondition(`!(${menuVisible})`, 'overview TODO closes on second click');
+
+  await evaluate(`document.querySelector('[aria-label="查看 TODO List"]').focus()`);
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter' });
+  await waitForCondition(menuVisible, 'overview TODO opens with Enter');
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  await waitForCondition(`!(${menuVisible})`, 'overview TODO closes with Escape');
+
+  await evaluate(`document.querySelector('[aria-label="查看 TODO List"]').focus()`);
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space' });
+  await waitForCondition(menuVisible, 'overview TODO opens with Space');
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  await waitForCondition(`!(${menuVisible})`, 'overview TODO closes after Space');
+
+  await setViewport(390, 844);
+  await navigate('/');
+  await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  const touchPoint = await evaluate(`(() => {
+    const button = document.querySelector('[aria-label="查看 TODO List"]');
+    if (!button) return null;
+    const rect = button.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+  assert(touchPoint, 'overview TODO touch target is missing');
+  await page.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: touchPoint.x, y: touchPoint.y }],
+  });
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await waitForCondition(menuVisible, 'overview TODO opens on touch');
+  await page.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: touchPoint.x, y: touchPoint.y }],
+  });
+  await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await waitForCondition(`!(${menuVisible})`, 'overview TODO closes on touch');
+  await page.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await setViewport(1440, 900);
 }
 
 async function auditDarkThemeMenus(sessionId) {
