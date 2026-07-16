@@ -7,13 +7,10 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 - AnyCode 是 Web 版 Codex agent 工具。
 - 后端使用 Go、gqlgen、ent 和 Turso/libSQL；Go module 为 `github.com/nzlov/anycode`。
 - 前端使用 Quasar、GraphQL 和 GraphQL WebSocket subscription；构建产物由 Go `embed` 嵌入。
-- 产品与架构背景以 `docs/plan/ddd-codex-agent-tool.md` 为总索引，具体任务以对应专项计划为准，不在本文件维护产品需求副本。
 
 ## 执行规则
 
 - 需求存在会改变架构或行为边界的歧义时，先向用户确认。
-- 用户明确授权开发前，只修改计划和原型，不实现代码。
-- 多步骤任务维护 `docs/plan/` 下的 Markdown TODO；每项必须包含可执行动作和 `verify:`，验证通过后才能勾选。
 - 只修改当前目标必需的内容，不顺手重构、清理或格式化无关代码。
 - 优先使用标准库、现有依赖和现有领域边界；不为能在调用处清楚表达的单次逻辑增加 helper、wrapper、adapter 或配置项。
 - 出现重复 mapping、透传 wrapper 或其他胶水代码时，先检查职责和数据形状是否放错边界。无法避免的胶水代码用简短 `GLUE:` 注释说明边界、原因和删除条件。
@@ -26,7 +23,7 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 - ent schema 与生成代码放在 `internal/infra/entstore/ent`；gqlgen 生成代码放在 `internal/interfaces/graphql/graph`。
 - ent model 和 GraphQL model 不作为领域模型，不跨层穿透；通过 repository、application DTO 或领域端口转换。
 - Codex 命令行参数只在 `internal/infra/codexcli` 拼装。
-- 新增领域对象和用例前，先按总计划的“分层领域抽象”确定归属，不新增跨层 glue package。
+- 新增领域对象和用例前，先按上述分层与领域边界确定归属，不新增跨层 glue package。
 
 ## DDD 领域边界
 
@@ -55,4 +52,4 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 
 - 测试范围与风险匹配；文档改动至少运行 `git diff --check`。
 - 常规收口统一运行 `make verify`；该目标依次执行后端测试与静态检查、前端测试、类型检查、生产构建和 Git 差异检查。
-- 验证失败时不勾选对应计划项，记录失败结果后继续修复或询问用户。
+- 验证失败时记录结果，继续修复或询问用户。
