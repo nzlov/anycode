@@ -7,11 +7,20 @@
       <q-tab name="artifacts" icon="inventory_2" label="产物" />
     </q-tabs>
 
-    <div class="detail-grid">
-      <section
-        class="event-panel"
-        :class="{ 'event-panel--mobile-hidden': detailView !== 'session' }"
-      >
+    <q-splitter
+      class="detail-grid detail-splitter"
+      reverse
+      unit="px"
+      :model-value="rightPanelWidth"
+      :limits="[minRightPanelWidth, maxRightPanelWidth]"
+      :disable="$q.screen.lt.md"
+      :before-class="{ 'detail-splitter__panel--mobile-hidden': detailView !== 'session' }"
+      :after-class="{ 'detail-splitter__panel--mobile-hidden': detailView === 'session' }"
+      :separator-style="{ width: `${detailSplitterGap}px` }"
+      @update:model-value="setPreferredRightPanelWidth"
+    >
+      <template #before>
+        <section class="event-panel">
         <q-card flat bordered class="stream-card">
           <q-inner-loading :showing="loading">
             <q-spinner color="primary" size="32px" />
@@ -128,11 +137,28 @@
           </CodexPromptComposer>
         </div>
       </section>
+      </template>
 
-      <aside
-        class="right-panel"
-        :class="{ 'right-panel--mobile-hidden': detailView === 'session' }"
-      >
+      <template #separator>
+        <div
+          class="detail-splitter__handle"
+          role="separator"
+          tabindex="0"
+          aria-label="调整左右面板宽度"
+          aria-orientation="vertical"
+          :aria-valuemin="minRightPanelWidth"
+          :aria-valuemax="maxRightPanelWidth"
+          :aria-valuenow="rightPanelWidth"
+          :aria-valuetext="`右侧面板 ${rightPanelWidth} 像素`"
+          @keydown.left.prevent="resizeRightPanel(splitterKeyboardStep)"
+          @keydown.right.prevent="resizeRightPanel(-splitterKeyboardStep)"
+        >
+          <q-icon name="drag_indicator" size="18px" />
+        </div>
+      </template>
+
+      <template #after>
+        <aside class="right-panel">
         <q-card flat bordered class="right-panel-card">
           <q-tabs
             v-model="rightPanelTab"
@@ -396,7 +422,10 @@
           </q-tab-panels>
         </q-card>
       </aside>
-    </div>
+      </template>
+
+      <q-resize-observer @resize="onDetailSplitterResize" />
+    </q-splitter>
 
     <q-dialog
       v-model="promptEditDialogOpen"
@@ -473,7 +502,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { Notify } from 'quasar';
+import { Notify, useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
@@ -502,8 +531,27 @@ import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 const emit = defineEmits<{
   'session-title': [title: string];
 }>();
+const $q = useQuasar();
 const route = useRoute();
 const sessionId = String(route.params.id ?? '');
+const defaultRightPanelWidth = 360;
+const minRightPanelWidth = 320;
+const minLeftPanelWidth = 480;
+const detailSplitterGap = 16;
+const splitterKeyboardStep = 16;
+const detailSplitterStorageKey = 'anycode:session-detail:right-panel-width';
+const initialDetailSplitterWidth = Math.max(
+  minLeftPanelWidth + minRightPanelWidth + detailSplitterGap,
+  window.innerWidth - 48,
+);
+const preferredRightPanelWidth = ref(readPreferredRightPanelWidth());
+const detailSplitterWidth = ref(initialDetailSplitterWidth);
+const maxRightPanelWidth = computed(() =>
+  Math.max(minRightPanelWidth, detailSplitterWidth.value - minLeftPanelWidth - detailSplitterGap),
+);
+const rightPanelWidth = computed(() =>
+  Math.max(minRightPanelWidth, Math.min(preferredRightPanelWidth.value, maxRightPanelWidth.value)),
+);
 const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
@@ -534,6 +582,40 @@ const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
 });
 let mounted = false;
 let preservingOlderEventScroll = false;
+
+function readPreferredRightPanelWidth() {
+  try {
+    const raw = window.localStorage.getItem(detailSplitterStorageKey);
+    if (raw === null || raw.trim() === '') return defaultRightPanelWidth;
+    const value = Number(raw);
+    return Number.isFinite(value)
+      ? Math.max(minRightPanelWidth, Math.round(value))
+      : defaultRightPanelWidth;
+  } catch {
+    return defaultRightPanelWidth;
+  }
+}
+
+function setPreferredRightPanelWidth(value: number) {
+  if ($q.screen.lt.md || !Number.isFinite(value)) return;
+  preferredRightPanelWidth.value = Math.round(
+    Math.max(minRightPanelWidth, Math.min(value, maxRightPanelWidth.value)),
+  );
+  try {
+    window.localStorage.setItem(detailSplitterStorageKey, String(preferredRightPanelWidth.value));
+  } catch {
+    // The active layout remains usable when browser storage is unavailable.
+  }
+}
+
+function resizeRightPanel(delta: number) {
+  setPreferredRightPanelWidth(rightPanelWidth.value + delta);
+}
+
+function onDetailSplitterResize(size: { width: number }) {
+  detailSplitterWidth.value = size.width;
+}
+
 const {
   session,
   events,
@@ -1043,9 +1125,62 @@ async function scrollEventsToBottom() {
 }
 
 .detail-page .detail-grid {
+  width: 100%;
+  height: 100%;
   flex: 1 1 auto;
   min-height: 0;
-  align-items: stretch;
+}
+
+.detail-splitter > :deep(.q-splitter__panel) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.detail-splitter > :deep(.q-splitter__separator) {
+  background: transparent;
+}
+
+.detail-splitter > :deep(.q-splitter__separator::before) {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  content: '';
+  background: var(--ac-border);
+  transform: translateX(-50%);
+}
+
+.detail-splitter__handle {
+  display: flex;
+  width: 12px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ac-text-muted);
+  background: var(--ac-surface-raised);
+  border: 1px solid var(--ac-border);
+  border-radius: 4px;
+  outline: 0;
+  cursor: col-resize;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.detail-splitter > :deep(.q-splitter__separator:hover) .detail-splitter__handle,
+.detail-splitter.q-splitter--active .detail-splitter__handle {
+  color: var(--q-primary);
+  border-color: var(--q-primary);
+  background: var(--ac-surface-muted);
+}
+
+.detail-splitter__handle:focus-visible {
+  color: var(--q-primary);
+  border-color: var(--q-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 28%, transparent);
 }
 
 .event-panel {
@@ -1297,10 +1432,23 @@ async function scrollEventsToBottom() {
   }
 
   .detail-page .detail-grid {
-    height: auto;
+    display: block;
+    width: 100%;
+    height: 100%;
     min-height: 0;
-    gap: 0;
-    align-items: stretch;
+  }
+
+  .detail-splitter > :deep(.q-splitter__separator) {
+    display: none;
+  }
+
+  .detail-splitter > :deep(.q-splitter__panel) {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .detail-splitter > :deep(.detail-splitter__panel--mobile-hidden) {
+    display: none;
   }
 
   .stream-card__body {
@@ -1310,11 +1458,6 @@ async function scrollEventsToBottom() {
   .event-panel {
     height: 100%;
     min-height: 0;
-  }
-
-  .event-panel--mobile-hidden,
-  .right-panel--mobile-hidden {
-    display: none;
   }
 
   .right-panel,

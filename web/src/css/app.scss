@@ -582,15 +582,9 @@ a {
   font-weight: 600;
 }
 
-.detail-grid,
 .workflow-layout {
   display: grid;
   gap: 16px;
-}
-
-.detail-grid {
-  grid-template-columns: minmax(0, 1fr) 360px;
-  align-items: start;
 }
 
 .event-panel {
@@ -1564,7 +1558,6 @@ a {
 }
 
 @media (max-width: 1023.98px) {
-  .detail-grid,
   .workflow-layout {
     grid-template-columns: 1fr;
   }
