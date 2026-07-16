@@ -36,6 +36,38 @@ test('overview card actions use a context menu without a visible trigger', () =>
   assert.match(source, /@keyup\.space\.self\.prevent=/);
 });
 
+test('overview TODO menu supports hover without removing click, touch, or keyboard access', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /const activeTodoMenuId = ref\(''\);/);
+  assert.match(source, /const todoMenuHideDelay = 120;/);
+  assert.match(
+    source,
+    /class="overview-todo-btn app-command-btn"[\s\S]*?@pointerenter="openTodoMenu\(card\.id, \$event\)"[\s\S]*?@pointerleave="scheduleTodoMenuClose\(card\.id, \$event\)"[\s\S]*?@click\.stop="toggleTodoMenu\(card\.id\)"[\s\S]*?@touchstart\.stop[\s\S]*?@keyup\.enter\.stop[\s\S]*?@keyup\.space\.stop/,
+  );
+  assert.match(
+    source,
+    /<q-menu[\s\S]*?no-parent-event[\s\S]*?no-focus[\s\S]*?:model-value="activeTodoMenuId === card\.id"[\s\S]*?@update:model-value="syncTodoMenuModel\(card\.id, \$event\)"[\s\S]*?@pointerenter="openTodoMenu\(card\.id, \$event\)"[\s\S]*?@pointerleave="scheduleTodoMenuClose\(card\.id, \$event\)"/,
+  );
+  assert.match(source, /if \(event\.pointerType !== 'mouse'\) return;/);
+  assert.match(source, /onUnmounted\(\(\) => \{[\s\S]*?clearTodoMenuHideTimer\(\)/);
+  assert.doesNotMatch(source, /<q-tooltip>TODO List<\/q-tooltip>/);
+});
+
+test('overview TODO headless scenario covers pointer, keyboard, and narrow-screen access', () => {
+  const source = readFileSync(new URL('../../scripts/headless-e2e.mjs', import.meta.url), 'utf8');
+
+  assert.match(source, /await assertOverviewTodoMenuInteractions\(\);/);
+  assert.match(source, /Input\.dispatchMouseEvent[\s\S]*overview TODO opens on hover/);
+  assert.match(source, /overview TODO closes while pointer is over the menu/);
+  assert.match(source, /overview TODO closes after pointer leaves/);
+  assert.match(source, /overview TODO opens on click/);
+  assert.match(source, /key: 'Enter'[\s\S]*overview TODO opens with Enter/);
+  assert.match(source, /key: ' ', code: 'Space'[\s\S]*overview TODO opens with Space/);
+  assert.match(source, /key: 'Escape'[\s\S]*overview TODO closes with Escape/);
+  assert.match(source, /Input\.dispatchTouchEvent[\s\S]*overview TODO opens on touch/);
+});
+
 test('overview requests only the latest range instead of dated buckets', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
   const oldLatestRange = ['recent', '3d'].join('');
