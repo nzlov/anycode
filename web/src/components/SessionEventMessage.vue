@@ -8,7 +8,7 @@
     >
       <q-icon :name="groupExpanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <span>{{ groupLabel }}</span>
-      <q-badge outline color="grey-7" :label="String(event.group.count)" />
+      <q-badge outline class="text-muted" :label="String(event.group.count)" />
     </button>
     <div v-if="groupExpanded" class="event-group__members">
       <SessionEventMessage
