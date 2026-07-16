@@ -6,7 +6,7 @@
         :model-value="workspaceMode"
         no-caps
         unelevated
-        toggle-color="dark"
+        toggle-color="primary"
         :disable="loading"
         :options="[
           { label: '单个文件', value: 'single', icon: 'description' },
@@ -52,7 +52,7 @@
       </q-btn>
     </div>
 
-    <q-banner v-if="error" rounded class="diff-workspace__error bg-negative text-white">
+    <q-banner v-if="error" rounded class="diff-workspace__error app-feedback app-feedback--danger">
       <template #avatar>
         <q-icon name="error_outline" />
       </template>
@@ -70,7 +70,7 @@
       </template>
     </q-banner>
 
-    <q-banner v-if="diff && !diff.available" rounded class="state-banner bg-grey-2 text-grey-8">
+    <q-banner v-if="diff && !diff.available" rounded class="state-banner app-feedback app-feedback--neutral">
       <template #avatar>
         <q-icon name="block" />
       </template>
@@ -148,7 +148,7 @@
 
         <q-card v-else-if="visibleDiffs.length === 0" flat bordered class="diff-state-card">
           <q-card-section class="empty-state">
-            <q-icon name="data_object" size="32px" color="grey-6" />
+            <q-icon name="data_object" size="32px" class="text-muted" />
             <div class="text-body2">当前范围没有可展示的 Diff</div>
           </q-card-section>
         </q-card>

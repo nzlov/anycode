@@ -58,7 +58,7 @@
                   回答后当前会话继续执行，输入框会恢复为追加描述。
                 </div>
               </div>
-              <q-badge rounded color="warning" text-color="dark" label="待回答" />
+              <q-badge rounded color="warning" class="app-on-warning" label="待回答" />
             </q-card-section>
             <q-separator />
             <AnswerUserPanel
@@ -114,6 +114,7 @@
                 v-if="composerAction"
                 unelevated
                 class="detail-composer__primary-btn app-icon-btn"
+                :class="{ 'app-on-positive': composerAction.color === 'positive' }"
                 :color="composerAction.color"
                 :icon="composerAction.icon"
                 :aria-label="composerAction.tooltip"
@@ -363,7 +364,7 @@
                       <q-item-label caption>{{ item.time }}</q-item-label>
                     </q-item-section>
                     <q-item-section side>
-                      <q-icon name="edit" color="grey-7" />
+                      <q-icon name="edit" class="text-muted" />
                     </q-item-section>
                     <q-tooltip>编辑追加提示</q-tooltip>
                   </q-item>
@@ -697,7 +698,7 @@ const composerAction = computed(() => {
   }
   return {
     icon: 'pause_circle',
-    color: 'grey-7',
+    color: 'primary',
     tooltip: '已暂停',
     loading: false,
     disabled: true,

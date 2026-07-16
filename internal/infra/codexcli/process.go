@@ -732,10 +732,19 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 			return ctx.Err()
 		}
 	}
-	path, remainingStdoutPlans, err := waitForActiveSessionLog(ctx, active, stdoutSessionIDs, stdoutPlanUpdates, emit)
+	path, remainingStdoutPlans, initialExitResult, processExited, err := waitForActiveSessionLog(ctx, active, exited, stdoutSessionIDs, stdoutPlanUpdates, emit)
 	stdoutPlanUpdates = remainingStdoutPlans
 	if err != nil {
 		observe(active.observer, Observation{Name: "transcript.bind", Outcome: "failed", Reason: transcriptFailureReason(err), Duration: time.Since(bindStarted)})
+		if processExited {
+			if initialExitResult.FailureReason == "" {
+				initialExitResult.FailureReason = err.Error()
+			}
+			if errors.Is(err, process.ErrTranscriptUnavailable) {
+				initialExitResult.FailureCode = "codex_transcript_unavailable"
+			}
+			return initialExitResult, err
+		}
 		return failUnreadableProcess(active, exited, err), err
 	}
 	source, err := transcriptSourceForPath(active.home, active.codexSessionID, path)
@@ -772,8 +781,7 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	observe(active.observer, Observation{Name: "transcript.bind", Outcome: "success", Duration: time.Since(bindStarted)})
 	reader := bufio.NewReader(file)
 	offset, _ := file.Seek(0, io.SeekCurrent)
-	var exitResult process.ExitResult
-	processExited := false
+	exitResult := initialExitResult
 	var pending []byte
 	var pendingOffset int64
 	drainStdoutPlans := func() error {
@@ -992,9 +1000,10 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
-func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutSessionIDs <-chan string, stdoutPlanUpdates <-chan process.CodexEvent, emit func(process.CodexEvent) error) (string, <-chan process.CodexEvent, error) {
-	deadline := time.Now().Add(5 * time.Second)
+func waitForActiveSessionLog(ctx context.Context, active *activeProcess, exited <-chan process.ExitResult, stdoutSessionIDs <-chan string, stdoutPlanUpdates <-chan process.CodexEvent, emit func(process.CodexEvent) error) (string, <-chan process.CodexEvent, process.ExitResult, bool, error) {
 	var last string
+	var exitResult process.ExitResult
+	processExited := false
 	for {
 		if stdoutSessionIDs != nil {
 			select {
@@ -1010,24 +1019,24 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutS
 		if active.transcriptPath != "" || active.codexSessionID != "" {
 			path, err := activeSessionLog(active)
 			if err == nil && path != "" {
-				return path, stdoutPlanUpdates, nil
+				return path, stdoutPlanUpdates, exitResult, processExited, nil
 			}
 			if err != nil {
 				last = err.Error()
 			}
 		}
-		if active.exited() {
-			return "", stdoutPlanUpdates, process.ErrTranscriptUnavailable
-		}
-		if time.Now().After(deadline) {
+		if processExited && stdoutSessionIDs == nil {
 			if last != "" {
-				return "", stdoutPlanUpdates, fmt.Errorf("%w: %s", process.ErrTranscriptUnavailable, last)
+				return "", stdoutPlanUpdates, exitResult, true, fmt.Errorf("%w: %s", process.ErrTranscriptUnavailable, last)
 			}
-			return "", stdoutPlanUpdates, process.ErrTranscriptUnavailable
+			return "", stdoutPlanUpdates, exitResult, true, process.ErrTranscriptUnavailable
 		}
 		select {
 		case <-ctx.Done():
-			return "", stdoutPlanUpdates, ctx.Err()
+			return "", stdoutPlanUpdates, exitResult, processExited, ctx.Err()
+		case exitResult = <-exited:
+			processExited = true
+			exited = nil
 		case sessionID, ok := <-stdoutSessionIDs:
 			if !ok {
 				stdoutSessionIDs = nil
@@ -1042,7 +1051,7 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutS
 				continue
 			}
 			if err := emit(event); err != nil {
-				return "", stdoutPlanUpdates, err
+				return "", stdoutPlanUpdates, exitResult, processExited, err
 			}
 		case <-time.After(50 * time.Millisecond):
 		}

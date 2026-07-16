@@ -55,11 +55,14 @@
             clickable
             :disable="!entry.isDir || !entry.canRead"
             :active="selected === entry.path"
-            active-class="bg-primary-1 text-primary"
+            active-class="directory-entry--active"
             @click="enterDirectory(entry)"
           >
             <q-item-section avatar>
-              <q-icon :name="entry.isGit ? 'folder_open' : 'folder'" :color="entry.canRead ? 'primary' : 'grey-5'" />
+              <q-icon
+                :name="entry.isGit ? 'folder_open' : 'folder'"
+                :class="entry.canRead ? 'text-primary' : 'text-muted'"
+              />
             </q-item-section>
             <q-item-section>
               <q-item-label>{{ entry.name }}</q-item-label>
@@ -67,8 +70,13 @@
             </q-item-section>
             <q-item-section side>
               <div class="row items-center q-gutter-xs">
-                <q-chip v-if="entry.isGit" dense color="green-1" text-color="green-9" label="Git" />
-                <q-chip v-if="!entry.canRead" dense color="red-1" text-color="negative" :label="entry.errorCode || '不可读'" />
+                <q-chip v-if="entry.isGit" dense class="directory-entry__git" label="Git" />
+                <q-chip
+                  v-if="!entry.canRead"
+                  dense
+                  class="directory-entry__error"
+                  :label="entry.errorCode || '不可读'"
+                />
                 <q-btn
                   v-if="entry.isDir && entry.canRead"
                   flat
@@ -103,7 +111,7 @@
         <q-btn
           unelevated
           color="positive"
-          text-color="dark"
+          class="app-on-positive"
           icon="folder_open"
           label="打开该项目"
           no-caps
@@ -191,3 +199,22 @@ function selectDirectory(path: string) {
   selected.value = path;
 }
 </script>
+
+<style scoped>
+.directory-entry--active {
+  color: var(--ac-link);
+  background: var(--ac-surface-selected);
+}
+
+.directory-entry__git {
+  color: var(--ac-status-success-text);
+  background: var(--ac-status-success-bg);
+  border: 1px solid var(--ac-status-success-border);
+}
+
+.directory-entry__error {
+  color: var(--ac-status-danger-text);
+  background: var(--ac-status-danger-bg);
+  border: 1px solid var(--ac-status-danger-border);
+}
+</style>

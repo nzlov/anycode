@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +33,50 @@ type blockingArtifactRepository struct {
 	firstSumEntered  chan struct{}
 	secondSumEntered chan struct{}
 	releaseFirstSum  chan struct{}
+}
+
+func TestResolveArtifactsNormalizesAndBoundsLogicalPaths(t *testing.T) {
+	ctx := context.Background()
+	database, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := database.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo := database.Attachments()
+	now := time.Now().UTC()
+	for _, artifact := range []session.SessionFile{
+		{ID: "first", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "first", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now},
+		{ID: "second", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "second", LogicalPath: "image.png", Filename: "image.png", CreatedAt: now.Add(time.Second)},
+	} {
+		if err := repo.SaveSessionAttachment(ctx, artifact); err != nil {
+			t.Fatal(err)
+		}
+	}
+	service := artifactapp.New(repo, nil, nil)
+
+	got, err := service.Resolve(ctx, "session-1", []string{" image.png ", `reports\result.txt`, "image.png", "missing.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "second" || got[1].ID != "first" {
+		t.Fatalf("Resolve() = %#v", got)
+	}
+
+	for _, invalid := range [][]string{{""}, {"/absolute.txt"}, {"../escape.txt"}, {"a/../escape.txt"}} {
+		if _, err := service.Resolve(ctx, "session-1", invalid); err == nil {
+			t.Fatalf("Resolve(%q) accepted invalid path", invalid)
+		}
+	}
+	tooMany := make([]string, artifactapp.MaxResolveArtifactPaths+1)
+	for index := range tooMany {
+		tooMany[index] = fmt.Sprintf("artifact-%d.txt", index)
+	}
+	if _, err := service.Resolve(ctx, "session-1", tooMany); err == nil {
+		t.Fatal("Resolve() accepted too many paths")
+	}
 }
 
 func (r *blockingArtifactRepository) SumSessionArtifactSize(ctx context.Context, sessionID session.ID) (int64, error) {

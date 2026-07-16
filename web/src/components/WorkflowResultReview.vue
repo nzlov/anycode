@@ -3,7 +3,7 @@
     v-if="phase === 'after_run' && !normalizedResult"
     dense
     rounded
-    class="workflow-result-review__error bg-negative text-white"
+    class="workflow-result-review__error app-feedback app-feedback--danger"
   >
     执行后审批缺少节点结果，请刷新后重试。结果恢复前不能提交审批。
   </q-banner>
@@ -41,13 +41,17 @@
             <q-item-label v-if="check.detail" caption>{{ check.detail }}</q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-badge outline color="grey-7" :label="check.source === 'system' ? '系统验证' : 'Agent 验证'" />
+            <q-badge outline class="text-muted" :label="check.source === 'system' ? '系统验证' : 'Agent 验证'" />
           </q-item-section>
         </q-item>
       </q-list>
     </section>
 
-    <q-banner v-if="normalizedResult.warnings.length" dense class="workflow-result-review__warnings bg-warning text-dark">
+    <q-banner
+      v-if="normalizedResult.warnings.length"
+      dense
+      class="workflow-result-review__warnings app-feedback app-feedback--warning"
+    >
       <div class="text-subtitle2 text-weight-bold">注意事项</div>
       <div v-for="(warning, index) in normalizedResult.warnings" :key="`${warning.code}:${index}`" class="q-mt-xs">{{ warning.message }}</div>
     </q-banner>
@@ -55,12 +59,17 @@
     <section v-if="normalizedResult.artifacts.length" class="workflow-result-review__section">
       <div class="text-subtitle2 text-weight-bold">产物</div>
       <q-list dense separator class="workflow-result-review__list">
-        <q-item v-for="(artifact, index) in normalizedResult.artifacts" :key="`${artifact.kind}:${artifact.ref}:${index}`">
+        <q-item
+          v-for="(artifact, index) in normalizedResult.artifacts"
+          :key="`${artifact.kind}:${artifact.ref}:${index}`"
+          :clickable="Boolean(resolvedArtifact(artifact.ref))"
+          @click="openArtifact(artifact.ref)"
+        >
           <q-item-section>
             <q-item-label>{{ artifact.label }}</q-item-label>
             <q-item-label caption class="text-mono">{{ artifact.ref }}</q-item-label>
           </q-item-section>
-          <q-item-section side><q-badge outline color="grey-7" :label="artifact.kind" /></q-item-section>
+          <q-item-section side><q-badge outline class="text-muted" :label="artifact.kind" /></q-item-section>
         </q-item>
       </q-list>
     </section>
@@ -73,17 +82,25 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+
+import { normalizeArtifactLogicalPath } from '@/services/artifactLogicalPath';
+import type { SessionFile } from '@/services/sessionFiles';
 import type { PendingApproval, WorkflowNodeResult } from '@/services/sessions';
 import {
   flattenWorkflowResultData,
   normalizeWorkflowNodeResult,
 } from '@/services/workflowApprovalReview';
 
-const props = defineProps<{
-  phase: PendingApproval['phase'] | null;
-  result: WorkflowNodeResult | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    phase: PendingApproval['phase'] | null;
+    result: WorkflowNodeResult | null;
+    resolvedArtifacts?: Record<string, SessionFile>;
+  }>(),
+  { resolvedArtifacts: () => ({}) },
+);
 
+const emit = defineEmits<{ openArtifact: [file: SessionFile] }>();
 const normalizedResult = computed(() => normalizeWorkflowNodeResult(props.result));
 const outcomePresentation = computed(() => {
   if (normalizedResult.value?.outcome === 'success') return { label: '成功', color: 'positive' };
@@ -92,6 +109,16 @@ const outcomePresentation = computed(() => {
 });
 const dataProjection = computed(() => flattenWorkflowResultData(normalizedResult.value?.data ?? {}));
 const formattedResult = computed(() => safeJSONStringify(normalizedResult.value, '原始结果层级过深，无法格式化展示。'));
+
+function resolvedArtifact(reference: string) {
+  const logicalPath = normalizeArtifactLogicalPath(reference);
+  return logicalPath ? props.resolvedArtifacts[logicalPath] : undefined;
+}
+
+function openArtifact(reference: string) {
+  const file = resolvedArtifact(reference);
+  if (file) emit('openArtifact', file);
+}
 
 function formatValue(value: unknown) {
   if (value == null) return '-';

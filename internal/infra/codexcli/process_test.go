@@ -119,6 +119,83 @@ EOF
 	}
 }
 
+func TestEventsWaitsForDelayedSessionLogWhileProcessRuns(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+sleep 6
+mkdir -p "$CODEX_HOME/sessions/2026/07/15"
+cat > "$CODEX_HOME/sessions/2026/07/15/rollout-delayed-session.jsonl" <<EOF
+{"timestamp":"2026-07-15T12:00:00Z","type":"session_meta","payload":{"session_id":"delayed-session","cwd":"$PWD","originator":"codex_exec"}}
+EOF
+printf '%s\n' '{"type":"thread.started","thread_id":"delayed-session"}'
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	handle, err := New(bin).Start(context.Background(), process.CodexStartInput{
+		ProcessRunID: "process-run-delayed-session-log",
+		Workdir:      dir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := New(bin).Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	startedAt := time.Now()
+	select {
+	case event := <-events:
+		if event.Type != "thread.started" || event.Payload["session_id"] != "delayed-session" {
+			t.Fatalf("first event = %+v", event)
+		}
+		if elapsed := time.Since(startedAt); elapsed < 5*time.Second {
+			t.Fatalf("session log arrived after %s, want delay beyond old timeout", elapsed)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("timed out waiting for delayed session log")
+	}
+
+	got := collectEvents(t, events, 1)
+	if got[0].Type != "process.exit" || got[0].Payload["exitCode"] != 0 {
+		t.Fatalf("exit event = %+v", got[0])
+	}
+}
+
+func TestEventsStopsWaitingWhenProcessExitsWithoutSessionLog(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+exit 0
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	handle, err := New(bin).Start(context.Background(), process.CodexStartInput{
+		ProcessRunID: "process-run-without-session-log",
+		Workdir:      dir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := New(bin).Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case event := <-events:
+		if event.Type != "process.exit" {
+			t.Fatalf("event = %+v", event)
+		}
+		if event.Payload["failureCode"] != "codex_transcript_unavailable" || !strings.Contains(event.Payload["failureReason"].(string), process.ErrTranscriptUnavailable.Error()) {
+			t.Fatalf("exit payload = %+v", event.Payload)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("process exit did not stop the session log wait")
+	}
+}
+
 func TestCodexTranscriptProjectorKeepsMissingTimestampInSourceOrder(t *testing.T) {
 	projector := newCodexTranscriptProjector()
 	previous := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-1"}}`), "/workspace/project", "rollout.jsonl", 10)

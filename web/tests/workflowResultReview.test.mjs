@@ -22,6 +22,9 @@ test('workflow result review renders the canonical approval projection', () => {
   assert.match(source, /check\.id}:\$\{index}/);
   assert.match(source, /warning\.code}:\$\{index}/);
   assert.match(source, /artifact\.ref}:\$\{index}/);
+  assert.match(source, /:clickable="Boolean\(resolvedArtifact\(artifact\.ref\)\)"/);
+  assert.match(source, /emit\('openArtifact', file\)/);
+  assert.match(source, /resolvedArtifacts/);
   assert.doesNotMatch(source, /function flattenData/);
   assert.match(source, /phase === 'after_run' && !normalizedResult/);
   assert.match(source, /结果恢复前不能提交审批/);

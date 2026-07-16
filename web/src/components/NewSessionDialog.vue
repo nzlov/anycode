@@ -50,35 +50,41 @@
           >
             <q-tooltip>项目：{{ selectedProject?.name }}</q-tooltip>
           </q-select>
-          <div v-if="selectedProject?.isGit" class="branch-picker">
-            <q-select
-              v-model="branch"
-              :outlined="!panel"
-              :borderless="panel"
-              dense
-              label="基础分支"
-              class="branch-picker__select"
-              dropdown-icon=""
-              :disable="creating || branchesLoading"
-              :loading="branchesLoading"
-              :options="branchOptions"
-            >
-              <q-tooltip>基础分支：{{ branch }}</q-tooltip>
-            </q-select>
-            <q-btn
-              flat
-              round
-              dense
-              class="app-icon-btn"
-              icon="refresh"
-              aria-label="刷新分支"
-              :disable="creating || branchesLoading"
-              :loading="branchesLoading"
-              @click="refreshProjectBranches(projectId)"
-            >
-              <q-tooltip>刷新分支</q-tooltip>
-            </q-btn>
-          </div>
+          <q-select
+            v-if="selectedProject?.isGit"
+            v-model="branch"
+            :outlined="!panel"
+            :borderless="panel"
+            dense
+            label="基础分支"
+            class="branch-picker"
+            hide-dropdown-icon
+            :disable="creating || branchesLoading"
+            :loading="branchesLoading"
+            :options="branchOptions"
+          >
+            <template #selected>
+              <span class="ellipsis">
+                {{ branch }}
+                <q-tooltip>基础分支：{{ branch }}</q-tooltip>
+              </span>
+            </template>
+            <template #append>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="refresh"
+                aria-label="刷新分支"
+                :disable="creating || branchesLoading"
+                :loading="branchesLoading"
+                @click.stop="refreshProjectBranches(projectId)"
+              >
+                <q-tooltip>刷新分支</q-tooltip>
+              </q-btn>
+            </template>
+          </q-select>
           <q-select
             v-model="priority"
             :outlined="!panel"
@@ -139,9 +145,9 @@
                 class="app-command-btn new-session-launch-btn"
                 :class="{
                   'new-session-launch-btn--preferred': preferredAvailableMode === 'workflow',
+                  'app-on-positive': preferredAvailableMode === 'workflow',
                 }"
                 :color="preferredAvailableMode === 'workflow' ? 'positive' : undefined"
-                :text-color="preferredAvailableMode === 'workflow' ? 'dark' : undefined"
                 icon="account_tree"
                 label="流程模式"
                 no-caps
@@ -152,9 +158,11 @@
               <q-btn
                 unelevated
                 class="app-command-btn new-session-launch-btn"
-                :class="{ 'new-session-launch-btn--preferred': preferredAvailableMode === 'chat' }"
+                :class="{
+                  'new-session-launch-btn--preferred': preferredAvailableMode === 'chat',
+                  'app-on-positive': preferredAvailableMode === 'chat',
+                }"
                 :color="preferredAvailableMode === 'chat' ? 'positive' : undefined"
-                :text-color="preferredAvailableMode === 'chat' ? 'dark' : undefined"
                 icon="forum"
                 label="会话模式"
                 no-caps

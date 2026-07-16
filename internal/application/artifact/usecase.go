@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -31,6 +32,7 @@ type UseCase interface {
 	Publish(ctx context.Context, input PublishInput) (session.SessionFile, error)
 	Scan(ctx context.Context, input ScanInput) ([]session.SessionFile, error)
 	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, int, error)
+	Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
 	Delete(ctx context.Context, id session.SessionFileID) (session.SessionFile, error)
 	UseAsInput(ctx context.Context, id session.SessionFileID) (session.SessionFile, error)
 	ReadMCPContent(ctx context.Context, id session.SessionFileID) (MCPContent, bool, error)
@@ -40,6 +42,7 @@ type UseCase interface {
 }
 
 const MaxInlineArtifactBytes int64 = 25 << 20
+const MaxResolveArtifactPaths = 100
 
 type PublishInput struct {
 	SessionID     session.ID
@@ -396,6 +399,66 @@ func (s *Service) List(ctx context.Context, query session.ArtifactQuery) ([]sess
 	}
 	query.Page, query.PageSize = NormalizePage(query.Page, query.PageSize)
 	return s.repo.ListSessionArtifacts(ctx, query)
+}
+
+func (s *Service) Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error) {
+	if s == nil || s.repo == nil {
+		return nil, errors.New("artifact usecase is not configured")
+	}
+	if sessionID == "" {
+		return nil, errors.New("session id is required")
+	}
+	if len(logicalPaths) > MaxResolveArtifactPaths {
+		return nil, fmt.Errorf("artifact reference count exceeds %d", MaxResolveArtifactPaths)
+	}
+	normalized := make([]string, 0, len(logicalPaths))
+	seen := make(map[string]struct{}, len(logicalPaths))
+	for _, logicalPath := range logicalPaths {
+		value, err := normalizeLogicalPathReference(logicalPath)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return []session.SessionFile{}, nil
+	}
+	resolved, err := s.repo.ResolveLatestSessionArtifactsByLogicalPaths(ctx, sessionID, normalized)
+	if err != nil {
+		return nil, err
+	}
+	byPath := make(map[string]session.SessionFile, len(resolved))
+	for _, artifact := range resolved {
+		byPath[artifact.LogicalPath] = artifact
+	}
+	ordered := make([]session.SessionFile, 0, len(resolved))
+	for _, logicalPath := range normalized {
+		if artifact, ok := byPath[logicalPath]; ok {
+			ordered = append(ordered, artifact)
+		}
+	}
+	return ordered, nil
+}
+
+func normalizeLogicalPathReference(value string) (string, error) {
+	value = strings.ReplaceAll(strings.TrimSpace(value), `\`, "/")
+	if value == "" || pathpkg.IsAbs(value) || (len(value) >= 2 && value[1] == ':') {
+		return "", errors.New("artifact reference must be a relative logical path")
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "." || segment == ".." {
+			return "", errors.New("artifact reference cannot contain dot segments")
+		}
+	}
+	value = pathpkg.Clean(value)
+	if value == "." || value == ".." || strings.HasPrefix(value, "../") {
+		return "", errors.New("artifact reference must stay inside the output directory")
+	}
+	return value, nil
 }
 
 func NormalizePage(page, pageSize int) (int, int) {

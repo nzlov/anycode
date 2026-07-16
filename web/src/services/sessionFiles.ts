@@ -40,6 +40,16 @@ export interface ListSessionFilesInput {
   sort?: string;
 }
 
+export interface ResolvedSessionArtifact {
+  logicalPath: string;
+  file: SessionFile;
+}
+
+export interface SessionArtifactFocusRequest {
+  file: SessionFile;
+  token: number;
+}
+
 const sessionFileFields = `
   id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
   previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
@@ -61,6 +71,27 @@ export async function listSessionFiles(input: ListSessionFilesInput): Promise<Se
     variables: { input },
   });
   return data.sessionFiles;
+}
+
+export async function resolveSessionArtifacts(
+  sessionId: string,
+  logicalPaths: string[],
+): Promise<ResolvedSessionArtifact[]> {
+  const data = await graphqlFetch<
+    { resolveSessionArtifacts: ResolvedSessionArtifact[] },
+    { input: { sessionId: string; logicalPaths: string[] } }
+  >({
+    query: `
+      query ResolveSessionArtifacts($input: ResolveSessionArtifactsInput!) {
+        resolveSessionArtifacts(input: $input) {
+          logicalPath
+          file { ${sessionFileFields} }
+        }
+      }
+    `,
+    variables: { input: { sessionId, logicalPaths } },
+  });
+  return data.resolveSessionArtifacts;
 }
 
 export async function deleteSessionFile(id: string): Promise<boolean> {

@@ -357,7 +357,7 @@ test('static ANSI rendering uses theme colors and preserves extended RGB colors'
     new URL('../src/components/StaticAnsiOutput.vue', import.meta.url),
     'utf8',
   );
-  const themeSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
+  const themeSource = readFileSync(new URL('../src/css/theme.scss', import.meta.url), 'utf8');
 
   assert.match(ansiSource, /value\.replaceAll\(' ', ''\)/);
   assert.match(ansiSource, /themedColors\[normalized\] \?\? `rgb\(\$\{normalized\}\)`/);

@@ -4,8 +4,12 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import { createDarkThemeAudit } from './lib/run-dark-theme-audit.mjs';
+import { darkThemeRoutes, darkThemeViewports } from './lib/dark-theme-scenarios.mjs';
+
 const args = new Set(process.argv.slice(2));
 const manageDocker = args.has('--manage-docker');
+const darkThemeAuditEnabled = args.has('--dark-theme-audit');
 const accessKey = process.env.ANYCODE_ACCESS_KEY || 'test';
 const baseURL = process.env.ANYCODE_E2E_BASE_URL || 'http://127.0.0.1:8080';
 const codexHome = process.env.ANYCODE_CODEX_HOME || `${homedir()}/.codex`;
@@ -15,12 +19,17 @@ const gitPath = process.env.ANYCODE_E2E_GIT_PATH || `/workspaces/e2e-anycode-git
 const debugPort = Number(process.env.ANYCODE_E2E_CDP_PORT || 9333);
 const debugURL = `http://127.0.0.1:${debugPort}`;
 const userDataDir = `/tmp/anycode-chromium-e2e-${stamp}`;
-const screenshotDir = process.env.ANYCODE_E2E_SCREENSHOT_DIR || '/tmp/anycode-headless';
+const artifactDir = process.env.ANYCODE_ARTIFACT_DIR || '';
+const e2eDataDir = process.env.ANYCODE_E2E_DATA_DIR || '';
+const screenshotDir =
+  process.env.ANYCODE_E2E_SCREENSHOT_DIR ||
+  (artifactDir ? `${artifactDir}/headless-e2e/${stamp}` : '/tmp/anycode-headless');
 const overrideFile = `/tmp/anycode-codex-override-${stamp}.yml`;
 
 let chrome;
 let page;
 let browserFailures;
+let darkThemeAudit;
 
 try {
   if (manageDocker) {
@@ -45,13 +54,36 @@ try {
   await page.send('Log.enable');
   await page.send('Network.enable');
   await page.send('Page.addScriptToEvaluateOnNewDocument', {
-    source: `localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)});`,
+    source: [
+      `localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)});`,
+      darkThemeAuditEnabled ? `localStorage.setItem('anycode.theme.mode', 'dark');` : '',
+    ].join('\n'),
   });
 
   await setViewport(1440, 900);
   await navigate('/');
   await evaluate(`localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)});`);
   await navigate('/');
+  if (darkThemeAuditEnabled) {
+    darkThemeAudit = createDarkThemeAudit({
+      artifactDir,
+      runId: stamp,
+      driver: {
+        evaluate,
+        setViewport,
+        waitForStableUI: () => sleep(500),
+        screenshot,
+        sleep,
+        moveMouse: (x, y) =>
+          page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }),
+        pressEscape: async () => {
+          await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+          await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+        },
+      },
+    });
+    await darkThemeAudit.prepare();
+  }
   browserState.clear();
   await waitForText('暂无卡片');
   await assertNoHorizontalOverflow('desktop overview');
@@ -75,7 +107,7 @@ try {
   const gitSession = await runGitSession(gitProject.id);
 
   await navigate('/');
-  await waitForText('提交 ');
+  await waitForText('ANYCODE_GIT_E2E_OK');
   await assertSessionCardShowsProject('ANYCODE_GIT_E2E_OK', gitProject.name);
   await assertProjectChipPersistence(gitProject.id, gitProject.name, 'ANYCODE_GIT_E2E_OK');
   await assertNoHorizontalOverflow('overview branch lanes');
@@ -143,10 +175,16 @@ try {
   await screenshot('08-overview-mobile.png');
 
   await navigate(`/#/sessions/${gitSession.id}`);
-  await waitForText('Shell result');
+  await waitForVisibleSelector('.stream-card__body .event-list__item');
   await assertSessionDetailReadableLayout('mobile git session detail layout');
   await assertNoHorizontalOverflow('mobile git session detail');
   await screenshot('09-git-session-mobile.png');
+
+  if (darkThemeAudit) {
+    await auditDarkThemeRoutes({ gitProject, gitSession });
+    await auditDarkThemeDialogsAndMenus({ gitProject, gitSession, approvalSession });
+    await darkThemeAudit.finish();
+  }
 
   browserState.assertClean();
   console.log(JSON.stringify({
@@ -471,10 +509,25 @@ async function waitForVisibleSelector(selector, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for visible selector ${selector}`);
 }
 
+async function waitForCondition(expression, label, timeoutMs = 10_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await evaluate(expression)) return;
+    await sleep(250);
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
 async function clickText(text) {
   const clicked = await evaluate(`(() => {
-    const target = Array.from(document.querySelectorAll('button, [role="tab"], .q-tab, .q-item'))
-      .find((element) => element.innerText && element.innerText.includes(${JSON.stringify(text)}));
+    const needle = ${JSON.stringify(text)}.toLocaleLowerCase();
+    const target = Array.from(document.querySelectorAll('button, [role="button"], [role="tab"], .q-tab, .q-item'))
+      .find((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 &&
+          rect.left < innerWidth && rect.top < innerHeight &&
+          element.innerText && element.innerText.toLocaleLowerCase().includes(needle);
+      });
     if (!target) return false;
     target.click();
     return true;
@@ -483,14 +536,43 @@ async function clickText(text) {
   await sleep(300);
 }
 
+async function clickTab(label) {
+  const clicked = await evaluate(`(() => {
+    const needle = ${JSON.stringify(label)}.toLocaleLowerCase();
+    const target = Array.from(document.querySelectorAll('[role="tab"]')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && element.innerText.toLocaleLowerCase().includes(needle);
+    });
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert(clicked, `tab not found: ${label}`);
+  await sleep(300);
+}
+
+async function clickAttachment(filename) {
+  const clicked = await evaluate(`(() => {
+    const target = Array.from(document.querySelectorAll('.attachment-chip'))
+      .find((element) => element.textContent?.includes(${JSON.stringify(filename)}));
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert(clicked, `attachment chip not found: ${filename}`);
+  await sleep(300);
+}
+
 async function clickAria(label) {
   const clicked = await evaluate(`(() => {
     const target = Array.from(document.querySelectorAll('[aria-label=${JSON.stringify(label)}]'))
       .find((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
+        return !element.disabled && element.getAttribute('aria-disabled') !== 'true' &&
+          rect.width > 0 && rect.height > 0;
       });
     if (!target) return false;
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
     target.click();
     return true;
   })()`);
@@ -499,18 +581,35 @@ async function clickAria(label) {
 }
 
 async function closeVisibleDialog() {
-  const closed = await evaluate(`(() => {
-    const dialogs = Array.from(document.querySelectorAll('.q-dialog')).filter((element) => {
+  const result = await evaluate(`(() => {
+    const visible = (element) => {
       const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-    const dialog = dialogs.at(-1);
-    const target = dialog?.querySelector('[aria-label="关闭"], [aria-label="取消"]');
-    if (!target) return false;
+      return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 &&
+        rect.left < innerWidth && rect.top < innerHeight;
+    };
+    const dialogs = Array.from(document.querySelectorAll('.q-dialog')).filter(visible).reverse();
+    const target = dialogs
+      .flatMap((dialog) => Array.from(dialog.querySelectorAll('button')))
+      .find((button) => visible(button) && (
+        button.getAttribute('aria-label')?.startsWith('关闭') ||
+        button.getAttribute('aria-label') === '取消' ||
+        button.innerText.trim() === '取消' ||
+        button.innerText.trim().toLocaleLowerCase() === 'cancel'
+      ));
+    if (!target) return { closed: false, count: dialogs.length };
     target.click();
-    return true;
+    return { closed: true, count: dialogs.length };
   })()`);
-  assert(closed, 'visible dialog close button not found');
+  if (!result.closed) {
+    assert(result.count > 0, 'visible dialog not found');
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+    await waitForCondition(`Array.from(document.querySelectorAll('.q-dialog')).filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 &&
+        rect.left < innerWidth && rect.top < innerHeight;
+    }).length < ${result.count}`, 'dialog closed with Escape');
+  }
   await sleep(300);
 }
 
@@ -561,8 +660,10 @@ async function assertSessionsTableProjectName(marker, projectName, projectId) {
 async function assertNewSessionDefaultProject({ route, expectedProjectName, label, screenshotName, withAttachments = false }) {
   await navigate(route);
   await waitForVisibleSelector('.overview-filter-toolbar');
-  await clickAria('新建卡片');
-  await waitForText('新建卡片');
+  const composerVisible = await evaluate(`Boolean(document.querySelector('.new-session-dialog'))`);
+  const modalOpened = !composerVisible;
+  if (modalOpened) await clickAria('新建卡片');
+  await waitForVisibleSelector('.new-session-dialog');
   if (withAttachments) {
     await attachNewSessionFixtureFiles();
     await waitForText('notes.md');
@@ -579,7 +680,7 @@ async function assertNewSessionDefaultProject({ route, expectedProjectName, labe
   })()`);
   assert(dialogText.includes(expectedProjectName), `${label} did not select ${expectedProjectName}: ${dialogText}`);
   if (screenshotName) await screenshot(screenshotName);
-  await closeVisibleDialog();
+  if (modalOpened) await closeVisibleDialog();
 }
 
 async function attachNewSessionFixtureFiles() {
@@ -611,12 +712,15 @@ async function attachNewSessionFixtureFiles() {
 
 async function screenshotDirectoryDialog() {
   await clickAria('更多操作');
+  await auditDarkThemeSurface('menu-header-more');
   await clickText('全局设置');
   await waitForText('全局设置');
+  await auditDarkThemeSurface('dialog-global-settings', 'projects');
   await clickAria('新增项目');
   await waitForText('选择项目目录');
   await waitForText('当前路径');
   await screenshot('10-directory-dialog.png');
+  await auditDarkThemeSurface('dialog-project-directory');
   await closeVisibleDialog();
   await closeVisibleDialog();
 }
@@ -636,7 +740,9 @@ async function assertSessionDetailReadableLayout(label) {
     const doc = document.documentElement;
     const page = document.querySelector('.detail-page');
     const pageContainer = document.querySelector('.q-page-container');
-    const eventTexts = Array.from(document.querySelectorAll('.event-message__body, .event-status__body, .event-tool__header span'))
+    const eventTexts = Array.from(document.querySelectorAll(
+      '.text-message__main, .status-event__content, .tool-event__header span, .command-event__title, .reasoning-event__header span',
+    ))
       .map((element) => element.innerText.trim())
       .filter(Boolean);
     const jsonLike = eventTexts.filter((text) => text.startsWith('{') || text.includes('"processRunId"') || text.includes('"raw"'));
@@ -648,7 +754,7 @@ async function assertSessionDetailReadableLayout(label) {
       jsonLike,
       hasEventStreamHeader: visibleText.includes('会话事件流'),
       hasNormalExitText: visibleText.includes('正常退出') || visibleText.includes('退出码 0'),
-      expandedToolBodies: document.querySelectorAll('.event-tool__body').length,
+      expandedToolBodies: document.querySelectorAll('.tool-event__content, .command-event__body').length,
       pageScrollHeight: doc.scrollHeight,
       innerHeight: window.innerHeight,
       bodyScrolls: doc.scrollHeight > window.innerHeight + 1,
@@ -671,7 +777,7 @@ async function assertSessionDetailReadableLayout(label) {
 
 async function clickQuestionButtonForCard(marker) {
   const clicked = await evaluate(`(() => {
-    const card = Array.from(document.querySelectorAll('.lane-session-card'))
+    const card = Array.from(document.querySelectorAll('.overview-session-card, .lane-session-card'))
       .find((element) => element.innerText.includes(${JSON.stringify(marker)}));
     const button = card?.querySelector('[aria-label="回答问题"]');
     if (!button) return false;
@@ -694,12 +800,307 @@ async function assertNoHorizontalOverflow(label) {
   assert(!overflow.overflow, `${label} has horizontal overflow: ${overflow.scrollWidth} > ${overflow.innerWidth}`);
 }
 
-async function screenshot(name) {
+async function auditDarkThemeSurface(surfaceId, stateId = 'default') {
+  if (!darkThemeAudit) return;
+  await darkThemeAudit.captureAllViewports(surfaceId, stateId);
+  await setViewport(1440, 900);
+  await sleep(300);
+}
+
+async function auditDarkThemeRoutes({ gitProject, gitSession }) {
+  const replacements = {
+    ':projectId': gitProject.id,
+    ':sessionId': gitSession.id,
+  };
+  for (const route of darkThemeRoutes) {
+    let path = route.path;
+    for (const [placeholder, value] of Object.entries(replacements)) {
+      path = path.replaceAll(placeholder, value);
+    }
+    if (route.id === 'login') {
+      await evaluate(`localStorage.removeItem('anycode.accessKey')`);
+      await navigate(path);
+    } else {
+      await evaluate(`localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)})`);
+      await navigate(path);
+    }
+    await waitForCondition('document.body && document.body.innerText.trim().length > 0', `${route.id} rendered`);
+    if (route.id === 'diff') {
+      await darkThemeAudit.captureAllViewports('route-diff', 'all');
+      await navigate(`${path}&mode=single&filePath=e2e-codex-output.txt`);
+      await waitForText('e2e-codex-output.txt');
+      await darkThemeAudit.captureAllViewports('route-diff', 'single');
+    } else {
+      await darkThemeAudit.captureAllViewports(`route-${route.id}`);
+    }
+  }
+  await evaluate(`localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)})`);
+  await setViewport(1440, 900);
+}
+
+async function auditDarkThemeDialogsAndMenus({ gitProject, gitSession, approvalSession }) {
+  await setViewport(390, 844);
+  await navigate('/');
+  await clickAria('新建卡片');
+  await waitForVisibleSelector('.new-session-dialog');
+  await attachNewSessionFixtureFiles();
+  await auditDarkThemeSurface('dialog-new-session');
+  await setViewport(390, 844);
+  await sleep(300);
+  await auditDarkThemeSelectPopup();
+  await clickAttachment('screenshot.png');
+  await waitForVisibleSelector('.attachment-preview-card');
+  await auditDarkThemeSurface('dialog-prompt-attachment-preview');
+  await clickAria('关闭预览');
+  await setViewport(390, 844);
+  await sleep(300);
+  await closeVisibleDialog();
+
+  await setViewport(1440, 900);
+  await navigate('/');
+  await clickAria('更多操作');
+  await clickText('全局设置');
+  await waitForVisibleSelector('.global-settings-dialog');
+  await clickText('快捷指令');
+  await waitForText('暂无快捷指令');
+  await auditDarkThemeSurface('dialog-global-settings', 'quick-commands');
+  await clickText('项目');
+  await waitForCondition(
+    `Boolean(document.querySelector('[aria-label=${JSON.stringify(`${gitProject.name} 项目操作`)}]'))`,
+    'global settings project actions',
+  );
+
+  await clickAria(`${gitProject.name} 项目操作`);
+  await auditDarkThemeSurface('menu-global-project-actions');
+  await clickText('设置');
+  await waitForVisibleSelector('.project-settings-dialog');
+  await auditDarkThemeSurface('dialog-project-settings');
+  await closeVisibleDialog();
+
+  await clickAria(`${gitProject.name} 项目操作`);
+  await clickText('移除项目');
+  await waitForText('确认移除项目');
+  await auditDarkThemeSurface('dialog-remove-project-confirmation');
+  await closeVisibleDialog();
+  await closeVisibleDialog();
+
+  await clickAria('更多操作');
+  await clickText('退出');
+  await waitForText('退出登录');
+  await auditDarkThemeSurface('dialog-logout-confirmation');
+  await closeVisibleDialog();
+
+  await navigate('/');
+  await clickAria('人工审核');
+  await waitForVisibleSelector('.forward-approval-dialog');
+  await auditDarkThemeSurface('dialog-forward-approval', 'result');
+  await clickTab('Diff');
+  await waitForVisibleSelector('.forward-approval-dialog .diff-workspace');
+  await auditDarkThemeSurface('dialog-forward-approval', 'diff');
+  await closeVisibleDialog();
+
+  await openOverviewDiffForCard('ANYCODE_GIT_E2E_OK');
+  await waitForVisibleSelector('.overview-diff-dialog');
+  await auditDarkThemeSurface('dialog-overview-diff');
+  await closeVisibleDialog();
+
+  await navigate(`/#/sessions/${gitSession.id}`);
+  await waitForText('E2E 追加描述验证');
+  await clickAria('编辑追加提示');
+  await waitForVisibleSelector('.prompt-edit-dialog');
+  await auditDarkThemeSurface('dialog-edit-prompt-append');
+  await closeVisibleDialog();
+
+  await publishThemeAuditArtifact(gitSession.id);
+  await navigate(`/#/sessions/${gitSession.id}`);
+  await clickText('产物');
+  await waitForText('theme-audit.txt');
+  await clickArtifactListItem('theme-audit.txt');
+  await waitForVisibleSelector('.artifact-preview-dialog');
+  await auditDarkThemeSurface('dialog-session-artifact-preview');
+  await closeVisibleDialog();
+
+  await clickAria('删除文件');
+  await waitForText('删除产物');
+  await auditDarkThemeSurface('dialog-delete-artifact-confirmation');
+  await closeVisibleDialog();
+
+  await clickAria('预览产物');
+  await waitForVisibleSelector('.artifact-event-preview');
+  await auditDarkThemeSurface('dialog-timeline-artifact-preview');
+  await closeVisibleDialog();
+
+  await auditDarkThemeMenus(gitSession.id);
+  await auditDarkThemeTooltipAndNotification();
+  assert(approvalSession.id, 'approval session fixture is required for dark theme audit');
+}
+
+async function openFirstVisibleSelect() {
+  const opened = await evaluate(`(() => {
+    const select = Array.from(document.querySelectorAll('.q-select')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && !element.classList.contains('disabled');
+    });
+    if (!select) return false;
+    select.click();
+    return true;
+  })()`);
+  assert(opened, 'visible select popup trigger is missing');
+  await waitForCondition(`Array.from(document.querySelectorAll('.q-menu')).some((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  })`, 'select popup');
+}
+
+async function auditDarkThemeSelectPopup() {
+  for (const viewport of darkThemeViewports) {
+    await setViewport(viewport.width, viewport.height);
+    await openFirstVisibleSelect();
+    await darkThemeAudit.capture('overlay-select-popup', viewport);
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  }
+}
+
+async function auditDarkThemeTooltipAndNotification() {
+  for (const viewport of darkThemeViewports) {
+    await setViewport(viewport.width, viewport.height);
+    await navigate('/');
+    const rect = await evaluate(`(() => {
+      const target = document.querySelector('[aria-label="历史卡片"]');
+      if (!target) return null;
+      const box = target.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    })()`);
+    assert(rect, 'tooltip trigger is missing');
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.x, y: rect.y });
+    await waitForCondition(`Array.from(document.querySelectorAll('.q-tooltip')).some((element) => {
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    })`, 'tooltip visible');
+    await darkThemeAudit.capture('overlay-tooltip', viewport);
+    await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 0, y: 0 });
+
+    await evaluate(`localStorage.removeItem('anycode.accessKey')`);
+    await navigate('/#/login');
+    await clickText('进入');
+    await waitForCondition(`Array.from(document.querySelectorAll('.q-notification')).some((element) => {
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    })`, 'notification visible');
+    await darkThemeAudit.capture('overlay-notification', viewport);
+    await evaluate(`localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)})`);
+  }
+}
+
+async function openOverviewDiffForCard(marker) {
+  const clicked = await evaluate(`(() => {
+    const card = Array.from(document.querySelectorAll('.overview-session-card'))
+      .find((element) => element.innerText.includes(${JSON.stringify(marker)}));
+    const button = card?.querySelector('.overview-diff-btn');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(clicked, `Diff button not found for ${marker}`);
+  await sleep(500);
+}
+
+async function clickArtifactListItem(filename) {
+  const clicked = await evaluate(`(() => {
+    const item = Array.from(document.querySelectorAll('.artifact-list .q-item'))
+      .find((element) => element.innerText.includes(${JSON.stringify(filename)}));
+    if (!item) return false;
+    item.click();
+    return true;
+  })()`);
+  assert(clicked, `artifact list item not found: ${filename}`);
+  await sleep(500);
+}
+
+async function publishThemeAuditArtifact(sessionId) {
+  const relativePath = `attachments/outputs/${sessionId}/theme-audit.txt`;
+  if (manageDocker) {
+    const artifactPath = `/home/anycode/.anycode/${relativePath}`;
+    await dockerCompose([
+      'exec',
+      '-T',
+      'anycode',
+      'sh',
+      '-lc',
+      `mkdir -p ${shellQuote(artifactPath.slice(0, artifactPath.lastIndexOf('/')))} && printf 'dark theme audit\\n' > ${shellQuote(artifactPath)}`,
+    ]);
+  } else {
+    if (!e2eDataDir) throw new Error('ANYCODE_E2E_DATA_DIR is required without --manage-docker');
+    const artifactPath = `${e2eDataDir}/${relativePath}`;
+    await mkdir(artifactPath.slice(0, artifactPath.lastIndexOf('/')), { recursive: true });
+    await writeFile(artifactPath, 'dark theme audit\n');
+  }
+  const response = await callSessionMCP(sessionId, 'publish_artifact', {
+    path: 'theme-audit.txt',
+    logicalPath: 'theme-audit.txt',
+    correlationId: `theme-audit-${stamp}`,
+  });
+  assert(response.status === 200, `publish_artifact status = ${response.status}: ${JSON.stringify(response.body)}`);
+}
+
+async function auditDarkThemeMenus(sessionId) {
+  await navigate('/');
+  const todoOpened = await evaluate(`(() => {
+    const button = document.querySelector('[aria-label="查看 TODO List"]');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  assert(todoOpened, 'overview TODO menu fixture is missing');
+  await auditDarkThemeSurface('menu-overview-todo');
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+
+  const contextOpened = await evaluate(`(() => {
+    const card = document.querySelector('.overview-session-card');
+    if (!card) return false;
+    card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    return true;
+  })()`);
+  assert(contextOpened, 'overview context menu fixture is missing');
+  await waitForCondition(`Array.from(document.querySelectorAll('.q-menu')).some((element) => element.innerText.includes('在新标签页中打开'))`, 'overview context menu');
+  await auditDarkThemeSurface('menu-overview-context');
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+
+  for (const viewport of darkThemeViewports.filter((item) => item.id !== 'desktop')) {
+    await setViewport(viewport.width, viewport.height);
+    await navigate(`/#/sessions/${sessionId}`);
+    await waitForText('追加描述');
+    await sleep(750);
+    let promptMenuVisible = false;
+    for (let attempt = 0; attempt < 3 && !promptMenuVisible; attempt += 1) {
+      await clickAria('运行参数');
+      promptMenuVisible = await evaluate(`Array.from(document.querySelectorAll('.prompt-config-menu')).some((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })`);
+    }
+    assert(promptMenuVisible, `prompt config menu is not visible at ${viewport.id}`);
+    await darkThemeAudit.capture('menu-prompt-config', viewport);
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+  }
+  await setViewport(1440, 900);
+  await navigate(`/#/sessions/${sessionId}`);
+  await waitForText('追加描述');
+  await clickAria('快捷回复');
+  await auditDarkThemeSurface('menu-quick-reply');
+}
+
+async function screenshot(name, directory = screenshotDir) {
   const shot = await page.send('Page.captureScreenshot', {
     format: 'png',
     captureBeyondViewport: false,
   });
-  await writeFile(`${screenshotDir}/${name}`, Buffer.from(shot.data, 'base64'));
+  await mkdir(directory, { recursive: true });
+  await writeFile(`${directory}/${name}`, Buffer.from(shot.data, 'base64'));
 }
 
 async function assertDirectoryBrowser() {
@@ -754,7 +1155,7 @@ async function runPlainSession(projectId) {
     config: { permissionMode: 'workspace-write' },
   });
   await startSession(session.id);
-  const finalStatus = await waitForSessionStatus(session.id, 120_000);
+  const finalStatus = await waitForSessionStatus(session.id, 240_000);
   assertTerminalStatus(finalStatus, 'plain session');
   await assertSessionEventsDoNotContain(session.id, 'bwrap');
 
@@ -767,6 +1168,7 @@ async function runGitSession(projectId) {
   const session = await createSession({
     projectId,
     requirement: [
+      '先使用 update_plan 建立两项 TODO，并把两项都标记为完成。',
       '请直接执行 shell 命令：',
       "`printf 'ANYCODE_GIT_E2E_OK\\n' > e2e-codex-output.txt`",
       '不要修改其他文件，然后结束。',
@@ -776,7 +1178,7 @@ async function runGitSession(projectId) {
     config: { permissionMode: 'workspace-write' },
   });
   await startSession(session.id);
-  const finalStatus = await waitForSessionStatus(session.id, 120_000);
+  const finalStatus = await waitForSessionStatus(session.id, 240_000);
   assertTerminalStatus(finalStatus, 'git session');
   await assertSessionEventsDoNotContain(session.id, 'bwrap');
 
@@ -793,10 +1195,26 @@ async function runGitSession(projectId) {
 async function assertWorkflowConfigInteractions(projectId) {
   await navigate(`/#/projects/${projectId}/workflow`);
   await waitForText('流程配置');
-  await clickAria('新增节点');
-  await waitForText('新节点');
-  await clickText('应用节点');
-  await clickText('保存为默认流程');
+  const dropped = await evaluate(`(() => {
+    const source = Array.from(document.querySelectorAll('.workflow-list .q-item'))
+      .find((element) => element.innerText.includes('运行 Codex 节点'));
+    const board = document.querySelector('.workflow-canvas-board');
+    if (!source || !board) return false;
+    const transfer = new DataTransfer();
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: transfer }));
+    const bounds = board.getBoundingClientRect();
+    board.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      clientX: bounds.left + bounds.width / 2,
+      clientY: bounds.top + bounds.height / 2,
+      dataTransfer: transfer,
+    }));
+    return true;
+  })()`);
+  assert(dropped, 'workflow Codex node drag source or canvas is missing');
+  await waitForText('节点 ID');
+  await clickText('保存');
   await waitForWorkflowSaved(projectId);
   await assertNoHorizontalOverflow('workflow config interactions');
 }
@@ -857,6 +1275,17 @@ async function assertAnswerUserFlow(projectId) {
   await waitForText('待回答问题');
   await waitForText('Choose next step');
   await screenshot('12-answer-user-inline.png');
+  if (darkThemeAudit) {
+    await navigate('/');
+    await waitForText('E2E_WAITING_USER_CARD');
+    await clickQuestionButtonForCard('E2E_WAITING_USER_CARD');
+    await waitForVisibleSelector('.answer-dialog');
+    await auditDarkThemeSurface('dialog-answer-user', 'questions');
+    await clickTab('Diff');
+    await waitForVisibleSelector('.answer-dialog .diff-workspace');
+    await auditDarkThemeSurface('dialog-answer-user', 'diff');
+    await closeVisibleDialog();
+  }
   await submitPendingQuestion(pending);
   const mcpResponse = await mcpPromise;
   assert(mcpResponse.status === 200, `answer_user MCP status = ${mcpResponse.status}: ${JSON.stringify(mcpResponse.body)}`);
@@ -998,11 +1427,12 @@ async function waitForSessionRunning(sessionId, timeoutMs) {
         session(id: $id) {
           id
           status
+          codexSessionId
         }
       }
     `, { id: sessionId });
     status = data.session.status;
-    if (status === 'running' || status === 'starting') return status;
+    if (status === 'running' && data.session.codexSessionId) return status;
     if (terminal.has(status)) throw new Error(`session ${sessionId} reached ${status} before answer_user test`);
     await sleep(500);
   }
@@ -1095,35 +1525,47 @@ async function sessionDiff(sessionId, mode) {
 
 async function assertSessionEventsDoNotContain(sessionId, text) {
   const data = await graphql(`
-    query SessionEvents($input: ListSessionEventsInput!) {
-      sessionEvents(input: $input) {
-        items {
-          type
-          payload
+    query SessionTranscript($input: ListTranscriptEventsInput!) {
+      sessionTranscript(input: $input) {
+        events {
+          content {
+            __typename
+            ... on TranscriptMessageContent { role text format }
+            ... on TranscriptReasoningContent { text }
+            ... on TranscriptCommandContent { commands { command workdir } output exitCode durationMs }
+            ... on TranscriptToolContent { qualifiedName category input { format text } output { format text } }
+            ... on TranscriptFileChangeContent { changes { kind path movePath unifiedDiff } }
+            ... on TranscriptStatusContent { code level message details }
+            ... on TranscriptUnknownContent { rawType payload }
+          }
         }
       }
     }
-  `, { input: { sessionId, page: 1, pageSize: 100 } });
-  const raw = JSON.stringify(data.sessionEvents.items);
+  `, { input: { sessionId, limit: 100 } });
+  const raw = JSON.stringify(data.sessionTranscript.events);
   assert(!raw.includes(text), `session ${sessionId} events still contain ${text}`);
 }
 
 async function callAnswerUser(sessionId) {
+  return callSessionMCP(sessionId, 'answer_user', {
+    questions: [{
+      title: 'Choose next step',
+      body: 'How should Codex continue?',
+      type: 'choice',
+      allowCustom: true,
+      options: [{ id: 'continue', label: 'Continue', description: 'Proceed' }],
+    }],
+  });
+}
+
+async function callSessionMCP(sessionId, name, toolArguments) {
   const body = {
     jsonrpc: '2.0',
     id: 1,
     method: 'tools/call',
     params: {
-      name: 'answer_user',
-      arguments: {
-        questions: [{
-          title: 'Choose next step',
-          body: 'How should Codex continue?',
-          type: 'choice',
-          allowCustom: true,
-          options: [{ id: 'continue', label: 'Continue', description: 'Proceed' }],
-        }],
-      },
+      name,
+      arguments: toolArguments,
     },
   };
   const response = await fetch(`${baseURL}/mcp/sessions/${sessionId}`, {

@@ -22,6 +22,7 @@ type Query {
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
   sessionFiles(input: ListSessionFilesInput!): SessionFilePage!
+  resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
 }
 
 type Mutation {
@@ -287,6 +288,16 @@ type SessionFile {
 type SessionFilePage {
   items: [SessionFile!]!
   pageInfo: PageInfo!
+}
+
+type ResolvedSessionArtifact {
+  logicalPath: String!
+  file: SessionFile!
+}
+
+input ResolveSessionArtifactsInput {
+  sessionId: ID!
+  logicalPaths: [String!]!
 }
 
 input ListSessionFilesInput {

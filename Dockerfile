@@ -39,7 +39,8 @@ ENV PATH=/usr/local/nvm/current/bin:$PATH
 WORKDIR /app
 COPY --from=build /out/anycode /usr/local/bin/anycode
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN pacman -Syu --noconfirm --needed ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less go chromium ttf-dejavu \
+RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less \
+  go chromium ttf-dejavu wqy-microhei catatonit \
   && pacman -Scc --noconfirm \
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \
@@ -59,5 +60,5 @@ ENV PLAYWRIGHT_MCP_BIN=playwright-mcp
 ENV CHROMIUM_BIN=/usr/bin/chromium
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/catatonit", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["anycode"]

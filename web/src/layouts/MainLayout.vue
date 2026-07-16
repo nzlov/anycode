@@ -92,7 +92,7 @@
       <q-btn
         fab
         color="positive"
-        text-color="dark"
+        class="app-on-positive"
         icon="add"
         aria-label="新建卡片"
         @click="newSessionOpen = true"

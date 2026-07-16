@@ -2,10 +2,10 @@
   <section class="workflow-approval-panel" aria-label="人工审批">
     <div class="workflow-approval-panel__header">
       <div class="text-subtitle2 text-weight-bold">人工审批</div>
-      <q-badge rounded color="warning" text-color="dark" label="待审批" />
+      <q-badge rounded color="warning" class="app-on-warning" label="待审批" />
     </div>
 
-    <q-banner v-if="!contextAvailable" dense rounded class="state-banner bg-negative text-white">
+    <q-banner v-if="!contextAvailable" dense rounded class="state-banner app-feedback app-feedback--danger">
       未找到当前审批上下文，请刷新后重试
     </q-banner>
 

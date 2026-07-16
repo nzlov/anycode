@@ -53,9 +53,8 @@
         </q-btn>
         <q-btn
           unelevated
-          class="app-command-btn"
           color="positive"
-          text-color="dark"
+          class="app-command-btn app-on-positive"
           icon="save"
           label="保存"
           no-caps

@@ -1954,6 +1954,13 @@ func resultOutput(data map[string]any) map[string]any {
 	}
 }
 
+func TestWorkflowResultContractDefinesArtifactLogicalPathReferences(t *testing.T) {
+	contract := workflowResultContract(domain.Node{})
+	if !strings.Contains(contract, "ANYCODE_ARTIFACT_DIR") || !strings.Contains(contract, "results.artifacts[].ref") || !strings.Contains(contract, "logicalPath") || !strings.Contains(contract, "publish_artifact") {
+		t.Fatalf("workflow result contract missing artifact reference rule: %s", contract)
+	}
+}
+
 func (r *fakeRepository) SaveDefinition(_ context.Context, definition domain.Definition) error {
 	r.definitions[definition.ID] = definition
 	return nil
