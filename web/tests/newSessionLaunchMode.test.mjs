@@ -71,7 +71,8 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
   assert.match(controlsSource, /class="compact-select permission-select"/);
   assert.match(controlsSource, /运行权限：\{\{ permissionLabel \}\}/);
   assert.doesNotMatch(controlsSource, /name="smart_toy"|name="psychology"/);
-  assert.equal((controlsSource.match(/dropdown-icon=""/g) ?? []).length, 3);
+  assert.equal((controlsSource.match(/hide-dropdown-icon/g) ?? []).length, 3);
+  assert.doesNotMatch(controlsSource, /dropdown-icon=""/);
   assert.match(
     stylesSource,
     /\.toolbar-file-picker \.q-field__prepend\s*{[^}]*justify-content:\s*center/s,
@@ -97,5 +98,16 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
   assert.match(
     dialogSource,
     /:force-config-menu="\s*\$q\.screen\.lt\.md \|\| \(panel && \$q\.screen\.width < overviewInlineConfigMinWidth\)\s*"/,
+  );
+  assert.match(stylesSource, /^\.prompt-toolbar\s*{[^}]*gap:\s*5px/ms);
+  assert.match(stylesSource, /^\.prompt-config-controls\s*{[^}]*gap:\s*5px/ms);
+  assert.match(stylesSource, /^\.prompt-config-controls--stacked\s*{[^}]*gap:\s*5px/ms);
+  assert.match(
+    stylesSource,
+    /^\.new-session-dialog--panel \.prompt-toolbar\s*{[^}]*gap:\s*5px/ms,
+  );
+  assert.match(
+    stylesSource,
+    /^\.new-session-dialog--panel \.prompt-config-controls\s*{[^}]*gap:\s*5px/ms,
   );
 });

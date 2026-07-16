@@ -13,6 +13,8 @@ test('project list no longer requests git state for sidebar summaries', () => {
 test('new session dialog refreshes cached branches explicitly', () => {
   const source = readFileSync(new URL('../src/components/NewSessionDialog.vue', import.meta.url), 'utf8');
 
+  assert.equal((source.match(/hide-dropdown-icon/g) ?? []).length, 3);
+  assert.doesNotMatch(source, /dropdown-icon=""/);
   assert.match(
     source,
     /label="基础分支"[\s\S]*hide-dropdown-icon[\s\S]*<template #append>[\s\S]*aria-label="刷新分支"[\s\S]*@click\.stop="refreshProjectBranches\(projectId\)"[\s\S]*<\/template>[\s\S]*<\/q-select>/,
