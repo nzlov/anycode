@@ -248,7 +248,6 @@ type Question struct {
 	Body             string            `json:"body"`
 	Type             string            `json:"type"`
 	Options          []*QuestionOption `json:"options"`
-	AllowCustom      bool              `json:"allowCustom"`
 	SelectedOptionID *string           `json:"selectedOptionId,omitempty"`
 	CustomAnswer     string            `json:"customAnswer"`
 	Answer           map[string]any    `json:"answer"`

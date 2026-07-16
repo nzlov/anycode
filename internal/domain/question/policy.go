@@ -88,9 +88,6 @@ func validateAnswer(question Question, answer Answer) error {
 		}
 		return fmt.Errorf("question %s selected option %s is invalid", question.ID, *answer.SelectedOptionID)
 	case hasCustom:
-		if !question.AllowCustom {
-			return fmt.Errorf("question %s does not allow custom answer", question.ID)
-		}
 		return nil
 	default:
 		return fmt.Errorf("question %s requires an option or custom answer", question.ID)

@@ -39,13 +39,12 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 		CreatedAt:          createdAt,
 		Questions: []question.Question{
 			{
-				ID:          question.QuestionID("question-1"),
-				BatchID:     question.BatchID("batch-1"),
-				Title:       "Choose path",
-				Body:        "Which path should the workflow take?",
-				Type:        "choice",
-				AllowCustom: true,
-				Status:      string(question.BatchPending),
+				ID:      question.QuestionID("question-1"),
+				BatchID: question.BatchID("batch-1"),
+				Title:   "Choose path",
+				Body:    "Which path should the workflow take?",
+				Type:    "choice",
+				Status:  string(question.BatchPending),
 				Options: []question.Option{
 					{
 						ID:          optionID,
@@ -206,6 +205,51 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	}
 	if answeredAgain.Status != question.BatchAnswered {
 		t.Fatalf("answered batch should not be cancelled: %#v", answeredAgain)
+	}
+}
+
+func TestQuestionRepositoryReadsLegacyAllowCustomField(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	err = store.client.QuestionBatch.Create().
+		SetID("legacy-batch").
+		SetSessionID("session-1").
+		SetStatus(string(question.BatchPending)).
+		SetQuestions([]map[string]any{
+			{
+				"ID":          "legacy-question",
+				"BatchID":     "legacy-batch",
+				"Title":       "Legacy question",
+				"Type":        "choice",
+				"AllowCustom": false,
+				"Status":      string(question.BatchPending),
+				"Options": []map[string]any{
+					{"ID": "continue", "Label": "Continue"},
+				},
+			},
+		}).
+		Exec(ctx)
+	if err != nil {
+		t.Fatalf("create legacy question batch: %v", err)
+	}
+
+	got, err := store.Questions().FindBatch(ctx, "legacy-batch")
+	if err != nil {
+		t.Fatalf("find legacy question batch: %v", err)
+	}
+	if len(got.Questions) != 1 || got.Questions[0].ID != "legacy-question" || got.Questions[0].Title != "Legacy question" {
+		t.Fatalf("legacy questions = %#v", got.Questions)
+	}
+	if len(got.Questions[0].Options) != 1 || got.Questions[0].Options[0].ID != "continue" {
+		t.Fatalf("legacy options = %#v", got.Questions[0].Options)
 	}
 }
 

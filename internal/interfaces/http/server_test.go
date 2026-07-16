@@ -281,7 +281,6 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 						questions {
 							id
 							title
-							allowCustom
 							options {
 								id
 								label
@@ -307,11 +306,10 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 		Status:    questiondomain.BatchPending,
 		Questions: []questiondomain.Question{
 			{
-				ID:          "question-1",
-				BatchID:     "batch-1",
-				Title:       "Choose next step",
-				Type:        "options",
-				AllowCustom: true,
+				ID:      "question-1",
+				BatchID: "batch-1",
+				Title:   "Choose next step",
+				Type:    "options",
 				Options: []questiondomain.Option{
 					{ID: "continue", Label: "Continue"},
 				},
@@ -347,7 +345,7 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 		t.Fatalf("batch questions = %#v", batch["questions"])
 	}
 	question, ok := items[0].(map[string]any)
-	if !ok || question["id"] != "question-1" || question["allowCustom"] != true {
+	if !ok || question["id"] != "question-1" {
 		t.Fatalf("question = %#v", items[0])
 	}
 }
@@ -518,6 +516,9 @@ func TestMCPRequiresBearerAndListsAnswerUserTool(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"answer_user"`) {
 		t.Fatalf("mcp tools/list missing answer_user: %s", rec.Body.String())
 	}
+	if strings.Contains(rec.Body.String(), `"allowCustom"`) {
+		t.Fatalf("mcp tools/list still exposes allowCustom: %s", rec.Body.String())
+	}
 	if !strings.Contains(rec.Body.String(), `"publish_artifact"`) {
 		t.Fatalf("mcp tools/list missing publish_artifact: %s", rec.Body.String())
 	}
@@ -577,7 +578,6 @@ func TestMCPAnswerUserReturnsDirectAnswerBeforeDeliveryAck(t *testing.T) {
 				"questions":[{
 					"title":"Choose next step",
 					"body":"How should Codex continue?",
-					"allowCustom":true,
 					"options":[{"id":"continue","label":"Continue","description":"Proceed"}]
 				}]
 			}
@@ -595,7 +595,7 @@ func TestMCPAnswerUserReturnsDirectAnswerBeforeDeliveryAck(t *testing.T) {
 	if sessions.requestInput.SessionID != "session-1" || len(sessions.requestInput.Questions) != 1 {
 		t.Fatalf("request input = %#v", sessions.requestInput)
 	}
-	if sessions.requestInput.Questions[0].Title != "Choose next step" || !sessions.requestInput.Questions[0].AllowCustom {
+	if sessions.requestInput.Questions[0].Title != "Choose next step" {
 		t.Fatalf("created question = %#v", sessions.requestInput.Questions[0])
 	}
 	var response struct {
