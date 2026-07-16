@@ -31,20 +31,19 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
-func TestQuerySessionFilesNormalizesPagination(t *testing.T) {
-	artifacts := &fakeArtifactUseCase{total: 120}
-	requestedPage, requestedPageSize := -2, 1000
-	page, err := NewResolver(UseCases{Artifacts: artifacts}).Query().SessionFiles(context.Background(), model.ListSessionFilesInput{
-		SessionID: "session-1", Page: &requestedPage, PageSize: &requestedPageSize,
+func TestQuerySessionFilesReturnsUnpaginatedFiles(t *testing.T) {
+	artifacts := &fakeArtifactUseCase{files: []sessiondomain.SessionFile{{ID: "artifact-1", SessionID: "session-1"}}}
+	files, err := NewResolver(UseCases{Artifacts: artifacts}).Query().SessionFiles(context.Background(), model.ListSessionFilesInput{
+		SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if artifacts.query.Page != 1 || artifacts.query.PageSize != 50 {
-		t.Fatalf("artifact query pagination = %d/%d", artifacts.query.Page, artifacts.query.PageSize)
+	if artifacts.query.SessionID != "session-1" {
+		t.Fatalf("artifact query = %#v", artifacts.query)
 	}
-	if page.PageInfo.Page != 1 || page.PageInfo.PageSize != 50 || page.PageInfo.Total != 120 || page.PageInfo.NextCursor != "2" {
-		t.Fatalf("session file page info = %#v", page.PageInfo)
+	if len(files) != 1 || files[0].ID != "artifact-1" {
+		t.Fatalf("session files = %#v", files)
 	}
 }
 
@@ -74,14 +73,14 @@ func TestResolveSessionArtifactsMapsSafeFiles(t *testing.T) {
 type fakeArtifactUseCase struct {
 	artifactapp.UseCase
 	query        sessiondomain.ArtifactQuery
-	total        int
+	files        []sessiondomain.SessionFile
 	resolvePaths []string
 	resolved     []sessiondomain.SessionFile
 }
 
-func (f *fakeArtifactUseCase) List(_ context.Context, query sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, int, error) {
+func (f *fakeArtifactUseCase) List(_ context.Context, query sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, error) {
 	f.query = query
-	return []sessiondomain.SessionFile{}, f.total, nil
+	return f.files, nil
 }
 
 func (f *fakeArtifactUseCase) Resolve(_ context.Context, _ sessiondomain.ID, logicalPaths []string) ([]sessiondomain.SessionFile, error) {
@@ -109,28 +108,6 @@ func TestMapPendingApprovalKeepsBeforeRunResultNull(t *testing.T) {
 	})
 	if got == nil || got.Result != nil {
 		t.Fatalf("mapPendingApproval() = %#v", got)
-	}
-}
-
-func TestQuerySessionDiffSummariesForwardsBatchInput(t *testing.T) {
-	diffs := &fakeDiffUseCase{summaries: []diffapp.SessionDiffSummaryDTO{
-		{SessionID: "session-1", State: diffapp.SessionDiffSummaryChanged, FilesChanged: 3},
-		{SessionID: "session-2", State: diffapp.SessionDiffSummaryUnavailable},
-	}}
-	resolver := NewResolver(UseCases{Diff: diffs}).Query()
-
-	got, err := resolver.SessionDiffSummaries(context.Background(), []string{"session-1", "session-2"})
-	if err != nil {
-		t.Fatalf("SessionDiffSummaries() error = %v", err)
-	}
-	if !reflect.DeepEqual(diffs.summaryInput.SessionIDs, []sessiondomain.ID{"session-1", "session-2"}) {
-		t.Fatalf("summary input = %#v", diffs.summaryInput)
-	}
-	if len(got) != 2 || got[0].SessionID != "session-1" || got[0].State != model.SessionDiffSummaryStateChanged || got[0].FilesChanged != 3 {
-		t.Fatalf("SessionDiffSummaries() = %#v", got)
-	}
-	if got[1].State != model.SessionDiffSummaryStateUnavailable || got[1].FilesChanged != 0 {
-		t.Fatalf("SessionDiffSummaries()[1] = %#v", got[1])
 	}
 }
 
@@ -477,10 +454,12 @@ func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *tes
 	sessions := &fakeSessionUseCase{
 		getCardResult: sessionapp.CardDTO{
 			DTO: sessionapp.DTO{
-				ID:        sessiondomain.ID(sessionID),
-				ProjectID: sessiondomain.ProjectID(projectID),
-				Status:    sessiondomain.StatusRunning,
-				Priority:  sessiondomain.PriorityHigh,
+				ID:            sessiondomain.ID(sessionID),
+				ProjectID:     sessiondomain.ProjectID(projectID),
+				Status:        sessiondomain.StatusRunning,
+				Priority:      sessiondomain.PriorityHigh,
+				ArtifactCount: 2,
+				FilesChanged:  4,
 			},
 			ProjectName: "AnyCode",
 		},
@@ -502,7 +481,7 @@ func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *tes
 	if !ok {
 		t.Fatal("SessionCardChanged() channel closed before card")
 	}
-	if got.ID != sessionID || got.ProjectID != projectID || got.ProjectName != "AnyCode" {
+	if got.ID != sessionID || got.ProjectID != projectID || got.ProjectName != "AnyCode" || got.ArtifactCount != 2 || got.FilesChanged != 4 {
 		t.Fatalf("SessionCardChanged() card = %#v", got)
 	}
 	if sessions.gotGetCardID != sessiondomain.ID(sessionID) {
@@ -627,6 +606,9 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 		"session.config_changed",
 		"session.priority_changed",
 		"session.todo_list_updated",
+		"session.diff_changed",
+		"artifact.published",
+		"artifact.deleted",
 		"workflow.blocked",
 	}
 	for _, eventType := range tests {
@@ -1329,14 +1311,6 @@ type fakeEventUseCase struct {
 
 type fakeDiffUseCase struct {
 	diffapp.UseCase
-	summaryInput diffapp.SessionDiffSummariesInput
-	summaries    []diffapp.SessionDiffSummaryDTO
-	err          error
-}
-
-func (f *fakeDiffUseCase) GetSessionDiffSummaries(_ context.Context, input diffapp.SessionDiffSummariesInput) ([]diffapp.SessionDiffSummaryDTO, error) {
-	f.summaryInput = input
-	return f.summaries, f.err
 }
 
 type fakeTimelineUseCase struct {

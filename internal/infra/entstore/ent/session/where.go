@@ -194,6 +194,16 @@ func FastMode(v bool) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldFastMode, v))
 }
 
+// ArtifactCount applies equality check predicate on the "artifact_count" field. It's identical to ArtifactCountEQ.
+func ArtifactCount(v int) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldArtifactCount, v))
+}
+
+// FilesChanged applies equality check predicate on the "files_changed" field. It's identical to FilesChangedEQ.
+func FilesChanged(v int) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldFilesChanged, v))
+}
+
 // QueuedAt applies equality check predicate on the "queued_at" field. It's identical to QueuedAtEQ.
 func QueuedAt(v time.Time) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueuedAt, v))
@@ -1767,6 +1777,86 @@ func TodoListIsNil() predicate.Session {
 // TodoListNotNil applies the NotNil predicate on the "todo_list" field.
 func TodoListNotNil() predicate.Session {
 	return predicate.Session(sql.FieldNotNull(FieldTodoList))
+}
+
+// ArtifactCountEQ applies the EQ predicate on the "artifact_count" field.
+func ArtifactCountEQ(v int) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldArtifactCount, v))
+}
+
+// ArtifactCountNEQ applies the NEQ predicate on the "artifact_count" field.
+func ArtifactCountNEQ(v int) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldArtifactCount, v))
+}
+
+// ArtifactCountIn applies the In predicate on the "artifact_count" field.
+func ArtifactCountIn(vs ...int) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldArtifactCount, vs...))
+}
+
+// ArtifactCountNotIn applies the NotIn predicate on the "artifact_count" field.
+func ArtifactCountNotIn(vs ...int) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldArtifactCount, vs...))
+}
+
+// ArtifactCountGT applies the GT predicate on the "artifact_count" field.
+func ArtifactCountGT(v int) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldArtifactCount, v))
+}
+
+// ArtifactCountGTE applies the GTE predicate on the "artifact_count" field.
+func ArtifactCountGTE(v int) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldArtifactCount, v))
+}
+
+// ArtifactCountLT applies the LT predicate on the "artifact_count" field.
+func ArtifactCountLT(v int) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldArtifactCount, v))
+}
+
+// ArtifactCountLTE applies the LTE predicate on the "artifact_count" field.
+func ArtifactCountLTE(v int) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldArtifactCount, v))
+}
+
+// FilesChangedEQ applies the EQ predicate on the "files_changed" field.
+func FilesChangedEQ(v int) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldFilesChanged, v))
+}
+
+// FilesChangedNEQ applies the NEQ predicate on the "files_changed" field.
+func FilesChangedNEQ(v int) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldFilesChanged, v))
+}
+
+// FilesChangedIn applies the In predicate on the "files_changed" field.
+func FilesChangedIn(vs ...int) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldFilesChanged, vs...))
+}
+
+// FilesChangedNotIn applies the NotIn predicate on the "files_changed" field.
+func FilesChangedNotIn(vs ...int) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldFilesChanged, vs...))
+}
+
+// FilesChangedGT applies the GT predicate on the "files_changed" field.
+func FilesChangedGT(v int) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldFilesChanged, v))
+}
+
+// FilesChangedGTE applies the GTE predicate on the "files_changed" field.
+func FilesChangedGTE(v int) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldFilesChanged, v))
+}
+
+// FilesChangedLT applies the LT predicate on the "files_changed" field.
+func FilesChangedLT(v int) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldFilesChanged, v))
+}
+
+// FilesChangedLTE applies the LTE predicate on the "files_changed" field.
+func FilesChangedLTE(v int) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldFilesChanged, v))
 }
 
 // QueuedAtEQ applies the EQ predicate on the "queued_at" field.

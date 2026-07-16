@@ -250,7 +250,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(overviewSource, /@click\.stop="openDiffDialog\(card\)"/);
   assert.match(overviewSource, /@keyup\.enter\.stop/);
   assert.match(overviewSource, /@keyup\.space\.stop/);
-  assert.match(overviewSource, /getSessionDiffSummaries/);
+  assert.doesNotMatch(overviewSource, /loadSummaries|syncPolling|visibilitychange/);
   assert.match(
     overviewSource,
     /<q-dialog[\s\S]*?v-model="diffDialog"[\s\S]*?:maximized="\$q\.screen\.lt\.sm"/,
@@ -260,7 +260,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(overviewSource, /aria-label="打开完整 Diff 页面"/);
   assert.match(
     overviewSource,
-    /class="overview-card-secondary-actions"[\s\S]*overview-todo-btn[\s\S]*overview-diff-btn[\s\S]*class="overview-card-actions"/,
+    /class="overview-card-secondary-actions"[\s\S]*overview-todo-btn[\s\S]*overview-diff-btn[\s\S]*overview-artifact-btn[\s\S]*class="overview-card-actions"/,
   );
   assert.doesNotMatch(
     overviewSource,
@@ -290,6 +290,40 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.equal(overviewSource.includes('SessionDiffPreview'), false);
   assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
   assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);
-  assert.match(stylesSource, /\.overview-diff-dialog\s*{[^}]*height:\s*90dvh/s);
+  assert.match(
+    stylesSource,
+    /\.overview-diff-dialog,\s*\.overview-artifact-dialog\s*{[^}]*height:\s*90dvh/s,
+  );
   assert.match(stylesSource, /\.overview-diff-dialog__body\s*{[^}]*overflow:\s*hidden/s);
+});
+
+test('overview cards open the full artifact panel from a subscribed count', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+  const sessionSource = readFileSync(
+    new URL('../src/services/sessions.ts', import.meta.url),
+    'utf8',
+  );
+  const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
+
+  assert.match(sessionSource, /artifactCount/);
+  assert.match(sessionSource, /artifactCount:\s*Math\.max\(0, session\.artifactCount\)/);
+  assert.match(sessionSource, /filesChanged:\s*Math\.max\(0, session\.filesChanged\)/);
+  assert.match(overviewSource, /v-if="card\.artifactCount > 0"/);
+  assert.match(overviewSource, /class="overview-artifact-btn app-command-btn"/);
+  assert.match(overviewSource, /:label="String\(card\.artifactCount\)"/);
+  assert.match(overviewSource, /@click\.stop="openArtifactDialog\(card\)"/);
+  assert.match(
+    overviewSource,
+    /<SessionArtifactsPanel[\s\S]*:session-id="artifactDialogSessionId"/,
+  );
+  assert.equal(overviewSource.match(/\binline-preview\b/g)?.length, 1);
+  assert.match(overviewSource, /:session-id="artifactDialogSessionId"[\s\S]*?inline-preview/);
+  assert.match(
+    overviewSource,
+    /<q-dialog[\s\S]*v-model="artifactDialog"[\s\S]*:maximized="\$q\.screen\.lt\.sm"/,
+  );
+  assert.match(stylesSource, /\.overview-artifact-dialog__body\s*{[^}]*overflow:\s*auto/s);
 });

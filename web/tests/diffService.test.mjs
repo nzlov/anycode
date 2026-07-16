@@ -11,17 +11,6 @@ function functionBody(name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
-test('getSessionDiffSummaries requests one normalized batch', () => {
-  const body = functionBody('getSessionDiffSummaries');
-
-  assert.match(body, /sessionDiffSummaries\(sessionIds: \$sessionIds\)/);
-  assert.match(body, /sessionId/);
-  assert.match(body, /state/);
-  assert.match(body, /filesChanged/);
-  assert.doesNotMatch(body, /Promise\.all/);
-  assert.doesNotMatch(body, /sessionDiff\(input:/);
-});
-
 test('full diff service queries request only the needed diff shape', () => {
   const sessionSingle = functionBody('getSessionSingleDiff');
   const sessionAll = functionBody('getSessionAllDiff');

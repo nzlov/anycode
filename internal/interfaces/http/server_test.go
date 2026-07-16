@@ -957,8 +957,8 @@ func (u *fakeArtifactUseCase) Scan(context.Context, artifactapp.ScanInput) ([]se
 	return nil, nil
 }
 
-func (u *fakeArtifactUseCase) List(context.Context, sessiondomain.ArtifactQuery) ([]sessiondomain.SessionAttachment, int, error) {
-	return nil, 0, nil
+func (u *fakeArtifactUseCase) List(context.Context, sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, error) {
+	return nil, nil
 }
 
 func (u *fakeArtifactUseCase) Resolve(context.Context, sessiondomain.ID, []string) ([]sessiondomain.SessionAttachment, error) {

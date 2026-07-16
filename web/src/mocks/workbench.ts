@@ -21,6 +21,7 @@ export interface SessionCard {
   node: string;
   updatedAt: string;
   pendingQuestion: boolean;
+  artifactCount: number;
   filesChanged: number;
 }
 
@@ -80,6 +81,7 @@ export const sessions: SessionCard[] = [
     node: '验证构建结果',
     updatedAt: '今天 09:42',
     pendingQuestion: false,
+    artifactCount: 3,
     filesChanged: 6,
   },
   {
@@ -93,6 +95,7 @@ export const sessions: SessionCard[] = [
     node: '待确认 UI 交互',
     updatedAt: '今天 08:18',
     pendingQuestion: true,
+    artifactCount: 1,
     filesChanged: 12,
   },
   {
@@ -106,6 +109,7 @@ export const sessions: SessionCard[] = [
     node: '已完成',
     updatedAt: '昨天 18:10',
     pendingQuestion: false,
+    artifactCount: 4,
     filesChanged: 18,
   },
   {
@@ -119,6 +123,7 @@ export const sessions: SessionCard[] = [
     node: '已停止',
     updatedAt: '2026-06-29',
     pendingQuestion: false,
+    artifactCount: 0,
     filesChanged: 4,
   },
   {
@@ -132,6 +137,7 @@ export const sessions: SessionCard[] = [
     node: '等待数据库凭据',
     updatedAt: '2026-06-28',
     pendingQuestion: true,
+    artifactCount: 2,
     filesChanged: 2,
   },
 ];

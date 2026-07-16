@@ -6869,6 +6869,139 @@ func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
 	}
 }
 
+type fakeSessionDiffCounter struct {
+	count int
+	err   error
+	calls int
+}
+
+func (f *fakeSessionDiffCounter) CountSessionChangedFiles(context.Context, domain.ID) (int, error) {
+	f.calls++
+	return f.count, f.err
+}
+
+func TestCompletedCodexFileChange(t *testing.T) {
+	fileChange := processdomain.CodexFileChangeContent{
+		Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}},
+	}
+	tests := []struct {
+		name  string
+		event processdomain.CodexEvent
+		want  bool
+	}{
+		{name: "completed file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseCompleted, Content: fileChange}, want: true},
+		{name: "started file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseStarted, Content: fileChange}},
+		{name: "failed file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseFailed, Content: fileChange}},
+		{name: "empty file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseCompleted, Content: processdomain.CodexFileChangeContent{}}},
+		{name: "completed command", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseCompleted, Content: processdomain.CodexCommandContent{}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := completedCodexFileChange(test.event); got != test.want {
+				t.Fatalf("completedCodexFileChange() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestPersistCodexFileChangeUpdatesDiffCount(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning, FilesChanged: 1,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	counter := &fakeSessionDiffCounter{count: 3}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, &fakeCodexProcess{}),
+		WithEvents(events),
+		WithDiffCounter(counter),
+		WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}),
+	)
+
+	err := service.persistCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+		EventID: "file-change-1", Type: "item.completed", Phase: processdomain.CodexPhaseCompleted,
+		Content:   processdomain.CodexFileChangeContent{Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}}},
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("persistCodexEvent() error = %v", err)
+	}
+	if counter.calls != 1 || repo.updateFilesChangedCalls != 1 || repo.sessions["session-1"].FilesChanged != 3 {
+		t.Fatalf("diff counter calls=%d update calls=%d session=%#v", counter.calls, repo.updateFilesChangedCalls, repo.sessions["session-1"])
+	}
+	if event := waitForEventType(t, events, "session.diff_changed"); event.Payload["filesChanged"] != 3 {
+		t.Fatalf("session.diff_changed = %#v", event)
+	}
+}
+
+func TestPersistCodexFileChangeKeepsDiffCountOnFailure(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning, FilesChanged: 2,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	counter := &fakeSessionDiffCounter{err: errors.New("diff unavailable")}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithEvents(events), WithDiffCounter(counter))
+
+	err := service.persistCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+		EventID: "file-change-1", Type: "item.completed", Phase: processdomain.CodexPhaseCompleted,
+		Content:   processdomain.CodexFileChangeContent{Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}}},
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("persistCodexEvent() error = %v", err)
+	}
+	if counter.calls != 1 || repo.sessions["session-1"].FilesChanged != 2 {
+		t.Fatalf("diff counter calls=%d session=%#v", counter.calls, repo.sessions["session-1"])
+	}
+	for _, event := range events.snapshot() {
+		if event.Type == "session.diff_changed" {
+			t.Fatalf("unexpected diff event = %#v", event)
+		}
+	}
+}
+
+func TestPersistCodexFileChangeRejectsNegativeDiffCount(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning, FilesChanged: 2,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	counter := &fakeSessionDiffCounter{count: -1}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithEvents(events), WithDiffCounter(counter))
+
+	err := service.persistCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+		EventID: "file-change-1", Type: "item.completed", Phase: processdomain.CodexPhaseCompleted,
+		Content:   processdomain.CodexFileChangeContent{Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}}},
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("persistCodexEvent() error = %v", err)
+	}
+	if counter.calls != 1 || repo.updateFilesChangedCalls != 0 || repo.sessions["session-1"].FilesChanged != 2 {
+		t.Fatalf("diff counter calls=%d update calls=%d session=%#v", counter.calls, repo.updateFilesChangedCalls, repo.sessions["session-1"])
+	}
+	for _, event := range events.snapshot() {
+		if event.Type == "session.diff_changed" {
+			t.Fatalf("unexpected diff event = %#v", event)
+		}
+	}
+}
+
 func TestStartSessionIgnoresDuplicateTypedPlanUpdate(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -10339,6 +10472,7 @@ type fakeRepository struct {
 	lastPromptAppendAttachmentSessionID domain.ID
 	lastPromptAppendAttachmentID        string
 	rejectCanceledContext               bool
+	updateFilesChangedCalls             int
 }
 
 func newFakeRepository() *fakeRepository {
@@ -10378,6 +10512,20 @@ func (r *fakeRepository) Save(ctx context.Context, session domain.Session) error
 	}
 	r.saved = append(r.saved, session)
 	r.sessions[session.ID] = session
+	return nil
+}
+
+func (r *fakeRepository) UpdateFilesChanged(_ context.Context, id domain.ID, filesChanged int) error {
+	if filesChanged < 0 {
+		return errors.New("files changed must be non-negative")
+	}
+	current, ok := r.sessions[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	current.FilesChanged = filesChanged
+	r.sessions[id] = current
+	r.updateFilesChangedCalls++
 	return nil
 }
 

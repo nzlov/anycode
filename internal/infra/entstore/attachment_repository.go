@@ -166,7 +166,21 @@ func (r *AttachmentRepository) saveArtifact(ctx context.Context, attachment doma
 	if r.db == nil {
 		return fmt.Errorf("save session artifact: database connection unavailable")
 	}
-	return insertArtifact(ctx, r.db, attachment)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin session artifact transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if err := insertArtifact(ctx, tx, attachment); err != nil {
+		return err
+	}
+	if err := refreshSessionArtifactCount(ctx, tx, attachment.SessionID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit session artifact transaction: %w", err)
+	}
+	return nil
 }
 
 func (r *AttachmentRepository) SaveArtifactWithEvent(ctx context.Context, artifact domainsession.SessionFile, event eventdomain.DomainEvent) error {
@@ -179,6 +193,9 @@ func (r *AttachmentRepository) SaveArtifactWithEvent(ctx context.Context, artifa
 	}
 	defer tx.Rollback()
 	if err := insertArtifact(ctx, tx, artifact); err != nil {
+		return err
+	}
+	if err := refreshSessionArtifactCount(ctx, tx, artifact.SessionID); err != nil {
 		return err
 	}
 	if err := insertArtifactEvent(ctx, tx, event); err != nil {
@@ -210,6 +227,9 @@ func (r *AttachmentRepository) DeleteArtifactWithEvent(ctx context.Context, arti
 	if changed == 0 {
 		return sql.ErrNoRows
 	}
+	if err := refreshSessionArtifactCount(ctx, tx, artifact.SessionID); err != nil {
+		return err
+	}
 	if err := insertArtifactEvent(ctx, tx, event); err != nil {
 		return err
 	}
@@ -222,6 +242,25 @@ func (r *AttachmentRepository) DeleteArtifactWithEvent(ctx context.Context, arti
 type artifactExecQuerier interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func refreshSessionArtifactCount(ctx context.Context, query artifactExecQuerier, sessionID domainsession.ID) error {
+	var count int
+	if err := query.QueryRowContext(ctx, `SELECT COUNT(DISTINCT logical_path) FROM session_attachments WHERE session_id = ? AND role = 'artifact' AND deleted_at IS NULL`, string(sessionID)).Scan(&count); err != nil {
+		return fmt.Errorf("count current session artifacts: %w", err)
+	}
+	result, err := query.ExecContext(ctx, `UPDATE sessions SET artifact_count = ? WHERE id = ?`, count, string(sessionID))
+	if err != nil {
+		return fmt.Errorf("update session artifact count: %w", err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update session artifact count rows: %w", err)
+	}
+	if changed == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func insertArtifact(ctx context.Context, executor artifactExecQuerier, attachment domainsession.SessionFile) error {
@@ -309,64 +348,64 @@ func (r *AttachmentRepository) FindArtifactBySourceKey(ctx context.Context, sess
 	return attachment, true, nil
 }
 
-func (r *AttachmentRepository) ListSessionArtifacts(ctx context.Context, query domainsession.ArtifactQuery) ([]domainsession.SessionFile, int, error) {
+func (r *AttachmentRepository) ListSessionArtifacts(ctx context.Context, query domainsession.ArtifactQuery) ([]domainsession.SessionFile, error) {
 	if r.db == nil {
-		return nil, 0, fmt.Errorf("list session artifacts: database connection unavailable")
+		return nil, fmt.Errorf("list session artifacts: database connection unavailable")
 	}
-	where := []string{"session_id = ?", "role = 'artifact'", "deleted_at IS NULL"}
+	where := []string{"current.session_id = ?"}
 	args := []any{string(query.SessionID)}
 	if query.Kind != "" {
-		where = append(where, "artifact_kind = ?")
+		where = append(where, "current.artifact_kind = ?")
 		args = append(args, string(query.Kind))
 	}
 	if query.Source != "" {
-		where = append(where, "source_type = ?")
+		where = append(where, "current.source_type = ?")
 		args = append(args, string(query.Source))
 	}
 	if filter := strings.TrimSpace(query.Filter); filter != "" {
-		where = append(where, "(LOWER(filename) LIKE ? OR LOWER(logical_path) LIKE ?)")
+		where = append(where, "(LOWER(current.filename) LIKE ? OR LOWER(current.logical_path) LIKE ?)")
 		pattern := "%" + strings.ToLower(filter) + "%"
 		args = append(args, pattern, pattern)
 	}
 	clause := strings.Join(where, " AND ")
-	var total int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM session_attachments WHERE `+clause, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("count session artifacts: %w", err)
-	}
-	page, pageSize := query.Page, query.PageSize
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 50
-	}
-	order := "created_at DESC, id DESC"
+	order := "current.created_at DESC, current.id DESC"
 	switch query.Sort {
 	case "created_at_asc":
-		order = "created_at ASC, id ASC"
+		order = "current.created_at ASC, current.id ASC"
 	case "filename_asc":
-		order = "filename ASC, id ASC"
+		order = "current.filename ASC, current.id ASC"
 	case "size_desc":
-		order = "size DESC, id DESC"
+		order = "current.size DESC, current.id DESC"
 	}
-	listArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
-	rows, err := r.db.QueryContext(ctx, sessionFileSelect+` WHERE `+clause+` ORDER BY `+order+` LIMIT ? OFFSET ?`, listArgs...)
+	querySQL := strings.Replace(sessionFileSelect, "FROM session_attachments", "FROM session_attachments AS current", 1) + ` WHERE ` + clause + `
+		AND current.role = 'artifact'
+		AND current.deleted_at IS NULL
+		AND current.id = (
+			SELECT latest.id FROM session_attachments AS latest
+			WHERE latest.session_id = current.session_id
+				AND latest.role = 'artifact'
+				AND latest.deleted_at IS NULL
+				AND latest.logical_path = current.logical_path
+			ORDER BY latest.created_at DESC, latest.id DESC
+			LIMIT 1
+		) ORDER BY ` + order
+	rows, err := r.db.QueryContext(ctx, querySQL, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("list session artifacts: %w", err)
+		return nil, fmt.Errorf("list session artifacts: %w", err)
 	}
 	defer rows.Close()
 	artifacts := make([]domainsession.SessionFile, 0)
 	for rows.Next() {
 		artifact, err := scanSessionFile(rows)
 		if err != nil {
-			return nil, 0, fmt.Errorf("scan session artifact: %w", err)
+			return nil, fmt.Errorf("scan session artifact: %w", err)
 		}
 		artifacts = append(artifacts, artifact)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("list session artifacts: %w", err)
+		return nil, fmt.Errorf("list session artifacts: %w", err)
 	}
-	return artifacts, total, nil
+	return artifacts, nil
 }
 
 func (r *AttachmentRepository) ResolveLatestSessionArtifactsByLogicalPaths(ctx context.Context, sessionID domainsession.ID, logicalPaths []string) ([]domainsession.SessionFile, error) {
@@ -425,7 +464,17 @@ func (r *AttachmentRepository) SoftDeleteArtifact(ctx context.Context, id domain
 	if r.db == nil {
 		return domainsession.SessionFile{}, fmt.Errorf("delete session artifact: database connection unavailable")
 	}
-	result, err := r.db.ExecContext(ctx, `UPDATE session_attachments SET deleted_at = ? WHERE id = ? AND role = 'artifact' AND deleted_at IS NULL`, deletedAt, string(id))
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domainsession.SessionFile{}, fmt.Errorf("begin delete session artifact transaction: %w", err)
+	}
+	defer tx.Rollback()
+	row := tx.QueryRowContext(ctx, sessionFileSelect+` WHERE id = ?`, string(id))
+	artifact, err := scanSessionFile(row)
+	if err != nil {
+		return domainsession.SessionFile{}, fmt.Errorf("find session artifact for delete: %w", err)
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE session_attachments SET deleted_at = ? WHERE id = ? AND role = 'artifact' AND deleted_at IS NULL`, deletedAt, string(id))
 	if err != nil {
 		return domainsession.SessionFile{}, fmt.Errorf("delete session artifact: %w", err)
 	}
@@ -436,7 +485,14 @@ func (r *AttachmentRepository) SoftDeleteArtifact(ctx context.Context, id domain
 	if changed == 0 {
 		return domainsession.SessionFile{}, sql.ErrNoRows
 	}
-	return r.FindSessionAttachment(ctx, id)
+	if err := refreshSessionArtifactCount(ctx, tx, artifact.SessionID); err != nil {
+		return domainsession.SessionFile{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domainsession.SessionFile{}, fmt.Errorf("commit delete session artifact transaction: %w", err)
+	}
+	artifact.DeletedAt = &deletedAt
+	return artifact, nil
 }
 
 func (r *AttachmentRepository) ListArtifactsPendingPhysicalDelete(ctx context.Context, limit int) ([]domainsession.SessionFile, error) {

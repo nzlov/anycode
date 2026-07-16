@@ -153,6 +153,8 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		PendingApproval:    mapPendingApproval(dto.PendingApproval),
 		PendingQuestion:    dto.PendingQuestion,
 		TodoList:           mapTodoList(dto.TodoList),
+		ArtifactCount:      dto.ArtifactCount,
+		FilesChanged:       dto.FilesChanged,
 		Attachments:        attachments,
 		AvailableActions:   dto.AvailableActions,
 		LastRunAt:          dto.LastRunAt,
@@ -479,18 +481,6 @@ func mapSessionDiff(dto diffapp.SessionDiffDTO) *model.SessionDiff {
 		AllDiff:   allDiff,
 		Available: dto.Available,
 	}
-}
-
-func mapSessionDiffSummaries(dtos []diffapp.SessionDiffSummaryDTO) []*model.SessionDiffSummary {
-	result := make([]*model.SessionDiffSummary, 0, len(dtos))
-	for _, dto := range dtos {
-		result = append(result, &model.SessionDiffSummary{
-			SessionID:    string(dto.SessionID),
-			State:        model.SessionDiffSummaryState(dto.State),
-			FilesChanged: dto.FilesChanged,
-		})
-	}
-	return result
 }
 
 func mapCommitHistory(dto diffapp.CommitHistoryDTO) *model.SessionCommitHistory {

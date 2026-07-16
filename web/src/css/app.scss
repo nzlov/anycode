@@ -1032,13 +1032,15 @@ a {
   height: 100%;
 }
 
-.overview-diff-dialog {
+.overview-diff-dialog,
+.overview-artifact-dialog {
   display: flex;
   height: 90dvh;
   flex-direction: column;
 }
 
-.overview-diff-dialog__header {
+.overview-diff-dialog__header,
+.overview-artifact-dialog__header {
   min-height: 52px;
   display: flex;
   flex: 0 0 auto;
@@ -1060,6 +1062,13 @@ a {
   min-height: 0;
   flex: 1 1 auto;
   overflow: hidden;
+}
+
+.overview-artifact-dialog__body {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .overview-diff-dialog__body .diff-workspace {

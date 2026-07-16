@@ -294,6 +294,8 @@ var (
 		{Name: "permission_mode", Type: field.TypeString, Default: ""},
 		{Name: "fast_mode", Type: field.TypeBool, Default: false},
 		{Name: "todo_list", Type: field.TypeJSON, Nullable: true},
+		{Name: "artifact_count", Type: field.TypeInt, Default: 0},
+		{Name: "files_changed", Type: field.TypeInt, Default: 0},
 		{Name: "queued_at", Type: field.TypeTime, Nullable: true},
 		{Name: "queue_kind", Type: field.TypeString, Default: ""},
 		{Name: "queue_priority", Type: field.TypeString, Default: "medium"},
@@ -325,12 +327,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[42]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[44]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[40]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[42]},
 			},
 			{
 				Name:    "session_status",
@@ -340,12 +342,12 @@ var (
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[30], SessionsColumns[5], SessionsColumns[28]},
+				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[32], SessionsColumns[5], SessionsColumns[30]},
 			},
 			{
 				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[42]},
+				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[44]},
 			},
 		},
 	}

@@ -156,6 +156,8 @@ type Session struct {
 	CodexSessionID        string
 	Config                Config
 	TodoList              TodoList
+	ArtifactCount         int
+	FilesChanged          int
 	QueuedAt              *time.Time
 	Queue                 QueueIntent
 	AppliedSystemCommands map[string]bool
@@ -495,8 +497,6 @@ type SessionAttachment = SessionFile
 
 type ArtifactQuery struct {
 	SessionID ID
-	Page      int
-	PageSize  int
 	Kind      ArtifactKind
 	Source    AttachmentSourceType
 	Filter    string
@@ -614,6 +614,7 @@ type ListQuery struct {
 type Repository interface {
 	Create(ctx context.Context, session Session) error
 	Save(ctx context.Context, session Session) error
+	UpdateFilesChanged(ctx context.Context, id ID, filesChanged int) error
 	Find(ctx context.Context, id ID) (Session, error)
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
 	ListQueued(ctx context.Context) ([]Session, error)
@@ -651,7 +652,7 @@ type AttachmentRepository interface {
 
 type ArtifactRepository interface {
 	FindArtifactBySourceKey(ctx context.Context, sessionID ID, sourceKey string) (SessionFile, bool, error)
-	ListSessionArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, int, error)
+	ListSessionArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, error)
 	ResolveLatestSessionArtifactsByLogicalPaths(ctx context.Context, sessionID ID, logicalPaths []string) ([]SessionFile, error)
 	SumSessionArtifactSize(ctx context.Context, sessionID ID) (int64, error)
 	SoftDeleteArtifact(ctx context.Context, id SessionFileID, deletedAt time.Time) (SessionFile, error)

@@ -73,6 +73,10 @@ type Session struct {
 	FastMode bool `json:"fast_mode,omitempty"`
 	// TodoList holds the value of the "todo_list" field.
 	TodoList session.TodoList `json:"todo_list,omitempty"`
+	// ArtifactCount holds the value of the "artifact_count" field.
+	ArtifactCount int `json:"artifact_count,omitempty"`
+	// FilesChanged holds the value of the "files_changed" field.
+	FilesChanged int `json:"files_changed,omitempty"`
 	// QueuedAt holds the value of the "queued_at" field.
 	QueuedAt *time.Time `json:"queued_at,omitempty"`
 	// QueueKind holds the value of the "queue_kind" field.
@@ -117,7 +121,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case entsession.FieldWorktreeCleanupRetryable, entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
-		case entsession.FieldWorktreeCleanupAttempts:
+		case entsession.FieldWorktreeCleanupAttempts, entsession.FieldArtifactCount, entsession.FieldFilesChanged:
 			values[i] = new(sql.NullInt64)
 		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID:
 			values[i] = new(sql.NullString)
@@ -313,6 +317,18 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.TodoList); err != nil {
 					return fmt.Errorf("unmarshal field todo_list: %w", err)
 				}
+			}
+		case entsession.FieldArtifactCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field artifact_count", values[i])
+			} else if value.Valid {
+				_m.ArtifactCount = int(value.Int64)
+			}
+		case entsession.FieldFilesChanged:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field files_changed", values[i])
+			} else if value.Valid {
+				_m.FilesChanged = int(value.Int64)
 			}
 		case entsession.FieldQueuedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -544,6 +560,12 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("todo_list=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TodoList))
+	builder.WriteString(", ")
+	builder.WriteString("artifact_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ArtifactCount))
+	builder.WriteString(", ")
+	builder.WriteString("files_changed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FilesChanged))
 	builder.WriteString(", ")
 	if v := _m.QueuedAt; v != nil {
 		builder.WriteString("queued_at=")

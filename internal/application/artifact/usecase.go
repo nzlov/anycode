@@ -31,7 +31,7 @@ var errArtifactCommitted = errors.New("artifact metadata was committed")
 type UseCase interface {
 	Publish(ctx context.Context, input PublishInput) (session.SessionFile, error)
 	Scan(ctx context.Context, input ScanInput) ([]session.SessionFile, error)
-	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, int, error)
+	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error)
 	Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
 	Delete(ctx context.Context, id session.SessionFileID) (session.SessionFile, error)
 	UseAsInput(ctx context.Context, id session.SessionFileID) (session.SessionFile, error)
@@ -393,11 +393,10 @@ func (s *Service) Scan(ctx context.Context, input ScanInput) ([]session.SessionF
 	return published, errors.Join(scanErrs...)
 }
 
-func (s *Service) List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, int, error) {
+func (s *Service) List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error) {
 	if s == nil || s.repo == nil {
-		return nil, 0, errors.New("artifact usecase is not configured")
+		return nil, errors.New("artifact usecase is not configured")
 	}
-	query.Page, query.PageSize = NormalizePage(query.Page, query.PageSize)
 	return s.repo.ListSessionArtifacts(ctx, query)
 }
 
@@ -459,16 +458,6 @@ func normalizeLogicalPathReference(value string) (string, error) {
 		return "", errors.New("artifact reference must stay inside the output directory")
 	}
 	return value, nil
-}
-
-func NormalizePage(page, pageSize int) (int, int) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 50
-	}
-	return page, pageSize
 }
 
 func (s *Service) Delete(ctx context.Context, id session.SessionFileID) (session.SessionFile, error) {

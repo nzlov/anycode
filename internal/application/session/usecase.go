@@ -172,6 +172,8 @@ type DTO struct {
 	WorktreeCleanup    WorktreeCleanupDTO
 	CodexSessionID     string
 	Config             domain.Config
+	ArtifactCount      int
+	FilesChanged       int
 	AvailableActions   []string
 	LastRunAt          *time.Time
 	CreatedAt          time.Time
@@ -301,6 +303,7 @@ type Service struct {
 	worktreeInitializer domain.WorktreeInitializer
 	workflows           domain.WorkflowStarter
 	merge               gitdiffdomain.MergePort
+	diffCounter         sessionDiffCounter
 	processes           processdomain.Repository
 	codex               processdomain.CodexProcess
 	processConsumers    sync.Map
@@ -329,6 +332,10 @@ type questionCoordinator interface {
 
 type artifactScanner interface {
 	Scan(ctx context.Context, input domain.ArtifactScanRequest) ([]domain.SessionAttachment, error)
+}
+
+type sessionDiffCounter interface {
+	CountSessionChangedFiles(ctx context.Context, sessionID domain.ID) (int, error)
 }
 
 type answerQuestionCoordinator interface {
@@ -392,6 +399,12 @@ func WithWorkflows(workflows domain.WorkflowStarter) Option {
 func WithMergePort(merge gitdiffdomain.MergePort) Option {
 	return func(s *Service) {
 		s.merge = merge
+	}
+}
+
+func WithDiffCounter(counter sessionDiffCounter) Option {
+	return func(s *Service) {
+		s.diffCounter = counter
 	}
 }
 
@@ -4703,6 +4716,7 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 		}
 	}
 	saveSession := false
+	saveFilesChanged := false
 	extraEvents := []sessionEventInput(nil)
 	if activeRun && codexEventCanUpdateSession(current.Status) {
 		if todoList, ok := todoListFromCodexEvent(event); ok && !slices.Equal(current.TodoList.Items, todoList.Items) {
@@ -4717,10 +4731,35 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 				},
 			})
 		}
+		if completedCodexFileChange(event) && s.diffCounter != nil {
+			filesChanged, countErr := s.diffCounter.CountSessionChangedFiles(ctx, sessionID)
+			if countErr != nil {
+				log.Printf("refresh session diff count: session=%s event=%s error=%v", sessionID, event.EventID, countErr)
+			} else if filesChanged < 0 {
+				log.Printf("refresh session diff count: session=%s event=%s error=negative count %d", sessionID, event.EventID, filesChanged)
+			} else if filesChanged != current.FilesChanged {
+				current.FilesChanged = filesChanged
+				current.UpdatedAt = s.now()
+				saveSession = true
+				saveFilesChanged = true
+				extraEvents = append(extraEvents, sessionEventInput{
+					eventType: "session.diff_changed",
+					payload:   map[string]any{"filesChanged": filesChanged},
+				})
+			}
+		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
 	extraEvents = append(extraEvents, s.archiveCodexEventImages(ctx, current, handle, &event)...)
-	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, promptDelivered, extraEvents...)
+	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveFilesChanged, promptDelivered, extraEvents...)
+}
+
+func completedCodexFileChange(event processdomain.CodexEvent) bool {
+	if event.Phase != processdomain.CodexPhaseCompleted {
+		return false
+	}
+	content, ok := event.Content.(processdomain.CodexFileChangeContent)
+	return ok && len(content.Changes) > 0
 }
 
 func (s *Service) bindProcessTranscript(ctx context.Context, current *domain.Session, handle processdomain.CodexHandle, source processdomain.CodexTranscriptSource) error {
@@ -6212,7 +6251,7 @@ type sessionEventInput struct {
 	payload   map[string]any
 }
 
-func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
+func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveFilesChanged bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
 	var codexEvent eventdomain.DomainEvent
 	publishCodexEvent := s.publisher != nil && !event.RealtimeOnly
 	if publishCodexEvent {
@@ -6246,6 +6285,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 					return fmt.Errorf("save session: %w", err)
 				}
 			}
+			if saveFilesChanged {
+				if err := tx.Sessions().UpdateFilesChanged(ctx, session.ID, session.FilesChanged); err != nil {
+					return err
+				}
+			}
 			for _, event := range extraEvents {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
@@ -6276,6 +6320,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 	if saveSession {
 		if err := s.repo.Save(ctx, session); err != nil {
 			return fmt.Errorf("save session: %w", err)
+		}
+	}
+	if saveFilesChanged {
+		if err := s.repo.UpdateFilesChanged(ctx, session.ID, session.FilesChanged); err != nil {
+			return err
 		}
 	}
 	if publishCodexEvent {
@@ -8113,6 +8162,8 @@ func toDTO(session domain.Session) DTO {
 		WorktreeCleanup:    toWorktreeCleanupDTO(session.WorktreeCleanup),
 		CodexSessionID:     session.CodexSessionID,
 		Config:             session.Config,
+		ArtifactCount:      session.ArtifactCount,
+		FilesChanged:       session.FilesChanged,
 		AvailableActions:   availableActions(session),
 		LastRunAt:          session.LastRunAt,
 		CreatedAt:          session.CreatedAt,

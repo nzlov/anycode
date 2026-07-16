@@ -2,6 +2,7 @@ package entstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -137,6 +138,16 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 	return r.create(ctx, s)
 }
 
+func (r *SessionRepository) UpdateFilesChanged(ctx context.Context, id domainsession.ID, filesChanged int) error {
+	if filesChanged < 0 {
+		return errors.New("update session files changed: count must be non-negative")
+	}
+	if err := r.client.Session.UpdateOneID(string(id)).SetFilesChanged(filesChanged).Exec(ctx); err != nil {
+		return fmt.Errorf("update session files changed: %w", err)
+	}
+	return nil
+}
+
 func (r *SessionRepository) create(ctx context.Context, s domainsession.Session) error {
 	create := r.client.Session.Create().
 		SetID(string(s.ID)).
@@ -161,6 +172,8 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetPermissionMode(s.Config.PermissionMode).
 		SetFastMode(s.Config.FastMode).
 		SetTodoList(s.TodoList).
+		SetArtifactCount(s.ArtifactCount).
+		SetFilesChanged(s.FilesChanged).
 		SetQueueKind(string(s.Queue.Kind)).
 		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 		SetQueueInitialStart(s.Queue.InitialStart).
@@ -714,8 +727,10 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			PermissionMode:  row.PermissionMode,
 			FastMode:        row.FastMode,
 		},
-		TodoList: row.TodoList,
-		QueuedAt: row.QueuedAt,
+		TodoList:      row.TodoList,
+		ArtifactCount: row.ArtifactCount,
+		FilesChanged:  row.FilesChanged,
+		QueuedAt:      row.QueuedAt,
 		Queue: domainsession.QueueIntent{
 			Kind:                    domainsession.QueueKind(row.QueueKind),
 			Priority:                normalizeQueuePriority(domainsession.QueuePriority(row.QueuePriority)),

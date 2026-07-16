@@ -344,48 +344,60 @@ func init() {
 	entsessionDescFastMode := entsessionFields[26].Descriptor()
 	// entsession.DefaultFastMode holds the default value on creation for the fast_mode field.
 	entsession.DefaultFastMode = entsessionDescFastMode.Default.(bool)
+	// entsessionDescArtifactCount is the schema descriptor for artifact_count field.
+	entsessionDescArtifactCount := entsessionFields[28].Descriptor()
+	// entsession.DefaultArtifactCount holds the default value on creation for the artifact_count field.
+	entsession.DefaultArtifactCount = entsessionDescArtifactCount.Default.(int)
+	// entsession.ArtifactCountValidator is a validator for the "artifact_count" field. It is called by the builders before save.
+	entsession.ArtifactCountValidator = entsessionDescArtifactCount.Validators[0].(func(int) error)
+	// entsessionDescFilesChanged is the schema descriptor for files_changed field.
+	entsessionDescFilesChanged := entsessionFields[29].Descriptor()
+	// entsession.DefaultFilesChanged holds the default value on creation for the files_changed field.
+	entsession.DefaultFilesChanged = entsessionDescFilesChanged.Default.(int)
+	// entsession.FilesChangedValidator is a validator for the "files_changed" field. It is called by the builders before save.
+	entsession.FilesChangedValidator = entsessionDescFilesChanged.Validators[0].(func(int) error)
 	// entsessionDescQueueKind is the schema descriptor for queue_kind field.
-	entsessionDescQueueKind := entsessionFields[29].Descriptor()
+	entsessionDescQueueKind := entsessionFields[31].Descriptor()
 	// entsession.DefaultQueueKind holds the default value on creation for the queue_kind field.
 	entsession.DefaultQueueKind = entsessionDescQueueKind.Default.(string)
 	// entsessionDescQueuePriority is the schema descriptor for queue_priority field.
-	entsessionDescQueuePriority := entsessionFields[30].Descriptor()
+	entsessionDescQueuePriority := entsessionFields[32].Descriptor()
 	// entsession.DefaultQueuePriority holds the default value on creation for the queue_priority field.
 	entsession.DefaultQueuePriority = entsessionDescQueuePriority.Default.(string)
 	// entsessionDescQueueReviewAfterReuseFailure is the schema descriptor for queue_review_after_reuse_failure field.
-	entsessionDescQueueReviewAfterReuseFailure := entsessionFields[32].Descriptor()
+	entsessionDescQueueReviewAfterReuseFailure := entsessionFields[34].Descriptor()
 	// entsession.DefaultQueueReviewAfterReuseFailure holds the default value on creation for the queue_review_after_reuse_failure field.
 	entsession.DefaultQueueReviewAfterReuseFailure = entsessionDescQueueReviewAfterReuseFailure.Default.(bool)
 	// entsessionDescQueueWorkflowRunID is the schema descriptor for queue_workflow_run_id field.
-	entsessionDescQueueWorkflowRunID := entsessionFields[33].Descriptor()
+	entsessionDescQueueWorkflowRunID := entsessionFields[35].Descriptor()
 	// entsession.DefaultQueueWorkflowRunID holds the default value on creation for the queue_workflow_run_id field.
 	entsession.DefaultQueueWorkflowRunID = entsessionDescQueueWorkflowRunID.Default.(string)
 	// entsessionDescQueueNodeRunID is the schema descriptor for queue_node_run_id field.
-	entsessionDescQueueNodeRunID := entsessionFields[34].Descriptor()
+	entsessionDescQueueNodeRunID := entsessionFields[36].Descriptor()
 	// entsession.DefaultQueueNodeRunID holds the default value on creation for the queue_node_run_id field.
 	entsession.DefaultQueueNodeRunID = entsessionDescQueueNodeRunID.Default.(string)
 	// entsessionDescQueuePrompt is the schema descriptor for queue_prompt field.
-	entsessionDescQueuePrompt := entsessionFields[35].Descriptor()
+	entsessionDescQueuePrompt := entsessionFields[37].Descriptor()
 	// entsession.DefaultQueuePrompt holds the default value on creation for the queue_prompt field.
 	entsession.DefaultQueuePrompt = entsessionDescQueuePrompt.Default.(string)
 	// entsessionDescQueueResumeCodexSessionID is the schema descriptor for queue_resume_codex_session_id field.
-	entsessionDescQueueResumeCodexSessionID := entsessionFields[36].Descriptor()
+	entsessionDescQueueResumeCodexSessionID := entsessionFields[38].Descriptor()
 	// entsession.DefaultQueueResumeCodexSessionID holds the default value on creation for the queue_resume_codex_session_id field.
 	entsession.DefaultQueueResumeCodexSessionID = entsessionDescQueueResumeCodexSessionID.Default.(string)
 	// entsessionDescQueueResumeOfProcessRunID is the schema descriptor for queue_resume_of_process_run_id field.
-	entsessionDescQueueResumeOfProcessRunID := entsessionFields[37].Descriptor()
+	entsessionDescQueueResumeOfProcessRunID := entsessionFields[39].Descriptor()
 	// entsession.DefaultQueueResumeOfProcessRunID holds the default value on creation for the queue_resume_of_process_run_id field.
 	entsession.DefaultQueueResumeOfProcessRunID = entsessionDescQueueResumeOfProcessRunID.Default.(string)
 	// entsessionDescQueueAnswerBatchID is the schema descriptor for queue_answer_batch_id field.
-	entsessionDescQueueAnswerBatchID := entsessionFields[38].Descriptor()
+	entsessionDescQueueAnswerBatchID := entsessionFields[40].Descriptor()
 	// entsession.DefaultQueueAnswerBatchID holds the default value on creation for the queue_answer_batch_id field.
 	entsession.DefaultQueueAnswerBatchID = entsessionDescQueueAnswerBatchID.Default.(string)
 	// entsessionDescCreatedAt is the schema descriptor for created_at field.
-	entsessionDescCreatedAt := entsessionFields[41].Descriptor()
+	entsessionDescCreatedAt := entsessionFields[43].Descriptor()
 	// entsession.DefaultCreatedAt holds the default value on creation for the created_at field.
 	entsession.DefaultCreatedAt = entsessionDescCreatedAt.Default.(func() time.Time)
 	// entsessionDescUpdatedAt is the schema descriptor for updated_at field.
-	entsessionDescUpdatedAt := entsessionFields[42].Descriptor()
+	entsessionDescUpdatedAt := entsessionFields[44].Descriptor()
 	// entsession.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

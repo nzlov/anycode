@@ -456,6 +456,48 @@ func (_u *SessionUpdate) ClearTodoList() *SessionUpdate {
 	return _u
 }
 
+// SetArtifactCount sets the "artifact_count" field.
+func (_u *SessionUpdate) SetArtifactCount(v int) *SessionUpdate {
+	_u.mutation.ResetArtifactCount()
+	_u.mutation.SetArtifactCount(v)
+	return _u
+}
+
+// SetNillableArtifactCount sets the "artifact_count" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableArtifactCount(v *int) *SessionUpdate {
+	if v != nil {
+		_u.SetArtifactCount(*v)
+	}
+	return _u
+}
+
+// AddArtifactCount adds value to the "artifact_count" field.
+func (_u *SessionUpdate) AddArtifactCount(v int) *SessionUpdate {
+	_u.mutation.AddArtifactCount(v)
+	return _u
+}
+
+// SetFilesChanged sets the "files_changed" field.
+func (_u *SessionUpdate) SetFilesChanged(v int) *SessionUpdate {
+	_u.mutation.ResetFilesChanged()
+	_u.mutation.SetFilesChanged(v)
+	return _u
+}
+
+// SetNillableFilesChanged sets the "files_changed" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableFilesChanged(v *int) *SessionUpdate {
+	if v != nil {
+		_u.SetFilesChanged(*v)
+	}
+	return _u
+}
+
+// AddFilesChanged adds value to the "files_changed" field.
+func (_u *SessionUpdate) AddFilesChanged(v int) *SessionUpdate {
+	_u.mutation.AddFilesChanged(v)
+	return _u
+}
+
 // SetQueuedAt sets the "queued_at" field.
 func (_u *SessionUpdate) SetQueuedAt(v time.Time) *SessionUpdate {
 	_u.mutation.SetQueuedAt(v)
@@ -738,6 +780,16 @@ func (_u *SessionUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Session.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ArtifactCount(); ok {
+		if err := entsession.ArtifactCountValidator(v); err != nil {
+			return &ValidationError{Name: "artifact_count", err: fmt.Errorf(`ent: validator failed for field "Session.artifact_count": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.FilesChanged(); ok {
+		if err := entsession.FilesChangedValidator(v); err != nil {
+			return &ValidationError{Name: "files_changed", err: fmt.Errorf(`ent: validator failed for field "Session.files_changed": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -857,6 +909,18 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.TodoListCleared() {
 		_spec.ClearField(entsession.FieldTodoList, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ArtifactCount(); ok {
+		_spec.SetField(entsession.FieldArtifactCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedArtifactCount(); ok {
+		_spec.AddField(entsession.FieldArtifactCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FilesChanged(); ok {
+		_spec.SetField(entsession.FieldFilesChanged, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFilesChanged(); ok {
+		_spec.AddField(entsession.FieldFilesChanged, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.QueuedAt(); ok {
 		_spec.SetField(entsession.FieldQueuedAt, field.TypeTime, value)
@@ -1365,6 +1429,48 @@ func (_u *SessionUpdateOne) ClearTodoList() *SessionUpdateOne {
 	return _u
 }
 
+// SetArtifactCount sets the "artifact_count" field.
+func (_u *SessionUpdateOne) SetArtifactCount(v int) *SessionUpdateOne {
+	_u.mutation.ResetArtifactCount()
+	_u.mutation.SetArtifactCount(v)
+	return _u
+}
+
+// SetNillableArtifactCount sets the "artifact_count" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableArtifactCount(v *int) *SessionUpdateOne {
+	if v != nil {
+		_u.SetArtifactCount(*v)
+	}
+	return _u
+}
+
+// AddArtifactCount adds value to the "artifact_count" field.
+func (_u *SessionUpdateOne) AddArtifactCount(v int) *SessionUpdateOne {
+	_u.mutation.AddArtifactCount(v)
+	return _u
+}
+
+// SetFilesChanged sets the "files_changed" field.
+func (_u *SessionUpdateOne) SetFilesChanged(v int) *SessionUpdateOne {
+	_u.mutation.ResetFilesChanged()
+	_u.mutation.SetFilesChanged(v)
+	return _u
+}
+
+// SetNillableFilesChanged sets the "files_changed" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableFilesChanged(v *int) *SessionUpdateOne {
+	if v != nil {
+		_u.SetFilesChanged(*v)
+	}
+	return _u
+}
+
+// AddFilesChanged adds value to the "files_changed" field.
+func (_u *SessionUpdateOne) AddFilesChanged(v int) *SessionUpdateOne {
+	_u.mutation.AddFilesChanged(v)
+	return _u
+}
+
 // SetQueuedAt sets the "queued_at" field.
 func (_u *SessionUpdateOne) SetQueuedAt(v time.Time) *SessionUpdateOne {
 	_u.mutation.SetQueuedAt(v)
@@ -1660,6 +1766,16 @@ func (_u *SessionUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Session.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.ArtifactCount(); ok {
+		if err := entsession.ArtifactCountValidator(v); err != nil {
+			return &ValidationError{Name: "artifact_count", err: fmt.Errorf(`ent: validator failed for field "Session.artifact_count": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.FilesChanged(); ok {
+		if err := entsession.FilesChangedValidator(v); err != nil {
+			return &ValidationError{Name: "files_changed", err: fmt.Errorf(`ent: validator failed for field "Session.files_changed": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1796,6 +1912,18 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if _u.mutation.TodoListCleared() {
 		_spec.ClearField(entsession.FieldTodoList, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.ArtifactCount(); ok {
+		_spec.SetField(entsession.FieldArtifactCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedArtifactCount(); ok {
+		_spec.AddField(entsession.FieldArtifactCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FilesChanged(); ok {
+		_spec.SetField(entsession.FieldFilesChanged, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFilesChanged(); ok {
+		_spec.AddField(entsession.FieldFilesChanged, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.QueuedAt(); ok {
 		_spec.SetField(entsession.FieldQueuedAt, field.TypeTime, value)
