@@ -2,6 +2,7 @@
   <PromptComposer
     :prompt="prompt"
     :files="files"
+    :artifacts="artifacts"
     :model="model"
     :effort="effort"
     :permission="permission"
@@ -16,6 +17,7 @@
     :model-options="modelOptions"
     @update:prompt="emit('update:prompt', $event)"
     @update:files="emit('update:files', $event)"
+    @update:artifacts="emit('update:artifacts', $event)"
     @update:model="emit('update:model', $event)"
     @update:effort="emit('update:effort', $event)"
     @update:permission="emit('update:permission', $event)"
@@ -99,11 +101,13 @@ import type { CodexModelOption } from '@/components/promptOptions';
 import { useQuickCommands } from '@/composables/useQuickCommands';
 import { listCodexModelOptions } from '@/services/codexOptions';
 import { appendQuickCommand } from '@/services/quickCommandText';
+import type { SessionFile } from '@/services/sessionFiles';
 
 const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
+    artifacts?: SessionFile[];
     model: string;
     effort: string;
     permission: string;
@@ -124,12 +128,14 @@ const props = withDefaults(
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
+    artifacts: () => [],
   },
 );
 
 const emit = defineEmits<{
   'update:prompt': [value: string];
   'update:files': [value: File[]];
+  'update:artifacts': [value: SessionFile[]];
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];

@@ -569,45 +569,6 @@ func (s *Store) DeleteArtifactOutputDirectory(ctx context.Context, sessionID ses
 	return removeDir(path)
 }
 
-func (s *Store) CopyArtifactToInput(ctx context.Context, artifact session.SessionFile) (session.SessionFile, error) {
-	if artifact.Role != session.FileRoleArtifact || artifact.DeletedAt != nil {
-		return session.SessionFile{}, &Error{Code: "artifact_unavailable", Path: artifact.Path}
-	}
-	if !s.underAttachments(artifact.Path) {
-		return session.SessionFile{}, &Error{Code: "outside_attachment_root", Path: artifact.Path}
-	}
-	info, err := os.Lstat(artifact.Path)
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: artifact.Path, Err: err}
-	}
-	if !info.Mode().IsRegular() {
-		return session.SessionFile{}, &Error{Code: "not_regular_file", Path: artifact.Path}
-	}
-	source, err := os.Open(artifact.Path)
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: artifact.Path, Err: err}
-	}
-	defer source.Close()
-	staged, err := s.Stage(ctx, session.StageAttachmentInput{
-		Filename: artifact.Filename,
-		MimeType: artifact.MimeType,
-		Reader:   source,
-	})
-	if err != nil {
-		return session.SessionFile{}, err
-	}
-	input, err := s.Promote(ctx, staged, artifact.SessionID)
-	if err != nil {
-		_ = s.DeleteStaged(context.WithoutCancel(ctx), staged.ID)
-		return session.SessionFile{}, err
-	}
-	input.Role = session.FileRoleInput
-	input.SourceType = session.AttachmentSourceArtifactCopy
-	input.SourceID = string(artifact.ID)
-	input.Kind = "file"
-	return input, nil
-}
-
 func (s *Store) DeleteQuarantine(ctx context.Context, quarantinePath string) error {
 	if err := ctx.Err(); err != nil {
 		return &Error{Code: "canceled", Path: quarantinePath, Err: err}

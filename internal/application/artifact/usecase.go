@@ -34,7 +34,6 @@ type UseCase interface {
 	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error)
 	Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
 	Delete(ctx context.Context, id session.SessionFileID) (session.SessionFile, error)
-	UseAsInput(ctx context.Context, id session.SessionFileID) (session.SessionFile, error)
 	ReadMCPContent(ctx context.Context, id session.SessionFileID) (MCPContent, bool, error)
 	ReconcileQuarantines(ctx context.Context) (int, error)
 	ReconcileOutputs(ctx context.Context) (int, error)
@@ -691,28 +690,6 @@ func artifactPreviewURL(artifact session.SessionFile) string {
 		return ""
 	}
 	return "/files/" + string(artifact.ID) + "/preview"
-}
-
-func (s *Service) UseAsInput(ctx context.Context, id session.SessionFileID) (session.SessionFile, error) {
-	if s == nil || s.repo == nil || s.store == nil || s.attachments == nil {
-		return session.SessionFile{}, errors.New("artifact usecase is not configured")
-	}
-	artifact, err := s.repo.FindSessionAttachment(ctx, id)
-	if err != nil {
-		return session.SessionFile{}, fmt.Errorf("find artifact: %w", err)
-	}
-	if artifact.Role != session.FileRoleArtifact || artifact.DeletedAt != nil {
-		return session.SessionFile{}, errors.New("artifact is unavailable")
-	}
-	input, err := s.store.CopyArtifactToInput(ctx, artifact)
-	if err != nil {
-		return session.SessionFile{}, fmt.Errorf("copy artifact as input: %w", err)
-	}
-	if err := s.repo.SaveSessionAttachment(ctx, input); err != nil {
-		cleanupErr := s.attachments.DeleteSession(context.WithoutCancel(ctx), input.ID)
-		return session.SessionFile{}, errors.Join(err, cleanupErr)
-	}
-	return input, nil
 }
 
 func (s *Service) ReadMCPContent(ctx context.Context, id session.SessionFileID) (MCPContent, bool, error) {

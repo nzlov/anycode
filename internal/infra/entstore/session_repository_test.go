@@ -344,6 +344,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		ID:        "append-1",
 		SessionID: input.ID,
 		Body:      "continue with tests",
+		ArtifactIDs: []session.SessionFileID{
+			"artifact-2", "artifact-1",
+		},
 		Status:    session.PromptAppendPending,
 		CreatedAt: appendAt,
 	}); err != nil {
@@ -355,6 +358,9 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 	}
 	if len(appends) != 1 || appends[0].SessionID != input.ID || appends[0].Body != "continue with tests" || appends[0].Status != session.PromptAppendPending {
 		t.Fatalf("prompt append mismatch: %#v", appends)
+	}
+	if len(appends[0].ArtifactIDs) != 2 || appends[0].ArtifactIDs[0] != "artifact-2" || appends[0].ArtifactIDs[1] != "artifact-1" {
+		t.Fatalf("prompt append artifact ids = %#v", appends[0].ArtifactIDs)
 	}
 	pending, err := repo.ListPendingPromptAppends(ctx, input.ID)
 	if err != nil {

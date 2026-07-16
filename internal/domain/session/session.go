@@ -16,6 +16,7 @@ var (
 	ErrInvalidQueueIntent      = errors.New("invalid session queue intent")
 	ErrInvalidWorktreeCleanup  = errors.New("invalid worktree cleanup transition")
 	ErrWorktreeUnavailable     = errors.New("session worktree is unavailable")
+	ErrSessionFileNotFound     = errors.New("session file not found")
 )
 
 type ID string
@@ -38,7 +39,6 @@ const (
 	AttachmentSourcePlaywright   AttachmentSourceType = "playwright_artifact"
 	AttachmentSourcePublished    AttachmentSourceType = "published_artifact"
 	AttachmentSourceReconciled   AttachmentSourceType = "reconciled_artifact"
-	AttachmentSourceArtifactCopy AttachmentSourceType = "artifact_input"
 )
 
 type FileRole string
@@ -583,6 +583,8 @@ type PromptAppend struct {
 	DispatchedProcessRunID string
 	CreatedAt              time.Time
 	Attachments            []SessionAttachment
+	ArtifactIDs            []SessionFileID
+	Artifacts              []SessionFile
 }
 
 type MergeRecord struct {
@@ -720,7 +722,6 @@ type ArtifactStore interface {
 	ListArtifactQuarantines(ctx context.Context) ([]ArtifactQuarantine, error)
 	ListArtifactOutputDirectories(ctx context.Context) ([]ArtifactOutputDirectory, error)
 	DeleteArtifactOutputDirectory(ctx context.Context, sessionID ID) error
-	CopyArtifactToInput(ctx context.Context, artifact SessionFile) (SessionFile, error)
 }
 
 type WorktreeManager interface {

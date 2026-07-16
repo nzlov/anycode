@@ -678,6 +678,17 @@ func TestBuildArgsOmitServiceTierWhenFastModeIsDisabled(t *testing.T) {
 	}
 }
 
+func TestBuildResumeArgsIncludesImagePaths(t *testing.T) {
+	args := New("codex").buildResumeArgs(process.CodexResumeInput{
+		CodexSessionID: "codex-session-1",
+		ImagePaths:     []string{"/archive/first.png", "", "/archive/second.png"},
+	})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "-i /archive/first.png -i /archive/second.png") {
+		t.Fatalf("resume args = %q", joined)
+	}
+}
+
 func TestArtifactDirectoryIsWritableAndInjectedAcrossStartAndResume(t *testing.T) {
 	client := New("codex")
 	artifactDir := "/data/attachments/outputs/session-1"

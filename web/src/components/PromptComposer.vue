@@ -14,13 +14,13 @@
         v-if="showBadge"
         rounded
         class="attachment-count-badge"
-        :label="files.length > 0 ? `${files.length} 个附件` : '可附加上下文'"
+        :label="attachmentCount > 0 ? `${attachmentCount} 个附件` : '可附加上下文'"
       />
     </div>
 
     <div v-if="showAttachmentZone" class="attachment-zone">
       <div class="text-caption text-muted">附件</div>
-      <div v-if="files.length > 0" class="attachment-list">
+      <div v-if="attachmentCount > 0" class="attachment-list">
         <q-chip
           v-for="file in files"
           :key="`${file.name}-${file.size}-${file.lastModified}`"
@@ -35,6 +35,18 @@
         >
           <span class="ellipsis">{{ file.name }}</span>
           <q-icon v-if="canPreview(file)" name="visibility" class="q-ml-sm" />
+        </q-chip>
+        <q-chip
+          v-for="artifact in artifacts"
+          :key="artifact.id"
+          removable
+          square
+          :disable="disabled"
+          class="attachment-chip"
+          :icon="artifactIcon(artifact)"
+          @remove="removeArtifact(artifact)"
+        >
+          <span class="ellipsis">{{ artifact.logicalPath || artifact.filename }}</span>
         </q-chip>
       </div>
       <div v-else class="text-caption text-muted attachment-empty">松开添加附件</div>
@@ -156,11 +168,13 @@ import { useQuasar } from 'quasar';
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
 import type { CodexModelOption } from '@/components/promptOptions';
 import { filesFromTransfer } from '@/services/promptAttachments';
+import type { SessionFile } from '@/services/sessionFiles';
 
 const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
+    artifacts?: SessionFile[];
     model: string;
     effort: string;
     permission: string;
@@ -183,12 +197,14 @@ const props = withDefaults(
     forceConfigMenu: false,
     readonlyConfig: false,
     modelOptions: () => [],
+    artifacts: () => [],
   },
 );
 
 const emit = defineEmits<{
   'update:prompt': [value: string];
   'update:files': [value: File[]];
+  'update:artifacts': [value: SessionFile[]];
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];
@@ -213,11 +229,21 @@ const filesModel = computed({
   set: (value: File[] | File | null) =>
     emit('update:files', Array.isArray(value) ? value : value ? [value] : []),
 });
-const showAttachmentZone = computed(() => props.files.length > 0 || draggingFiles.value);
+const attachmentCount = computed(() => props.files.length + props.artifacts.length);
+const showAttachmentZone = computed(() => attachmentCount.value > 0 || draggingFiles.value);
 
 function fileIcon(file: File) {
   if (file.type.startsWith('image/')) return 'image';
   if (file.type.startsWith('video/')) return 'movie';
+  return 'description';
+}
+
+function artifactIcon(artifact: SessionFile) {
+  if (artifact.artifactKind === 'image') return 'image';
+  if (artifact.artifactKind === 'video') return 'movie';
+  if (artifact.artifactKind === 'audio') return 'audio_file';
+  if (artifact.artifactKind === 'archive') return 'folder_zip';
+  if (artifact.artifactKind === 'pdf') return 'picture_as_pdf';
   return 'description';
 }
 
@@ -252,6 +278,14 @@ function removeFile(file: File) {
   emit(
     'update:files',
     props.files.filter((item) => item !== file),
+  );
+}
+
+function removeArtifact(artifact: SessionFile) {
+  if (props.disabled) return;
+  emit(
+    'update:artifacts',
+    props.artifacts.filter((item) => item.id !== artifact.id),
   );
 }
 

@@ -17,6 +17,8 @@ const (
 	FieldSessionID = "session_id"
 	// FieldBody holds the string denoting the body field in the database.
 	FieldBody = "body"
+	// FieldArtifactIds holds the string denoting the artifact_ids field in the database.
+	FieldArtifactIds = "artifact_ids"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldDispatchedAt holds the string denoting the dispatched_at field in the database.
@@ -34,6 +36,7 @@ var Columns = []string{
 	FieldID,
 	FieldSessionID,
 	FieldBody,
+	FieldArtifactIds,
 	FieldStatus,
 	FieldDispatchedAt,
 	FieldDispatchedProcessRunID,
@@ -55,6 +58,8 @@ var (
 	SessionIDValidator func(string) error
 	// DefaultBody holds the default value on creation for the "body" field.
 	DefaultBody string
+	// DefaultArtifactIds holds the default value on creation for the "artifact_ids" field.
+	DefaultArtifactIds []string
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// DefaultDispatchedProcessRunID holds the default value on creation for the "dispatched_process_run_id" field.

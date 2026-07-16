@@ -154,6 +154,7 @@ type CodexResumeInput struct {
 	ReasoningEffort string
 	PermissionMode  string
 	FastMode        bool
+	ImagePaths      []string
 }
 
 type CodexHandle struct {

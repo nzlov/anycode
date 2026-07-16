@@ -283,11 +283,16 @@ func mapPromptAppend(dto sessionapp.PromptAppendDTO) *model.PromptAppend {
 	for _, attachment := range dto.Attachments {
 		attachments = append(attachments, mapSessionAttachment(attachment))
 	}
+	artifacts := make([]*model.SessionFile, 0, len(dto.Artifacts))
+	for _, artifact := range dto.Artifacts {
+		artifacts = append(artifacts, mapSessionFile(artifact))
+	}
 	return &model.PromptAppend{
 		ID:          dto.ID,
 		SessionID:   string(dto.SessionID),
 		Body:        dto.Body,
 		Attachments: attachments,
+		Artifacts:   artifacts,
 		CreatedAt:   dto.CreatedAt,
 	}
 }

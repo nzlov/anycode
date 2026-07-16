@@ -100,15 +100,15 @@
           <q-item-section side class="artifact-list-item__side">
             <div class="artifact-actions">
               <q-btn
+                v-if="allowReference"
                 flat
                 round
                 dense
-                icon="input"
-                aria-label="作为输入使用"
-                :loading="copyingId === file.id"
-                @click.stop="copyAsInput(file)"
+                icon="add_link"
+                aria-label="引用到当前提示"
+                @click.stop="emit('referenceArtifact', file)"
               >
-                <q-tooltip>作为输入使用</q-tooltip>
+                <q-tooltip>引用到当前提示</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -282,7 +282,6 @@ import {
   downloadSessionFile,
   fetchSessionFile,
   listSessionFiles,
-  useSessionFileAsInput,
   type SessionFile,
   type SessionArtifactFocusRequest,
 } from '@/services/sessionFiles';
@@ -293,12 +292,14 @@ const props = withDefaults(
     refreshKey?: string;
     focusRequest?: SessionArtifactFocusRequest | null;
     inlinePreview?: boolean;
+    allowReference?: boolean;
   }>(),
-  { refreshKey: '', focusRequest: null, inlinePreview: false },
+  { refreshKey: '', focusRequest: null, inlinePreview: false, allowReference: false },
 );
 const emit = defineEmits<{
-  artifactDeleted: [logicalPath: string];
+  artifactDeleted: [file: SessionFile];
   artifactsRefreshed: [];
+  referenceArtifact: [file: SessionFile];
 }>();
 const files = ref<SessionFile[]>([]);
 const panelElement = ref<HTMLElement | null>(null);
@@ -310,7 +311,6 @@ const source = ref<string | null>(null);
 const sort = ref('created_at_desc');
 const deletingId = ref('');
 const downloadingId = ref('');
-const copyingId = ref('');
 const previewOpen = ref(false);
 const selected = ref<SessionFile | null>(null);
 const previewLoading = ref(false);
@@ -448,18 +448,6 @@ async function download(file: SessionFile) {
   }
 }
 
-async function copyAsInput(file: SessionFile) {
-  copyingId.value = file.id;
-  try {
-    await useSessionFileAsInput(file.id);
-    Notify.create({ type: 'positive', message: `已将 ${file.filename} 复制为会话输入` });
-  } catch (err) {
-    Notify.create({ type: 'negative', message: errorMessage(err, '复制输入文件失败') });
-  } finally {
-    copyingId.value = '';
-  }
-}
-
 function confirmDelete(file: SessionFile) {
   Dialog.create({
     title: '删除产物',
@@ -479,7 +467,7 @@ async function remove(file: SessionFile) {
     }
     if (focusedId.value === file.id) focusedId.value = '';
     await load();
-    emit('artifactDeleted', file.logicalPath);
+    emit('artifactDeleted', file);
   } catch (err) {
     Notify.create({ type: 'negative', message: errorMessage(err, '删除文件失败') });
   } finally {

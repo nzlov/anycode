@@ -107,6 +107,7 @@ type AppendPromptInput struct {
 	SessionID           domain.ID
 	Body                string
 	StagedAttachmentIDs []domain.StagedAttachmentID
+	ArtifactIDs         []domain.SessionFileID
 }
 
 type UpdatePromptAppendInput struct {
@@ -232,6 +233,7 @@ type PromptAppendDTO struct {
 	Body        string
 	CreatedAt   time.Time
 	Attachments []domain.SessionAttachment
+	Artifacts   []domain.SessionFile
 }
 
 type WorkflowRunDTO struct {
@@ -3543,6 +3545,8 @@ type codexStartOptions struct {
 	prompt                  string
 	fallbackPrompt          string
 	promptAppendIDs         []string
+	promptAttachmentPaths   []string
+	promptImagePaths        []string
 	queueKind               domain.QueueKind
 	workflowResultRetry     bool
 	resumeAcknowledged      bool
@@ -3827,6 +3831,10 @@ func (s *Service) enqueueCodex(ctx context.Context, session domain.Session, opti
 
 func (s *Service) startCodexNow(ctx context.Context, session domain.Session, options codexStartOptions, workdir string, maxActive int) (DTO, error) {
 	resolved, err := s.resolveCodexInput(ctx, session, options)
+	if errors.Is(err, errNoEffectivePromptAppend) {
+		s.releaseWorkdir(workdir, session.ID)
+		return s.settleEmptyPromptAppendQueue(ctx, session)
+	}
 	if err != nil {
 		return DTO{}, err
 	}
@@ -4406,6 +4414,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
 			PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
 			FastMode:        session.Config.FastMode,
+			ImagePaths:      append([]string(nil), options.promptImagePaths...),
 		})
 		if errors.Is(err, processdomain.ErrTranscriptUnavailable) && options.queueKind == domain.QueueKindPromptAppend {
 			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
@@ -4413,11 +4422,15 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		return handle, err
 	}
 	prompt = promptWithArtifactGuidance(prompt, artifactDir)
+	attachmentPaths = appendUniqueStrings(attachmentPaths, options.promptAttachmentPaths...)
+	imagePaths = appendUniqueStrings(imagePaths, options.promptImagePaths...)
 	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, attachmentPaths, imagePaths))
 }
 
 func (s *Service) startCodexFallback(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string, artifactDir string, attachmentPaths []string, imagePaths []string) (processdomain.CodexHandle, error) {
 	prompt := promptWithArtifactGuidance(options.fallbackPrompt, artifactDir)
+	attachmentPaths = appendUniqueStrings(attachmentPaths, options.promptAttachmentPaths...)
+	imagePaths = appendUniqueStrings(imagePaths, options.promptImagePaths...)
 	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, attachmentPaths, imagePaths))
 }
 
@@ -4453,19 +4466,40 @@ func pendingPromptRequiredError(sessionID domain.ID) error {
 		WithDetails(map[string]any{"sessionId": string(sessionID)})
 }
 
+var errNoEffectivePromptAppend = errors.New("no effective prompt append")
+
+func (s *Service) settleEmptyPromptAppendQueue(ctx context.Context, session domain.Session) (DTO, error) {
+	if session.Status != domain.StatusQueued || session.Queue.Kind != domain.QueueKindPromptAppend {
+		return toDTO(session), nil
+	}
+	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+		return DTO{}, err
+	}
+	if err := s.saveSessionWithEvent(ctx, session, "session.prompt_append_cancelled", map[string]any{"reason": "attachments_unavailable"}); err != nil {
+		return DTO{}, err
+	}
+	s.scheduleQueueDrain()
+	return toDTO(session), nil
+}
+
 func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session, options codexStartOptions) (codexStartOptions, error) {
 	appends, err := s.repo.ListPromptAppends(ctx, session.ID)
 	if err != nil {
 		return codexStartOptions{}, fmt.Errorf("list prompt appends: %w", err)
 	}
-	pendingPrompt, pendingIDs, err := s.pendingPromptInput(ctx, session.ID, appends)
+	pendingPrompt, pendingIDs, attachmentPaths, imagePaths, cancelledIDs, err := s.pendingPromptInput(ctx, session.ID, appends)
 	if err != nil {
 		return codexStartOptions{}, err
+	}
+	for _, id := range cancelledIDs {
+		if err := s.repo.DeletePromptAppend(ctx, id); err != nil {
+			return codexStartOptions{}, fmt.Errorf("cancel empty prompt append %s: %w", id, err)
+		}
 	}
 	prompt := strings.TrimSpace(options.prompt)
 	if options.queueKind == domain.QueueKindPromptAppend {
 		if len(pendingIDs) == 0 {
-			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
+			return codexStartOptions{}, errNoEffectivePromptAppend
 		}
 		options.fallbackPrompt = rebuiltSessionPrompt(session, prompt, true, appends)
 		if options.resumeCodexSessionID != "" {
@@ -4477,6 +4511,8 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 		prompt = rebuiltSessionPrompt(session, prompt, true, appends)
 	} else if session.Mode == domain.ModeWorkflow {
 		pendingIDs = nil
+		attachmentPaths = nil
+		imagePaths = nil
 	} else if options.resumeCodexSessionID != "" {
 		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && len(pendingIDs) == 0 {
 			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
@@ -4490,29 +4526,60 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	}
 	options.prompt = prompt
 	options.promptAppendIDs = pendingIDs
+	options.promptAttachmentPaths = attachmentPaths
+	options.promptImagePaths = imagePaths
 	return options, nil
 }
 
-func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) (string, []string, error) {
+func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) (string, []string, []string, []string, []string, error) {
 	parts := make([]string, 0, len(appends))
 	ids := make([]string, 0, len(appends))
+	attachmentPaths := make([]string, 0)
+	imagePaths := make([]string, 0)
+	cancelledIDs := make([]string, 0)
 	for _, promptAppend := range appends {
 		if promptAppend.Status != domain.PromptAppendPending {
 			continue
 		}
-		body := strings.TrimSpace(promptAppend.Body)
-		if body == "" {
-			continue
-		}
 		attachments, err := s.listPromptAppendAttachments(ctx, sessionID, promptAppend.ID)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, nil, nil, err
 		}
-		paths, _ := attachmentPathsFromAttachments(attachments)
+		artifacts, err := s.resolvePromptArtifacts(ctx, sessionID, promptAppend.ArtifactIDs, true)
+		if err != nil {
+			return "", nil, nil, nil, nil, err
+		}
+		files := append(append([]domain.SessionFile(nil), attachments...), artifacts...)
+		body := strings.TrimSpace(promptAppend.Body)
+		if body == "" && len(files) == 0 {
+			cancelledIDs = append(cancelledIDs, promptAppend.ID)
+			continue
+		}
+		paths, currentImagePaths := attachmentPathsFromAttachments(files)
 		parts = append(parts, promptWithAttachments(body, paths))
+		attachmentPaths = appendUniqueStrings(attachmentPaths, paths...)
+		imagePaths = appendUniqueStrings(imagePaths, currentImagePaths...)
 		ids = append(ids, promptAppend.ID)
 	}
-	return strings.Join(parts, "\n\n"), ids, nil
+	return strings.Join(parts, "\n\n"), ids, attachmentPaths, imagePaths, cancelledIDs, nil
+}
+
+func appendUniqueStrings(values []string, additions ...string) []string {
+	seen := make(map[string]struct{}, len(values)+len(additions))
+	for _, value := range values {
+		seen[value] = struct{}{}
+	}
+	for _, value := range additions {
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	return values
 }
 
 func joinPromptParts(parts ...string) string {
@@ -4605,8 +4672,11 @@ func promptWithAttachments(prompt string, paths []string) string {
 		return prompt
 	}
 	var builder strings.Builder
-	builder.WriteString(prompt)
-	builder.WriteString("\n\nAttached files available on disk:\n")
+	if prompt = strings.TrimSpace(prompt); prompt != "" {
+		builder.WriteString(prompt)
+		builder.WriteString("\n\n")
+	}
+	builder.WriteString("Attached files available on disk:\n")
 	for _, path := range paths {
 		builder.WriteString("- ")
 		builder.WriteString(path)
@@ -7556,15 +7626,18 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, errors.New("session id is required")
 	}
 	body := strings.TrimSpace(input.Body)
+	artifactIDs, err := normalizeArtifactIDs(input.ArtifactIDs)
+	if err != nil {
+		return PromptAppendDTO{}, err
+	}
 	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
 	if body == "" {
-		if len(stagedAttachments) == 0 {
+		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 {
 			return PromptAppendDTO{}, errors.New("prompt append body is required")
 		}
-		body = "追加附件"
 	}
 	var append domain.PromptAppend
 	err = s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) (err error) {
@@ -7590,6 +7663,10 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		if err := requireActiveWorktree(session); err != nil {
 			return err
 		}
+		artifacts, err := s.resolvePromptArtifacts(ctx, input.SessionID, artifactIDs, false)
+		if err != nil {
+			return err
+		}
 		id, err := s.generateID()
 		if err != nil {
 			return fmt.Errorf("generate prompt append id: %w", err)
@@ -7605,6 +7682,8 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			Status:      domain.PromptAppendPending,
 			CreatedAt:   s.now(),
 			Attachments: archivedAttachments,
+			ArtifactIDs: artifactIDs,
+			Artifacts:   artifacts,
 		}
 		if session.Mode == domain.ModeChat && session.Status == domain.StatusStopped {
 			options := codexStartOptions{queueKind: domain.QueueKindPromptAppend}
@@ -7641,6 +7720,52 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 		return PromptAppendDTO{}, err
 	}
 	return toPromptAppendDTO(append), nil
+}
+
+func normalizeArtifactIDs(ids []domain.SessionFileID) ([]domain.SessionFileID, error) {
+	seen := make(map[domain.SessionFileID]struct{}, len(ids))
+	result := make([]domain.SessionFileID, 0, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "artifact id is required")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		result = append(result, id)
+	}
+	return result, nil
+}
+
+func (s *Service) resolvePromptArtifacts(ctx context.Context, sessionID domain.ID, ids []domain.SessionFileID, allowMissing bool) ([]domain.SessionFile, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if s.attachments == nil {
+		return nil, errors.New("attachment repository is required")
+	}
+	artifacts := make([]domain.SessionFile, 0, len(ids))
+	for _, id := range ids {
+		artifact, err := s.attachments.FindSessionAttachment(ctx, id)
+		if err != nil {
+			if errors.Is(err, domain.ErrSessionFileNotFound) {
+				if allowMissing {
+					continue
+				}
+				return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "artifact is unavailable").WithDetails(map[string]any{"artifactId": string(id)})
+			}
+			return nil, fmt.Errorf("find prompt artifact %s: %w", id, err)
+		}
+		if artifact.SessionID != sessionID || artifact.Role != domain.FileRoleArtifact || artifact.DeletedAt != nil {
+			if allowMissing {
+				continue
+			}
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "artifact is unavailable").WithDetails(map[string]any{"artifactId": string(id)})
+		}
+		artifacts = append(artifacts, artifact)
+	}
+	return artifacts, nil
 }
 
 func (s *Service) UpdatePromptAppend(ctx context.Context, input UpdatePromptAppendInput) (PromptAppendDTO, error) {
@@ -7710,6 +7835,11 @@ func (s *Service) UpdatePromptAppend(ctx context.Context, input UpdatePromptAppe
 			return err
 		}
 		updated.Attachments = attachments
+		artifacts, err := s.resolvePromptArtifacts(ctx, input.SessionID, updated.ArtifactIDs, true)
+		if err != nil {
+			return err
+		}
+		updated.Artifacts = artifacts
 		return nil
 	})
 	if err != nil {
@@ -8169,6 +8299,9 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 		return DetailDTO{}, err
 	}
 	appends = attachPromptAppendAttachments(appends, attachments)
+	if err := s.attachPromptAppendArtifacts(ctx, id, appends); err != nil {
+		return DetailDTO{}, err
+	}
 	currentNodeTitle, pendingApproval, err := s.currentNodeState(ctx, session)
 	if err != nil {
 		return DetailDTO{}, err
@@ -8510,6 +8643,17 @@ func attachPromptAppendAttachments(appends []domain.PromptAppend, attachments []
 	return appends
 }
 
+func (s *Service) attachPromptAppendArtifacts(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) error {
+	for index := range appends {
+		artifacts, err := s.resolvePromptArtifacts(ctx, sessionID, appends[index].ArtifactIDs, true)
+		if err != nil {
+			return fmt.Errorf("resolve prompt append artifacts: %w", err)
+		}
+		appends[index].Artifacts = artifacts
+	}
+	return nil
+}
+
 func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {
 	return PromptAppendDTO{
 		ID:          append.ID,
@@ -8517,6 +8661,7 @@ func toPromptAppendDTO(append domain.PromptAppend) PromptAppendDTO {
 		Body:        append.Body,
 		CreatedAt:   append.CreatedAt,
 		Attachments: append.Attachments,
+		Artifacts:   append.Artifacts,
 	}
 }
 

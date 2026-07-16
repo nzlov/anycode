@@ -275,7 +275,7 @@ func TestUnitOfWorkDeletesSessionArtifactsAndPreservesInputs(t *testing.T) {
 	files := []session.SessionFile{
 		{ID: "artifact-1", SessionID: card.ID, Role: session.FileRoleArtifact, SourceType: session.AttachmentSourceCodex, SourceID: "run-1", SourceKey: "source-1", LogicalPath: "one.txt", Filename: "one.txt", Path: "/archive/one.txt", CreatedAt: now},
 		{ID: "artifact-2", SessionID: card.ID, Role: session.FileRoleArtifact, SourceType: session.AttachmentSourceCodex, SourceID: "run-1", SourceKey: "source-2", LogicalPath: "two.txt", Filename: "two.txt", Path: "/archive/two.txt", CreatedAt: now.Add(time.Second)},
-		{ID: "input-1", SessionID: card.ID, Role: session.FileRoleInput, SourceType: session.AttachmentSourceArtifactCopy, SourceID: "artifact-1", Filename: "one.txt", Path: "/inputs/one.txt", CreatedAt: now.Add(2 * time.Second)},
+		{ID: "input-1", SessionID: card.ID, Role: session.FileRoleInput, SourceType: session.AttachmentSourceRequirement, SourceID: "requirement", Filename: "one.txt", Path: "/inputs/one.txt", CreatedAt: now.Add(2 * time.Second)},
 	}
 	for _, file := range files {
 		if err := store.Attachments().SaveSessionAttachment(ctx, file); err != nil {

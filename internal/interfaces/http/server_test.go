@@ -969,10 +969,6 @@ func (u *fakeArtifactUseCase) Delete(context.Context, sessiondomain.SessionAttac
 	return sessiondomain.SessionAttachment{}, nil
 }
 
-func (u *fakeArtifactUseCase) UseAsInput(context.Context, sessiondomain.SessionAttachmentID) (sessiondomain.SessionAttachment, error) {
-	return sessiondomain.SessionAttachment{}, nil
-}
-
 func (u *fakeArtifactUseCase) ReadMCPContent(context.Context, sessiondomain.SessionFileID) (artifactapp.MCPContent, bool, error) {
 	return artifactapp.MCPContent{Type: "image", MIMEType: "image/png", Data: []byte("png")}, true, nil
 }

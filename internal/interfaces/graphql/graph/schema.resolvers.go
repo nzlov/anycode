@@ -251,10 +251,15 @@ func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendP
 	for _, id := range input.StagedAttachmentIds {
 		stagedAttachmentIDs = append(stagedAttachmentIDs, sessiondomain.StagedAttachmentID(id))
 	}
+	artifactIDs := make([]sessiondomain.SessionFileID, 0, len(input.ArtifactIds))
+	for _, id := range input.ArtifactIds {
+		artifactIDs = append(artifactIDs, sessiondomain.SessionFileID(id))
+	}
 	dto, err := r.UseCases.Sessions.AppendPrompt(ctx, sessionapp.AppendPromptInput{
 		SessionID:           sessiondomain.ID(input.SessionID),
 		Body:                input.Body,
 		StagedAttachmentIDs: stagedAttachmentIDs,
+		ArtifactIDs:         artifactIDs,
 	})
 	if err != nil {
 		return nil, err
@@ -322,18 +327,6 @@ func (r *mutationResolver) DeleteSessionFile(ctx context.Context, id string) (bo
 		return false, err
 	}
 	return true, nil
-}
-
-// UseSessionFileAsInput is the resolver for the useSessionFileAsInput field.
-func (r *mutationResolver) UseSessionFileAsInput(ctx context.Context, id string) (*model.SessionAttachment, error) {
-	if r.UseCases.Artifacts == nil {
-		return nil, missingUseCase("artifacts")
-	}
-	input, err := r.UseCases.Artifacts.UseAsInput(ctx, sessiondomain.SessionAttachmentID(id))
-	if err != nil {
-		return nil, err
-	}
-	return mapSessionAttachment(input), nil
 }
 
 // SaveWorkflowDefinition is the resolver for the saveWorkflowDefinition field.

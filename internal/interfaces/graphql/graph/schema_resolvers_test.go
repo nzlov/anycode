@@ -932,7 +932,7 @@ func TestMutationCreateSessionPreservesNullableFastMode(t *testing.T) {
 	}
 }
 
-func TestMutationAppendPromptForwardsStagedAttachmentIDs(t *testing.T) {
+func TestMutationAppendPromptForwardsFileIDs(t *testing.T) {
 	sessions := &fakeSessionUseCase{
 		appendResult: sessionapp.PromptAppendDTO{
 			ID:        "append-1",
@@ -947,6 +947,7 @@ func TestMutationAppendPromptForwardsStagedAttachmentIDs(t *testing.T) {
 		SessionID:           "session-1",
 		Body:                "continue",
 		StagedAttachmentIds: []string{"staged-1", "staged-2"},
+		ArtifactIds:         []string{"artifact-1", "artifact-2"},
 	})
 	if err != nil {
 		t.Fatalf("AppendPrompt() error = %v", err)
@@ -956,6 +957,9 @@ func TestMutationAppendPromptForwardsStagedAttachmentIDs(t *testing.T) {
 	}
 	if len(sessions.gotAppend.StagedAttachmentIDs) != 2 || sessions.gotAppend.StagedAttachmentIDs[0] != "staged-1" || sessions.gotAppend.StagedAttachmentIDs[1] != "staged-2" {
 		t.Fatalf("AppendPrompt() staged ids = %#v", sessions.gotAppend.StagedAttachmentIDs)
+	}
+	if len(sessions.gotAppend.ArtifactIDs) != 2 || sessions.gotAppend.ArtifactIDs[0] != "artifact-1" || sessions.gotAppend.ArtifactIDs[1] != "artifact-2" {
+		t.Fatalf("AppendPrompt() artifact ids = %#v", sessions.gotAppend.ArtifactIDs)
 	}
 }
 

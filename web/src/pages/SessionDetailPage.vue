@@ -95,6 +95,7 @@
             v-else
             v-model:prompt="appendText"
             v-model:files="appendFiles"
+            v-model:artifacts="appendArtifacts"
             v-model:model="composerModel"
             v-model:effort="composerEffort"
             v-model:permission="composerPermission"
@@ -387,6 +388,19 @@
                           :label="attachment.filename"
                         />
                       </div>
+                      <div v-if="item.artifacts.length" class="append-history__attachments">
+                        <q-chip
+                          v-for="artifact in item.artifacts"
+                          :key="artifact.id"
+                          dense
+                          square
+                          outline
+                          icon="link"
+                          color="primary"
+                          text-color="primary"
+                          :label="artifact.logicalPath || artifact.filename"
+                        />
+                      </div>
                       <q-item-label caption>{{ item.time }}</q-item-label>
                     </q-item-section>
                     <q-item-section side>
@@ -417,7 +431,13 @@
             </q-tab-panel>
 
             <q-tab-panel name="artifacts">
-              <SessionArtifactsPanel :session-id="sessionId" :refresh-key="artifactRefreshKey" />
+              <SessionArtifactsPanel
+                :session-id="sessionId"
+                :refresh-key="artifactRefreshKey"
+                allow-reference
+                @reference-artifact="referenceArtifact"
+                @artifact-deleted="handleArtifactDeleted"
+              />
             </q-tab-panel>
           </q-tab-panels>
         </q-card>
@@ -464,7 +484,10 @@
             label="追加提示正文"
             :disable="promptEditSaving"
           />
-          <div v-if="promptEditTarget?.attachments.length" class="prompt-edit-dialog__attachments">
+          <div
+            v-if="promptEditTarget?.attachments.length || promptEditTarget?.artifacts.length"
+            class="prompt-edit-dialog__attachments"
+          >
             <div class="text-caption text-muted">附件保持不变</div>
             <div class="append-history__attachments">
               <q-chip
@@ -477,6 +500,17 @@
                 color="primary"
                 text-color="primary"
                 :label="attachment.filename"
+              />
+              <q-chip
+                v-for="artifact in promptEditTarget.artifacts"
+                :key="artifact.id"
+                dense
+                square
+                outline
+                icon="link"
+                color="primary"
+                text-color="primary"
+                :label="artifact.logicalPath || artifact.filename"
               />
             </div>
           </div>
@@ -523,6 +557,7 @@ import {
 } from '@/services/sessionStatusPresentation';
 import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
+import type { SessionFile } from '@/services/sessionFiles';
 import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 import type { TranscriptTokenUsage } from '@/services/sessionTimeline';
@@ -555,6 +590,7 @@ const rightPanelWidth = computed(() =>
 const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
+const appendArtifacts = ref<SessionFile[]>([]);
 const appendUploading = ref(false);
 const promptEditDialogOpen = ref(false);
 const promptEditTarget = ref<PromptAppend | null>(null);
@@ -728,7 +764,11 @@ const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;
   if (current.status === 'closed') return null;
-  if (appendText.value.trim().length > 0 || appendFiles.value.length > 0) {
+  if (
+    appendText.value.trim().length > 0 ||
+    appendFiles.value.length > 0 ||
+    appendArtifacts.value.length > 0
+  ) {
     return {
       icon: 'send',
       color: 'primary',
@@ -936,6 +976,7 @@ async function sendAppend() {
   if (isClosed.value || appendUploading.value || appending.value) return;
   const text = appendText.value;
   const selectedFiles = [...appendFiles.value];
+  const selectedArtifacts = [...appendArtifacts.value];
   const stagedAttachmentIds: string[] = [];
   let phase: 'upload' | 'append' = selectedFiles.length > 0 ? 'upload' : 'append';
   appendUploading.value = selectedFiles.length > 0;
@@ -947,9 +988,15 @@ async function sendAppend() {
     }
     appendUploading.value = false;
     phase = 'append';
-    await appendDescription(text, stagedAttachmentIds);
+    // GLUE: uploads become staged IDs while archived artifacts already have session file IDs.
+    await appendDescription(
+      text,
+      stagedAttachmentIds,
+      selectedArtifacts.map((artifact) => artifact.id),
+    );
     appendText.value = '';
     appendFiles.value = [];
+    appendArtifacts.value = [];
   } catch (err) {
     appendUploading.value = false;
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
@@ -957,6 +1004,17 @@ async function sendAppend() {
   } finally {
     appendUploading.value = false;
   }
+}
+
+function referenceArtifact(artifact: SessionFile) {
+  if (!appendArtifacts.value.some((item) => item.id === artifact.id)) {
+    appendArtifacts.value = [...appendArtifacts.value, artifact];
+  }
+  if ($q.screen.lt.md) detailView.value = 'session';
+}
+
+function handleArtifactDeleted(artifact: SessionFile) {
+  appendArtifacts.value = appendArtifacts.value.filter((item) => item.id !== artifact.id);
 }
 
 async function executeWithComposerConfig() {
