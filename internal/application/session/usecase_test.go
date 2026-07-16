@@ -4308,7 +4308,7 @@ func TestAppendPromptQueuesStoppedChatInOneUnitOfWork(t *testing.T) {
 		t.Fatalf("prompt appends = %#v", repo.appends)
 	}
 	queued := repo.sessions["session-1"]
-	if queued.Status != domain.StatusQueued || queued.Queue.Kind != domain.QueueKindResume || queued.Queue.ResumeCodexSessionID != "codex-session-1" {
+	if queued.Status != domain.StatusQueued || queued.Queue.Kind != domain.QueueKindPromptAppend || queued.Queue.ResumeCodexSessionID != "codex-session-1" {
 		t.Fatalf("queued session = %#v", queued)
 	}
 	if len(events.events) != 1 || events.events[0].Type != "session.queued" {
@@ -4532,7 +4532,7 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 	}
 
 	saved := repo.sessions["session-1"]
-	if saved.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindResume {
+	if saved.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindPromptAppend {
 		t.Fatalf("queued session = %#v", saved)
 	}
 	if saved.Queue.ResumeCodexSessionID != "codex-session-1" {
@@ -4572,6 +4572,82 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 	}
 	if len(repo.appends) != 2 || repo.appends[1].Status != domain.PromptAppendInflight || repo.appends[1].DispatchedProcessRunID != "process-run-1" {
 		t.Fatalf("prompt append delivery state = %#v", repo.appends)
+	}
+}
+
+func TestAppendPromptResumesWorkflowWithOnlyPendingContent(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		missingTranscript bool
+	}{
+		{name: "resume existing Codex session"},
+		{name: "start full context when transcript is unavailable", missingTranscript: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := newFakeRepository()
+			repo.sessions["session-1"] = domain.Session{
+				ID:             "session-1",
+				ProjectID:      "project-1",
+				Requirement:    "original requirement",
+				Mode:           domain.ModeWorkflow,
+				Status:         domain.StatusStopped,
+				BaseBranch:     "main",
+				CodexSessionID: "codex-session-1",
+				WorktreePath:   "/workspace/session-1",
+			}
+			nodeRunID := domain.NodeRunID("node-run-1")
+			workflows := &fakeWorkflowStarter{resumeNodeAdvance: domain.WorkflowAdvance{
+				WorkflowRunID: "workflow-run-1",
+				NodeRunID:     &nodeRunID,
+				RequiresCodex: true,
+				Prompt:        "Workflow node\n\nWorkflow input params JSON:\n{}\n\nWorkflow result contract",
+			}}
+			processes := newFakeProcessRepository()
+			processes.transcriptMissing = test.missingTranscript
+			events := make(chan processdomain.CodexEvent)
+			close(events)
+			codex := &fakeCodexProcess{
+				resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"},
+				events:       events,
+			}
+			service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithWorkflows(workflows))
+			service.artifacts = &fakeSessionArtifactStore{}
+			nextID := 0
+			service.generateID = func() (domain.ID, error) {
+				nextID++
+				return domain.ID(fmt.Sprintf("id-%d", nextID)), nil
+			}
+
+			if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "only this instruction"}); err != nil {
+				t.Fatalf("AppendPrompt() error = %v", err)
+			}
+			queued := repo.sessions["session-1"]
+			if queued.Queue.Kind != domain.QueueKindPromptAppend {
+				t.Fatalf("queue kind = %q", queued.Queue.Kind)
+			}
+			if started, err := service.DrainQueuedSessions(ctx); err != nil || started != 1 {
+				t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
+			}
+			if !test.missingTranscript {
+				if !codex.resumeCalled || codex.startCalled || codex.resumeInput.Prompt != "only this instruction" {
+					t.Fatalf("codex resume=%v start=%v prompt=%q", codex.resumeCalled, codex.startCalled, codex.resumeInput.Prompt)
+				}
+				return
+			}
+			if !codex.startCalled || codex.resumeCalled {
+				t.Fatalf("codex calls start=%v resume=%v", codex.startCalled, codex.resumeCalled)
+			}
+			prompt := codex.startInput.Prompt
+			for _, want := range []string{"original requirement", "Workflow node", artifactPromptGuidance, anyCodePromptGuidance} {
+				if !strings.Contains(prompt, want) {
+					t.Fatalf("fallback prompt missing %q: %q", want, prompt)
+				}
+			}
+			if strings.Count(prompt, "only this instruction") != 1 {
+				t.Fatalf("fallback prompt append count = %d: %q", strings.Count(prompt, "only this instruction"), prompt)
+			}
+		})
 	}
 }
 
@@ -4730,7 +4806,7 @@ func TestAppendPromptResumesStoredCodexSessionID(t *testing.T) {
 	if saved.CodexSessionID != "codex-session-current" {
 		t.Fatalf("CodexSessionID = %q", saved.CodexSessionID)
 	}
-	if saved.Queue.Kind != domain.QueueKindResume || saved.Queue.ResumeCodexSessionID != "codex-session-current" {
+	if saved.Queue.Kind != domain.QueueKindPromptAppend || saved.Queue.ResumeCodexSessionID != "codex-session-current" {
 		t.Fatalf("queued session = %#v", saved)
 	}
 	started, err := service.DrainQueuedSessions(ctx)
@@ -4867,7 +4943,7 @@ func TestAppendPromptRebuildsResumeFailedChatSession(t *testing.T) {
 	}
 
 	saved := repo.sessions["session-1"]
-	if saved.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindStart || saved.Queue.ResumeCodexSessionID != "" {
+	if saved.Status != domain.StatusQueued || saved.Queue.Kind != domain.QueueKindPromptAppend || saved.Queue.ResumeCodexSessionID != "" {
 		t.Fatalf("queued session = %#v", saved)
 	}
 	if saved.Queue.Prompt != "" || !saved.Queue.ReviewAfterReuseFailure {
@@ -8040,7 +8116,7 @@ func TestDrainQueuedWorkflowKeepsActiveProcessWhenRunningPersistenceAndStopFail(
 	if !processes.hasActive || processes.exitedID != "" {
 		t.Fatalf("process active=%v exited=%q", processes.hasActive, processes.exitedID)
 	}
-	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendInflight || promptAppend.DispatchedProcessRunID != "id-1" {
+	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendPending || promptAppend.DispatchedProcessRunID != "" {
 		t.Fatalf("prompt append = %#v", promptAppend)
 	}
 	if service.reserveWorkdir("/workspace/session-1", "session-2") {
@@ -11306,6 +11382,7 @@ type fakeProcessRepository struct {
 	markExitedHook     func()
 	markExitedDoneHook func()
 	transcriptSources  map[string]processdomain.CodexTranscriptSource
+	transcriptMissing  bool
 }
 
 func newFakeProcessRepository() *fakeProcessRepository {
@@ -11437,6 +11514,9 @@ func (r *fakeProcessRepository) BindTranscript(_ context.Context, id processdoma
 func (r *fakeProcessRepository) FindTranscriptSource(_ context.Context, codexSessionID string) (processdomain.CodexTranscriptSource, bool, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if r.transcriptMissing {
+		return processdomain.CodexTranscriptSource{}, false, nil
+	}
 	source, ok := r.transcriptSources[codexSessionID]
 	if !ok && codexSessionID != "" {
 		return processdomain.CodexTranscriptSource{

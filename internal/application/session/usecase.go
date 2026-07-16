@@ -83,6 +83,7 @@ type StartSessionOptions struct {
 	Force                bool
 	prompt               string
 	resumeCodexSessionID string
+	queueKind            domain.QueueKind
 }
 
 type CloseSessionInput struct {
@@ -1985,7 +1986,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, err, "attachment_archive_failed")
 		}
 		if mode == domain.ModeWorkflow {
-			dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), true)
+			dto, startErr := s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), true, "")
 			if startErr != nil {
 				return DTO{}, s.failCreatedSessionWithCleanup(ctx, session, startErr, "workflow_start_failed")
 			}
@@ -2187,7 +2188,7 @@ func (s *Service) startLoadedSession(ctx context.Context, session domain.Session
 		if project.DefaultWorkflowID == nil || strings.TrimSpace(string(*project.DefaultWorkflowID)) == "" {
 			return DTO{}, apperror.New(apperror.CodeWorkflowBlocked, apperror.CategoryWorkflowError, "project default workflow is required for workflow mode").WithUserAction("configure_project_workflow")
 		}
-		return s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), session.Status == domain.StatusCreated)
+		return s.startWorkflowSession(ctx, session, domain.WorkflowDefinitionID(*project.DefaultWorkflowID), session.Status == domain.StatusCreated, startOptions.queueKind)
 	}
 	switch session.Status {
 	case domain.StatusQueued:
@@ -2201,7 +2202,7 @@ func (s *Service) startLoadedSession(ctx context.Context, session domain.Session
 	default:
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
-	options := codexStartOptions{initialStart: session.Status == domain.StatusCreated}
+	options := codexStartOptions{initialStart: session.Status == domain.StatusCreated, queueKind: startOptions.queueKind}
 	if session.Status == domain.StatusResumeFailed {
 		options.reviewAfterReuseFailure = true
 	}
@@ -2231,7 +2232,7 @@ type workflowAdvanceOptions struct {
 	commandID            string
 }
 
-func (s *Service) startWorkflowSession(ctx context.Context, session domain.Session, workflowDefinitionID domain.WorkflowDefinitionID, initialStart bool) (DTO, error) {
+func (s *Service) startWorkflowSession(ctx context.Context, session domain.Session, workflowDefinitionID domain.WorkflowDefinitionID, initialStart bool, queueKind domain.QueueKind) (DTO, error) {
 	if s.workflows == nil {
 		return DTO{}, errors.New("session workflow starter is required for workflow mode")
 	}
@@ -2289,6 +2290,7 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 		workflowRunID:       start.WorkflowRunID,
 		nodeRunID:           workflowNodeRunID(start.NodeRunID),
 		prompt:              start.Prompt,
+		queueKind:           queueKind,
 		workflowResultRetry: start.RequireResultRetry,
 		initialStart:        initialStart,
 	}, queuePriorityForSession(session))
@@ -2810,6 +2812,7 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 	options := codexStartOptions{
 		resumeCodexSessionID: resumeCodexSessionID,
 		prompt:               strings.TrimSpace(startOptions.prompt),
+		queueKind:            startOptions.queueKind,
 	}
 	if session.Mode == domain.ModeWorkflow {
 		if s.workflows == nil {
@@ -2833,7 +2836,7 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 		}
 		options.workflowRunID = advance.WorkflowRunID
 		options.nodeRunID = workflowNodeRunID(advance.NodeRunID)
-		if options.prompt == "" {
+		if options.prompt == "" || options.queueKind == domain.QueueKindPromptAppend {
 			options.prompt = advance.Prompt
 		}
 	} else if err := s.requirePendingChatResume(ctx, session.ID); err != nil {
@@ -3526,7 +3529,9 @@ type codexStartOptions struct {
 	workflowRunID           domain.WorkflowRunID
 	nodeRunID               *processdomain.NodeRunID
 	prompt                  string
+	fallbackPrompt          string
 	promptAppendIDs         []string
+	queueKind               domain.QueueKind
 	workflowResultRetry     bool
 	resumeAcknowledged      bool
 	reviewAfterReuseFailure bool
@@ -4288,6 +4293,9 @@ func queueKindForStartOptions(options codexStartOptions) domain.QueueKind {
 	if options.answerBatchID != "" {
 		return domain.QueueKindAnswerUser
 	}
+	if options.queueKind != "" {
+		return options.queueKind
+	}
 	if options.resumeCodexSessionID != "" {
 		return domain.QueueKindResume
 	}
@@ -4310,6 +4318,7 @@ func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 		workflowRunID:           session.Queue.WorkflowRunID,
 		nodeRunID:               nodeRunID,
 		prompt:                  session.Queue.Prompt,
+		queueKind:               session.Queue.Kind,
 		reviewAfterReuseFailure: session.Queue.ReviewAfterReuseFailure,
 		workflowResultRetry:     isWorkflowResultRetryPrompt(session.Queue.Prompt),
 		initialStart:            session.Queue.InitialStart,
@@ -4361,17 +4370,19 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		if err != nil {
 			return processdomain.CodexHandle{}, fmt.Errorf("prepare artifact directory: %w", err)
 		}
-		prompt = promptWithArtifactGuidance(prompt, artifactDir)
 	}
 	if options.resumeCodexSessionID != "" {
 		transcript, found, err := s.processes.FindTranscriptSource(ctx, options.resumeCodexSessionID)
 		if err != nil {
 			return processdomain.CodexHandle{}, err
 		}
+		if !found && options.queueKind == domain.QueueKindPromptAppend {
+			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
+		}
 		if !found {
 			return processdomain.CodexHandle{}, processdomain.ErrTranscriptUnavailable
 		}
-		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
+		handle, err := s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
 			SessionID:       processdomain.SessionID(session.ID),
 			CodexSessionID:  options.resumeCodexSessionID,
@@ -4384,8 +4395,22 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
 			FastMode:        session.Config.FastMode,
 		})
+		if errors.Is(err, processdomain.ErrTranscriptUnavailable) && options.queueKind == domain.QueueKindPromptAppend {
+			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
+		}
+		return handle, err
 	}
-	return s.codex.Start(ctx, processdomain.CodexStartInput{
+	prompt = promptWithArtifactGuidance(prompt, artifactDir)
+	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, attachmentPaths, imagePaths))
+}
+
+func (s *Service) startCodexFallback(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string, artifactDir string, attachmentPaths []string, imagePaths []string) (processdomain.CodexHandle, error) {
+	prompt := promptWithArtifactGuidance(options.fallbackPrompt, artifactDir)
+	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, attachmentPaths, imagePaths))
+}
+
+func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, attachmentPaths []string, imagePaths []string) processdomain.CodexStartInput {
+	return processdomain.CodexStartInput{
 		ProcessRunID:    runID,
 		SessionID:       processdomain.SessionID(session.ID),
 		Workdir:         workdir,
@@ -4397,7 +4422,7 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		FastMode:        session.Config.FastMode,
 		AttachmentPaths: attachmentPaths,
 		ImagePaths:      imagePaths,
-	})
+	}
 }
 
 func (s *Service) requirePendingChatResume(ctx context.Context, sessionID domain.ID) error {
@@ -4426,15 +4451,27 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 		return codexStartOptions{}, err
 	}
 	prompt := strings.TrimSpace(options.prompt)
-	if options.resumeCodexSessionID != "" {
+	if options.queueKind == domain.QueueKindPromptAppend {
+		if len(pendingIDs) == 0 {
+			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
+		}
+		options.fallbackPrompt = rebuiltSessionPrompt(session, prompt, true, appends)
+		if options.resumeCodexSessionID != "" {
+			prompt = pendingPrompt
+		} else {
+			prompt = options.fallbackPrompt
+		}
+	} else if options.reviewAfterReuseFailure {
+		prompt = rebuiltSessionPrompt(session, prompt, true, appends)
+	} else if session.Mode == domain.ModeWorkflow {
+		pendingIDs = nil
+	} else if options.resumeCodexSessionID != "" {
 		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && len(pendingIDs) == 0 {
 			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
 		}
 		prompt = joinPromptParts(prompt, pendingPrompt)
-	} else if session.Mode != domain.ModeWorkflow || options.reviewAfterReuseFailure {
+	} else if session.Mode != domain.ModeWorkflow {
 		prompt = rebuiltSessionPrompt(session, prompt, options.reviewAfterReuseFailure, appends)
-	} else {
-		prompt = joinPromptParts(prompt, pendingPrompt)
 	}
 	if strings.TrimSpace(prompt) == "" && !options.initialStart {
 		return codexStartOptions{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "Codex 执行提示不能为空")
@@ -7499,11 +7536,10 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			Attachments: archivedAttachments,
 		}
 		if session.Mode == domain.ModeChat && session.Status == domain.StatusStopped {
-			options := codexStartOptions{}
-			kind := domain.QueueKindStart
+			options := codexStartOptions{queueKind: domain.QueueKindPromptAppend}
+			kind := domain.QueueKindPromptAppend
 			if codexSessionID := strings.TrimSpace(session.CodexSessionID); codexSessionID != "" {
 				options.resumeCodexSessionID = codexSessionID
-				kind = domain.QueueKindResume
 			}
 			_, appendSaved, err = s.appendPromptAndQueue(ctx, session, append, options, queuePriorityForSession(session), kind)
 			if err != nil {
@@ -7520,12 +7556,12 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			return nil
 		}
 		if canReuseCodexSessionAfterAppend(session) {
-			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{resumeCodexSessionID: session.CodexSessionID}); err != nil {
+			if _, err := s.resumeSession(ctx, input.SessionID, StartSessionOptions{resumeCodexSessionID: session.CodexSessionID, queueKind: domain.QueueKindPromptAppend}); err != nil {
 				return fmt.Errorf("resume session after prompt append: %w", err)
 			}
 			return nil
 		}
-		if _, err := s.startSession(ctx, input.SessionID, StartSessionOptions{}); err != nil {
+		if _, err := s.startSession(ctx, input.SessionID, StartSessionOptions{queueKind: domain.QueueKindPromptAppend}); err != nil {
 			return fmt.Errorf("start session after prompt append: %w", err)
 		}
 		return nil
