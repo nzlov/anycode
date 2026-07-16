@@ -2445,8 +2445,9 @@ func TestSubmitWorkflowApprovalAcknowledgesPreviouslyAppliedSystemCommand(t *tes
 		AppliedSystemCommands: map[string]bool{"old-command": true},
 	}
 	workflows := &fakeWorkflowStarter{approvalResult: domain.WorkflowApprovalResult{
-		Run:     domain.WorkflowRunSnapshot{ID: "run-1", SessionID: "session-1", Status: "blocked", CurrentNodeID: "review"},
-		Advance: domain.WorkflowAdvance{WorkflowRunID: "run-1", Blocked: true, BlockedReason: "rejected"},
+		Run:      domain.WorkflowRunSnapshot{ID: "run-1", SessionID: "session-1", Status: "blocked", CurrentNodeID: "review"},
+		Advance:  domain.WorkflowAdvance{WorkflowRunID: "run-1", Blocked: true, BlockedReason: "rejected"},
+		Rejected: true,
 	}}
 	eventSessionID := eventdomain.SessionID("session-1")
 	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
@@ -2474,6 +2475,9 @@ func TestSubmitWorkflowApprovalAcknowledgesPreviouslyAppliedSystemCommand(t *tes
 	}
 	if repo.sessions["session-1"].AppliedSystemCommands["old-command"] {
 		t.Fatalf("old command remains in applied ledger: %#v", repo.sessions["session-1"].AppliedSystemCommands)
+	}
+	if len(repo.appends) != 1 || repo.appends[0].Body != "stop" || repo.appends[0].Status != domain.PromptAppendPending {
+		t.Fatalf("rejection prompt appends = %#v", repo.appends)
 	}
 }
 
@@ -2921,6 +2925,7 @@ func TestSubmitWorkflowApprovalRejectsAfterRunWithPromptAppend(t *testing.T) {
 				Prompt:           "Build",
 			},
 			RejectedAfterRun: true,
+			Rejected:         true,
 		},
 	}
 	processes := newFakeProcessRepository()
@@ -3103,6 +3108,7 @@ func TestSubmitWorkflowApprovalRejectsAfterRunSystemNodeWithoutStartingCodex(t *
 				Expr: &domain.WorkflowExpr{Script: `{status: "ready"}`},
 			},
 			RejectedAfterRun: true,
+			Rejected:         true,
 		},
 		advance: domain.WorkflowAdvance{
 			WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
@@ -3127,7 +3133,7 @@ func TestSubmitWorkflowApprovalRejectsAfterRunSystemNodeWithoutStartingCodex(t *
 	if workflows.completeCalls != 1 {
 		t.Fatalf("CompleteNode calls = %d", workflows.completeCalls)
 	}
-	if len(repo.appends) != 0 || repo.sessions["session-1"].Status != domain.StatusWaitingApproval || repo.sessions["session-1"].Queue.Kind != "" {
+	if len(repo.appends) != 1 || repo.appends[0].Status != domain.PromptAppendPending || repo.sessions["session-1"].Status != domain.StatusWaitingApproval || repo.sessions["session-1"].Queue.Kind != "" {
 		t.Fatalf("session=%#v appends=%#v", repo.sessions["session-1"], repo.appends)
 	}
 	var pending, completed bool
@@ -4707,11 +4713,13 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 
 func TestAppendPromptResumesWorkflowWithOnlyPendingContent(t *testing.T) {
 	for _, test := range []struct {
-		name              string
-		missingTranscript bool
+		name                        string
+		missingTranscript           bool
+		resumeTranscriptUnavailable bool
 	}{
 		{name: "resume existing Codex session"},
 		{name: "start full context when transcript is unavailable", missingTranscript: true},
+		{name: "start full context when resume reports transcript unavailable", resumeTranscriptUnavailable: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -4741,6 +4749,9 @@ func TestAppendPromptResumesWorkflowWithOnlyPendingContent(t *testing.T) {
 				resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"},
 				events:       events,
 			}
+			if test.resumeTranscriptUnavailable {
+				codex.resumeErr = processdomain.ErrTranscriptUnavailable
+			}
 			service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithWorkflows(workflows))
 			service.artifacts = &fakeSessionArtifactStore{}
 			nextID := 0
@@ -4759,13 +4770,13 @@ func TestAppendPromptResumesWorkflowWithOnlyPendingContent(t *testing.T) {
 			if started, err := service.DrainQueuedSessions(ctx); err != nil || started != 1 {
 				t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
 			}
-			if !test.missingTranscript {
+			if !test.missingTranscript && !test.resumeTranscriptUnavailable {
 				if !codex.resumeCalled || codex.startCalled || codex.resumeInput.Prompt != "only this instruction" {
 					t.Fatalf("codex resume=%v start=%v prompt=%q", codex.resumeCalled, codex.startCalled, codex.resumeInput.Prompt)
 				}
 				return
 			}
-			if !codex.startCalled || codex.resumeCalled {
+			if !codex.startCalled || (codex.resumeCalled != test.resumeTranscriptUnavailable) {
 				t.Fatalf("codex calls start=%v resume=%v", codex.startCalled, codex.resumeCalled)
 			}
 			prompt := codex.startInput.Prompt
@@ -8391,7 +8402,7 @@ func TestDrainQueuedWorkflowKeepsActiveProcessWhenRunningPersistenceAndStopFail(
 	if !processes.hasActive || processes.exitedID != "" {
 		t.Fatalf("process active=%v exited=%q", processes.hasActive, processes.exitedID)
 	}
-	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendPending || promptAppend.DispatchedProcessRunID != "" {
+	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendInflight || promptAppend.DispatchedProcessRunID != "id-1" {
 		t.Fatalf("prompt append = %#v", promptAppend)
 	}
 	if service.reserveWorkdir("/workspace/session-1", "session-2") {

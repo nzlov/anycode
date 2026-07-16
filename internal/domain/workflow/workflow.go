@@ -102,8 +102,23 @@ type Run struct {
 	Status               RunStatus
 	CurrentNodeID        string
 	Context              Context
+	PendingApproval      *PendingApproval
 	StartedAt            *time.Time
 	StoppedAt            *time.Time
+}
+
+type ApprovalPhase string
+
+const (
+	ApprovalBeforeRun ApprovalPhase = "before_run"
+	ApprovalAfterRun  ApprovalPhase = "after_run"
+)
+
+type PendingApproval struct {
+	Phase     ApprovalPhase
+	NodeID    string
+	NodeRunID *NodeRunID
+	Attempt   int
 }
 
 type NodeRunStatus string
@@ -168,6 +183,7 @@ type Repository interface {
 	SaveNodeRun(ctx context.Context, run NodeRun) error
 	CreateNodeRunAndUpdateRun(ctx context.Context, run Run, nodeRun NodeRun) error
 	CompleteNodeAndAdvance(ctx context.Context, completedNodeRun NodeRun, run Run, nextNodeRun *NodeRun) error
+	ResumeNodeAndUpdateRun(ctx context.Context, nodeRun NodeRun, run Run) error
 	MarkRunFailed(ctx context.Context, runID RunID, nodeRunID NodeRunID, failure NodeFailure, finishedAt time.Time) error
 	UpdateRunContext(ctx context.Context, id RunID, context Context) error
 }

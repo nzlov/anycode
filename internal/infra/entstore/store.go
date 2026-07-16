@@ -155,6 +155,22 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.migrateSessionFileColumns(ctx); err != nil {
 		return err
 	}
+	// GLUE: Legacy approval gates lived only on node_runs; remove after all waiting approvals use workflow_runs.pending_approval.
+	if _, err := s.db.ExecContext(ctx, `UPDATE workflow_runs
+		SET pending_approval = json_object(
+			'phase', CASE
+				WHEN COALESCE((SELECT output FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id ORDER BY started_at DESC, id DESC LIMIT 1), '{}') <> '{}' THEN 'after_run'
+				ELSE 'before_run'
+			END,
+			'nodeId', current_node_id,
+			'nodeRunId', (SELECT id FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id ORDER BY started_at DESC, id DESC LIMIT 1),
+			'attempt', (SELECT attempt FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id ORDER BY started_at DESC, id DESC LIMIT 1)
+		)
+		WHERE status = 'waiting_approval'
+		AND COALESCE(pending_approval, '{}') = '{}'
+		AND EXISTS (SELECT 1 FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id)`); err != nil {
+		return fmt.Errorf("backfill workflow pending approval: %w", err)
+	}
 	// GLUE: Backfill queues written before queue_initial_start; remove after legacy databases no longer need upgrading.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sessions
 		SET queue_initial_start = CASE

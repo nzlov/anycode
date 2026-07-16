@@ -188,7 +188,8 @@ func (r *WorkflowRepository) CreateRun(ctx context.Context, run workflow.Run) er
 		SetWorkflowDefinitionID(string(run.WorkflowDefinitionID)).
 		SetStatus(string(run.Status)).
 		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values))
+		SetContext(payloadOrEmpty(run.Context.Values)).
+		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StartedAt != nil {
 		create.SetStartedAt(*run.StartedAt)
 	}
@@ -205,7 +206,8 @@ func (r *WorkflowRepository) UpdateRunState(ctx context.Context, run workflow.Ru
 	update := r.client.WorkflowRun.UpdateOneID(string(run.ID)).
 		SetStatus(string(run.Status)).
 		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values))
+		SetContext(payloadOrEmpty(run.Context.Values)).
+		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
 		update.SetStoppedAt(*run.StoppedAt)
 	}
@@ -261,7 +263,8 @@ func (r *WorkflowRepository) CreateNodeRunAndUpdateRun(ctx context.Context, run 
 	updateRun := tx.WorkflowRun.UpdateOneID(string(run.ID)).
 		SetStatus(string(run.Status)).
 		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values))
+		SetContext(payloadOrEmpty(run.Context.Values)).
+		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
 		updateRun.SetStoppedAt(*run.StoppedAt)
 	}
@@ -313,7 +316,8 @@ func (r *WorkflowRepository) CompleteNodeAndAdvance(ctx context.Context, complet
 	updateRun := tx.WorkflowRun.UpdateOneID(string(run.ID)).
 		SetStatus(string(run.Status)).
 		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values))
+		SetContext(payloadOrEmpty(run.Context.Values)).
+		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
 		updateRun.SetStoppedAt(*run.StoppedAt)
 	}
@@ -329,6 +333,31 @@ func (r *WorkflowRepository) CompleteNodeAndAdvance(ctx context.Context, complet
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit workflow advance transaction: %w", err)
+	}
+	return nil
+}
+
+func (r *WorkflowRepository) ResumeNodeAndUpdateRun(ctx context.Context, nodeRun workflow.NodeRun, run workflow.Run) error {
+	if r.inTx {
+		if err := resumeNodeRun(ctx, r.client, nodeRun); err != nil {
+			return err
+		}
+		return updateWorkflowRun(ctx, r.client, run)
+	}
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin workflow approval resume transaction: %w", err)
+	}
+	if err := resumeNodeRun(ctx, tx.Client(), nodeRun); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := updateWorkflowRun(ctx, tx.Client(), run); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit workflow approval resume transaction: %w", err)
 	}
 	return nil
 }
@@ -376,7 +405,8 @@ func createWorkflowRun(ctx context.Context, client *ent.Client, run workflow.Run
 		SetWorkflowDefinitionID(string(run.WorkflowDefinitionID)).
 		SetStatus(string(run.Status)).
 		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values))
+		SetContext(payloadOrEmpty(run.Context.Values)).
+		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StartedAt != nil {
 		create.SetStartedAt(*run.StartedAt)
 	}
@@ -420,12 +450,24 @@ func updateWorkflowRun(ctx context.Context, client *ent.Client, run workflow.Run
 	updateRun := client.WorkflowRun.UpdateOneID(string(run.ID)).
 		SetStatus(string(run.Status)).
 		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values))
+		SetContext(payloadOrEmpty(run.Context.Values)).
+		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
 		updateRun.SetStoppedAt(*run.StoppedAt)
 	}
 	if err := updateRun.Exec(ctx); err != nil {
 		return fmt.Errorf("update workflow run: %w", err)
+	}
+	return nil
+}
+
+func resumeNodeRun(ctx context.Context, client *ent.Client, nodeRun workflow.NodeRun) error {
+	update := client.NodeRun.UpdateOneID(string(nodeRun.ID)).
+		SetStatus(string(nodeRun.Status)).
+		SetOutput(map[string]any{}).
+		ClearFinishedAt()
+	if err := update.Exec(ctx); err != nil {
+		return fmt.Errorf("resume node run after approval: %w", err)
 	}
 	return nil
 }
@@ -539,9 +581,40 @@ func toDomainWorkflowRun(row *ent.WorkflowRun) workflow.Run {
 		Status:               workflow.RunStatus(row.Status),
 		CurrentNodeID:        row.CurrentNodeID,
 		Context:              workflow.Context{Values: payloadOrEmpty(row.Context)},
+		PendingApproval:      pendingApprovalFromMap(row.PendingApproval),
 		StartedAt:            row.StartedAt,
 		StoppedAt:            row.StoppedAt,
 	}
+}
+
+func pendingApprovalToMap(approval *workflow.PendingApproval) map[string]any {
+	if approval == nil {
+		return map[string]any{}
+	}
+	value := map[string]any{"phase": string(approval.Phase), "nodeId": approval.NodeID, "attempt": approval.Attempt}
+	if approval.NodeRunID != nil {
+		value["nodeRunId"] = string(*approval.NodeRunID)
+	}
+	return value
+}
+
+func pendingApprovalFromMap(value map[string]any) *workflow.PendingApproval {
+	phase, _ := value["phase"].(string)
+	nodeID, _ := value["nodeId"].(string)
+	if phase == "" || nodeID == "" {
+		return nil
+	}
+	approval := &workflow.PendingApproval{Phase: workflow.ApprovalPhase(phase), NodeID: nodeID}
+	if attempt, ok := value["attempt"].(float64); ok {
+		approval.Attempt = int(attempt)
+	} else if attempt, ok := value["attempt"].(int); ok {
+		approval.Attempt = attempt
+	}
+	if raw, _ := value["nodeRunId"].(string); raw != "" {
+		id := workflow.NodeRunID(raw)
+		approval.NodeRunID = &id
+	}
+	return approval
 }
 
 func toDomainNodeRun(row *ent.NodeRun) (workflow.NodeRun, error) {

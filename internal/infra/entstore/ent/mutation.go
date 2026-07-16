@@ -12916,6 +12916,7 @@ type WorkflowRunMutation struct {
 	status                 *string
 	current_node_id        *string
 	context                *map[string]interface{}
+	pending_approval       *map[string]interface{}
 	started_at             *time.Time
 	stopped_at             *time.Time
 	clearedFields          map[string]struct{}
@@ -13208,6 +13209,42 @@ func (m *WorkflowRunMutation) ResetContext() {
 	m.context = nil
 }
 
+// SetPendingApproval sets the "pending_approval" field.
+func (m *WorkflowRunMutation) SetPendingApproval(value map[string]interface{}) {
+	m.pending_approval = &value
+}
+
+// PendingApproval returns the value of the "pending_approval" field in the mutation.
+func (m *WorkflowRunMutation) PendingApproval() (r map[string]interface{}, exists bool) {
+	v := m.pending_approval
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPendingApproval returns the old "pending_approval" field's value of the WorkflowRun entity.
+// If the WorkflowRun object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WorkflowRunMutation) OldPendingApproval(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPendingApproval is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPendingApproval requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPendingApproval: %w", err)
+	}
+	return oldValue.PendingApproval, nil
+}
+
+// ResetPendingApproval resets all changes to the "pending_approval" field.
+func (m *WorkflowRunMutation) ResetPendingApproval() {
+	m.pending_approval = nil
+}
+
 // SetStartedAt sets the "started_at" field.
 func (m *WorkflowRunMutation) SetStartedAt(t time.Time) {
 	m.started_at = &t
@@ -13340,7 +13377,7 @@ func (m *WorkflowRunMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WorkflowRunMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.session_id != nil {
 		fields = append(fields, workflowrun.FieldSessionID)
 	}
@@ -13355,6 +13392,9 @@ func (m *WorkflowRunMutation) Fields() []string {
 	}
 	if m.context != nil {
 		fields = append(fields, workflowrun.FieldContext)
+	}
+	if m.pending_approval != nil {
+		fields = append(fields, workflowrun.FieldPendingApproval)
 	}
 	if m.started_at != nil {
 		fields = append(fields, workflowrun.FieldStartedAt)
@@ -13380,6 +13420,8 @@ func (m *WorkflowRunMutation) Field(name string) (ent.Value, bool) {
 		return m.CurrentNodeID()
 	case workflowrun.FieldContext:
 		return m.Context()
+	case workflowrun.FieldPendingApproval:
+		return m.PendingApproval()
 	case workflowrun.FieldStartedAt:
 		return m.StartedAt()
 	case workflowrun.FieldStoppedAt:
@@ -13403,6 +13445,8 @@ func (m *WorkflowRunMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldCurrentNodeID(ctx)
 	case workflowrun.FieldContext:
 		return m.OldContext(ctx)
+	case workflowrun.FieldPendingApproval:
+		return m.OldPendingApproval(ctx)
 	case workflowrun.FieldStartedAt:
 		return m.OldStartedAt(ctx)
 	case workflowrun.FieldStoppedAt:
@@ -13450,6 +13494,13 @@ func (m *WorkflowRunMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetContext(v)
+		return nil
+	case workflowrun.FieldPendingApproval:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPendingApproval(v)
 		return nil
 	case workflowrun.FieldStartedAt:
 		v, ok := value.(time.Time)
@@ -13543,6 +13594,9 @@ func (m *WorkflowRunMutation) ResetField(name string) error {
 		return nil
 	case workflowrun.FieldContext:
 		m.ResetContext()
+		return nil
+	case workflowrun.FieldPendingApproval:
+		m.ResetPendingApproval()
 		return nil
 	case workflowrun.FieldStartedAt:
 		m.ResetStartedAt()

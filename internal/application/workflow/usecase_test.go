@@ -413,7 +413,7 @@ func TestStartForSessionWaitsWhenStartNodeRequiresApproval(t *testing.T) {
 	if len(repo.runs) != 1 || repo.runs[0].Status != domain.RunWaitingApproval {
 		t.Fatalf("runs = %#v", repo.runs)
 	}
-	if len(repo.nodeRuns) != 1 || repo.nodeRuns[0].Status != domain.NodeWaitingApproval {
+	if len(repo.nodeRuns) != 0 || got.NodeRunID != nil || repo.runs[0].PendingApproval == nil {
 		t.Fatalf("node runs = %#v", repo.nodeRuns)
 	}
 }
@@ -518,8 +518,8 @@ func TestStartForSessionDefersSystemNodeSideEffectsUntilBeforeRunApproval(t *tes
 			if start.Result != nil {
 				t.Fatalf("StartForSession() before-run result = %#v, want nil", start.Result)
 			}
-			if repo.runs[0].StoppedAt != nil || repo.nodeRuns[0].FinishedAt != nil || repo.nodeRuns[0].Status != domain.NodeWaitingApproval {
-				t.Fatalf("run=%#v nodeRun=%#v", repo.runs[0], repo.nodeRuns[0])
+			if repo.runs[0].StoppedAt != nil || len(repo.nodeRuns) != 0 || repo.runs[0].PendingApproval == nil {
+				t.Fatalf("run=%#v nodeRuns=%#v", repo.runs[0], repo.nodeRuns)
 			}
 
 			approved, err := service.SubmitApprovalForSession(context.Background(), sessiondomain.WorkflowApprovalInput{
@@ -541,8 +541,8 @@ func TestStartForSessionDefersSystemNodeSideEffectsUntilBeforeRunApproval(t *tes
 					t.Fatalf("approved expr event = %#v", event)
 				}
 			case "close":
-				if !approved.Advance.Close || approved.Run.Status != string(domain.RunCompleted) || repo.nodeRuns[0].Status != domain.NodeSucceeded {
-					t.Fatalf("SubmitApproval() = %#v nodeRun=%#v", approved, repo.nodeRuns[0])
+				if !approved.Advance.Close || approved.Run.Status != string(domain.RunCompleted) || len(repo.nodeRuns) != 1 || repo.nodeRuns[0].Status != domain.NodeSucceeded {
+					t.Fatalf("SubmitApproval() = %#v nodeRuns=%#v", approved, repo.nodeRuns)
 				}
 			}
 		})
@@ -586,8 +586,8 @@ func TestCompleteNodeDefersNextSystemNodeSideEffectsUntilBeforeRunApproval(t *te
 			if advance.Result != nil {
 				t.Fatalf("CompleteNode() before-run result = %#v, want nil", advance.Result)
 			}
-			if repo.runs[0].StoppedAt != nil || repo.nodeRuns[1].Status != domain.NodeWaitingApproval || repo.nodeRuns[1].FinishedAt != nil {
-				t.Fatalf("run=%#v nodeRun=%#v", repo.runs[0], repo.nodeRuns[1])
+			if repo.runs[0].StoppedAt != nil || len(repo.nodeRuns) != 1 || repo.runs[0].PendingApproval == nil || advance.NodeRunID != nil {
+				t.Fatalf("run=%#v nodeRuns=%#v", repo.runs[0], repo.nodeRuns)
 			}
 		})
 	}
@@ -1670,6 +1670,32 @@ func TestRerunCurrentNodeForSessionBlocksWhenRetryLimitReached(t *testing.T) {
 	}
 }
 
+func TestBeforeRunApprovalPreservesRetryAttemptWithoutPlaceholderNodeRun(t *testing.T) {
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{ID: "workflow-1", ProjectID: "project-1", Graph: domain.Graph{Nodes: []domain.Node{{
+		ID: "build", Type: "codex", Title: "Build", Approval: domain.ApprovalConfig{BeforeRun: true}, Retry: domain.RetryConfig{MaxAttempts: 2},
+	}}}}
+	repo.runs = []domain.Run{{ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: domain.RunWaitingResumeAction, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}}}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "run-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-2", nil }
+
+	advance, err := service.RerunCurrentNodeForSession(context.Background(), sessiondomain.WorkflowRerunCurrentNodeInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("RerunCurrentNodeForSession() error = %v", err)
+	}
+	if advance.NodeRunID != nil || repo.runs[0].PendingApproval == nil || repo.runs[0].PendingApproval.Attempt != 2 || len(repo.nodeRuns) != 1 {
+		t.Fatalf("advance=%#v run=%#v nodeRuns=%#v", advance, repo.runs[0], repo.nodeRuns)
+	}
+	if _, err := service.SubmitApproval(context.Background(), SubmitApprovalInput{WorkflowRunID: "run-1", NodeID: "build", Approved: true}); err != nil {
+		t.Fatalf("SubmitApproval() error = %v", err)
+	}
+	if len(repo.nodeRuns) != 2 || repo.nodeRuns[1].Attempt != 2 || repo.nodeRuns[1].ID != "node-run-2" {
+		t.Fatalf("node runs = %#v", repo.nodeRuns)
+	}
+}
+
 func TestSubmitApprovalApprovesAndAdvancesWorkflow(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -1692,8 +1718,8 @@ func TestSubmitApprovalApprovesAndAdvancesWorkflow(t *testing.T) {
 		Status:               domain.RunWaitingApproval,
 		CurrentNodeID:        "approve",
 		Context:              domain.Context{Values: map[string]any{}},
+		PendingApproval:      &domain.PendingApproval{Phase: domain.ApprovalBeforeRun, NodeID: "approve"},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "approve", Status: domain.NodeWaitingApproval, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
@@ -1710,7 +1736,7 @@ func TestSubmitApprovalApprovesAndAdvancesWorkflow(t *testing.T) {
 	if got.Status != domain.RunRunning || got.CurrentNodeID != "build" {
 		t.Fatalf("SubmitApproval() = %#v", got)
 	}
-	if repo.nodeRuns[0].Status != domain.NodeSucceeded || len(repo.nodeRuns) != 2 || repo.nodeRuns[1].NodeID != "build" {
+	if len(repo.nodeRuns) != 1 || repo.nodeRuns[0].NodeID != "build" || repo.nodeRuns[0].Status != domain.NodeRunning {
 		t.Fatalf("node runs = %#v", repo.nodeRuns)
 	}
 }
@@ -1819,7 +1845,7 @@ func TestSubmitAfterRunApprovalRejectsAndRerunsCurrentNodeWithoutBeforeApproval(
 	if !result.RejectedAfterRun || result.Advance.Status != string(domain.RunRunning) || !result.Advance.RequiresCodex {
 		t.Fatalf("SubmitApprovalForSession() = %#v", result)
 	}
-	if len(repo.nodeRuns) != 2 || repo.nodeRuns[1].Status != domain.NodeRunning || repo.nodeRuns[1].Attempt != 2 {
+	if len(repo.nodeRuns) != 1 || repo.nodeRuns[0].Status != domain.NodeRunning || repo.nodeRuns[0].Attempt != 1 || repo.nodeRuns[0].Result != nil {
 		t.Fatalf("node runs = %#v", repo.nodeRuns)
 	}
 }
@@ -1871,7 +1897,7 @@ func TestSubmitAfterRunApprovalRejectsAndRerunsCurrentNode(t *testing.T) {
 	if !result.RejectedAfterRun || !result.Advance.RequiresCodex || result.Advance.CurrentNodeID != "build" {
 		t.Fatalf("SubmitApprovalForSession() = %#v", result)
 	}
-	if len(repo.nodeRuns) != 2 || repo.nodeRuns[0].Status != domain.NodeFailed || repo.nodeRuns[1].NodeID != "build" || repo.nodeRuns[1].Attempt != 2 {
+	if len(repo.nodeRuns) != 1 || repo.nodeRuns[0].Status != domain.NodeRunning || repo.nodeRuns[0].ID != "node-run-1" || repo.nodeRuns[0].Attempt != 1 || repo.nodeRuns[0].Result != nil {
 		t.Fatalf("node runs = %#v", repo.nodeRuns)
 	}
 	if repo.runs[0].Status != domain.RunRunning || repo.runs[0].CurrentNodeID != "build" {
@@ -1879,7 +1905,7 @@ func TestSubmitAfterRunApprovalRejectsAndRerunsCurrentNode(t *testing.T) {
 	}
 }
 
-func TestSubmitApprovalRejectsAndBlocksWorkflow(t *testing.T) {
+func TestSubmitApprovalRejectsTerminalApprovalNodeWithoutNodeRun(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.definitions["workflow-1"] = domain.Definition{
@@ -1898,7 +1924,7 @@ func TestSubmitApprovalRejectsAndBlocksWorkflow(t *testing.T) {
 		CurrentNodeID:        "approve",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "approve", Status: domain.NodeWaitingApproval, Attempt: 1}}
+	repo.runs[0].PendingApproval = &domain.PendingApproval{Phase: domain.ApprovalBeforeRun, NodeID: "approve"}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 
@@ -1911,14 +1937,40 @@ func TestSubmitApprovalRejectsAndBlocksWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SubmitApproval() error = %v", err)
 	}
-	if got.Status != domain.RunBlocked {
+	if got.Status != domain.RunCompleted {
 		t.Fatalf("SubmitApproval() = %#v", got)
 	}
-	if repo.nodeRuns[0].Status != domain.NodeFailed {
-		t.Fatalf("node run = %#v", repo.nodeRuns[0])
+	if len(repo.nodeRuns) != 0 {
+		t.Fatalf("node runs = %#v", repo.nodeRuns)
 	}
-	if repo.runs[0].Context.Values["blockedReason"] != "approval rejected" {
-		t.Fatalf("run context = %#v", repo.runs[0].Context)
+}
+
+func TestSubmitApprovalRejectionUsesApprovalConditionWithoutPlaceholderNodeRun(t *testing.T) {
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{ID: "workflow-1", ProjectID: "project-1", Graph: domain.Graph{
+		Nodes: []domain.Node{{ID: "approve", Type: "approval"}, {ID: "revise", Type: "codex"}, {ID: "ship", Type: "codex"}},
+		Edges: []domain.Edge{
+			{From: "approve", To: "revise", Priority: 1, Condition: domain.Condition{Field: "approval.approved", Op: "eq", Value: false}},
+			{From: "approve", To: "ship", Priority: 2, Condition: domain.Condition{Field: "approval.approved", Op: "eq", Value: true}},
+		},
+	}}
+	repo.runs = []domain.Run{{
+		ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: domain.RunWaitingApproval,
+		CurrentNodeID: "approve", Context: domain.Context{Values: map[string]any{}}, PendingApproval: &domain.PendingApproval{Phase: domain.ApprovalBeforeRun, NodeID: "approve", Attempt: 1},
+	}}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-revise", nil }
+
+	got, err := service.SubmitApproval(context.Background(), SubmitApprovalInput{WorkflowRunID: "run-1", NodeID: "approve", Approved: false, Comment: "revise"})
+	if err != nil {
+		t.Fatalf("SubmitApproval() error = %v", err)
+	}
+	if got.Status != domain.RunRunning || got.CurrentNodeID != "revise" || len(repo.nodeRuns) != 1 || repo.nodeRuns[0].NodeID != "revise" {
+		t.Fatalf("run=%#v nodeRuns=%#v", got, repo.nodeRuns)
+	}
+	if _, exists := repo.runs[0].Context.Values["approval"]; exists {
+		t.Fatalf("approval leaked into next node context: %#v", repo.runs[0].Context)
 	}
 }
 
@@ -2064,6 +2116,15 @@ func (r *fakeRepository) CompleteNodeAndAdvance(_ context.Context, completedNode
 		r.nodeRuns = append(r.nodeRuns, *nextNodeRun)
 	}
 	return nil
+}
+
+func (r *fakeRepository) ResumeNodeAndUpdateRun(_ context.Context, nodeRun domain.NodeRun, run domain.Run) error {
+	for i := range r.nodeRuns {
+		if r.nodeRuns[i].ID == nodeRun.ID {
+			r.nodeRuns[i] = nodeRun
+		}
+	}
+	return r.UpdateRunState(context.Background(), run)
 }
 
 func (r *fakeRepository) UpdateRunContext(context.Context, domain.RunID, domain.Context) error {

@@ -167,10 +167,15 @@ func mapPendingApproval(dto *sessionapp.PendingApprovalDTO) *model.PendingApprov
 	if dto == nil {
 		return nil
 	}
+	var nodeRunID *string
+	if dto.NodeRunID != "" {
+		value := dto.NodeRunID
+		nodeRunID = &value
+	}
 	return &model.PendingApproval{
 		WorkflowRunID:    string(dto.WorkflowRunID),
 		NodeID:           dto.NodeID,
-		NodeRunID:        dto.NodeRunID,
+		NodeRunID:        nodeRunID,
 		CurrentNodeTitle: dto.CurrentNodeTitle,
 		Phase:            dto.Phase,
 		Result:           dto.Result,

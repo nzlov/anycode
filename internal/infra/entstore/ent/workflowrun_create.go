@@ -58,6 +58,12 @@ func (_c *WorkflowRunCreate) SetContext(v map[string]interface{}) *WorkflowRunCr
 	return _c
 }
 
+// SetPendingApproval sets the "pending_approval" field.
+func (_c *WorkflowRunCreate) SetPendingApproval(v map[string]interface{}) *WorkflowRunCreate {
+	_c.mutation.SetPendingApproval(v)
+	return _c
+}
+
 // SetStartedAt sets the "started_at" field.
 func (_c *WorkflowRunCreate) SetStartedAt(v time.Time) *WorkflowRunCreate {
 	_c.mutation.SetStartedAt(v)
@@ -135,6 +141,10 @@ func (_c *WorkflowRunCreate) defaults() {
 		v := workflowrun.DefaultContext
 		_c.mutation.SetContext(v)
 	}
+	if _, ok := _c.mutation.PendingApproval(); !ok {
+		v := workflowrun.DefaultPendingApproval
+		_c.mutation.SetPendingApproval(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -168,6 +178,9 @@ func (_c *WorkflowRunCreate) check() error {
 	}
 	if _, ok := _c.mutation.Context(); !ok {
 		return &ValidationError{Name: "context", err: errors.New(`ent: missing required field "WorkflowRun.context"`)}
+	}
+	if _, ok := _c.mutation.PendingApproval(); !ok {
+		return &ValidationError{Name: "pending_approval", err: errors.New(`ent: missing required field "WorkflowRun.pending_approval"`)}
 	}
 	return nil
 }
@@ -223,6 +236,10 @@ func (_c *WorkflowRunCreate) createSpec() (*WorkflowRun, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Context(); ok {
 		_spec.SetField(workflowrun.FieldContext, field.TypeJSON, value)
 		_node.Context = value
+	}
+	if value, ok := _c.mutation.PendingApproval(); ok {
+		_spec.SetField(workflowrun.FieldPendingApproval, field.TypeJSON, value)
+		_node.PendingApproval = value
 	}
 	if value, ok := _c.mutation.StartedAt(); ok {
 		_spec.SetField(workflowrun.FieldStartedAt, field.TypeTime, value)
