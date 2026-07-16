@@ -139,6 +139,8 @@ try {
   await assertNoHorizontalOverflow('desktop sessions');
   await screenshot('03-sessions-desktop.png');
 
+  await assertSessionDetailResizableLayout(plainSession.id, gitSession.id);
+
   await navigate(`/#/sessions/${plainSession.id}`);
   await waitForText('请只输出 OK');
   await waitForText('会话信息');
@@ -214,6 +216,11 @@ try {
       '11-new-session-dialog.png',
       '12-answer-user-dialog.png',
       '13-session-diff-workspace.png',
+      '14-session-splitter-default.png',
+      '15-session-splitter-persisted.png',
+      '16-session-splitter-clamped.png',
+      '17-session-splitter-restored.png',
+      '18-session-splitter-mobile.png',
     ].map((name) => `${screenshotDir}/${name}`),
   }, null, 2));
 } catch (error) {
@@ -773,6 +780,168 @@ async function assertSessionDetailReadableLayout(label) {
   assert(!result.pageScrolls, `${label} scrolls the detail page`);
   assert(!result.pageContainerScrolls, `${label} scrolls the page container`);
   assert(['auto', 'scroll'].includes(result.streamOverflowY), `${label} event stream is not scrollable`);
+}
+
+async function assertSessionDetailResizableLayout(firstSessionId, secondSessionId) {
+  const storageKey = 'anycode:session-detail:right-panel-width';
+  await setViewport(1440, 900);
+  await evaluate(`localStorage.removeItem(${JSON.stringify(storageKey)})`);
+  await navigate(`/#/sessions/${firstSessionId}`);
+  await waitForVisibleSelector('.detail-splitter__handle');
+
+  const initial = await readSessionSplitterMetrics(storageKey);
+  assert(Math.abs(initial.rightWidth - 360) <= 1, `splitter default width = ${initial.rightWidth}`);
+  assert(initial.leftWidth >= 480, `splitter default left width = ${initial.leftWidth}`);
+  assert(initial.separatorWidth === 16, `splitter separator width = ${initial.separatorWidth}`);
+  await screenshot('14-session-splitter-default.png');
+
+  await evaluate(`localStorage.setItem(${JSON.stringify(storageKey)}, ' ')`);
+  await navigate(`/#/sessions/${firstSessionId}`);
+  await waitForVisibleSelector('.detail-splitter__handle');
+  const invalidPreference = await readSessionSplitterMetrics(storageKey);
+  assert(
+    Math.abs(invalidPreference.rightWidth - 360) <= 1,
+    `splitter invalid preference width = ${invalidPreference.rightWidth}`,
+  );
+
+  const dragStart = await readSessionSplitterMetrics(storageKey);
+  const startX = dragStart.handleLeft + dragStart.handleWidth / 2;
+  const startY = dragStart.handleTop + dragStart.handleHeight / 2;
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: startX, y: startY });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: startX,
+    y: startY,
+    button: 'left',
+    buttons: 1,
+    clickCount: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: startX - 48,
+    y: startY,
+    button: 'left',
+    buttons: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseMoved',
+    x: startX - 96,
+    y: startY,
+    button: 'left',
+    buttons: 1,
+  });
+  await page.send('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: startX - 96,
+    y: startY,
+    button: 'left',
+    buttons: 0,
+    clickCount: 1,
+  });
+  await waitForCondition(
+    `Number(localStorage.getItem(${JSON.stringify(storageKey)})) > 360`,
+    'session splitter drag persistence',
+  );
+
+  const dragged = await readSessionSplitterMetrics(storageKey);
+  assert(dragged.rightWidth > 360, `splitter drag width = ${dragged.rightWidth}`);
+  assert(dragged.leftWidth >= 480, `splitter drag left width = ${dragged.leftWidth}`);
+  await evaluate(`document.querySelector('.detail-splitter__handle').focus()`);
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight' });
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowRight', code: 'ArrowRight' });
+  await sleep(200);
+  const keyboard = await readSessionSplitterMetrics(storageKey);
+  assert(
+    Math.abs(keyboard.rightWidth - (dragged.rightWidth - 16)) <= 1,
+    `splitter keyboard width ${keyboard.rightWidth} did not follow ${dragged.rightWidth}`,
+  );
+  assert(keyboard.focused, 'splitter keyboard handle lost focus');
+  assert(keyboard.focusRing !== 'none', 'splitter focus ring is not visible');
+
+  await navigate(`/#/sessions/${secondSessionId}`);
+  await waitForVisibleSelector('.detail-splitter__handle');
+  const persisted = await readSessionSplitterMetrics(storageKey);
+  assert(
+    Math.abs(persisted.rightWidth - keyboard.rightWidth) <= 1,
+    `splitter persisted width ${persisted.rightWidth} != ${keyboard.rightWidth}`,
+  );
+  await screenshot('15-session-splitter-persisted.png');
+
+  await evaluate(`localStorage.setItem(${JSON.stringify(storageKey)}, '700')`);
+  const reloaded = page.once('Page.loadEventFired', 30_000);
+  await page.send('Page.reload', { ignoreCache: true });
+  await reloaded;
+  await waitForReadyState();
+  await waitForVisibleSelector('.detail-splitter__handle');
+  const widePreference = await readSessionSplitterMetrics(storageKey);
+  assert(Math.abs(widePreference.rightWidth - 700) <= 1, `splitter wide width = ${widePreference.rightWidth}`);
+
+  await setViewport(1024, 768);
+  await sleep(400);
+  const clamped = await readSessionSplitterMetrics(storageKey);
+  assert(Math.abs(clamped.leftWidth - 480) <= 1, `splitter clamped left width = ${clamped.leftWidth}`);
+  assert(Math.abs(clamped.rightWidth - 480) <= 1, `splitter clamped right width = ${clamped.rightWidth}`);
+  assert(clamped.storedWidth === 700, `splitter clamp overwrote preference: ${clamped.storedWidth}`);
+  assert(!clamped.hasHorizontalOverflow, 'splitter clamped viewport has horizontal overflow');
+  await screenshot('16-session-splitter-clamped.png');
+
+  await setViewport(2048, 1152);
+  await sleep(400);
+  const restored = await readSessionSplitterMetrics(storageKey);
+  assert(Math.abs(restored.rightWidth - 700) <= 1, `splitter restored width = ${restored.rightWidth}`);
+  assert(restored.leftWidth >= 480, `splitter restored left width = ${restored.leftWidth}`);
+  await screenshot('17-session-splitter-restored.png');
+
+  await setViewport(1023, 900);
+  await sleep(400);
+  let mobile = await readSessionSplitterMetrics(storageKey);
+  assert(mobile.separatorDisplay === 'none', `mobile splitter separator = ${mobile.separatorDisplay}`);
+  assert(mobile.visiblePanelCount === 1, `mobile splitter visible panels = ${mobile.visiblePanelCount}`);
+  assert(!mobile.hasHorizontalOverflow, 'mobile splitter viewport has horizontal overflow');
+  for (const label of ['信息', '变更', '产物', '会话']) {
+    await clickTab(label);
+    mobile = await readSessionSplitterMetrics(storageKey);
+    assert(mobile.visiblePanelCount === 1, `mobile ${label} visible panels = ${mobile.visiblePanelCount}`);
+    assert(!mobile.hasHorizontalOverflow, `mobile ${label} viewport has horizontal overflow`);
+  }
+  await screenshot('18-session-splitter-mobile.png');
+
+  await evaluate(`localStorage.setItem(${JSON.stringify(storageKey)}, '360')`);
+  await setViewport(1440, 900);
+}
+
+async function readSessionSplitterMetrics(storageKey) {
+  return evaluate(`(() => {
+    const root = document.querySelector('.detail-splitter');
+    const left = root?.querySelector('.q-splitter__before');
+    const right = root?.querySelector('.q-splitter__after');
+    const separator = root?.querySelector('.q-splitter__separator');
+    const handle = root?.querySelector('.detail-splitter__handle');
+    if (!root || !left || !right || !separator || !handle) throw new Error('session splitter missing');
+    const leftRect = left.getBoundingClientRect();
+    const rightRect = right.getBoundingClientRect();
+    const separatorRect = separator.getBoundingClientRect();
+    const handleRect = handle.getBoundingClientRect();
+    const panels = [left, right];
+    return {
+      leftWidth: leftRect.width,
+      rightWidth: rightRect.width,
+      separatorWidth: separatorRect.width,
+      separatorDisplay: getComputedStyle(separator).display,
+      handleLeft: handleRect.left,
+      handleTop: handleRect.top,
+      handleWidth: handleRect.width,
+      handleHeight: handleRect.height,
+      focused: document.activeElement === handle,
+      focusRing: getComputedStyle(handle).boxShadow,
+      visiblePanelCount: panels.filter((panel) => {
+        const rect = panel.getBoundingClientRect();
+        return getComputedStyle(panel).display !== 'none' && rect.width > 0 && rect.height > 0;
+      }).length,
+      storedWidth: Number(localStorage.getItem(${JSON.stringify(storageKey)})),
+      hasHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    };
+  })()`);
 }
 
 async function clickQuestionButtonForCard(marker) {

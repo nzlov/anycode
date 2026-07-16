@@ -194,15 +194,73 @@ test('session detail mobile navigation shows one scroll owner at a time', () => 
     /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page\s*{[^}]*overflow:\s*hidden/s,
   );
   assert.match(
-    stylesSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-grid,[\s\S]*?grid-template-columns:\s*1fr/s,
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page \.detail-grid\s*{[^}]*width:\s*100%/s,
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.right-panel--mobile-hidden\s*{[^}]*display:\s*none/s,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.detail-splitter__panel--mobile-hidden\)\s*{[^}]*display:\s*none/s,
   );
   assert.doesNotMatch(
     detailSource,
     /@media \(max-width:\s*699px\)[\s\S]*?\.detail-page\s*{[^}]*overflow:\s*auto/s,
+  );
+});
+
+test('session detail desktop splitter keeps one persisted and accessible layout owner', () => {
+  assert.match(detailSource, /<q-splitter[\s\S]*?class="detail-grid detail-splitter"/s);
+  assert.match(detailSource, /<q-splitter[\s\S]*?reverse[\s\S]*?unit="px"/s);
+  assert.match(detailSource, /:model-value="rightPanelWidth"/);
+  assert.match(detailSource, /:limits="\[minRightPanelWidth, maxRightPanelWidth\]"/);
+  assert.match(detailSource, /:disable="\$q\.screen\.lt\.md"/);
+  assert.match(detailSource, /<q-resize-observer\s+@resize="onDetailSplitterResize"/);
+  assert.equal(detailSource.match(/class="event-panel"/g)?.length, 1);
+  assert.equal(detailSource.match(/class="right-panel"/g)?.length, 1);
+  assert.match(detailSource, /const defaultRightPanelWidth = 360/);
+  assert.match(detailSource, /const minRightPanelWidth = 320/);
+  assert.match(detailSource, /const minLeftPanelWidth = 480/);
+  assert.match(detailSource, /const detailSplitterGap = 16/);
+  assert.match(detailSource, /const splitterKeyboardStep = 16/);
+  assert.match(
+    detailSource,
+    /const detailSplitterStorageKey = 'anycode:session-detail:right-panel-width'/,
+  );
+  assert.match(detailSource, /window\.localStorage\.getItem\(detailSplitterStorageKey\)/);
+  assert.match(detailSource, /window\.localStorage\.setItem\(/);
+  assert.match(
+    detailSource,
+    /if \(raw === null \|\| raw\.trim\(\) === ''\) return defaultRightPanelWidth/,
+  );
+  assert.match(
+    detailSource,
+    /Number\.isFinite\(value\)\s*\?\s*Math\.max\(minRightPanelWidth, Math\.round\(value\)\)/,
+  );
+  assert.match(detailSource, /const rightPanelWidth = computed/);
+  assert.match(
+    detailSource,
+    /Math\.min\(preferredRightPanelWidth\.value, maxRightPanelWidth\.value\)/,
+  );
+  assert.match(detailSource, /#separator/);
+  assert.match(detailSource, /role="separator"/);
+  assert.match(detailSource, /aria-orientation="vertical"/);
+  assert.match(detailSource, /:aria-valuemin="minRightPanelWidth"/);
+  assert.match(detailSource, /:aria-valuemax="maxRightPanelWidth"/);
+  assert.match(detailSource, /:aria-valuenow="rightPanelWidth"/);
+  assert.match(detailSource, /@keydown\.left\.prevent="resizeRightPanel\(splitterKeyboardStep\)"/);
+  assert.match(
+    detailSource,
+    /@keydown\.right\.prevent="resizeRightPanel\(-splitterKeyboardStep\)"/,
+  );
+  assert.match(
+    detailSource,
+    /\.detail-splitter\s*>\s*:deep\(\.q-splitter__panel\)\s*{[^}]*overflow:\s*hidden/s,
+  );
+  assert.match(
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.q-splitter__separator\)\s*{[^}]*display:\s*none/s,
+  );
+  assert.match(
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.q-splitter__panel\)\s*{[^}]*width:\s*100%\s*!important/s,
   );
 });
