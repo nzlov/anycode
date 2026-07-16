@@ -17,6 +17,14 @@ const detailPage = readFileSync(
   new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
   'utf8',
 );
+const composer = readFileSync(
+  new URL('../src/components/PromptComposer.vue', import.meta.url),
+  'utf8',
+);
+const sessionsService = readFileSync(
+  new URL('../src/services/sessions.ts', import.meta.url),
+  'utf8',
+);
 
 test('session artifacts use one unpaginated latest-version query and unified file actions', () => {
   assert.match(panel, /listSessionFiles\(input\)/);
@@ -27,7 +35,10 @@ test('session artifacts use one unpaginated latest-version query and unified fil
   assert.match(panel, /files\.value = result/);
   assert.match(service, /sessionFiles\(input: \$input\) \{ \$\{sessionFileFields\} \}/);
   assert.doesNotMatch(service, /SessionFilePage|pageInfo|pageSize/);
-  assert.match(panel, /useSessionFileAsInput/);
+  assert.doesNotMatch(panel, /useSessionFileAsInput|copyAsInput/);
+  assert.doesNotMatch(service, /useSessionFileAsInput/);
+  assert.match(panel, /allowReference/);
+  assert.match(panel, /emit\('referenceArtifact', file\)/);
   assert.match(panel, /deleteSessionFile/);
   assert.match(panel, /downloadSessionFile/);
 });
@@ -84,8 +95,19 @@ test('artifact panel supports controlled focus without replacing file actions', 
   assert.match(panel, /props\.focusRequest\?\.token/);
   assert.match(panel, /void applyFocus\(request\)/);
   assert.match(panel, /\{ immediate: true \}/);
-  assert.match(panel, /emit\('artifactDeleted', file\.logicalPath\)/);
+  assert.match(panel, /emit\('artifactDeleted', file\)/);
   assert.match(panel, /emit\('artifactsRefreshed'\)/);
   assert.match(panel, /@click="refresh"/);
   assert.match(panel, /openPreview\(request\.file\)/);
+});
+
+test('detail prompt composer submits artifact ids without uploading artifacts', () => {
+  assert.match(detailPage, /v-model:artifacts="appendArtifacts"/);
+  assert.match(detailPage, /allow-reference/);
+  assert.match(detailPage, /selectedArtifacts\.map\(\(artifact\) => artifact\.id\)/);
+  assert.match(composer, /v-for="artifact in artifacts"/);
+  assert.match(composer, /attachmentCount/);
+  assert.match(sessionsService, /artifactIds\?: string\[\]/);
+  assert.match(sessionsService, /input\.artifactIds = artifactIds/);
+  assert.doesNotMatch(detailPage, /stageAttachment\(artifact/);
 });

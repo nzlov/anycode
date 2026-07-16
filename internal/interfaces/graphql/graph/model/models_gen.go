@@ -18,6 +18,7 @@ type AppendPromptInput struct {
 	SessionID           string   `json:"sessionId"`
 	Body                string   `json:"body"`
 	StagedAttachmentIds []string `json:"stagedAttachmentIds,omitempty"`
+	ArtifactIds         []string `json:"artifactIds,omitempty"`
 }
 
 type ApprovalConfig struct {
@@ -235,6 +236,7 @@ type PromptAppend struct {
 	SessionID   string               `json:"sessionId"`
 	Body        string               `json:"body"`
 	Attachments []*SessionAttachment `json:"attachments"`
+	Artifacts   []*SessionFile       `json:"artifacts"`
 	CreatedAt   time.Time            `json:"createdAt"`
 }
 

@@ -4,6 +4,7 @@ import {
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
 import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
+import type { SessionFile } from '@/services/sessionFiles';
 import type { TranscriptEvent } from '@/services/sessionTimeline';
 import { normalizeWorkflowNodeResult } from '@/services/workflowApprovalReview';
 
@@ -112,6 +113,7 @@ export interface PromptAppend {
   sessionId: string;
   body: string;
   attachments: SessionAttachment[];
+  artifacts: SessionFile[];
   createdAt: string;
   time: string;
 }
@@ -301,6 +303,7 @@ interface GraphQLPromptAppend {
   sessionId: string;
   body: string;
   attachments?: GraphQLSessionAttachment[];
+  artifacts?: SessionFile[];
   createdAt: string;
 }
 
@@ -431,6 +434,10 @@ const sessionDetailFields = `
       size
       previewable
       createdAt
+    }
+    artifacts {
+      id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
+      previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
     }
     createdAt
   }
@@ -656,17 +663,31 @@ export async function appendPrompt(
   sessionId: string,
   body: string,
   stagedAttachmentIds?: string[],
+  artifactIds?: string[],
 ) {
-  const input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } = {
+  const input: {
+    sessionId: string;
+    body: string;
+    stagedAttachmentIds?: string[];
+    artifactIds?: string[];
+  } = {
     sessionId,
     body,
   };
   if (stagedAttachmentIds && stagedAttachmentIds.length > 0) {
     input.stagedAttachmentIds = stagedAttachmentIds;
   }
+  if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
   return graphqlFetch<
     { appendPrompt: GraphQLPromptAppend },
-    { input: { sessionId: string; body: string; stagedAttachmentIds?: string[] } }
+    {
+      input: {
+        sessionId: string;
+        body: string;
+        stagedAttachmentIds?: string[];
+        artifactIds?: string[];
+      };
+    }
   >({
     query: `
       mutation AppendPrompt($input: AppendPromptInput!) {
@@ -683,6 +704,10 @@ export async function appendPrompt(
             size
             previewable
             createdAt
+          }
+          artifacts {
+            id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
+            previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
           }
           createdAt
         }
@@ -716,6 +741,10 @@ export async function updatePromptAppend(
             size
             previewable
             createdAt
+          }
+          artifacts {
+            id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
+            previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
           }
           createdAt
         }
@@ -1010,6 +1039,7 @@ function normalizePromptAppend(promptAppend: GraphQLPromptAppend): PromptAppend 
     sessionId: promptAppend.sessionId,
     body: promptAppend.body,
     attachments: (promptAppend.attachments ?? []).map(normalizeAttachment),
+    artifacts: promptAppend.artifacts ?? [],
     createdAt: promptAppend.createdAt,
     time: formatEventTime(promptAppend.createdAt),
   };

@@ -40,6 +40,12 @@ func (_c *PromptAppendCreate) SetNillableBody(v *string) *PromptAppendCreate {
 	return _c
 }
 
+// SetArtifactIds sets the "artifact_ids" field.
+func (_c *PromptAppendCreate) SetArtifactIds(v []string) *PromptAppendCreate {
+	_c.mutation.SetArtifactIds(v)
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *PromptAppendCreate) SetStatus(v string) *PromptAppendCreate {
 	_c.mutation.SetStatus(v)
@@ -141,6 +147,10 @@ func (_c *PromptAppendCreate) defaults() {
 		v := promptappend.DefaultBody
 		_c.mutation.SetBody(v)
 	}
+	if _, ok := _c.mutation.ArtifactIds(); !ok {
+		v := promptappend.DefaultArtifactIds
+		_c.mutation.SetArtifactIds(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := promptappend.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -167,6 +177,9 @@ func (_c *PromptAppendCreate) check() error {
 	}
 	if _, ok := _c.mutation.Body(); !ok {
 		return &ValidationError{Name: "body", err: errors.New(`ent: missing required field "PromptAppend.body"`)}
+	}
+	if _, ok := _c.mutation.ArtifactIds(); !ok {
+		return &ValidationError{Name: "artifact_ids", err: errors.New(`ent: missing required field "PromptAppend.artifact_ids"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "PromptAppend.status"`)}
@@ -219,6 +232,10 @@ func (_c *PromptAppendCreate) createSpec() (*PromptAppend, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
 		_node.Body = value
+	}
+	if value, ok := _c.mutation.ArtifactIds(); ok {
+		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)
+		_node.ArtifactIds = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)

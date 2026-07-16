@@ -382,6 +382,7 @@ func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsessi
 		SetID(append.ID).
 		SetSessionID(string(append.SessionID)).
 		SetBody(append.Body).
+		SetArtifactIds(sessionFileIDsToStrings(append.ArtifactIDs)).
 		SetStatus(string(append.Status)).
 		SetDispatchedProcessRunID(append.DispatchedProcessRunID)
 	if append.DispatchedAt != nil {
@@ -511,6 +512,10 @@ func promptAppendsFromRows(rows []*ent.PromptAppend) []domainsession.PromptAppen
 }
 
 func promptAppendFromRow(row *ent.PromptAppend) domainsession.PromptAppend {
+	artifactIDs := make([]domainsession.SessionFileID, 0, len(row.ArtifactIds))
+	for _, id := range row.ArtifactIds {
+		artifactIDs = append(artifactIDs, domainsession.SessionFileID(id))
+	}
 	return domainsession.PromptAppend{
 		ID:                     row.ID,
 		SessionID:              domainsession.ID(row.SessionID),
@@ -519,7 +524,16 @@ func promptAppendFromRow(row *ent.PromptAppend) domainsession.PromptAppend {
 		DispatchedAt:           row.DispatchedAt,
 		DispatchedProcessRunID: row.DispatchedProcessRunID,
 		CreatedAt:              row.CreatedAt,
+		ArtifactIDs:            artifactIDs,
 	}
+}
+
+func sessionFileIDsToStrings(ids []domainsession.SessionFileID) []string {
+	values := make([]string, 0, len(ids))
+	for _, id := range ids {
+		values = append(values, string(id))
+	}
+	return values
 }
 
 func (r *SessionRepository) AddMergeRecord(ctx context.Context, record domainsession.MergeRecord) error {

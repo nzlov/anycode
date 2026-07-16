@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
@@ -53,6 +54,18 @@ func (_u *PromptAppendUpdate) SetNillableBody(v *string) *PromptAppendUpdate {
 	if v != nil {
 		_u.SetBody(*v)
 	}
+	return _u
+}
+
+// SetArtifactIds sets the "artifact_ids" field.
+func (_u *PromptAppendUpdate) SetArtifactIds(v []string) *PromptAppendUpdate {
+	_u.mutation.SetArtifactIds(v)
+	return _u
+}
+
+// AppendArtifactIds appends value to the "artifact_ids" field.
+func (_u *PromptAppendUpdate) AppendArtifactIds(v []string) *PromptAppendUpdate {
+	_u.mutation.AppendArtifactIds(v)
 	return _u
 }
 
@@ -164,6 +177,14 @@ func (_u *PromptAppendUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ArtifactIds(); ok {
+		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedArtifactIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldArtifactIds, value)
+		})
+	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)
 	}
@@ -221,6 +242,18 @@ func (_u *PromptAppendUpdateOne) SetNillableBody(v *string) *PromptAppendUpdateO
 	if v != nil {
 		_u.SetBody(*v)
 	}
+	return _u
+}
+
+// SetArtifactIds sets the "artifact_ids" field.
+func (_u *PromptAppendUpdateOne) SetArtifactIds(v []string) *PromptAppendUpdateOne {
+	_u.mutation.SetArtifactIds(v)
+	return _u
+}
+
+// AppendArtifactIds appends value to the "artifact_ids" field.
+func (_u *PromptAppendUpdateOne) AppendArtifactIds(v []string) *PromptAppendUpdateOne {
+	_u.mutation.AppendArtifactIds(v)
 	return _u
 }
 
@@ -361,6 +394,14 @@ func (_u *PromptAppendUpdateOne) sqlSave(ctx context.Context) (_node *PromptAppe
 	}
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ArtifactIds(); ok {
+		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedArtifactIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldArtifactIds, value)
+		})
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(promptappend.FieldStatus, field.TypeString, value)

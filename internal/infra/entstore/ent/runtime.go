@@ -202,16 +202,20 @@ func init() {
 	promptappendDescBody := promptappendFields[2].Descriptor()
 	// promptappend.DefaultBody holds the default value on creation for the body field.
 	promptappend.DefaultBody = promptappendDescBody.Default.(string)
+	// promptappendDescArtifactIds is the schema descriptor for artifact_ids field.
+	promptappendDescArtifactIds := promptappendFields[3].Descriptor()
+	// promptappend.DefaultArtifactIds holds the default value on creation for the artifact_ids field.
+	promptappend.DefaultArtifactIds = promptappendDescArtifactIds.Default.([]string)
 	// promptappendDescStatus is the schema descriptor for status field.
-	promptappendDescStatus := promptappendFields[3].Descriptor()
+	promptappendDescStatus := promptappendFields[4].Descriptor()
 	// promptappend.DefaultStatus holds the default value on creation for the status field.
 	promptappend.DefaultStatus = promptappendDescStatus.Default.(string)
 	// promptappendDescDispatchedProcessRunID is the schema descriptor for dispatched_process_run_id field.
-	promptappendDescDispatchedProcessRunID := promptappendFields[5].Descriptor()
+	promptappendDescDispatchedProcessRunID := promptappendFields[6].Descriptor()
 	// promptappend.DefaultDispatchedProcessRunID holds the default value on creation for the dispatched_process_run_id field.
 	promptappend.DefaultDispatchedProcessRunID = promptappendDescDispatchedProcessRunID.Default.(string)
 	// promptappendDescCreatedAt is the schema descriptor for created_at field.
-	promptappendDescCreatedAt := promptappendFields[6].Descriptor()
+	promptappendDescCreatedAt := promptappendFields[7].Descriptor()
 	// promptappend.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promptappend.DefaultCreatedAt = promptappendDescCreatedAt.Default.(func() time.Time)
 	questionbatchFields := schema.QuestionBatch{}.Fields()

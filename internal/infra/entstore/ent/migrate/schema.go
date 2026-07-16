@@ -180,6 +180,7 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "body", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "artifact_ids", Type: field.TypeJSON},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "dispatched_at", Type: field.TypeTime, Nullable: true},
 		{Name: "dispatched_process_run_id", Type: field.TypeString, Default: ""},
@@ -194,12 +195,12 @@ var (
 			{
 				Name:    "promptappend_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[6]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[7]},
 			},
 			{
 				Name:    "promptappend_session_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[3], PromptAppendsColumns[6]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[4], PromptAppendsColumns[7]},
 			},
 		},
 	}

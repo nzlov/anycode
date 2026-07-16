@@ -307,13 +307,6 @@ func TestPublishScanVersionAndDelete(t *testing.T) {
 	if len(artifacts) != 1 || artifacts[0].ID != published[0].ID {
 		t.Fatalf("artifact listing rows=%#v", artifacts)
 	}
-	input, err := service.UseAsInput(ctx, first.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if input.ID == first.ID || input.Path == first.Path || input.Role != session.FileRoleInput || input.SourceType != session.AttachmentSourceArtifactCopy {
-		t.Fatalf("copied input = %#v", input)
-	}
 	deleted, err := service.Delete(ctx, first.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -323,9 +316,6 @@ func TestPublishScanVersionAndDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(first.Path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("archived file still exists: %v", err)
-	}
-	if body, err := os.ReadFile(input.Path); err != nil || string(body) != "first" {
-		t.Fatalf("copied input changed after artifact delete: body=%q err=%v", body, err)
 	}
 	artifacts, err = service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
 	if err != nil {

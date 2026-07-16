@@ -92,17 +92,6 @@ export async function deleteSessionFile(id: string): Promise<boolean> {
   return data.deleteSessionFile;
 }
 
-export async function useSessionFileAsInput(id: string): Promise<{ id: string; filename: string }> {
-  const data = await graphqlFetch<
-    { useSessionFileAsInput: { id: string; filename: string } },
-    { id: string }
-  >({
-    query: `mutation UseSessionFileAsInput($id: ID!) { useSessionFileAsInput(id: $id) { id filename } }`,
-    variables: { id },
-  });
-  return data.useSessionFileAsInput;
-}
-
 export async function fetchSessionFile(
   file: SessionFileAccess,
   mode: 'preview' | 'download',

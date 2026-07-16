@@ -33,8 +33,8 @@ exits and immediately before the card closes.
   belong to closed cards, and deletes orphan output directories after 24 hours.
 - Archived files are retained while the card remains open. Explicit deletion or closing the card
   tombstones and removes them. A deletion tombstone prevents the same output version from being
-  recreated by a later scan. Input attachments copied from artifacts are retained because they follow
-  the input-file lifecycle rather than the artifact lifecycle.
+  recreated by a later scan. Prompt references store artifact IDs without copying files, so deleted
+  artifacts are ignored when pending prompt input is resolved.
 
 This design can temporarily use roughly twice the generated file size: one mutable working copy and
 one immutable archived copy.

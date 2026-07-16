@@ -46,7 +46,6 @@ type Mutation {
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
   deleteSessionFile(id: ID!): Boolean!
-  useSessionFileAsInput(id: ID!): SessionAttachment!
   saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): WorkflowDefinition!
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
@@ -317,6 +316,7 @@ type PromptAppend {
   sessionId: ID!
   body: String!
   attachments: [SessionAttachment!]!
+  artifacts: [SessionFile!]!
   createdAt: Time!
 }
 
@@ -699,6 +699,7 @@ input AppendPromptInput {
   sessionId: ID!
   body: String!
   stagedAttachmentIds: [ID!]
+  artifactIds: [ID!]
 }
 
 input UpdatePromptAppendInput {

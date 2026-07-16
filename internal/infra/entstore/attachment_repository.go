@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -94,12 +95,18 @@ func (r *AttachmentRepository) FindSessionAttachment(ctx context.Context, id dom
 		row := r.db.QueryRowContext(ctx, sessionFileSelect+` WHERE id = ?`, string(id))
 		attachment, err := scanSessionFile(row)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domainsession.SessionFile{}, domainsession.ErrSessionFileNotFound
+			}
 			return domainsession.SessionFile{}, fmt.Errorf("find session attachment: %w", err)
 		}
 		return attachment, nil
 	}
 	row, err := r.client.SessionAttachment.Get(ctx, string(id))
 	if err != nil {
+		if ent.IsNotFound(err) {
+			return domainsession.SessionFile{}, domainsession.ErrSessionFileNotFound
+		}
 		return domainsession.SessionFile{}, fmt.Errorf("find session attachment: %w", err)
 	}
 	return toDomainSessionAttachment(row), nil

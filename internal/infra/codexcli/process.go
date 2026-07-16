@@ -2735,6 +2735,11 @@ func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
 	if input.ArtifactDir != "" && input.PermissionMode == "workspace-write" {
 		args = append(args, "-c", fmt.Sprintf("sandbox_workspace_write.writable_roots=[%q]", input.ArtifactDir))
 	}
+	for _, path := range input.ImagePaths {
+		if path != "" {
+			args = append(args, "-i", path)
+		}
+	}
 	if input.CodexSessionID != "" {
 		args = append(args, input.CodexSessionID)
 	}

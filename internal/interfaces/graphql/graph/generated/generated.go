@@ -166,7 +166,6 @@ type ComplexityRoot struct {
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
-		UseSessionFileAsInput       func(childComplexity int, id string) int
 	}
 
 	PageInfo struct {
@@ -198,6 +197,7 @@ type ComplexityRoot struct {
 	}
 
 	PromptAppend struct {
+		Artifacts   func(childComplexity int) int
 		Attachments func(childComplexity int) int
 		Body        func(childComplexity int) int
 		CreatedAt   func(childComplexity int) int
@@ -643,7 +643,6 @@ type MutationResolver interface {
 	DeleteStagedAttachment(ctx context.Context, id string) (bool, error)
 	DeleteSessionAttachment(ctx context.Context, id string) (bool, error)
 	DeleteSessionFile(ctx context.Context, id string) (bool, error)
-	UseSessionFileAsInput(ctx context.Context, id string) (*model.SessionAttachment, error)
 	SaveWorkflowDefinition(ctx context.Context, input model.SaveWorkflowDefinitionInput) (*model.WorkflowDefinition, error)
 	ActivateWorkflowDefinition(ctx context.Context, id string) (bool, error)
 	SubmitWorkflowApproval(ctx context.Context, input model.SubmitWorkflowApprovalInput) (*model.WorkflowRun, error)
@@ -1310,17 +1309,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateSessionConfig(childComplexity, args["input"].(model.UpdateSessionConfigInput)), true
-	case "Mutation.useSessionFileAsInput":
-		if e.ComplexityRoot.Mutation.UseSessionFileAsInput == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_useSessionFileAsInput_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.UseSessionFileAsInput(childComplexity, args["id"].(string)), true
 
 	case "PageInfo.nextCursor":
 		if e.ComplexityRoot.PageInfo.NextCursor == nil {
@@ -1439,6 +1427,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Project.WorktreeInitCommand(childComplexity), true
 
+	case "PromptAppend.artifacts":
+		if e.ComplexityRoot.PromptAppend.Artifacts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptAppend.Artifacts(childComplexity), true
 	case "PromptAppend.attachments":
 		if e.ComplexityRoot.PromptAppend.Attachments == nil {
 			break
@@ -3404,7 +3398,6 @@ type Mutation {
   deleteStagedAttachment(id: ID!): Boolean!
   deleteSessionAttachment(id: ID!): Boolean!
   deleteSessionFile(id: ID!): Boolean!
-  useSessionFileAsInput(id: ID!): SessionAttachment!
   saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): WorkflowDefinition!
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
@@ -3675,6 +3668,7 @@ type PromptAppend {
   sessionId: ID!
   body: String!
   attachments: [SessionAttachment!]!
+  artifacts: [SessionFile!]!
   createdAt: Time!
 }
 
@@ -4057,6 +4051,7 @@ input AppendPromptInput {
   sessionId: ID!
   body: String!
   stagedAttachmentIds: [ID!]
+  artifactIds: [ID!]
 }
 
 input UpdatePromptAppendInput {
@@ -4473,17 +4468,6 @@ func (ec *executionContext) field_Mutation_updateSessionConfig_args(ctx context.
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_useSessionFileAsInput_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
 	return args, nil
 }
 
@@ -7463,6 +7447,8 @@ func (ec *executionContext) fieldContext_Mutation_appendPrompt(ctx context.Conte
 				return ec.fieldContext_PromptAppend_body(ctx, field)
 			case "attachments":
 				return ec.fieldContext_PromptAppend_attachments(ctx, field)
+			case "artifacts":
+				return ec.fieldContext_PromptAppend_artifacts(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -7516,6 +7502,8 @@ func (ec *executionContext) fieldContext_Mutation_updatePromptAppend(ctx context
 				return ec.fieldContext_PromptAppend_body(ctx, field)
 			case "attachments":
 				return ec.fieldContext_PromptAppend_attachments(ctx, field)
+			case "artifacts":
+				return ec.fieldContext_PromptAppend_artifacts(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -7706,65 +7694,6 @@ func (ec *executionContext) fieldContext_Mutation_deleteSessionFile(ctx context.
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_deleteSessionFile_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_useSessionFileAsInput(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Mutation_useSessionFileAsInput,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().UseSessionFileAsInput(ctx, fc.Args["id"].(string))
-		},
-		nil,
-		ec.marshalNSessionAttachment2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionAttachment,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Mutation_useSessionFileAsInput(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_SessionAttachment_id(ctx, field)
-			case "sessionId":
-				return ec.fieldContext_SessionAttachment_sessionId(ctx, field)
-			case "kind":
-				return ec.fieldContext_SessionAttachment_kind(ctx, field)
-			case "filename":
-				return ec.fieldContext_SessionAttachment_filename(ctx, field)
-			case "mimeType":
-				return ec.fieldContext_SessionAttachment_mimeType(ctx, field)
-			case "size":
-				return ec.fieldContext_SessionAttachment_size(ctx, field)
-			case "previewable":
-				return ec.fieldContext_SessionAttachment_previewable(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_SessionAttachment_createdAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionAttachment", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_useSessionFileAsInput_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8663,6 +8592,73 @@ func (ec *executionContext) fieldContext_PromptAppend_attachments(_ context.Cont
 				return ec.fieldContext_SessionAttachment_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionAttachment", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptAppend_artifacts(ctx context.Context, field graphql.CollectedField, obj *model.PromptAppend) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptAppend_artifacts,
+		func(ctx context.Context) (any, error) {
+			return obj.Artifacts, nil
+		},
+		nil,
+		ec.marshalNSessionFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFileᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptAppend_artifacts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptAppend",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_SessionFile_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_SessionFile_sessionId(ctx, field)
+			case "role":
+				return ec.fieldContext_SessionFile_role(ctx, field)
+			case "sourceType":
+				return ec.fieldContext_SessionFile_sourceType(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_SessionFile_sourceId(ctx, field)
+			case "artifactKind":
+				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
+			case "logicalPath":
+				return ec.fieldContext_SessionFile_logicalPath(ctx, field)
+			case "filename":
+				return ec.fieldContext_SessionFile_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_SessionFile_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_SessionFile_size(ctx, field)
+			case "sha256":
+				return ec.fieldContext_SessionFile_sha256(ctx, field)
+			case "previewKind":
+				return ec.fieldContext_SessionFile_previewKind(ctx, field)
+			case "processRunId":
+				return ec.fieldContext_SessionFile_processRunId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_SessionFile_correlationId(ctx, field)
+			case "previewUrl":
+				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
+			case "downloadUrl":
+				return ec.fieldContext_SessionFile_downloadUrl(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionFile_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type SessionFile", field.Name)
 		},
 	}
 	return fc, nil
@@ -12873,6 +12869,8 @@ func (ec *executionContext) fieldContext_SessionDetail_promptAppends(_ context.C
 				return ec.fieldContext_PromptAppend_body(ctx, field)
 			case "attachments":
 				return ec.fieldContext_PromptAppend_attachments(ctx, field)
+			case "artifacts":
+				return ec.fieldContext_PromptAppend_artifacts(ctx, field)
 			case "createdAt":
 				return ec.fieldContext_PromptAppend_createdAt(ctx, field)
 			}
@@ -19320,7 +19318,7 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds"}
+	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -19348,6 +19346,13 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 				return it, err
 			}
 			it.StagedAttachmentIds = data
+		case "artifactIds":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactIds"))
+			data, err := ec.unmarshalOID2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactIds = data
 		}
 	}
 	return it, nil
@@ -21890,13 +21895,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "useSessionFileAsInput":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_useSessionFileAsInput(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "saveWorkflowDefinition":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_saveWorkflowDefinition(ctx, field)
@@ -22167,6 +22165,11 @@ func (ec *executionContext) _PromptAppend(ctx context.Context, sel ast.Selection
 			}
 		case "attachments":
 			out.Values[i] = ec._PromptAppend_attachments(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "artifacts":
+			out.Values[i] = ec._PromptAppend_artifacts(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -26437,10 +26440,6 @@ func (ec *executionContext) marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋ
 		return graphql.Null
 	}
 	return ec._Session(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionAttachment2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionAttachment(ctx context.Context, sel ast.SelectionSet, v model.SessionAttachment) graphql.Marshaler {
-	return ec._SessionAttachment(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNSessionAttachment2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionAttachmentᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionAttachment) graphql.Marshaler {

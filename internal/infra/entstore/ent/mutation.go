@@ -4901,6 +4901,8 @@ type PromptAppendMutation struct {
 	id                        *string
 	session_id                *string
 	body                      *string
+	artifact_ids              *[]string
+	appendartifact_ids        []string
 	status                    *string
 	dispatched_at             *time.Time
 	dispatched_process_run_id *string
@@ -5085,6 +5087,57 @@ func (m *PromptAppendMutation) OldBody(ctx context.Context) (v string, err error
 // ResetBody resets all changes to the "body" field.
 func (m *PromptAppendMutation) ResetBody() {
 	m.body = nil
+}
+
+// SetArtifactIds sets the "artifact_ids" field.
+func (m *PromptAppendMutation) SetArtifactIds(s []string) {
+	m.artifact_ids = &s
+	m.appendartifact_ids = nil
+}
+
+// ArtifactIds returns the value of the "artifact_ids" field in the mutation.
+func (m *PromptAppendMutation) ArtifactIds() (r []string, exists bool) {
+	v := m.artifact_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArtifactIds returns the old "artifact_ids" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldArtifactIds(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArtifactIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArtifactIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArtifactIds: %w", err)
+	}
+	return oldValue.ArtifactIds, nil
+}
+
+// AppendArtifactIds adds s to the "artifact_ids" field.
+func (m *PromptAppendMutation) AppendArtifactIds(s []string) {
+	m.appendartifact_ids = append(m.appendartifact_ids, s...)
+}
+
+// AppendedArtifactIds returns the list of values that were appended to the "artifact_ids" field in this mutation.
+func (m *PromptAppendMutation) AppendedArtifactIds() ([]string, bool) {
+	if len(m.appendartifact_ids) == 0 {
+		return nil, false
+	}
+	return m.appendartifact_ids, true
+}
+
+// ResetArtifactIds resets all changes to the "artifact_ids" field.
+func (m *PromptAppendMutation) ResetArtifactIds() {
+	m.artifact_ids = nil
+	m.appendartifact_ids = nil
 }
 
 // SetStatus sets the "status" field.
@@ -5278,12 +5331,15 @@ func (m *PromptAppendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptAppendMutation) Fields() []string {
-	fields := make([]string, 0, 6)
+	fields := make([]string, 0, 7)
 	if m.session_id != nil {
 		fields = append(fields, promptappend.FieldSessionID)
 	}
 	if m.body != nil {
 		fields = append(fields, promptappend.FieldBody)
+	}
+	if m.artifact_ids != nil {
+		fields = append(fields, promptappend.FieldArtifactIds)
 	}
 	if m.status != nil {
 		fields = append(fields, promptappend.FieldStatus)
@@ -5309,6 +5365,8 @@ func (m *PromptAppendMutation) Field(name string) (ent.Value, bool) {
 		return m.SessionID()
 	case promptappend.FieldBody:
 		return m.Body()
+	case promptappend.FieldArtifactIds:
+		return m.ArtifactIds()
 	case promptappend.FieldStatus:
 		return m.Status()
 	case promptappend.FieldDispatchedAt:
@@ -5330,6 +5388,8 @@ func (m *PromptAppendMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldSessionID(ctx)
 	case promptappend.FieldBody:
 		return m.OldBody(ctx)
+	case promptappend.FieldArtifactIds:
+		return m.OldArtifactIds(ctx)
 	case promptappend.FieldStatus:
 		return m.OldStatus(ctx)
 	case promptappend.FieldDispatchedAt:
@@ -5360,6 +5420,13 @@ func (m *PromptAppendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBody(v)
+		return nil
+	case promptappend.FieldArtifactIds:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArtifactIds(v)
 		return nil
 	case promptappend.FieldStatus:
 		v, ok := value.(string)
@@ -5452,6 +5519,9 @@ func (m *PromptAppendMutation) ResetField(name string) error {
 		return nil
 	case promptappend.FieldBody:
 		m.ResetBody()
+		return nil
+	case promptappend.FieldArtifactIds:
+		m.ResetArtifactIds()
 		return nil
 	case promptappend.FieldStatus:
 		m.ResetStatus()

@@ -131,15 +131,18 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function appendDescription(body: string, stagedAttachmentIds: string[] = []) {
+  async function appendDescription(
+    body: string,
+    stagedAttachmentIds: string[] = [],
+    artifactIds: string[] = [],
+  ) {
     const text = body.trim();
-    if (!text && stagedAttachmentIds.length === 0) return;
-    const appendBody = text || '追加附件';
+    if (!text && stagedAttachmentIds.length === 0 && artifactIds.length === 0) return;
 
     appending.value = true;
     error.value = '';
     try {
-      await appendPrompt(sessionId, appendBody, stagedAttachmentIds);
+      await appendPrompt(sessionId, text, stagedAttachmentIds, artifactIds);
       await loadSessionDetail();
     } catch (err) {
       const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
