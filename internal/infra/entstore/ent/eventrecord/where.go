@@ -79,6 +79,31 @@ func Type(v string) predicate.EventRecord {
 	return predicate.EventRecord(sql.FieldEQ(FieldType, v))
 }
 
+// ProcessRunID applies equality check predicate on the "process_run_id" field. It's identical to ProcessRunIDEQ.
+func ProcessRunID(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldProcessRunID, v))
+}
+
+// WorkflowRunID applies equality check predicate on the "workflow_run_id" field. It's identical to WorkflowRunIDEQ.
+func WorkflowRunID(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldWorkflowRunID, v))
+}
+
+// NodeRunID applies equality check predicate on the "node_run_id" field. It's identical to NodeRunIDEQ.
+func NodeRunID(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldNodeRunID, v))
+}
+
+// CorrelationID applies equality check predicate on the "correlation_id" field. It's identical to CorrelationIDEQ.
+func CorrelationID(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldCorrelationID, v))
+}
+
+// SessionStatus applies equality check predicate on the "session_status" field. It's identical to SessionStatusEQ.
+func SessionStatus(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldSessionStatus, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.EventRecord {
 	return predicate.EventRecord(sql.FieldEQ(FieldCreatedAt, v))
@@ -287,6 +312,331 @@ func TypeEqualFold(v string) predicate.EventRecord {
 // TypeContainsFold applies the ContainsFold predicate on the "type" field.
 func TypeContainsFold(v string) predicate.EventRecord {
 	return predicate.EventRecord(sql.FieldContainsFold(FieldType, v))
+}
+
+// ProcessRunIDEQ applies the EQ predicate on the "process_run_id" field.
+func ProcessRunIDEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldProcessRunID, v))
+}
+
+// ProcessRunIDNEQ applies the NEQ predicate on the "process_run_id" field.
+func ProcessRunIDNEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNEQ(FieldProcessRunID, v))
+}
+
+// ProcessRunIDIn applies the In predicate on the "process_run_id" field.
+func ProcessRunIDIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldIn(FieldProcessRunID, vs...))
+}
+
+// ProcessRunIDNotIn applies the NotIn predicate on the "process_run_id" field.
+func ProcessRunIDNotIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNotIn(FieldProcessRunID, vs...))
+}
+
+// ProcessRunIDGT applies the GT predicate on the "process_run_id" field.
+func ProcessRunIDGT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGT(FieldProcessRunID, v))
+}
+
+// ProcessRunIDGTE applies the GTE predicate on the "process_run_id" field.
+func ProcessRunIDGTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGTE(FieldProcessRunID, v))
+}
+
+// ProcessRunIDLT applies the LT predicate on the "process_run_id" field.
+func ProcessRunIDLT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLT(FieldProcessRunID, v))
+}
+
+// ProcessRunIDLTE applies the LTE predicate on the "process_run_id" field.
+func ProcessRunIDLTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLTE(FieldProcessRunID, v))
+}
+
+// ProcessRunIDContains applies the Contains predicate on the "process_run_id" field.
+func ProcessRunIDContains(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContains(FieldProcessRunID, v))
+}
+
+// ProcessRunIDHasPrefix applies the HasPrefix predicate on the "process_run_id" field.
+func ProcessRunIDHasPrefix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasPrefix(FieldProcessRunID, v))
+}
+
+// ProcessRunIDHasSuffix applies the HasSuffix predicate on the "process_run_id" field.
+func ProcessRunIDHasSuffix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasSuffix(FieldProcessRunID, v))
+}
+
+// ProcessRunIDEqualFold applies the EqualFold predicate on the "process_run_id" field.
+func ProcessRunIDEqualFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEqualFold(FieldProcessRunID, v))
+}
+
+// ProcessRunIDContainsFold applies the ContainsFold predicate on the "process_run_id" field.
+func ProcessRunIDContainsFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContainsFold(FieldProcessRunID, v))
+}
+
+// WorkflowRunIDEQ applies the EQ predicate on the "workflow_run_id" field.
+func WorkflowRunIDEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDNEQ applies the NEQ predicate on the "workflow_run_id" field.
+func WorkflowRunIDNEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNEQ(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDIn applies the In predicate on the "workflow_run_id" field.
+func WorkflowRunIDIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldIn(FieldWorkflowRunID, vs...))
+}
+
+// WorkflowRunIDNotIn applies the NotIn predicate on the "workflow_run_id" field.
+func WorkflowRunIDNotIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNotIn(FieldWorkflowRunID, vs...))
+}
+
+// WorkflowRunIDGT applies the GT predicate on the "workflow_run_id" field.
+func WorkflowRunIDGT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGT(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDGTE applies the GTE predicate on the "workflow_run_id" field.
+func WorkflowRunIDGTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGTE(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDLT applies the LT predicate on the "workflow_run_id" field.
+func WorkflowRunIDLT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLT(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDLTE applies the LTE predicate on the "workflow_run_id" field.
+func WorkflowRunIDLTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLTE(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDContains applies the Contains predicate on the "workflow_run_id" field.
+func WorkflowRunIDContains(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContains(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDHasPrefix applies the HasPrefix predicate on the "workflow_run_id" field.
+func WorkflowRunIDHasPrefix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasPrefix(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDHasSuffix applies the HasSuffix predicate on the "workflow_run_id" field.
+func WorkflowRunIDHasSuffix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasSuffix(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDEqualFold applies the EqualFold predicate on the "workflow_run_id" field.
+func WorkflowRunIDEqualFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEqualFold(FieldWorkflowRunID, v))
+}
+
+// WorkflowRunIDContainsFold applies the ContainsFold predicate on the "workflow_run_id" field.
+func WorkflowRunIDContainsFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContainsFold(FieldWorkflowRunID, v))
+}
+
+// NodeRunIDEQ applies the EQ predicate on the "node_run_id" field.
+func NodeRunIDEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldNodeRunID, v))
+}
+
+// NodeRunIDNEQ applies the NEQ predicate on the "node_run_id" field.
+func NodeRunIDNEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNEQ(FieldNodeRunID, v))
+}
+
+// NodeRunIDIn applies the In predicate on the "node_run_id" field.
+func NodeRunIDIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldIn(FieldNodeRunID, vs...))
+}
+
+// NodeRunIDNotIn applies the NotIn predicate on the "node_run_id" field.
+func NodeRunIDNotIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNotIn(FieldNodeRunID, vs...))
+}
+
+// NodeRunIDGT applies the GT predicate on the "node_run_id" field.
+func NodeRunIDGT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGT(FieldNodeRunID, v))
+}
+
+// NodeRunIDGTE applies the GTE predicate on the "node_run_id" field.
+func NodeRunIDGTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGTE(FieldNodeRunID, v))
+}
+
+// NodeRunIDLT applies the LT predicate on the "node_run_id" field.
+func NodeRunIDLT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLT(FieldNodeRunID, v))
+}
+
+// NodeRunIDLTE applies the LTE predicate on the "node_run_id" field.
+func NodeRunIDLTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLTE(FieldNodeRunID, v))
+}
+
+// NodeRunIDContains applies the Contains predicate on the "node_run_id" field.
+func NodeRunIDContains(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContains(FieldNodeRunID, v))
+}
+
+// NodeRunIDHasPrefix applies the HasPrefix predicate on the "node_run_id" field.
+func NodeRunIDHasPrefix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasPrefix(FieldNodeRunID, v))
+}
+
+// NodeRunIDHasSuffix applies the HasSuffix predicate on the "node_run_id" field.
+func NodeRunIDHasSuffix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasSuffix(FieldNodeRunID, v))
+}
+
+// NodeRunIDEqualFold applies the EqualFold predicate on the "node_run_id" field.
+func NodeRunIDEqualFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEqualFold(FieldNodeRunID, v))
+}
+
+// NodeRunIDContainsFold applies the ContainsFold predicate on the "node_run_id" field.
+func NodeRunIDContainsFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContainsFold(FieldNodeRunID, v))
+}
+
+// CorrelationIDEQ applies the EQ predicate on the "correlation_id" field.
+func CorrelationIDEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldCorrelationID, v))
+}
+
+// CorrelationIDNEQ applies the NEQ predicate on the "correlation_id" field.
+func CorrelationIDNEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNEQ(FieldCorrelationID, v))
+}
+
+// CorrelationIDIn applies the In predicate on the "correlation_id" field.
+func CorrelationIDIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldIn(FieldCorrelationID, vs...))
+}
+
+// CorrelationIDNotIn applies the NotIn predicate on the "correlation_id" field.
+func CorrelationIDNotIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNotIn(FieldCorrelationID, vs...))
+}
+
+// CorrelationIDGT applies the GT predicate on the "correlation_id" field.
+func CorrelationIDGT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGT(FieldCorrelationID, v))
+}
+
+// CorrelationIDGTE applies the GTE predicate on the "correlation_id" field.
+func CorrelationIDGTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGTE(FieldCorrelationID, v))
+}
+
+// CorrelationIDLT applies the LT predicate on the "correlation_id" field.
+func CorrelationIDLT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLT(FieldCorrelationID, v))
+}
+
+// CorrelationIDLTE applies the LTE predicate on the "correlation_id" field.
+func CorrelationIDLTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLTE(FieldCorrelationID, v))
+}
+
+// CorrelationIDContains applies the Contains predicate on the "correlation_id" field.
+func CorrelationIDContains(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContains(FieldCorrelationID, v))
+}
+
+// CorrelationIDHasPrefix applies the HasPrefix predicate on the "correlation_id" field.
+func CorrelationIDHasPrefix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasPrefix(FieldCorrelationID, v))
+}
+
+// CorrelationIDHasSuffix applies the HasSuffix predicate on the "correlation_id" field.
+func CorrelationIDHasSuffix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasSuffix(FieldCorrelationID, v))
+}
+
+// CorrelationIDEqualFold applies the EqualFold predicate on the "correlation_id" field.
+func CorrelationIDEqualFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEqualFold(FieldCorrelationID, v))
+}
+
+// CorrelationIDContainsFold applies the ContainsFold predicate on the "correlation_id" field.
+func CorrelationIDContainsFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContainsFold(FieldCorrelationID, v))
+}
+
+// SessionStatusEQ applies the EQ predicate on the "session_status" field.
+func SessionStatusEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEQ(FieldSessionStatus, v))
+}
+
+// SessionStatusNEQ applies the NEQ predicate on the "session_status" field.
+func SessionStatusNEQ(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNEQ(FieldSessionStatus, v))
+}
+
+// SessionStatusIn applies the In predicate on the "session_status" field.
+func SessionStatusIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldIn(FieldSessionStatus, vs...))
+}
+
+// SessionStatusNotIn applies the NotIn predicate on the "session_status" field.
+func SessionStatusNotIn(vs ...string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldNotIn(FieldSessionStatus, vs...))
+}
+
+// SessionStatusGT applies the GT predicate on the "session_status" field.
+func SessionStatusGT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGT(FieldSessionStatus, v))
+}
+
+// SessionStatusGTE applies the GTE predicate on the "session_status" field.
+func SessionStatusGTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldGTE(FieldSessionStatus, v))
+}
+
+// SessionStatusLT applies the LT predicate on the "session_status" field.
+func SessionStatusLT(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLT(FieldSessionStatus, v))
+}
+
+// SessionStatusLTE applies the LTE predicate on the "session_status" field.
+func SessionStatusLTE(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldLTE(FieldSessionStatus, v))
+}
+
+// SessionStatusContains applies the Contains predicate on the "session_status" field.
+func SessionStatusContains(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContains(FieldSessionStatus, v))
+}
+
+// SessionStatusHasPrefix applies the HasPrefix predicate on the "session_status" field.
+func SessionStatusHasPrefix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasPrefix(FieldSessionStatus, v))
+}
+
+// SessionStatusHasSuffix applies the HasSuffix predicate on the "session_status" field.
+func SessionStatusHasSuffix(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldHasSuffix(FieldSessionStatus, v))
+}
+
+// SessionStatusEqualFold applies the EqualFold predicate on the "session_status" field.
+func SessionStatusEqualFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldEqualFold(FieldSessionStatus, v))
+}
+
+// SessionStatusContainsFold applies the ContainsFold predicate on the "session_status" field.
+func SessionStatusContainsFold(v string) predicate.EventRecord {
+	return predicate.EventRecord(sql.FieldContainsFold(FieldSessionStatus, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

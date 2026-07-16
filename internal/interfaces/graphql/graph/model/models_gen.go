@@ -531,12 +531,20 @@ type TranscriptCommandInvocation struct {
 }
 
 type TranscriptEvent struct {
-	ID            string               `json:"id"`
-	OrderKey      string               `json:"orderKey"`
-	CorrelationID *string              `json:"correlationId,omitempty"`
-	Phase         TranscriptEventPhase `json:"phase"`
-	OccurredAt    time.Time            `json:"occurredAt"`
-	Content       TranscriptContent    `json:"content"`
+	ID            string                `json:"id"`
+	OrderKey      string                `json:"orderKey"`
+	CorrelationID *string               `json:"correlationId,omitempty"`
+	Phase         TranscriptEventPhase  `json:"phase"`
+	OccurredAt    time.Time             `json:"occurredAt"`
+	Content       TranscriptContent     `json:"content"`
+	Group         *TranscriptEventGroup `json:"group,omitempty"`
+}
+
+type TranscriptEventGroup struct {
+	Kind    string             `json:"kind"`
+	Label   string             `json:"label"`
+	Count   int                `json:"count"`
+	Members []*TranscriptEvent `json:"members"`
 }
 
 type TranscriptFileChange struct {
@@ -567,9 +575,11 @@ type TranscriptMessageContent struct {
 func (TranscriptMessageContent) IsTranscriptContent() {}
 
 type TranscriptPage struct {
-	Events   []*TranscriptEvent    `json:"events"`
-	Usage    *TranscriptTokenUsage `json:"usage,omitempty"`
-	PageInfo *PageInfo             `json:"pageInfo"`
+	Events       []*TranscriptEvent            `json:"events"`
+	Usage        *TranscriptTokenUsage         `json:"usage,omitempty"`
+	ProcessUsage []*TranscriptUsageAttribution `json:"processUsage"`
+	NodeUsage    []*TranscriptUsageAttribution `json:"nodeUsage"`
+	PageInfo     *PageInfo                     `json:"pageInfo"`
 }
 
 type TranscriptReasoningContent struct {
@@ -599,12 +609,18 @@ type TranscriptStructuredText struct {
 }
 
 type TranscriptTokenUsage struct {
-	InputTokens           int `json:"inputTokens"`
-	CachedInputTokens     int `json:"cachedInputTokens"`
-	OutputTokens          int `json:"outputTokens"`
-	ReasoningOutputTokens int `json:"reasoningOutputTokens"`
-	TotalTokens           int `json:"totalTokens"`
-	ContextWindow         int `json:"contextWindow"`
+	InputTokens                  int `json:"inputTokens"`
+	CachedInputTokens            int `json:"cachedInputTokens"`
+	OutputTokens                 int `json:"outputTokens"`
+	ReasoningOutputTokens        int `json:"reasoningOutputTokens"`
+	TotalTokens                  int `json:"totalTokens"`
+	ContextWindow                int `json:"contextWindow"`
+	CurrentInputTokens           int `json:"currentInputTokens"`
+	CurrentCachedInputTokens     int `json:"currentCachedInputTokens"`
+	CurrentOutputTokens          int `json:"currentOutputTokens"`
+	CurrentReasoningOutputTokens int `json:"currentReasoningOutputTokens"`
+	CurrentTotalTokens           int `json:"currentTotalTokens"`
+	CompactionCount              int `json:"compactionCount"`
 }
 
 type TranscriptToolContent struct {
@@ -623,6 +639,12 @@ type TranscriptUnknownContent struct {
 }
 
 func (TranscriptUnknownContent) IsTranscriptContent() {}
+
+type TranscriptUsageAttribution struct {
+	ProcessRunID *string               `json:"processRunId,omitempty"`
+	NodeRunID    *string               `json:"nodeRunId,omitempty"`
+	Usage        *TranscriptTokenUsage `json:"usage"`
+}
 
 type UpdateProjectSettingsInput struct {
 	ProjectID           string `json:"projectId"`

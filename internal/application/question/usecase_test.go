@@ -34,6 +34,34 @@ func TestSubmitBatchStoresAllAnswers(t *testing.T) {
 	}
 }
 
+func TestSubmitBatchObservesWaitingDurationWithoutQuestionContent(t *testing.T) {
+	repo := newFakeRepository()
+	recorder := &questionObservationRecorder{}
+	service := New(repo, WithObserver(recorder))
+	batch := pendingBatch()
+	batch.CreatedAt = time.Unix(10, 0).UTC()
+	repo.batches[batch.ID] = batch
+	service.now = func() time.Time { return time.Unix(13, 0).UTC() }
+	optionA := domain.OptionID("a")
+	_, err := service.SubmitBatch(context.Background(), SubmitBatchInput{BatchID: batch.ID, Answers: []domain.Answer{
+		{QuestionID: "q1", SelectedOptionID: &optionA}, {QuestionID: "q2", CustomAnswer: "private answer"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.items) != 1 || recorder.items[0].Name != "waiting_user" || recorder.items[0].Outcome != "answered" || recorder.items[0].Duration != 3*time.Second {
+		t.Fatalf("observations = %#v", recorder.items)
+	}
+}
+
+type questionObservationRecorder struct {
+	items []Observation
+}
+
+func (r *questionObservationRecorder) Observe(observation Observation) {
+	r.items = append(r.items, observation)
+}
+
 func TestSubmitBatchRejectsIncompleteAnswers(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)

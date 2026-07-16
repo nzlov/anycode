@@ -283,15 +283,38 @@
                   <q-item-section>
                     <q-item-label caption>Token 用量</q-item-label>
                     <q-item-label class="token-usage-summary">
-                      <span>输入 {{ formatTokenCount(latestTokenUsage.inputTokens) }}</span>
-                      <span>缓存 {{ formatTokenCount(latestTokenUsage.cachedInputTokens) }}</span>
-                      <span>输出 {{ formatTokenCount(latestTokenUsage.outputTokens) }}</span>
                       <span
-                        >推理 {{ formatTokenCount(latestTokenUsage.reasoningOutputTokens) }}</span
+                        >本轮输入 {{ formatTokenCount(latestTokenUsage.currentInputTokens) }}</span
                       >
-                      <span>累计 {{ formatTokenCount(latestTokenUsage.totalTokens) }}</span>
                       <span v-if="latestTokenUsage.contextWindow">
-                        上下文 {{ formatTokenCount(latestTokenUsage.contextWindow) }}
+                        上下文占用 {{ contextUsagePercent(latestTokenUsage) }}
+                      </span>
+                      <span
+                        >本轮缓存
+                        {{ formatTokenCount(latestTokenUsage.currentCachedInputTokens) }}</span
+                      >
+                      <span>累计输入 {{ formatTokenCount(latestTokenUsage.inputTokens) }}</span>
+                      <span
+                        >累计缓存 {{ formatTokenCount(latestTokenUsage.cachedInputTokens) }}</span
+                      >
+                      <span>累计输出 {{ formatTokenCount(latestTokenUsage.outputTokens) }}</span>
+                      <span v-if="latestTokenUsage.contextWindow">
+                        窗口 {{ formatTokenCount(latestTokenUsage.contextWindow) }}
+                      </span>
+                      <span v-if="latestTokenUsage.compactionCount">
+                        压缩 {{ latestTokenUsage.compactionCount }} 次
+                      </span>
+                    </q-item-label>
+                    <q-item-label
+                      v-if="session?.mode === 'workflow' && nodeUsage.length"
+                      caption
+                      class="token-usage-summary"
+                    >
+                      <span
+                        v-for="item in nodeUsage"
+                        :key="`${item.nodeRunId ?? ''}:${item.processRunId ?? ''}`"
+                      >
+                        节点 {{ item.nodeRunId }} {{ formatTokenCount(item.usage.totalTokens) }}
                       </span>
                     </q-item-label>
                   </q-item-section>
@@ -473,6 +496,7 @@ import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
+import type { TranscriptTokenUsage } from '@/services/sessionTimeline';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 
 const emit = defineEmits<{
@@ -514,6 +538,7 @@ const {
   session,
   events,
   tokenUsage,
+  nodeUsage,
   eventsPageInfo,
   pendingQuestionBatches,
   loading,
@@ -600,6 +625,9 @@ const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(ev
 const artifactRefreshKey = computed(() => {
   for (let index = streamEntries.value.length - 1; index >= 0; index--) {
     const entry = streamEntries.value[index];
+    if (entry?.group?.kind === 'artifact') {
+      return `${entry.id}:${entry.group.count}`;
+    }
     if (
       entry?.content.__typename === 'TranscriptUnknownContent' &&
       entry.content.rawType.startsWith('artifact.')
@@ -610,6 +638,10 @@ const artifactRefreshKey = computed(() => {
   return '';
 });
 const latestTokenUsage = computed(() => tokenUsage.value);
+const contextUsagePercent = (usage: TranscriptTokenUsage) => {
+  if (!usage.contextWindow) return '-';
+  return `${Math.min(100, Math.round((usage.currentInputTokens / usage.contextWindow) * 100))}%`;
+};
 const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;

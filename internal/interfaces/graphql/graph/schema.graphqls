@@ -329,7 +329,15 @@ type PromptAppend {
 type TranscriptPage {
   events: [TranscriptEvent!]!
   usage: TranscriptTokenUsage
+  processUsage: [TranscriptUsageAttribution!]!
+  nodeUsage: [TranscriptUsageAttribution!]!
   pageInfo: PageInfo!
+}
+
+type TranscriptUsageAttribution {
+  processRunId: ID
+  nodeRunId: ID
+  usage: TranscriptTokenUsage!
 }
 
 type TranscriptEvent {
@@ -339,6 +347,14 @@ type TranscriptEvent {
   phase: TranscriptEventPhase!
   occurredAt: Time!
   content: TranscriptContent!
+  group: TranscriptEventGroup
+}
+
+type TranscriptEventGroup {
+  kind: String!
+  label: String!
+  count: Int!
+  members: [TranscriptEvent!]!
 }
 
 enum TranscriptEventPhase {
@@ -437,6 +453,12 @@ type TranscriptTokenUsage {
   reasoningOutputTokens: Int!
   totalTokens: Int!
   contextWindow: Int!
+  currentInputTokens: Int!
+  currentCachedInputTokens: Int!
+  currentOutputTokens: Int!
+  currentReasoningOutputTokens: Int!
+  currentTotalTokens: Int!
+  compactionCount: Int!
 }
 
 type TranscriptStreamItem {

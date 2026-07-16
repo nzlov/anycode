@@ -1,6 +1,27 @@
 <template>
+  <section v-if="event.group" class="event-group">
+    <button
+      type="button"
+      class="event-group__toggle"
+      :aria-expanded="groupExpanded"
+      @click="groupExpanded = !groupExpanded"
+    >
+      <q-icon :name="groupExpanded ? 'expand_more' : 'chevron_right'" size="18px" />
+      <span>{{ groupLabel }}</span>
+      <q-badge outline color="grey-7" :label="String(event.group.count)" />
+    </button>
+    <div v-if="groupExpanded" class="event-group__members">
+      <SessionEventMessage
+        v-for="member in groupMembers"
+        :key="member.id"
+        :event="member"
+        :known-user-prompts="knownUserPrompts"
+        :workflow-prompt="workflowPrompt"
+      />
+    </div>
+  </section>
   <SessionTextMessage
-    v-if="event.content.__typename === 'TranscriptMessageContent'"
+    v-else-if="event.content.__typename === 'TranscriptMessageContent'"
     :event="textEvent"
     :known-user-prompts="knownUserPrompts"
     :workflow-prompt="workflowPrompt"
@@ -36,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import SessionCommandEvent from '@/components/SessionCommandEvent.vue';
 import SessionArtifactEvent from '@/components/SessionArtifactEvent.vue';
@@ -66,6 +87,26 @@ const props = withDefaults(
   { knownUserPrompts: () => [], workflowPrompt: false },
 );
 
+const groupExpanded = ref(false);
+const groupLabel = computed(() => {
+  switch (props.event.group?.kind) {
+    case 'lifecycle':
+      return '运行状态';
+    case 'todo':
+      return 'TODO 更新';
+    case 'artifact':
+      return '产物';
+    default:
+      return props.event.group?.label ?? '事件';
+  }
+});
+const groupMembers = computed<TranscriptItem[]>(() =>
+  (props.event.group?.members ?? []).map((member) => ({
+    ...member,
+    sourceEventIds: [member.id],
+  })),
+);
+
 const textEvent = computed(
   () => props.event as TranscriptItem & { content: TranscriptMessageContent },
 );
@@ -88,3 +129,36 @@ const unknownEvent = computed(
   () => props.event as TranscriptItem & { content: TranscriptUnknownContent },
 );
 </script>
+
+<style scoped>
+.event-group__toggle {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.event-group__toggle:focus-visible {
+  outline: 2px solid var(--q-primary);
+  outline-offset: 2px;
+}
+
+.event-group__toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.event-group__members {
+  display: grid;
+  gap: 4px;
+  padding-left: 18px;
+  border-left: 1px solid var(--ac-border);
+}
+</style>

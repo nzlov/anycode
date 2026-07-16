@@ -32,6 +32,7 @@ import {
   getSessionTranscriptPage,
   subscribeSessionTranscript,
   type TranscriptTokenUsage,
+  type TranscriptUsageAttribution,
 } from '@/services/sessionTimeline';
 import {
   appendLiveEvent,
@@ -49,6 +50,7 @@ export function useSessionDetail(sessionId: string) {
   const session = ref<SessionDetailData['session'] | null>(null);
   const events = ref<SessionDetailData['events']>([]);
   const tokenUsage = ref<TranscriptTokenUsage | null>(null);
+  const nodeUsage = ref<TranscriptUsageAttribution[]>([]);
   const eventsPageInfo = ref<PageInfo>({ ...emptyPageInfo });
   const loading = ref(false);
   const loadingOlderEvents = ref(false);
@@ -111,6 +113,7 @@ export function useSessionDetail(sessionId: string) {
           bufferedLiveEvents = [];
           eventsPageInfo.value = eventResult.value.pageInfo;
           tokenUsage.value = bufferedLiveUsage ?? eventResult.value.usage;
+          nodeUsage.value = eventResult.value.nodeUsage;
         } else {
           error.value =
             eventResult.reason instanceof Error ? eventResult.reason.message : '加载会话事件失败';
@@ -514,6 +517,7 @@ export function useSessionDetail(sessionId: string) {
     session,
     events,
     tokenUsage,
+    nodeUsage,
     eventsPageInfo,
     pendingQuestionBatches,
     loading,

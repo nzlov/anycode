@@ -81,6 +81,76 @@ func (_u *EventRecordUpdate) SetPayload(v map[string]interface{}) *EventRecordUp
 	return _u
 }
 
+// SetProcessRunID sets the "process_run_id" field.
+func (_u *EventRecordUpdate) SetProcessRunID(v string) *EventRecordUpdate {
+	_u.mutation.SetProcessRunID(v)
+	return _u
+}
+
+// SetNillableProcessRunID sets the "process_run_id" field if the given value is not nil.
+func (_u *EventRecordUpdate) SetNillableProcessRunID(v *string) *EventRecordUpdate {
+	if v != nil {
+		_u.SetProcessRunID(*v)
+	}
+	return _u
+}
+
+// SetWorkflowRunID sets the "workflow_run_id" field.
+func (_u *EventRecordUpdate) SetWorkflowRunID(v string) *EventRecordUpdate {
+	_u.mutation.SetWorkflowRunID(v)
+	return _u
+}
+
+// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
+func (_u *EventRecordUpdate) SetNillableWorkflowRunID(v *string) *EventRecordUpdate {
+	if v != nil {
+		_u.SetWorkflowRunID(*v)
+	}
+	return _u
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (_u *EventRecordUpdate) SetNodeRunID(v string) *EventRecordUpdate {
+	_u.mutation.SetNodeRunID(v)
+	return _u
+}
+
+// SetNillableNodeRunID sets the "node_run_id" field if the given value is not nil.
+func (_u *EventRecordUpdate) SetNillableNodeRunID(v *string) *EventRecordUpdate {
+	if v != nil {
+		_u.SetNodeRunID(*v)
+	}
+	return _u
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (_u *EventRecordUpdate) SetCorrelationID(v string) *EventRecordUpdate {
+	_u.mutation.SetCorrelationID(v)
+	return _u
+}
+
+// SetNillableCorrelationID sets the "correlation_id" field if the given value is not nil.
+func (_u *EventRecordUpdate) SetNillableCorrelationID(v *string) *EventRecordUpdate {
+	if v != nil {
+		_u.SetCorrelationID(*v)
+	}
+	return _u
+}
+
+// SetSessionStatus sets the "session_status" field.
+func (_u *EventRecordUpdate) SetSessionStatus(v string) *EventRecordUpdate {
+	_u.mutation.SetSessionStatus(v)
+	return _u
+}
+
+// SetNillableSessionStatus sets the "session_status" field if the given value is not nil.
+func (_u *EventRecordUpdate) SetNillableSessionStatus(v *string) *EventRecordUpdate {
+	if v != nil {
+		_u.SetSessionStatus(*v)
+	}
+	return _u
+}
+
 // Mutation returns the EventRecordMutation object of the builder.
 func (_u *EventRecordUpdate) Mutation() *EventRecordMutation {
 	return _u.mutation
@@ -155,6 +225,21 @@ func (_u *EventRecordUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if value, ok := _u.mutation.Payload(); ok {
 		_spec.SetField(eventrecord.FieldPayload, field.TypeJSON, value)
 	}
+	if value, ok := _u.mutation.ProcessRunID(); ok {
+		_spec.SetField(eventrecord.FieldProcessRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowRunID(); ok {
+		_spec.SetField(eventrecord.FieldWorkflowRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NodeRunID(); ok {
+		_spec.SetField(eventrecord.FieldNodeRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CorrelationID(); ok {
+		_spec.SetField(eventrecord.FieldCorrelationID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SessionStatus(); ok {
+		_spec.SetField(eventrecord.FieldSessionStatus, field.TypeString, value)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{eventrecord.Label}
@@ -226,6 +311,76 @@ func (_u *EventRecordUpdateOne) SetNillableType(v *string) *EventRecordUpdateOne
 // SetPayload sets the "payload" field.
 func (_u *EventRecordUpdateOne) SetPayload(v map[string]interface{}) *EventRecordUpdateOne {
 	_u.mutation.SetPayload(v)
+	return _u
+}
+
+// SetProcessRunID sets the "process_run_id" field.
+func (_u *EventRecordUpdateOne) SetProcessRunID(v string) *EventRecordUpdateOne {
+	_u.mutation.SetProcessRunID(v)
+	return _u
+}
+
+// SetNillableProcessRunID sets the "process_run_id" field if the given value is not nil.
+func (_u *EventRecordUpdateOne) SetNillableProcessRunID(v *string) *EventRecordUpdateOne {
+	if v != nil {
+		_u.SetProcessRunID(*v)
+	}
+	return _u
+}
+
+// SetWorkflowRunID sets the "workflow_run_id" field.
+func (_u *EventRecordUpdateOne) SetWorkflowRunID(v string) *EventRecordUpdateOne {
+	_u.mutation.SetWorkflowRunID(v)
+	return _u
+}
+
+// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
+func (_u *EventRecordUpdateOne) SetNillableWorkflowRunID(v *string) *EventRecordUpdateOne {
+	if v != nil {
+		_u.SetWorkflowRunID(*v)
+	}
+	return _u
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (_u *EventRecordUpdateOne) SetNodeRunID(v string) *EventRecordUpdateOne {
+	_u.mutation.SetNodeRunID(v)
+	return _u
+}
+
+// SetNillableNodeRunID sets the "node_run_id" field if the given value is not nil.
+func (_u *EventRecordUpdateOne) SetNillableNodeRunID(v *string) *EventRecordUpdateOne {
+	if v != nil {
+		_u.SetNodeRunID(*v)
+	}
+	return _u
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (_u *EventRecordUpdateOne) SetCorrelationID(v string) *EventRecordUpdateOne {
+	_u.mutation.SetCorrelationID(v)
+	return _u
+}
+
+// SetNillableCorrelationID sets the "correlation_id" field if the given value is not nil.
+func (_u *EventRecordUpdateOne) SetNillableCorrelationID(v *string) *EventRecordUpdateOne {
+	if v != nil {
+		_u.SetCorrelationID(*v)
+	}
+	return _u
+}
+
+// SetSessionStatus sets the "session_status" field.
+func (_u *EventRecordUpdateOne) SetSessionStatus(v string) *EventRecordUpdateOne {
+	_u.mutation.SetSessionStatus(v)
+	return _u
+}
+
+// SetNillableSessionStatus sets the "session_status" field if the given value is not nil.
+func (_u *EventRecordUpdateOne) SetNillableSessionStatus(v *string) *EventRecordUpdateOne {
+	if v != nil {
+		_u.SetSessionStatus(*v)
+	}
 	return _u
 }
 
@@ -332,6 +487,21 @@ func (_u *EventRecordUpdateOne) sqlSave(ctx context.Context) (_node *EventRecord
 	}
 	if value, ok := _u.mutation.Payload(); ok {
 		_spec.SetField(eventrecord.FieldPayload, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.ProcessRunID(); ok {
+		_spec.SetField(eventrecord.FieldProcessRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowRunID(); ok {
+		_spec.SetField(eventrecord.FieldWorkflowRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.NodeRunID(); ok {
+		_spec.SetField(eventrecord.FieldNodeRunID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CorrelationID(); ok {
+		_spec.SetField(eventrecord.FieldCorrelationID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SessionStatus(); ok {
+		_spec.SetField(eventrecord.FieldSessionStatus, field.TypeString, value)
 	}
 	_node = &EventRecord{config: _u.config}
 	_spec.Assign = _node.assignValues

@@ -55,16 +55,37 @@ type Service struct {
 	now        func() time.Time
 	generateID func() (string, error)
 	broker     *pendingBroker
+	observer   Observer
 }
 
-func New(repo domain.Repository) *Service {
-	return &Service{
+type Observation struct {
+	Name     string
+	Outcome  string
+	Duration time.Duration
+}
+
+type Observer interface {
+	Observe(Observation)
+}
+
+type Option func(*Service)
+
+func WithObserver(observer Observer) Option {
+	return func(service *Service) { service.observer = observer }
+}
+
+func New(repo domain.Repository, options ...Option) *Service {
+	service := &Service{
 		repo:       repo,
 		policy:     domain.DefaultPolicy{},
 		now:        time.Now,
 		generateID: generateID,
 		broker:     newPendingBroker(),
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (BatchDTO, error) {
@@ -162,6 +183,13 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 		return BatchDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question batch is no longer pending").WithDetails(map[string]any{"batchId": string(input.BatchID), "status": string(persisted.Status)})
 	}
 	dto := toDTO(persisted)
+	if s.observer != nil {
+		duration := s.now().Sub(batch.CreatedAt)
+		if duration < 0 {
+			duration = 0
+		}
+		s.observer.Observe(Observation{Name: "waiting_user", Outcome: "answered", Duration: duration})
+	}
 	s.publish(dto)
 	return dto, nil
 }

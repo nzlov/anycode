@@ -13,12 +13,21 @@ type Scope struct {
 	ProjectID string
 }
 
+type Causality struct {
+	ProcessRunID  string
+	WorkflowRunID string
+	NodeRunID     string
+	CorrelationID string
+	SessionStatus string
+}
+
 type DomainEvent struct {
 	ID        ID
 	Scope     Scope
 	SessionID *SessionID
 	Type      string
 	Payload   map[string]any
+	Causality Causality
 	CreatedAt time.Time
 }
 

@@ -23,6 +23,7 @@ type DTO struct {
 	SessionID *domain.SessionID
 	Type      string
 	Payload   map[string]any
+	Causality domain.Causality
 	CreatedAt string
 }
 
@@ -30,10 +31,30 @@ type Service struct {
 	mu          sync.Mutex
 	nextSubID   int64
 	subscribers map[string]map[int64]*subscription
+	observer    Observer
 }
 
-func New() *Service {
-	return &Service{subscribers: map[string]map[int64]*subscription{}}
+type Observation struct {
+	Name    string
+	Outcome string
+}
+
+type Observer interface {
+	Observe(Observation)
+}
+
+type Option func(*Service)
+
+func WithObserver(observer Observer) Option {
+	return func(service *Service) { service.observer = observer }
+}
+
+func New(options ...Option) *Service {
+	service := &Service{subscribers: map[string]map[int64]*subscription{}}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error) {
@@ -55,7 +76,11 @@ func (s *Service) PublishAfterCommit(_ context.Context, event domain.DomainEvent
 	}
 	dto := toDTO(event)
 	for _, sub := range s.matchingSubscribers(event.Scope) {
-		if !sub.trySend(dto) {
+		switch sub.trySend(dto) {
+		case deliveryMailboxFull:
+			s.observe(Observation{Name: "subscription.delivery", Outcome: "overflow"})
+			s.removeSubscription(sub)
+		case deliveryUnavailable:
 			s.removeSubscription(sub)
 		}
 	}
@@ -71,9 +96,16 @@ type subscription struct {
 	closed bool
 }
 
+type deliveryResult uint8
+
+const (
+	deliverySent deliveryResult = iota
+	deliveryUnavailable
+	deliveryMailboxFull
+)
+
 func (s *Service) subscribe(scope domain.Scope, ch chan DTO, done <-chan struct{}) *subscription {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.nextSubID++
 	key := subscriptionKey(scope)
 	sub := &subscription{id: s.nextSubID, key: key, ch: ch, done: done}
@@ -81,20 +113,34 @@ func (s *Service) subscribe(scope domain.Scope, ch chan DTO, done <-chan struct{
 		s.subscribers[key] = map[int64]*subscription{}
 	}
 	s.subscribers[key][sub.id] = sub
+	s.mu.Unlock()
+	s.observe(Observation{Name: "subscription.lifecycle", Outcome: "opened"})
 	return sub
 }
 
 func (s *Service) removeSubscription(sub *subscription) {
 	s.mu.Lock()
 	bucket := s.subscribers[sub.key]
+	removed := false
 	if bucket[sub.id] == sub {
 		delete(bucket, sub.id)
+		removed = true
 		if len(bucket) == 0 {
 			delete(s.subscribers, sub.key)
 		}
 	}
 	s.mu.Unlock()
+	if !removed {
+		return
+	}
 	sub.close()
+	s.observe(Observation{Name: "subscription.lifecycle", Outcome: "closed"})
+}
+
+func (s *Service) observe(observation Observation) {
+	if s.observer != nil {
+		s.observer.Observe(observation)
+	}
 }
 
 func (s *Service) matchingSubscribers(scope domain.Scope) []*subscription {
@@ -114,19 +160,24 @@ func (s *Service) matchingSubscribers(scope domain.Scope) []*subscription {
 	return subscribers
 }
 
-func (s *subscription) trySend(dto DTO) bool {
+func (s *subscription) trySend(dto DTO) deliveryResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return false
+		return deliveryUnavailable
 	}
 	select {
 	case <-s.done:
-		return false
-	case s.ch <- dto:
-		return true
+		return deliveryUnavailable
 	default:
-		return false
+	}
+	select {
+	case <-s.done:
+		return deliveryUnavailable
+	case s.ch <- dto:
+		return deliverySent
+	default:
+		return deliveryMailboxFull
 	}
 }
 
@@ -170,6 +221,7 @@ func toDTO(event domain.DomainEvent) DTO {
 		SessionID: event.SessionID,
 		Type:      event.Type,
 		Payload:   payloadOrEmpty(event.Payload),
+		Causality: event.Causality,
 		CreatedAt: event.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 }

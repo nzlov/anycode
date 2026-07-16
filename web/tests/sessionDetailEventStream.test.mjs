@@ -53,7 +53,9 @@ test('session event presentation moves usage out of the event list into session 
   );
   assert.match(pageSource, /const latestTokenUsage = computed/);
   assert.match(pageSource, /Token 用量/);
-  assert.match(pageSource, /latestTokenUsage\.totalTokens/);
+  assert.match(pageSource, /latestTokenUsage\.currentInputTokens/);
+  assert.match(pageSource, /latestTokenUsage\.inputTokens/);
+  assert.match(pageSource, /contextUsagePercent/);
 });
 
 test('session text messages fold runtime context and AnyCode guidance', () => {
@@ -201,6 +203,9 @@ test('subscription schema exposes only session-scoped transcript and unified sta
   assert.equal(schemaSource.includes('sessionStatusChanged'), false);
   assert.equal(schemaSource.includes('input SessionTranscriptInput'), false);
   assert.match(schemaSource, /input ListTranscriptEventsInput/);
+  assert.match(schemaSource, /type TranscriptEventGroup/);
+  assert.match(schemaSource, /members: \[TranscriptEvent!\]!/);
+  assert.match(timelineSource, /group \{/);
   assert.match(timelineSource, /subscription SessionTranscript\(\$sessionId: ID!\)/);
   assert.equal(timelineSource.includes("codexType === 'process.exit'"), false);
 });

@@ -52,6 +52,76 @@ func (_c *EventRecordCreate) SetPayload(v map[string]interface{}) *EventRecordCr
 	return _c
 }
 
+// SetProcessRunID sets the "process_run_id" field.
+func (_c *EventRecordCreate) SetProcessRunID(v string) *EventRecordCreate {
+	_c.mutation.SetProcessRunID(v)
+	return _c
+}
+
+// SetNillableProcessRunID sets the "process_run_id" field if the given value is not nil.
+func (_c *EventRecordCreate) SetNillableProcessRunID(v *string) *EventRecordCreate {
+	if v != nil {
+		_c.SetProcessRunID(*v)
+	}
+	return _c
+}
+
+// SetWorkflowRunID sets the "workflow_run_id" field.
+func (_c *EventRecordCreate) SetWorkflowRunID(v string) *EventRecordCreate {
+	_c.mutation.SetWorkflowRunID(v)
+	return _c
+}
+
+// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
+func (_c *EventRecordCreate) SetNillableWorkflowRunID(v *string) *EventRecordCreate {
+	if v != nil {
+		_c.SetWorkflowRunID(*v)
+	}
+	return _c
+}
+
+// SetNodeRunID sets the "node_run_id" field.
+func (_c *EventRecordCreate) SetNodeRunID(v string) *EventRecordCreate {
+	_c.mutation.SetNodeRunID(v)
+	return _c
+}
+
+// SetNillableNodeRunID sets the "node_run_id" field if the given value is not nil.
+func (_c *EventRecordCreate) SetNillableNodeRunID(v *string) *EventRecordCreate {
+	if v != nil {
+		_c.SetNodeRunID(*v)
+	}
+	return _c
+}
+
+// SetCorrelationID sets the "correlation_id" field.
+func (_c *EventRecordCreate) SetCorrelationID(v string) *EventRecordCreate {
+	_c.mutation.SetCorrelationID(v)
+	return _c
+}
+
+// SetNillableCorrelationID sets the "correlation_id" field if the given value is not nil.
+func (_c *EventRecordCreate) SetNillableCorrelationID(v *string) *EventRecordCreate {
+	if v != nil {
+		_c.SetCorrelationID(*v)
+	}
+	return _c
+}
+
+// SetSessionStatus sets the "session_status" field.
+func (_c *EventRecordCreate) SetSessionStatus(v string) *EventRecordCreate {
+	_c.mutation.SetSessionStatus(v)
+	return _c
+}
+
+// SetNillableSessionStatus sets the "session_status" field if the given value is not nil.
+func (_c *EventRecordCreate) SetNillableSessionStatus(v *string) *EventRecordCreate {
+	if v != nil {
+		_c.SetSessionStatus(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *EventRecordCreate) SetCreatedAt(v time.Time) *EventRecordCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -111,6 +181,26 @@ func (_c *EventRecordCreate) defaults() {
 		v := eventrecord.DefaultPayload
 		_c.mutation.SetPayload(v)
 	}
+	if _, ok := _c.mutation.ProcessRunID(); !ok {
+		v := eventrecord.DefaultProcessRunID
+		_c.mutation.SetProcessRunID(v)
+	}
+	if _, ok := _c.mutation.WorkflowRunID(); !ok {
+		v := eventrecord.DefaultWorkflowRunID
+		_c.mutation.SetWorkflowRunID(v)
+	}
+	if _, ok := _c.mutation.NodeRunID(); !ok {
+		v := eventrecord.DefaultNodeRunID
+		_c.mutation.SetNodeRunID(v)
+	}
+	if _, ok := _c.mutation.CorrelationID(); !ok {
+		v := eventrecord.DefaultCorrelationID
+		_c.mutation.SetCorrelationID(v)
+	}
+	if _, ok := _c.mutation.SessionStatus(); !ok {
+		v := eventrecord.DefaultSessionStatus
+		_c.mutation.SetSessionStatus(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := eventrecord.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -137,6 +227,21 @@ func (_c *EventRecordCreate) check() error {
 	}
 	if _, ok := _c.mutation.Payload(); !ok {
 		return &ValidationError{Name: "payload", err: errors.New(`ent: missing required field "EventRecord.payload"`)}
+	}
+	if _, ok := _c.mutation.ProcessRunID(); !ok {
+		return &ValidationError{Name: "process_run_id", err: errors.New(`ent: missing required field "EventRecord.process_run_id"`)}
+	}
+	if _, ok := _c.mutation.WorkflowRunID(); !ok {
+		return &ValidationError{Name: "workflow_run_id", err: errors.New(`ent: missing required field "EventRecord.workflow_run_id"`)}
+	}
+	if _, ok := _c.mutation.NodeRunID(); !ok {
+		return &ValidationError{Name: "node_run_id", err: errors.New(`ent: missing required field "EventRecord.node_run_id"`)}
+	}
+	if _, ok := _c.mutation.CorrelationID(); !ok {
+		return &ValidationError{Name: "correlation_id", err: errors.New(`ent: missing required field "EventRecord.correlation_id"`)}
+	}
+	if _, ok := _c.mutation.SessionStatus(); !ok {
+		return &ValidationError{Name: "session_status", err: errors.New(`ent: missing required field "EventRecord.session_status"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "EventRecord.created_at"`)}
@@ -191,6 +296,26 @@ func (_c *EventRecordCreate) createSpec() (*EventRecord, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Payload(); ok {
 		_spec.SetField(eventrecord.FieldPayload, field.TypeJSON, value)
 		_node.Payload = value
+	}
+	if value, ok := _c.mutation.ProcessRunID(); ok {
+		_spec.SetField(eventrecord.FieldProcessRunID, field.TypeString, value)
+		_node.ProcessRunID = value
+	}
+	if value, ok := _c.mutation.WorkflowRunID(); ok {
+		_spec.SetField(eventrecord.FieldWorkflowRunID, field.TypeString, value)
+		_node.WorkflowRunID = value
+	}
+	if value, ok := _c.mutation.NodeRunID(); ok {
+		_spec.SetField(eventrecord.FieldNodeRunID, field.TypeString, value)
+		_node.NodeRunID = value
+	}
+	if value, ok := _c.mutation.CorrelationID(); ok {
+		_spec.SetField(eventrecord.FieldCorrelationID, field.TypeString, value)
+		_node.CorrelationID = value
+	}
+	if value, ok := _c.mutation.SessionStatus(); ok {
+		_spec.SetField(eventrecord.FieldSessionStatus, field.TypeString, value)
+		_node.SessionStatus = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(eventrecord.FieldCreatedAt, field.TypeTime, value)

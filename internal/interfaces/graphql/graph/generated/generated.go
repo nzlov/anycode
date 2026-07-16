@@ -453,10 +453,18 @@ type ComplexityRoot struct {
 	TranscriptEvent struct {
 		Content       func(childComplexity int) int
 		CorrelationID func(childComplexity int) int
+		Group         func(childComplexity int) int
 		ID            func(childComplexity int) int
 		OccurredAt    func(childComplexity int) int
 		OrderKey      func(childComplexity int) int
 		Phase         func(childComplexity int) int
+	}
+
+	TranscriptEventGroup struct {
+		Count   func(childComplexity int) int
+		Kind    func(childComplexity int) int
+		Label   func(childComplexity int) int
+		Members func(childComplexity int) int
 	}
 
 	TranscriptFileChange struct {
@@ -483,9 +491,11 @@ type ComplexityRoot struct {
 	}
 
 	TranscriptPage struct {
-		Events   func(childComplexity int) int
-		PageInfo func(childComplexity int) int
-		Usage    func(childComplexity int) int
+		Events       func(childComplexity int) int
+		NodeUsage    func(childComplexity int) int
+		PageInfo     func(childComplexity int) int
+		ProcessUsage func(childComplexity int) int
+		Usage        func(childComplexity int) int
 	}
 
 	TranscriptReasoningContent struct {
@@ -511,12 +521,18 @@ type ComplexityRoot struct {
 	}
 
 	TranscriptTokenUsage struct {
-		CachedInputTokens     func(childComplexity int) int
-		ContextWindow         func(childComplexity int) int
-		InputTokens           func(childComplexity int) int
-		OutputTokens          func(childComplexity int) int
-		ReasoningOutputTokens func(childComplexity int) int
-		TotalTokens           func(childComplexity int) int
+		CachedInputTokens            func(childComplexity int) int
+		CompactionCount              func(childComplexity int) int
+		ContextWindow                func(childComplexity int) int
+		CurrentCachedInputTokens     func(childComplexity int) int
+		CurrentInputTokens           func(childComplexity int) int
+		CurrentOutputTokens          func(childComplexity int) int
+		CurrentReasoningOutputTokens func(childComplexity int) int
+		CurrentTotalTokens           func(childComplexity int) int
+		InputTokens                  func(childComplexity int) int
+		OutputTokens                 func(childComplexity int) int
+		ReasoningOutputTokens        func(childComplexity int) int
+		TotalTokens                  func(childComplexity int) int
 	}
 
 	TranscriptToolContent struct {
@@ -530,6 +546,12 @@ type ComplexityRoot struct {
 	TranscriptUnknownContent struct {
 		Payload func(childComplexity int) int
 		RawType func(childComplexity int) int
+	}
+
+	TranscriptUsageAttribution struct {
+		NodeRunID    func(childComplexity int) int
+		ProcessRunID func(childComplexity int) int
+		Usage        func(childComplexity int) int
 	}
 
 	WorkflowCondition struct {
@@ -2601,6 +2623,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptEvent.CorrelationID(childComplexity), true
+	case "TranscriptEvent.group":
+		if e.ComplexityRoot.TranscriptEvent.Group == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.Group(childComplexity), true
 	case "TranscriptEvent.id":
 		if e.ComplexityRoot.TranscriptEvent.ID == nil {
 			break
@@ -2625,6 +2653,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptEvent.Phase(childComplexity), true
+
+	case "TranscriptEventGroup.count":
+		if e.ComplexityRoot.TranscriptEventGroup.Count == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEventGroup.Count(childComplexity), true
+	case "TranscriptEventGroup.kind":
+		if e.ComplexityRoot.TranscriptEventGroup.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEventGroup.Kind(childComplexity), true
+	case "TranscriptEventGroup.label":
+		if e.ComplexityRoot.TranscriptEventGroup.Label == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEventGroup.Label(childComplexity), true
+	case "TranscriptEventGroup.members":
+		if e.ComplexityRoot.TranscriptEventGroup.Members == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEventGroup.Members(childComplexity), true
 
 	case "TranscriptFileChange.kind":
 		if e.ComplexityRoot.TranscriptFileChange.Kind == nil {
@@ -2702,12 +2755,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptPage.Events(childComplexity), true
+	case "TranscriptPage.nodeUsage":
+		if e.ComplexityRoot.TranscriptPage.NodeUsage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptPage.NodeUsage(childComplexity), true
 	case "TranscriptPage.pageInfo":
 		if e.ComplexityRoot.TranscriptPage.PageInfo == nil {
 			break
 		}
 
 		return e.ComplexityRoot.TranscriptPage.PageInfo(childComplexity), true
+	case "TranscriptPage.processUsage":
+		if e.ComplexityRoot.TranscriptPage.ProcessUsage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptPage.ProcessUsage(childComplexity), true
 	case "TranscriptPage.usage":
 		if e.ComplexityRoot.TranscriptPage.Usage == nil {
 			break
@@ -2785,12 +2850,48 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptTokenUsage.CachedInputTokens(childComplexity), true
+	case "TranscriptTokenUsage.compactionCount":
+		if e.ComplexityRoot.TranscriptTokenUsage.CompactionCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CompactionCount(childComplexity), true
 	case "TranscriptTokenUsage.contextWindow":
 		if e.ComplexityRoot.TranscriptTokenUsage.ContextWindow == nil {
 			break
 		}
 
 		return e.ComplexityRoot.TranscriptTokenUsage.ContextWindow(childComplexity), true
+	case "TranscriptTokenUsage.currentCachedInputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.CurrentCachedInputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CurrentCachedInputTokens(childComplexity), true
+	case "TranscriptTokenUsage.currentInputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.CurrentInputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CurrentInputTokens(childComplexity), true
+	case "TranscriptTokenUsage.currentOutputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.CurrentOutputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CurrentOutputTokens(childComplexity), true
+	case "TranscriptTokenUsage.currentReasoningOutputTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.CurrentReasoningOutputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CurrentReasoningOutputTokens(childComplexity), true
+	case "TranscriptTokenUsage.currentTotalTokens":
+		if e.ComplexityRoot.TranscriptTokenUsage.CurrentTotalTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptTokenUsage.CurrentTotalTokens(childComplexity), true
 	case "TranscriptTokenUsage.inputTokens":
 		if e.ComplexityRoot.TranscriptTokenUsage.InputTokens == nil {
 			break
@@ -2859,6 +2960,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptUnknownContent.RawType(childComplexity), true
+
+	case "TranscriptUsageAttribution.nodeRunId":
+		if e.ComplexityRoot.TranscriptUsageAttribution.NodeRunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptUsageAttribution.NodeRunID(childComplexity), true
+	case "TranscriptUsageAttribution.processRunId":
+		if e.ComplexityRoot.TranscriptUsageAttribution.ProcessRunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptUsageAttribution.ProcessRunID(childComplexity), true
+	case "TranscriptUsageAttribution.usage":
+		if e.ComplexityRoot.TranscriptUsageAttribution.Usage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptUsageAttribution.Usage(childComplexity), true
 
 	case "WorkflowCondition.all":
 		if e.ComplexityRoot.WorkflowCondition.All == nil {
@@ -3616,7 +3736,15 @@ type PromptAppend {
 type TranscriptPage {
   events: [TranscriptEvent!]!
   usage: TranscriptTokenUsage
+  processUsage: [TranscriptUsageAttribution!]!
+  nodeUsage: [TranscriptUsageAttribution!]!
   pageInfo: PageInfo!
+}
+
+type TranscriptUsageAttribution {
+  processRunId: ID
+  nodeRunId: ID
+  usage: TranscriptTokenUsage!
 }
 
 type TranscriptEvent {
@@ -3626,6 +3754,14 @@ type TranscriptEvent {
   phase: TranscriptEventPhase!
   occurredAt: Time!
   content: TranscriptContent!
+  group: TranscriptEventGroup
+}
+
+type TranscriptEventGroup {
+  kind: String!
+  label: String!
+  count: Int!
+  members: [TranscriptEvent!]!
 }
 
 enum TranscriptEventPhase {
@@ -3724,6 +3860,12 @@ type TranscriptTokenUsage {
   reasoningOutputTokens: Int!
   totalTokens: Int!
   contextWindow: Int!
+  currentInputTokens: Int!
+  currentCachedInputTokens: Int!
+  currentOutputTokens: Int!
+  currentReasoningOutputTokens: Int!
+  currentTotalTokens: Int!
+  compactionCount: Int!
 }
 
 type TranscriptStreamItem {
@@ -9086,6 +9228,10 @@ func (ec *executionContext) fieldContext_Query_sessionTranscript(ctx context.Con
 				return ec.fieldContext_TranscriptPage_events(ctx, field)
 			case "usage":
 				return ec.fieldContext_TranscriptPage_usage(ctx, field)
+			case "processUsage":
+				return ec.fieldContext_TranscriptPage_processUsage(ctx, field)
+			case "nodeUsage":
+				return ec.fieldContext_TranscriptPage_nodeUsage(ctx, field)
 			case "pageInfo":
 				return ec.fieldContext_TranscriptPage_pageInfo(ctx, field)
 			}
@@ -14728,6 +14874,177 @@ func (ec *executionContext) fieldContext_TranscriptEvent_content(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _TranscriptEvent_group(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_group,
+		func(ctx context.Context) (any, error) {
+			return obj.Group, nil
+		},
+		nil,
+		ec.marshalOTranscriptEventGroup2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventGroup,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_group(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "kind":
+				return ec.fieldContext_TranscriptEventGroup_kind(ctx, field)
+			case "label":
+				return ec.fieldContext_TranscriptEventGroup_label(ctx, field)
+			case "count":
+				return ec.fieldContext_TranscriptEventGroup_count(ctx, field)
+			case "members":
+				return ec.fieldContext_TranscriptEventGroup_members(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEventGroup", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEventGroup_kind(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEventGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEventGroup_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEventGroup_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEventGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEventGroup_label(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEventGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEventGroup_label,
+		func(ctx context.Context) (any, error) {
+			return obj.Label, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEventGroup_label(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEventGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEventGroup_count(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEventGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEventGroup_count,
+		func(ctx context.Context) (any, error) {
+			return obj.Count, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEventGroup_count(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEventGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptEventGroup_members(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEventGroup) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEventGroup_members,
+		func(ctx context.Context) (any, error) {
+			return obj.Members, nil
+		},
+		nil,
+		ec.marshalNTranscriptEvent2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEventGroup_members(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEventGroup",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TranscriptEvent_id(ctx, field)
+			case "orderKey":
+				return ec.fieldContext_TranscriptEvent_orderKey(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_TranscriptEvent_correlationId(ctx, field)
+			case "phase":
+				return ec.fieldContext_TranscriptEvent_phase(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
+			case "content":
+				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "group":
+				return ec.fieldContext_TranscriptEvent_group(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TranscriptFileChange_kind(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptFileChange) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15099,6 +15416,8 @@ func (ec *executionContext) fieldContext_TranscriptPage_events(_ context.Context
 				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
 			case "content":
 				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "group":
+				return ec.fieldContext_TranscriptEvent_group(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
 		},
@@ -15142,8 +15461,94 @@ func (ec *executionContext) fieldContext_TranscriptPage_usage(_ context.Context,
 				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
 			case "contextWindow":
 				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			case "currentInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentInputTokens(ctx, field)
+			case "currentCachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentCachedInputTokens(ctx, field)
+			case "currentOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentOutputTokens(ctx, field)
+			case "currentReasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens(ctx, field)
+			case "currentTotalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentTotalTokens(ctx, field)
+			case "compactionCount":
+				return ec.fieldContext_TranscriptTokenUsage_compactionCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptPage_processUsage(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptPage_processUsage,
+		func(ctx context.Context) (any, error) {
+			return obj.ProcessUsage, nil
+		},
+		nil,
+		ec.marshalNTranscriptUsageAttribution2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptUsageAttributionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptPage_processUsage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "processRunId":
+				return ec.fieldContext_TranscriptUsageAttribution_processRunId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_TranscriptUsageAttribution_nodeRunId(ctx, field)
+			case "usage":
+				return ec.fieldContext_TranscriptUsageAttribution_usage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptUsageAttribution", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptPage_nodeUsage(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptPage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptPage_nodeUsage,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeUsage, nil
+		},
+		nil,
+		ec.marshalNTranscriptUsageAttribution2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptUsageAttributionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptPage_nodeUsage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptPage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "processRunId":
+				return ec.fieldContext_TranscriptUsageAttribution_processRunId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_TranscriptUsageAttribution_nodeRunId(ctx, field)
+			case "usage":
+				return ec.fieldContext_TranscriptUsageAttribution_usage(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptUsageAttribution", field.Name)
 		},
 	}
 	return fc, nil
@@ -15398,6 +15803,8 @@ func (ec *executionContext) fieldContext_TranscriptStreamItem_event(_ context.Co
 				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
 			case "content":
 				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "group":
+				return ec.fieldContext_TranscriptEvent_group(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
 		},
@@ -15441,6 +15848,18 @@ func (ec *executionContext) fieldContext_TranscriptStreamItem_usage(_ context.Co
 				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
 			case "contextWindow":
 				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			case "currentInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentInputTokens(ctx, field)
+			case "currentCachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentCachedInputTokens(ctx, field)
+			case "currentOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentOutputTokens(ctx, field)
+			case "currentReasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens(ctx, field)
+			case "currentTotalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentTotalTokens(ctx, field)
+			case "compactionCount":
+				return ec.fieldContext_TranscriptTokenUsage_compactionCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
 		},
@@ -15680,6 +16099,180 @@ func (ec *executionContext) fieldContext_TranscriptTokenUsage_contextWindow(_ co
 	return fc, nil
 }
 
+func (ec *executionContext) _TranscriptTokenUsage_currentInputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_currentInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_currentInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_currentCachedInputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_currentCachedInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentCachedInputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_currentCachedInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_currentOutputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_currentOutputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentOutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_currentOutputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_currentReasoningOutputTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentReasoningOutputTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_currentTotalTokens(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_currentTotalTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentTotalTokens, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_currentTotalTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptTokenUsage_compactionCount(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptTokenUsage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptTokenUsage_compactionCount,
+		func(ctx context.Context) (any, error) {
+			return obj.CompactionCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptTokenUsage_compactionCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptTokenUsage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TranscriptToolContent_qualifiedName(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptToolContent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15896,6 +16489,119 @@ func (ec *executionContext) fieldContext_TranscriptUnknownContent_payload(_ cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptUsageAttribution_processRunId(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptUsageAttribution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptUsageAttribution_processRunId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProcessRunID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptUsageAttribution_processRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptUsageAttribution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptUsageAttribution_nodeRunId(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptUsageAttribution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptUsageAttribution_nodeRunId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeRunID, nil
+		},
+		nil,
+		ec.marshalOID2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptUsageAttribution_nodeRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptUsageAttribution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptUsageAttribution_usage(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptUsageAttribution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptUsageAttribution_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalNTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptUsageAttribution_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptUsageAttribution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "inputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_cachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_outputTokens(ctx, field)
+			case "reasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_reasoningOutputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
+			case "contextWindow":
+				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			case "currentInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentInputTokens(ctx, field)
+			case "currentCachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentCachedInputTokens(ctx, field)
+			case "currentOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentOutputTokens(ctx, field)
+			case "currentReasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens(ctx, field)
+			case "currentTotalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentTotalTokens(ctx, field)
+			case "compactionCount":
+				return ec.fieldContext_TranscriptTokenUsage_compactionCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
 		},
 	}
 	return fc, nil
@@ -23751,6 +24457,62 @@ func (ec *executionContext) _TranscriptEvent(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "group":
+			out.Values[i] = ec._TranscriptEvent_group(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptEventGroupImplementors = []string{"TranscriptEventGroup"}
+
+func (ec *executionContext) _TranscriptEventGroup(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptEventGroup) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptEventGroupImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptEventGroup")
+		case "kind":
+			out.Values[i] = ec._TranscriptEventGroup_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "label":
+			out.Values[i] = ec._TranscriptEventGroup_label(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "count":
+			out.Values[i] = ec._TranscriptEventGroup_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "members":
+			out.Values[i] = ec._TranscriptEventGroup_members(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -23983,6 +24745,16 @@ func (ec *executionContext) _TranscriptPage(ctx context.Context, sel ast.Selecti
 			}
 		case "usage":
 			out.Values[i] = ec._TranscriptPage_usage(ctx, field, obj)
+		case "processUsage":
+			out.Values[i] = ec._TranscriptPage_processUsage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodeUsage":
+			out.Values[i] = ec._TranscriptPage_nodeUsage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "pageInfo":
 			out.Values[i] = ec._TranscriptPage_pageInfo(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -24232,6 +25004,36 @@ func (ec *executionContext) _TranscriptTokenUsage(ctx context.Context, sel ast.S
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "currentInputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_currentInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentCachedInputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_currentCachedInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentOutputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_currentOutputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentReasoningOutputTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_currentReasoningOutputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentTotalTokens":
+			out.Values[i] = ec._TranscriptTokenUsage_currentTotalTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "compactionCount":
+			out.Values[i] = ec._TranscriptTokenUsage_compactionCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -24332,6 +25134,49 @@ func (ec *executionContext) _TranscriptUnknownContent(ctx context.Context, sel a
 			}
 		case "payload":
 			out.Values[i] = ec._TranscriptUnknownContent_payload(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var transcriptUsageAttributionImplementors = []string{"TranscriptUsageAttribution"}
+
+func (ec *executionContext) _TranscriptUsageAttribution(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptUsageAttribution) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptUsageAttributionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptUsageAttribution")
+		case "processRunId":
+			out.Values[i] = ec._TranscriptUsageAttribution_processRunId(ctx, field, obj)
+		case "nodeRunId":
+			out.Values[i] = ec._TranscriptUsageAttribution_nodeRunId(ctx, field, obj)
+		case "usage":
+			out.Values[i] = ec._TranscriptUsageAttribution_usage(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -26524,6 +27369,42 @@ func (ec *executionContext) marshalNTranscriptTextFormat2githubᚗcomᚋnzlovᚋ
 	return v
 }
 
+func (ec *executionContext) marshalNTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptTokenUsage) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptTokenUsage(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTranscriptUsageAttribution2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptUsageAttributionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.TranscriptUsageAttribution) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTranscriptUsageAttribution2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptUsageAttribution(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTranscriptUsageAttribution2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptUsageAttribution(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptUsageAttribution) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TranscriptUsageAttribution(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput(ctx context.Context, v any) (model.UpdateProjectSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateProjectSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -27183,6 +28064,13 @@ func (ec *executionContext) marshalOTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋan
 		return graphql.Null
 	}
 	return ec._TranscriptEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOTranscriptEventGroup2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventGroup(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptEventGroup) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TranscriptEventGroup(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptTokenUsage) graphql.Marshaler {

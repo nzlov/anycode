@@ -1302,8 +1302,8 @@ func workflowEventInputFromStart(start sessiondomain.WorkflowStart) workflowEven
 
 func workflowEventInputFromAdvance(advance sessiondomain.WorkflowAdvance) workflowEventInput {
 	payload := map[string]any{
-		"workflowRunId": string(advance.WorkflowRunID),
-		"status":        advance.Status,
+		"workflowRunId":         string(advance.WorkflowRunID),
+		"workflowAdvanceStatus": advance.Status,
 	}
 	if advance.NodeRunID != nil {
 		payload["nodeRunId"] = string(*advance.NodeRunID)
@@ -1391,7 +1391,7 @@ func (s *Service) newWorkflowEvent(run domain.Run, definition domain.Definition,
 	for key, value := range input.payload {
 		payload[key] = value
 	}
-	payload["status"] = string(run.Status)
+	payload["workflowStatus"] = string(run.Status)
 	return eventdomain.DomainEvent{
 		ID: eventdomain.ID(id),
 		Scope: eventdomain.Scope{
@@ -1401,8 +1401,20 @@ func (s *Service) newWorkflowEvent(run domain.Run, definition domain.Definition,
 		SessionID: &sessionID,
 		Type:      input.eventType,
 		Payload:   payload,
+		Causality: eventdomain.Causality{
+			WorkflowRunID: string(run.ID),
+			NodeRunID:     workflowEventString(payload, "nodeRunId"),
+		},
 		CreatedAt: s.now(),
 	}, true, nil
+}
+
+func workflowEventString(payload map[string]any, key string) string {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 func (s *Service) publishWorkflowEvent(ctx context.Context, event eventdomain.DomainEvent) {

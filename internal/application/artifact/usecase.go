@@ -574,6 +574,11 @@ func (s *Service) artifactEvent(ctx context.Context, artifact session.SessionFil
 		SessionID: &sessionID,
 		Type:      eventType,
 		Payload:   payload,
+		Causality: eventdomain.Causality{
+			ProcessRunID:  artifact.ProcessRunID,
+			NodeRunID:     artifact.NodeRunID,
+			CorrelationID: artifact.CorrelationID,
+		},
 		CreatedAt: artifact.CreatedAt,
 	}
 	if eventType == "artifact.deleted" {

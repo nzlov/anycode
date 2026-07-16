@@ -21,6 +21,16 @@ const (
 	FieldType = "type"
 	// FieldPayload holds the string denoting the payload field in the database.
 	FieldPayload = "payload"
+	// FieldProcessRunID holds the string denoting the process_run_id field in the database.
+	FieldProcessRunID = "process_run_id"
+	// FieldWorkflowRunID holds the string denoting the workflow_run_id field in the database.
+	FieldWorkflowRunID = "workflow_run_id"
+	// FieldNodeRunID holds the string denoting the node_run_id field in the database.
+	FieldNodeRunID = "node_run_id"
+	// FieldCorrelationID holds the string denoting the correlation_id field in the database.
+	FieldCorrelationID = "correlation_id"
+	// FieldSessionStatus holds the string denoting the session_status field in the database.
+	FieldSessionStatus = "session_status"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the eventrecord in the database.
@@ -34,6 +44,11 @@ var Columns = []string{
 	FieldProjectID,
 	FieldType,
 	FieldPayload,
+	FieldProcessRunID,
+	FieldWorkflowRunID,
+	FieldNodeRunID,
+	FieldCorrelationID,
+	FieldSessionStatus,
 	FieldCreatedAt,
 }
 
@@ -54,6 +69,16 @@ var (
 	TypeValidator func(string) error
 	// DefaultPayload holds the default value on creation for the "payload" field.
 	DefaultPayload map[string]interface{}
+	// DefaultProcessRunID holds the default value on creation for the "process_run_id" field.
+	DefaultProcessRunID string
+	// DefaultWorkflowRunID holds the default value on creation for the "workflow_run_id" field.
+	DefaultWorkflowRunID string
+	// DefaultNodeRunID holds the default value on creation for the "node_run_id" field.
+	DefaultNodeRunID string
+	// DefaultCorrelationID holds the default value on creation for the "correlation_id" field.
+	DefaultCorrelationID string
+	// DefaultSessionStatus holds the default value on creation for the "session_status" field.
+	DefaultSessionStatus string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -79,6 +104,31 @@ func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
 // ByType orders the results by the type field.
 func ByType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldType, opts...).ToFunc()
+}
+
+// ByProcessRunID orders the results by the process_run_id field.
+func ByProcessRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProcessRunID, opts...).ToFunc()
+}
+
+// ByWorkflowRunID orders the results by the workflow_run_id field.
+func ByWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowRunID, opts...).ToFunc()
+}
+
+// ByNodeRunID orders the results by the node_run_id field.
+func ByNodeRunID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNodeRunID, opts...).ToFunc()
+}
+
+// ByCorrelationID orders the results by the correlation_id field.
+func ByCorrelationID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCorrelationID, opts...).ToFunc()
+}
+
+// BySessionStatus orders the results by the session_status field.
+func BySessionStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSessionStatus, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

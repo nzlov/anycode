@@ -155,6 +155,7 @@ func TestEventStorePreservesPayload(t *testing.T) {
 			"accessKey":    "secret",
 			"worktreePath": "/home/nzlov/workspaces/github/project",
 		},
+		Causality: event.Causality{ProcessRunID: "process-1", WorkflowRunID: "workflow-1", NodeRunID: "node-1", CorrelationID: "correlation-1", SessionStatus: "running"},
 		CreatedAt: time.Now(),
 	})
 
@@ -164,6 +165,38 @@ func TestEventStorePreservesPayload(t *testing.T) {
 	}
 	if got[0].Payload["accessKey"] != "secret" || got[0].Payload["worktreePath"] != "/home/nzlov/workspaces/github/project" {
 		t.Fatalf("payload changed: %#v", got[0].Payload)
+	}
+	if got[0].Causality.ProcessRunID != "process-1" || got[0].Causality.WorkflowRunID != "workflow-1" || got[0].Causality.NodeRunID != "node-1" || got[0].Causality.CorrelationID != "correlation-1" || got[0].Causality.SessionStatus != "running" {
+		t.Fatalf("causality changed: %#v", got[0].Causality)
+	}
+}
+
+func TestEventStoreRejectsCodexSessionContent(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, domainEvent := range []event.DomainEvent{
+		{ID: "codex-event", Type: "process.codex_event", Payload: map[string]any{"message": "secret"}},
+		{ID: "usage-event", Type: "session.running", Payload: map[string]any{"tokenUsage": map[string]any{"input": 10}}},
+		{ID: "transcript-event", Type: "session.running", Payload: map[string]any{"transcript": []any{"secret"}}},
+	} {
+		if err := store.Events().Append(ctx, domainEvent); err == nil {
+			t.Fatalf("event %q was accepted", domainEvent.ID)
+		}
+	}
+	count, err := store.client.EventRecord.Query().Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("persisted Codex content events = %d", count)
 	}
 }
 

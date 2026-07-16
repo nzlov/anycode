@@ -3894,17 +3894,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		}
 		return DTO{}, startErr
 	}
-	if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
-		return DTO{}, err
-	}
-	if handle.CodexSessionID != "" {
-		session.CodexSessionID = handle.CodexSessionID
-	}
-	if err := s.markProcessRunningWithSessionEvent(ctx, runID, handle.PID, handle.CodexSessionID, session, "session.running", map[string]any{
-		"processRunId":   string(runID),
-		"pid":            handle.PID,
-		"codexSessionId": handle.CodexSessionID,
-	}); err != nil {
+	if err := s.processes.MarkStarted(ctx, runID, handle.PID); err != nil {
 		cleanupErr := s.cleanupStartedCodexAfterPersistenceFailure(ctx, session.ID, handle, options, err)
 		return DTO{}, errors.Join(err, cleanupErr)
 	}
@@ -4361,10 +4351,18 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		prompt = promptWithArtifactGuidance(prompt, artifactDir)
 	}
 	if options.resumeCodexSessionID != "" {
+		transcript, found, err := s.processes.FindTranscriptSource(ctx, options.resumeCodexSessionID)
+		if err != nil {
+			return processdomain.CodexHandle{}, err
+		}
+		if !found {
+			return processdomain.CodexHandle{}, processdomain.ErrTranscriptUnavailable
+		}
 		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
 			ProcessRunID:    runID,
 			SessionID:       processdomain.SessionID(session.ID),
 			CodexSessionID:  options.resumeCodexSessionID,
+			Transcript:      transcript,
 			Workdir:         workdir,
 			ArtifactDir:     artifactDir,
 			Prompt:          prompt,
@@ -4584,6 +4582,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 		}
 		exitResult := processdomain.ExitResult{}
 		workflowResults := map[string]any(nil)
+		var persistenceFailure *processdomain.ExitResult
 		for event := range events {
 			if result, ok := exitResultFromEvent(event); ok {
 				exitResult = result
@@ -4595,7 +4594,37 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if event.Type == "process.exit" {
 				continue
 			}
-			s.persistCodexEventWithRetry(session.ID, handle, event)
+			if persistenceFailure != nil {
+				continue
+			}
+			if err := s.persistCodexEventWithRetry(session.ID, handle, event); err != nil {
+				cleanupCtx, cancel := detachedCleanupContext(context.Background())
+				stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
+				cancel()
+				if errors.Is(stopErr, processdomain.ErrProcessNotFound) {
+					stopErr = nil
+				}
+				reason := fmt.Sprintf("bind codex transcript: %v", err)
+				if stopErr != nil {
+					log.Printf("stop codex after transcript bind failure: session=%s process_run=%s error=%v", session.ID, handle.ProcessRunID, stopErr)
+					reason += fmt.Sprintf("; stop codex: %v", stopErr)
+				}
+				failure := processdomain.ExitResult{
+					FailureCode:   "codex_transcript_unavailable",
+					FailureReason: reason,
+					FinishedAt:    s.now(),
+				}
+				if stopErr == nil {
+					s.releaseWorkdir(workdir, session.ID)
+					s.handleCodexProcessExit(session, handle, options, failure, nil)
+					return
+				}
+				persistenceFailure = &failure
+			}
+		}
+		if persistenceFailure != nil {
+			exitResult = *persistenceFailure
+			workflowResults = nil
 		}
 		s.releaseWorkdir(workdir, session.ID)
 		s.handleCodexProcessExit(session, handle, options, exitResult, workflowResults)
@@ -4616,8 +4645,8 @@ func (s *Service) processConsumerDone(runID processdomain.RunID) (<-chan struct{
 	return done, ok
 }
 
-func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) {
-	retryAcknowledgement := codexEventAcknowledgesPrompt(event)
+func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) error {
+	retryAcknowledgement := event.Transcript != nil || codexEventAcknowledgesPrompt(event)
 	retryDelay := s.processExitDelay
 	if retryDelay == nil {
 		retryDelay = processExitRetryDelay
@@ -4628,23 +4657,26 @@ func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle process
 	}
 	for attempt := 0; ; attempt++ {
 		if retryCtx.Err() != nil {
-			return
+			return retryCtx.Err()
 		}
 		err := s.withSessionLock(retryCtx, sessionID, func(ctx context.Context) error {
 			return s.persistCodexEvent(ctx, sessionID, handle, event)
 		})
 		if err == nil {
-			return
+			return nil
+		}
+		if event.Transcript != nil {
+			return err
 		}
 		if !retryAcknowledgement {
 			log.Printf("persist codex event: session=%s process_run=%s type=%s error=%v", sessionID, handle.ProcessRunID, event.Type, err)
-			return
+			return nil
 		}
 		timer := time.NewTimer(retryDelay(attempt))
 		select {
 		case <-retryCtx.Done():
 			timer.Stop()
-			return
+			return retryCtx.Err()
 		case <-timer.C:
 		}
 	}
@@ -4656,12 +4688,19 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 		return fmt.Errorf("find session for codex event: %w", err)
 	}
 	activeRun := false
+	active := processdomain.Run{}
 	if s.processes != nil {
-		active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
+		found, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
 		if err != nil {
 			return fmt.Errorf("find active process for codex event: %w", err)
 		}
+		active = found
 		activeRun = ok && active.ID == handle.ProcessRunID
+	}
+	if activeRun && active.Status == processdomain.StatusStarting && event.Transcript != nil {
+		if err := s.bindProcessTranscript(ctx, &current, handle, *event.Transcript); err != nil {
+			return err
+		}
 	}
 	saveSession := false
 	extraEvents := []sessionEventInput(nil)
@@ -4678,18 +4717,72 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 				},
 			})
 		}
-		if codexSessionID := codexSessionIDFromEvent(event); codexSessionID != "" && current.CodexSessionID != codexSessionID {
-			current.CodexSessionID = codexSessionID
-			current.UpdatedAt = s.now()
-			if err := s.saveProcessRunningSession(ctx, handle.ProcessRunID, handle.PID, codexSessionID, current); err != nil {
-				return err
-			}
-			saveSession = false
-		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
 	extraEvents = append(extraEvents, s.archiveCodexEventImages(ctx, current, handle, &event)...)
 	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, promptDelivered, extraEvents...)
+}
+
+func (s *Service) bindProcessTranscript(ctx context.Context, current *domain.Session, handle processdomain.CodexHandle, source processdomain.CodexTranscriptSource) error {
+	if current == nil {
+		return errors.New("bind process transcript: nil session")
+	}
+	if source.CodexSessionID == "" || source.RelativePath == "" {
+		return processdomain.ErrTranscriptUnavailable
+	}
+	if err := transitionSession(current, domain.StatusRunning, s.now()); err != nil {
+		return err
+	}
+	current.CodexSessionID = source.CodexSessionID
+	current.UpdatedAt = s.now()
+	events, err := s.newSessionEvents(*current, []sessionEventInput{
+		{eventType: "process.transcript_bound", payload: map[string]any{
+			"processRunId": string(handle.ProcessRunID), "codexSessionId": source.CodexSessionID,
+		}},
+		{eventType: "session.running", payload: map[string]any{
+			"processRunId": string(handle.ProcessRunID), "pid": handle.PID, "codexSessionId": source.CodexSessionID,
+		}},
+	})
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Processes().BindTranscript(ctx, handle.ProcessRunID, handle.PID, source); err != nil {
+				return err
+			}
+			if err := tx.Sessions().Save(ctx, *current); err != nil {
+				return err
+			}
+			for _, event := range events {
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	} else {
+		// GLUE: isolated application tests may omit transactions; production always injects a unit of work.
+		if err := s.processes.BindTranscript(ctx, handle.ProcessRunID, handle.PID, source); err != nil {
+			return err
+		}
+		if err := s.repo.Save(ctx, *current); err != nil {
+			return err
+		}
+		for _, event := range events {
+			if s.events != nil {
+				if err := s.events.Append(ctx, event); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	for _, event := range events {
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
 }
 
 func (s *Service) archiveCodexEventImages(ctx context.Context, current domain.Session, handle processdomain.CodexHandle, event *processdomain.CodexEvent) []sessionEventInput {
@@ -5280,6 +5373,9 @@ func exitResultFromEvent(event processdomain.CodexEvent) (processdomain.ExitResu
 	if reason, ok := event.Payload["failureReason"].(string); ok {
 		result.FailureReason = strings.TrimSpace(reason)
 	}
+	if code, ok := event.Payload["failureCode"].(string); ok {
+		result.FailureCode = strings.TrimSpace(code)
+	}
 	return result, true
 }
 
@@ -5338,6 +5434,8 @@ func processExitPayload(processRunID processdomain.RunID, result processdomain.E
 	if result.FailureReason != "" {
 		payload["failureReason"] = result.FailureReason
 		payload["failureCode"] = codexProcessFailureCode(result)
+	} else if result.FailureCode != "" {
+		payload["failureCode"] = result.FailureCode
 	}
 	return payload
 }
@@ -5350,6 +5448,9 @@ func processExitFailed(result processdomain.ExitResult) bool {
 }
 
 func codexProcessFailureCode(result processdomain.ExitResult) string {
+	if result.FailureCode != "" {
+		return result.FailureCode
+	}
 	reason := strings.ToLower(result.FailureReason)
 	if strings.Contains(reason, "model_reasoning_effort") ||
 		strings.Contains(reason, "service_tier") ||
@@ -6198,7 +6299,7 @@ func promptDeliveryTime(event processdomain.CodexEvent, fallback time.Time) time
 	return event.CreatedAt
 }
 
-func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.RunID, event processdomain.CodexEvent) (eventdomain.DomainEvent, error) {
+func (s *Service) newCodexSessionEvent(session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent) (eventdomain.DomainEvent, error) {
 	var id domain.ID
 	var err error
 	codexSessionID := strings.TrimSpace(session.CodexSessionID)
@@ -6228,6 +6329,11 @@ func (s *Service) newCodexSessionEvent(session domain.Session, _ processdomain.R
 		SessionID: &sessionID,
 		Type:      "process.codex_event",
 		Payload:   payload,
+		Causality: eventdomain.Causality{
+			ProcessRunID:  string(processRunID),
+			CorrelationID: event.CorrelationID,
+			SessionStatus: string(session.Status),
+		},
 		CreatedAt: createdAt,
 	}, nil
 }
@@ -6872,7 +6978,6 @@ func (s *Service) newSessionEventWithID(session domain.Session, eventType string
 	}
 	sessionID := eventdomain.SessionID(session.ID)
 	eventPayload := copyPayload(payload)
-	eventPayload["status"] = string(session.Status)
 	return eventdomain.DomainEvent{
 		ID: eventdomain.ID(id),
 		Scope: eventdomain.Scope{
@@ -6882,8 +6987,23 @@ func (s *Service) newSessionEventWithID(session domain.Session, eventType string
 		SessionID: &sessionID,
 		Type:      eventType,
 		Payload:   eventPayload,
+		Causality: eventdomain.Causality{
+			ProcessRunID:  payloadString(eventPayload, "processRunId"),
+			WorkflowRunID: payloadString(eventPayload, "workflowRunId"),
+			NodeRunID:     payloadString(eventPayload, "nodeRunId"),
+			CorrelationID: payloadString(eventPayload, "correlationId"),
+			SessionStatus: string(session.Status),
+		},
 		CreatedAt: s.now(),
 	}, true
+}
+
+func payloadString(payload map[string]any, key string) string {
+	value, ok := payload[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 func fallbackSessionEventID(sessionID domain.ID) domain.ID {

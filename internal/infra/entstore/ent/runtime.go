@@ -5,6 +5,7 @@ package ent
 import (
 	"time"
 
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/codextranscriptsource"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -25,6 +26,16 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	codextranscriptsourceFields := schema.CodexTranscriptSource{}.Fields()
+	_ = codextranscriptsourceFields
+	// codextranscriptsourceDescRelativePath is the schema descriptor for relative_path field.
+	codextranscriptsourceDescRelativePath := codextranscriptsourceFields[1].Descriptor()
+	// codextranscriptsource.RelativePathValidator is a validator for the "relative_path" field. It is called by the builders before save.
+	codextranscriptsource.RelativePathValidator = codextranscriptsourceDescRelativePath.Validators[0].(func(string) error)
+	// codextranscriptsourceDescBoundAt is the schema descriptor for bound_at field.
+	codextranscriptsourceDescBoundAt := codextranscriptsourceFields[2].Descriptor()
+	// codextranscriptsource.DefaultBoundAt holds the default value on creation for the bound_at field.
+	codextranscriptsource.DefaultBoundAt = codextranscriptsourceDescBoundAt.Default.(func() time.Time)
 	eventrecordFields := schema.EventRecord{}.Fields()
 	_ = eventrecordFields
 	// eventrecordDescProjectID is the schema descriptor for project_id field.
@@ -39,8 +50,28 @@ func init() {
 	eventrecordDescPayload := eventrecordFields[4].Descriptor()
 	// eventrecord.DefaultPayload holds the default value on creation for the payload field.
 	eventrecord.DefaultPayload = eventrecordDescPayload.Default.(map[string]interface{})
+	// eventrecordDescProcessRunID is the schema descriptor for process_run_id field.
+	eventrecordDescProcessRunID := eventrecordFields[5].Descriptor()
+	// eventrecord.DefaultProcessRunID holds the default value on creation for the process_run_id field.
+	eventrecord.DefaultProcessRunID = eventrecordDescProcessRunID.Default.(string)
+	// eventrecordDescWorkflowRunID is the schema descriptor for workflow_run_id field.
+	eventrecordDescWorkflowRunID := eventrecordFields[6].Descriptor()
+	// eventrecord.DefaultWorkflowRunID holds the default value on creation for the workflow_run_id field.
+	eventrecord.DefaultWorkflowRunID = eventrecordDescWorkflowRunID.Default.(string)
+	// eventrecordDescNodeRunID is the schema descriptor for node_run_id field.
+	eventrecordDescNodeRunID := eventrecordFields[7].Descriptor()
+	// eventrecord.DefaultNodeRunID holds the default value on creation for the node_run_id field.
+	eventrecord.DefaultNodeRunID = eventrecordDescNodeRunID.Default.(string)
+	// eventrecordDescCorrelationID is the schema descriptor for correlation_id field.
+	eventrecordDescCorrelationID := eventrecordFields[8].Descriptor()
+	// eventrecord.DefaultCorrelationID holds the default value on creation for the correlation_id field.
+	eventrecord.DefaultCorrelationID = eventrecordDescCorrelationID.Default.(string)
+	// eventrecordDescSessionStatus is the schema descriptor for session_status field.
+	eventrecordDescSessionStatus := eventrecordFields[9].Descriptor()
+	// eventrecord.DefaultSessionStatus holds the default value on creation for the session_status field.
+	eventrecord.DefaultSessionStatus = eventrecordDescSessionStatus.Default.(string)
 	// eventrecordDescCreatedAt is the schema descriptor for created_at field.
-	eventrecordDescCreatedAt := eventrecordFields[5].Descriptor()
+	eventrecordDescCreatedAt := eventrecordFields[10].Descriptor()
 	// eventrecord.DefaultCreatedAt holds the default value on creation for the created_at field.
 	eventrecord.DefaultCreatedAt = eventrecordDescCreatedAt.Default.(func() time.Time)
 	mergerecordFields := schema.MergeRecord{}.Fields()

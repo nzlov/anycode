@@ -34,6 +34,70 @@ test('appendLiveEvent ignores duplicate history replay events', () => {
   );
 });
 
+test('appendLiveEvent merges a live group delta with the same stable id', () => {
+  const first = {
+    ...middle,
+    id: 'group:lifecycle:process-1',
+    group: { count: 1, members: [older] },
+  };
+  const nextSnapshot = {
+    ...first,
+    group: { count: 1, members: [middle] },
+  };
+
+  const next = appendLiveEvent([first, newest], nextSnapshot);
+
+  assert.equal(next.length, 2);
+  assert.equal(next[0].group.count, 2);
+  assert.deepEqual(
+    next[0].group.members.map((event) => event.id),
+    ['event-1', 'event-2'],
+  );
+});
+
+test('prependOlderEvents restores historical members of an already live group', () => {
+  const historical = {
+    ...older,
+    id: 'group:lifecycle:process-1',
+    group: { count: 2, members: [older, middle] },
+  };
+  const live = {
+    ...newest,
+    id: historical.id,
+    group: { count: 1, members: [newest] },
+  };
+
+  const next = prependOlderEvents([live], [historical]);
+
+  assert.equal(next.length, 1);
+  assert.equal(next[0].orderKey, older.orderKey);
+  assert.deepEqual(
+    next[0].group.members.map((event) => event.id),
+    ['event-1', 'event-2', 'event-3'],
+  );
+});
+
+test('mergeSnapshotEvents preserves snapshot and buffered group members', () => {
+  const snapshot = {
+    ...older,
+    id: 'group:todo:process-1',
+    group: { count: 1, members: [older] },
+  };
+  const buffered = {
+    ...newest,
+    id: snapshot.id,
+    group: { count: 1, members: [newest] },
+  };
+
+  const next = mergeSnapshotEvents([snapshot], [], [buffered]);
+
+  assert.equal(next[0].group.count, 2);
+  assert.deepEqual(
+    next[0].group.members.map((event) => event.id),
+    ['event-1', 'event-3'],
+  );
+});
+
 test('prependOlderEvents dedupes older page while preserving the viewport anchor order', () => {
   const events = [middle, newest];
   const next = prependOlderEvents(events, [older, middle]);

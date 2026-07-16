@@ -9,6 +9,7 @@ import (
 var (
 	ErrProcessNotFound            = errors.New("codex process run is not active")
 	ErrProcessOwnershipUnverified = errors.New("codex process ownership could not be verified")
+	ErrTranscriptUnavailable      = errors.New("codex transcript is unavailable")
 )
 
 type RunID string
@@ -42,6 +43,12 @@ type Run struct {
 	FinishedAt     *time.Time
 }
 
+type CodexTranscriptSource struct {
+	CodexSessionID string
+	RelativePath   string
+	BoundAt        time.Time
+}
+
 type CodexEvent struct {
 	EventID       string
 	Type          string
@@ -54,6 +61,7 @@ type CodexEvent struct {
 	SourceOffset  int64
 	SourceIndex   int
 	CreatedAt     time.Time
+	Transcript    *CodexTranscriptSource
 }
 
 type PlanItemStatus string
@@ -82,12 +90,12 @@ func CanonicalCodexEventID(codexSessionID string, eventID string) string {
 }
 
 type CodexTranscriptInput struct {
-	CodexSessionID string
-	Workdir        string
+	Source CodexTranscriptSource
 }
 
 type ExitResult struct {
 	ExitCode      *int
+	FailureCode   string
 	FailureReason string
 	FinishedAt    time.Time
 }
@@ -97,6 +105,10 @@ type Repository interface {
 	HasAnyBySession(ctx context.Context, sessionID SessionID) (bool, error)
 	FindActiveBySession(ctx context.Context, sessionID SessionID) (Run, bool, error)
 	CountActive(ctx context.Context) (int, error)
+	MarkStarted(ctx context.Context, id RunID, pid int) error
+	BindTranscript(ctx context.Context, id RunID, pid int, source CodexTranscriptSource) error
+	FindTranscriptSource(ctx context.Context, codexSessionID string) (CodexTranscriptSource, bool, error)
+	TranscriptSources(ctx context.Context, sessionID SessionID) ([]CodexTranscriptSource, error)
 	MarkWaitingUser(ctx context.Context, id RunID) error
 	MarkRunning(ctx context.Context, id RunID, pid int, codexSessionID string) error
 	MarkStopping(ctx context.Context, id RunID) error
@@ -134,6 +146,7 @@ type CodexResumeInput struct {
 	ProcessRunID    RunID
 	SessionID       SessionID
 	CodexSessionID  string
+	Transcript      CodexTranscriptSource
 	Workdir         string
 	ArtifactDir     string
 	Prompt          string

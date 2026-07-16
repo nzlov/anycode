@@ -98,12 +98,17 @@ type CodexStatusContent struct {
 func (CodexStatusContent) isCodexEventContent() {}
 
 type CodexUsageContent struct {
-	InputTokens           int
-	CachedInputTokens     int
-	OutputTokens          int
-	ReasoningOutputTokens int
-	TotalTokens           int
-	ContextWindow         int
+	InputTokens                  int
+	CachedInputTokens            int
+	OutputTokens                 int
+	ReasoningOutputTokens        int
+	TotalTokens                  int
+	ContextWindow                int
+	CurrentInputTokens           int
+	CurrentCachedInputTokens     int
+	CurrentOutputTokens          int
+	CurrentReasoningOutputTokens int
+	CurrentTotalTokens           int
 }
 
 func (CodexUsageContent) isCodexEventContent() {}

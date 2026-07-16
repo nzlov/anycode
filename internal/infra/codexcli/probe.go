@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 )
@@ -27,6 +28,19 @@ type Client struct {
 	mcpToolTimeout  bool
 	playwrightBin   string
 	chromiumBin     string
+	observer        Observer
+}
+
+type Observation struct {
+	Name     string
+	Outcome  string
+	Reason   string
+	Duration time.Duration
+	Bytes    int64
+}
+
+type Observer interface {
+	Observe(Observation)
 }
 
 type Option func(*Client)
@@ -73,6 +87,12 @@ func WithMCPStdio(command string, socket string, authToken string) Option {
 func WithCodexHome(path string) Option {
 	return func(c *Client) {
 		c.codexHome = strings.TrimSpace(path)
+	}
+}
+
+func WithObserver(observer Observer) Option {
+	return func(c *Client) {
+		c.observer = observer
 	}
 }
 
