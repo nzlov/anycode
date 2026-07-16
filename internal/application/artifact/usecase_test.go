@@ -192,6 +192,10 @@ func TestCommittedArtifactIgnoresLivePublisherFailure(t *testing.T) {
 	if len(events) != 2 || events[0].Type != "artifact.published" || events[1].Type != "artifact.deleted" {
 		t.Fatalf("persisted events = %#v", events)
 	}
+	deleted := events[1]
+	if deleted.Payload["status"] != "deleted" || deleted.Payload["previewUrl"] != "" || deleted.Payload["downloadUrl"] != "/files/"+string(artifact.ID)+"/download" {
+		t.Fatalf("deleted event payload = %#v", deleted.Payload)
+	}
 }
 
 func TestClosingSessionOnlyAcceptsFinalScan(t *testing.T) {

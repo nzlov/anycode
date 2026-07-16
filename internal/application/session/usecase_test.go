@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
@@ -24,6 +26,7 @@ import (
 	domain "github.com/nzlov/anycode/internal/domain/session"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore"
+	"github.com/nzlov/anycode/internal/infra/filestore"
 )
 
 func TestPromptWithArtifactGuidanceDoesNotExposeArtifactPath(t *testing.T) {
@@ -4997,6 +5000,142 @@ func TestCloseSessionScansQuarantinesAndDeletesArtifactOutput(t *testing.T) {
 	}
 	if artifacts.quarantinedToken != "close-token" || artifacts.deletedQuarantine != "/trash/session-1/close-token" || artifacts.restoredQuarantine != "" {
 		t.Fatalf("artifact lifecycle = %#v", artifacts)
+	}
+}
+
+func TestCloseSessionAtomicallyDeletesArtifactsAndIgnoresPhysicalCleanupFailure(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusCreated, ArtifactCount: 2,
+	}
+	events := &fakeEventStore{}
+	processes := newFakeProcessRepository()
+	deletedAt := time.Unix(30, 0).UTC()
+	tx := fakeTx{
+		sessions: repo, processes: processes, events: events,
+		artifacts: []domain.SessionFile{
+			{ID: "artifact-1", SessionID: "session-1", Role: domain.FileRoleArtifact, Filename: "one.txt", Path: "/archive/one.txt", CreatedAt: time.Unix(10, 0).UTC()},
+			{ID: "artifact-2", SessionID: "session-1", Role: domain.FileRoleArtifact, Filename: "two.txt", Path: "/archive/two.txt", CreatedAt: time.Unix(20, 0).UTC()},
+		},
+	}
+	cleaner := &fakeSessionArtifactCleaner{err: errors.New("disk unavailable")}
+	service := New(repo, newFakeProjectRepository("project-1"),
+		WithEvents(events),
+		WithProcesses(processes, nil),
+		WithUnitOfWork(&fakeUnitOfWork{tx: tx}),
+		WithArtifactCleaner(cleaner),
+	)
+	service.now = func() time.Time { return deletedAt }
+
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.Status != domain.StatusClosed || got.ArtifactCount != 0 {
+		t.Fatalf("closed session = %#v", got)
+	}
+	if len(cleaner.artifacts) != 2 {
+		t.Fatalf("physical cleanup artifacts = %#v", cleaner.artifacts)
+	}
+	for _, artifact := range cleaner.artifacts {
+		if artifact.DeletedAt == nil || !artifact.DeletedAt.Equal(deletedAt) {
+			t.Fatalf("cleanup artifact = %#v", artifact)
+		}
+	}
+	types := make([]string, 0, len(events.snapshot()))
+	for _, event := range events.snapshot() {
+		types = append(types, event.Type)
+	}
+	if !slices.Equal(types, []string{"session.closing", "artifact.deleted", "artifact.deleted", "session.closed"}) {
+		t.Fatalf("event types = %#v", types)
+	}
+}
+
+func TestCloseSessionDeletesArchivedFilesAndPreservesCopiedInput(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(dataDir, "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(30, 0).UTC()
+	if err := store.Sessions().Create(ctx, domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusCreated,
+		CreatedAt: now.Add(-time.Minute), UpdatedAt: now.Add(-time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	files := filestore.New(dataDir)
+	artifacts := artifactapp.New(store.Attachments(), files, files, store.Sessions())
+	artifacts.SetEvents(store.Events(), nil)
+	outputDir, err := files.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(outputDir, "result.txt")
+	if err := os.WriteFile(source, []byte("result"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archived, err := artifacts.Publish(ctx, artifactapp.PublishInput{SessionID: "session-1", Path: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	archivedPath := archived.Path
+	input, err := artifacts.UseAsInput(ctx, archived.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	service := New(store.Sessions(), newFakeProjectRepository("project-1"),
+		WithAttachments(store.Attachments(), files),
+		WithArtifactScanner(artifacts),
+		WithArtifactCleaner(artifacts),
+		WithEvents(store.Events()),
+		WithUnitOfWork(store),
+	)
+	service.now = func() time.Time { return now }
+	closed, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if closed.Status != domain.StatusClosed || closed.ArtifactCount != 0 {
+		t.Fatalf("closed session = %#v", closed)
+	}
+	found, err := store.Attachments().FindSessionAttachment(ctx, archived.ID)
+	if err != nil || found.DeletedAt == nil || found.Path != "" {
+		t.Fatalf("archived artifact after close = %#v err=%v", found, err)
+	}
+	if _, err := os.Stat(archivedPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("archived file still exists: %v", err)
+	}
+	inputs, err := store.Attachments().ListSessionAttachments(ctx, "session-1")
+	if err != nil || len(inputs) != 1 || inputs[0].ID != input.ID {
+		t.Fatalf("inputs after close = %#v err=%v", inputs, err)
+	}
+	if _, err := os.Stat(inputs[0].Path); err != nil {
+		t.Fatalf("copied input was deleted: %v", err)
+	}
+	if _, err := os.Stat(outputDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("artifact output still exists: %v", err)
+	}
+	sessionID := eventdomain.SessionID("session-1")
+	events, err := store.Events().List(ctx, eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var deleted, closedEvent bool
+	for _, event := range events {
+		deleted = deleted || event.Type == "artifact.deleted"
+		closedEvent = closedEvent || event.Type == "session.closed"
+	}
+	if !deleted || !closedEvent {
+		t.Fatalf("close events = %#v", events)
 	}
 }
 
@@ -10894,6 +11033,16 @@ type fakeSessionArtifactScanner struct {
 	inputs []domain.ArtifactScanRequest
 }
 
+type fakeSessionArtifactCleaner struct {
+	artifacts []domain.SessionFile
+	err       error
+}
+
+func (c *fakeSessionArtifactCleaner) DeleteArchived(_ context.Context, artifacts []domain.SessionFile) (int, error) {
+	c.artifacts = append(c.artifacts, artifacts...)
+	return 0, c.err
+}
+
 type fakeInlineArtifactPublisher struct {
 	input       domain.InlineArtifactRequest
 	previewKind domain.PreviewKind
@@ -12386,6 +12535,19 @@ type fakeTx struct {
 	questions questiondomain.Repository
 	processes processdomain.Repository
 	events    eventdomain.Store
+	artifacts []domain.SessionFile
+}
+
+func (tx fakeTx) DeleteSessionArtifacts(_ context.Context, input port.DeleteSessionArtifactsInput) (port.DeleteSessionArtifactsResult, error) {
+	artifacts := make([]domain.SessionFile, 0, len(tx.artifacts))
+	for _, artifact := range tx.artifacts {
+		if artifact.SessionID != input.SessionID || artifact.Role != domain.FileRoleArtifact || artifact.DeletedAt != nil {
+			continue
+		}
+		artifact.DeletedAt = &input.DeletedAt
+		artifacts = append(artifacts, artifact)
+	}
+	return port.DeleteSessionArtifactsResult{Artifacts: artifacts}, nil
 }
 
 func (tx fakeTx) ClaimExecution(ctx context.Context, input port.ExecutionClaimInput) (port.ExecutionClaimResult, error) {

@@ -199,9 +199,21 @@ func (s *Service) ReconcileDeletedArtifacts(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	return s.DeleteArchived(ctx, artifacts)
+}
+
+// DeleteArchived removes tombstoned artifact files and records completed physical deletion.
+func (s *Service) DeleteArchived(ctx context.Context, artifacts []session.SessionFile) (int, error) {
+	if s == nil || s.repo == nil || s.attachments == nil {
+		return 0, errors.New("artifact deletion is not configured")
+	}
 	processed := 0
 	var cleanupErrs []error
 	for _, artifact := range artifacts {
+		if artifact.Role != session.FileRoleArtifact || artifact.DeletedAt == nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete artifact %s: artifact is not tombstoned", artifact.ID))
+			continue
+		}
 		if err := s.attachments.DeleteSession(ctx, artifact.ID); err != nil {
 			cleanupErrs = append(cleanupErrs, fmt.Errorf("delete artifact %s: %w", artifact.ID, err))
 			continue
@@ -505,12 +517,7 @@ func (s *Service) Delete(ctx context.Context, id session.SessionFileID) (session
 	if eventErr != nil && !errors.Is(eventErr, errArtifactCommitted) {
 		return artifact, eventErr
 	}
-	deleteErr := s.attachments.DeleteSession(context.WithoutCancel(ctx), id)
-	if deleteErr != nil {
-		deleteErr = fmt.Errorf("delete archived artifact: %w", deleteErr)
-	} else if err := s.repo.MarkArtifactPhysicalDeleted(context.WithoutCancel(ctx), id); err != nil {
-		deleteErr = fmt.Errorf("confirm archived artifact deletion: %w", err)
-	}
+	_, deleteErr := s.DeleteArchived(context.WithoutCancel(ctx), []session.SessionFile{artifact})
 	return artifact, errors.Join(eventErr, deleteErr)
 }
 
@@ -539,8 +546,11 @@ func (s *Service) artifactEvent(ctx context.Context, artifact session.SessionFil
 		}
 		projectID = string(card.ProjectID)
 	}
+	if eventType == "artifact.deleted" {
+		return NewDeletedEvent(artifact, projectID, s.now().UTC()), nil
+	}
 	status := "available"
-	if artifact.DeletedAt != nil || eventType == "artifact.deleted" {
+	if artifact.DeletedAt != nil {
 		status = "deleted"
 	}
 	payload := map[string]any{
@@ -570,10 +580,39 @@ func (s *Service) artifactEvent(ctx context.Context, artifact session.SessionFil
 		},
 		CreatedAt: artifact.CreatedAt,
 	}
-	if eventType == "artifact.deleted" {
-		event.CreatedAt = s.now().UTC()
-	}
 	return event, nil
+}
+
+// NewDeletedEvent builds the canonical audit event for a tombstoned artifact.
+func NewDeletedEvent(artifact session.SessionFile, projectID string, deletedAt time.Time) eventdomain.DomainEvent {
+	artifact.DeletedAt = &deletedAt
+	sessionID := eventdomain.SessionID(artifact.SessionID)
+	return eventdomain.DomainEvent{
+		ID:        eventdomain.ID("artifact.deleted:" + string(artifact.ID)),
+		Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: projectID},
+		SessionID: &sessionID,
+		Type:      "artifact.deleted",
+		Payload: map[string]any{
+			"id":            string(artifact.ID),
+			"artifactKind":  string(artifact.ArtifactKind),
+			"logicalPath":   artifact.LogicalPath,
+			"filename":      artifact.Filename,
+			"mimeType":      artifact.MimeType,
+			"size":          artifact.Size,
+			"sha256":        artifact.SHA256,
+			"previewKind":   string(artifact.PreviewKind),
+			"status":        "deleted",
+			"previewUrl":    artifactPreviewURL(artifact),
+			"downloadUrl":   "/files/" + string(artifact.ID) + "/download",
+			"correlationId": artifact.CorrelationID,
+		},
+		Causality: eventdomain.Causality{
+			ProcessRunID:  artifact.ProcessRunID,
+			NodeRunID:     artifact.NodeRunID,
+			CorrelationID: artifact.CorrelationID,
+		},
+		CreatedAt: deletedAt,
+	}
 }
 
 func (s *Service) publishCommittedEvent(ctx context.Context, event eventdomain.DomainEvent) {
