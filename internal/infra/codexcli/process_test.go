@@ -572,8 +572,8 @@ func TestResumeBuildsResumeCommandInWorkdir(t *testing.T) {
 	stdinFile := filepath.Join(dir, "stdin")
 	bin := fakeCodex(t, `#!/bin/sh
 printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
-pwd > "$CODEX_PWD_FILE"
 cat > "$CODEX_STDIN_FILE"
+pwd > "$CODEX_PWD_FILE"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_PWD_FILE", pwdFile)
