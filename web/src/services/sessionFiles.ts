@@ -23,17 +23,10 @@ export interface SessionFile {
   createdAt: string;
 }
 
-export interface SessionFilePage {
-  items: SessionFile[];
-  pageInfo: { page: number; pageSize: number; total: number; nextCursor: string };
-}
-
 export type SessionFileAccess = Pick<SessionFile, 'filename' | 'previewUrl' | 'downloadUrl'>;
 
 export interface ListSessionFilesInput {
   sessionId: string;
-  page?: number;
-  pageSize?: number;
   kind?: string;
   source?: string;
   filter?: string;
@@ -55,17 +48,14 @@ const sessionFileFields = `
   previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
 `;
 
-export async function listSessionFiles(input: ListSessionFilesInput): Promise<SessionFilePage> {
+export async function listSessionFiles(input: ListSessionFilesInput): Promise<SessionFile[]> {
   const data = await graphqlFetch<
-    { sessionFiles: SessionFilePage },
+    { sessionFiles: SessionFile[] },
     { input: ListSessionFilesInput }
   >({
     query: `
       query SessionFiles($input: ListSessionFilesInput!) {
-        sessionFiles(input: $input) {
-          items { ${sessionFileFields} }
-          pageInfo { page pageSize total nextCursor }
-        }
+        sessionFiles(input: $input) { ${sessionFileFields} }
       }
     `,
     variables: { input },

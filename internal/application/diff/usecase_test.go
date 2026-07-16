@@ -15,98 +15,45 @@ import (
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
-func TestGetSessionDiffSummariesReturnsDeduplicatedIsolatedStates(t *testing.T) {
+func TestCountSessionChangedFilesUsesSessionDiffSource(t *testing.T) {
 	ctx := context.Background()
 	diffPort := &fakeDiffPort{
 		filesByWorktreePath: map[string][]gitdiff.DiffFile{
-			"/worktrees/changed": {{Path: "a.go", Status: "modified"}},
-			"/worktrees/clean":   {},
-		},
-		changedFileErrors: map[string]error{
-			"/worktrees/error": errors.New("git diff failed"),
+			"/worktrees/changed": {
+				{Path: "a.go", Status: "modified"},
+				{Path: "b.go", Status: "added"},
+			},
 		},
 	}
 	service := New(
-		&fakeSessionRepository{sessions: []sessiondomain.Session{
-			{ID: "changed", ProjectID: "git-project", WorktreePath: "/worktrees/changed", WorktreeBaseCommit: "base"},
-			{ID: "clean", ProjectID: "git-project", WorktreePath: "/worktrees/clean", WorktreeBaseCommit: "base"},
-			{ID: "unavailable", ProjectID: "plain-project"},
-			{ID: "error", ProjectID: "git-project", WorktreePath: "/worktrees/error", WorktreeBaseCommit: "base"},
-		}},
-		&fakeProjectRepository{projects: map[projectdomain.ID]projectdomain.Project{
-			"git-project":   {ID: "git-project", IsGit: true},
-			"plain-project": {ID: "plain-project", IsGit: false},
-		}},
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "changed", ProjectID: "git-project", WorktreePath: "/worktrees/changed", WorktreeBaseCommit: "base"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "git-project", IsGit: true}},
 		diffPort,
 	)
 
-	got, err := service.GetSessionDiffSummaries(ctx, SessionDiffSummariesInput{
-		SessionIDs: []sessiondomain.ID{"changed", "clean", "changed", "unavailable", "error", "missing"},
-	})
+	got, err := service.CountSessionChangedFiles(ctx, "changed")
 	if err != nil {
-		t.Fatalf("GetSessionDiffSummaries() error = %v", err)
+		t.Fatalf("CountSessionChangedFiles() error = %v", err)
 	}
-	want := []SessionDiffSummaryDTO{
-		{SessionID: "changed", State: SessionDiffSummaryChanged, FilesChanged: 1},
-		{SessionID: "clean", State: SessionDiffSummaryClean, FilesChanged: 0},
-		{SessionID: "unavailable", State: SessionDiffSummaryUnavailable, FilesChanged: 0},
-		{SessionID: "error", State: SessionDiffSummaryError, FilesChanged: 0},
-		{SessionID: "missing", State: SessionDiffSummaryError, FilesChanged: 0},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("GetSessionDiffSummaries() = %#v, want %#v", got, want)
+	if got != 2 {
+		t.Fatalf("CountSessionChangedFiles() = %d, want 2", got)
 	}
 	if calls := diffPort.changedFileCallCount("/worktrees/changed"); calls != 1 {
 		t.Fatalf("ChangedFiles changed calls = %d, want 1", calls)
 	}
 }
 
-func TestGetSessionDiffSummariesBoundsConcurrency(t *testing.T) {
-	const total = summaryConcurrency + 3
-	sessions := make([]sessiondomain.Session, 0, total)
-	ids := make([]sessiondomain.ID, 0, total)
-	for index := range total {
-		id := sessiondomain.ID(fmt.Sprintf("session-%d", index))
-		ids = append(ids, id)
-		sessions = append(sessions, sessiondomain.Session{
-			ID:                 id,
-			ProjectID:          "project-1",
-			WorktreePath:       fmt.Sprintf("/worktrees/%s", id),
-			WorktreeBaseCommit: "base",
-		})
-	}
-	started := make(chan string, total)
-	release := make(chan struct{})
-	diffPort := &fakeDiffPort{changedFilesStarted: started, changedFilesRelease: release}
+func TestCountSessionChangedFilesRejectsUnavailableDiff(t *testing.T) {
 	service := New(
-		&fakeSessionRepository{sessions: sessions},
-		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
-		diffPort,
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo"}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: false}},
+		&fakeDiffPort{},
 	)
-	done := make(chan error, 1)
-	go func() {
-		_, err := service.GetSessionDiffSummaries(context.Background(), SessionDiffSummariesInput{SessionIDs: ids})
-		done <- err
-	}()
 
-	for range summaryConcurrency {
-		select {
-		case <-started:
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for bounded workers to start")
-		}
-	}
-	select {
-	case path := <-started:
-		t.Fatalf("ChangedFiles exceeded concurrency bound with %q", path)
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(release)
-	if err := <-done; err != nil {
-		t.Fatalf("GetSessionDiffSummaries() error = %v", err)
-	}
-	if diffPort.maxChangedFilesInFlight != summaryConcurrency {
-		t.Fatalf("max ChangedFiles concurrency = %d, want %d", diffPort.maxChangedFilesInFlight, summaryConcurrency)
+	_, err := service.CountSessionChangedFiles(context.Background(), "session-1")
+	appErr, ok := apperror.From(err)
+	if !ok || appErr.Code != apperror.CodeDiffUnavailable || !appErr.Retryable {
+		t.Fatalf("CountSessionChangedFiles() error = %#v", err)
 	}
 }
 
@@ -861,6 +808,10 @@ type fakeSessionRepository struct {
 func (r *fakeSessionRepository) Create(context.Context, sessiondomain.Session) error { return nil }
 
 func (r *fakeSessionRepository) Save(context.Context, sessiondomain.Session) error { return nil }
+
+func (r *fakeSessionRepository) UpdateFilesChanged(context.Context, sessiondomain.ID, int) error {
+	return nil
+}
 
 func (r *fakeSessionRepository) Find(_ context.Context, id sessiondomain.ID) (sessiondomain.Session, error) {
 	if r.session.ID == id {

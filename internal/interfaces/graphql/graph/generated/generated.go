@@ -219,7 +219,6 @@ type ComplexityRoot struct {
 		Session                 func(childComplexity int, id string) int
 		SessionCommitHistory    func(childComplexity int, input model.SessionCommitHistoryInput) int
 		SessionDiff             func(childComplexity int, input model.SessionDiffInput) int
-		SessionDiffSummaries    func(childComplexity int, sessionIds []string) int
 		SessionFiles            func(childComplexity int, input model.ListSessionFilesInput) int
 		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
 		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
@@ -305,11 +304,13 @@ type ComplexityRoot struct {
 	}
 
 	SessionCard struct {
+		ArtifactCount      func(childComplexity int) int
 		Attachments        func(childComplexity int) int
 		AvailableActions   func(childComplexity int) int
 		BaseBranch         func(childComplexity int) int
 		CreatedAt          func(childComplexity int) int
 		CurrentNodeTitle   func(childComplexity int) int
+		FilesChanged       func(childComplexity int) int
 		ID                 func(childComplexity int) int
 		LastRunAt          func(childComplexity int) int
 		Mode               func(childComplexity int) int
@@ -382,12 +383,6 @@ type ComplexityRoot struct {
 		Mode      func(childComplexity int) int
 	}
 
-	SessionDiffSummary struct {
-		FilesChanged func(childComplexity int) int
-		SessionID    func(childComplexity int) int
-		State        func(childComplexity int) int
-	}
-
 	SessionFile struct {
 		ArtifactKind  func(childComplexity int) int
 		CorrelationID func(childComplexity int) int
@@ -407,11 +402,6 @@ type ComplexityRoot struct {
 		Size          func(childComplexity int) int
 		SourceID      func(childComplexity int) int
 		SourceType    func(childComplexity int) int
-	}
-
-	SessionFilePage struct {
-		Items    func(childComplexity int) int
-		PageInfo func(childComplexity int) int
 	}
 
 	SessionStateStreamItem struct {
@@ -671,13 +661,12 @@ type QueryResolver interface {
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
-	SessionDiffSummaries(ctx context.Context, sessionIds []string) ([]*model.SessionDiffSummary, error)
 	BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error)
 	SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error)
 	WorkflowDefinition(ctx context.Context, id string) (*model.WorkflowDefinition, error)
 	QuestionBatch(ctx context.Context, id string) (*model.QuestionBatch, error)
 	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
-	SessionFiles(ctx context.Context, input model.ListSessionFilesInput) (*model.SessionFilePage, error)
+	SessionFiles(ctx context.Context, input model.ListSessionFilesInput) ([]*model.SessionFile, error)
 	ResolveSessionArtifacts(ctx context.Context, input model.ResolveSessionArtifactsInput) ([]*model.ResolvedSessionArtifact, error)
 }
 type SubscriptionResolver interface {
@@ -1616,17 +1605,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SessionDiff(childComplexity, args["input"].(model.SessionDiffInput)), true
-	case "Query.sessionDiffSummaries":
-		if e.ComplexityRoot.Query.SessionDiffSummaries == nil {
-			break
-		}
-
-		args, err := ec.field_Query_sessionDiffSummaries_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.SessionDiffSummaries(childComplexity, args["sessionIds"].([]string)), true
 	case "Query.sessionFiles":
 		if e.ComplexityRoot.Query.SessionFiles == nil {
 			break
@@ -1987,6 +1965,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionAttachment.Size(childComplexity), true
 
+	case "SessionCard.artifactCount":
+		if e.ComplexityRoot.SessionCard.ArtifactCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.ArtifactCount(childComplexity), true
 	case "SessionCard.attachments":
 		if e.ComplexityRoot.SessionCard.Attachments == nil {
 			break
@@ -2017,6 +2001,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.CurrentNodeTitle(childComplexity), true
+	case "SessionCard.filesChanged":
+		if e.ComplexityRoot.SessionCard.FilesChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.FilesChanged(childComplexity), true
 	case "SessionCard.id":
 		if e.ComplexityRoot.SessionCard.ID == nil {
 			break
@@ -2336,25 +2326,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionDiff.Mode(childComplexity), true
 
-	case "SessionDiffSummary.filesChanged":
-		if e.ComplexityRoot.SessionDiffSummary.FilesChanged == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionDiffSummary.FilesChanged(childComplexity), true
-	case "SessionDiffSummary.sessionId":
-		if e.ComplexityRoot.SessionDiffSummary.SessionID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionDiffSummary.SessionID(childComplexity), true
-	case "SessionDiffSummary.state":
-		if e.ComplexityRoot.SessionDiffSummary.State == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionDiffSummary.State(childComplexity), true
-
 	case "SessionFile.artifactKind":
 		if e.ComplexityRoot.SessionFile.ArtifactKind == nil {
 			break
@@ -2463,19 +2434,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionFile.SourceType(childComplexity), true
-
-	case "SessionFilePage.items":
-		if e.ComplexityRoot.SessionFilePage.Items == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFilePage.Items(childComplexity), true
-	case "SessionFilePage.pageInfo":
-		if e.ComplexityRoot.SessionFilePage.PageInfo == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFilePage.PageInfo(childComplexity), true
 
 	case "SessionStateStreamItem.questionBatch":
 		if e.ComplexityRoot.SessionStateStreamItem.QuestionBatch == nil {
@@ -3422,13 +3380,12 @@ type Query {
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
-  sessionDiffSummaries(sessionIds: [ID!]!): [SessionDiffSummary!]!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
-  sessionFiles(input: ListSessionFilesInput!): SessionFilePage!
+  sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
 }
 
@@ -3582,6 +3539,8 @@ type SessionCard {
   pendingApproval: PendingApproval
   pendingQuestion: Boolean!
   todoList: TodoList
+  artifactCount: Int!
+  filesChanged: Int!
   attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
@@ -3692,11 +3651,6 @@ type SessionFile {
   createdAt: Time!
 }
 
-type SessionFilePage {
-  items: [SessionFile!]!
-  pageInfo: PageInfo!
-}
-
 type ResolvedSessionArtifact {
   logicalPath: String!
   file: SessionFile!
@@ -3709,8 +3663,6 @@ input ResolveSessionArtifactsInput {
 
 input ListSessionFilesInput {
   sessionId: ID!
-  page: Int
-  pageSize: Int
   kind: String
   source: String
   filter: String
@@ -3897,19 +3849,6 @@ type SessionDiff {
   fileDiff: FileDiff
   allDiff: [FileDiff!]!
   available: Boolean!
-}
-
-enum SessionDiffSummaryState {
-  changed
-  clean
-  unavailable
-  error
-}
-
-type SessionDiffSummary {
-  sessionId: ID!
-  state: SessionDiffSummaryState!
-  filesChanged: Int!
 }
 
 type DiffFile {
@@ -4668,17 +4607,6 @@ func (ec *executionContext) field_Query_sessionCommitHistory_args(ctx context.Co
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_sessionDiffSummaries_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionIds", ec.unmarshalNID2ᚕstringᚄ)
-	if err != nil {
-		return nil, err
-	}
-	args["sessionIds"] = arg0
 	return args, nil
 }
 
@@ -9307,55 +9235,6 @@ func (ec *executionContext) fieldContext_Query_sessionDiff(ctx context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_sessionDiffSummaries(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_sessionDiffSummaries,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().SessionDiffSummaries(ctx, fc.Args["sessionIds"].([]string))
-		},
-		nil,
-		ec.marshalNSessionDiffSummary2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_sessionDiffSummaries(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "sessionId":
-				return ec.fieldContext_SessionDiffSummary_sessionId(ctx, field)
-			case "state":
-				return ec.fieldContext_SessionDiffSummary_state(ctx, field)
-			case "filesChanged":
-				return ec.fieldContext_SessionDiffSummary_filesChanged(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionDiffSummary", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_sessionDiffSummaries_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Query_branchDiff(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9626,7 +9505,7 @@ func (ec *executionContext) _Query_sessionFiles(ctx context.Context, field graph
 			return ec.Resolvers.Query().SessionFiles(ctx, fc.Args["input"].(model.ListSessionFilesInput))
 		},
 		nil,
-		ec.marshalNSessionFilePage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFilePage,
+		ec.marshalNSessionFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFileᚄ,
 		true,
 		true,
 	)
@@ -9640,12 +9519,44 @@ func (ec *executionContext) fieldContext_Query_sessionFiles(ctx context.Context,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "items":
-				return ec.fieldContext_SessionFilePage_items(ctx, field)
-			case "pageInfo":
-				return ec.fieldContext_SessionFilePage_pageInfo(ctx, field)
+			case "id":
+				return ec.fieldContext_SessionFile_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_SessionFile_sessionId(ctx, field)
+			case "role":
+				return ec.fieldContext_SessionFile_role(ctx, field)
+			case "sourceType":
+				return ec.fieldContext_SessionFile_sourceType(ctx, field)
+			case "sourceId":
+				return ec.fieldContext_SessionFile_sourceId(ctx, field)
+			case "artifactKind":
+				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
+			case "logicalPath":
+				return ec.fieldContext_SessionFile_logicalPath(ctx, field)
+			case "filename":
+				return ec.fieldContext_SessionFile_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_SessionFile_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_SessionFile_size(ctx, field)
+			case "sha256":
+				return ec.fieldContext_SessionFile_sha256(ctx, field)
+			case "previewKind":
+				return ec.fieldContext_SessionFile_previewKind(ctx, field)
+			case "processRunId":
+				return ec.fieldContext_SessionFile_processRunId(ctx, field)
+			case "nodeRunId":
+				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_SessionFile_correlationId(ctx, field)
+			case "previewUrl":
+				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
+			case "downloadUrl":
+				return ec.fieldContext_SessionFile_downloadUrl(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_SessionFile_createdAt(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionFilePage", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type SessionFile", field.Name)
 		},
 	}
 	defer func() {
@@ -11836,6 +11747,64 @@ func (ec *executionContext) fieldContext_SessionCard_todoList(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_artifactCount(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_artifactCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_artifactCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionCard_filesChanged(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_filesChanged,
+		func(ctx context.Context) (any, error) {
+			return obj.FilesChanged, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_filesChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_attachments(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12051,6 +12020,10 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
 			case "todoList":
 				return ec.fieldContext_SessionCard_todoList(ctx, field)
+			case "artifactCount":
+				return ec.fieldContext_SessionCard_artifactCount(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_SessionCard_filesChanged(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
@@ -12188,6 +12161,10 @@ func (ec *executionContext) fieldContext_SessionCardStreamItem_card(_ context.Co
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
 			case "todoList":
 				return ec.fieldContext_SessionCard_todoList(ctx, field)
+			case "artifactCount":
+				return ec.fieldContext_SessionCard_artifactCount(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_SessionCard_filesChanged(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
@@ -13285,93 +13262,6 @@ func (ec *executionContext) fieldContext_SessionDiff_available(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionDiffSummary_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.SessionDiffSummary) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionDiffSummary_sessionId,
-		func(ctx context.Context) (any, error) {
-			return obj.SessionID, nil
-		},
-		nil,
-		ec.marshalNID2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionDiffSummary_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionDiffSummary",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionDiffSummary_state(ctx context.Context, field graphql.CollectedField, obj *model.SessionDiffSummary) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionDiffSummary_state,
-		func(ctx context.Context) (any, error) {
-			return obj.State, nil
-		},
-		nil,
-		ec.marshalNSessionDiffSummaryState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryState,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionDiffSummary_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionDiffSummary",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type SessionDiffSummaryState does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionDiffSummary_filesChanged(ctx context.Context, field graphql.CollectedField, obj *model.SessionDiffSummary) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionDiffSummary_filesChanged,
-		func(ctx context.Context) (any, error) {
-			return obj.FilesChanged, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionDiffSummary_filesChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionDiffSummary",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SessionFile_id(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13894,112 +13784,6 @@ func (ec *executionContext) fieldContext_SessionFile_createdAt(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionFilePage_items(ctx context.Context, field graphql.CollectedField, obj *model.SessionFilePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFilePage_items,
-		func(ctx context.Context) (any, error) {
-			return obj.Items, nil
-		},
-		nil,
-		ec.marshalNSessionFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFileᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFilePage_items(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFilePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_SessionFile_id(ctx, field)
-			case "sessionId":
-				return ec.fieldContext_SessionFile_sessionId(ctx, field)
-			case "role":
-				return ec.fieldContext_SessionFile_role(ctx, field)
-			case "sourceType":
-				return ec.fieldContext_SessionFile_sourceType(ctx, field)
-			case "sourceId":
-				return ec.fieldContext_SessionFile_sourceId(ctx, field)
-			case "artifactKind":
-				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
-			case "logicalPath":
-				return ec.fieldContext_SessionFile_logicalPath(ctx, field)
-			case "filename":
-				return ec.fieldContext_SessionFile_filename(ctx, field)
-			case "mimeType":
-				return ec.fieldContext_SessionFile_mimeType(ctx, field)
-			case "size":
-				return ec.fieldContext_SessionFile_size(ctx, field)
-			case "sha256":
-				return ec.fieldContext_SessionFile_sha256(ctx, field)
-			case "previewKind":
-				return ec.fieldContext_SessionFile_previewKind(ctx, field)
-			case "processRunId":
-				return ec.fieldContext_SessionFile_processRunId(ctx, field)
-			case "nodeRunId":
-				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
-			case "correlationId":
-				return ec.fieldContext_SessionFile_correlationId(ctx, field)
-			case "previewUrl":
-				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
-			case "downloadUrl":
-				return ec.fieldContext_SessionFile_downloadUrl(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_SessionFile_createdAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionFile", field.Name)
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionFilePage_pageInfo(ctx context.Context, field graphql.CollectedField, obj *model.SessionFilePage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFilePage_pageInfo,
-		func(ctx context.Context) (any, error) {
-			return obj.PageInfo, nil
-		},
-		nil,
-		ec.marshalNPageInfo2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPageInfo,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFilePage_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFilePage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "page":
-				return ec.fieldContext_PageInfo_page(ctx, field)
-			case "pageSize":
-				return ec.fieldContext_PageInfo_pageSize(ctx, field)
-			case "total":
-				return ec.fieldContext_PageInfo_total(ctx, field)
-			case "nextCursor":
-				return ec.fieldContext_PageInfo_nextCursor(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SessionStateStreamItem_ready(ctx context.Context, field graphql.CollectedField, obj *model.SessionStateStreamItem) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -14294,6 +14078,10 @@ func (ec *executionContext) fieldContext_Subscription_sessionCardChanged(ctx con
 				return ec.fieldContext_SessionCard_pendingQuestion(ctx, field)
 			case "todoList":
 				return ec.fieldContext_SessionCard_todoList(ctx, field)
+			case "artifactCount":
+				return ec.fieldContext_SessionCard_artifactCount(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_SessionCard_filesChanged(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
@@ -19960,7 +19748,7 @@ func (ec *executionContext) unmarshalInputListSessionFilesInput(ctx context.Cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "page", "pageSize", "kind", "source", "filter", "sort"}
+	fieldsInOrder := [...]string{"sessionId", "kind", "source", "filter", "sort"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -19974,20 +19762,6 @@ func (ec *executionContext) unmarshalInputListSessionFilesInput(ctx context.Cont
 				return it, err
 			}
 			it.SessionID = data
-		case "page":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Page = data
-		case "pageSize":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pageSize"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.PageSize = data
 		case "kind":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("kind"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -22699,28 +22473,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "sessionDiffSummaries":
-			field := field
-
-			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_sessionDiffSummaries(ctx, field)
-				if res == graphql.Null {
-					atomic.AddUint32(&fs.Invalids, 1)
-				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "branchDiff":
 			field := field
 
@@ -23533,6 +23285,16 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			}
 		case "todoList":
 			out.Values[i] = ec._SessionCard_todoList(ctx, field, obj)
+		case "artifactCount":
+			out.Values[i] = ec._SessionCard_artifactCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filesChanged":
+			out.Values[i] = ec._SessionCard_filesChanged(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "attachments":
 			out.Values[i] = ec._SessionCard_attachments(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -23957,55 +23719,6 @@ func (ec *executionContext) _SessionDiff(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
-var sessionDiffSummaryImplementors = []string{"SessionDiffSummary"}
-
-func (ec *executionContext) _SessionDiffSummary(ctx context.Context, sel ast.SelectionSet, obj *model.SessionDiffSummary) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionDiffSummaryImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionDiffSummary")
-		case "sessionId":
-			out.Values[i] = ec._SessionDiffSummary_sessionId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "state":
-			out.Values[i] = ec._SessionDiffSummary_state(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "filesChanged":
-			out.Values[i] = ec._SessionDiffSummary_filesChanged(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var sessionFileImplementors = []string{"SessionFile"}
 
 func (ec *executionContext) _SessionFile(ctx context.Context, sel ast.SelectionSet, obj *model.SessionFile) graphql.Marshaler {
@@ -24095,50 +23808,6 @@ func (ec *executionContext) _SessionFile(ctx context.Context, sel ast.SelectionS
 			}
 		case "createdAt":
 			out.Values[i] = ec._SessionFile_createdAt(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
-var sessionFilePageImplementors = []string{"SessionFilePage"}
-
-func (ec *executionContext) _SessionFilePage(ctx context.Context, sel ast.SelectionSet, obj *model.SessionFilePage) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, sessionFilePageImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("SessionFilePage")
-		case "items":
-			out.Values[i] = ec._SessionFilePage_items(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "pageInfo":
-			out.Values[i] = ec._SessionFilePage_pageInfo(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -26474,36 +26143,6 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
-func (ec *executionContext) unmarshalNID2ᚕstringᚄ(ctx context.Context, v any) ([]string, error) {
-	var vSlice []any
-	vSlice = graphql.CoerceList(v)
-	var err error
-	res := make([]string, len(vSlice))
-	for i := range vSlice {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNID2string(ctx, vSlice[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (ec *executionContext) marshalNID2ᚕstringᚄ(ctx context.Context, sel ast.SelectionSet, v []string) graphql.Marshaler {
-	ret := make(graphql.Array, len(v))
-	for i := range v {
-		ret[i] = ec.marshalNID2string(ctx, sel, v[i])
-	}
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
 func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
 	res, err := graphql.UnmarshalInt(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -26999,42 +26638,6 @@ func (ec *executionContext) unmarshalNSessionDiffInput2githubᚗcomᚋnzlovᚋan
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNSessionDiffSummary2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionDiffSummary) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNSessionDiffSummary2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummary(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNSessionDiffSummary2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummary(ctx context.Context, sel ast.SelectionSet, v *model.SessionDiffSummary) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionDiffSummary(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNSessionDiffSummaryState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryState(ctx context.Context, v any) (model.SessionDiffSummaryState, error) {
-	var res model.SessionDiffSummaryState
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNSessionDiffSummaryState2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionDiffSummaryState(ctx context.Context, sel ast.SelectionSet, v model.SessionDiffSummaryState) graphql.Marshaler {
-	return v
-}
-
 func (ec *executionContext) marshalNSessionFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFileᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.SessionFile) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -27059,20 +26662,6 @@ func (ec *executionContext) marshalNSessionFile2ᚖgithubᚗcomᚋnzlovᚋanycod
 		return graphql.Null
 	}
 	return ec._SessionFile(ctx, sel, v)
-}
-
-func (ec *executionContext) marshalNSessionFilePage2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFilePage(ctx context.Context, sel ast.SelectionSet, v model.SessionFilePage) graphql.Marshaler {
-	return ec._SessionFilePage(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNSessionFilePage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionFilePage(ctx context.Context, sel ast.SelectionSet, v *model.SessionFilePage) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._SessionFilePage(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSessionStateStreamItem2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionStateStreamItem(ctx context.Context, sel ast.SelectionSet, v model.SessionStateStreamItem) graphql.Marshaler {

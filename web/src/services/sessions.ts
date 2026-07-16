@@ -57,6 +57,7 @@ export interface SessionCard {
   pendingQuestion: boolean;
   pendingApproval?: PendingApproval | null;
   todoList?: SessionTodoList | null;
+  artifactCount: number;
   filesChanged: number;
   availableActions: string[];
 }
@@ -246,6 +247,8 @@ interface GraphQLSessionCard {
   pendingQuestion: boolean;
   pendingApproval?: GraphQLPendingApproval | null;
   todoList?: GraphQLSessionTodoList | null;
+  artifactCount: number;
+  filesChanged: number;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -372,6 +375,8 @@ const sessionCardFields = `
       completed
     }
   }
+  artifactCount
+  filesChanged
   availableActions
   lastRunAt
   createdAt
@@ -963,7 +968,8 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     pendingQuestion: session.pendingQuestion,
     pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: normalizeTodoList(session.todoList),
-    filesChanged: 0,
+    artifactCount: Math.max(0, session.artifactCount),
+    filesChanged: Math.max(0, session.filesChanged),
     availableActions: normalizeAvailableActions(session.availableActions),
   };
 }
@@ -989,6 +995,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     pendingQuestion: status === 'waiting_user',
     pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: null,
+    artifactCount: 0,
     filesChanged: 0,
     config: session.config,
     closeReason: session.closeReason ?? null,
@@ -1044,6 +1051,7 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     pendingQuestion: status === 'waiting_user',
     pendingApproval: null,
     todoList: null,
+    artifactCount: 0,
     filesChanged: 0,
     availableActions: normalizeAvailableActions(session.availableActions),
   };

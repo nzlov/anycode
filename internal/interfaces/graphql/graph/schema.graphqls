@@ -15,13 +15,12 @@ type Query {
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
-  sessionDiffSummaries(sessionIds: [ID!]!): [SessionDiffSummary!]!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
   questionBatch(id: ID!): QuestionBatch!
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
-  sessionFiles(input: ListSessionFilesInput!): SessionFilePage!
+  sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
 }
 
@@ -175,6 +174,8 @@ type SessionCard {
   pendingApproval: PendingApproval
   pendingQuestion: Boolean!
   todoList: TodoList
+  artifactCount: Int!
+  filesChanged: Int!
   attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
@@ -285,11 +286,6 @@ type SessionFile {
   createdAt: Time!
 }
 
-type SessionFilePage {
-  items: [SessionFile!]!
-  pageInfo: PageInfo!
-}
-
 type ResolvedSessionArtifact {
   logicalPath: String!
   file: SessionFile!
@@ -302,8 +298,6 @@ input ResolveSessionArtifactsInput {
 
 input ListSessionFilesInput {
   sessionId: ID!
-  page: Int
-  pageSize: Int
   kind: String
   source: String
   filter: String
@@ -490,19 +484,6 @@ type SessionDiff {
   fileDiff: FileDiff
   allDiff: [FileDiff!]!
   available: Boolean!
-}
-
-enum SessionDiffSummaryState {
-  changed
-  clean
-  unavailable
-  error
-}
-
-type SessionDiffSummary {
-  sessionId: ID!
-  state: SessionDiffSummaryState!
-  filesChanged: Int!
 }
 
 type DiffFile {

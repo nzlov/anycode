@@ -375,6 +375,34 @@ func (_c *SessionCreate) SetNillableTodoList(v *session.TodoList) *SessionCreate
 	return _c
 }
 
+// SetArtifactCount sets the "artifact_count" field.
+func (_c *SessionCreate) SetArtifactCount(v int) *SessionCreate {
+	_c.mutation.SetArtifactCount(v)
+	return _c
+}
+
+// SetNillableArtifactCount sets the "artifact_count" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableArtifactCount(v *int) *SessionCreate {
+	if v != nil {
+		_c.SetArtifactCount(*v)
+	}
+	return _c
+}
+
+// SetFilesChanged sets the "files_changed" field.
+func (_c *SessionCreate) SetFilesChanged(v int) *SessionCreate {
+	_c.mutation.SetFilesChanged(v)
+	return _c
+}
+
+// SetNillableFilesChanged sets the "files_changed" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableFilesChanged(v *int) *SessionCreate {
+	if v != nil {
+		_c.SetFilesChanged(*v)
+	}
+	return _c
+}
+
 // SetQueuedAt sets the "queued_at" field.
 func (_c *SessionCreate) SetQueuedAt(v time.Time) *SessionCreate {
 	_c.mutation.SetQueuedAt(v)
@@ -700,6 +728,14 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultFastMode
 		_c.mutation.SetFastMode(v)
 	}
+	if _, ok := _c.mutation.ArtifactCount(); !ok {
+		v := entsession.DefaultArtifactCount
+		_c.mutation.SetArtifactCount(v)
+	}
+	if _, ok := _c.mutation.FilesChanged(); !ok {
+		v := entsession.DefaultFilesChanged
+		_c.mutation.SetFilesChanged(v)
+	}
 	if _, ok := _c.mutation.QueueKind(); !ok {
 		v := entsession.DefaultQueueKind
 		_c.mutation.SetQueueKind(v)
@@ -822,6 +858,22 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.FastMode(); !ok {
 		return &ValidationError{Name: "fast_mode", err: errors.New(`ent: missing required field "Session.fast_mode"`)}
+	}
+	if _, ok := _c.mutation.ArtifactCount(); !ok {
+		return &ValidationError{Name: "artifact_count", err: errors.New(`ent: missing required field "Session.artifact_count"`)}
+	}
+	if v, ok := _c.mutation.ArtifactCount(); ok {
+		if err := entsession.ArtifactCountValidator(v); err != nil {
+			return &ValidationError{Name: "artifact_count", err: fmt.Errorf(`ent: validator failed for field "Session.artifact_count": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.FilesChanged(); !ok {
+		return &ValidationError{Name: "files_changed", err: errors.New(`ent: missing required field "Session.files_changed"`)}
+	}
+	if v, ok := _c.mutation.FilesChanged(); ok {
+		if err := entsession.FilesChangedValidator(v); err != nil {
+			return &ValidationError{Name: "files_changed", err: fmt.Errorf(`ent: validator failed for field "Session.files_changed": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.QueueKind(); !ok {
 		return &ValidationError{Name: "queue_kind", err: errors.New(`ent: missing required field "Session.queue_kind"`)}
@@ -998,6 +1050,14 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TodoList(); ok {
 		_spec.SetField(entsession.FieldTodoList, field.TypeJSON, value)
 		_node.TodoList = value
+	}
+	if value, ok := _c.mutation.ArtifactCount(); ok {
+		_spec.SetField(entsession.FieldArtifactCount, field.TypeInt, value)
+		_node.ArtifactCount = value
+	}
+	if value, ok := _c.mutation.FilesChanged(); ok {
+		_spec.SetField(entsession.FieldFilesChanged, field.TypeInt, value)
+		_node.FilesChanged = value
 	}
 	if value, ok := _c.mutation.QueuedAt(); ok {
 		_spec.SetField(entsession.FieldQueuedAt, field.TypeTime, value)

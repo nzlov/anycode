@@ -18,12 +18,15 @@ const detailPage = readFileSync(
   'utf8',
 );
 
-test('session artifacts use backend pagination, filters, and unified file actions', () => {
+test('session artifacts use one unpaginated latest-version query and unified file actions', () => {
   assert.match(panel, /listSessionFiles\(input\)/);
   assert.match(panel, /input\.kind = kind\.value/);
   assert.match(panel, /input\.source = source\.value/);
   assert.match(panel, /input\.sort = sort\.value/);
-  assert.match(panel, /<AppPagination/);
+  assert.doesNotMatch(panel, /<AppPagination|pageSize|pageMax|result\.pageInfo/);
+  assert.match(panel, /files\.value = result/);
+  assert.match(service, /sessionFiles\(input: \$input\) \{ \$\{sessionFileFields\} \}/);
+  assert.doesNotMatch(service, /SessionFilePage|pageInfo|pageSize/);
   assert.match(panel, /useSessionFileAsInput/);
   assert.match(panel, /deleteSessionFile/);
   assert.match(panel, /downloadSessionFile/);
@@ -40,6 +43,21 @@ test('authenticated previews revoke blob URLs and bound text rendering', () => {
   assert.match(panel, /selected\?\.previewKind === 'video'/);
   assert.match(panel, /selected\?\.previewKind === 'audio'/);
   assert.match(panel, /selected\?\.previewKind === 'text'/);
+});
+
+test('artifact panel enables one-item inline previews only for wide opted-in containers', () => {
+  assert.match(panel, /inlinePreview\?: boolean/);
+  assert.match(panel, /const inlinePreviewMinWidth = 1024/);
+  assert.match(panel, /new ResizeObserver/);
+  assert.match(panel, /width >= inlinePreviewMinWidth/);
+  assert.match(panel, /v-if="inlinePreviewActive"/);
+  assert.match(panel, /grid-template-columns: minmax\(320px, 36%\) minmax\(0, 1fr\)/);
+  assert.match(panel, /nextFiles\.find\(\(file\) => file\.id === selected\.value\?\.id\)/);
+  assert.match(panel, /const first = nextFiles\[0\]/);
+  assert.match(panel, /if \(first\) await selectPreview\(first\)/);
+  assert.match(panel, /if \(!inlinePreviewActive\.value\) previewOpen\.value = true/);
+  assert.match(panel, /panelResizeObserver\?\.disconnect\(\)/);
+  assert.doesNotMatch(detailPage, /inline-preview/);
 });
 
 test('artifact requests ignore stale responses and follow live artifact events', () => {

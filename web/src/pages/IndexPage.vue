@@ -151,6 +151,22 @@
                 >
                   <q-tooltip>查看 Diff</q-tooltip>
                 </q-btn>
+
+                <q-btn
+                  v-if="card.artifactCount > 0"
+                  flat
+                  dense
+                  no-caps
+                  class="overview-artifact-btn app-command-btn"
+                  icon="inventory_2"
+                  :label="String(card.artifactCount)"
+                  :aria-label="`查看 ${card.artifactCount} 个产物`"
+                  @click.stop="openArtifactDialog(card)"
+                  @keyup.enter.stop
+                  @keyup.space.stop
+                >
+                  <q-tooltip>查看产物</q-tooltip>
+                </q-btn>
               </div>
 
               <div class="overview-card-actions" @contextmenu.stop @touchstart.stop>
@@ -378,6 +394,27 @@
         </q-card-section>
       </q-card>
     </q-dialog>
+
+    <q-dialog
+      v-model="artifactDialog"
+      :maximized="$q.screen.lt.sm"
+      @hide="handleArtifactDialogClosed"
+    >
+      <q-card class="overview-artifact-dialog app-content-dialog">
+        <div class="overview-artifact-dialog__header">
+          <div class="text-subtitle1 text-weight-bold">产物</div>
+          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭产物" />
+        </div>
+        <q-separator />
+        <q-card-section class="overview-artifact-dialog__body">
+          <SessionArtifactsPanel
+            v-if="artifactDialog"
+            :session-id="artifactDialogSessionId"
+            inline-preview
+          />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -393,22 +430,13 @@ import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionsPage } from '@/composables/useSessionsPage';
-import {
-  getSessionDiffSummaries,
-  type DiffWorkspaceState,
-  type DiffWorkspaceTarget,
-  type SessionDiffSummary,
-} from '@/services/diff';
+import { type DiffWorkspaceState, type DiffWorkspaceTarget } from '@/services/diff';
 import {
   getGraphQLAccessKey,
   verifyGraphQLAccessKey,
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
-import {
-  activeOverviewDiffSessionIds,
-  createOverviewDiffSummaryController,
-} from '@/services/overviewDiffSummary';
 import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
 import { normalizeArtifactLogicalPath } from '@/services/artifactLogicalPath';
 import {
@@ -461,10 +489,9 @@ const {
 });
 const { projects, loadProjects } = useProjects();
 
-const diffSummariesBySessionId = ref<Record<string, SessionDiffSummary>>({});
 const hiddenProjectIds = ref(readHiddenProjectIds());
 const overviewCardGroups = computed(() => createOverviewCardGroups(latestRows.value, []));
-const latestCards = computed(() => overviewCardGroups.value.latestCards.map(withDiffSummary));
+const latestCards = computed(() => overviewCardGroups.value.latestCards);
 const projectChips = computed(() => {
   const seen = new Set<string>();
   return latestCards.value
@@ -505,6 +532,8 @@ const diffDialogWorkspaceState = ref<DiffWorkspaceState>({
   mode: 'all',
   filePath: '',
 });
+const artifactDialog = ref(false);
+const artifactDialogSessionId = ref('');
 const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
@@ -547,33 +576,17 @@ interface ApprovalContext {
   nodeId: string;
 }
 
-const diffSummaryController = createOverviewDiffSummaryController({
-  loadSummaries: getSessionDiffSummaries,
-  applySummaries: (sessionIds: string[], summaries: SessionDiffSummary[]) => {
-    const next = { ...diffSummariesBySessionId.value };
-    for (const sessionId of sessionIds) delete next[sessionId];
-    for (const summary of summaries) next[summary.sessionId] = summary;
-    diffSummariesBySessionId.value = next;
-  },
-  getVisibleCards: () => visibleLatestCards.value,
-  isPageVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
-});
-
 onMounted(() => {
-  document.addEventListener('visibilitychange', handleVisibilityChange);
   void startOverview();
 });
 
 onUnmounted(() => {
-  document.removeEventListener('visibilitychange', handleVisibilityChange);
   clearCardClickSuppression();
-  diffSummaryController.stop();
   stopOverviewLiveUpdates();
 });
 
 watch(projectScopeId, (value) => {
   latestProjectId.value = value;
-  diffSummariesBySessionId.value = {};
   void loadOverviewSessions();
   if (!liveStopped) {
     startOverviewLiveUpdates();
@@ -589,24 +602,11 @@ async function startOverview() {
   await loadProjects();
   pruneHiddenProjectIds();
   await loadOverviewSessions();
-  diffSummaryController.start();
   startOverviewLiveUpdates();
 }
 
 async function loadOverviewSessions() {
   await loadLatestSessions();
-  await diffSummaryController
-    .refresh(visibleLatestCards.value.map((card: SessionCard) => card.id))
-    .catch(() => undefined);
-  diffSummaryController.syncPolling();
-}
-
-function withDiffSummary(card: SessionCard): SessionCard {
-  const summary = diffSummariesBySessionId.value[card.id];
-  return {
-    ...card,
-    filesChanged: summary?.state === 'changed' ? summary.filesChanged : 0,
-  };
 }
 
 function readHiddenProjectIds() {
@@ -655,19 +655,6 @@ function toggleProjectVisibility(projectId: string) {
   }
   hiddenProjectIds.value = next;
   persistHiddenProjectIds();
-  void diffSummaryController
-    .refresh(visibleLatestCards.value.map((card: SessionCard) => card.id))
-    .catch(() => undefined);
-  diffSummaryController.syncPolling();
-}
-
-function handleVisibilityChange() {
-  if (document.visibilityState === 'visible') {
-    void diffSummaryController
-      .refresh(activeOverviewDiffSessionIds(visibleLatestCards.value))
-      .catch(() => undefined);
-  }
-  diffSummaryController.syncPolling();
 }
 
 function startOverviewLiveUpdates(onSubscribed?: () => void) {
@@ -999,9 +986,16 @@ function initialDiffWorkspaceState(): DiffWorkspaceState {
 }
 
 function handleDiffDialogClosed() {
-  if (diffDialogSessionId.value) {
-    void diffSummaryController.refresh([diffDialogSessionId.value]).catch(() => undefined);
-  }
+  diffDialogSessionId.value = '';
+}
+
+function openArtifactDialog(card: SessionCard) {
+  artifactDialogSessionId.value = card.id;
+  artifactDialog.value = true;
+}
+
+function handleArtifactDialogClosed() {
+  artifactDialogSessionId.value = '';
 }
 
 async function submitApproval(approved: boolean, comment: string) {

@@ -35,6 +35,17 @@ type blockingArtifactRepository struct {
 	releaseFirstSum  chan struct{}
 }
 
+func createArtifactSession(t *testing.T, ctx context.Context, database *entstore.Store, id session.ID) {
+	t.Helper()
+	now := time.Now().UTC()
+	if err := database.Sessions().Create(ctx, session.Session{
+		ID: id, ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusCreated,
+		Priority: session.PriorityMedium, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestResolveArtifactsNormalizesAndBoundsLogicalPaths(t *testing.T) {
 	ctx := context.Background()
 	database, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
@@ -45,6 +56,7 @@ func TestResolveArtifactsNormalizesAndBoundsLogicalPaths(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	repo := database.Attachments()
 	now := time.Now().UTC()
 	for _, artifact := range []session.SessionFile{
@@ -105,6 +117,7 @@ func TestPublishSerializesSessionQuotaChecks(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	repo := &blockingArtifactRepository{
 		ArtifactRepository: database.Attachments(),
 		firstSumEntered:    make(chan struct{}), secondSumEntered: make(chan struct{}), releaseFirstSum: make(chan struct{}),
@@ -158,6 +171,7 @@ func TestCommittedArtifactIgnoresLivePublisherFailure(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	files := filestore.New(dataDir)
 	service := artifactapp.New(database.Attachments(), files, files)
 	service.SetEvents(database.Events(), failingArtifactPublisher{})
@@ -239,6 +253,7 @@ func TestPublishScanVersionAndDelete(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	files := filestore.New(dataDir)
 	service := artifactapp.New(database.Attachments(), files, files)
 	outputDir, err := files.EnsureArtifactDir(ctx, "session-1")
@@ -281,12 +296,12 @@ func TestPublishScanVersionAndDelete(t *testing.T) {
 	if len(published) != 1 || published[0].ID == first.ID {
 		t.Fatalf("scan published = %#v", published)
 	}
-	artifacts, total, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1", Page: 1, PageSize: 20})
+	artifacts, err := service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 2 || len(artifacts) != 2 {
-		t.Fatalf("artifact listing total=%d rows=%#v", total, artifacts)
+	if len(artifacts) != 1 || artifacts[0].ID != published[0].ID {
+		t.Fatalf("artifact listing rows=%#v", artifacts)
 	}
 	input, err := service.UseAsInput(ctx, first.ID)
 	if err != nil {
@@ -308,12 +323,12 @@ func TestPublishScanVersionAndDelete(t *testing.T) {
 	if body, err := os.ReadFile(input.Path); err != nil || string(body) != "first" {
 		t.Fatalf("copied input changed after artifact delete: body=%q err=%v", body, err)
 	}
-	_, total, err = service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
+	artifacts, err = service.List(ctx, session.ArtifactQuery{SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 1 {
-		t.Fatalf("artifact total after delete = %d", total)
+	if len(artifacts) != 1 || artifacts[0].ID != published[0].ID {
+		t.Fatalf("artifacts after old version delete = %#v", artifacts)
 	}
 	if _, err := service.Scan(ctx, artifactapp.ScanInput{SessionID: "session-1"}); err != nil {
 		t.Fatalf("scan resurrected deleted artifact: %v", err)
@@ -331,6 +346,7 @@ func TestScanIgnoresPartialAndSymlink(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	files := filestore.New(dataDir)
 	service := artifactapp.New(database.Attachments(), files, files)
 	outputDir, err := files.EnsureArtifactDir(ctx, "session-1")
@@ -373,6 +389,7 @@ func TestScanContinuesAfterIndividualPublishFailure(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	files := filestore.New(dataDir)
 	service := artifactapp.New(database.Attachments(), files, files)
 	service.SetLimits(artifactapp.Limits{MaxFileBytes: 4, MaxSessionBytes: 100})
@@ -407,6 +424,7 @@ func TestPublishInlineArtifactArchivesAndDeduplicates(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	files := filestore.New(dataDir)
 	service := artifactapp.New(database.Attachments(), files, files)
 	imageData, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
@@ -552,9 +570,9 @@ func TestReconcileOutputsScansOpenAndCleansClosedAndOldOrphans(t *testing.T) {
 	if count != 3 {
 		t.Fatalf("reconciled count = %d", count)
 	}
-	artifacts, total, err := service.List(ctx, session.ArtifactQuery{SessionID: "open-session"})
-	if err != nil || total != 1 || len(artifacts) != 1 {
-		t.Fatalf("open session artifacts total=%d rows=%#v err=%v", total, artifacts, err)
+	artifacts, err := service.List(ctx, session.ArtifactQuery{SessionID: "open-session"})
+	if err != nil || len(artifacts) != 1 {
+		t.Fatalf("open session artifacts rows=%#v err=%v", artifacts, err)
 	}
 	for _, sessionID := range []session.ID{"closed-session", "old-orphan"} {
 		if _, err := os.Stat(files.ArtifactDir(sessionID)); !errors.Is(err, os.ErrNotExist) {
@@ -577,6 +595,7 @@ func TestReconcileDeletedArtifactsFinishesPhysicalCleanup(t *testing.T) {
 	if err := database.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
+	createArtifactSession(t, ctx, database, "session-1")
 	files := filestore.New(dataDir)
 	service := artifactapp.New(database.Attachments(), files, files)
 	outputDir, err := files.EnsureArtifactDir(ctx, "session-1")

@@ -168,8 +168,6 @@ type ListQuickCommandsInput struct {
 
 type ListSessionFilesInput struct {
 	SessionID string  `json:"sessionId"`
-	Page      *int    `json:"page,omitempty"`
-	PageSize  *int    `json:"pageSize,omitempty"`
 	Kind      *string `json:"kind,omitempty"`
 	Source    *string `json:"source,omitempty"`
 	Filter    *string `json:"filter,omitempty"`
@@ -358,6 +356,8 @@ type SessionCard struct {
 	PendingApproval    *PendingApproval     `json:"pendingApproval,omitempty"`
 	PendingQuestion    bool                 `json:"pendingQuestion"`
 	TodoList           *TodoList            `json:"todoList,omitempty"`
+	ArtifactCount      int                  `json:"artifactCount"`
+	FilesChanged       int                  `json:"filesChanged"`
 	Attachments        []*SessionAttachment `json:"attachments"`
 	AvailableActions   []string             `json:"availableActions"`
 	LastRunAt          *time.Time           `json:"lastRunAt,omitempty"`
@@ -442,12 +442,6 @@ type SessionDiffInput struct {
 	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
-type SessionDiffSummary struct {
-	SessionID    string                  `json:"sessionId"`
-	State        SessionDiffSummaryState `json:"state"`
-	FilesChanged int                     `json:"filesChanged"`
-}
-
 type SessionFile struct {
 	ID            string    `json:"id"`
 	SessionID     string    `json:"sessionId"`
@@ -467,11 +461,6 @@ type SessionFile struct {
 	PreviewURL    *string   `json:"previewUrl,omitempty"`
 	DownloadURL   string    `json:"downloadUrl"`
 	CreatedAt     time.Time `json:"createdAt"`
-}
-
-type SessionFilePage struct {
-	Items    []*SessionFile `json:"items"`
-	PageInfo *PageInfo      `json:"pageInfo"`
 }
 
 type SessionStateStreamItem struct {
@@ -783,65 +772,6 @@ type WorktreeCleanupError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
-}
-
-type SessionDiffSummaryState string
-
-const (
-	SessionDiffSummaryStateChanged     SessionDiffSummaryState = "changed"
-	SessionDiffSummaryStateClean       SessionDiffSummaryState = "clean"
-	SessionDiffSummaryStateUnavailable SessionDiffSummaryState = "unavailable"
-	SessionDiffSummaryStateError       SessionDiffSummaryState = "error"
-)
-
-var AllSessionDiffSummaryState = []SessionDiffSummaryState{
-	SessionDiffSummaryStateChanged,
-	SessionDiffSummaryStateClean,
-	SessionDiffSummaryStateUnavailable,
-	SessionDiffSummaryStateError,
-}
-
-func (e SessionDiffSummaryState) IsValid() bool {
-	switch e {
-	case SessionDiffSummaryStateChanged, SessionDiffSummaryStateClean, SessionDiffSummaryStateUnavailable, SessionDiffSummaryStateError:
-		return true
-	}
-	return false
-}
-
-func (e SessionDiffSummaryState) String() string {
-	return string(e)
-}
-
-func (e *SessionDiffSummaryState) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = SessionDiffSummaryState(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid SessionDiffSummaryState", str)
-	}
-	return nil
-}
-
-func (e SessionDiffSummaryState) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *SessionDiffSummaryState) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e SessionDiffSummaryState) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
 }
 
 type TranscriptEventPhase string

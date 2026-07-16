@@ -6955,6 +6955,10 @@ type SessionMutation struct {
 	permission_mode                  *string
 	fast_mode                        *bool
 	todo_list                        *session.TodoList
+	artifact_count                   *int
+	addartifact_count                *int
+	files_changed                    *int
+	addfiles_changed                 *int
 	queued_at                        *time.Time
 	queue_kind                       *string
 	queue_priority                   *string
@@ -8164,6 +8168,118 @@ func (m *SessionMutation) ResetTodoList() {
 	delete(m.clearedFields, entsession.FieldTodoList)
 }
 
+// SetArtifactCount sets the "artifact_count" field.
+func (m *SessionMutation) SetArtifactCount(i int) {
+	m.artifact_count = &i
+	m.addartifact_count = nil
+}
+
+// ArtifactCount returns the value of the "artifact_count" field in the mutation.
+func (m *SessionMutation) ArtifactCount() (r int, exists bool) {
+	v := m.artifact_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldArtifactCount returns the old "artifact_count" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldArtifactCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldArtifactCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldArtifactCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldArtifactCount: %w", err)
+	}
+	return oldValue.ArtifactCount, nil
+}
+
+// AddArtifactCount adds i to the "artifact_count" field.
+func (m *SessionMutation) AddArtifactCount(i int) {
+	if m.addartifact_count != nil {
+		*m.addartifact_count += i
+	} else {
+		m.addartifact_count = &i
+	}
+}
+
+// AddedArtifactCount returns the value that was added to the "artifact_count" field in this mutation.
+func (m *SessionMutation) AddedArtifactCount() (r int, exists bool) {
+	v := m.addartifact_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetArtifactCount resets all changes to the "artifact_count" field.
+func (m *SessionMutation) ResetArtifactCount() {
+	m.artifact_count = nil
+	m.addartifact_count = nil
+}
+
+// SetFilesChanged sets the "files_changed" field.
+func (m *SessionMutation) SetFilesChanged(i int) {
+	m.files_changed = &i
+	m.addfiles_changed = nil
+}
+
+// FilesChanged returns the value of the "files_changed" field in the mutation.
+func (m *SessionMutation) FilesChanged() (r int, exists bool) {
+	v := m.files_changed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilesChanged returns the old "files_changed" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldFilesChanged(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilesChanged is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilesChanged requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilesChanged: %w", err)
+	}
+	return oldValue.FilesChanged, nil
+}
+
+// AddFilesChanged adds i to the "files_changed" field.
+func (m *SessionMutation) AddFilesChanged(i int) {
+	if m.addfiles_changed != nil {
+		*m.addfiles_changed += i
+	} else {
+		m.addfiles_changed = &i
+	}
+}
+
+// AddedFilesChanged returns the value that was added to the "files_changed" field in this mutation.
+func (m *SessionMutation) AddedFilesChanged() (r int, exists bool) {
+	v := m.addfiles_changed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFilesChanged resets all changes to the "files_changed" field.
+func (m *SessionMutation) ResetFilesChanged() {
+	m.files_changed = nil
+	m.addfiles_changed = nil
+}
+
 // SetQueuedAt sets the "queued_at" field.
 func (m *SessionMutation) SetQueuedAt(t time.Time) {
 	m.queued_at = &t
@@ -8839,7 +8955,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 43)
+	fields := make([]string, 0, 45)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -8920,6 +9036,12 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.todo_list != nil {
 		fields = append(fields, entsession.FieldTodoList)
+	}
+	if m.artifact_count != nil {
+		fields = append(fields, entsession.FieldArtifactCount)
+	}
+	if m.files_changed != nil {
+		fields = append(fields, entsession.FieldFilesChanged)
 	}
 	if m.queued_at != nil {
 		fields = append(fields, entsession.FieldQueuedAt)
@@ -9031,6 +9153,10 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.FastMode()
 	case entsession.FieldTodoList:
 		return m.TodoList()
+	case entsession.FieldArtifactCount:
+		return m.ArtifactCount()
+	case entsession.FieldFilesChanged:
+		return m.FilesChanged()
 	case entsession.FieldQueuedAt:
 		return m.QueuedAt()
 	case entsession.FieldQueueKind:
@@ -9126,6 +9252,10 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldFastMode(ctx)
 	case entsession.FieldTodoList:
 		return m.OldTodoList(ctx)
+	case entsession.FieldArtifactCount:
+		return m.OldArtifactCount(ctx)
+	case entsession.FieldFilesChanged:
+		return m.OldFilesChanged(ctx)
 	case entsession.FieldQueuedAt:
 		return m.OldQueuedAt(ctx)
 	case entsession.FieldQueueKind:
@@ -9356,6 +9486,20 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTodoList(v)
 		return nil
+	case entsession.FieldArtifactCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetArtifactCount(v)
+		return nil
+	case entsession.FieldFilesChanged:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilesChanged(v)
+		return nil
 	case entsession.FieldQueuedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -9479,6 +9623,12 @@ func (m *SessionMutation) AddedFields() []string {
 	if m.addworktree_cleanup_attempts != nil {
 		fields = append(fields, entsession.FieldWorktreeCleanupAttempts)
 	}
+	if m.addartifact_count != nil {
+		fields = append(fields, entsession.FieldArtifactCount)
+	}
+	if m.addfiles_changed != nil {
+		fields = append(fields, entsession.FieldFilesChanged)
+	}
 	return fields
 }
 
@@ -9489,6 +9639,10 @@ func (m *SessionMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case entsession.FieldWorktreeCleanupAttempts:
 		return m.AddedWorktreeCleanupAttempts()
+	case entsession.FieldArtifactCount:
+		return m.AddedArtifactCount()
+	case entsession.FieldFilesChanged:
+		return m.AddedFilesChanged()
 	}
 	return nil, false
 }
@@ -9504,6 +9658,20 @@ func (m *SessionMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddWorktreeCleanupAttempts(v)
+		return nil
+	case entsession.FieldArtifactCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddArtifactCount(v)
+		return nil
+	case entsession.FieldFilesChanged:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFilesChanged(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Session numeric field %s", name)
@@ -9687,6 +9855,12 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldTodoList:
 		m.ResetTodoList()
+		return nil
+	case entsession.FieldArtifactCount:
+		m.ResetArtifactCount()
+		return nil
+	case entsession.FieldFilesChanged:
+		m.ResetFilesChanged()
 		return nil
 	case entsession.FieldQueuedAt:
 		m.ResetQueuedAt()

@@ -67,6 +67,10 @@ const (
 	FieldFastMode = "fast_mode"
 	// FieldTodoList holds the string denoting the todo_list field in the database.
 	FieldTodoList = "todo_list"
+	// FieldArtifactCount holds the string denoting the artifact_count field in the database.
+	FieldArtifactCount = "artifact_count"
+	// FieldFilesChanged holds the string denoting the files_changed field in the database.
+	FieldFilesChanged = "files_changed"
 	// FieldQueuedAt holds the string denoting the queued_at field in the database.
 	FieldQueuedAt = "queued_at"
 	// FieldQueueKind holds the string denoting the queue_kind field in the database.
@@ -133,6 +137,8 @@ var Columns = []string{
 	FieldPermissionMode,
 	FieldFastMode,
 	FieldTodoList,
+	FieldArtifactCount,
+	FieldFilesChanged,
 	FieldQueuedAt,
 	FieldQueueKind,
 	FieldQueuePriority,
@@ -202,6 +208,14 @@ var (
 	DefaultPermissionMode string
 	// DefaultFastMode holds the default value on creation for the "fast_mode" field.
 	DefaultFastMode bool
+	// DefaultArtifactCount holds the default value on creation for the "artifact_count" field.
+	DefaultArtifactCount int
+	// ArtifactCountValidator is a validator for the "artifact_count" field. It is called by the builders before save.
+	ArtifactCountValidator func(int) error
+	// DefaultFilesChanged holds the default value on creation for the "files_changed" field.
+	DefaultFilesChanged int
+	// FilesChangedValidator is a validator for the "files_changed" field. It is called by the builders before save.
+	FilesChangedValidator func(int) error
 	// DefaultQueueKind holds the default value on creation for the "queue_kind" field.
 	DefaultQueueKind string
 	// DefaultQueuePriority holds the default value on creation for the "queue_priority" field.
@@ -364,6 +378,16 @@ func ByPermissionMode(opts ...sql.OrderTermOption) OrderOption {
 // ByFastMode orders the results by the fast_mode field.
 func ByFastMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFastMode, opts...).ToFunc()
+}
+
+// ByArtifactCount orders the results by the artifact_count field.
+func ByArtifactCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldArtifactCount, opts...).ToFunc()
+}
+
+// ByFilesChanged orders the results by the files_changed field.
+func ByFilesChanged(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFilesChanged, opts...).ToFunc()
 }
 
 // ByQueuedAt orders the results by the queued_at field.

@@ -7,10 +7,8 @@ package graph
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/99designs/gqlgen/graphql"
-	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
@@ -535,22 +533,6 @@ func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiff
 	return mapSessionDiff(dto), nil
 }
 
-// SessionDiffSummaries is the resolver for the sessionDiffSummaries field.
-func (r *queryResolver) SessionDiffSummaries(ctx context.Context, sessionIds []string) ([]*model.SessionDiffSummary, error) {
-	if r.UseCases.Diff == nil {
-		return nil, missingUseCase("diff")
-	}
-	sessionIDs := make([]sessiondomain.ID, 0, len(sessionIds))
-	for _, sessionID := range sessionIds {
-		sessionIDs = append(sessionIDs, sessiondomain.ID(sessionID))
-	}
-	dtos, err := r.UseCases.Diff.GetSessionDiffSummaries(ctx, diffapp.SessionDiffSummariesInput{SessionIDs: sessionIDs})
-	if err != nil {
-		return nil, err
-	}
-	return mapSessionDiffSummaries(dtos), nil
-}
-
 // BranchDiff is the resolver for the branchDiff field.
 func (r *queryResolver) BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error) {
 	if r.UseCases.Diff == nil {
@@ -629,17 +611,12 @@ func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID st
 }
 
 // SessionFiles is the resolver for the sessionFiles field.
-func (r *queryResolver) SessionFiles(ctx context.Context, input model.ListSessionFilesInput) (*model.SessionFilePage, error) {
+func (r *queryResolver) SessionFiles(ctx context.Context, input model.ListSessionFilesInput) ([]*model.SessionFile, error) {
 	if r.UseCases.Artifacts == nil {
 		return nil, missingUseCase("artifacts")
 	}
-	page := intValue(input.Page, 1)
-	pageSize := intValue(input.PageSize, 50)
-	page, pageSize = artifactapp.NormalizePage(page, pageSize)
-	files, total, err := r.UseCases.Artifacts.List(ctx, sessiondomain.ArtifactQuery{
+	files, err := r.UseCases.Artifacts.List(ctx, sessiondomain.ArtifactQuery{
 		SessionID: sessiondomain.ID(input.SessionID),
-		Page:      page,
-		PageSize:  pageSize,
 		Kind:      sessiondomain.ArtifactKind(stringValue(input.Kind, "")),
 		Source:    sessiondomain.AttachmentSourceType(stringValue(input.Source, "")),
 		Filter:    stringValue(input.Filter, ""),
@@ -652,11 +629,7 @@ func (r *queryResolver) SessionFiles(ctx context.Context, input model.ListSessio
 	for _, file := range files {
 		items = append(items, mapSessionFile(file))
 	}
-	nextCursor := ""
-	if page*pageSize < total {
-		nextCursor = strconv.Itoa(page + 1)
-	}
-	return &model.SessionFilePage{Items: items, PageInfo: mapPageInfo(page, pageSize, total, nextCursor)}, nil
+	return items, nil
 }
 
 // ResolveSessionArtifacts is the resolver for the resolveSessionArtifacts field.
