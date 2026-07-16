@@ -212,7 +212,9 @@ try {
       '09-git-session-mobile.png',
       '10-directory-dialog.png',
       '11-new-session-dialog.png',
+      '12-answer-user-inline.png',
       '12-answer-user-dialog.png',
+      '12-answer-user-dialog-mobile.png',
       '13-session-diff-workspace.png',
     ].map((name) => `${screenshotDir}/${name}`),
   }, null, 2));
@@ -788,6 +790,105 @@ async function clickQuestionButtonForCard(marker) {
   await sleep(500);
 }
 
+async function clickAnswerQuestionTab(panelSelector, label) {
+  const clicked = await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const tab = Array.from(panel?.querySelectorAll('[role="tab"]') || [])
+      .find((element) => element.innerText.trim() === ${JSON.stringify(label)});
+    if (!tab) return false;
+    tab.click();
+    return true;
+  })()`);
+  assert(clicked, `${label} tab not found in ${panelSelector}`);
+  await sleep(300);
+}
+
+async function clickAnswerOption(panelSelector, label) {
+  const clicked = await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const option = Array.from(panel?.querySelectorAll('.q-tab-panel .option-item') || [])
+      .find((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && element.innerText.includes(${JSON.stringify(label)});
+      });
+    if (!option) return false;
+    option.click();
+    return true;
+  })()`);
+  assert(clicked, `${label} option not found in ${panelSelector}`);
+  await sleep(300);
+}
+
+async function clickCustomAnswer(panelSelector) {
+  const clicked = await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const radio = panel?.querySelector('.q-tab-panel .option-item--custom .q-radio');
+    if (!radio) return false;
+    const rect = radio.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    radio.click();
+    return true;
+  })()`);
+  assert(clicked, `custom answer option not found in ${panelSelector}`);
+  await sleep(300);
+}
+
+async function fillCustomAnswer(panelSelector, value) {
+  const focused = await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const input = panel?.querySelector('.q-tab-panel .custom-answer-input textarea');
+    if (!input || input.disabled) return false;
+    input.focus();
+    return document.activeElement === input;
+  })()`);
+  assert(focused, `custom answer input not focusable in ${panelSelector}`);
+  await page.send('Input.insertText', { text: value });
+  await waitForCondition(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    return panel?.querySelector('.q-tab-panel .custom-answer-input textarea')?.value === ${JSON.stringify(value)};
+  })()`, `custom answer text in ${panelSelector}`);
+}
+
+async function waitForActiveAnswerQuestion(panelSelector, label) {
+  await waitForCondition(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    return panel?.querySelector('.q-tab--active')?.innerText.trim() === ${JSON.stringify(label)};
+  })()`, `${label} to become active in ${panelSelector}`);
+}
+
+async function assertAnswerUserAutoAdvance(panelSelector, label) {
+  await waitForVisibleSelector(panelSelector);
+  await waitForActiveAnswerQuestion(panelSelector, '问题 1');
+
+  await clickAnswerQuestionTab(panelSelector, '问题 2');
+  await clickAnswerOption(panelSelector, 'Second choice');
+  await waitForActiveAnswerQuestion(panelSelector, '问题 3');
+
+  await clickAnswerQuestionTab(panelSelector, '问题 2');
+  await clickCustomAnswer(panelSelector);
+  await waitForActiveAnswerQuestion(panelSelector, '问题 2');
+  await fillCustomAnswer(panelSelector, 'Custom response');
+  await waitForActiveAnswerQuestion(panelSelector, '问题 2');
+
+  await clickAnswerQuestionTab(panelSelector, '问题 1');
+  await clickAnswerOption(panelSelector, 'First choice');
+  await waitForActiveAnswerQuestion(panelSelector, '问题 3');
+  await clickAnswerOption(panelSelector, 'Final choice');
+  await waitForActiveAnswerQuestion(panelSelector, '问题 3');
+
+  const state = await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const submit = Array.from(panel?.querySelectorAll('button') || [])
+      .find((element) => element.innerText.includes('提交全部答案并继续'));
+    return {
+      visible: Boolean(panel && panel.getBoundingClientRect().height > 0),
+      submitEnabled: Boolean(submit && !submit.disabled && submit.getAttribute('aria-disabled') !== 'true'),
+    };
+  })()`);
+  assert(state.visible, `${label} closed after the final choice`);
+  assert(state.submitEnabled, `${label} did not preserve three valid drafts`);
+}
+
 async function assertNoHorizontalOverflow(label) {
   const overflow = await evaluate(`(() => {
     const doc = document.documentElement;
@@ -1273,19 +1374,29 @@ async function assertAnswerUserFlow(projectId) {
   await navigate(`/#/sessions/${session.id}`);
   await waitForText('E2E_WAITING_USER_CARD');
   await waitForText('待回答问题');
-  await waitForText('Choose next step');
+  await waitForText('Choose first step');
+  await assertAnswerUserAutoAdvance('.detail-page .answer-panel', 'inline answer panel');
+  await assertPendingQuestionBatch(session.id, pending.batchId);
   await screenshot('12-answer-user-inline.png');
+
+  await navigate('/');
+  await waitForText('E2E_WAITING_USER_CARD');
+  await clickQuestionButtonForCard('E2E_WAITING_USER_CARD');
+  await waitForVisibleSelector('.answer-dialog');
+  await assertAnswerUserAutoAdvance('.answer-dialog .answer-panel', 'answer dialog');
+  await assertPendingQuestionBatch(session.id, pending.batchId);
+  await screenshot('12-answer-user-dialog.png');
+  await setViewport(390, 844);
+  await assertNoHorizontalOverflow('mobile answer dialog');
+  await screenshot('12-answer-user-dialog-mobile.png');
+  await setViewport(1440, 900);
   if (darkThemeAudit) {
-    await navigate('/');
-    await waitForText('E2E_WAITING_USER_CARD');
-    await clickQuestionButtonForCard('E2E_WAITING_USER_CARD');
-    await waitForVisibleSelector('.answer-dialog');
     await auditDarkThemeSurface('dialog-answer-user', 'questions');
     await clickTab('Diff');
     await waitForVisibleSelector('.answer-dialog .diff-workspace');
     await auditDarkThemeSurface('dialog-answer-user', 'diff');
-    await closeVisibleDialog();
   }
+  await closeVisibleDialog();
   await submitPendingQuestion(pending);
   const mcpResponse = await mcpPromise;
   assert(mcpResponse.status === 200, `answer_user MCP status = ${mcpResponse.status}: ${JSON.stringify(mcpResponse.body)}`);
@@ -1452,12 +1563,14 @@ async function waitForPendingQuestion(sessionId, timeoutMs = 10_000) {
       }
     `, { sessionId });
     const batch = data.pendingQuestionBatches.find((item) => item.status === 'pending');
-    const question = batch?.questions?.[0];
-    if (batch?.id && question?.id) {
+    const answers = batch?.questions?.map((question) => ({
+      questionId: question.id,
+      optionId: question.options?.[0]?.id || '',
+    })) || [];
+    if (batch?.id && answers.length === 3 && answers.every((answer) => answer.questionId && answer.optionId)) {
       return {
         batchId: batch.id,
-        questionId: question.id,
-        optionId: question.options?.[0]?.id || '',
+        answers,
       };
     }
     await sleep(250);
@@ -1465,8 +1578,20 @@ async function waitForPendingQuestion(sessionId, timeoutMs = 10_000) {
   throw new Error(`Timed out waiting for pending question for ${sessionId}`);
 }
 
+async function assertPendingQuestionBatch(sessionId, batchId) {
+  const data = await graphql(`
+    query PendingQuestionBatches($sessionId: ID!) {
+      pendingQuestionBatches(sessionId: $sessionId) { id status }
+    }
+  `, { sessionId });
+  assert(
+    data.pendingQuestionBatches.some((batch) => batch.id === batchId && batch.status === 'pending'),
+    `question batch ${batchId} was submitted during automatic navigation`,
+  );
+}
+
 async function submitPendingQuestion(pending) {
-  assert(pending.batchId && pending.questionId && pending.optionId, `invalid pending question: ${JSON.stringify(pending)}`);
+  assert(pending.batchId && pending.answers.length === 3, `invalid pending question: ${JSON.stringify(pending)}`);
   const data = await graphql(`
     mutation SubmitQuestionBatch($input: SubmitQuestionBatchInput!) {
       submitQuestionBatch(input: $input) {
@@ -1478,10 +1603,10 @@ async function submitPendingQuestion(pending) {
   `, {
     input: {
       batchId: pending.batchId,
-      answers: [{
-        questionId: pending.questionId,
-        selectedOptionId: pending.optionId,
-      }],
+      answers: pending.answers.map((answer) => ({
+        questionId: answer.questionId,
+        selectedOptionId: answer.optionId,
+      })),
     },
   });
   assert(data.submitQuestionBatch.status === 'answered', `submitQuestionBatch status = ${data.submitQuestionBatch.status}`);
@@ -1548,13 +1673,29 @@ async function assertSessionEventsDoNotContain(sessionId, text) {
 
 async function callAnswerUser(sessionId) {
   return callSessionMCP(sessionId, 'answer_user', {
-    questions: [{
-      title: 'Choose next step',
-      body: 'How should Codex continue?',
-      type: 'choice',
-      allowCustom: true,
-      options: [{ id: 'continue', label: 'Continue', description: 'Proceed' }],
-    }],
+    questions: [
+      {
+        title: 'Choose first step',
+        body: 'How should Codex start?',
+        type: 'choice',
+        allowCustom: false,
+        options: [{ id: 'first', label: 'First choice', description: 'Start' }],
+      },
+      {
+        title: 'Choose second step',
+        body: 'How should Codex continue?',
+        type: 'choice',
+        allowCustom: true,
+        options: [{ id: 'second', label: 'Second choice', description: 'Continue' }],
+      },
+      {
+        title: 'Choose final step',
+        body: 'How should Codex finish?',
+        type: 'choice',
+        allowCustom: false,
+        options: [{ id: 'final', label: 'Final choice', description: 'Finish' }],
+      },
+    ],
   });
 }
 

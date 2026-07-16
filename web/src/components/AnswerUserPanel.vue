@@ -141,14 +141,7 @@ const currentBatch = computed(
   () => props.batches.find((batch) => batch.status === 'pending') ?? null,
 );
 const questions = computed<AgentQuestion[]>(() => currentBatch.value?.questions ?? []);
-const canSubmit = computed(() =>
-  questions.value.every((question) => {
-    const draft = drafts.value[question.id];
-    if (!draft?.choice) return false;
-    if (draft.choice === '__custom__') return draft.customAnswer.trim().length > 0;
-    return question.options.some((option) => option.id === draft.choice);
-  }),
-);
+const canSubmit = computed(() => questions.value.every(hasValidDraft));
 
 watch(
   () => props.batches,
@@ -168,6 +161,15 @@ function setChoice(questionId: string, choice: string) {
     ...draftFor(questionId),
     choice,
   };
+
+  if (choice === '__custom__') return;
+  const questionIndex = questions.value.findIndex((question) => question.id === questionId);
+  const currentQuestion = questions.value[questionIndex];
+  if (!currentQuestion || !hasValidDraft(currentQuestion)) return;
+  const nextQuestion = questions.value
+    .slice(questionIndex + 1)
+    .find((question) => !hasValidDraft(question));
+  if (nextQuestion) activeQuestionId.value = nextQuestion.id;
 }
 
 function setCustomAnswer(questionId: string, customAnswer: string) {
@@ -179,6 +181,13 @@ function setCustomAnswer(questionId: string, customAnswer: string) {
 
 function draftFor(questionId: string): DraftAnswer {
   return drafts.value[questionId] ?? { choice: '', customAnswer: '' };
+}
+
+function hasValidDraft(question: AgentQuestion): boolean {
+  const draft = drafts.value[question.id];
+  if (!draft?.choice) return false;
+  if (draft.choice === '__custom__') return draft.customAnswer.trim().length > 0;
+  return question.options.some((option) => option.id === draft.choice);
 }
 
 function submit() {
