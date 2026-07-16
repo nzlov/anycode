@@ -19,6 +19,7 @@ import (
 
 	"github.com/expr-lang/expr"
 	"github.com/nzlov/anycode/internal/application/apperror"
+	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
@@ -299,6 +300,7 @@ type Service struct {
 	files               domain.AttachmentStore
 	artifacts           domain.ArtifactStore
 	artifactScanner     artifactScanner
+	artifactCleaner     artifactCleaner
 	artifactPublisher   domain.ArtifactPublisher
 	worktrees           domain.WorktreeManager
 	worktreeInitializer domain.WorktreeInitializer
@@ -333,6 +335,10 @@ type questionCoordinator interface {
 
 type artifactScanner interface {
 	Scan(ctx context.Context, input domain.ArtifactScanRequest) ([]domain.SessionAttachment, error)
+}
+
+type artifactCleaner interface {
+	DeleteArchived(ctx context.Context, artifacts []domain.SessionFile) (int, error)
 }
 
 type sessionDiffCounter interface {
@@ -370,6 +376,12 @@ func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentSt
 func WithArtifactScanner(scanner artifactScanner) Option {
 	return func(s *Service) {
 		s.artifactScanner = scanner
+	}
+}
+
+func WithArtifactCleaner(cleaner artifactCleaner) Option {
+	return func(s *Service) {
+		s.artifactCleaner = cleaner
 	}
 }
 
@@ -6901,6 +6913,58 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 	return true, nil
 }
 
+func (s *Service) saveClosedSessionWithArtifacts(ctx context.Context, session domain.Session, inputs []sessionEventInput, deletedAt time.Time) ([]domain.SessionFile, bool, error) {
+	// GLUE: Legacy in-memory tests omit artifact cleanup; remove this fallback when every constructor requires the transactional cleaner.
+	if s.artifactCleaner == nil {
+		committed, err := s.saveSessionWithEvents(ctx, session, inputs)
+		return nil, committed, err
+	}
+	if s.uow == nil {
+		return nil, false, errors.New("close session artifact cleanup requires a unit of work")
+	}
+	sessionEvents, err := s.newSessionEvents(session, inputs)
+	if err != nil {
+		return nil, false, err
+	}
+	var artifacts []domain.SessionFile
+	var artifactEvents []eventdomain.DomainEvent
+	if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		if err := tx.Sessions().Save(ctx, session); err != nil {
+			return fmt.Errorf("save session: %w", err)
+		}
+		result, err := tx.DeleteSessionArtifacts(ctx, port.DeleteSessionArtifactsInput{SessionID: session.ID, DeletedAt: deletedAt})
+		if err != nil {
+			return err
+		}
+		artifacts = result.Artifacts
+		if s.events != nil {
+			artifactEvents = make([]eventdomain.DomainEvent, 0, len(artifacts))
+			for _, artifact := range artifacts {
+				event := artifactapp.NewDeletedEvent(artifact, string(session.ProjectID), deletedAt)
+				if err := tx.Events().Append(ctx, event); err != nil {
+					return err
+				}
+				artifactEvents = append(artifactEvents, event)
+			}
+		}
+		for _, event := range sessionEvents {
+			if err := tx.Events().Append(ctx, event); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, false, err
+	}
+	for _, event := range artifactEvents {
+		s.publishSessionEvent(ctx, event)
+	}
+	for _, event := range sessionEvents {
+		s.publishSessionEvent(ctx, event)
+	}
+	return artifacts, true, nil
+}
+
 func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
@@ -7321,13 +7385,16 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		closeErr := fmt.Errorf("close session %s: %w", session.ID, err)
 		return DTO{}, releaseClose(closeErr)
 	}
+	if s.artifactCleaner != nil {
+		session.ArtifactCount = 0
+	}
 	events := []sessionEventInput{{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}}}
 	if cleanupRequested {
 		events = append(events, sessionEventInput{eventType: "session.worktree_cleanup_requested", payload: map[string]any{
 			"worktreeBranch": session.WorktreeBranch,
 		}})
 	}
-	committed, err := s.saveSessionWithEvents(ctx, session, events)
+	deletedArtifacts, committed, err := s.saveClosedSessionWithArtifacts(ctx, session, events, now)
 	if err != nil {
 		if committed {
 			if quarantinePath != "" && s.artifacts != nil {
@@ -7341,6 +7408,11 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			return DTO{}, err
 		}
 		return DTO{}, releaseClose(err)
+	}
+	if len(deletedArtifacts) > 0 {
+		if _, cleanupErr := s.artifactCleaner.DeleteArchived(context.WithoutCancel(ctx), deletedArtifacts); cleanupErr != nil {
+			log.Printf("delete closed session archived artifacts: session=%s error=%v", session.ID, cleanupErr)
+		}
 	}
 	if quarantinePath != "" && s.artifacts != nil {
 		if cleanupErr := s.artifacts.DeleteQuarantine(context.WithoutCancel(ctx), quarantinePath); cleanupErr != nil {

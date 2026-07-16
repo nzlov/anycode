@@ -21,14 +21,20 @@ exits and immediately before the card closes.
   workflow node retries.
 - Publishing copies the working file to an immutable archive at
   `attachments/sessions/<sessionID>/<fileID>/`.
-- Closing a card performs a final scan, atomically moves its output directory under
-  `attachments/output-trash/`, commits the closed state, and deletes the quarantine directory.
+- Closing a card performs a final scan and atomically moves its output directory under
+  `attachments/output-trash/`. The close transaction tombstones every archived artifact, resets the
+  card's artifact count, and records `artifact.deleted` events together with the closed state.
+- After the close transaction commits, AnyCode deletes both the quarantined output directory and the
+  immutable artifact archives. Physical deletion failures do not reopen the card; startup and six-hour
+  reconciliation retry every tombstoned archive whose stored path is still present.
 - Startup reconciliation restores quarantined output for a card that was not committed closed and
   deletes quarantine left by an already closed card.
 - Startup and six-hour reconciliation scans open-card outputs, removes output directories that
   belong to closed cards, and deletes orphan output directories after 24 hours.
-- Archived files are retained until the user explicitly deletes them. A deletion tombstone prevents
-  the same output version from being recreated by a later scan.
+- Archived files are retained while the card remains open. Explicit deletion or closing the card
+  tombstones and removes them. A deletion tombstone prevents the same output version from being
+  recreated by a later scan. Input attachments copied from artifacts are retained because they follow
+  the input-file lifecycle rather than the artifact lifecycle.
 
 This design can temporarily use roughly twice the generated file size: one mutable working copy and
 one immutable archived copy.
