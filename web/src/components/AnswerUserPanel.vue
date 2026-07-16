@@ -59,7 +59,7 @@
               </q-item-section>
             </q-item>
 
-            <q-item v-if="question.allowCustom" class="option-item option-item--custom">
+            <q-item class="option-item option-item--custom">
               <q-item-section>
                 <q-radio
                   :model-value="drafts[question.id]?.choice"

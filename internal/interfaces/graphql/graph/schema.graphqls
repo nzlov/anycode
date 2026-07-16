@@ -621,7 +621,6 @@ type Question {
   body: String!
   type: String!
   options: [QuestionOption!]!
-  allowCustom: Boolean!
   selectedOptionId: ID
   customAnswer: String!
   answer: JSON!

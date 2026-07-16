@@ -226,7 +226,6 @@ type ComplexityRoot struct {
 	}
 
 	Question struct {
-		AllowCustom      func(childComplexity int) int
 		Answer           func(childComplexity int) int
 		BatchID          func(childComplexity int) int
 		Body             func(childComplexity int) int
@@ -1650,12 +1649,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.WorkflowDefinition(childComplexity, args["id"].(string)), true
 
-	case "Question.allowCustom":
-		if e.ComplexityRoot.Question.AllowCustom == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Question.AllowCustom(childComplexity), true
 	case "Question.answer":
 		if e.ComplexityRoot.Question.Answer == nil {
 			break
@@ -3986,7 +3979,6 @@ type Question {
   body: String!
   type: String!
   options: [QuestionOption!]!
-  allowCustom: Boolean!
   selectedOptionId: ID
   customAnswer: String!
   answer: JSON!
@@ -9912,35 +9904,6 @@ func (ec *executionContext) fieldContext_Question_options(_ context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _Question_allowCustom(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Question_allowCustom,
-		func(ctx context.Context) (any, error) {
-			return obj.AllowCustom, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Question_allowCustom(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Question",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Question_selectedOptionId(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10180,8 +10143,6 @@ func (ec *executionContext) fieldContext_QuestionBatch_questions(_ context.Conte
 				return ec.fieldContext_Question_type(ctx, field)
 			case "options":
 				return ec.fieldContext_Question_options(ctx, field)
-			case "allowCustom":
-				return ec.fieldContext_Question_allowCustom(ctx, field)
 			case "selectedOptionId":
 				return ec.fieldContext_Question_selectedOptionId(ctx, field)
 			case "customAnswer":
@@ -22693,11 +22654,6 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "options":
 			out.Values[i] = ec._Question_options(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "allowCustom":
-			out.Values[i] = ec._Question_allowCustom(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

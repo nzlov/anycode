@@ -141,7 +141,6 @@ export interface AgentQuestion {
   body: string;
   type: string;
   options: QuestionOption[];
-  allowCustom: boolean;
   selectedOptionId?: string | null;
   customAnswer: string;
   answer: Record<string, unknown>;
@@ -490,7 +489,6 @@ const questionBatchFields = `
       description
       payload
     }
-    allowCustom
     selectedOptionId
     customAnswer
     answer

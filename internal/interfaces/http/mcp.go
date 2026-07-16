@@ -286,12 +286,11 @@ func buildQuestions(inputs []mcpQuestionInput) ([]questiondomain.Question, error
 			})
 		}
 		questions = append(questions, questiondomain.Question{
-			Title:       title,
-			Body:        body,
-			Type:        questionType,
-			Options:     options,
-			AllowCustom: input.AllowCustom,
-			Status:      string(questiondomain.BatchPending),
+			Title:   title,
+			Body:    body,
+			Type:    questionType,
+			Options: options,
+			Status:  string(questiondomain.BatchPending),
 		})
 	}
 	return questions, nil
@@ -309,10 +308,9 @@ func answerUserTool() map[string]any {
 					"items": map[string]any{
 						"type": "object",
 						"properties": map[string]any{
-							"title":       map[string]any{"type": "string"},
-							"body":        map[string]any{"type": "string"},
-							"type":        map[string]any{"type": "string"},
-							"allowCustom": map[string]any{"type": "boolean"},
+							"title": map[string]any{"type": "string"},
+							"body":  map[string]any{"type": "string"},
+							"type":  map[string]any{"type": "string"},
 							"options": map[string]any{
 								"type": "array",
 								"items": map[string]any{
@@ -371,11 +369,10 @@ type mcpToolArguments struct {
 }
 
 type mcpQuestionInput struct {
-	Title       string           `json:"title"`
-	Body        string           `json:"body"`
-	Type        string           `json:"type"`
-	Options     []mcpOptionInput `json:"options"`
-	AllowCustom bool             `json:"allowCustom"`
+	Title   string           `json:"title"`
+	Body    string           `json:"body"`
+	Type    string           `json:"type"`
+	Options []mcpOptionInput `json:"options"`
 }
 
 type mcpOptionInput struct {

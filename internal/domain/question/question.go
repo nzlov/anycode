@@ -49,7 +49,6 @@ type Question struct {
 	Body             string
 	Type             string
 	Options          []Option
-	AllowCustom      bool
 	Metadata         map[string]any
 	SelectedOptionID *OptionID
 	CustomAnswer     string

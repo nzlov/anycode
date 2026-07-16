@@ -766,7 +766,6 @@ func mapQuestion(question questiondomain.Question) *model.Question {
 		Body:             question.Body,
 		Type:             question.Type,
 		Options:          options,
-		AllowCustom:      question.AllowCustom,
 		SelectedOptionID: stringPtr(question.SelectedOptionID),
 		CustomAnswer:     question.CustomAnswer,
 		Answer:           nonNilMap(question.Answer),

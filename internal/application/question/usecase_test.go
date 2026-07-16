@@ -154,7 +154,7 @@ func TestCreateBatchWithStableIDReturnsExistingBatch(t *testing.T) {
 	input := CreateBatchInput{
 		BatchID:   "merge-failure-command-1",
 		SessionID: "session-1",
-		Questions: []domain.Question{{Title: "Resolve merge?", AllowCustom: true}},
+		Questions: []domain.Question{{Title: "Resolve merge?"}},
 	}
 	first, err := service.CreateBatch(context.Background(), input)
 	if err != nil {
@@ -176,7 +176,7 @@ func TestCreateBatchWithStableIDRejectsNonPendingExistingBatch(t *testing.T) {
 	input := CreateBatchInput{
 		BatchID:   "merge-failure-command-1",
 		SessionID: "session-1",
-		Questions: []domain.Question{{Title: "Resolve merge?", AllowCustom: true}},
+		Questions: []domain.Question{{Title: "Resolve merge?"}},
 	}
 	if _, err := service.CreateBatch(context.Background(), input); err != nil {
 		t.Fatalf("first CreateBatch() error = %v", err)
@@ -313,8 +313,8 @@ func pendingBatch() domain.Batch {
 		Status:         domain.BatchPending,
 		DeliveryStatus: domain.DeliveryNone,
 		Questions: []domain.Question{
-			{ID: "q1", Options: []domain.Option{{ID: "a", Label: "A"}}, AllowCustom: false},
-			{ID: "q2", AllowCustom: true},
+			{ID: "q1", Options: []domain.Option{{ID: "a", Label: "A"}}},
+			{ID: "q2"},
 		},
 	}
 }
