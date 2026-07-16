@@ -1492,7 +1492,7 @@ func (p *codexTranscriptProjector) mergeCommandState(event *process.CodexEvent) 
 		}
 		return
 	}
-	if tool, ok := event.Content.(process.CodexToolContent); ok && isTerminalCodexPhase(event.Phase) {
+	if tool, ok := event.Content.(process.CodexToolContent); ok {
 		if command, exists := p.commands[event.CorrelationID]; exists {
 			item := mapValue(event.Payload["item"])
 			normalized := mapValue(event.Payload["normalizedItem"])
@@ -1503,7 +1503,11 @@ func (p *codexTranscriptProjector) mergeCommandState(event *process.CodexEvent) 
 				event.Phase = process.CodexPhaseFailed
 			}
 			event.Content = command
-			delete(p.commands, event.CorrelationID)
+			if isTerminalCodexPhase(event.Phase) {
+				delete(p.commands, event.CorrelationID)
+			} else {
+				p.commands[event.CorrelationID] = command
+			}
 		}
 	}
 }
@@ -2176,7 +2180,8 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		input := stringOrJSON(payload["input"])
 		itemType := "custom_tool_call"
 		commands, extracted := extractExecCommandInvocations(input)
-		if name == "exec" && extracted {
+		nestedName := extractExecToolName(input)
+		if name == "exec" && (extracted || isCommandTransportTool(nestedName)) {
 			itemType = "command_execution"
 		}
 		normalized := normalizedItem(itemType, "in_progress")
@@ -2194,7 +2199,17 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 	case "custom_tool_call_output":
 		callID := stringValue(payload, "call_id")
 		normalized := normalizedItem("custom_tool_call", "completed")
-		normalized["output"] = textFromValue(payload["output"])
+		result := normalizeCustomToolOutput(payload["output"])
+		normalized["output"] = result.output
+		if result.exitCode != nil {
+			normalized["exitCode"] = *result.exitCode
+		}
+		if result.durationMS != nil {
+			normalized["durationMs"] = *result.durationMS
+		}
+		if result.status != "" {
+			normalized["status"] = result.status
+		}
 		return []process.CodexEvent{{
 			EventID:   eventID(timestamp, "item.completed", callID),
 			Type:      "item.completed",
@@ -2510,6 +2525,112 @@ func textFromValue(value any) string {
 		}
 	}
 	return ""
+}
+
+type customToolOutput struct {
+	output     string
+	exitCode   *int
+	durationMS *int
+	status     string
+}
+
+func normalizeCustomToolOutput(value any) customToolOutput {
+	items, ok := value.([]any)
+	if !ok {
+		return unwrapCustomToolEnvelope(textFromValue(value))
+	}
+	result := customToolOutput{}
+	parts := make([]string, 0, len(items))
+	for index, item := range items {
+		text := textFromValue(item)
+		if index == 0 {
+			if status, durationMS, matched := parseScriptSummary(text); matched {
+				result.status = status
+				result.durationMS = durationMS
+				continue
+			}
+		}
+		part := unwrapCustomToolEnvelope(text)
+		if part.output != "" {
+			parts = append(parts, part.output)
+		}
+		if part.exitCode != nil {
+			result.exitCode = part.exitCode
+		}
+		if part.durationMS != nil {
+			result.durationMS = part.durationMS
+		}
+		if part.status != "" {
+			result.status = part.status
+		}
+	}
+	result.output = strings.Join(parts, "\n")
+	return result
+}
+
+func parseScriptSummary(value string) (string, *int, bool) {
+	lines := strings.Split(value, "\n")
+	if len(lines) < 4 || lines[2] != "Output:" {
+		return "", nil, false
+	}
+	for _, line := range lines[3:] {
+		if line != "" {
+			return "", nil, false
+		}
+	}
+	status := ""
+	switch {
+	case lines[0] == "Script completed":
+		status = "completed"
+	case strings.HasPrefix(lines[0], "Script running with cell ID "):
+		status = "running"
+	case lines[0] == "Script failed":
+		status = "failed"
+	default:
+		return "", nil, false
+	}
+	const wallTimePrefix = "Wall time "
+	const wallTimeSuffix = " seconds"
+	if !strings.HasPrefix(lines[1], wallTimePrefix) || !strings.HasSuffix(lines[1], wallTimeSuffix) {
+		return "", nil, false
+	}
+	seconds, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimPrefix(lines[1], wallTimePrefix), wallTimeSuffix), 64)
+	if err != nil || seconds < 0 {
+		return "", nil, false
+	}
+	durationMS := int(seconds*1000 + 0.5)
+	return status, &durationMS, true
+}
+
+func unwrapCustomToolEnvelope(value string) customToolOutput {
+	result := customToolOutput{output: value}
+	var envelope map[string]any
+	if json.Unmarshal([]byte(strings.TrimSpace(value)), &envelope) != nil {
+		return result
+	}
+	output, ok := envelope["output"].(string)
+	if !ok || !hasAnyKey(envelope, "chunk_id", "session_id", "exit_code", "wall_time_seconds", "original_token_count") {
+		return result
+	}
+	result.output = output
+	result.exitCode = intPointer(envelope["exit_code"], envelope["exitCode"])
+	if seconds, ok := envelope["wall_time_seconds"].(float64); ok && seconds >= 0 {
+		durationMS := int(seconds*1000 + 0.5)
+		result.durationMS = &durationMS
+	}
+	if result.exitCode == nil && envelope["session_id"] != nil {
+		result.status = "running"
+	}
+	return result
+}
+
+func isCommandTransportTool(name string) bool {
+	switch name {
+	case "tools.write_stdin", "tools.wait":
+		return true
+	default:
+		return false
+	}
 }
 
 func fileChangesFromPatch(payload map[string]any, sessionCWD string) []any {
