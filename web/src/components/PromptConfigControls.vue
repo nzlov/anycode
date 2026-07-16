@@ -14,7 +14,7 @@
       map-options
       aria-label="运行权限"
       class="compact-select permission-select"
-      dropdown-icon=""
+      hide-dropdown-icon
       :disable="disabled"
       :options="permissionModeOptions"
     >
@@ -37,7 +37,7 @@
       map-options
       aria-label="Codex 模型"
       class="compact-select model-select"
-      dropdown-icon=""
+      hide-dropdown-icon
       :disable="disabled"
       :options="modelOptions"
     >
@@ -57,7 +57,7 @@
       map-options
       aria-label="思考强度"
       class="compact-select effort-select"
-      dropdown-icon=""
+      hide-dropdown-icon
       :disable="disabled"
       :options="reasoningEffortOptions"
     >

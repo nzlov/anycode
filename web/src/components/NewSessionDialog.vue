@@ -44,7 +44,7 @@
             label="项目"
             emit-value
             map-options
-            dropdown-icon=""
+            hide-dropdown-icon
             :disable="creating"
             :options="projectOptions"
           >
@@ -94,7 +94,7 @@
             class="new-session-priority"
             emit-value
             map-options
-            dropdown-icon=""
+            hide-dropdown-icon
             :disable="creating"
             :options="priorityOptions"
           />

@@ -63,7 +63,7 @@ test('desktop create panel uses one project row within its reserved maximum heig
   );
   assert.match(
     stylesSource,
-    /\.new-session-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*grid-auto-flow:\s*column/s,
+    /\.new-session-grid\s*{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)[^}]*grid-auto-flow:\s*column[^}]*gap:\s*5px/s,
   );
   assert.match(newSessionSource, /label="项目"[\s\S]*class="branch-picker"[\s\S]*label="优先级"/);
   assert.match(
@@ -92,7 +92,7 @@ test('desktop create panel presents the prompt before a compact context row', ()
   );
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel \.new-session-context\s*{[^}]*order:\s*2[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s,
+    /\.new-session-dialog--panel \.new-session-context\s*{[^}]*order:\s*2[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap[^}]*gap:\s*5px/s,
   );
   assert.match(
     stylesSource,
