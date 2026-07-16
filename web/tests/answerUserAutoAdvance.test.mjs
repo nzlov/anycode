@@ -46,7 +46,7 @@ test('preset choices advance to the next unanswered question without wrapping or
 
 test('custom answer selection keeps using setChoice without a separate advance handler', () => {
   const customItem = panelSource.match(
-    /<q-item\s+v-if="question\.allowCustom"[\s\S]*?<\/q-item>/,
+    /<q-item\s+class="option-item option-item--custom"[\s\S]*?<\/q-item>/,
   )?.[0];
 
   assert.ok(customItem, 'custom answer item should exist');
@@ -64,9 +64,19 @@ test('headless flow exercises automatic navigation in both answer panel entries'
   );
   assert.match(headlessSource, /assertAnswerUserAutoAdvance\('\.detail-page \.answer-panel'/);
   assert.match(headlessSource, /assertAnswerUserAutoAdvance\('\.answer-dialog \.answer-panel'/);
+  assert.match(headlessSource, /function assertCustomAnswerInteractiveForAllQuestions\(panelSelector\)/);
+  assert.match(
+    headlessSource,
+    /await setViewport\(390, 844\);[\s\S]*assertCustomAnswerInteractiveForAllQuestions\('\.answer-dialog \.answer-panel'\)/,
+  );
+  assert.match(
+    headlessSource,
+    /assertCustomAnswerInteractiveForAllQuestions[\s\S]*clickCustomAnswer\(panelSelector\)[\s\S]*focusCustomAnswerInput\(panelSelector\)/,
+  );
   assert.match(
     headlessSource,
     /clickCustomAnswer\(panelSelector\)[\s\S]*fillCustomAnswer\(panelSelector, 'Custom response'\)[\s\S]*waitForActiveAnswerQuestion\(panelSelector, '问题 2'\)/,
   );
   assert.match(headlessSource, /assertPendingQuestionBatch\(session\.id, pending\.batchId\)/);
+  assert.doesNotMatch(headlessSource, /allowCustom/);
 });

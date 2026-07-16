@@ -989,12 +989,16 @@ async function clickAnswerOption(panelSelector, label) {
 }
 
 async function clickCustomAnswer(panelSelector) {
+  await sleep(100);
   const clicked = await evaluate(`(() => {
     const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const radio = panel?.querySelector('.q-tab-panel .option-item--custom .q-radio');
+    const radios = Array.from(panel?.querySelectorAll('.q-tab-panel .option-item--custom .q-radio') || [])
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+    const radio = radios.at(-1);
     if (!radio) return false;
-    const rect = radio.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return false;
     radio.click();
     return true;
   })()`);
@@ -1003,19 +1007,37 @@ async function clickCustomAnswer(panelSelector) {
 }
 
 async function fillCustomAnswer(panelSelector, value) {
-  const focused = await evaluate(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const input = panel?.querySelector('.q-tab-panel .custom-answer-input textarea');
-    if (!input || input.disabled) return false;
-    input.focus();
-    return document.activeElement === input;
-  })()`);
-  assert(focused, `custom answer input not focusable in ${panelSelector}`);
+  await focusCustomAnswerInput(panelSelector);
   await page.send('Input.insertText', { text: value });
   await waitForCondition(`(() => {
     const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    return panel?.querySelector('.q-tab-panel .custom-answer-input textarea')?.value === ${JSON.stringify(value)};
+    return Array.from(panel?.querySelectorAll('.q-tab-panel .custom-answer-input textarea') || [])
+      .some((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && element.value === ${JSON.stringify(value)};
+      });
   })()`, `custom answer text in ${panelSelector}`);
+}
+
+async function focusCustomAnswerInput(panelSelector) {
+  const state = await evaluate(`(() => {
+    const panel = document.querySelector(${JSON.stringify(panelSelector)});
+    const inputs = Array.from(panel?.querySelectorAll('.q-tab-panel .custom-answer-input textarea') || []);
+    const input = inputs.find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    if (!input) return { count: inputs.length, visible: false, disabled: false, focused: false };
+    if (input.disabled) return { count: inputs.length, visible: true, disabled: true, focused: false };
+    input.focus();
+    return {
+      count: inputs.length,
+      visible: true,
+      disabled: false,
+      focused: document.activeElement === input,
+    };
+  })()`);
+  assert(state.focused, `custom answer input not focusable in ${panelSelector}: ${JSON.stringify(state)}`);
 }
 
 async function waitForActiveAnswerQuestion(panelSelector, label) {
@@ -1056,6 +1078,41 @@ async function assertAnswerUserAutoAdvance(panelSelector, label) {
   })()`);
   assert(state.visible, `${label} closed after the final choice`);
   assert(state.submitEnabled, `${label} did not preserve three valid drafts`);
+
+  await assertCustomAnswerInteractiveForAllQuestions(panelSelector);
+}
+
+async function assertCustomAnswerInteractiveForAllQuestions(panelSelector) {
+  for (const [index, tabLabel] of ['问题 1', '问题 2', '问题 3'].entries()) {
+    await clickAnswerQuestionTab(panelSelector, tabLabel);
+    const state = await evaluate(`(() => {
+      const panel = document.querySelector(${JSON.stringify(panelSelector)});
+      const items = Array.from(panel?.querySelectorAll('.q-tab-panel .option-item--custom') || []);
+      const item = items.find((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      const radio = item?.querySelector('.q-radio');
+      const input = item?.querySelector('.custom-answer-input textarea');
+      return {
+        visible: Boolean(item && input && item.innerText.includes('自定义答案')),
+        selectable: Boolean(radio && radio.getAttribute('aria-disabled') !== 'true'),
+      };
+    })()`);
+    assert(state.visible, `custom answer option not visible for ${tabLabel} in ${panelSelector}`);
+    assert(state.selectable, `custom answer option not selectable for ${tabLabel} in ${panelSelector}`);
+    await clickCustomAnswer(panelSelector);
+    await focusCustomAnswerInput(panelSelector);
+    const hasValue = await evaluate(`(() => {
+      const panel = document.querySelector(${JSON.stringify(panelSelector)});
+      return Array.from(panel?.querySelectorAll('.q-tab-panel .custom-answer-input textarea') || [])
+        .some((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && element.value.trim().length > 0;
+        });
+    })()`);
+    if (!hasValue) await fillCustomAnswer(panelSelector, `Custom response ${index + 1}`);
+  }
 }
 
 async function assertNoHorizontalOverflow(label) {
@@ -1556,6 +1613,7 @@ async function assertAnswerUserFlow(projectId) {
   await assertPendingQuestionBatch(session.id, pending.batchId);
   await screenshot('12-answer-user-dialog.png');
   await setViewport(390, 844);
+  await assertCustomAnswerInteractiveForAllQuestions('.answer-dialog .answer-panel');
   await assertNoHorizontalOverflow('mobile answer dialog');
   await screenshot('12-answer-user-dialog-mobile.png');
   await setViewport(1440, 900);
@@ -1847,21 +1905,18 @@ async function callAnswerUser(sessionId) {
         title: 'Choose first step',
         body: 'How should Codex start?',
         type: 'choice',
-        allowCustom: false,
         options: [{ id: 'first', label: 'First choice', description: 'Start' }],
       },
       {
         title: 'Choose second step',
         body: 'How should Codex continue?',
         type: 'choice',
-        allowCustom: true,
         options: [{ id: 'second', label: 'Second choice', description: 'Continue' }],
       },
       {
         title: 'Choose final step',
         body: 'How should Codex finish?',
         type: 'choice',
-        allowCustom: false,
         options: [{ id: 'final', label: 'Final choice', description: 'Finish' }],
       },
     ],

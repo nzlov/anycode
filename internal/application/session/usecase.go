@@ -5952,12 +5952,11 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 		WorkflowRunID: &workflowRunID,
 		Questions: []questiondomain.Question{
 			{
-				Title:       "合并失败处理",
-				Body:        mergeFailureQuestionBody(result),
-				Type:        "merge_failure_action",
-				AllowCustom: true,
-				Metadata:    metadata,
-				Status:      string(questiondomain.BatchPending),
+				Title:    "合并失败处理",
+				Body:     mergeFailureQuestionBody(result),
+				Type:     "merge_failure_action",
+				Metadata: metadata,
+				Status:   string(questiondomain.BatchPending),
 				Options: []questiondomain.Option{
 					{
 						ID:          "retry_merge",

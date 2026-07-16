@@ -176,7 +176,6 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 						"title":"Choose next step",
 						"body":"How should Codex continue?",
 						"type":"choice",
-						"allowCustom":true,
 						"options":[{"id":"continue","label":"Continue","description":"Proceed"}]
 					}]
 				}

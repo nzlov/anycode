@@ -17,10 +17,11 @@ const detailSource = readFileSync(
 
 test('custom answer input is not nested in an actionable item or label', () => {
   const customItem = panelSource.match(
-    /<q-item\s+v-if="question\.allowCustom"[\s\S]*?<\/q-item>/,
+    /<q-item\s+class="option-item option-item--custom"[\s\S]*?<\/q-item>/,
   )?.[0];
 
   assert.ok(customItem, 'custom answer item should exist');
+  assert.doesNotMatch(panelSource, /question\.allowCustom/);
   const openingTag = customItem.match(/^<q-item[^>]*>/)?.[0] ?? '';
   assert.doesNotMatch(openingTag, /\btag="label"/);
   assert.doesNotMatch(openingTag, /\bclickable\b/);
