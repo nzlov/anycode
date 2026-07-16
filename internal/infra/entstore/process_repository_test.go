@@ -2,14 +2,49 @@ package entstore
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
-	"reflect"
 	"testing"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/port"
 	"github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/domain/session"
 )
+
+func TestTranscriptBindingRollsBackSourceAndRunStateWithTransaction(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().CreateRun(ctx, process.Run{ID: "process-1", SessionID: "session-1", Status: process.StatusStarting}); err != nil {
+		t.Fatal(err)
+	}
+	injected := errors.New("injected session save failure")
+	err = store.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		if err := tx.Processes().BindTranscript(ctx, "process-1", 1234, process.CodexTranscriptSource{
+			CodexSessionID: "codex-1", RelativePath: "2026/07/15/codex-1.jsonl", BoundAt: time.Now().UTC(),
+		}); err != nil {
+			return err
+		}
+		return injected
+	})
+	if !errors.Is(err, injected) {
+		t.Fatalf("transaction error = %v", err)
+	}
+	if _, found, err := store.Processes().FindTranscriptSource(ctx, "codex-1"); err != nil || found {
+		t.Fatalf("source after rollback found=%v error=%v", found, err)
+	}
+	run, err := store.Processes().FindRun(ctx, "process-1")
+	if err != nil || run.Status != process.StatusStarting || run.CodexSessionID != "" {
+		t.Fatalf("run after rollback = %#v, %v", run, err)
+	}
+}
 
 func TestProcessRepositoryPersistsRunLifecycle(t *testing.T) {
 	ctx := context.Background()
@@ -283,7 +318,7 @@ func TestMigrateCollapsesLegacyDuplicateActiveRuns(t *testing.T) {
 	}
 }
 
-func TestProcessRepositoryListsCodexSessionIDsForSession(t *testing.T) {
+func TestProcessRepositoryBindsAndListsTranscriptSourcesForSession(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
 		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
@@ -309,23 +344,74 @@ func TestProcessRepositoryListsCodexSessionIDsForSession(t *testing.T) {
 		t.Fatalf("save session: %v", err)
 	}
 	repo := store.Processes()
-	runs := []process.Run{
-		{ID: "process-run-1", SessionID: "session-1", Status: process.StatusExited, CodexSessionID: "codex-session-1", StartedAt: startedAt},
-		{ID: "process-run-2", SessionID: "session-1", Status: process.StatusExited, CodexSessionID: "codex-session-2", StartedAt: startedAt.Add(time.Minute)},
-		{ID: "process-run-3", SessionID: "session-1", Status: process.StatusExited, CodexSessionID: "codex-session-1", StartedAt: startedAt.Add(2 * time.Minute)},
-		{ID: "process-run-empty", SessionID: "session-1", Status: process.StatusExited, StartedAt: startedAt.Add(3 * time.Minute)},
+	source1 := process.CodexTranscriptSource{CodexSessionID: "codex-session-1", RelativePath: "2026/07/02/one.jsonl", BoundAt: startedAt}
+	source2 := process.CodexTranscriptSource{CodexSessionID: "codex-session-2", RelativePath: "2026/07/02/two.jsonl", BoundAt: startedAt.Add(time.Minute)}
+	for _, binding := range []struct {
+		run    process.Run
+		source process.CodexTranscriptSource
+	}{
+		{process.Run{ID: "process-run-1", SessionID: "session-1", Status: process.StatusStarting, StartedAt: startedAt}, source1},
+		{process.Run{ID: "process-run-2", SessionID: "session-1", Status: process.StatusStarting, StartedAt: startedAt.Add(time.Minute)}, source2},
+		{process.Run{ID: "process-run-3", SessionID: "session-1", Status: process.StatusStarting, StartedAt: startedAt.Add(2 * time.Minute)}, source1},
+	} {
+		if err := repo.CreateRun(ctx, binding.run); err != nil {
+			t.Fatalf("create run %s: %v", binding.run.ID, err)
+		}
+		if err := repo.MarkStarted(ctx, binding.run.ID, 1234); err != nil {
+			t.Fatalf("mark %s started: %v", binding.run.ID, err)
+		}
+		if err := repo.BindTranscript(ctx, binding.run.ID, 1234, binding.source); err != nil {
+			t.Fatalf("bind %s: %v", binding.run.ID, err)
+		}
+		if err := repo.BindTranscript(ctx, binding.run.ID, 1234, binding.source); err != nil {
+			t.Fatalf("idempotent bind %s: %v", binding.run.ID, err)
+		}
+		if binding.run.ID == "process-run-1" {
+			conflict := source1
+			conflict.RelativePath = "2026/07/02/conflict.jsonl"
+			if err := repo.BindTranscript(ctx, binding.run.ID, 1234, conflict); err == nil {
+				t.Fatal("conflicting transcript path was accepted")
+			}
+		}
+		if err := repo.MarkExited(ctx, binding.run.ID, process.ExitResult{FinishedAt: startedAt.Add(4 * time.Minute)}); err != nil {
+			t.Fatalf("restore %s exited: %v", binding.run.ID, err)
+		}
 	}
-	for _, run := range runs {
-		if err := repo.CreateRun(ctx, run); err != nil {
-			t.Fatalf("create run %s: %v", run.ID, err)
+	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-empty", SessionID: "session-1", Status: process.StatusExited, StartedAt: startedAt.Add(3 * time.Minute)}); err != nil {
+		t.Fatalf("create empty run: %v", err)
+	}
+	if err := repo.BindTranscript(ctx, "process-run-1", 1234, source1); err == nil {
+		t.Fatal("exited process run was rebound")
+	}
+	if err := repo.MarkStarted(ctx, "process-run-1", 1234); err == nil {
+		t.Fatal("exited process run was marked started")
+	}
+	stopping := process.Run{ID: "process-run-stopping", SessionID: "session-1", Status: process.StatusStopping, StartedAt: startedAt.Add(5 * time.Minute)}
+	if err := repo.CreateRun(ctx, stopping); err != nil {
+		t.Fatalf("create stopping run: %v", err)
+	}
+	if err := repo.MarkStarted(ctx, stopping.ID, 4321); err != nil {
+		t.Fatalf("record PID for stopping run: %v", err)
+	}
+	if err := repo.MarkExited(ctx, stopping.ID, process.ExitResult{FinishedAt: startedAt.Add(6 * time.Minute)}); err != nil {
+		t.Fatalf("mark stopping run exited: %v", err)
+	}
+	for _, invalid := range []string{"../escape.jsonl", "/absolute.jsonl"} {
+		invalidSource := process.CodexTranscriptSource{CodexSessionID: "invalid-" + invalid, RelativePath: invalid}
+		if err := repo.BindTranscript(ctx, "process-run-1", 1234, invalidSource); err == nil {
+			t.Fatalf("invalid path %q was accepted", invalid)
 		}
 	}
 
-	got, err := repo.CodexSessionIDs(ctx, "session-1")
+	got, err := repo.TranscriptSources(ctx, "session-1")
 	if err != nil {
-		t.Fatalf("CodexSessionIDs() error = %v", err)
+		t.Fatalf("TranscriptSources() error = %v", err)
 	}
-	if want := []string{"codex-session-1", "codex-session-2"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("CodexSessionIDs() = %#v, want %#v", got, want)
+	if len(got) != 2 || got[0].CodexSessionID != source1.CodexSessionID || got[0].RelativePath != source1.RelativePath || got[1].CodexSessionID != source2.CodexSessionID {
+		t.Fatalf("TranscriptSources() = %#v", got)
+	}
+	transcriptRuns, err := repo.TranscriptRuns(ctx, "session-1")
+	if err != nil || len(transcriptRuns) != 3 || transcriptRuns[0].ID != "process-run-1" || transcriptRuns[2].ID != "process-run-3" {
+		t.Fatalf("TranscriptRuns() = %#v, %v", transcriptRuns, err)
 	}
 }

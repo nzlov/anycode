@@ -2,12 +2,16 @@ package entstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 	domainsession "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
+	entcodextranscriptsource "github.com/nzlov/anycode/internal/infra/entstore/ent/codextranscriptsource"
 	entprocessrun "github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
@@ -145,6 +149,137 @@ func (r *ProcessRepository) CountActive(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+func (r *ProcessRepository) MarkStarted(ctx context.Context, id process.RunID, pid int) error {
+	updated, err := r.client.ProcessRun.Update().
+		Where(
+			entprocessrun.IDEQ(string(id)),
+			entprocessrun.StatusIn(string(process.StatusStarting), string(process.StatusStopping)),
+		).
+		SetPid(pid).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("mark process started: %w", err)
+	}
+	if updated != 1 {
+		return fmt.Errorf("mark process started: process run %q is not active", id)
+	}
+	return nil
+}
+
+func (r *ProcessRepository) BindTranscript(ctx context.Context, id process.RunID, pid int, source process.CodexTranscriptSource) error {
+	if source.CodexSessionID == "" || source.RelativePath == "" {
+		return errors.New("codex transcript source id and relative path are required")
+	}
+	relativePath := filepath.Clean(filepath.FromSlash(source.RelativePath))
+	if relativePath == "." || filepath.IsAbs(relativePath) || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+		return errors.New("codex transcript source path must be relative to the sessions directory")
+	}
+	source.RelativePath = filepath.ToSlash(relativePath)
+	run, err := r.FindRun(ctx, id)
+	if err != nil {
+		return err
+	}
+	idempotent := run.Status == process.StatusRunning && run.CodexSessionID == source.CodexSessionID && run.PID != nil && *run.PID == pid
+	if run.Status != process.StatusStarting && !idempotent {
+		return fmt.Errorf("bind process transcript: process run %q has status %q", id, run.Status)
+	}
+	existing, err := r.client.CodexTranscriptSource.Query().
+		Where(entcodextranscriptsource.CodexSessionIDEQ(source.CodexSessionID)).
+		Only(ctx)
+	if err == nil {
+		if existing.RelativePath != source.RelativePath {
+			return fmt.Errorf("codex transcript source %q is already bound to a different path", source.CodexSessionID)
+		}
+	} else if ent.IsNotFound(err) {
+		create := r.client.CodexTranscriptSource.Create().
+			SetCodexSessionID(source.CodexSessionID).
+			SetRelativePath(source.RelativePath)
+		if !source.BoundAt.IsZero() {
+			create.SetBoundAt(source.BoundAt)
+		}
+		if err := create.Exec(ctx); err != nil {
+			return fmt.Errorf("create codex transcript source: %w", err)
+		}
+	} else {
+		return fmt.Errorf("find codex transcript source: %w", err)
+	}
+	if idempotent {
+		return nil
+	}
+	updated, err := r.client.ProcessRun.Update().
+		Where(entprocessrun.IDEQ(string(id)), entprocessrun.StatusEQ(string(process.StatusStarting))).
+		SetStatus(string(process.StatusRunning)).
+		SetPid(pid).
+		SetCodexSessionID(source.CodexSessionID).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("bind process transcript: %w", err)
+	}
+	if updated != 1 {
+		return fmt.Errorf("bind process transcript: process run %q is not starting", id)
+	}
+	return nil
+}
+
+func (r *ProcessRepository) FindTranscriptSource(ctx context.Context, codexSessionID string) (process.CodexTranscriptSource, bool, error) {
+	row, err := r.client.CodexTranscriptSource.Query().
+		Where(entcodextranscriptsource.CodexSessionIDEQ(codexSessionID)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return process.CodexTranscriptSource{}, false, nil
+		}
+		return process.CodexTranscriptSource{}, false, fmt.Errorf("find codex transcript source: %w", err)
+	}
+	return process.CodexTranscriptSource{
+		CodexSessionID: row.CodexSessionID,
+		RelativePath:   row.RelativePath,
+		BoundAt:        row.BoundAt,
+	}, true, nil
+}
+
+func (r *ProcessRepository) TranscriptSources(ctx context.Context, sessionID process.SessionID) ([]process.CodexTranscriptSource, error) {
+	rows, err := r.client.ProcessRun.Query().
+		Where(entprocessrun.SessionIDEQ(string(sessionID)), entprocessrun.CodexSessionIDNEQ("")).
+		Order(ent.Asc(entprocessrun.FieldStartedAt), ent.Asc(entprocessrun.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list process transcript sources: %w", err)
+	}
+	seen := map[string]struct{}{}
+	sources := make([]process.CodexTranscriptSource, 0, len(rows))
+	for _, row := range rows {
+		if _, ok := seen[row.CodexSessionID]; ok {
+			continue
+		}
+		seen[row.CodexSessionID] = struct{}{}
+		source, found, err := r.FindTranscriptSource(ctx, row.CodexSessionID)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, fmt.Errorf("%w: source for codex session %q", process.ErrTranscriptUnavailable, row.CodexSessionID)
+		}
+		sources = append(sources, source)
+	}
+	return sources, nil
+}
+
+func (r *ProcessRepository) TranscriptRuns(ctx context.Context, sessionID process.SessionID) ([]process.Run, error) {
+	rows, err := r.client.ProcessRun.Query().
+		Where(entprocessrun.SessionIDEQ(string(sessionID)), entprocessrun.CodexSessionIDNEQ("")).
+		Order(ent.Asc(entprocessrun.FieldStartedAt), ent.Asc(entprocessrun.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list transcript process runs: %w", err)
+	}
+	runs := make([]process.Run, 0, len(rows))
+	for _, row := range rows {
+		runs = append(runs, toDomainProcessRun(row))
+	}
+	return runs, nil
+}
+
 func concurrencySessionStatuses() []string {
 	return []string{
 		string(domainsession.StatusStarting),
@@ -197,29 +332,6 @@ func (r *ProcessRepository) MarkExited(ctx context.Context, id process.RunID, re
 		return fmt.Errorf("mark process exited: %w", err)
 	}
 	return nil
-}
-
-func (r *ProcessRepository) CodexSessionIDs(ctx context.Context, sessionID process.SessionID) ([]string, error) {
-	rows, err := r.client.ProcessRun.Query().
-		Where(
-			entprocessrun.SessionIDEQ(string(sessionID)),
-			entprocessrun.CodexSessionIDNEQ(""),
-		).
-		Order(ent.Asc(entprocessrun.FieldStartedAt), ent.Asc(entprocessrun.FieldID)).
-		All(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list codex session ids: %w", err)
-	}
-	seen := map[string]struct{}{}
-	ids := make([]string, 0, len(rows))
-	for _, row := range rows {
-		if _, ok := seen[row.CodexSessionID]; ok {
-			continue
-		}
-		seen[row.CodexSessionID] = struct{}{}
-		ids = append(ids, row.CodexSessionID)
-	}
-	return ids, nil
 }
 
 func activeProcessStatuses() []string {

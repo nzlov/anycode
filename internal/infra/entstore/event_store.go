@@ -19,11 +19,19 @@ func NewEventStore(client *ent.Client) *EventStore {
 }
 
 func (s *EventStore) Append(ctx context.Context, domainEvent event.DomainEvent) error {
+	if err := validatePersistedEvent(domainEvent); err != nil {
+		return err
+	}
 	create := s.client.EventRecord.Create().
 		SetID(string(domainEvent.ID)).
 		SetProjectID(domainEvent.Scope.ProjectID).
 		SetType(domainEvent.Type).
-		SetPayload(payloadOrEmpty(domainEvent.Payload))
+		SetPayload(payloadOrEmpty(domainEvent.Payload)).
+		SetProcessRunID(domainEvent.Causality.ProcessRunID).
+		SetWorkflowRunID(domainEvent.Causality.WorkflowRunID).
+		SetNodeRunID(domainEvent.Causality.NodeRunID).
+		SetCorrelationID(domainEvent.Causality.CorrelationID).
+		SetSessionStatus(domainEvent.Causality.SessionStatus)
 	if domainEvent.SessionID != nil {
 		create.SetSessionID(string(*domainEvent.SessionID))
 	} else if domainEvent.Scope.SessionID != nil {
@@ -40,6 +48,18 @@ func (s *EventStore) Append(ctx context.Context, domainEvent event.DomainEvent) 
 			}
 		}
 		return fmt.Errorf("append event: %w", err)
+	}
+	return nil
+}
+
+func validatePersistedEvent(domainEvent event.DomainEvent) error {
+	if domainEvent.Type == "process.codex_event" || domainEvent.Type == "codex.transcript" || domainEvent.Type == "codex.usage" {
+		return fmt.Errorf("event type %q contains Codex session content and cannot be persisted", domainEvent.Type)
+	}
+	for _, key := range []string{"codexContent", "codexPayload", "transcript", "tokenUsage", "compaction"} {
+		if _, ok := domainEvent.Payload[key]; ok {
+			return fmt.Errorf("event payload field %q contains Codex session content and cannot be persisted", key)
+		}
 	}
 	return nil
 }
@@ -160,6 +180,13 @@ func toDomainEvent(row *ent.EventRecord) event.DomainEvent {
 		SessionID: sessionID,
 		Type:      row.Type,
 		Payload:   payloadOrEmpty(row.Payload),
+		Causality: event.Causality{
+			ProcessRunID:  row.ProcessRunID,
+			WorkflowRunID: row.WorkflowRunID,
+			NodeRunID:     row.NodeRunID,
+			CorrelationID: row.CorrelationID,
+			SessionStatus: row.SessionStatus,
+		},
 		CreatedAt: row.CreatedAt,
 	}
 }

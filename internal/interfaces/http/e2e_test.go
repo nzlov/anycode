@@ -151,6 +151,17 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	if codex.startInput.SessionID != processdomain.SessionID(sessionID) || codex.startInput.Workdir == "" {
 		t.Fatalf("codex Start input = %#v", codex.startInput)
 	}
+	codex.events <- processdomain.CodexEvent{
+		Type:         "thread.started",
+		RealtimeOnly: true,
+		Payload:      map[string]any{"thread_id": "codex-smoke-session"},
+		Transcript: &processdomain.CodexTranscriptSource{
+			CodexSessionID: "codex-smoke-session",
+			RelativePath:   "test/codex-smoke-session.jsonl",
+			BoundAt:        time.Now().UTC(),
+		},
+	}
+	smokeWaitSessionStatus(t, store, sessionID, sessiondomain.StatusRunning)
 
 	mcpDone := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
@@ -468,8 +479,16 @@ func TestRestartRequeuesInflightAnswerDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.Processes().CreateRun(ctx, processdomain.Run{
-		ID: "process-origin", SessionID: "session-1", Status: processdomain.StatusExited, CodexSessionID: "codex-1", StartedAt: now,
+		ID: "process-origin", SessionID: "session-1", Status: processdomain.StatusStarting, StartedAt: now,
 	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().BindTranscript(ctx, "process-origin", 4321, processdomain.CodexTranscriptSource{
+		CodexSessionID: "codex-1", RelativePath: "test/codex-1.jsonl", BoundAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().MarkExited(ctx, "process-origin", processdomain.ExitResult{FinishedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	origin := questiondomain.ProcessRunID("process-origin")
@@ -530,8 +549,16 @@ func TestAnswerDeliveryResumeFailureCanRetrySameBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := store.Processes().CreateRun(ctx, processdomain.Run{
-		ID: "process-origin", SessionID: "session-1", Status: processdomain.StatusExited, CodexSessionID: "codex-1", StartedAt: now,
+		ID: "process-origin", SessionID: "session-1", Status: processdomain.StatusStarting, StartedAt: now,
 	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().BindTranscript(ctx, "process-origin", 4321, processdomain.CodexTranscriptSource{
+		CodexSessionID: "codex-1", RelativePath: "test/codex-1.jsonl", BoundAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Processes().MarkExited(ctx, "process-origin", processdomain.ExitResult{FinishedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	origin := questiondomain.ProcessRunID("process-origin")
@@ -678,6 +705,20 @@ func smokeWaitPendingBatch(t *testing.T, handler http.Handler, sessionID string)
 	}
 	t.Fatal("pendingQuestionBatches did not contain answer_user batch")
 	return smokePendingBatch{}
+}
+
+func smokeWaitSessionStatus(t *testing.T, store *entstore.Store, sessionID string, status sessiondomain.Status) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		session, err := store.Sessions().Find(context.Background(), sessiondomain.ID(sessionID))
+		if err == nil && session.Status == status {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	session, _ := store.Sessions().Find(context.Background(), sessiondomain.ID(sessionID))
+	t.Fatalf("session %q status = %q, want %q", sessionID, session.Status, status)
 }
 
 func smokeAssertMCPStatus(t *testing.T, body []byte, batchID string, status string) {

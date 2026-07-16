@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// CodexTranscriptSource is the predicate function for codextranscriptsource builders.
+type CodexTranscriptSource func(*sql.Selector)
+
 // EventRecord is the predicate function for eventrecord builders.
 type EventRecord func(*sql.Selector)
 

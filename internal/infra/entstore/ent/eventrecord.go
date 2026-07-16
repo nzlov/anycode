@@ -26,6 +26,16 @@ type EventRecord struct {
 	Type string `json:"type,omitempty"`
 	// Payload holds the value of the "payload" field.
 	Payload map[string]interface{} `json:"payload,omitempty"`
+	// ProcessRunID holds the value of the "process_run_id" field.
+	ProcessRunID string `json:"process_run_id,omitempty"`
+	// WorkflowRunID holds the value of the "workflow_run_id" field.
+	WorkflowRunID string `json:"workflow_run_id,omitempty"`
+	// NodeRunID holds the value of the "node_run_id" field.
+	NodeRunID string `json:"node_run_id,omitempty"`
+	// CorrelationID holds the value of the "correlation_id" field.
+	CorrelationID string `json:"correlation_id,omitempty"`
+	// SessionStatus holds the value of the "session_status" field.
+	SessionStatus string `json:"session_status,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -38,7 +48,7 @@ func (*EventRecord) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case eventrecord.FieldPayload:
 			values[i] = new([]byte)
-		case eventrecord.FieldID, eventrecord.FieldSessionID, eventrecord.FieldProjectID, eventrecord.FieldType:
+		case eventrecord.FieldID, eventrecord.FieldSessionID, eventrecord.FieldProjectID, eventrecord.FieldType, eventrecord.FieldProcessRunID, eventrecord.FieldWorkflowRunID, eventrecord.FieldNodeRunID, eventrecord.FieldCorrelationID, eventrecord.FieldSessionStatus:
 			values[i] = new(sql.NullString)
 		case eventrecord.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -89,6 +99,36 @@ func (_m *EventRecord) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Payload); err != nil {
 					return fmt.Errorf("unmarshal field payload: %w", err)
 				}
+			}
+		case eventrecord.FieldProcessRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field process_run_id", values[i])
+			} else if value.Valid {
+				_m.ProcessRunID = value.String
+			}
+		case eventrecord.FieldWorkflowRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_run_id", values[i])
+			} else if value.Valid {
+				_m.WorkflowRunID = value.String
+			}
+		case eventrecord.FieldNodeRunID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field node_run_id", values[i])
+			} else if value.Valid {
+				_m.NodeRunID = value.String
+			}
+		case eventrecord.FieldCorrelationID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field correlation_id", values[i])
+			} else if value.Valid {
+				_m.CorrelationID = value.String
+			}
+		case eventrecord.FieldSessionStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field session_status", values[i])
+			} else if value.Valid {
+				_m.SessionStatus = value.String
 			}
 		case eventrecord.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -145,6 +185,21 @@ func (_m *EventRecord) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("payload=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Payload))
+	builder.WriteString(", ")
+	builder.WriteString("process_run_id=")
+	builder.WriteString(_m.ProcessRunID)
+	builder.WriteString(", ")
+	builder.WriteString("workflow_run_id=")
+	builder.WriteString(_m.WorkflowRunID)
+	builder.WriteString(", ")
+	builder.WriteString("node_run_id=")
+	builder.WriteString(_m.NodeRunID)
+	builder.WriteString(", ")
+	builder.WriteString("correlation_id=")
+	builder.WriteString(_m.CorrelationID)
+	builder.WriteString(", ")
+	builder.WriteString("session_status=")
+	builder.WriteString(_m.SessionStatus)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

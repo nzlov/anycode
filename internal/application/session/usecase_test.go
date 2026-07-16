@@ -1901,7 +1901,8 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	}
 	processes := newFakeProcessRepository()
 	events := &fakeEventStore{}
-	closedEvents := make(chan processdomain.CodexEvent)
+	closedEvents := make(chan processdomain.CodexEvent, 1)
+	closedEvents <- transcriptReadyEvent("codex-session-1")
 	close(closedEvents)
 	blockedEvents := make(chan processdomain.CodexEvent)
 	codex := &fakeCodexProcess{
@@ -2555,15 +2556,8 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 	if codex.startInput.Prompt != promptWithAnyCodeGuidance("Verify build", repo.sessions["session-1"]) {
 		t.Fatalf("restarted workflow prompt = %q", codex.startInput.Prompt)
 	}
-	consumerDone, ok := service.processConsumerDone(codex.startInput.ProcessRunID)
-	if !ok {
+	if _, ok := service.processConsumerDone(codex.startInput.ProcessRunID); !ok {
 		t.Fatal("restarted workflow consumer was not registered")
-	}
-	close(stream)
-	select {
-	case <-consumerDone:
-	case <-time.After(time.Second):
-		t.Fatal("restarted workflow consumer did not stop")
 	}
 }
 
@@ -2649,9 +2643,11 @@ func TestSubmitWorkflowApprovalResumesExistingCodexSessionForNextNode(t *testing
 	if err != nil {
 		t.Fatalf("startQueuedSession() error = %v", err)
 	}
-	if started.Status != domain.StatusRunning || !codex.resumeCalled || codex.startCalled {
+	if started.Status != domain.StatusStarting || !codex.resumeCalled || codex.startCalled {
 		t.Fatalf("started session = %#v start=%v resume=%v", started, codex.startCalled, codex.resumeCalled)
 	}
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForSessionStatus(t, repo, "session-1", domain.StatusRunning)
 	if codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.Prompt != "Verify build" {
 		t.Fatalf("Codex Resume input = %#v", codex.resumeInput)
 	}
@@ -3372,7 +3368,7 @@ func TestCreateWorkflowSessionRetriesWhenCodexStartFailsBeforeMaxAttempts(t *tes
 	if _, err := service.DrainQueuedSessions(ctx); err != nil {
 		t.Fatalf("DrainQueuedSessions() error = %v", err)
 	}
-	if repo.sessions["session-1"].Status != domain.StatusRunning || repo.sessions["session-1"].CodexSessionID != "codex-session-2" {
+	if repo.sessions["session-1"].Status != domain.StatusStarting || repo.sessions["session-1"].CodexSessionID != "" {
 		t.Fatalf("session after retry = %#v", repo.sessions["session-1"])
 	}
 	if workflows.failInput.NodeRunID != "node-run-1" || workflows.failInput.Code != "codex_start_failed" {
@@ -4455,7 +4451,7 @@ func TestAppendPromptAutoStartsStoppedChatSession(t *testing.T) {
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}}
 	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil), WithProcesses(processes, codex))
-	ids := []domain.ID{"append-1", "process-run-1", "event-starting", "event-running"}
+	ids := []domain.ID{"append-1", "process-run-1", "event-starting", "event-transcript-bound", "event-running"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -4515,7 +4511,8 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 		MimeType: "text/markdown",
 	}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}, events: stream}
 	files := newFakeAttachmentStore()
 	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
 	ids := []domain.ID{"append-1", "process-run-1"}
@@ -4680,6 +4677,8 @@ func TestRunningAppendRemainsPendingAfterProcessExit(t *testing.T) {
 	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForSessionStatus(t, repo, "session-1", domain.StatusRunning)
 	if _, err := service.AppendPrompt(ctx, AppendPromptInput{SessionID: "session-1", Body: "review the result"}); err != nil {
 		t.Fatalf("AppendPrompt() error = %v", err)
 	}
@@ -6173,7 +6172,7 @@ func TestCloseQueuedAnswerUserStopsActiveProcessBeforeClosing(t *testing.T) {
 	}
 }
 
-func TestStartSessionCreatesProcessRunAndMarksRunning(t *testing.T) {
+func TestStartSessionCreatesProcessRunAndKeepsStartingUntilTranscript(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -6199,19 +6198,19 @@ func TestStartSessionCreatesProcessRunAndMarksRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
-	if got.Status != domain.StatusRunning {
+	if got.Status != domain.StatusStarting {
 		t.Fatalf("StartSession() status = %q", got.Status)
 	}
 	if len(processes.created) != 1 || processes.created[0].ID != "process-run-1" || processes.created[0].Status != processdomain.StatusStarting {
 		t.Fatalf("created process runs = %#v", processes.created)
 	}
-	if processes.runningID != "process-run-1" || processes.runningPID != 1234 {
-		t.Fatalf("running process = id %q pid %d", processes.runningID, processes.runningPID)
+	if processes.active.Status != processdomain.StatusStarting || processes.active.PID == nil || *processes.active.PID != 1234 {
+		t.Fatalf("starting process = %#v", processes.active)
 	}
 	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codex.startInput.Prompt != promptWithAnyCodeGuidance("implement session", repo.sessions["session-1"]) || !codex.startInput.FastMode {
 		t.Fatalf("codex start input = %#v", codex.startInput)
 	}
-	if repo.sessions["session-1"].Status != domain.StatusRunning {
+	if repo.sessions["session-1"].Status != domain.StatusStarting {
 		t.Fatalf("saved session = %#v", repo.sessions["session-1"])
 	}
 }
@@ -6307,12 +6306,13 @@ func TestStartSessionAppendsLifecycleEvents(t *testing.T) {
 		WorktreePath: "/workspace/session-1",
 	}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}, events: stream}
 	events := &fakeEventStore{}
 	publisher := &fakeEventPublisher{}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithEventPublisher(publisher))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
-	ids := []domain.ID{"process-run-1", "event-starting", "event-running"}
+	ids := []domain.ID{"process-run-1", "event-starting", "event-transcript-bound", "event-running"}
 	service.generateID = func() (domain.ID, error) {
 		if len(ids) == 0 {
 			t.Fatal("generateID called more than expected")
@@ -6326,23 +6326,26 @@ func TestStartSessionAppendsLifecycleEvents(t *testing.T) {
 		t.Fatalf("StartSession() error = %v", err)
 	}
 	got := events.snapshot()
-	if len(got) != 2 {
-		t.Fatalf("events length = %d, want 2: %#v", len(got), got)
+	if len(got) != 1 {
+		t.Fatalf("events before transcript = %d, want 1: %#v", len(got), got)
 	}
 	if got[0].ID != "event-starting" || got[0].Type != "session.starting" || got[0].Scope.ProjectID != "project-1" {
 		t.Fatalf("starting event = %#v", got[0])
 	}
-	if got[0].SessionID == nil || *got[0].SessionID != "session-1" || got[0].Payload["processRunId"] != "process-run-1" || got[0].Payload["status"] != "starting" {
+	if got[0].SessionID == nil || *got[0].SessionID != "session-1" || got[0].Payload["processRunId"] != "process-run-1" || got[0].Causality.ProcessRunID != "process-run-1" || got[0].Causality.SessionStatus != "starting" {
 		t.Fatalf("starting payload/scope = %#v", got[0])
 	}
-	if got[1].ID != "event-running" || got[1].Type != "session.running" {
-		t.Fatalf("running event = %#v", got[1])
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForEventType(t, events, "session.running")
+	got = events.snapshot()
+	if len(got) != 3 || got[1].ID != "event-transcript-bound" || got[1].Type != "process.transcript_bound" || got[2].ID != "event-running" || got[2].Type != "session.running" {
+		t.Fatalf("bound/running events = %#v", got)
 	}
-	if got[1].Payload["pid"] != 1234 || got[1].Payload["codexSessionId"] != "codex-session-1" || got[1].Payload["status"] != "running" {
-		t.Fatalf("running payload = %#v", got[1].Payload)
+	if got[2].Payload["pid"] != 1234 || got[2].Payload["codexSessionId"] != "codex-session-1" || got[2].Causality.SessionStatus != "running" {
+		t.Fatalf("running payload = %#v", got[2].Payload)
 	}
 	published := publisher.snapshot()
-	if len(published) != 2 || published[0].ID != "event-starting" || published[1].ID != "event-running" {
+	if len(published) != 3 || published[0].ID != "event-starting" || published[1].ID != "event-transcript-bound" || published[2].ID != "event-running" {
 		t.Fatalf("published events = %#v", published)
 	}
 }
@@ -6430,7 +6433,7 @@ func TestStartSessionQueuesWhenSameWorkdirAlreadyRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first StartSessionWithOptions() error = %v", err)
 	}
-	if first.Status != domain.StatusRunning {
+	if first.Status != domain.StatusStarting {
 		t.Fatalf("first status = %q", first.Status)
 	}
 	second, err := service.StartSessionWithOptions(ctx, "session-2", StartSessionOptions{Force: true})
@@ -6487,7 +6490,7 @@ func TestStartSessionQueuesWhenSameProjectPathAlreadyRunning(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first StartSessionWithOptions() error = %v", err)
 	}
-	if first.Status != domain.StatusRunning {
+	if first.Status != domain.StatusStarting {
 		t.Fatalf("first status = %q", first.Status)
 	}
 	second, err := service.StartSessionWithOptions(ctx, "session-2", StartSessionOptions{Force: true})
@@ -6534,6 +6537,7 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 	ids := []domain.ID{
 		"process-run-1",
 		"event-starting",
+		"event-transcript-bound",
 		"event-running",
 		"event-codex",
 		"event-process-exited",
@@ -6578,6 +6582,43 @@ func TestStartSessionPublishesCodexEventsWithoutStoringTranscript(t *testing.T) 
 	}
 }
 
+func TestTranscriptBindFailureSettlesAfterStopFailure(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Requirement: "implement session",
+		Status: domain.StatusCreated, WorktreePath: "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	processes.bindErr = errors.New("bind unavailable")
+	source := make(chan processdomain.CodexEvent, 1)
+	source <- processdomain.CodexEvent{EventID: "event-1", Type: "assistant_message", Content: processdomain.CodexMessageContent{Role: "assistant", Text: "done"}}
+	close(source)
+	codex := &fakeCodexProcess{
+		startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"},
+		events:      source,
+		stopErr:     errors.New("stop unavailable"),
+	}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
+	sequence := 0
+	service.generateID = func() (domain.ID, error) {
+		sequence++
+		return domain.ID(fmt.Sprintf("generated-%d", sequence)), nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	failed := waitForEventType(t, events, "session.failed")
+	if repo.sessions["session-1"].Status != domain.StatusFailed || processes.hasActive {
+		t.Fatalf("unsettled bind failure: session=%#v process=%#v", repo.sessions["session-1"], processes.active)
+	}
+	if codex.stoppedID == "" || failed.Payload["failureCode"] != "codex_transcript_unavailable" {
+		t.Fatalf("bind failure event = %#v stopped=%q", failed, codex.stoppedID)
+	}
+}
+
 func TestStartSessionReplacesStaleCodexSessionIDFromThreadStarted(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -6611,7 +6652,7 @@ func TestStartSessionReplacesStaleCodexSessionIDFromThreadStarted(t *testing.T) 
 	events := &fakeEventStore{}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithEventPublisher(publisher))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
-	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-codex", "event-process-exited", "event-stopped"}
+	ids := []domain.ID{"process-run-1", "event-starting", "event-transcript-bound", "event-running", "event-codex", "event-process-exited", "event-stopped"}
 	service.generateID = func() (domain.ID, error) {
 		if len(ids) == 0 {
 			t.Fatal("generateID called more than expected")
@@ -6802,6 +6843,7 @@ func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
 	ids := []domain.ID{
 		"process-run-1",
 		"event-starting",
+		"event-transcript-bound",
 		"event-running",
 		"event-todo-list",
 		"event-process-exited",
@@ -6851,7 +6893,7 @@ func TestStartSessionIgnoresDuplicateTypedPlanUpdate(t *testing.T) {
 		events:      source,
 	}), WithEvents(events), WithEventPublisher(publisher))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
-	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-todo", "event-exited", "event-stopped"}
+	ids := []domain.ID{"process-run-1", "event-starting", "event-transcript-bound", "event-running", "event-todo", "event-exited", "event-stopped"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -6908,7 +6950,7 @@ func TestStartSessionIgnoresPlanUpdateMatchingPersistedTodoList(t *testing.T) {
 		events:      source,
 	}), WithEvents(events), WithEventPublisher(publisher))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
-	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-exited", "event-stopped"}
+	ids := []domain.ID{"process-run-1", "event-starting", "event-transcript-bound", "event-running", "event-exited", "event-stopped"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -6969,6 +7011,7 @@ func TestStartSessionUpdatesTodoListFromStartedAndUpdatedItems(t *testing.T) {
 	ids := []domain.ID{
 		"process-run-1",
 		"event-starting",
+		"event-transcript-bound",
 		"event-running",
 		"process-event-todo-started",
 		"event-codex-started",
@@ -7100,6 +7143,7 @@ func TestStartSessionClearsTodoListFromEmptyPlanUpdateEvent(t *testing.T) {
 	ids := []domain.ID{
 		"process-run-1",
 		"event-starting",
+		"event-transcript-bound",
 		"event-running",
 		"process-event-empty-plan",
 		"event-codex",
@@ -7158,6 +7202,7 @@ func TestSessionModeMarksParamRejectedExitFailed(t *testing.T) {
 	ids := []domain.ID{
 		"process-run-1",
 		"event-starting",
+		"event-transcript-bound",
 		"event-running",
 		"process-event-exit",
 		"event-codex",
@@ -7365,7 +7410,7 @@ func TestForceStartQueuedSessionBypassesAgentLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSessionWithOptions() error = %v", err)
 	}
-	if got.Status != domain.StatusRunning {
+	if got.Status != domain.StatusStarting {
 		t.Fatalf("StartSessionWithOptions() status = %q", got.Status)
 	}
 	saved := repo.sessions["session-1"]
@@ -7423,7 +7468,7 @@ func TestDrainQueuedSessionsStartsHighestPriorityFirst(t *testing.T) {
 	if codex.startInput.Prompt != promptWithAnyCodeGuidance("high priority", repo.sessions["high-session"]) {
 		t.Fatalf("initial queued prompt = %q", codex.startInput.Prompt)
 	}
-	if repo.sessions["high-session"].Status != domain.StatusRunning || repo.sessions["low-session"].Status != domain.StatusQueued {
+	if repo.sessions["high-session"].Status != domain.StatusStarting || repo.sessions["low-session"].Status != domain.StatusQueued {
 		t.Fatalf("session statuses: high=%q low=%q", repo.sessions["high-session"].Status, repo.sessions["low-session"].Status)
 	}
 }
@@ -7824,9 +7869,11 @@ func TestDrainQueuedWorkflowKeepsActiveProcessWhenRunningPersistenceAndStopFail(
 		return nil
 	}
 	processes := newFakeProcessRepository()
+	stream := make(chan processdomain.CodexEvent)
 	codex := &fakeCodexProcess{
 		startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"},
 		stopErr:     errors.New("stop unavailable"),
+		events:      stream,
 	}
 	workflows := &fakeWorkflowStarter{}
 	events := &fakeEventStore{}
@@ -7846,9 +7893,11 @@ func TestDrainQueuedWorkflowKeepsActiveProcessWhenRunningPersistenceAndStopFail(
 	}
 
 	started, err := service.DrainQueuedSessions(ctx)
-	if started != 0 || !errors.Is(err, errProcessCleanupPending) {
+	if started != 1 || err != nil {
 		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
 	}
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForProcessStop(t, codex, "id-1")
 	if workflows.failInput.NodeRunID != "" {
 		t.Fatalf("workflow failure was advanced: %#v", workflows.failInput)
 	}
@@ -7889,7 +7938,8 @@ func TestDrainQueuedWorkflowResumeMarksWaitingActionWhenRunningPersistenceFails(
 		return nil
 	}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}, events: stream}
 	workflows := &fakeWorkflowStarter{resumeSnapshot: domain.WorkflowRunSnapshot{
 		ID: "workflow-run-1", SessionID: "session-1", Status: "waiting_resume_action", CurrentNodeID: "build",
 	}}
@@ -7913,11 +7963,10 @@ func TestDrainQueuedWorkflowResumeMarksWaitingActionWhenRunningPersistenceFails(
 	if err != nil || started != 1 {
 		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
 	}
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForEventType(t, events, "session.resume_failed")
 	if got := repo.sessions["session-1"].Status; got != domain.StatusResumeFailed {
 		t.Fatalf("session status = %q", got)
-	}
-	if workflows.resumeInput.SessionID != "session-1" || workflows.resumeInput.Code != "resume_failed" {
-		t.Fatalf("workflow resume failure = %#v", workflows.resumeInput)
 	}
 	if processes.hasActive || processes.exitedID != "id-1" {
 		t.Fatalf("process active=%v exited=%q", processes.hasActive, processes.exitedID)
@@ -7925,7 +7974,6 @@ func TestDrainQueuedWorkflowResumeMarksWaitingActionWhenRunningPersistenceFails(
 	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendPending || promptAppend.DispatchedProcessRunID != "" {
 		t.Fatalf("prompt append = %#v", promptAppend)
 	}
-	waitForEventType(t, events, "workflow.waiting_resume_action")
 }
 
 func TestDrainQueuedWorkflowResumeFailureWaitsForResumeAction(t *testing.T) {
@@ -8045,7 +8093,7 @@ func TestDrainQueuedWorkflowResumeFailureReturnsWorkflowStateError(t *testing.T)
 	if err != nil {
 		t.Fatalf("ExecuteSession() error = %v", err)
 	}
-	if got.Status != domain.StatusRunning || workflows.resumeNodeInput.SessionID != "session-1" {
+	if got.Status != domain.StatusStarting || workflows.resumeNodeInput.SessionID != "session-1" {
 		t.Fatalf("ExecuteSession() = %#v workflow=%#v", got, workflows.resumeNodeInput)
 	}
 }
@@ -8096,7 +8144,8 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	}
 	repo.appends = []domain.PromptAppend{{ID: "append-1", SessionID: "session-1", Body: "continue work", Status: domain.PromptAppendPending}}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}, events: stream}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
 	service.now = func() time.Time { return time.Unix(41, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "process-run-2", nil }
@@ -8105,7 +8154,7 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
-	if got.Status != domain.StatusRunning {
+	if got.Status != domain.StatusStarting {
 		t.Fatalf("ResumeSession() status = %q", got.Status)
 	}
 	if !codex.resumeCalled || codex.resumeInput.CodexSessionID != "codex-session-1" || codex.resumeInput.ProcessRunID != "process-run-2" {
@@ -8247,7 +8296,8 @@ func TestRunningPersistenceFailureStopsStartedProcessAndKeepsPromptPending(t *te
 		return nil
 	}
 	processes := newFakeProcessRepository()
-	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
+	stream := make(chan processdomain.CodexEvent)
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}, events: stream}
 	events := &fakeEventStore{}
 	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events), WithUnitOfWork(uow))
@@ -8257,10 +8307,12 @@ func TestRunningPersistenceFailureStopsStartedProcessAndKeepsPromptPending(t *te
 		return domain.ID(fmt.Sprintf("id-%d", nextID)), nil
 	}
 
-	if _, err := service.ResumeSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err == nil {
-		t.Fatal("ResumeSession() expected running persistence error")
+	if _, err := service.ResumeSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("ResumeSession() error = %v", err)
 	}
-	if codex.stoppedID != "id-1" || codex.eventsCalled {
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForEventType(t, events, "session.resume_failed")
+	if codex.stoppedID != "id-1" || !codex.eventsCalled {
 		t.Fatalf("codex cleanup stopped=%q eventsCalled=%v", codex.stoppedID, codex.eventsCalled)
 	}
 	if got := repo.sessions["session-1"].Status; got != domain.StatusResumeFailed {
@@ -8291,9 +8343,11 @@ func TestRunningPersistenceFailureKeepsActiveProcessAndWorkdirWhenStopFails(t *t
 		return nil
 	}
 	processes := newFakeProcessRepository()
+	stream := make(chan processdomain.CodexEvent)
 	codex := &fakeCodexProcess{
 		resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"},
 		stopErr:      errors.New("stop unavailable"),
+		events:       stream,
 	}
 	events := &fakeEventStore{}
 	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
@@ -8305,9 +8359,11 @@ func TestRunningPersistenceFailureKeepsActiveProcessAndWorkdirWhenStopFails(t *t
 	}
 
 	_, err := service.ResumeSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true})
-	if !errors.Is(err, errProcessCleanupPending) {
+	if err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
+	stream <- transcriptReadyEvent("codex-session-1")
+	waitForProcessStop(t, codex, "id-1")
 	if codex.stoppedID != "id-1" || !processes.hasActive || processes.exitedID != "" {
 		t.Fatalf("process cleanup stopped=%q active=%v exited=%q", codex.stoppedID, processes.hasActive, processes.exitedID)
 	}
@@ -8387,7 +8443,7 @@ func TestCodexEventStreamFailureKeepsProcessAndPromptInflightWhenStopFails(t *te
 	case <-time.After(time.Second):
 		t.Fatal("codex Stop was not called")
 	}
-	if got := repo.sessions["session-1"].Status; got != domain.StatusRunning {
+	if got := repo.sessions["session-1"].Status; got != domain.StatusStarting {
 		t.Fatalf("session status = %q", got)
 	}
 	if promptAppend := repo.appends[0]; promptAppend.Status != domain.PromptAppendInflight || promptAppend.DispatchedProcessRunID != "process-run-1" {
@@ -8462,7 +8518,7 @@ func TestResumeWorkflowSessionBindsCurrentNodeRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResumeSession() error = %v", err)
 	}
-	if got.Status != domain.StatusRunning || workflows.resumeNodeInput.SessionID != "session-1" {
+	if got.Status != domain.StatusStarting || workflows.resumeNodeInput.SessionID != "session-1" {
 		t.Fatalf("ResumeSession() = %#v workflow input=%#v", got, workflows.resumeNodeInput)
 	}
 	if len(processes.created) != 1 || processes.created[0].NodeRunID == nil || *processes.created[0].NodeRunID != "node-run-1" {
@@ -8812,7 +8868,7 @@ func TestStoppedProcessExitReleasesUnacknowledgedPrompt(t *testing.T) {
 	events := &fakeEventStore{}
 	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
-	ids := []domain.ID{"event-stopping", "event-exited", "event-stopped", "append-new", "event-queued", "process-run-2", "event-starting", "event-running"}
+	ids := []domain.ID{"event-stopping", "event-exited", "event-stopped", "append-new", "event-queued", "process-run-2", "event-starting", "event-transcript-bound", "event-running"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -9223,9 +9279,9 @@ func TestStartSessionUsesUnitOfWorkForProcessLifecycleEvents(t *testing.T) {
 	}
 	close(source)
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}, events: source}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), codex), WithEvents(&fakeEventStore{}), WithEventPublisher(publisher), WithUnitOfWork(uow))
+	service := New(txRepo, newFakeProjectRepository("project-1"), WithProcesses(txProcesses, codex), WithEvents(&fakeEventStore{}), WithEventPublisher(publisher), WithUnitOfWork(uow))
 	service.now = func() time.Time { return time.Unix(45, 0).UTC() }
-	ids := []domain.ID{"process-run-1", "event-starting", "event-running", "event-codex", "event-process-exited"}
+	ids := []domain.ID{"process-run-1", "event-starting", "event-transcript-bound", "event-running", "event-codex", "event-process-exited"}
 	service.generateID = func() (domain.ID, error) {
 		if len(ids) == 0 {
 			t.Fatal("generateID called more than expected")
@@ -9239,7 +9295,7 @@ func TestStartSessionUsesUnitOfWorkForProcessLifecycleEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession() error = %v", err)
 	}
-	if got.Status != domain.StatusRunning {
+	if got.Status != domain.StatusStarting {
 		t.Fatalf("status = %q", got.Status)
 	}
 	waitForPublishedEventType(t, publisher, "process.codex_event")
@@ -9256,7 +9312,7 @@ func TestStartSessionUsesUnitOfWorkForProcessLifecycleEvents(t *testing.T) {
 	if txProcesses.exitedID != "process-run-1" {
 		t.Fatalf("exited process = %q", txProcesses.exitedID)
 	}
-	if txRepo.sessions["session-1"].Status != domain.StatusRunning {
+	if txRepo.sessions["session-1"].Status != domain.StatusStopped || txRepo.sessions["session-1"].CodexSessionID != "codex-session-1" {
 		t.Fatalf("tx session = %#v", txRepo.sessions["session-1"])
 	}
 }
@@ -11093,6 +11149,7 @@ type fakeProcessRepository struct {
 	runningID          processdomain.RunID
 	runningPID         int
 	runningCodex       string
+	bindErr            error
 	stoppingID         processdomain.RunID
 	exitedID           processdomain.RunID
 	exitedResult       processdomain.ExitResult
@@ -11100,10 +11157,11 @@ type fakeProcessRepository struct {
 	markExitedFailures int
 	markExitedHook     func()
 	markExitedDoneHook func()
+	transcriptSources  map[string]processdomain.CodexTranscriptSource
 }
 
 func newFakeProcessRepository() *fakeProcessRepository {
-	return &fakeProcessRepository{}
+	return &fakeProcessRepository{transcriptSources: map[string]processdomain.CodexTranscriptSource{}}
 }
 
 func (r *fakeProcessRepository) CreateRun(_ context.Context, run processdomain.Run) error {
@@ -11195,6 +11253,77 @@ func (r *fakeProcessRepository) MarkWaitingUser(_ context.Context, id processdom
 	r.active.Status = processdomain.StatusWaitingUser
 	r.hasActive = true
 	return nil
+}
+
+func (r *fakeProcessRepository) MarkStarted(_ context.Context, id processdomain.RunID, pid int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.active.ID = id
+	r.active.PID = &pid
+	r.active.Status = processdomain.StatusStarting
+	r.hasActive = true
+	return nil
+}
+
+func (r *fakeProcessRepository) BindTranscript(_ context.Context, id processdomain.RunID, pid int, source processdomain.CodexTranscriptSource) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.bindErr != nil {
+		return r.bindErr
+	}
+	r.runningID = id
+	r.runningPID = pid
+	r.runningCodex = source.CodexSessionID
+	r.active.ID = id
+	r.active.Status = processdomain.StatusRunning
+	r.active.PID = &pid
+	r.active.CodexSessionID = source.CodexSessionID
+	r.hasActive = true
+	if r.transcriptSources == nil {
+		r.transcriptSources = map[string]processdomain.CodexTranscriptSource{}
+	}
+	r.transcriptSources[source.CodexSessionID] = source
+	return nil
+}
+
+func (r *fakeProcessRepository) FindTranscriptSource(_ context.Context, codexSessionID string) (processdomain.CodexTranscriptSource, bool, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	source, ok := r.transcriptSources[codexSessionID]
+	if !ok && codexSessionID != "" {
+		return processdomain.CodexTranscriptSource{
+			CodexSessionID: codexSessionID,
+			RelativePath:   "test/" + codexSessionID + ".jsonl",
+			BoundAt:        time.Now().UTC(),
+		}, true, nil
+	}
+	return source, ok, nil
+}
+
+func (r *fakeProcessRepository) TranscriptSources(_ context.Context, sessionID processdomain.SessionID) ([]processdomain.CodexTranscriptSource, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := map[string]struct{}{}
+	var sources []processdomain.CodexTranscriptSource
+	for _, run := range r.created {
+		if run.SessionID != sessionID || run.CodexSessionID == "" {
+			continue
+		}
+		if _, ok := seen[run.CodexSessionID]; ok {
+			continue
+		}
+		seen[run.CodexSessionID] = struct{}{}
+		if source, ok := r.transcriptSources[run.CodexSessionID]; ok {
+			sources = append(sources, source)
+		} else {
+			sources = append(sources, processdomain.CodexTranscriptSource{
+				CodexSessionID: run.CodexSessionID,
+				RelativePath:   "test/" + run.CodexSessionID + ".jsonl",
+				BoundAt:        time.Now().UTC(),
+			})
+		}
+	}
+	return sources, nil
 }
 
 func (r *fakeProcessRepository) MarkRunning(_ context.Context, id processdomain.RunID, pid int, codexSessionID string) error {
@@ -11894,6 +12023,9 @@ func (p *fakeCodexProcess) Start(_ context.Context, input processdomain.CodexSta
 		p.startHandles = p.startHandles[1:]
 	}
 	handle.ProcessRunID = input.ProcessRunID
+	if handle.CodexSessionID == "" {
+		handle.CodexSessionID = "codex-session-test"
+	}
 	return handle, nil
 }
 
@@ -11905,6 +12037,9 @@ func (p *fakeCodexProcess) Resume(_ context.Context, input processdomain.CodexRe
 	}
 	handle := p.resumeHandle
 	handle.ProcessRunID = input.ProcessRunID
+	if handle.CodexSessionID == "" {
+		handle.CodexSessionID = input.CodexSessionID
+	}
 	return handle, nil
 }
 
@@ -11924,20 +12059,42 @@ func (p *fakeCodexProcess) StopDetached(_ context.Context, detached processdomai
 	return p.detachedErr
 }
 
-func (p *fakeCodexProcess) Events(context.Context, processdomain.CodexHandle) (<-chan processdomain.CodexEvent, error) {
+func (p *fakeCodexProcess) Events(_ context.Context, handle processdomain.CodexHandle) (<-chan processdomain.CodexEvent, error) {
 	p.eventsCalled = true
 	if p.eventsErr != nil {
 		return nil, p.eventsErr
 	}
+	var source <-chan processdomain.CodexEvent
 	if len(p.eventStreams) > 0 {
-		events := p.eventStreams[0]
+		source = p.eventStreams[0]
 		p.eventStreams = p.eventStreams[1:]
-		return events, nil
+	} else if p.events != nil {
+		source = p.events
+	} else {
+		source = make(chan processdomain.CodexEvent)
 	}
-	if p.events != nil {
-		return p.events, nil
-	}
-	return make(chan processdomain.CodexEvent), nil
+
+	events := make(chan processdomain.CodexEvent)
+	go func() {
+		defer close(events)
+		for event := range source {
+			if event.Transcript == nil && !event.RealtimeOnly && event.Type != "process.exit" {
+				codexSessionID := codexSessionIDFromEvent(event)
+				if codexSessionID == "" {
+					codexSessionID = handle.CodexSessionID
+				}
+				if codexSessionID != "" {
+					event.Transcript = &processdomain.CodexTranscriptSource{
+						CodexSessionID: codexSessionID,
+						RelativePath:   "test/" + codexSessionID + ".jsonl",
+						BoundAt:        time.Now().UTC(),
+					}
+				}
+			}
+			events <- event
+		}
+	}()
+	return events, nil
 }
 
 type fakeUnitOfWork struct {
@@ -12199,6 +12356,46 @@ func waitForEventType(t *testing.T, store *fakeEventStore, eventType string) eve
 	}
 	t.Fatalf("event type %q not found in %#v", eventType, store.snapshot())
 	return eventdomain.DomainEvent{}
+}
+
+func waitForSessionStatus(t *testing.T, repo *fakeRepository, sessionID domain.ID, status domain.Status) domain.Session {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		session, err := repo.Find(context.Background(), sessionID)
+		if err == nil && session.Status == status {
+			return session
+		}
+		time.Sleep(time.Millisecond)
+	}
+	session, _ := repo.Find(context.Background(), sessionID)
+	t.Fatalf("session %q status = %q, want %q", sessionID, session.Status, status)
+	return domain.Session{}
+}
+
+func waitForProcessStop(t *testing.T, codex *fakeCodexProcess, processRunID processdomain.RunID) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if codex.stoppedID == processRunID {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("stopped process = %q, want %q", codex.stoppedID, processRunID)
+}
+
+func transcriptReadyEvent(codexSessionID string) processdomain.CodexEvent {
+	return processdomain.CodexEvent{
+		Type:         "thread.started",
+		RealtimeOnly: true,
+		Payload:      map[string]any{"thread_id": codexSessionID},
+		Transcript: &processdomain.CodexTranscriptSource{
+			CodexSessionID: codexSessionID,
+			RelativePath:   "test/" + codexSessionID + ".jsonl",
+			BoundAt:        time.Now().UTC(),
+		},
+	}
 }
 
 func waitForEventTypeAfter(t *testing.T, store *fakeEventStore, afterType string, eventType string) eventdomain.DomainEvent {

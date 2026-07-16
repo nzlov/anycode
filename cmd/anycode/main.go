@@ -187,13 +187,13 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 			return graph.UseCases{}, fmt.Errorf("find Playwright MCP executable %q: %w", cfg.PlaywrightMCPBin, err)
 		}
 	}
-	codexOptions := []codexcli.Option{codexcli.WithMCP(localHTTPBaseURL(cfg.HTTPAddr), cfg.AccessKey)}
+	codexOptions := []codexcli.Option{codexcli.WithMCP(localHTTPBaseURL(cfg.HTTPAddr), cfg.AccessKey), codexcli.WithObserver(codexMetricLogger{})}
 	if cfg.PlaywrightMCPBin != "" {
 		codexOptions = append(codexOptions, codexcli.WithPlaywrightMCP(cfg.PlaywrightMCPBin, cfg.ChromiumBin))
 	}
 	codex := codexcli.New(cfg.CodexBin, codexOptions...)
 	if mcpCommand != "" && mcpSocket != "" {
-		codexOptions = []codexcli.Option{codexcli.WithMCPStdio(mcpCommand, mcpSocket, cfg.AccessKey)}
+		codexOptions = []codexcli.Option{codexcli.WithMCPStdio(mcpCommand, mcpSocket, cfg.AccessKey), codexcli.WithObserver(codexMetricLogger{})}
 		if cfg.PlaywrightMCPBin != "" {
 			codexOptions = append(codexOptions, codexcli.WithPlaywrightMCP(cfg.PlaywrightMCPBin, cfg.ChromiumBin))
 		}
@@ -205,12 +205,12 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	}
 	log.Printf("codex image generation capability: enabled=%t status=%s", capabilities.SupportsImageGeneration, capabilities.ImageGenerationStatus)
 	events := store.Events()
-	eventService := eventapp.New()
+	eventService := eventapp.New(eventapp.WithObserver(eventMetricLogger{}))
 	artifacts.SetEvents(events, eventService)
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes, timelineapp.WithHistory(events))
 	questions := store.Questions()
-	questionService := questionapp.New(questions)
+	questionService := questionapp.New(questions, questionapp.WithObserver(questionMetricLogger{}))
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactScanner(artifacts), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
@@ -349,4 +349,22 @@ func localHTTPBaseURL(addr string) string {
 
 func localMCPSocketPath(uid int, pid int) string {
 	return filepath.Join(os.TempDir(), fmt.Sprintf("anycode-%d", uid), fmt.Sprintf("mcp-%d.sock", pid))
+}
+
+type codexMetricLogger struct{}
+
+func (codexMetricLogger) Observe(observation codexcli.Observation) {
+	log.Printf("metric=%s outcome=%s reason=%s duration_ms=%d bytes=%d", observation.Name, observation.Outcome, observation.Reason, observation.Duration.Milliseconds(), observation.Bytes)
+}
+
+type eventMetricLogger struct{}
+
+func (eventMetricLogger) Observe(observation eventapp.Observation) {
+	log.Printf("metric=%s outcome=%s", observation.Name, observation.Outcome)
+}
+
+type questionMetricLogger struct{}
+
+func (questionMetricLogger) Observe(observation questionapp.Observation) {
+	log.Printf("metric=%s outcome=%s duration_ms=%d", observation.Name, observation.Outcome, observation.Duration.Milliseconds())
 }

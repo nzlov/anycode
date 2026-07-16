@@ -98,6 +98,14 @@ export interface TranscriptEvent {
   phase: TranscriptPhase;
   occurredAt: string;
   content: TranscriptContent;
+  group?: TranscriptEventGroup | null;
+}
+
+export interface TranscriptEventGroup {
+  kind: string;
+  label: string;
+  count: number;
+  members: TranscriptEvent[];
 }
 
 export interface TranscriptItem extends TranscriptEvent {
@@ -111,6 +119,18 @@ export interface TranscriptTokenUsage {
   reasoningOutputTokens: number;
   totalTokens: number;
   contextWindow: number;
+  currentInputTokens: number;
+  currentCachedInputTokens: number;
+  currentOutputTokens: number;
+  currentReasoningOutputTokens: number;
+  currentTotalTokens: number;
+  compactionCount: number;
+}
+
+export interface TranscriptUsageAttribution {
+  processRunId?: string | null;
+  nodeRunId?: string | null;
+  usage: TranscriptTokenUsage;
 }
 
 interface GraphQLTranscriptEvent extends Omit<TranscriptEvent, 'phase' | 'content'> {
@@ -124,39 +144,51 @@ interface GraphQLTranscriptStreamItem {
   usage?: TranscriptTokenUsage | null;
 }
 
-const transcriptEventFields = `
+const transcriptContentFields = `
+  __typename
+  ... on TranscriptMessageContent {
+    role
+    text
+    format
+    images { src detail }
+  }
+  ... on TranscriptReasoningContent { text }
+  ... on TranscriptCommandContent {
+    commands { command workdir }
+    output
+    exitCode
+    durationMs
+  }
+  ... on TranscriptToolContent {
+    qualifiedName
+    category
+    input { format text }
+    output { format text }
+    images { src detail }
+  }
+  ... on TranscriptFileChangeContent {
+    changes { kind path movePath unifiedDiff }
+  }
+  ... on TranscriptStatusContent { code level message details }
+  ... on TranscriptUnknownContent { rawType payload }
+`;
+
+const transcriptEventBaseFields = `
   id
   orderKey
   correlationId
   phase
   occurredAt
-  content {
-    __typename
-    ... on TranscriptMessageContent {
-      role
-      text
-      format
-      images { src detail }
-    }
-    ... on TranscriptReasoningContent { text }
-    ... on TranscriptCommandContent {
-      commands { command workdir }
-      output
-      exitCode
-      durationMs
-    }
-    ... on TranscriptToolContent {
-      qualifiedName
-      category
-      input { format text }
-      output { format text }
-      images { src detail }
-    }
-    ... on TranscriptFileChangeContent {
-      changes { kind path movePath unifiedDiff }
-    }
-    ... on TranscriptStatusContent { code level message details }
-    ... on TranscriptUnknownContent { rawType payload }
+  content { ${transcriptContentFields} }
+`;
+
+const transcriptEventFields = `
+  ${transcriptEventBaseFields}
+  group {
+    kind
+    label
+    count
+    members { ${transcriptEventBaseFields} }
   }
 `;
 
@@ -167,6 +199,12 @@ const transcriptUsageFields = `
   reasoningOutputTokens
   totalTokens
   contextWindow
+  currentInputTokens
+  currentCachedInputTokens
+  currentOutputTokens
+  currentReasoningOutputTokens
+  currentTotalTokens
+  compactionCount
 `;
 
 export async function getSessionTranscriptPage(
@@ -180,6 +218,8 @@ export async function getSessionTranscriptPage(
       sessionTranscript: {
         events: GraphQLTranscriptEvent[];
         usage?: TranscriptTokenUsage | null;
+        processUsage: TranscriptUsageAttribution[];
+        nodeUsage: TranscriptUsageAttribution[];
         pageInfo: PageInfo;
       };
     },
@@ -190,6 +230,8 @@ export async function getSessionTranscriptPage(
         sessionTranscript(input: $input) {
           events { ${transcriptEventFields} }
           usage { ${transcriptUsageFields} }
+          processUsage { processRunId nodeRunId usage { ${transcriptUsageFields} } }
+          nodeUsage { processRunId nodeRunId usage { ${transcriptUsageFields} } }
           pageInfo { page pageSize total nextCursor }
         }
       }
@@ -199,6 +241,8 @@ export async function getSessionTranscriptPage(
   return {
     items: data.sessionTranscript.events.map(normalizeTranscriptEvent),
     usage: data.sessionTranscript.usage ?? null,
+    processUsage: data.sessionTranscript.processUsage,
+    nodeUsage: data.sessionTranscript.nodeUsage,
     pageInfo: data.sessionTranscript.pageInfo,
   };
 }
@@ -239,9 +283,10 @@ export function subscribeSessionTranscript(
   };
   if (handlers.onError) Object.assign(options, { onError: handlers.onError });
   if (handlers.onClose) Object.assign(options, { onClose: handlers.onClose });
-  return graphqlSubscribe<{ sessionTranscript: GraphQLTranscriptStreamItem }, { sessionId: string }>(
-    options,
-  );
+  return graphqlSubscribe<
+    { sessionTranscript: GraphQLTranscriptStreamItem },
+    { sessionId: string }
+  >(options);
 }
 
 function normalizeTranscriptEvent(event: GraphQLTranscriptEvent): TranscriptEvent {
@@ -250,6 +295,14 @@ function normalizeTranscriptEvent(event: GraphQLTranscriptEvent): TranscriptEven
     correlationId: event.correlationId ?? '',
     phase: event.phase.toLowerCase() as TranscriptPhase,
     content: normalizeContent(event.content),
+    group: event.group
+      ? {
+          ...event.group,
+          members: event.group.members.map((member) =>
+            normalizeTranscriptEvent(member as GraphQLTranscriptEvent),
+          ),
+        }
+      : null,
   };
 }
 

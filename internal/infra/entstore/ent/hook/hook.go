@@ -9,6 +9,18 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
+// The CodexTranscriptSourceFunc type is an adapter to allow the use of ordinary
+// function as CodexTranscriptSource mutator.
+type CodexTranscriptSourceFunc func(context.Context, *ent.CodexTranscriptSourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f CodexTranscriptSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.CodexTranscriptSourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CodexTranscriptSourceMutation", m)
+}
+
 // The EventRecordFunc type is an adapter to allow the use of ordinary
 // function as EventRecord mutator.
 type EventRecordFunc func(context.Context, *ent.EventRecordMutation) (ent.Value, error)

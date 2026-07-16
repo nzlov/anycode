@@ -306,16 +306,31 @@ func mapTranscriptPage(page timelineapp.Page) *model.TranscriptPage {
 		items = append(items, mapTranscriptEvent(item))
 	}
 	return &model.TranscriptPage{
-		Events:   items,
-		Usage:    mapTranscriptUsage(page.Usage),
-		PageInfo: mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor),
+		Events:       items,
+		Usage:        mapTranscriptUsage(page.Usage),
+		ProcessUsage: mapTranscriptUsageAttributions(page.ProcessUsage),
+		NodeUsage:    mapTranscriptUsageAttributions(page.NodeUsage),
+		PageInfo:     mapPageInfo(page.Page, page.PageSize, page.Total, page.NextCursor),
 	}
+}
+
+func mapTranscriptUsageAttributions(values []timelineapp.UsageAttributionDTO) []*model.TranscriptUsageAttribution {
+	result := make([]*model.TranscriptUsageAttribution, 0, len(values))
+	for _, value := range values {
+		usage := value.Usage
+		result = append(result, &model.TranscriptUsageAttribution{
+			ProcessRunID: optionalString(value.ProcessRunID),
+			NodeRunID:    optionalString(value.NodeRunID),
+			Usage:        mapTranscriptUsage(&usage),
+		})
+	}
+	return result
 }
 
 func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 	correlationID := dto.CorrelationID
 	createdAt, _ := time.Parse(time.RFC3339Nano, dto.OccurredAt)
-	return &model.TranscriptEvent{
+	event := &model.TranscriptEvent{
 		ID:            string(dto.ID),
 		OrderKey:      dto.OrderKey,
 		CorrelationID: optionalString(correlationID),
@@ -323,6 +338,16 @@ func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 		OccurredAt:    createdAt,
 		Content:       mapTranscriptContent(dto.Content),
 	}
+	if dto.Group != nil {
+		members := make([]*model.TranscriptEvent, 0, len(dto.Group.Members))
+		for _, member := range dto.Group.Members {
+			members = append(members, mapTranscriptEvent(member))
+		}
+		event.Group = &model.TranscriptEventGroup{
+			Kind: dto.Group.Kind, Label: dto.Group.Label, Count: len(members), Members: members,
+		}
+	}
+	return event
 }
 
 func mapTranscriptStreamItem(dto timelineapp.DTO) *model.TranscriptStreamItem {
@@ -389,12 +414,18 @@ func mapTranscriptUsage(value *timelineapp.TokenUsageDTO) *model.TranscriptToken
 		return nil
 	}
 	return &model.TranscriptTokenUsage{
-		InputTokens:           value.InputTokens,
-		CachedInputTokens:     value.CachedInputTokens,
-		OutputTokens:          value.OutputTokens,
-		ReasoningOutputTokens: value.ReasoningOutputTokens,
-		TotalTokens:           value.TotalTokens,
-		ContextWindow:         value.ContextWindow,
+		InputTokens:                  value.InputTokens,
+		CachedInputTokens:            value.CachedInputTokens,
+		OutputTokens:                 value.OutputTokens,
+		ReasoningOutputTokens:        value.ReasoningOutputTokens,
+		TotalTokens:                  value.TotalTokens,
+		ContextWindow:                value.ContextWindow,
+		CurrentInputTokens:           value.CurrentInputTokens,
+		CurrentCachedInputTokens:     value.CurrentCachedInputTokens,
+		CurrentOutputTokens:          value.CurrentOutputTokens,
+		CurrentReasoningOutputTokens: value.CurrentReasoningOutputTokens,
+		CurrentTotalTokens:           value.CurrentTotalTokens,
+		CompactionCount:              value.CompactionCount,
 	}
 }
 

@@ -3,6 +3,7 @@ package codexcli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -25,6 +26,7 @@ func TestStartBuildsExecCommandAndStreamsSessionLogEvents(t *testing.T) {
 printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 pwd > "$CODEX_PWD_FILE"
 cat > "$CODEX_STDIN_FILE"
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-1"}'
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-codex-session-1.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-1","id":"codex-session-1","cwd":"$PWD","originator":"codex_exec"}}
@@ -487,6 +489,7 @@ func TestCodexTranscriptProjectorNamesNestedExecTool(t *testing.T) {
 
 func TestResumeBuildsResumeCommandInWorkdir(t *testing.T) {
 	dir := t.TempDir()
+	codexHome := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
 	pwdFile := filepath.Join(dir, "pwd")
 	stdinFile := filepath.Join(dir, "stdin")
@@ -498,11 +501,14 @@ cat > "$CODEX_STDIN_FILE"
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_PWD_FILE", pwdFile)
 	t.Setenv("CODEX_STDIN_FILE", stdinFile)
+	t.Setenv("CODEX_HOME", codexHome)
+	writeTranscript(t, codexHome, "codex-session-1", "2026/07/08/rollout-resume-command.jsonl", dir)
 
 	handle, err := New(bin).Resume(context.Background(), process.CodexResumeInput{
 		ProcessRunID:    "process-run-2",
 		SessionID:       "session-1",
 		CodexSessionID:  "codex-session-1",
+		Transcript:      transcriptInput(t, codexHome, "codex-session-1").Source,
 		Workdir:         dir,
 		Prompt:          "next node",
 		Model:           "gpt-test",
@@ -664,6 +670,7 @@ EOF
 				ProcessRunID:   "process-run-resume",
 				SessionID:      "session-1",
 				CodexSessionID: "codex-session-1",
+				Transcript:     transcriptInput(t, codexHome, "codex-session-1").Source,
 				Workdir:        dir,
 				Prompt:         "continue",
 			})
@@ -712,6 +719,7 @@ EOF
 		ProcessRunID:   "process-run-resume-plan",
 		SessionID:      "session-1",
 		CodexSessionID: "codex-session-resume-plan",
+		Transcript:     transcriptInput(t, codexHome, "codex-session-resume-plan").Source,
 		Workdir:        dir,
 	})
 	if err != nil {
@@ -916,10 +924,11 @@ func TestTailSessionLogDrainsStdoutPlanWhileTranscriptHasBacklog(t *testing.T) {
 	exited <- process.ExitResult{}
 	events := make(chan process.CodexEvent, 256)
 	active := &activeProcess{
-		home:           codexHome,
-		workdir:        dir,
-		codexSessionID: "codex-session-backlog",
-		baseline:       map[string]int64{},
+		home:                   codexHome,
+		workdir:                dir,
+		codexSessionID:         "codex-session-backlog",
+		transcriptPath:         sessionFile,
+		transcriptRelativePath: "2026/07/08/rollout-backlog.jsonl",
 	}
 	if _, err := tailSessionLog(context.Background(), active, events, exited, sessionIDs, stdoutPlans); err != nil {
 		t.Fatal(err)
@@ -933,6 +942,48 @@ func TestTailSessionLogDrainsStdoutPlanWhileTranscriptHasBacklog(t *testing.T) {
 	}
 	if planIndex < 0 || planIndex > 2 {
 		t.Fatalf("realtime plan index = %d, want before transcript backlog", planIndex)
+	}
+}
+
+func TestTailSessionLogAnnouncesTranscriptSourceOnce(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-source-once.jsonl")
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	contents := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-source-once","cwd":"` + dir + `"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"message","id":"msg-1","role":"assistant","content":[{"type":"output_text","text":"first"}]}}
+{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"message","id":"msg-2","role":"assistant","content":[{"type":"output_text","text":"second"}]}}
+`
+	if err := os.WriteFile(sessionFile, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan process.ExitResult, 1)
+	exited <- process.ExitResult{}
+	events := make(chan process.CodexEvent, 8)
+	recorder := &observationRecorder{}
+	active := &activeProcess{
+		home:           codexHome,
+		workdir:        dir,
+		codexSessionID: "codex-session-source-once",
+		transcriptPath: sessionFile,
+		observer:       recorder,
+	}
+	if _, err := tailSessionLog(context.Background(), active, events, exited, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	announcements := 0
+	for len(events) > 0 {
+		if event := <-events; event.Transcript != nil {
+			announcements++
+		}
+	}
+	if announcements != 1 {
+		t.Fatalf("transcript source announcements = %d, want 1", announcements)
+	}
+	if len(recorder.items) != 1 || recorder.items[0].Name != "transcript.bind" || recorder.items[0].Outcome != "success" {
+		t.Fatalf("bind observations = %#v", recorder.items)
 	}
 }
 
@@ -1167,6 +1218,7 @@ func TestStartProcessOutlivesCallerContextCancellation(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-after-cancel"}'
 sleep 0.2
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-after-cancel.jsonl" <<EOF
@@ -1316,16 +1368,20 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 
 func TestResumeInjectsUnixSocketPermissionProfileForStdioMCP(t *testing.T) {
 	dir := t.TempDir()
+	codexHome := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
 	bin := fakeCodex(t, `#!/bin/sh
 printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
+	t.Setenv("CODEX_HOME", codexHome)
+	writeTranscript(t, codexHome, "codex-session-1", "2026/07/08/rollout-mcp-resume.jsonl", dir)
 
 	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp-2000.sock", "secret")).Resume(context.Background(), process.CodexResumeInput{
 		ProcessRunID:   "process-run-mcp-profile-resume",
 		SessionID:      "session-1",
 		CodexSessionID: "codex-session-1",
+		Transcript:     transcriptInput(t, codexHome, "codex-session-1").Source,
 		Workdir:        dir,
 		PermissionMode: "workspace-write",
 		Prompt:         "continue with answer_user when needed",
@@ -1358,6 +1414,7 @@ func TestEventsParsesNestedMessageTypeAndInvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-invalid"}'
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-invalid-json.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-invalid","id":"codex-session-invalid","cwd":"$PWD","originator":"codex_exec"}}
@@ -1404,7 +1461,7 @@ func TestSessionEventsMapsReasoningResponseItem(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-reasoning"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-reasoning"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1437,7 +1494,7 @@ func TestSessionEventsUsesResponseItemMessagesAndIgnoresEventMessageMirrors(t *t
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-agent-messages"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-agent-messages"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1481,7 +1538,7 @@ func TestSessionEventsUsesResponseItemMessageWhenEventMessageMirrorArrivesFirst(
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-agent-message-mirror-first"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-agent-message-mirror-first"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1508,7 +1565,7 @@ func TestSessionEventsKeepsEventMessageAgentMessageWhenNoCanonicalMessageExists(
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-event-agent-message"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-event-agent-message"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1537,7 +1594,7 @@ func TestSessionEventsKeepsRepeatedCanonicalAssistantMessages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-repeated-agent-messages"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-repeated-agent-messages"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1567,7 +1624,7 @@ func TestSessionEventsPreservesStructuredCustomToolOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-custom-output"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-custom-output"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1600,7 +1657,7 @@ func TestSessionEventsKeepsSourceFieldsSeparateFromNormalizedView(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-normalized-conflict"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-normalized-conflict"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1656,7 +1713,7 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-record-types"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-record-types"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1885,11 +1942,11 @@ func TestParseSessionLogLineBuildsTypedTimelineEvents(t *testing.T) {
 		},
 		{
 			name:      "usage",
-			raw:       `{"timestamp":"2026-07-08T09:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"total_tokens":42},"model_context_window":200000}}}`,
+			raw:       `{"timestamp":"2026-07-08T09:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":10,"cached_input_tokens":6,"output_tokens":5,"total_tokens":42},"last_token_usage":{"input_tokens":7,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":10},"model_context_window":200000}}}`,
 			wantPhase: process.CodexPhaseStandalone,
 			assertValue: func(t *testing.T, content process.CodexEventContent) {
 				usage, ok := content.(process.CodexUsageContent)
-				if !ok || usage.InputTokens != 10 || usage.TotalTokens != 42 || usage.ContextWindow != 200000 {
+				if !ok || usage.InputTokens != 10 || usage.CachedInputTokens != 6 || usage.TotalTokens != 42 || usage.ContextWindow != 200000 || usage.CurrentInputTokens != 7 || usage.CurrentCachedInputTokens != 4 || usage.CurrentOutputTokens != 3 || usage.CurrentReasoningOutputTokens != 2 || usage.CurrentTotalTokens != 10 {
 					t.Fatalf("usage content = %#v", content)
 				}
 			},
@@ -2146,7 +2203,7 @@ func TestSessionEventsPreservesUnknownJSONLRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-unknown-records"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-unknown-records"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2170,6 +2227,7 @@ func TestEventsEmitsProcessExitWithFailureCode(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-exit"}'
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-exit.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-exit","id":"codex-session-exit","cwd":"$PWD","originator":"codex_exec"}}
@@ -2232,7 +2290,7 @@ sleep 0.2
 		t.Fatalf("ambiguous transcript event = %+v", got[0])
 	}
 	failureReason, _ := got[0].Payload["failureReason"].(string)
-	if !strings.Contains(failureReason, "multiple active codex session logs") {
+	if !strings.Contains(failureReason, "codex transcript is unavailable") {
 		t.Fatalf("ambiguous transcript failure = %+v", got[0])
 	}
 }
@@ -2251,7 +2309,7 @@ func TestSessionEventsReadsLongJSONLLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-long"})
+	got, err := New("codex", WithCodexHome(codexHome)).SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-long"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2261,6 +2319,98 @@ func TestSessionEventsReadsLongJSONLLines(t *testing.T) {
 	_, ok := got[1].Payload["item"].(map[string]any)
 	if !ok || eventNormalizedItem(t, got[1])["output"] != longOutput {
 		t.Fatalf("long output item = %#v", got[1].Payload["item"])
+	}
+}
+
+func TestSessionEventsRejectsMissingAndEscapingTranscriptSources(t *testing.T) {
+	codexHome := t.TempDir()
+	client := New("codex", WithCodexHome(codexHome))
+	for _, source := range []process.CodexTranscriptSource{
+		{},
+		{CodexSessionID: "codex-session-1", RelativePath: "../escape.jsonl"},
+		{CodexSessionID: "codex-session-1", RelativePath: "/absolute.jsonl"},
+	} {
+		if _, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{Source: source}); !errors.Is(err, process.ErrTranscriptUnavailable) {
+			t.Fatalf("SessionEvents(%#v) error = %v", source, err)
+		}
+	}
+	missing := process.CodexTranscriptSource{CodexSessionID: "codex-session-1", RelativePath: "2026/07/08/missing.jsonl"}
+	if _, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{Source: missing}); err == nil || strings.Contains(err.Error(), codexHome) {
+		t.Fatalf("missing transcript error = %v", err)
+	}
+}
+
+func TestTranscriptObserverRecordsOnlyAllowlistedReadMetadata(t *testing.T) {
+	codexHome := t.TempDir()
+	writeTranscript(t, codexHome, "codex-session-1", "2026/07/08/observed.jsonl", "/workspace/project")
+	recorder := &observationRecorder{}
+	client := New("codex", WithCodexHome(codexHome), WithObserver(recorder))
+	if _, err := client.SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.items) != 1 || recorder.items[0].Name != "transcript.read" || recorder.items[0].Outcome != "success" || recorder.items[0].Bytes <= 0 || recorder.items[0].Duration <= 0 {
+		t.Fatalf("observations = %#v", recorder.items)
+	}
+	if strings.Contains(fmt.Sprintf("%#v", recorder.items), "codex-session-1") || strings.Contains(fmt.Sprintf("%#v", recorder.items), codexHome) {
+		t.Fatalf("observation leaked locator data: %#v", recorder.items)
+	}
+}
+
+func TestTranscriptObserverRecordsFailureReasonsWithoutContent(t *testing.T) {
+	codexHome := t.TempDir()
+	writeTranscript(t, codexHome, "codex-session-1", "2026/07/08/observed.jsonl", "/workspace/project")
+	recorder := &observationRecorder{}
+	client := New("codex", WithCodexHome(codexHome), WithObserver(recorder))
+
+	if _, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{}); !errors.Is(err, process.ErrTranscriptUnavailable) {
+		t.Fatalf("missing source error = %v", err)
+	}
+	deadlineCtx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	if _, err := client.SessionEvents(deadlineCtx, transcriptInput(t, codexHome, "codex-session-1")); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deadline error = %v", err)
+	}
+
+	if len(recorder.items) != 2 || recorder.items[0].Reason != "unavailable" || recorder.items[1].Reason != "deadline" {
+		t.Fatalf("observations = %#v", recorder.items)
+	}
+	encoded := fmt.Sprintf("%#v", recorder.items)
+	if strings.Contains(encoded, "codex-session-1") || strings.Contains(encoded, codexHome) || strings.Contains(encoded, "/workspace/project") {
+		t.Fatalf("observations leaked transcript data: %s", encoded)
+	}
+}
+
+func BenchmarkSessionEvents4MB(b *testing.B) {
+	codexHome := b.TempDir()
+	relativePath := "2026/07/08/rollout-benchmark.jsonl"
+	path := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		b.Fatal(err)
+	}
+	var log strings.Builder
+	log.WriteString(`{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-benchmark","cwd":"/workspace/project"}}` + "\n")
+	message := strings.Repeat("x", 2800)
+	for index := 0; index < 1500; index++ {
+		log.WriteString(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"message","id":"msg-`)
+		log.WriteString(strconv.Itoa(index))
+		log.WriteString(`","role":"assistant","content":[{"type":"output_text","text":`)
+		log.WriteString(strconv.Quote(message))
+		log.WriteString(`}]}}` + "\n")
+	}
+	if err := os.WriteFile(path, []byte(log.String()), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	client := New("codex", WithCodexHome(codexHome))
+	input := process.CodexTranscriptInput{Source: process.CodexTranscriptSource{
+		CodexSessionID: "codex-session-benchmark",
+		RelativePath:   relativePath,
+	}}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		if _, err := client.SessionEvents(context.Background(), input); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -2277,7 +2427,7 @@ func TestSessionEventsIgnoresIncompleteFinalLineUntilNextSnapshot(t *testing.T) 
 	}
 	client := New("codex", WithCodexHome(codexHome))
 
-	first, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-snapshot-partial"})
+	first, err := client.SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-snapshot-partial"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2298,7 +2448,7 @@ func TestSessionEventsIgnoresIncompleteFinalLineUntilNextSnapshot(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	second, err := client.SessionEvents(context.Background(), process.CodexTranscriptInput{CodexSessionID: "codex-session-snapshot-partial"})
+	second, err := client.SessionEvents(context.Background(), transcriptInput(t, codexHome, "codex-session-snapshot-partial"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2380,7 +2530,8 @@ func TestStopKillsActiveProcess(t *testing.T) {
 touch "$CODEX_STARTED_FILE"
 sleep 30 &
 child="$!"
-printf '%s\n' "$child" > "$CODEX_CHILD_PID_FILE"
+printf '%s\n' "$child" > "$CODEX_CHILD_PID_FILE.tmp"
+mv "$CODEX_CHILD_PID_FILE.tmp" "$CODEX_CHILD_PID_FILE"
 trap 'kill "$child" 2>/dev/null; wait "$child" 2>/dev/null; exit 0' TERM INT
 wait "$child"
 `)
@@ -2566,6 +2717,35 @@ func collectEvents(t *testing.T, events <-chan process.CodexEvent, count int) []
 	return got
 }
 
+func transcriptInput(t *testing.T, codexHome, codexSessionID string) process.CodexTranscriptInput {
+	t.Helper()
+	path, err := sessionLogByID(codexHome, codexSessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Fatalf("transcript for %q was not found", codexSessionID)
+	}
+	source, err := transcriptSourceForPath(codexHome, codexSessionID, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return process.CodexTranscriptInput{Source: source}
+}
+
+func writeTranscript(t *testing.T, codexHome, codexSessionID, relativePath, workdir string) string {
+	t.Helper()
+	path := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":` + strconv.Quote(codexSessionID) + `,"cwd":` + strconv.Quote(workdir) + `}}` + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func eventNormalizedItem(t *testing.T, event process.CodexEvent) map[string]any {
 	t.Helper()
 	item, ok := event.Payload["normalizedItem"].(map[string]any)
@@ -2611,4 +2791,12 @@ func waitForProcessExit(t *testing.T, pid int) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+type observationRecorder struct {
+	items []Observation
+}
+
+func (r *observationRecorder) Observe(observation Observation) {
+	r.items = append(r.items, observation)
 }

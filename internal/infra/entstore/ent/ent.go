@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/codextranscriptsource"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -86,19 +87,20 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			eventrecord.Table:        eventrecord.ValidColumn,
-			mergerecord.Table:        mergerecord.ValidColumn,
-			noderun.Table:            noderun.ValidColumn,
-			processrun.Table:         processrun.ValidColumn,
-			project.Table:            project.ValidColumn,
-			promptappend.Table:       promptappend.ValidColumn,
-			questionbatch.Table:      questionbatch.ValidColumn,
-			quickcommand.Table:       quickcommand.ValidColumn,
-			entsession.Table:         entsession.ValidColumn,
-			sessionattachment.Table:  sessionattachment.ValidColumn,
-			stagedattachment.Table:   stagedattachment.ValidColumn,
-			workflowdefinition.Table: workflowdefinition.ValidColumn,
-			workflowrun.Table:        workflowrun.ValidColumn,
+			codextranscriptsource.Table: codextranscriptsource.ValidColumn,
+			eventrecord.Table:           eventrecord.ValidColumn,
+			mergerecord.Table:           mergerecord.ValidColumn,
+			noderun.Table:               noderun.ValidColumn,
+			processrun.Table:            processrun.ValidColumn,
+			project.Table:               project.ValidColumn,
+			promptappend.Table:          promptappend.ValidColumn,
+			questionbatch.Table:         questionbatch.ValidColumn,
+			quickcommand.Table:          quickcommand.ValidColumn,
+			entsession.Table:            entsession.ValidColumn,
+			sessionattachment.Table:     sessionattachment.ValidColumn,
+			stagedattachment.Table:      stagedattachment.ValidColumn,
+			workflowdefinition.Table:    workflowdefinition.ValidColumn,
+			workflowrun.Table:           workflowrun.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

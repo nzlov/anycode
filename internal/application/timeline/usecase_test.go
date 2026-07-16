@@ -67,7 +67,7 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 			CreatedAt: time.Unix(15, 0).UTC(),
 		},
 	}}
-	service := New(&fakeLiveSource{}, sessions, transcript, nil, WithHistory(history))
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1"), WithHistory(history))
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: "session-1",
@@ -76,19 +76,18 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
-	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"status-1", "artifact-1", "codex:codex-session-1:codex-event-1"}) {
+	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"group:lifecycle:session", "group:artifact:session", "codex:codex-session-1:codex-event-1"}) {
 		t.Fatalf("items = %#v", gotIDs)
 	}
 	if got.Total != 3 || got.Usage == nil || got.Usage.TotalTokens != 14 {
 		t.Fatalf("page metadata = total %d, usage %#v", got.Total, got.Usage)
 	}
-	status, ok := got.Items[0].Content.(process.CodexStatusContent)
-	if !ok || status.Code != "session.running" {
-		t.Fatalf("status content = %#v", got.Items[0].Content)
+	if got.Items[0].Group == nil || len(got.Items[0].Group.Members) != 1 {
+		t.Fatalf("status group = %#v", got.Items[0])
 	}
-	artifact, ok := got.Items[1].Content.(process.CodexUnknownContent)
+	artifact, ok := got.Items[1].Group.Members[0].Content.(process.CodexUnknownContent)
 	if !ok || artifact.RawType != "artifact.published" || artifact.Payload["filename"] != "result.png" {
-		t.Fatalf("artifact content = %#v", got.Items[1].Content)
+		t.Fatalf("artifact group = %#v", got.Items[1])
 	}
 	codex := got.Items[2]
 	if codex.Phase != process.CodexPhaseStandalone || codex.CorrelationID != "codex:codex-session-1:call-1" || codex.OccurredAt != "1970-01-01T00:00:20Z" {
@@ -97,8 +96,64 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 	if content, ok := codex.Content.(process.CodexFileChangeContent); !ok || len(content.Changes) != 1 || content.Changes[0].Path != "a.txt" {
 		t.Fatalf("codex content = %#v", codex.Content)
 	}
-	if transcript.input.CodexSessionID != "codex-session-1" || transcript.input.Workdir != "" {
+	if transcript.input.Source.CodexSessionID != "codex-session-1" {
 		t.Fatalf("transcript input = %#v", transcript.input)
+	}
+}
+
+func TestListSessionEventsGroupsRoutineEventsBeforePaginationWithoutLosingAuditEvents(t *testing.T) {
+	sessionID := eventdomain.SessionID("session-1")
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(20, 0).UTC()},
+	}}
+	processCausality := eventdomain.Causality{ProcessRunID: "process-1", NodeRunID: "node-1"}
+	artifactCausality := eventdomain.Causality{NodeRunID: "node-1", CorrelationID: "publish-1"}
+	history := &fakeEventHistory{events: []eventdomain.DomainEvent{
+		{ID: "queued", Type: "session.queued", Causality: processCausality, CreatedAt: time.Unix(1, 0).UTC()},
+		{ID: "starting", Type: "session.starting", Causality: processCausality, CreatedAt: time.Unix(2, 0).UTC()},
+		{ID: "running", Type: "session.running", Causality: processCausality, CreatedAt: time.Unix(3, 0).UTC()},
+		{ID: "todo-1", Type: "session.todo_list_updated", Causality: processCausality, CreatedAt: time.Unix(4, 0).UTC()},
+		{ID: "todo-2", Type: "session.todo_list_updated", Causality: processCausality, CreatedAt: time.Unix(5, 0).UTC()},
+		{ID: "artifact-1", Type: "artifact.published", Causality: artifactCausality, CreatedAt: time.Unix(6, 0).UTC()},
+		{ID: "artifact-2", Type: "artifact.published", Causality: artifactCausality, CreatedAt: time.Unix(7, 0).UTC()},
+		{ID: "artifact-3", Type: "artifact.published", Causality: eventdomain.Causality{NodeRunID: "node-1", CorrelationID: "publish-2"}, CreatedAt: time.Unix(7, int64(time.Millisecond)).UTC()},
+		{ID: "waiting", Type: "session.waiting_user", Causality: processCausality, CreatedAt: time.Unix(8, 0).UTC()},
+		{ID: "failed", Type: "session.failed", Causality: processCausality, Payload: map[string]any{"reason": "boom"}, CreatedAt: time.Unix(9, 0).UTC()},
+		{ID: "failed-exit", Type: "process.exited", Causality: processCausality, Payload: map[string]any{"exitCode": float64(1)}, CreatedAt: time.Unix(10, 0).UTC()},
+	}}
+	for index := range history.events {
+		history.events[index].Scope = eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID}
+		history.events[index].SessionID = &sessionID
+	}
+	service := New(&fakeLiveSource{}, sessions, nil, nil, WithHistory(history))
+
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 7 || len(page.Items) != 4 || page.NextCursor == "" {
+		t.Fatalf("page = %#v", page)
+	}
+	all, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var auditIDs []eventdomain.ID
+	for _, item := range all.Items {
+		if item.Group == nil {
+			auditIDs = append(auditIDs, item.ID)
+			continue
+		}
+		for _, member := range item.Group.Members {
+			auditIDs = append(auditIDs, member.ID)
+		}
+	}
+	want := []eventdomain.ID{"queued", "starting", "running", "todo-1", "todo-2", "artifact-1", "artifact-2", "artifact-3", "waiting", "failed", "failed-exit"}
+	if !reflect.DeepEqual(auditIDs, want) {
+		t.Fatalf("expanded ids = %#v, want %#v", auditIDs, want)
+	}
+	if all.Items[4].ID != "waiting" || all.Items[5].ID != "failed" || all.Items[6].ID != "failed-exit" {
+		t.Fatalf("waiting/error events were grouped: %#v", dtoIDs(all.Items))
 	}
 }
 
@@ -130,7 +185,7 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 			}},
 		},
 	}
-	index := &fakeCodexSessionIndex{ids: []string{"codex-session-1", "codex-session-2"}}
+	index := transcriptIndex("codex-session-1", "codex-session-2")
 	service := New(&fakeLiveSource{}, sessions, transcript, index)
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
@@ -156,10 +211,10 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 		t.Fatalf("older items = %#v", gotIDs)
 	}
 	wantInputs := []process.CodexTranscriptInput{
-		{CodexSessionID: "codex-session-1"},
-		{CodexSessionID: "codex-session-2"},
-		{CodexSessionID: "codex-session-1"},
-		{CodexSessionID: "codex-session-2"},
+		{Source: transcriptSource("codex-session-1")},
+		{Source: transcriptSource("codex-session-2")},
+		{Source: transcriptSource("codex-session-1")},
+		{Source: transcriptSource("codex-session-2")},
 	}
 	if !reflect.DeepEqual(transcript.inputs, wantInputs) {
 		t.Fatalf("transcript inputs = %#v", transcript.inputs)
@@ -167,6 +222,88 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	if index.input != process.SessionID(sessionID) {
 		t.Fatalf("index input = %q", index.input)
 	}
+}
+
+func TestListSessionEventsProjectsCurrentAndCumulativeUsageWithCompactionCount(t *testing.T) {
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(3, 0).UTC()},
+	}}
+	transcript := &fakeTranscriptSource{events: []process.CodexEvent{
+		{Type: "token_count", Content: process.CodexUsageContent{
+			InputTokens: 46_200_000, CachedInputTokens: 45_000_000, OutputTokens: 200_000, TotalTokens: 46_400_000,
+			CurrentInputTokens: 314_000, CurrentCachedInputTokens: 300_000, CurrentOutputTokens: 2_000, CurrentTotalTokens: 316_000, ContextWindow: 353_000,
+		}},
+		{EventID: "compact-1", Type: "context.compacted", Content: process.CodexStatusContent{Code: "context.compacted", Level: "warning"}, CreatedAt: time.Unix(2, 0).UTC()},
+	}}
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1"))
+
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Usage == nil || page.Usage.InputTokens != 46_200_000 || page.Usage.CurrentInputTokens != 314_000 || page.Usage.CurrentCachedInputTokens != 300_000 || page.Usage.ContextWindow != 353_000 || page.Usage.CompactionCount != 1 {
+		t.Fatalf("usage = %#v", page.Usage)
+	}
+}
+
+func TestListSessionEventsSelectsLatestUsageByTimestampAcrossSources(t *testing.T) {
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(30, 0).UTC()},
+	}}
+	transcript := &fakeTranscriptSource{eventsByID: map[string][]process.CodexEvent{
+		"codex-session-1": {{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 200}, CreatedAt: time.Unix(20, 0).UTC()}},
+		"codex-session-2": {{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 100}, CreatedAt: time.Unix(10, 0).UTC()}},
+	}}
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1", "codex-session-2"))
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Usage == nil || page.Usage.InputTokens != 200 {
+		t.Fatalf("latest usage = %#v", page.Usage)
+	}
+}
+
+func TestListSessionEventsAttributesNonNegativeUsageDeltasToProcessAndNodeRuns(t *testing.T) {
+	finishedOne := time.Unix(20, 0).UTC()
+	finishedTwo := time.Unix(30, 0).UTC()
+	index := transcriptIndex("codex-session-1")
+	index.runs = []process.Run{
+		{ID: "process-1", SessionID: "session-1", NodeRunID: nodeRunID("node-1"), CodexSessionID: "codex-session-1", StartedAt: time.Unix(0, 0).UTC(), FinishedAt: &finishedOne},
+		{ID: "process-2", SessionID: "session-1", NodeRunID: nodeRunID("node-2"), CodexSessionID: "codex-session-1", StartedAt: finishedOne, FinishedAt: &finishedTwo},
+	}
+	transcript := &fakeTranscriptSource{events: []process.CodexEvent{
+		{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 100, TotalTokens: 110}, CreatedAt: time.Unix(5, 0).UTC()},
+		{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 160, TotalTokens: 180}, CreatedAt: time.Unix(15, 0).UTC()},
+		{EventID: "compact-boundary", Type: "context.compacted", Content: process.CodexStatusContent{Code: "context.compacted", Level: "warning"}, CreatedAt: finishedOne},
+		{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 250, TotalTokens: 280}, CreatedAt: time.Unix(25, 0).UTC()},
+	}}
+	service := New(&fakeLiveSource{}, &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: finishedTwo},
+	}}, transcript, index)
+
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.ProcessUsage) != 2 || page.ProcessUsage[0].Usage.InputTokens != 160 || page.ProcessUsage[1].Usage.InputTokens != 90 || len(page.NodeUsage) != 2 || page.NodeUsage[1].Usage.TotalTokens != 100 {
+		t.Fatalf("process usage = %#v node usage = %#v", page.ProcessUsage, page.NodeUsage)
+	}
+	if page.ProcessUsage[0].Usage.CompactionCount != 1 || page.ProcessUsage[1].Usage.CompactionCount != 0 {
+		t.Fatalf("boundary compactions = %#v", page.ProcessUsage)
+	}
+}
+
+func TestCumulativeUsageBeforeMissingStartUsesZeroBaseline(t *testing.T) {
+	samples := []usageSample{{at: time.Unix(1, 0).UTC(), usage: process.CodexUsageContent{InputTokens: 10}}}
+	if got := cumulativeUsageBefore(samples, time.Time{}); got.InputTokens != 0 {
+		t.Fatalf("zero-time baseline = %#v", got)
+	}
+}
+
+func nodeRunID(id string) *process.NodeRunID {
+	value := process.NodeRunID(id)
+	return &value
 }
 
 func TestListSessionEventsPreservesTranscriptOrderForEqualTimestamps(t *testing.T) {
@@ -183,7 +320,7 @@ func TestListSessionEventsPreservesTranscriptOrderForEqualTimestamps(t *testing.
 		{EventID: "z-started", Type: "item.started", CorrelationID: "call-1", Phase: process.CodexPhaseStarted, Content: process.CodexToolContent{}, SourceOffset: 10, CreatedAt: createdAt},
 		{EventID: "a-completed", Type: "item.completed", CorrelationID: "call-1", Phase: process.CodexPhaseCompleted, Content: process.CodexToolContent{}, SourceOffset: 20, CreatedAt: createdAt},
 	}}
-	service := New(&fakeLiveSource{}, sessions, transcript, nil)
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1"))
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
 	if err != nil {
@@ -210,7 +347,7 @@ func TestListSessionEventsPreservesCodexSessionOrderForEqualSourcePositions(t *t
 		"z-old": {{EventID: "event", Type: "item.completed", Content: process.CodexMessageContent{Role: "assistant", Text: "old"}, SourceOffset: 10, CreatedAt: createdAt}},
 		"a-new": {{EventID: "event", Type: "item.completed", Content: process.CodexMessageContent{Role: "assistant", Text: "new"}, SourceOffset: 10, CreatedAt: createdAt}},
 	}}
-	service := New(&fakeLiveSource{}, sessions, transcript, &fakeCodexSessionIndex{ids: []string{"z-old", "a-new"}})
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("z-old", "a-new"))
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
 	if err != nil {
@@ -248,7 +385,7 @@ func TestListSessionEventsFiltersMessageRoleBeforePaging(t *testing.T) {
 			},
 		)
 	}
-	service := New(&fakeLiveSource{}, sessions, &fakeTranscriptSource{events: events}, nil)
+	service := New(&fakeLiveSource{}, sessions, &fakeTranscriptSource{events: events}, transcriptIndex("codex-session-1"))
 
 	latest, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID:   "session-1",
@@ -323,7 +460,7 @@ func TestHistoryAndLiveUseTheSameOrderKeyForTheSameEvent(t *testing.T) {
 		CreatedAt:     createdAt,
 	}}}
 	live := &fakeLiveSource{ch: make(chan event.DTO, 1)}
-	service := New(live, sessions, transcript, nil)
+	service := New(live, sessions, transcript, transcriptIndex("codex-session-1"))
 	history, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
@@ -377,7 +514,7 @@ func TestListSessionEventsPreservesUnknownCodexPayload(t *testing.T) {
 			CreatedAt: time.Unix(20, 0).UTC(),
 		}},
 	}
-	service := New(&fakeLiveSource{}, sessions, transcript, nil)
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1"))
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: sessiondomain.ID(sessionID),
@@ -425,7 +562,7 @@ func TestSessionEventsForwardsTypedLiveEventsInArrivalOrder(t *testing.T) {
 		},
 		CreatedAt: time.Unix(2, 0).UTC().Format(time.RFC3339Nano),
 	}
-	if got := <-ch; got.ID != "event-status" {
+	if got := <-ch; got.ID != "group:lifecycle:session" || got.Group == nil || len(got.Group.Members) != 1 {
 		t.Fatalf("status event = %#v", got)
 	}
 	if got := <-ch; got.ID != "event-2" || got.CorrelationID != "codex:codex-session-1:call-1" || got.Phase != process.CodexPhaseCompleted {
@@ -483,15 +620,28 @@ func (s *fakeTranscriptSource) SessionEvents(_ context.Context, input process.Co
 	s.input = input
 	s.inputs = append(s.inputs, input)
 	if s.eventsByID != nil {
-		return s.eventsByID[input.CodexSessionID], s.err
+		return s.eventsByID[input.Source.CodexSessionID], s.err
 	}
 	return s.events, s.err
 }
 
 type fakeCodexSessionIndex struct {
-	input process.SessionID
-	ids   []string
-	err   error
+	input   process.SessionID
+	sources []process.CodexTranscriptSource
+	runs    []process.Run
+	err     error
+}
+
+func transcriptSource(id string) process.CodexTranscriptSource {
+	return process.CodexTranscriptSource{CodexSessionID: id, RelativePath: id + ".jsonl"}
+}
+
+func transcriptIndex(ids ...string) *fakeCodexSessionIndex {
+	sources := make([]process.CodexTranscriptSource, 0, len(ids))
+	for _, id := range ids {
+		sources = append(sources, transcriptSource(id))
+	}
+	return &fakeCodexSessionIndex{sources: sources}
 }
 
 type fakeEventHistory struct {
@@ -515,7 +665,12 @@ func (s *fakeEventHistory) Before(context.Context, eventdomain.Scope, eventdomai
 	return nil, 0, false, nil
 }
 
-func (i *fakeCodexSessionIndex) CodexSessionIDs(_ context.Context, sessionID process.SessionID) ([]string, error) {
+func (i *fakeCodexSessionIndex) TranscriptSources(_ context.Context, sessionID process.SessionID) ([]process.CodexTranscriptSource, error) {
 	i.input = sessionID
-	return i.ids, i.err
+	return i.sources, i.err
+}
+
+func (i *fakeCodexSessionIndex) TranscriptRuns(_ context.Context, sessionID process.SessionID) ([]process.Run, error) {
+	i.input = sessionID
+	return i.runs, i.err
 }

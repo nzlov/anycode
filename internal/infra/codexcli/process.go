@@ -22,10 +22,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/process"
 )
 
-var (
-	ErrProcessNotFound      = process.ErrProcessNotFound
-	errAmbiguousSessionLogs = errors.New("multiple active codex session logs")
-)
+var ErrProcessNotFound = process.ErrProcessNotFound
 
 const (
 	processRunOwnerEnv    = "ANYCODE_PROCESS_RUN_ID"
@@ -52,33 +49,36 @@ func defaultDetachedProcessOps() detachedProcessOps {
 }
 
 type activeProcess struct {
-	cmd               *exec.Cmd
-	stderr            *bytes.Buffer
-	home              string
-	workdir           string
-	codexSessionID    string
-	baseline          map[string]int64
-	stdoutSessionIDs  <-chan string
-	stdoutPlanUpdates <-chan process.CodexEvent
-	done              chan struct{}
-	mu                sync.Mutex
-	exitResult        process.ExitResult
-	eventsStarted     bool
+	cmd                    *exec.Cmd
+	stderr                 *bytes.Buffer
+	home                   string
+	workdir                string
+	codexSessionID         string
+	transcriptPath         string
+	transcriptRelativePath string
+	baselineOffset         int64
+	stdoutSessionIDs       <-chan string
+	stdoutPlanUpdates      <-chan process.CodexEvent
+	done                   chan struct{}
+	mu                     sync.Mutex
+	exitResult             process.ExitResult
+	eventsStarted          bool
+	observer               Observer
 }
 
 var processRegistry sync.Map
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
 	args := c.buildStartArgs(input)
-	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.ArtifactDir, "")
+	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.ArtifactDir, "", process.CodexTranscriptSource{})
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	args := c.buildResumeArgs(input)
-	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.ArtifactDir, input.CodexSessionID)
+	return c.start(ctx, input.ProcessRunID, args, input.Prompt, input.Workdir, input.ArtifactDir, input.CodexSessionID, input.Transcript)
 }
 
-func (c *Client) start(ctx context.Context, runID process.RunID, args []string, prompt string, workdir string, artifactDir string, codexSessionID string) (process.CodexHandle, error) {
+func (c *Client) start(ctx context.Context, runID process.RunID, args []string, prompt string, workdir string, artifactDir string, codexSessionID string, source process.CodexTranscriptSource) (process.CodexHandle, error) {
 	if runID == "" {
 		return process.CodexHandle{}, errors.New("process run id is required")
 	}
@@ -86,7 +86,24 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 		return process.CodexHandle{}, err
 	}
 	codexHome := c.CodexHome()
-	baseline := sessionLogOffsets(codexHome)
+	transcriptPath := ""
+	transcriptRelativePath := ""
+	baselineOffset := int64(0)
+	if codexSessionID != "" {
+		if source.CodexSessionID != codexSessionID {
+			return process.CodexHandle{}, fmt.Errorf("%w: transcript source does not match resume session", process.ErrTranscriptUnavailable)
+		}
+		var err error
+		transcriptPath, transcriptRelativePath, err = resolveTranscriptPath(codexHome, source)
+		if err != nil {
+			return process.CodexHandle{}, err
+		}
+		info, err := os.Stat(transcriptPath)
+		if err != nil {
+			return process.CodexHandle{}, fmt.Errorf("%w: open resume transcript", process.ErrTranscriptUnavailable)
+		}
+		baselineOffset = info.Size()
+	}
 	cmd := exec.CommandContext(context.Background(), c.Bin(), args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if prompt != "" {
@@ -125,15 +142,18 @@ func (c *Client) start(ctx context.Context, runID process.RunID, args []string, 
 	}
 	stdoutSessionIDs, stdoutPlanUpdates := observeStdout(stdout, codexSessionID != "")
 	active := &activeProcess{
-		cmd:               cmd,
-		stderr:            &stderr,
-		home:              codexHome,
-		workdir:           workdir,
-		codexSessionID:    codexSessionID,
-		baseline:          baseline,
-		stdoutSessionIDs:  stdoutSessionIDs,
-		stdoutPlanUpdates: stdoutPlanUpdates,
-		done:              make(chan struct{}),
+		cmd:                    cmd,
+		stderr:                 &stderr,
+		home:                   codexHome,
+		workdir:                workdir,
+		codexSessionID:         codexSessionID,
+		transcriptPath:         transcriptPath,
+		transcriptRelativePath: transcriptRelativePath,
+		baselineOffset:         baselineOffset,
+		stdoutSessionIDs:       stdoutSessionIDs,
+		stdoutPlanUpdates:      stdoutPlanUpdates,
+		observer:               c.observer,
+		done:                   make(chan struct{}),
 	}
 	processRegistry.Store(runID, active)
 	go active.wait()
@@ -675,8 +695,11 @@ func stablePlanUpdateEventID(update process.PlanUpdate) string {
 }
 
 func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- process.CodexEvent, exited <-chan process.ExitResult, stdoutSessionIDs <-chan string, stdoutPlanUpdates <-chan process.CodexEvent) (process.ExitResult, error) {
+	bindStarted := time.Now()
 	unmatchedStdoutPlans := []string(nil)
 	unmatchedSessionPlans := []string(nil)
+	var transcriptSource *process.CodexTranscriptSource
+	transcriptAnnounced := false
 	emit := func(event process.CodexEvent) error {
 		if event.PlanUpdate != nil {
 			planEventID := event.PlanUpdate.EventID
@@ -697,6 +720,11 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 				}
 			}
 		}
+		if transcriptSource != nil && !event.RealtimeOnly && !transcriptAnnounced {
+			source := *transcriptSource
+			event.Transcript = &source
+			transcriptAnnounced = true
+		}
 		select {
 		case events <- event:
 			return nil
@@ -707,11 +735,19 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	path, remainingStdoutPlans, err := waitForActiveSessionLog(ctx, active, stdoutSessionIDs, stdoutPlanUpdates, emit)
 	stdoutPlanUpdates = remainingStdoutPlans
 	if err != nil {
+		observe(active.observer, Observation{Name: "transcript.bind", Outcome: "failed", Reason: transcriptFailureReason(err), Duration: time.Since(bindStarted)})
 		return failUnreadableProcess(active, exited, err), err
 	}
+	source, err := transcriptSourceForPath(active.home, active.codexSessionID, path)
+	if err != nil {
+		observe(active.observer, Observation{Name: "transcript.bind", Outcome: "failed", Reason: transcriptFailureReason(err), Duration: time.Since(bindStarted)})
+		return failUnreadableProcess(active, exited, err), err
+	}
+	transcriptSource = &source
 	file, err := os.Open(path)
 	if err != nil {
 		err = fmt.Errorf("open codex session log: %w", err)
+		observe(active.observer, Observation{Name: "transcript.bind", Outcome: "failed", Reason: "unavailable", Duration: time.Since(bindStarted)})
 		return failUnreadableProcess(active, exited, err), err
 	}
 	defer file.Close()
@@ -719,18 +755,21 @@ func tailSessionLog(ctx context.Context, active *activeProcess, events chan<- pr
 	sourceID := filepath.Base(path)
 	projector := newCodexTranscriptProjector()
 	skipLeadingLineTerminator := false
-	if offset := active.baseline[path]; offset > 0 {
+	if offset := active.baselineOffset; offset > 0 {
 		var resumeOffset int64
 		sessionCWD, resumeOffset, skipLeadingLineTerminator, err = primeCodexTranscriptProjector(path, offset, sessionCWD, sourceID, projector)
 		if err != nil {
 			err = fmt.Errorf("prime codex session state: %w", err)
+			observe(active.observer, Observation{Name: "transcript.bind", Outcome: "failed", Reason: "read_failed", Duration: time.Since(bindStarted)})
 			return failUnreadableProcess(active, exited, err), err
 		}
 		if _, err := file.Seek(resumeOffset, io.SeekStart); err != nil {
 			err = fmt.Errorf("seek codex session log: %w", err)
+			observe(active.observer, Observation{Name: "transcript.bind", Outcome: "failed", Reason: "read_failed", Duration: time.Since(bindStarted)})
 			return failUnreadableProcess(active, exited, err), err
 		}
 	}
+	observe(active.observer, Observation{Name: "transcript.bind", Outcome: "success", Duration: time.Since(bindStarted)})
 	reader := bufio.NewReader(file)
 	offset, _ := file.Seek(0, io.SeekCurrent)
 	var exitResult process.ExitResult
@@ -926,6 +965,9 @@ func failUnreadableProcess(active *activeProcess, exited <-chan process.ExitResu
 	if result.FailureReason == "" {
 		result.FailureReason = err.Error()
 	}
+	if errors.Is(err, process.ErrTranscriptUnavailable) {
+		result.FailureCode = "codex_transcript_unavailable"
+	}
 	return result
 }
 
@@ -953,32 +995,41 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutSessionIDs <-chan string, stdoutPlanUpdates <-chan process.CodexEvent, emit func(process.CodexEvent) error) (string, <-chan process.CodexEvent, error) {
 	deadline := time.Now().Add(5 * time.Second)
 	var last string
-	allowWorkdirFallback := active.codexSessionID != ""
 	for {
-		if active.codexSessionID != "" || allowWorkdirFallback {
+		if stdoutSessionIDs != nil {
+			select {
+			case sessionID, ok := <-stdoutSessionIDs:
+				if !ok {
+					stdoutSessionIDs = nil
+				} else if sessionID != "" {
+					active.codexSessionID = sessionID
+				}
+			default:
+			}
+		}
+		if active.transcriptPath != "" || active.codexSessionID != "" {
 			path, err := activeSessionLog(active)
 			if err == nil && path != "" {
 				return path, stdoutPlanUpdates, nil
 			}
 			if err != nil {
-				if errors.Is(err, errAmbiguousSessionLogs) {
-					return "", stdoutPlanUpdates, fmt.Errorf("find codex session log: %w", err)
-				}
 				last = err.Error()
 			}
 		}
+		if active.exited() {
+			return "", stdoutPlanUpdates, process.ErrTranscriptUnavailable
+		}
 		if time.Now().After(deadline) {
 			if last != "" {
-				return "", stdoutPlanUpdates, fmt.Errorf("find codex session log: %s", last)
+				return "", stdoutPlanUpdates, fmt.Errorf("%w: %s", process.ErrTranscriptUnavailable, last)
 			}
-			return "", stdoutPlanUpdates, errors.New("codex session log was not created")
+			return "", stdoutPlanUpdates, process.ErrTranscriptUnavailable
 		}
 		select {
 		case <-ctx.Done():
 			return "", stdoutPlanUpdates, ctx.Err()
 		case sessionID, ok := <-stdoutSessionIDs:
 			if !ok {
-				allowWorkdirFallback = true
 				stdoutSessionIDs = nil
 				continue
 			}
@@ -999,133 +1050,53 @@ func waitForActiveSessionLog(ctx context.Context, active *activeProcess, stdoutS
 }
 
 func activeSessionLog(active *activeProcess) (string, error) {
+	if active.transcriptPath != "" {
+		info, err := os.Stat(active.transcriptPath)
+		if err != nil {
+			return "", fmt.Errorf("%w: resume transcript is not readable", process.ErrTranscriptUnavailable)
+		}
+		if info.Size() > active.baselineOffset {
+			return active.transcriptPath, nil
+		}
+		return "", nil
+	}
 	if active.codexSessionID != "" {
 		path, err := sessionLogByID(active.home, active.codexSessionID)
 		if err != nil || path == "" {
 			return path, err
 		}
-		if sessionLogAdvanced(path, active.baseline) {
-			return path, nil
-		}
-		return "", nil
+		return path, nil
 	}
-	return activeSessionLogByWorkdir(active.home, active.workdir, active.baseline)
-}
-
-func latestSessionLog(codexHome string, workdir string) (string, error) {
-	root := filepath.Join(codexHome, "sessions")
-	var matches []string
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			return nil
-		}
-		if workdir == "" {
-			matches = append(matches, path)
-			return nil
-		}
-		if sessionLogMatchesWorkdir(path, workdir) {
-			matches = append(matches, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if len(matches) == 0 {
-		return "", nil
-	}
-	sortSessionLogsByModTime(matches)
-	return matches[0], nil
-}
-
-func activeSessionLogByWorkdir(codexHome string, workdir string, baseline map[string]int64) (string, error) {
-	root := filepath.Join(codexHome, "sessions")
-	matches := []string{}
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			return nil
-		}
-		if !sessionLogAdvanced(path, baseline) {
-			return nil
-		}
-		if workdir == "" || sessionLogMatchesWorkdir(path, workdir) {
-			matches = append(matches, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
-	if len(matches) == 0 {
-		return "", nil
-	}
-	if len(matches) > 1 {
-		return "", fmt.Errorf("%w for workdir %q", errAmbiguousSessionLogs, workdir)
-	}
-	return matches[0], nil
-}
-
-func sortSessionLogsByModTime(paths []string) {
-	sort.Slice(paths, func(i, j int) bool {
-		left, leftErr := os.Stat(paths[i])
-		right, rightErr := os.Stat(paths[j])
-		if leftErr != nil || rightErr != nil {
-			return paths[i] > paths[j]
-		}
-		if !left.ModTime().Equal(right.ModTime()) {
-			return left.ModTime().After(right.ModTime())
-		}
-		return paths[i] > paths[j]
-	})
-}
-
-func sessionLogOffsets(codexHome string) map[string]int64 {
-	offsets := map[string]int64{}
-	root := filepath.Join(codexHome, "sessions")
-	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return nil
-		}
-		offsets[path] = info.Size()
-		return nil
-	})
-	return offsets
-}
-
-func sessionLogAdvanced(path string, baseline map[string]int64) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	offset, ok := baseline[path]
-	return !ok || info.Size() > offset
+	return "", nil
 }
 
 func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscriptInput) ([]process.CodexEvent, error) {
-	path, err := c.sessionLogPath(input)
+	startedAt := time.Now()
+	var bytesRead int64
+	observeRead := func(outcome string, reason string) {
+		observe(c.observer, Observation{Name: "transcript.read", Outcome: outcome, Reason: reason, Duration: time.Since(startedAt), Bytes: bytesRead})
+	}
+	path, _, err := resolveTranscriptPath(c.CodexHome(), input.Source)
 	if err != nil {
+		observeRead("failed", transcriptFailureReason(err))
 		return nil, err
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open codex session log: %w", err)
+		observeRead("failed", "unavailable")
+		return nil, fmt.Errorf("%w: transcript source is not readable", process.ErrTranscriptUnavailable)
 	}
 	defer file.Close()
 	reader := bufio.NewReader(file)
 	events := []process.CodexEvent(nil)
-	sessionCWD := input.Workdir
+	sessionCWD := ""
 	sourceID := filepath.Base(path)
 	projector := newCodexTranscriptProjector()
 	var offset int64
 	for {
 		if err := ctx.Err(); err != nil {
+			bytesRead = offset
+			observeRead("failed", transcriptFailureReason(err))
 			return nil, err
 		}
 		line, err := reader.ReadBytes('\n')
@@ -1149,34 +1120,66 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 		if errors.Is(err, io.EOF) {
 			break
 		}
+		bytesRead = offset
+		observeRead("failed", "read_failed")
 		return nil, fmt.Errorf("read codex session log: %w", err)
 	}
 	events = append(events, projector.flushPending()...)
+	bytesRead = offset
+	observeRead("success", "")
 	return events, nil
 }
 
-func (c *Client) sessionLogPath(input process.CodexTranscriptInput) (string, error) {
-	if input.CodexSessionID != "" {
-		path, err := sessionLogByID(c.CodexHome(), input.CodexSessionID)
-		if err != nil {
-			return "", err
-		}
-		if path == "" {
-			return "", fmt.Errorf("codex session log %q was not found", input.CodexSessionID)
-		}
-		return path, nil
+func observe(observer Observer, observation Observation) {
+	if observer != nil {
+		observer.Observe(observation)
 	}
-	if input.Workdir == "" {
-		return "", errors.New("codex session id or workdir is required")
+}
+
+func transcriptFailureReason(err error) string {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline"
+	case errors.Is(err, process.ErrTranscriptUnavailable):
+		return "unavailable"
+	default:
+		return "read_failed"
 	}
-	path, err := latestSessionLog(c.CodexHome(), input.Workdir)
-	if err != nil {
-		return "", fmt.Errorf("find codex session log: %w", err)
+}
+
+func resolveTranscriptPath(codexHome string, source process.CodexTranscriptSource) (string, string, error) {
+	if strings.TrimSpace(source.CodexSessionID) == "" || strings.TrimSpace(source.RelativePath) == "" {
+		return "", "", fmt.Errorf("%w: transcript source is required", process.ErrTranscriptUnavailable)
 	}
-	if path == "" {
-		return "", errors.New("codex session log was not found")
+	relative := filepath.Clean(filepath.FromSlash(source.RelativePath))
+	if relative == "." || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("%w: invalid transcript source path", process.ErrTranscriptUnavailable)
 	}
-	return path, nil
+	root := filepath.Join(codexHome, "sessions")
+	path := filepath.Join(root, relative)
+	checked, err := filepath.Rel(root, path)
+	if err != nil || checked == ".." || strings.HasPrefix(checked, ".."+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("%w: transcript source is outside codex sessions", process.ErrTranscriptUnavailable)
+	}
+	return path, filepath.ToSlash(checked), nil
+}
+
+func transcriptSourceForPath(codexHome string, codexSessionID string, path string) (process.CodexTranscriptSource, error) {
+	root := filepath.Join(codexHome, "sessions")
+	relative, err := filepath.Rel(root, path)
+	if err != nil || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return process.CodexTranscriptSource{}, fmt.Errorf("%w: discovered transcript is outside codex sessions", process.ErrTranscriptUnavailable)
+	}
+	if strings.TrimSpace(codexSessionID) == "" {
+		return process.CodexTranscriptSource{}, fmt.Errorf("%w: discovered transcript has no codex session id", process.ErrTranscriptUnavailable)
+	}
+	return process.CodexTranscriptSource{
+		CodexSessionID: codexSessionID,
+		RelativePath:   filepath.ToSlash(relative),
+		BoundAt:        time.Now().UTC(),
+	}, nil
 }
 
 func sessionLogByID(codexHome string, codexSessionID string) (string, error) {
@@ -1196,39 +1199,6 @@ func sessionLogByID(codexHome string, codexSessionID string) (string, error) {
 		return "", fmt.Errorf("find codex session log: %w", err)
 	}
 	return matched, nil
-}
-
-func sessionLogMatchesWorkdir(path string, workdir string) bool {
-	file, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer file.Close()
-	reader := bufio.NewReader(file)
-	for i := 0; i < 20; i++ {
-		line, err := reader.ReadBytes('\n')
-		if len(line) == 0 && err != nil {
-			return false
-		}
-		raw := bytes.TrimRight(line, "\r\n")
-		var record struct {
-			Type    string         `json:"type"`
-			Payload map[string]any `json:"payload"`
-		}
-		if json.Unmarshal(raw, &record) != nil || record.Type != "session_meta" {
-			if err != nil {
-				return false
-			}
-			continue
-		}
-		if cwd, ok := record.Payload["cwd"].(string); ok && cwd == workdir {
-			return true
-		}
-		if err != nil {
-			return false
-		}
-	}
-	return false
 }
 
 func sessionLogMatchesSessionID(path string, codexSessionID string) bool {
@@ -1287,6 +1257,9 @@ func sendProcessExit(ctx context.Context, events chan<- process.CodexEvent, resu
 	}
 	if result.FailureReason != "" {
 		payload["failureReason"] = result.FailureReason
+	}
+	if result.FailureCode != "" {
+		payload["failureCode"] = result.FailureCode
 	}
 	if readErr != nil {
 		payload["readError"] = readErr.Error()
@@ -1979,13 +1952,19 @@ func normalizeFileChangeKind(kind string) string {
 func codexUsageContent(payload map[string]any) process.CodexUsageContent {
 	info := mapValue(payload["info"])
 	total := mapValue(info["total_token_usage"])
+	current := mapValue(info["last_token_usage"])
 	return process.CodexUsageContent{
-		InputTokens:           intValue(total["input_tokens"]),
-		CachedInputTokens:     intValue(total["cached_input_tokens"]),
-		OutputTokens:          intValue(total["output_tokens"]),
-		ReasoningOutputTokens: intValue(total["reasoning_output_tokens"]),
-		TotalTokens:           intValue(total["total_tokens"]),
-		ContextWindow:         intValue(info["model_context_window"]),
+		InputTokens:                  intValue(total["input_tokens"]),
+		CachedInputTokens:            intValue(total["cached_input_tokens"]),
+		OutputTokens:                 intValue(total["output_tokens"]),
+		ReasoningOutputTokens:        intValue(total["reasoning_output_tokens"]),
+		TotalTokens:                  intValue(total["total_tokens"]),
+		ContextWindow:                intValue(info["model_context_window"]),
+		CurrentInputTokens:           intValue(current["input_tokens"]),
+		CurrentCachedInputTokens:     intValue(current["cached_input_tokens"]),
+		CurrentOutputTokens:          intValue(current["output_tokens"]),
+		CurrentReasoningOutputTokens: intValue(current["reasoning_output_tokens"]),
+		CurrentTotalTokens:           intValue(current["total_tokens"]),
 	}
 }
 

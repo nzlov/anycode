@@ -2,6 +2,9 @@ package event
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -239,7 +242,7 @@ func TestPublishAfterCommitUnblocksWhenSubscriberContextCancels(t *testing.T) {
 	}
 }
 
-func TestPublishAfterCommitDisconnectsSubscriberWhenMailboxIsFull(t *testing.T) {
+func TestSlowSubscriptionDisconnectsWhenMailboxIsFull(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	service := New()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -280,6 +283,58 @@ func TestPublishAfterCommitDisconnectsSubscriberWhenMailboxIsFull(t *testing.T) 
 	if _, ok := <-ch; ok {
 		t.Fatal("slow subscriber remained open after mailbox overflow")
 	}
+}
+
+func TestSubscriptionObserverRecordsOverflowWithoutEventContent(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	recorder := &eventObservationRecorder{}
+	service := New(WithObserver(recorder))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{Scope: domain.Scope{SessionID: &sessionID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index <= cap(ch); index++ {
+		if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+			ID: domain.ID(fmt.Sprintf("event-%d", index)), Scope: domain.Scope{SessionID: &sessionID},
+			Payload: map[string]any{"message": "must-not-be-observed"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Contains(recorder.items, (Observation{Name: "subscription.delivery", Outcome: "overflow"})) {
+		t.Fatalf("observations = %#v", recorder.items)
+	}
+	if strings.Contains(fmt.Sprintf("%#v", recorder.items), "must-not-be-observed") || strings.Contains(fmt.Sprintf("%#v", recorder.items), "session-1") {
+		t.Fatalf("observation leaked event content: %#v", recorder.items)
+	}
+}
+
+func TestSubscriptionObserverDoesNotReportCancellationAsOverflow(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	recorder := &eventObservationRecorder{}
+	service := New(WithObserver(recorder))
+	done := make(chan struct{})
+	sub := service.subscribe(domain.Scope{SessionID: &sessionID}, make(chan DTO, 1), done)
+	close(done)
+	if result := sub.trySend(DTO{ID: "after-cancel"}); result != deliveryUnavailable {
+		t.Fatalf("delivery result = %d", result)
+	}
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{ID: "after-cancel", Scope: domain.Scope{SessionID: &sessionID}}); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(recorder.items, (Observation{Name: "subscription.delivery", Outcome: "overflow"})) {
+		t.Fatalf("cancellation observations = %#v", recorder.items)
+	}
+}
+
+type eventObservationRecorder struct {
+	items []Observation
+}
+
+func (r *eventObservationRecorder) Observe(observation Observation) {
+	r.items = append(r.items, observation)
 }
 
 func TestPublishAfterCommitDoesNotPanicAfterLiveSubscriberCancels(t *testing.T) {

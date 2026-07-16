@@ -133,6 +133,9 @@ func TestWorkflowMutationsWriteEventsInUnitOfWorkAndIgnorePublishError(t *testin
 	if events[0].Payload["currentNodeTitle"] != "Build" || events[1].Payload["workflowRunId"] != "workflow-run-1" {
 		t.Fatalf("event payloads = %#v / %#v", events[0].Payload, events[1].Payload)
 	}
+	if _, found := events[0].Payload["status"]; found || events[0].Payload["workflowStatus"] == nil || events[0].Payload["workflowAdvanceStatus"] == nil {
+		t.Fatalf("workflow event status fields = %#v", events[0].Payload)
+	}
 }
 
 func TestSaveDefinitionRejectsInvalidCondition(t *testing.T) {
