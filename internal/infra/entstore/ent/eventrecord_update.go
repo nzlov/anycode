@@ -95,20 +95,6 @@ func (_u *EventRecordUpdate) SetNillableProcessRunID(v *string) *EventRecordUpda
 	return _u
 }
 
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_u *EventRecordUpdate) SetWorkflowRunID(v string) *EventRecordUpdate {
-	_u.mutation.SetWorkflowRunID(v)
-	return _u
-}
-
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_u *EventRecordUpdate) SetNillableWorkflowRunID(v *string) *EventRecordUpdate {
-	if v != nil {
-		_u.SetWorkflowRunID(*v)
-	}
-	return _u
-}
-
 // SetNodeRunID sets the "node_run_id" field.
 func (_u *EventRecordUpdate) SetNodeRunID(v string) *EventRecordUpdate {
 	_u.mutation.SetNodeRunID(v)
@@ -228,9 +214,6 @@ func (_u *EventRecordUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if value, ok := _u.mutation.ProcessRunID(); ok {
 		_spec.SetField(eventrecord.FieldProcessRunID, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.WorkflowRunID(); ok {
-		_spec.SetField(eventrecord.FieldWorkflowRunID, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.NodeRunID(); ok {
 		_spec.SetField(eventrecord.FieldNodeRunID, field.TypeString, value)
 	}
@@ -324,20 +307,6 @@ func (_u *EventRecordUpdateOne) SetProcessRunID(v string) *EventRecordUpdateOne 
 func (_u *EventRecordUpdateOne) SetNillableProcessRunID(v *string) *EventRecordUpdateOne {
 	if v != nil {
 		_u.SetProcessRunID(*v)
-	}
-	return _u
-}
-
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_u *EventRecordUpdateOne) SetWorkflowRunID(v string) *EventRecordUpdateOne {
-	_u.mutation.SetWorkflowRunID(v)
-	return _u
-}
-
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_u *EventRecordUpdateOne) SetNillableWorkflowRunID(v *string) *EventRecordUpdateOne {
-	if v != nil {
-		_u.SetWorkflowRunID(*v)
 	}
 	return _u
 }
@@ -490,9 +459,6 @@ func (_u *EventRecordUpdateOne) sqlSave(ctx context.Context) (_node *EventRecord
 	}
 	if value, ok := _u.mutation.ProcessRunID(); ok {
 		_spec.SetField(eventrecord.FieldProcessRunID, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.WorkflowRunID(); ok {
-		_spec.SetField(eventrecord.FieldWorkflowRunID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.NodeRunID(); ok {
 		_spec.SetField(eventrecord.FieldNodeRunID, field.TypeString, value)

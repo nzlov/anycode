@@ -11,8 +11,8 @@ const (
 	Label = "node_run"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
-	// FieldWorkflowRunID holds the string denoting the workflow_run_id field in the database.
-	FieldWorkflowRunID = "workflow_run_id"
+	// FieldSessionID holds the string denoting the session_id field in the database.
+	FieldSessionID = "session_id"
 	// FieldNodeID holds the string denoting the node_id field in the database.
 	FieldNodeID = "node_id"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -34,7 +34,7 @@ const (
 // Columns holds all SQL columns for noderun fields.
 var Columns = []string{
 	FieldID,
-	FieldWorkflowRunID,
+	FieldSessionID,
 	FieldNodeID,
 	FieldStatus,
 	FieldAttempt,
@@ -55,8 +55,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
-	// WorkflowRunIDValidator is a validator for the "workflow_run_id" field. It is called by the builders before save.
-	WorkflowRunIDValidator func(string) error
+	// SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	SessionIDValidator func(string) error
 	// NodeIDValidator is a validator for the "node_id" field. It is called by the builders before save.
 	NodeIDValidator func(string) error
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -75,9 +75,9 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
 }
 
-// ByWorkflowRunID orders the results by the workflow_run_id field.
-func ByWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWorkflowRunID, opts...).ToFunc()
+// BySessionID orders the results by the session_id field.
+func BySessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSessionID, opts...).ToFunc()
 }
 
 // ByNodeID orders the results by the node_id field.

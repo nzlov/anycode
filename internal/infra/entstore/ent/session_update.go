@@ -580,20 +580,6 @@ func (_u *SessionUpdate) SetNillableQueueReviewAfterReuseFailure(v *bool) *Sessi
 	return _u
 }
 
-// SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
-func (_u *SessionUpdate) SetQueueWorkflowRunID(v string) *SessionUpdate {
-	_u.mutation.SetQueueWorkflowRunID(v)
-	return _u
-}
-
-// SetNillableQueueWorkflowRunID sets the "queue_workflow_run_id" field if the given value is not nil.
-func (_u *SessionUpdate) SetNillableQueueWorkflowRunID(v *string) *SessionUpdate {
-	if v != nil {
-		_u.SetQueueWorkflowRunID(*v)
-	}
-	return _u
-}
-
 // SetQueueNodeRunID sets the "queue_node_run_id" field.
 func (_u *SessionUpdate) SetQueueNodeRunID(v string) *SessionUpdate {
 	_u.mutation.SetQueueNodeRunID(v)
@@ -661,6 +647,100 @@ func (_u *SessionUpdate) SetNillableQueueAnswerBatchID(v *string) *SessionUpdate
 	if v != nil {
 		_u.SetQueueAnswerBatchID(*v)
 	}
+	return _u
+}
+
+// SetWorkflowDefinitionID sets the "workflow_definition_id" field.
+func (_u *SessionUpdate) SetWorkflowDefinitionID(v string) *SessionUpdate {
+	_u.mutation.SetWorkflowDefinitionID(v)
+	return _u
+}
+
+// SetNillableWorkflowDefinitionID sets the "workflow_definition_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorkflowDefinitionID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorkflowDefinitionID(*v)
+	}
+	return _u
+}
+
+// SetWorkflowStatus sets the "workflow_status" field.
+func (_u *SessionUpdate) SetWorkflowStatus(v string) *SessionUpdate {
+	_u.mutation.SetWorkflowStatus(v)
+	return _u
+}
+
+// SetNillableWorkflowStatus sets the "workflow_status" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorkflowStatus(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorkflowStatus(*v)
+	}
+	return _u
+}
+
+// SetWorkflowCurrentNodeID sets the "workflow_current_node_id" field.
+func (_u *SessionUpdate) SetWorkflowCurrentNodeID(v string) *SessionUpdate {
+	_u.mutation.SetWorkflowCurrentNodeID(v)
+	return _u
+}
+
+// SetNillableWorkflowCurrentNodeID sets the "workflow_current_node_id" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorkflowCurrentNodeID(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetWorkflowCurrentNodeID(*v)
+	}
+	return _u
+}
+
+// SetWorkflowContext sets the "workflow_context" field.
+func (_u *SessionUpdate) SetWorkflowContext(v map[string]interface{}) *SessionUpdate {
+	_u.mutation.SetWorkflowContext(v)
+	return _u
+}
+
+// SetWorkflowPendingApproval sets the "workflow_pending_approval" field.
+func (_u *SessionUpdate) SetWorkflowPendingApproval(v map[string]interface{}) *SessionUpdate {
+	_u.mutation.SetWorkflowPendingApproval(v)
+	return _u
+}
+
+// SetWorkflowStartedAt sets the "workflow_started_at" field.
+func (_u *SessionUpdate) SetWorkflowStartedAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorkflowStartedAt(v)
+	return _u
+}
+
+// SetNillableWorkflowStartedAt sets the "workflow_started_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorkflowStartedAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorkflowStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorkflowStartedAt clears the value of the "workflow_started_at" field.
+func (_u *SessionUpdate) ClearWorkflowStartedAt() *SessionUpdate {
+	_u.mutation.ClearWorkflowStartedAt()
+	return _u
+}
+
+// SetWorkflowStoppedAt sets the "workflow_stopped_at" field.
+func (_u *SessionUpdate) SetWorkflowStoppedAt(v time.Time) *SessionUpdate {
+	_u.mutation.SetWorkflowStoppedAt(v)
+	return _u
+}
+
+// SetNillableWorkflowStoppedAt sets the "workflow_stopped_at" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableWorkflowStoppedAt(v *time.Time) *SessionUpdate {
+	if v != nil {
+		_u.SetWorkflowStoppedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorkflowStoppedAt clears the value of the "workflow_stopped_at" field.
+func (_u *SessionUpdate) ClearWorkflowStoppedAt() *SessionUpdate {
+	_u.mutation.ClearWorkflowStoppedAt()
 	return _u
 }
 
@@ -943,9 +1023,6 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.QueueReviewAfterReuseFailure(); ok {
 		_spec.SetField(entsession.FieldQueueReviewAfterReuseFailure, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
-		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.QueueNodeRunID(); ok {
 		_spec.SetField(entsession.FieldQueueNodeRunID, field.TypeString, value)
 	}
@@ -960,6 +1037,33 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
 		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowDefinitionID(); ok {
+		_spec.SetField(entsession.FieldWorkflowDefinitionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowStatus(); ok {
+		_spec.SetField(entsession.FieldWorkflowStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowCurrentNodeID(); ok {
+		_spec.SetField(entsession.FieldWorkflowCurrentNodeID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowContext(); ok {
+		_spec.SetField(entsession.FieldWorkflowContext, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.WorkflowPendingApproval(); ok {
+		_spec.SetField(entsession.FieldWorkflowPendingApproval, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.WorkflowStartedAt(); ok {
+		_spec.SetField(entsession.FieldWorkflowStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorkflowStartedAtCleared() {
+		_spec.ClearField(entsession.FieldWorkflowStartedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorkflowStoppedAt(); ok {
+		_spec.SetField(entsession.FieldWorkflowStoppedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorkflowStoppedAtCleared() {
+		_spec.ClearField(entsession.FieldWorkflowStoppedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.AppliedSystemCommands(); ok {
 		_spec.SetField(entsession.FieldAppliedSystemCommands, field.TypeJSON, value)
@@ -1553,20 +1657,6 @@ func (_u *SessionUpdateOne) SetNillableQueueReviewAfterReuseFailure(v *bool) *Se
 	return _u
 }
 
-// SetQueueWorkflowRunID sets the "queue_workflow_run_id" field.
-func (_u *SessionUpdateOne) SetQueueWorkflowRunID(v string) *SessionUpdateOne {
-	_u.mutation.SetQueueWorkflowRunID(v)
-	return _u
-}
-
-// SetNillableQueueWorkflowRunID sets the "queue_workflow_run_id" field if the given value is not nil.
-func (_u *SessionUpdateOne) SetNillableQueueWorkflowRunID(v *string) *SessionUpdateOne {
-	if v != nil {
-		_u.SetQueueWorkflowRunID(*v)
-	}
-	return _u
-}
-
 // SetQueueNodeRunID sets the "queue_node_run_id" field.
 func (_u *SessionUpdateOne) SetQueueNodeRunID(v string) *SessionUpdateOne {
 	_u.mutation.SetQueueNodeRunID(v)
@@ -1634,6 +1724,100 @@ func (_u *SessionUpdateOne) SetNillableQueueAnswerBatchID(v *string) *SessionUpd
 	if v != nil {
 		_u.SetQueueAnswerBatchID(*v)
 	}
+	return _u
+}
+
+// SetWorkflowDefinitionID sets the "workflow_definition_id" field.
+func (_u *SessionUpdateOne) SetWorkflowDefinitionID(v string) *SessionUpdateOne {
+	_u.mutation.SetWorkflowDefinitionID(v)
+	return _u
+}
+
+// SetNillableWorkflowDefinitionID sets the "workflow_definition_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorkflowDefinitionID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorkflowDefinitionID(*v)
+	}
+	return _u
+}
+
+// SetWorkflowStatus sets the "workflow_status" field.
+func (_u *SessionUpdateOne) SetWorkflowStatus(v string) *SessionUpdateOne {
+	_u.mutation.SetWorkflowStatus(v)
+	return _u
+}
+
+// SetNillableWorkflowStatus sets the "workflow_status" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorkflowStatus(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorkflowStatus(*v)
+	}
+	return _u
+}
+
+// SetWorkflowCurrentNodeID sets the "workflow_current_node_id" field.
+func (_u *SessionUpdateOne) SetWorkflowCurrentNodeID(v string) *SessionUpdateOne {
+	_u.mutation.SetWorkflowCurrentNodeID(v)
+	return _u
+}
+
+// SetNillableWorkflowCurrentNodeID sets the "workflow_current_node_id" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorkflowCurrentNodeID(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorkflowCurrentNodeID(*v)
+	}
+	return _u
+}
+
+// SetWorkflowContext sets the "workflow_context" field.
+func (_u *SessionUpdateOne) SetWorkflowContext(v map[string]interface{}) *SessionUpdateOne {
+	_u.mutation.SetWorkflowContext(v)
+	return _u
+}
+
+// SetWorkflowPendingApproval sets the "workflow_pending_approval" field.
+func (_u *SessionUpdateOne) SetWorkflowPendingApproval(v map[string]interface{}) *SessionUpdateOne {
+	_u.mutation.SetWorkflowPendingApproval(v)
+	return _u
+}
+
+// SetWorkflowStartedAt sets the "workflow_started_at" field.
+func (_u *SessionUpdateOne) SetWorkflowStartedAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorkflowStartedAt(v)
+	return _u
+}
+
+// SetNillableWorkflowStartedAt sets the "workflow_started_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorkflowStartedAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorkflowStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorkflowStartedAt clears the value of the "workflow_started_at" field.
+func (_u *SessionUpdateOne) ClearWorkflowStartedAt() *SessionUpdateOne {
+	_u.mutation.ClearWorkflowStartedAt()
+	return _u
+}
+
+// SetWorkflowStoppedAt sets the "workflow_stopped_at" field.
+func (_u *SessionUpdateOne) SetWorkflowStoppedAt(v time.Time) *SessionUpdateOne {
+	_u.mutation.SetWorkflowStoppedAt(v)
+	return _u
+}
+
+// SetNillableWorkflowStoppedAt sets the "workflow_stopped_at" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableWorkflowStoppedAt(v *time.Time) *SessionUpdateOne {
+	if v != nil {
+		_u.SetWorkflowStoppedAt(*v)
+	}
+	return _u
+}
+
+// ClearWorkflowStoppedAt clears the value of the "workflow_stopped_at" field.
+func (_u *SessionUpdateOne) ClearWorkflowStoppedAt() *SessionUpdateOne {
+	_u.mutation.ClearWorkflowStoppedAt()
 	return _u
 }
 
@@ -1946,9 +2130,6 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	if value, ok := _u.mutation.QueueReviewAfterReuseFailure(); ok {
 		_spec.SetField(entsession.FieldQueueReviewAfterReuseFailure, field.TypeBool, value)
 	}
-	if value, ok := _u.mutation.QueueWorkflowRunID(); ok {
-		_spec.SetField(entsession.FieldQueueWorkflowRunID, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.QueueNodeRunID(); ok {
 		_spec.SetField(entsession.FieldQueueNodeRunID, field.TypeString, value)
 	}
@@ -1963,6 +2144,33 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
 		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowDefinitionID(); ok {
+		_spec.SetField(entsession.FieldWorkflowDefinitionID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowStatus(); ok {
+		_spec.SetField(entsession.FieldWorkflowStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowCurrentNodeID(); ok {
+		_spec.SetField(entsession.FieldWorkflowCurrentNodeID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WorkflowContext(); ok {
+		_spec.SetField(entsession.FieldWorkflowContext, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.WorkflowPendingApproval(); ok {
+		_spec.SetField(entsession.FieldWorkflowPendingApproval, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.WorkflowStartedAt(); ok {
+		_spec.SetField(entsession.FieldWorkflowStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorkflowStartedAtCleared() {
+		_spec.ClearField(entsession.FieldWorkflowStartedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.WorkflowStoppedAt(); ok {
+		_spec.SetField(entsession.FieldWorkflowStoppedAt, field.TypeTime, value)
+	}
+	if _u.mutation.WorkflowStoppedAtCleared() {
+		_spec.ClearField(entsession.FieldWorkflowStoppedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.AppliedSystemCommands(); ok {
 		_spec.SetField(entsession.FieldAppliedSystemCommands, field.TypeJSON, value)

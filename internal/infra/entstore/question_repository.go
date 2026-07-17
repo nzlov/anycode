@@ -38,9 +38,6 @@ func (r *QuestionRepository) CreateBatch(ctx context.Context, batch question.Bat
 		SetStatus(string(batch.Status)).
 		SetDeliveryStatus(string(normalizeDeliveryStatus(batch.DeliveryStatus))).
 		SetQuestions(questions)
-	if batch.WorkflowRunID != nil {
-		create.SetWorkflowRunID(string(*batch.WorkflowRunID))
-	}
 	if batch.OriginProcessRunID != nil {
 		create.SetOriginProcessRunID(string(*batch.OriginProcessRunID))
 	}
@@ -555,11 +552,6 @@ func toDomainQuestionBatch(row *ent.QuestionBatch) (question.Batch, error) {
 	if err != nil {
 		return question.Batch{}, fmt.Errorf("decode batch questions: %w", err)
 	}
-	var workflowRunID *question.WorkflowRunID
-	if row.WorkflowRunID != nil {
-		value := question.WorkflowRunID(*row.WorkflowRunID)
-		workflowRunID = &value
-	}
 	var originProcessRunID *question.ProcessRunID
 	if row.OriginProcessRunID != "" {
 		value := question.ProcessRunID(row.OriginProcessRunID)
@@ -573,7 +565,6 @@ func toDomainQuestionBatch(row *ent.QuestionBatch) (question.Batch, error) {
 	return question.Batch{
 		ID:                   question.BatchID(row.ID),
 		SessionID:            question.SessionID(row.SessionID),
-		WorkflowRunID:        workflowRunID,
 		OriginProcessRunID:   originProcessRunID,
 		Status:               question.BatchStatus(row.Status),
 		DeliveryStatus:       normalizeDeliveryStatus(question.DeliveryStatus(row.DeliveryStatus)),

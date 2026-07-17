@@ -128,7 +128,6 @@ func updateClaimedSessionState(ctx context.Context, client *ent.Client, expected
 		SetQueuePriority(string(normalizeQueuePriority(starting.Queue.Priority))).
 		SetQueueInitialStart(starting.Queue.InitialStart).
 		SetQueueReviewAfterReuseFailure(starting.Queue.ReviewAfterReuseFailure).
-		SetQueueWorkflowRunID(string(starting.Queue.WorkflowRunID)).
 		SetQueuePrompt(starting.Queue.Prompt).
 		SetQueueResumeCodexSessionID(starting.Queue.ResumeCodexSessionID).
 		SetQueueResumeOfProcessRunID(starting.Queue.ResumeOfProcessRunID).

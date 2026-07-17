@@ -16,7 +16,6 @@ func (QuestionBatch) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Immutable(),
 		field.String("session_id").NotEmpty(),
-		field.String("workflow_run_id").Optional().Nillable(),
 		field.String("origin_process_run_id").Default(""),
 		field.String("status").NotEmpty(),
 		field.String("delivery_status").Default("none"),

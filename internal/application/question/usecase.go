@@ -27,7 +27,6 @@ type UseCase interface {
 type CreateBatchInput struct {
 	BatchID            domain.BatchID
 	SessionID          domain.SessionID
-	WorkflowRunID      *domain.WorkflowRunID
 	OriginProcessRunID *domain.ProcessRunID
 	Questions          []domain.Question
 }
@@ -40,7 +39,6 @@ type SubmitBatchInput struct {
 type BatchDTO struct {
 	ID                   domain.BatchID
 	SessionID            domain.SessionID
-	WorkflowRunID        *domain.WorkflowRunID
 	OriginProcessRunID   *domain.ProcessRunID
 	Status               domain.BatchStatus
 	DeliveryStatus       domain.DeliveryStatus
@@ -124,7 +122,6 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 	batch := domain.Batch{
 		ID:                 domain.BatchID(batchID),
 		SessionID:          input.SessionID,
-		WorkflowRunID:      input.WorkflowRunID,
 		OriginProcessRunID: input.OriginProcessRunID,
 		Status:             domain.BatchPending,
 		DeliveryStatus:     domain.DeliveryNone,
@@ -303,7 +300,6 @@ func toDTO(batch domain.Batch) BatchDTO {
 	return BatchDTO{
 		ID:                   batch.ID,
 		SessionID:            batch.SessionID,
-		WorkflowRunID:        batch.WorkflowRunID,
 		OriginProcessRunID:   batch.OriginProcessRunID,
 		Status:               batch.Status,
 		DeliveryStatus:       batch.DeliveryStatus,

@@ -22,7 +22,6 @@ var (
 type ID string
 type ProjectID string
 type WorkflowDefinitionID string
-type WorkflowRunID string
 type NodeRunID string
 type AttachmentID string
 type StagedAttachmentID string
@@ -187,7 +186,6 @@ type QueueIntent struct {
 	Priority                QueuePriority
 	InitialStart            bool
 	ReviewAfterReuseFailure bool
-	WorkflowRunID           WorkflowRunID
 	NodeRunID               *NodeRunID
 	Prompt                  string
 	ResumeCodexSessionID    string
@@ -364,7 +362,7 @@ func (s Session) MatchesLifecycleSnapshot(expected Session) bool {
 
 func queueIntentsEqual(left QueueIntent, right QueueIntent) bool {
 	if left.Kind != right.Kind || left.Priority != right.Priority || left.InitialStart != right.InitialStart ||
-		left.ReviewAfterReuseFailure != right.ReviewAfterReuseFailure || left.WorkflowRunID != right.WorkflowRunID ||
+		left.ReviewAfterReuseFailure != right.ReviewAfterReuseFailure ||
 		left.Prompt != right.Prompt || left.ResumeCodexSessionID != right.ResumeCodexSessionID ||
 		left.ResumeOfProcessRunID != right.ResumeOfProcessRunID || left.AnswerBatchID != right.AnswerBatchID {
 		return false
@@ -762,7 +760,7 @@ type WorkflowStartInput struct {
 }
 
 type WorkflowStart struct {
-	WorkflowRunID      WorkflowRunID
+	SessionID          ID
 	NodeRunID          *NodeRunID
 	CurrentNodeID      string
 	CurrentNodeTitle   string
@@ -778,10 +776,10 @@ type WorkflowStart struct {
 }
 
 type WorkflowStartFailureInput struct {
-	WorkflowRunID WorkflowRunID
-	NodeRunID     *NodeRunID
-	Code          string
-	Message       string
+	SessionID ID
+	NodeRunID *NodeRunID
+	Code      string
+	Message   string
 }
 
 type WorkflowResumeFailureInput struct {
@@ -801,22 +799,22 @@ type WorkflowResumeCurrentNodeInput struct {
 }
 
 type WorkflowNodeFailInput struct {
-	WorkflowRunID WorkflowRunID
-	NodeRunID     NodeRunID
-	Code          string
-	Message       string
-	Output        map[string]any
+	SessionID ID
+	NodeRunID NodeRunID
+	Code      string
+	Message   string
+	Output    map[string]any
 }
 
 type WorkflowNodeCompleteInput struct {
-	WorkflowRunID WorkflowRunID
-	NodeRunID     NodeRunID
-	CommandID     string
-	Output        map[string]any
+	SessionID ID
+	NodeRunID NodeRunID
+	CommandID string
+	Output    map[string]any
 }
 
 type WorkflowProcessExitInput struct {
-	WorkflowRunID  WorkflowRunID
+	SessionID      ID
 	NodeRunID      NodeRunID
 	Failed         bool
 	FailureCode    string
@@ -825,14 +823,13 @@ type WorkflowProcessExitInput struct {
 }
 
 type WorkflowApprovalInput struct {
-	WorkflowRunID WorkflowRunID
-	NodeID        string
-	Approved      bool
-	Comment       string
+	SessionID ID
+	NodeID    string
+	Approved  bool
+	Comment   string
 }
 
 type WorkflowRunSnapshot struct {
-	ID            WorkflowRunID
 	SessionID     ID
 	Status        string
 	CurrentNodeID string
@@ -847,7 +844,7 @@ type WorkflowApprovalResult struct {
 }
 
 type WorkflowAdvance struct {
-	WorkflowRunID      WorkflowRunID
+	SessionID          ID
 	NodeRunID          *NodeRunID
 	CurrentNodeID      string
 	CurrentNodeTitle   string

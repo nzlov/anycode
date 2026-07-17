@@ -144,7 +144,7 @@ func TestRecoverInterruptedWorkflowKeepsCurrentNodeAttempt(t *testing.T) {
 	repo.interruptedSessions = []domain.Session{session}
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{resumeNodeAdvance: domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CurrentNodeID: "build", RequiresCodex: true, Prompt: "Build",
+		SessionID: "session-1", NodeRunID: &nodeRunID, CurrentNodeID: "build", RequiresCodex: true, Prompt: "Build",
 	}}
 	processes := newFakeProcessRepository()
 	processes.active = processdomain.Run{
@@ -160,7 +160,7 @@ func TestRecoverInterruptedWorkflowKeepsCurrentNodeAttempt(t *testing.T) {
 		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
 	}
 	got := repo.sessions[session.ID]
-	if got.Status != domain.StatusQueued || got.Queue.WorkflowRunID != "workflow-run-1" || got.Queue.NodeRunID == nil || *got.Queue.NodeRunID != nodeRunID {
+	if got.Status != domain.StatusQueued || got.ID != "session-1" || got.Queue.NodeRunID == nil || *got.Queue.NodeRunID != nodeRunID {
 		t.Fatalf("workflow recovery = %#v", got)
 	}
 	if workflows.resumeNodeInput.SessionID != session.ID {

@@ -20,6 +20,8 @@ func (ProcessRun) Fields() []ent.Field {
 		field.String("status").NotEmpty(),
 		field.Int("pid").Optional().Nillable(),
 		field.String("codex_session_id").Default(""),
+		field.String("transcript_relative_path").Default(""),
+		field.Time("transcript_bound_at").Optional().Nillable(),
 		field.String("resume_of").Optional().Nillable(),
 		field.Int("exit_code").Optional().Nillable(),
 		field.Text("failure_reason").Default(""),
@@ -32,5 +34,6 @@ func (ProcessRun) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("session_id", "status"),
 		index.Fields("session_id", "started_at"),
+		index.Fields("session_id", "codex_session_id", "transcript_bound_at"),
 	}
 }

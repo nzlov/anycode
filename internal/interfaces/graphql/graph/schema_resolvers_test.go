@@ -90,7 +90,7 @@ func (f *fakeArtifactUseCase) Resolve(_ context.Context, _ sessiondomain.ID, log
 
 func TestMapPendingApprovalIncludesResultProjection(t *testing.T) {
 	got := mapPendingApproval(&sessionapp.PendingApprovalDTO{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeID:           "build",
 		NodeRunID:        "node-run-1",
 		CurrentNodeTitle: "Build",
@@ -104,7 +104,7 @@ func TestMapPendingApprovalIncludesResultProjection(t *testing.T) {
 
 func TestMapPendingApprovalKeepsBeforeRunResultNull(t *testing.T) {
 	got := mapPendingApproval(&sessionapp.PendingApprovalDTO{
-		WorkflowRunID: "workflow-run-1", NodeID: "build", NodeRunID: "node-run-1", Phase: "before_run",
+		SessionID: "session-1", NodeID: "build", NodeRunID: "node-run-1", Phase: "before_run",
 	})
 	if got == nil || got.Result != nil {
 		t.Fatalf("mapPendingApproval() = %#v", got)

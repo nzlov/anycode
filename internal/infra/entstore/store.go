@@ -146,6 +146,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return errors.New("entstore: nil store")
 	}
+	if err := s.dropRemovedStorage(ctx); err != nil {
+		return err
+	}
 	if err := s.client.Schema.Create(ctx); err != nil {
 		return err
 	}
@@ -154,22 +157,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if err := s.migrateSessionFileColumns(ctx); err != nil {
 		return err
-	}
-	// GLUE: Legacy approval gates lived only on node_runs; remove after all waiting approvals use workflow_runs.pending_approval.
-	if _, err := s.db.ExecContext(ctx, `UPDATE workflow_runs
-		SET pending_approval = json_object(
-			'phase', CASE
-				WHEN COALESCE((SELECT output FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id ORDER BY started_at DESC, id DESC LIMIT 1), '{}') <> '{}' THEN 'after_run'
-				ELSE 'before_run'
-			END,
-			'nodeId', current_node_id,
-			'nodeRunId', (SELECT id FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id ORDER BY started_at DESC, id DESC LIMIT 1),
-			'attempt', (SELECT attempt FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id ORDER BY started_at DESC, id DESC LIMIT 1)
-		)
-		WHERE status = 'waiting_approval'
-		AND COALESCE(pending_approval, '{}') = '{}'
-		AND EXISTS (SELECT 1 FROM node_runs WHERE workflow_run_id = workflow_runs.id AND node_id = workflow_runs.current_node_id)`); err != nil {
-		return fmt.Errorf("backfill workflow pending approval: %w", err)
 	}
 	// GLUE: Backfill queues written before queue_initial_start; remove after legacy databases no longer need upgrading.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sessions
@@ -229,6 +216,55 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("backfill question origin process run: %w", err)
 	}
 	return nil
+}
+
+// GLUE: Remove the superseded schema shape. This is intentionally destructive because legacy data is not supported.
+func (s *Store) dropRemovedStorage(ctx context.Context) error {
+	legacyNodeRuns, err := s.columnExists(ctx, "node_runs", "workflow_run_id")
+	if err != nil {
+		return err
+	}
+	statements := make([]string, 0, 3)
+	if legacyNodeRuns {
+		statements = append(statements, `DROP TABLE node_runs`)
+	}
+	statements = append(statements,
+		`DROP TABLE IF EXISTS workflow_runs`,
+		`DROP TABLE IF EXISTS codex_transcript_sources`,
+	)
+	for _, statement := range statements {
+		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("remove superseded storage with %q: %w", statement, err)
+		}
+	}
+	for _, item := range []struct {
+		table  string
+		column string
+	}{
+		{table: "sessions", column: "queue_workflow_run_id"},
+		{table: "question_batches", column: "workflow_run_id"},
+		{table: "event_records", column: "workflow_run_id"},
+	} {
+		hasColumn, err := s.columnExists(ctx, item.table, item.column)
+		if err != nil {
+			return err
+		}
+		if hasColumn {
+			statement := fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, item.table, item.column)
+			if _, err := s.db.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("remove superseded column %s.%s: %w", item.table, item.column, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Store) columnExists(ctx context.Context, table string, column string) (bool, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&count); err != nil {
+		return false, fmt.Errorf("check column %s.%s: %w", table, column, err)
+	}
+	return count != 0, nil
 }
 
 func (s *Store) migrateWorkflowApprovalOutputFields(ctx context.Context) error {

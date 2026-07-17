@@ -262,12 +262,12 @@ func (_q *NodeRunQuery) Clone() *NodeRunQuery {
 // Example:
 //
 //	var v []struct {
-//		WorkflowRunID string `json:"workflow_run_id,omitempty"`
+//		SessionID string `json:"session_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.NodeRun.Query().
-//		GroupBy(noderun.FieldWorkflowRunID).
+//		GroupBy(noderun.FieldSessionID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *NodeRunQuery) GroupBy(field string, fields ...string) *NodeRunGroupBy {
@@ -285,11 +285,11 @@ func (_q *NodeRunQuery) GroupBy(field string, fields ...string) *NodeRunGroupBy 
 // Example:
 //
 //	var v []struct {
-//		WorkflowRunID string `json:"workflow_run_id,omitempty"`
+//		SessionID string `json:"session_id,omitempty"`
 //	}
 //
 //	client.NodeRun.Query().
-//		Select(noderun.FieldWorkflowRunID).
+//		Select(noderun.FieldSessionID).
 //		Scan(ctx, &v)
 func (_q *NodeRunQuery) Select(fields ...string) *NodeRunSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

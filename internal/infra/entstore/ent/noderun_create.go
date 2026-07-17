@@ -20,9 +20,9 @@ type NodeRunCreate struct {
 	hooks    []Hook
 }
 
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_c *NodeRunCreate) SetWorkflowRunID(v string) *NodeRunCreate {
-	_c.mutation.SetWorkflowRunID(v)
+// SetSessionID sets the "session_id" field.
+func (_c *NodeRunCreate) SetSessionID(v string) *NodeRunCreate {
+	_c.mutation.SetSessionID(v)
 	return _c
 }
 
@@ -153,12 +153,12 @@ func (_c *NodeRunCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *NodeRunCreate) check() error {
-	if _, ok := _c.mutation.WorkflowRunID(); !ok {
-		return &ValidationError{Name: "workflow_run_id", err: errors.New(`ent: missing required field "NodeRun.workflow_run_id"`)}
+	if _, ok := _c.mutation.SessionID(); !ok {
+		return &ValidationError{Name: "session_id", err: errors.New(`ent: missing required field "NodeRun.session_id"`)}
 	}
-	if v, ok := _c.mutation.WorkflowRunID(); ok {
-		if err := noderun.WorkflowRunIDValidator(v); err != nil {
-			return &ValidationError{Name: "workflow_run_id", err: fmt.Errorf(`ent: validator failed for field "NodeRun.workflow_run_id": %w`, err)}
+	if v, ok := _c.mutation.SessionID(); ok {
+		if err := noderun.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "NodeRun.session_id": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.NodeID(); !ok {
@@ -218,9 +218,9 @@ func (_c *NodeRunCreate) createSpec() (*NodeRun, *sqlgraph.CreateSpec) {
 		_node.ID = id
 		_spec.ID.Value = id
 	}
-	if value, ok := _c.mutation.WorkflowRunID(); ok {
-		_spec.SetField(noderun.FieldWorkflowRunID, field.TypeString, value)
-		_node.WorkflowRunID = value
+	if value, ok := _c.mutation.SessionID(); ok {
+		_spec.SetField(noderun.FieldSessionID, field.TypeString, value)
+		_node.SessionID = value
 	}
 	if value, ok := _c.mutation.NodeID(); ok {
 		_spec.SetField(noderun.FieldNodeID, field.TypeString, value)

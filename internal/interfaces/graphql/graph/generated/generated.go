@@ -181,7 +181,7 @@ type ComplexityRoot struct {
 		NodeRunID        func(childComplexity int) int
 		Phase            func(childComplexity int) int
 		Result           func(childComplexity int) int
-		WorkflowRunID    func(childComplexity int) int
+		SessionID        func(childComplexity int) int
 	}
 
 	Project struct {
@@ -601,7 +601,6 @@ type ComplexityRoot struct {
 	WorkflowRun struct {
 		Context       func(childComplexity int) int
 		CurrentNodeID func(childComplexity int) int
-		ID            func(childComplexity int) int
 		SessionID     func(childComplexity int) int
 		Status        func(childComplexity int) int
 	}
@@ -1365,12 +1364,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.PendingApproval.Result(childComplexity), true
-	case "PendingApproval.workflowRunId":
-		if e.ComplexityRoot.PendingApproval.WorkflowRunID == nil {
+	case "PendingApproval.sessionId":
+		if e.ComplexityRoot.PendingApproval.SessionID == nil {
 			break
 		}
 
-		return e.ComplexityRoot.PendingApproval.WorkflowRunID(childComplexity), true
+		return e.ComplexityRoot.PendingApproval.SessionID(childComplexity), true
 
 	case "Project.createdAt":
 		if e.ComplexityRoot.Project.CreatedAt == nil {
@@ -3148,12 +3147,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkflowRun.CurrentNodeID(childComplexity), true
-	case "WorkflowRun.id":
-		if e.ComplexityRoot.WorkflowRun.ID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.WorkflowRun.ID(childComplexity), true
 	case "WorkflowRun.sessionId":
 		if e.ComplexityRoot.WorkflowRun.SessionID == nil {
 			break
@@ -3590,7 +3583,7 @@ type WorktreeCleanupError {
 }
 
 type PendingApproval {
-  workflowRunId: ID!
+  sessionId: ID!
   nodeId: ID!
   nodeRunId: ID
   currentNodeTitle: String!
@@ -3952,7 +3945,6 @@ type WorkflowCondition {
 }
 
 type WorkflowRun {
-  id: ID!
   sessionId: ID!
   status: String!
   currentNodeId: ID!
@@ -4156,7 +4148,7 @@ input WorkflowConditionInput {
 }
 
 input SubmitWorkflowApprovalInput {
-  workflowRunId: ID!
+  sessionId: ID!
   nodeId: ID!
   approved: Boolean!
   comment: String
@@ -7821,8 +7813,6 @@ func (ec *executionContext) fieldContext_Mutation_submitWorkflowApproval(ctx con
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "id":
-				return ec.fieldContext_WorkflowRun_id(ctx, field)
 			case "sessionId":
 				return ec.fieldContext_WorkflowRun_sessionId(ctx, field)
 			case "status":
@@ -8016,14 +8006,14 @@ func (ec *executionContext) fieldContext_PageInfo_nextCursor(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _PendingApproval_workflowRunId(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
+func (ec *executionContext) _PendingApproval_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.PendingApproval) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_PendingApproval_workflowRunId,
+		ec.fieldContext_PendingApproval_sessionId,
 		func(ctx context.Context) (any, error) {
-			return obj.WorkflowRunID, nil
+			return obj.SessionID, nil
 		},
 		nil,
 		ec.marshalNID2string,
@@ -8032,7 +8022,7 @@ func (ec *executionContext) _PendingApproval_workflowRunId(ctx context.Context, 
 	)
 }
 
-func (ec *executionContext) fieldContext_PendingApproval_workflowRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_PendingApproval_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "PendingApproval",
 		Field:      field,
@@ -11619,8 +11609,8 @@ func (ec *executionContext) fieldContext_SessionCard_pendingApproval(_ context.C
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "workflowRunId":
-				return ec.fieldContext_PendingApproval_workflowRunId(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_PendingApproval_sessionId(ctx, field)
 			case "nodeId":
 				return ec.fieldContext_PendingApproval_nodeId(ctx, field)
 			case "nodeRunId":
@@ -12633,8 +12623,8 @@ func (ec *executionContext) fieldContext_SessionDetail_pendingApproval(_ context
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "workflowRunId":
-				return ec.fieldContext_PendingApproval_workflowRunId(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_PendingApproval_sessionId(ctx, field)
 			case "nodeId":
 				return ec.fieldContext_PendingApproval_nodeId(ctx, field)
 			case "nodeRunId":
@@ -17476,35 +17466,6 @@ func (ec *executionContext) fieldContext_WorkflowOutputField_valueType(_ context
 	return fc, nil
 }
 
-func (ec *executionContext) _WorkflowRun_id(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowRun) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_WorkflowRun_id,
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		ec.marshalNID2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_WorkflowRun_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "WorkflowRun",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _WorkflowRun_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowRun) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20351,20 +20312,20 @@ func (ec *executionContext) unmarshalInputSubmitWorkflowApprovalInput(ctx contex
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"workflowRunId", "nodeId", "approved", "comment"}
+	fieldsInOrder := [...]string{"sessionId", "nodeId", "approved", "comment"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "workflowRunId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("workflowRunId"))
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
 			data, err := ec.unmarshalNID2string(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.WorkflowRunID = data
+			it.SessionID = data
 		case "nodeId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("nodeId"))
 			data, err := ec.unmarshalNID2string(ctx, v)
@@ -22011,8 +21972,8 @@ func (ec *executionContext) _PendingApproval(ctx context.Context, sel ast.Select
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("PendingApproval")
-		case "workflowRunId":
-			out.Values[i] = ec._PendingApproval_workflowRunId(ctx, field, obj)
+		case "sessionId":
+			out.Values[i] = ec._PendingApproval_sessionId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -25238,11 +25199,6 @@ func (ec *executionContext) _WorkflowRun(ctx context.Context, sel ast.SelectionS
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("WorkflowRun")
-		case "id":
-			out.Values[i] = ec._WorkflowRun_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "sessionId":
 			out.Values[i] = ec._WorkflowRun_sessionId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

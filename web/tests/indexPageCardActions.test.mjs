@@ -181,7 +181,7 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /!isPendingApprovalReviewable\(approvalPending\.value\)/);
   assert.match(overviewSource, /if \(approvalSubmitting\.value\) return;/);
   assert.match(overviewSource, /const requestGeneration = approvalContextGeneration/);
-  assert.match(overviewSource, /approvalContext\.value\?\.workflowRunId === workflowRunId/);
+  assert.match(overviewSource, /approvalContext\.value\?\.sessionId === workflowSessionId/);
   assert.match(overviewSource, /approvalContext\.value\?\.nodeId === nodeId/);
   assert.match(overviewSource, /<DiffWorkspace[\s\S]*v-model="approvalDiffWorkspaceState"/);
   assert.match(overviewSource, /:target="approvalDiffTarget"/);
@@ -203,13 +203,16 @@ test('overview waiting approval dialog shows model output and diff before submit
     /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important[^}]*max-width:\s*90vw\s*!important/s,
   );
   assert.match(sessionsSource, /pendingApproval\s*\{/);
-  assert.match(sessionsSource, /workflowRunId/);
+  assert.match(sessionsSource, /sessionId/);
   assert.match(sessionsSource, /normalizePendingApproval/);
   assert.match(sessionsSource, /phase: approval\.phase/);
   assert.match(sessionsSource, /result: unknown/);
   assert.match(sessionsSource, /normalizeWorkflowNodeResult\(approval\.result\)/);
   assert.match(sessionsSource, /result,\s*\n\s*};/);
   assert.match(sessionsSource, /mutation SubmitWorkflowApproval/);
+  assert.match(sessionsSource, /submitWorkflowApproval\(input: \$input\)\s*{\s*sessionId/);
+  assert.doesNotMatch(sessionsSource, /submitWorkflowApproval\(input: \$input\)\s*{\s*id\b/);
+  assert.doesNotMatch(sessionsSource, /submitWorkflowApproval:\s*{\s*id:\s*string/);
 
   assert.match(approvalPanelSource, /mode === 'reject'/);
   assert.match(approvalPanelSource, /label="返回"/);

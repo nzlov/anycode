@@ -320,7 +320,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await submitWorkflowApprovalRequest({
-        workflowRunId: approval.workflowRunId,
+        sessionId: approval.sessionId,
         nodeId: approval.nodeId,
         approved,
         comment,

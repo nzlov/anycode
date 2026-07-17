@@ -28,16 +28,16 @@ func (_u *NodeRunUpdate) Where(ps ...predicate.NodeRun) *NodeRunUpdate {
 	return _u
 }
 
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_u *NodeRunUpdate) SetWorkflowRunID(v string) *NodeRunUpdate {
-	_u.mutation.SetWorkflowRunID(v)
+// SetSessionID sets the "session_id" field.
+func (_u *NodeRunUpdate) SetSessionID(v string) *NodeRunUpdate {
+	_u.mutation.SetSessionID(v)
 	return _u
 }
 
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_u *NodeRunUpdate) SetNillableWorkflowRunID(v *string) *NodeRunUpdate {
+// SetNillableSessionID sets the "session_id" field if the given value is not nil.
+func (_u *NodeRunUpdate) SetNillableSessionID(v *string) *NodeRunUpdate {
 	if v != nil {
-		_u.SetWorkflowRunID(*v)
+		_u.SetSessionID(*v)
 	}
 	return _u
 }
@@ -191,9 +191,9 @@ func (_u *NodeRunUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *NodeRunUpdate) check() error {
-	if v, ok := _u.mutation.WorkflowRunID(); ok {
-		if err := noderun.WorkflowRunIDValidator(v); err != nil {
-			return &ValidationError{Name: "workflow_run_id", err: fmt.Errorf(`ent: validator failed for field "NodeRun.workflow_run_id": %w`, err)}
+	if v, ok := _u.mutation.SessionID(); ok {
+		if err := noderun.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "NodeRun.session_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.NodeID(); ok {
@@ -221,8 +221,8 @@ func (_u *NodeRunUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			}
 		}
 	}
-	if value, ok := _u.mutation.WorkflowRunID(); ok {
-		_spec.SetField(noderun.FieldWorkflowRunID, field.TypeString, value)
+	if value, ok := _u.mutation.SessionID(); ok {
+		_spec.SetField(noderun.FieldSessionID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.NodeID(); ok {
 		_spec.SetField(noderun.FieldNodeID, field.TypeString, value)
@@ -277,16 +277,16 @@ type NodeRunUpdateOne struct {
 	mutation *NodeRunMutation
 }
 
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_u *NodeRunUpdateOne) SetWorkflowRunID(v string) *NodeRunUpdateOne {
-	_u.mutation.SetWorkflowRunID(v)
+// SetSessionID sets the "session_id" field.
+func (_u *NodeRunUpdateOne) SetSessionID(v string) *NodeRunUpdateOne {
+	_u.mutation.SetSessionID(v)
 	return _u
 }
 
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_u *NodeRunUpdateOne) SetNillableWorkflowRunID(v *string) *NodeRunUpdateOne {
+// SetNillableSessionID sets the "session_id" field if the given value is not nil.
+func (_u *NodeRunUpdateOne) SetNillableSessionID(v *string) *NodeRunUpdateOne {
 	if v != nil {
-		_u.SetWorkflowRunID(*v)
+		_u.SetSessionID(*v)
 	}
 	return _u
 }
@@ -453,9 +453,9 @@ func (_u *NodeRunUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *NodeRunUpdateOne) check() error {
-	if v, ok := _u.mutation.WorkflowRunID(); ok {
-		if err := noderun.WorkflowRunIDValidator(v); err != nil {
-			return &ValidationError{Name: "workflow_run_id", err: fmt.Errorf(`ent: validator failed for field "NodeRun.workflow_run_id": %w`, err)}
+	if v, ok := _u.mutation.SessionID(); ok {
+		if err := noderun.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "NodeRun.session_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.NodeID(); ok {
@@ -500,8 +500,8 @@ func (_u *NodeRunUpdateOne) sqlSave(ctx context.Context) (_node *NodeRun, err er
 			}
 		}
 	}
-	if value, ok := _u.mutation.WorkflowRunID(); ok {
-		_spec.SetField(noderun.FieldWorkflowRunID, field.TypeString, value)
+	if value, ok := _u.mutation.SessionID(); ok {
+		_spec.SetField(noderun.FieldSessionID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.NodeID(); ok {
 		_spec.SetField(noderun.FieldNodeID, field.TypeString, value)

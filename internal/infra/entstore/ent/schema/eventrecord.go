@@ -20,7 +20,6 @@ func (EventRecord) Fields() []ent.Field {
 		field.String("type").NotEmpty(),
 		field.JSON("payload", map[string]any{}).Default(map[string]any{}),
 		field.String("process_run_id").Default(""),
-		field.String("workflow_run_id").Default(""),
 		field.String("node_run_id").Default(""),
 		field.String("correlation_id").Default(""),
 		field.String("session_status").Default(""),

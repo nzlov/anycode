@@ -856,7 +856,7 @@ func TestCreateWorkflowSessionStartsFirstNodeCodexWithNodeRun(t *testing.T) {
 	}
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -893,7 +893,7 @@ func TestCreateWorkflowSessionStartsFirstNodeCodexWithNodeRun(t *testing.T) {
 		t.Fatalf("process runs = %#v", processes.created)
 	}
 	saved := repo.sessions["session-1"]
-	if codex.startCalled || !saved.Queue.InitialStart || saved.Queue.WorkflowRunID != "workflow-run-1" || saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-1" || saved.Queue.Prompt != "Validate build" {
+	if codex.startCalled || !saved.Queue.InitialStart || saved.ID != "session-1" || saved.Queue.NodeRunID == nil || *saved.Queue.NodeRunID != "node-run-1" || saved.Queue.Prompt != "Validate build" {
 		t.Fatalf("queued workflow session = %#v codexCalled=%v", saved, codex.startCalled)
 	}
 }
@@ -911,7 +911,7 @@ func TestCreateWorkflowSessionClosesWhenWorkflowStartsAtCloseNode(t *testing.T) 
 	}
 	nodeRunID := domain.NodeRunID("node-run-close")
 	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "close",
 		CurrentNodeTitle: "Close",
@@ -961,8 +961,8 @@ func TestWorkflowAdvanceClosesRunningSessionWithoutActiveProcess(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 
 	got, err := service.applyWorkflowAdvance(ctx, session, domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
-		Close:         true,
+		SessionID: "session-1",
+		Close:     true,
 	}, workflowAdvanceOptions{})
 	if err != nil {
 		t.Fatalf("applyWorkflowAdvance() error = %v", err)
@@ -1000,7 +1000,7 @@ func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T
 	}
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -1050,7 +1050,7 @@ func TestRestartedWorkflowNodePromptIncludesUnifiedAnyCodeGuidance(t *testing.T)
 	}
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -1099,7 +1099,7 @@ func TestStartWorkflowResumeFailedSessionRerunsCurrentNode(t *testing.T) {
 	}
 	nodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{rerunAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -1146,7 +1146,7 @@ func TestWorkflowRerunRebuildsPromptWithAppendsAndNodePrompt(t *testing.T) {
 	}
 	nodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{rerunAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -1187,7 +1187,7 @@ func TestWorkflowRerunResumeFailedWithCodexSessionStartsNewProcess(t *testing.T)
 	}
 	nodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{rerunAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -1266,7 +1266,7 @@ func TestWorkflowMergeNodeRecordsMergeAndClosesWhenCompleted(t *testing.T) {
 	nodeRunID := domain.NodeRunID("node-run-merge")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &nodeRunID,
 			CurrentNodeID:    "merge",
 			CurrentNodeTitle: "Merge",
@@ -1274,9 +1274,9 @@ func TestWorkflowMergeNodeRecordsMergeAndClosesWhenCompleted(t *testing.T) {
 			Merge:            &domain.WorkflowMerge{Strategy: "merge"},
 		},
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1",
-			Status:        "completed",
-			Completed:     true,
+			SessionID: "session-1",
+			Status:    "completed",
+			Completed: true,
 		},
 	}
 	merge := &fakeMergePort{result: gitdiffdomain.MergeResult{
@@ -1354,7 +1354,7 @@ func TestWorkflowMergeNodeFailureRecordsAndFailsCurrentNode(t *testing.T) {
 	nodeRunID := domain.NodeRunID("node-run-merge")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &nodeRunID,
 			CurrentNodeID:    "merge",
 			CurrentNodeTitle: "Merge",
@@ -1362,7 +1362,7 @@ func TestWorkflowMergeNodeFailureRecordsAndFailsCurrentNode(t *testing.T) {
 			Merge:            &domain.WorkflowMerge{Strategy: "rebase"},
 		},
 		failAdvance: domain.WorkflowAdvance{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			Status:           "blocked",
 			Blocked:          true,
 			BlockedReason:    "merge failed",
@@ -1435,7 +1435,7 @@ func TestWorkflowMergeNodeFailureAsksUserBeforeFailingNode(t *testing.T) {
 	nodeRunID := domain.NodeRunID("node-run-merge")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &nodeRunID,
 			CurrentNodeID:    "merge",
 			CurrentNodeTitle: "Merge",
@@ -1465,7 +1465,7 @@ func TestWorkflowMergeNodeFailureAsksUserBeforeFailingNode(t *testing.T) {
 	if workflows.failInput.NodeRunID != "" {
 		t.Fatalf("FailNode should not be called before user answer: %#v", workflows.failInput)
 	}
-	if questions.created.SessionID != "session-1" || questions.created.WorkflowRunID == nil || *questions.created.WorkflowRunID != "workflow-run-1" {
+	if questions.created.SessionID != "session-1" {
 		t.Fatalf("created question batch input = %#v", questions.created)
 	}
 	if len(questions.created.Questions) != 1 {
@@ -1474,6 +1474,9 @@ func TestWorkflowMergeNodeFailureAsksUserBeforeFailingNode(t *testing.T) {
 	question := questions.created.Questions[0]
 	if question.Type != "merge_failure_action" || question.Metadata["nodeRunId"] != "node-run-merge" {
 		t.Fatalf("merge failure question = %#v", question)
+	}
+	if _, ok := question.Metadata["sessionId"]; ok {
+		t.Fatalf("merge failure question contains duplicate session id: %#v", question.Metadata)
 	}
 	if len(question.Options) != 3 || question.Options[0].Payload["action"] != "retry_merge" {
 		t.Fatalf("merge failure options = %#v", question.Options)
@@ -1499,7 +1502,7 @@ func TestWorkflowExprNodeCompletesWithResults(t *testing.T) {
 	nodeRunID := domain.NodeRunID("node-run-expr")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &nodeRunID,
 			CurrentNodeID:    "derive",
 			CurrentNodeTitle: "Derive",
@@ -1510,9 +1513,9 @@ func TestWorkflowExprNodeCompletesWithResults(t *testing.T) {
 			},
 		},
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1",
-			Status:        "completed",
-			Completed:     true,
+			SessionID: "session-1",
+			Status:    "completed",
+			Completed: true,
 		},
 	}
 	service := New(repo, projects, WithWorkflows(workflows))
@@ -1556,7 +1559,7 @@ func TestRestartedWorkflowExprDoesNotMarkNextCodexInitial(t *testing.T) {
 	nextNodeRunID := domain.NodeRunID("node-run-build")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID: "workflow-run-2",
+			SessionID:     "session-2",
 			NodeRunID:     &exprNodeRunID,
 			CurrentNodeID: "derive",
 			Status:        "running",
@@ -1565,7 +1568,7 @@ func TestRestartedWorkflowExprDoesNotMarkNextCodexInitial(t *testing.T) {
 			},
 		},
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-2",
+			SessionID:     "session-2",
 			NodeRunID:     &nextNodeRunID,
 			CurrentNodeID: "build",
 			Status:        "running",
@@ -1610,9 +1613,9 @@ func TestHandleQuestionBatchAnsweredRetriesMerge(t *testing.T) {
 	nodeRunID := domain.NodeRunID("node-run-merge")
 	workflows := &fakeWorkflowStarter{
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1",
-			Status:        "completed",
-			Completed:     true,
+			SessionID: "session-1",
+			Status:    "completed",
+			Completed: true,
 		},
 	}
 	merge := &fakeMergePort{result: gitdiffdomain.MergeResult{
@@ -1639,20 +1642,20 @@ func TestHandleQuestionBatchAnsweredRetriesMerge(t *testing.T) {
 				ID:   "question-1",
 				Type: "merge_failure_action",
 				Metadata: map[string]any{
-					"workflowRunId": "workflow-run-1",
-					"nodeRunId":     string(nodeRunID),
-					"strategy":      "merge",
-					"failureCode":   "merge_failed",
+					"sessionId":   "forged-session",
+					"nodeRunId":   string(nodeRunID),
+					"strategy":    "merge",
+					"failureCode": "merge_failed",
 				},
 				SelectedOptionID: &optionID,
 				Options: []questiondomain.Option{
 					{ID: "retry_merge", Payload: map[string]any{"action": "retry_merge"}},
 				},
 				Answer: map[string]any{
-					"action":        "fail_node",
-					"workflowRunId": "forged-workflow-run",
-					"nodeRunId":     "forged-node-run",
-					"strategy":      "rebase",
+					"action":    "fail_node",
+					"sessionId": "forged-workflow-run",
+					"nodeRunId": "forged-node-run",
+					"strategy":  "rebase",
 				},
 			},
 		},
@@ -1666,7 +1669,7 @@ func TestHandleQuestionBatchAnsweredRetriesMerge(t *testing.T) {
 	if merge.rebaseCalled {
 		t.Fatalf("client payload should not override server metadata: rebase input = %#v", merge.rebaseInput)
 	}
-	if workflows.completeInput.NodeRunID != nodeRunID {
+	if workflows.completeInput.SessionID != "session-1" || workflows.completeInput.NodeRunID != nodeRunID {
 		t.Fatalf("complete input = %#v", workflows.completeInput)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusClosed {
@@ -1722,7 +1725,7 @@ func TestHandleQuestionBatchAnsweredFailsMergeNode(t *testing.T) {
 	nodeRunID := domain.NodeRunID("node-run-merge")
 	workflows := &fakeWorkflowStarter{
 		failAdvance: domain.WorkflowAdvance{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			CurrentNodeID:    "approve",
 			CurrentNodeTitle: "Approve merge failure",
 			Status:           "running",
@@ -1741,7 +1744,6 @@ func TestHandleQuestionBatchAnsweredFailsMergeNode(t *testing.T) {
 				ID:   "question-1",
 				Type: "merge_failure_action",
 				Metadata: map[string]any{
-					"workflowRunId": "workflow-run-1",
 					"nodeRunId":     string(nodeRunID),
 					"failureCode":   "dirty_worktree",
 					"failureReason": "worktree has uncommitted changes",
@@ -1756,7 +1758,7 @@ func TestHandleQuestionBatchAnsweredFailsMergeNode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleQuestionBatchAnswered() error = %v", err)
 	}
-	if workflows.failInput.NodeRunID != nodeRunID || workflows.failInput.Code != "dirty_worktree" {
+	if workflows.failInput.SessionID != "session-1" || workflows.failInput.NodeRunID != nodeRunID || workflows.failInput.Code != "dirty_worktree" {
 		t.Fatalf("fail input = %#v", workflows.failInput)
 	}
 	results, ok := workflows.failInput.Output["results"].(map[string]any)
@@ -1792,8 +1794,7 @@ func TestHandleQuestionBatchAnsweredRejectsUnsupportedMergeAction(t *testing.T) 
 				ID:   "question-1",
 				Type: "merge_failure_action",
 				Metadata: map[string]any{
-					"workflowRunId": "workflow-run-1",
-					"nodeRunId":     "node-run-merge",
+					"nodeRunId": "node-run-merge",
 				},
 				SelectedOptionID: &optionID,
 				Options: []questiondomain.Option{
@@ -1824,8 +1825,8 @@ func TestAskMergeFailureCancelsQuestionWhenSessionSaveFails(t *testing.T) {
 		ProjectID: "project-1",
 		Status:    domain.StatusStopped,
 	}, domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     &nodeRunID,
+		SessionID: "session-1",
+		NodeRunID: &nodeRunID,
 	}, gitdiffdomain.MergeResult{
 		Strategy:      "merge",
 		Status:        "failed",
@@ -1849,7 +1850,7 @@ func TestAskMergeFailureKeepsStableBatchWhenSessionSaveFails(t *testing.T) {
 	_, err := service.askMergeFailure(context.Background(), domain.Session{
 		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning,
 	}, domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CommandID: "command-merge-1",
+		SessionID: "session-1", NodeRunID: &nodeRunID, CommandID: "command-merge-1",
 	}, gitdiffdomain.MergeResult{Strategy: "merge", Status: "failed", FailureReason: "conflict"}, "merge_conflict")
 	if err == nil || !strings.Contains(err.Error(), "save session") {
 		t.Fatalf("askMergeFailure() error = %v", err)
@@ -1884,7 +1885,7 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 	secondNodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &firstNodeRunID,
 			CurrentNodeID:    "build",
 			CurrentNodeTitle: "Build",
@@ -1893,7 +1894,7 @@ func TestWorkflowSessionStartsNextNodeAfterProcessExit(t *testing.T) {
 			Prompt:           "Build",
 		},
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &secondNodeRunID,
 			CurrentNodeID:    "verify",
 			CurrentNodeTitle: "Verify",
@@ -1971,7 +1972,7 @@ func TestWorkflowSessionMarksRunFailedWhenResultCorrectionStillInvalid(t *testin
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:      "workflow-run-1",
+			SessionID:          "session-1",
 			NodeRunID:          &nodeRunID,
 			CurrentNodeID:      "build",
 			CurrentNodeTitle:   "Build",
@@ -2015,7 +2016,7 @@ func TestWorkflowSessionMarksRunFailedWhenResultCorrectionStillInvalid(t *testin
 		t.Fatalf("DrainQueuedSessions() error = %v", err)
 	}
 	waitForEventTypeAfter(t, events, "workflow.exit_pending", "workflow.failed")
-	if workflows.failedInput.WorkflowRunID != "workflow-run-1" || workflows.failedInput.NodeRunID == nil || *workflows.failedInput.NodeRunID != "node-run-1" {
+	if workflows.failedInput.SessionID != "session-1" || workflows.failedInput.NodeRunID == nil || *workflows.failedInput.NodeRunID != "node-run-1" {
 		t.Fatalf("failed input = %#v", workflows.failedInput)
 	}
 	if workflows.failedInput.Code != apperror.CodeWorkflowResultInvalid {
@@ -2037,8 +2038,8 @@ func TestWorkflowAdvanceAfterProcessExitReturnsMarkStartFailedError(t *testing.T
 	service := New(newFakeRepository(), newFakeProjectRepository(), WithWorkflows(workflows))
 
 	_, err := service.workflowAdvanceAfterProcessExit(context.Background(), processdomain.CodexHandle{ProcessRunID: "process-run-1"}, codexStartOptions{
-		workflowRunID: "workflow-run-1",
-		nodeRunID:     &nodeRunID,
+		sessionID: "session-1",
+		nodeRunID: &nodeRunID,
 	}, processdomain.ExitResult{}, nil)
 	if !errors.Is(err, markErr) || !errors.Is(err, resultErr) {
 		t.Fatalf("workflowAdvanceAfterProcessExit() error = %v", err)
@@ -2052,7 +2053,7 @@ func TestPendingApprovalFromEventIncludesPersistedResult(t *testing.T) {
 	event := eventdomain.DomainEvent{
 		Type: "session.waiting_approval",
 		Payload: map[string]any{
-			"workflowRunId":    "workflow-run-1",
+			"sessionId":        "session-1",
 			"nodeRunId":        "node-run-1",
 			"currentNodeId":    "build",
 			"currentNodeTitle": "Build",
@@ -2070,7 +2071,7 @@ func TestPendingApprovalFromEventKeepsBeforeRunResultNil(t *testing.T) {
 	event := eventdomain.DomainEvent{
 		Type: "session.waiting_approval",
 		Payload: map[string]any{
-			"workflowRunId": "workflow-run-1",
+			"sessionId":     "session-1",
 			"nodeRunId":     "node-run-1",
 			"currentNodeId": "build",
 			"approvalPhase": "before_run",
@@ -2105,7 +2106,7 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 	secondNodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &firstNodeRunID,
 			CurrentNodeID:    "build",
 			CurrentNodeTitle: "Build",
@@ -2114,7 +2115,7 @@ func TestWorkflowSessionFailsCurrentNodeOnAbnormalProcessExit(t *testing.T) {
 			Prompt:           "Build",
 		},
 		failAdvance: domain.WorkflowAdvance{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &secondNodeRunID,
 			CurrentNodeID:    "build",
 			CurrentNodeTitle: "Build",
@@ -2340,14 +2341,13 @@ func TestSubmitWorkflowApprovalStartsNextCodexNode(t *testing.T) {
 	workflows := &fakeWorkflowStarter{
 		approvalResult: domain.WorkflowApprovalResult{
 			Run: domain.WorkflowRunSnapshot{
-				ID:            "workflow-run-1",
 				SessionID:     "session-1",
 				Status:        "running",
 				CurrentNodeID: "verify",
 				Context:       map[string]any{"last": map[string]any{"status": "succeeded"}},
 			},
 			Advance: domain.WorkflowAdvance{
-				WorkflowRunID:    "workflow-run-1",
+				SessionID:        "session-1",
 				NodeRunID:        &nextNodeRunID,
 				CurrentNodeID:    "verify",
 				CurrentNodeTitle: "Verify",
@@ -2372,18 +2372,18 @@ func TestSubmitWorkflowApprovalStartsNextCodexNode(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(50, 0).UTC() }
 
 	got, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "approve",
-		Approved:      true,
-		Comment:       "looks good",
+		SessionID: "session-1",
+		NodeID:    "approve",
+		Approved:  true,
+		Comment:   "looks good",
 	})
 	if err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
-	if got.ID != "workflow-run-1" || got.Status != "running" || got.CurrentNodeID != "verify" {
+	if got.SessionID != "session-1" || got.Status != "running" || got.CurrentNodeID != "verify" {
 		t.Fatalf("SubmitWorkflowApproval() = %#v", got)
 	}
-	if workflows.approvalInput.WorkflowRunID != "workflow-run-1" || workflows.approvalInput.NodeID != "approve" || !workflows.approvalInput.Approved {
+	if workflows.approvalInput.SessionID != "session-1" || workflows.approvalInput.NodeID != "approve" || !workflows.approvalInput.Approved {
 		t.Fatalf("approval input = %#v", workflows.approvalInput)
 	}
 	if repo.sessions["session-1"].Status != domain.StatusQueued || repo.sessions["session-1"].CodexSessionID != "" {
@@ -2406,9 +2406,9 @@ func TestSubmitWorkflowApprovalPersistsNextApprovalProjection(t *testing.T) {
 	nextNodeRunID := domain.NodeRunID("node-run-2")
 	result := map[string]any{"version": float64(1), "outcome": "success", "summary": "done", "data": map[string]any{}}
 	workflows := &fakeWorkflowStarter{approvalResult: domain.WorkflowApprovalResult{
-		Run: domain.WorkflowRunSnapshot{ID: "workflow-run-1", SessionID: "session-1", Status: "waiting_approval", CurrentNodeID: "review"},
+		Run: domain.WorkflowRunSnapshot{SessionID: "session-1", Status: "waiting_approval", CurrentNodeID: "review"},
 		Advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1", NodeRunID: &nextNodeRunID, CurrentNodeID: "review", CurrentNodeTitle: "Review",
+			SessionID: "session-1", NodeRunID: &nextNodeRunID, CurrentNodeID: "review", CurrentNodeTitle: "Review",
 			Status: "waiting_approval", RequiresCodex: false, ApprovalPhase: "after_run", Result: result,
 		},
 	}}
@@ -2420,7 +2420,7 @@ func TestSubmitWorkflowApprovalPersistsNextApprovalProjection(t *testing.T) {
 		return domain.ID(fmt.Sprintf("event-%d", sequence)), nil
 	}
 
-	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{WorkflowRunID: "workflow-run-1", NodeID: "approve", Approved: true}); err != nil {
+	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{SessionID: "session-1", NodeID: "approve", Approved: true}); err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
 	var waiting eventdomain.DomainEvent
@@ -2445,14 +2445,14 @@ func TestSubmitWorkflowApprovalAcknowledgesPreviouslyAppliedSystemCommand(t *tes
 		AppliedSystemCommands: map[string]bool{"old-command": true},
 	}
 	workflows := &fakeWorkflowStarter{approvalResult: domain.WorkflowApprovalResult{
-		Run:      domain.WorkflowRunSnapshot{ID: "run-1", SessionID: "session-1", Status: "blocked", CurrentNodeID: "review"},
-		Advance:  domain.WorkflowAdvance{WorkflowRunID: "run-1", Blocked: true, BlockedReason: "rejected"},
+		Run:      domain.WorkflowRunSnapshot{SessionID: "session-1", Status: "blocked", CurrentNodeID: "review"},
+		Advance:  domain.WorkflowAdvance{SessionID: "run-1", Blocked: true, BlockedReason: "rejected"},
 		Rejected: true,
 	}}
 	eventSessionID := eventdomain.SessionID("session-1")
 	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
 		ID: "old-command", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
-		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("old-node"), Close: true}),
+		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{SessionID: "run-1", NodeRunID: nodeRunIDPtr("old-node"), Close: true}),
 	}}}
 	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
 	sequence := 0
@@ -2462,7 +2462,7 @@ func TestSubmitWorkflowApprovalAcknowledgesPreviouslyAppliedSystemCommand(t *tes
 	}
 
 	if _, err := service.SubmitWorkflowApproval(context.Background(), SubmitWorkflowApprovalInput{
-		WorkflowRunID: "run-1", NodeID: "review", Approved: false, Comment: "stop",
+		SessionID: "run-1", NodeID: "review", Approved: false, Comment: "stop",
 	}); err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
@@ -2504,7 +2504,7 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 	nextNodeRunID := domain.NodeRunID("node-run-verify")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID:    "workflow-run-2",
+			SessionID:        "session-2",
 			NodeRunID:        &approvalNodeRunID,
 			CurrentNodeID:    "approve",
 			CurrentNodeTitle: "Approve",
@@ -2513,13 +2513,12 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 		},
 		approvalResult: domain.WorkflowApprovalResult{
 			Run: domain.WorkflowRunSnapshot{
-				ID:            "workflow-run-2",
 				SessionID:     "session-1",
 				Status:        "running",
 				CurrentNodeID: "verify",
 			},
 			Advance: domain.WorkflowAdvance{
-				WorkflowRunID:    "workflow-run-2",
+				SessionID:        "session-2",
 				NodeRunID:        &nextNodeRunID,
 				CurrentNodeID:    "verify",
 				CurrentNodeTitle: "Verify",
@@ -2544,9 +2543,9 @@ func TestRestartedWorkflowApprovalDoesNotMarkNextCodexInitial(t *testing.T) {
 		t.Fatalf("restarted workflow waiting session = %#v", waiting)
 	}
 	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-2",
-		NodeID:        "approve",
-		Approved:      true,
+		SessionID: "session-2",
+		NodeID:    "approve",
+		Approved:  true,
 	}); err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
@@ -2584,13 +2583,12 @@ func TestSubmitWorkflowApprovalResumesExistingCodexSessionForNextNode(t *testing
 	workflows := &fakeWorkflowStarter{
 		approvalResult: domain.WorkflowApprovalResult{
 			Run: domain.WorkflowRunSnapshot{
-				ID:            "workflow-run-1",
 				SessionID:     "session-1",
 				Status:        "running",
 				CurrentNodeID: "verify",
 			},
 			Advance: domain.WorkflowAdvance{
-				WorkflowRunID:    "workflow-run-1",
+				SessionID:        "session-1",
 				NodeRunID:        &nextNodeRunID,
 				CurrentNodeID:    "verify",
 				CurrentNodeTitle: "Verify",
@@ -2612,9 +2610,9 @@ func TestSubmitWorkflowApprovalResumesExistingCodexSessionForNextNode(t *testing
 	service.generateID = func() (domain.ID, error) { return "event-1", nil }
 
 	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "plan",
-		Approved:      true,
+		SessionID: "session-1",
+		NodeID:    "plan",
+		Approved:  true,
 	}); err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
@@ -2697,7 +2695,7 @@ func TestWorkflowResumeExitWithoutPromptAcknowledgementWaitsForResumeAction(t *t
 	}
 	processes.hasActive = true
 	workflows := &fakeWorkflowStarter{resumeSnapshot: domain.WorkflowRunSnapshot{
-		ID: "workflow-run-1", SessionID: "session-1", Status: "waiting_resume_action", CurrentNodeID: "verify",
+		SessionID: "session-1", Status: "waiting_resume_action", CurrentNodeID: "verify",
 	}}
 	events := &fakeEventStore{}
 	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
@@ -2714,7 +2712,7 @@ func TestWorkflowResumeExitWithoutPromptAcknowledgementWaitsForResumeAction(t *t
 		repo.sessions["session-1"],
 		processdomain.CodexHandle{ProcessRunID: "process-run-2", CodexSessionID: "codex-session-1"},
 		codexStartOptions{
-			workflowRunID:        "workflow-run-1",
+			sessionID:            "session-1",
 			nodeRunID:            &nodeRunID,
 			resumeCodexSessionID: "codex-session-1",
 		},
@@ -2768,7 +2766,7 @@ func TestWorkflowResumeStoppedBeforePromptAcknowledgementStaysStopped(t *testing
 	service.handleCodexProcessExit(
 		repo.sessions["session-1"],
 		processdomain.CodexHandle{ProcessRunID: "process-run-2", CodexSessionID: "codex-session-1"},
-		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &nodeRunID, resumeCodexSessionID: "codex-session-1"},
+		codexStartOptions{sessionID: "session-1", nodeRunID: &nodeRunID, resumeCodexSessionID: "codex-session-1"},
 		processdomain.ExitResult{ExitCode: &exitCode, FailureReason: "terminated", FinishedAt: time.Unix(55, 0).UTC()},
 		nil,
 	)
@@ -2793,7 +2791,7 @@ func TestWorkflowResumeFailureAfterPromptAcknowledgementFailsNode(t *testing.T) 
 	processes.active = processdomain.Run{ID: "process-run-2", SessionID: "session-1", NodeRunID: &nodeRunID, Status: processdomain.StatusRunning}
 	processes.hasActive = true
 	workflows := &fakeWorkflowStarter{failAdvance: domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1", Blocked: true, BlockedReason: "node failed after start",
+		SessionID: "session-1", Blocked: true, BlockedReason: "node failed after start",
 	}}
 	eventStream := make(chan processdomain.CodexEvent, 2)
 	eventStream <- processdomain.CodexEvent{EventID: "turn-started", Type: "turn.started"}
@@ -2815,7 +2813,7 @@ func TestWorkflowResumeFailureAfterPromptAcknowledgementFailsNode(t *testing.T) 
 		handle,
 		repo.sessions["session-1"],
 		codexStartOptions{
-			workflowRunID:        "workflow-run-1",
+			sessionID:            "session-1",
 			nodeRunID:            &nodeRunID,
 			resumeCodexSessionID: "codex-session-1",
 		},
@@ -2852,14 +2850,13 @@ func TestSubmitWorkflowApprovalRejectBlocksSession(t *testing.T) {
 	workflows := &fakeWorkflowStarter{
 		approvalResult: domain.WorkflowApprovalResult{
 			Run: domain.WorkflowRunSnapshot{
-				ID:            "workflow-run-1",
 				SessionID:     "session-1",
 				Status:        "blocked",
 				CurrentNodeID: "approve",
 				Context:       map[string]any{"blockedReason": "approval rejected"},
 			},
 			Advance: domain.WorkflowAdvance{
-				WorkflowRunID: "workflow-run-1",
+				SessionID:     "session-1",
 				Status:        "blocked",
 				Blocked:       true,
 				BlockedReason: "approval rejected",
@@ -2878,10 +2875,10 @@ func TestSubmitWorkflowApprovalRejectBlocksSession(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(51, 0).UTC() }
 
 	got, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "approve",
-		Approved:      false,
-		Comment:       "needs changes",
+		SessionID: "session-1",
+		NodeID:    "approve",
+		Approved:  false,
+		Comment:   "needs changes",
 	})
 	if err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
@@ -2910,13 +2907,12 @@ func TestSubmitWorkflowApprovalRejectsAfterRunWithPromptAppend(t *testing.T) {
 	workflows := &fakeWorkflowStarter{
 		approvalResult: domain.WorkflowApprovalResult{
 			Run: domain.WorkflowRunSnapshot{
-				ID:            "workflow-run-1",
 				SessionID:     "session-1",
 				Status:        "running",
 				CurrentNodeID: "build",
 			},
 			Advance: domain.WorkflowAdvance{
-				WorkflowRunID:    "workflow-run-1",
+				SessionID:        "session-1",
 				NodeRunID:        &nodeRunID,
 				CurrentNodeID:    "build",
 				CurrentNodeTitle: "Build",
@@ -2940,10 +2936,10 @@ func TestSubmitWorkflowApprovalRejectsAfterRunWithPromptAppend(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(52, 0).UTC() }
 
 	got, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Approved:      false,
-		Comment:       "fix failing tests",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Approved:  false,
+		Comment:   "fix failing tests",
 	})
 	if err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
@@ -2982,14 +2978,14 @@ func TestSubmitWorkflowApprovalRequiresTransactionalRunner(t *testing.T) {
 	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows))
 
 	_, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "approve",
-		Approved:      true,
+		SessionID: "session-1",
+		NodeID:    "approve",
+		Approved:  true,
 	})
 	if err == nil || !strings.Contains(err.Error(), "requires transactional workflow repository runner") {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
-	if workflows.approvalInput.WorkflowRunID != "" {
+	if workflows.approvalInput.SessionID != "" {
 		t.Fatalf("workflow approval should not be submitted without transaction: %#v", workflows.approvalInput)
 	}
 }
@@ -3037,22 +3033,22 @@ func TestSubmitWorkflowApprovalExecutesPostCommitExprAdvance(t *testing.T) {
 	}
 	now := time.Unix(10, 0).UTC()
 	run := workflowdomain.Run{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               workflowdomain.RunWaitingApproval,
 		CurrentNodeID:        "build",
 		Context:              workflowdomain.Context{Values: map[string]any{}},
+		PendingApproval:      &workflowdomain.PendingApproval{Phase: workflowdomain.ApprovalAfterRun, NodeID: "build", Attempt: 1},
 		StartedAt:            &now,
 	}
 	nodeRun := workflowdomain.NodeRun{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        workflowdomain.NodeWaitingApproval,
-		Attempt:       1,
-		Result:        &workflowdomain.Result{Version: workflowdomain.ResultVersion, Outcome: workflowdomain.ResultSuccess, Summary: "passed", Data: map[string]any{"status": "passed"}},
-		StartedAt:     &now,
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    workflowdomain.NodeWaitingApproval,
+		Attempt:   1,
+		Result:    &workflowdomain.Result{Version: workflowdomain.ResultVersion, Outcome: workflowdomain.ResultSuccess, Summary: "passed", Data: map[string]any{"status": "passed"}},
+		StartedAt: &now,
 	}
 	if err := store.Workflows().CreateInitialRun(ctx, run, nodeRun); err != nil {
 		t.Fatalf("create workflow run: %v", err)
@@ -3067,9 +3063,9 @@ func TestSubmitWorkflowApprovalExecutesPostCommitExprAdvance(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(20, 0).UTC() }
 
 	if _, err := service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Approved:      true,
+		SessionID: "session-1",
+		NodeID:    "build",
+		Approved:  true,
 	}); err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
@@ -3080,14 +3076,14 @@ func TestSubmitWorkflowApprovalExecutesPostCommitExprAdvance(t *testing.T) {
 	if gotSession.Status != domain.StatusQueued || gotSession.Queue.NodeRunID == nil || gotSession.Queue.Prompt == "" {
 		t.Fatalf("session after expr advance = %#v", gotSession)
 	}
-	gotRun, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	gotRun, err := store.Workflows().FindRun(ctx, "session-1")
 	if err != nil {
 		t.Fatalf("find workflow run: %v", err)
 	}
 	if gotRun.CurrentNodeID != "verify" || gotRun.Status != workflowdomain.RunRunning {
 		t.Fatalf("workflow run after expr advance = %#v", gotRun)
 	}
-	exprRun, err := store.Workflows().FindLatestNodeRun(ctx, "workflow-run-1", "expr")
+	exprRun, err := store.Workflows().FindLatestNodeRun(ctx, "session-1", "expr")
 	if err != nil {
 		t.Fatalf("find expr node run: %v", err)
 	}
@@ -3102,16 +3098,16 @@ func TestSubmitWorkflowApprovalRejectsAfterRunSystemNodeWithoutStartingCodex(t *
 	nodeRunID := domain.NodeRunID("node-run-expr-2")
 	workflows := &fakeWorkflowStarter{
 		approvalResult: domain.WorkflowApprovalResult{
-			Run: domain.WorkflowRunSnapshot{ID: "workflow-run-1", SessionID: "session-1", Status: "running", CurrentNodeID: "expr"},
+			Run: domain.WorkflowRunSnapshot{SessionID: "session-1", Status: "running", CurrentNodeID: "expr"},
 			Advance: domain.WorkflowAdvance{
-				WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
+				SessionID: "session-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
 				Expr: &domain.WorkflowExpr{Script: `{status: "ready"}`},
 			},
 			RejectedAfterRun: true,
 			Rejected:         true,
 		},
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
+			SessionID: "session-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", CurrentNodeTitle: "Expr",
 			Status: "waiting_approval", ApprovalPhase: "after_run", Result: map[string]any{"outcome": "success"},
 		},
 	}
@@ -3126,7 +3122,7 @@ func TestSubmitWorkflowApprovalRejectsAfterRunSystemNodeWithoutStartingCodex(t *
 	}
 
 	if _, err := service.SubmitWorkflowApproval(context.Background(), SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1", NodeID: "expr", Approved: false, Comment: "run again",
+		SessionID: "session-1", NodeID: "expr", Approved: false, Comment: "run again",
 	}); err != nil {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
@@ -3186,22 +3182,22 @@ func TestSubmitWorkflowApprovalRejectsAfterRunRollsBackWhenPromptAppendFails(t *
 	}
 	now := time.Unix(10, 0).UTC()
 	run := workflowdomain.Run{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               workflowdomain.RunWaitingApproval,
 		CurrentNodeID:        "build",
 		Context:              workflowdomain.Context{Values: map[string]any{}},
+		PendingApproval:      &workflowdomain.PendingApproval{Phase: workflowdomain.ApprovalAfterRun, NodeID: "build", Attempt: 1},
 		StartedAt:            &now,
 	}
 	nodeRun := workflowdomain.NodeRun{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        workflowdomain.NodeWaitingApproval,
-		Attempt:       1,
-		Result:        &workflowdomain.Result{Version: workflowdomain.ResultVersion, Outcome: workflowdomain.ResultSuccess, Summary: "review required", Data: map[string]any{"status": "failed"}},
-		StartedAt:     &now,
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    workflowdomain.NodeWaitingApproval,
+		Attempt:   1,
+		Result:    &workflowdomain.Result{Version: workflowdomain.ResultVersion, Outcome: workflowdomain.ResultSuccess, Summary: "review required", Data: map[string]any{"status": "failed"}},
+		StartedAt: &now,
 	}
 	if err := store.Workflows().CreateInitialRun(ctx, run, nodeRun); err != nil {
 		t.Fatalf("create workflow run: %v", err)
@@ -3218,22 +3214,22 @@ func TestSubmitWorkflowApprovalRejectsAfterRunRollsBackWhenPromptAppendFails(t *
 	}
 
 	_, err = service.SubmitWorkflowApproval(ctx, SubmitWorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Approved:      false,
-		Comment:       "fix it",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Approved:  false,
+		Comment:   "fix it",
 	})
 	if err == nil || !strings.Contains(err.Error(), "generate prompt append id") {
 		t.Fatalf("SubmitWorkflowApproval() error = %v", err)
 	}
-	gotRun, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	gotRun, err := store.Workflows().FindRun(ctx, "session-1")
 	if err != nil {
 		t.Fatalf("find workflow run: %v", err)
 	}
 	if gotRun.Status != workflowdomain.RunWaitingApproval {
 		t.Fatalf("workflow run status = %q", gotRun.Status)
 	}
-	gotNodeRun, err := store.Workflows().FindLatestNodeRun(ctx, "workflow-run-1", "build")
+	gotNodeRun, err := store.Workflows().FindLatestNodeRun(ctx, "session-1", "build")
 	if err != nil {
 		t.Fatalf("find node run: %v", err)
 	}
@@ -3269,13 +3265,13 @@ func TestCreateWorkflowSessionAppliesWorkflowFailureWhenCodexStartFails(t *testi
 	}
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{start: domain.WorkflowStart{
-		WorkflowRunID: "workflow-run-1",
+		SessionID:     "session-1",
 		NodeRunID:     &nodeRunID,
 		Status:        "running",
 		RequiresCodex: true,
 		Prompt:        "Run workflow node",
 	}, failAdvance: domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
+		SessionID:     "session-1",
 		Status:        "blocked",
 		Blocked:       true,
 		BlockedReason: "workflow node failed",
@@ -3308,7 +3304,7 @@ func TestCreateWorkflowSessionAppliesWorkflowFailureWhenCodexStartFails(t *testi
 	if repo.sessions["session-1"].Status != domain.StatusBlocked {
 		t.Fatalf("session status after drain = %q", repo.sessions["session-1"].Status)
 	}
-	if workflows.failInput.WorkflowRunID != "workflow-run-1" || workflows.failInput.NodeRunID != "node-run-1" {
+	if workflows.failInput.SessionID != "session-1" || workflows.failInput.NodeRunID != "node-run-1" {
 		t.Fatalf("workflow fail input = %#v", workflows.failInput)
 	}
 	if workflows.failInput.Code != "codex_start_failed" || !strings.Contains(workflows.failInput.Message, "codex rejected params") {
@@ -3331,14 +3327,14 @@ func TestCreateWorkflowSessionRetriesWhenCodexStartFailsBeforeMaxAttempts(t *tes
 	secondNodeRunID := domain.NodeRunID("node-run-2")
 	workflows := &fakeWorkflowStarter{
 		start: domain.WorkflowStart{
-			WorkflowRunID: "workflow-run-1",
+			SessionID:     "session-1",
 			NodeRunID:     &firstNodeRunID,
 			Status:        "running",
 			RequiresCodex: true,
 			Prompt:        "Run workflow node",
 		},
 		failAdvance: domain.WorkflowAdvance{
-			WorkflowRunID:    "workflow-run-1",
+			SessionID:        "session-1",
 			NodeRunID:        &secondNodeRunID,
 			CurrentNodeID:    "build",
 			CurrentNodeTitle: "Build",
@@ -4736,7 +4732,7 @@ func TestAppendPromptResumesWorkflowWithOnlyPendingContent(t *testing.T) {
 			}
 			nodeRunID := domain.NodeRunID("node-run-1")
 			workflows := &fakeWorkflowStarter{resumeNodeAdvance: domain.WorkflowAdvance{
-				WorkflowRunID: "workflow-run-1",
+				SessionID:     "session-1",
 				NodeRunID:     &nodeRunID,
 				RequiresCodex: true,
 				Prompt:        "Workflow node\n\nWorkflow input params JSON:\n{}\n\nWorkflow result contract",
@@ -4769,6 +4765,9 @@ func TestAppendPromptResumesWorkflowWithOnlyPendingContent(t *testing.T) {
 			}
 			if started, err := service.DrainQueuedSessions(ctx); err != nil || started != 1 {
 				t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
+			}
+			if processes.transcriptLookupSessionID != "session-1" {
+				t.Fatalf("transcript lookup session = %q", processes.transcriptLookupSessionID)
 			}
 			if !test.missingTranscript && !test.resumeTranscriptUnavailable {
 				if !codex.resumeCalled || codex.startCalled || codex.resumeInput.Prompt != "only this instruction" {
@@ -7150,7 +7149,7 @@ func TestStopWorkflowSessionWaitsForConsumerSettlement(t *testing.T) {
 	service.consumeCodexEvents(
 		processdomain.CodexHandle{ProcessRunID: "process-run-1", PID: pid},
 		repo.sessions["session-1"],
-		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &nodeRunID},
+		codexStartOptions{sessionID: "session-1", nodeRunID: &nodeRunID},
 		"/workspace/session-1",
 	)
 
@@ -8092,10 +8091,9 @@ func TestDrainQueuedWorkflowStartFailureReturnsWorkflowFailureError(t *testing.T
 		WorktreePath: "/workspace/session-1",
 		QueuedAt:     &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind:          domain.QueueKindStart,
-			Prompt:        "implement session",
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     &nodeRunID,
+			Kind:      domain.QueueKindStart,
+			Prompt:    "implement session",
+			NodeRunID: &nodeRunID,
 		},
 	}
 	processes := newFakeProcessRepository()
@@ -8112,7 +8110,7 @@ func TestDrainQueuedWorkflowStartFailureReturnsWorkflowFailureError(t *testing.T
 	if started != 0 {
 		t.Fatalf("DrainQueuedSessions() = %d, want 0", started)
 	}
-	if workflows.failInput.WorkflowRunID != "workflow-run-1" || workflows.failInput.NodeRunID != nodeRunID {
+	if workflows.failInput.SessionID != "session-1" || workflows.failInput.NodeRunID != nodeRunID {
 		t.Fatalf("workflow fail input = %#v", workflows.failInput)
 	}
 	if workflows.failedInput.Code != "codex_start_failed" {
@@ -8134,14 +8132,13 @@ func TestDrainQueuedWorkflowStartFailureAdvancesFromPersistedFailureState(t *tes
 		WorktreePath: "/workspace/session-1",
 		QueuedAt:     &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind:          domain.QueueKindStart,
-			Prompt:        "implement session",
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     &nodeRunID,
+			Kind:      domain.QueueKindStart,
+			Prompt:    "implement session",
+			NodeRunID: &nodeRunID,
 		},
 	}
 	workflows := &fakeWorkflowStarter{failAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		CurrentNodeID:    "approve",
 		CurrentNodeTitle: "Approve failure",
 		Status:           "running",
@@ -8182,16 +8179,15 @@ func TestDrainQueuedWorkflowStartFailureUsesFallbackEventIDsToExitProcess(t *tes
 		WorktreePath: "/workspace/session-1",
 		QueuedAt:     &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind:          domain.QueueKindStart,
-			Prompt:        "Run workflow node",
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     &nodeRunID,
+			Kind:      domain.QueueKindStart,
+			Prompt:    "Run workflow node",
+			NodeRunID: &nodeRunID,
 		},
 	}
 	processes := newFakeProcessRepository()
 	events := &fakeEventStore{}
 	workflows := &fakeWorkflowStarter{failAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		CurrentNodeID:    "approve",
 		CurrentNodeTitle: "Approve failure",
 		Status:           "running",
@@ -8251,14 +8247,13 @@ func TestDrainQueuedWorkflowPreStartFailureNormalizesStateBeforeAdvance(t *testi
 		WorktreePath: "/workspace/session-1",
 		QueuedAt:     &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind:          domain.QueueKindStart,
-			Prompt:        "implement session",
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     &nodeRunID,
+			Kind:      domain.QueueKindStart,
+			Prompt:    "implement session",
+			NodeRunID: &nodeRunID,
 		},
 	}
 	workflows := &fakeWorkflowStarter{failAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		CurrentNodeID:    "approve",
 		CurrentNodeTitle: "Approve failure",
 		Status:           "running",
@@ -8310,9 +8305,8 @@ func TestDrainQueuedWorkflowPreStartAndWorkflowFailurePersistsFailedSession(t *t
 		WorktreePath: "/workspace/session-1",
 		QueuedAt:     &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind:          domain.QueueKindStart,
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     &nodeRunID,
+			Kind:      domain.QueueKindStart,
+			NodeRunID: &nodeRunID,
 		},
 	}
 	workflows := &fakeWorkflowStarter{failErr: failErr}
@@ -8351,7 +8345,7 @@ func TestDrainQueuedWorkflowKeepsActiveProcessWhenRunningPersistenceAndStopFail(
 		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusQueued,
 		WorktreePath: "/workspace/session-1", QueuedAt: &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind: domain.QueueKindStart, Prompt: "Run build", WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID,
+			Kind: domain.QueueKindStart, Prompt: "Run build", NodeRunID: &nodeRunID,
 		},
 	}
 	repo.appends = []domain.PromptAppend{{ID: "append-1", SessionID: "session-1", Body: "extra context", Status: domain.PromptAppendPending}}
@@ -8419,8 +8413,7 @@ func TestDrainQueuedWorkflowResumeMarksWaitingActionWhenRunningPersistenceFails(
 		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusQueued,
 		CodexSessionID: "codex-session-1", WorktreePath: "/workspace/session-1", QueuedAt: &queuedAt,
 		Queue: domain.QueueIntent{
-			Kind: domain.QueueKindResume, Prompt: "Resume build", ResumeCodexSessionID: "codex-session-1",
-			WorkflowRunID: "workflow-run-1", NodeRunID: &nodeRunID,
+			Kind: domain.QueueKindResume, Prompt: "Resume build", ResumeCodexSessionID: "session-1", NodeRunID: &nodeRunID,
 		},
 	}
 	repo.appends = []domain.PromptAppend{{ID: "append-1", SessionID: "session-1", Body: "extra context", Status: domain.PromptAppendPending}}
@@ -8436,7 +8429,7 @@ func TestDrainQueuedWorkflowResumeMarksWaitingActionWhenRunningPersistenceFails(
 	stream := make(chan processdomain.CodexEvent)
 	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}, events: stream}
 	workflows := &fakeWorkflowStarter{resumeSnapshot: domain.WorkflowRunSnapshot{
-		ID: "workflow-run-1", SessionID: "session-1", Status: "waiting_resume_action", CurrentNodeID: "build",
+		SessionID: "session-1", Status: "waiting_resume_action", CurrentNodeID: "build",
 	}}
 	events := &fakeEventStore{}
 	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
@@ -8487,13 +8480,11 @@ func TestDrainQueuedWorkflowResumeFailureWaitsForResumeAction(t *testing.T) {
 		Queue: domain.QueueIntent{
 			Kind:                 domain.QueueKindResume,
 			Prompt:               "Resume build",
-			WorkflowRunID:        "workflow-run-1",
 			NodeRunID:            &nodeRunID,
 			ResumeCodexSessionID: "codex-session-1",
 		},
 	}
 	workflows := &fakeWorkflowStarter{resumeSnapshot: domain.WorkflowRunSnapshot{
-		ID:            "workflow-run-1",
 		SessionID:     "session-1",
 		Status:        "waiting_resume_action",
 		CurrentNodeID: "build",
@@ -8540,7 +8531,6 @@ func TestDrainQueuedWorkflowResumeFailureReturnsWorkflowStateError(t *testing.T)
 		Queue: domain.QueueIntent{
 			Kind:                 domain.QueueKindResume,
 			Prompt:               "Resume build",
-			WorkflowRunID:        "workflow-run-1",
 			NodeRunID:            &nodeRunID,
 			ResumeCodexSessionID: "codex-session-1",
 		},
@@ -8573,7 +8563,7 @@ func TestDrainQueuedWorkflowResumeFailureReturnsWorkflowStateError(t *testing.T)
 
 	workflows.resumeErr = nil
 	workflows.resumeNodeAdvance = domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -9005,7 +8995,7 @@ func TestResumeWorkflowSessionBindsCurrentNodeRun(t *testing.T) {
 	}
 	nodeRunID := domain.NodeRunID("node-run-1")
 	workflows := &fakeWorkflowStarter{resumeNodeAdvance: domain.WorkflowAdvance{
-		WorkflowRunID:    "workflow-run-1",
+		SessionID:        "session-1",
 		NodeRunID:        &nodeRunID,
 		CurrentNodeID:    "build",
 		CurrentNodeTitle: "Build",
@@ -9088,13 +9078,12 @@ func TestResumeWorkflowSessionFailureMarksWorkflowWaitingResumeAction(t *testing
 	codex := &fakeCodexProcess{resumeErr: errors.New("resume unavailable")}
 	workflows := &fakeWorkflowStarter{
 		resumeNodeAdvance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1",
+			SessionID:     "session-1",
 			NodeRunID:     func() *domain.NodeRunID { value := domain.NodeRunID("node-run-1"); return &value }(),
 			RequiresCodex: true,
 			Prompt:        "Resume build",
 		},
 		resumeSnapshot: domain.WorkflowRunSnapshot{
-			ID:            "workflow-run-1",
 			SessionID:     "session-1",
 			Status:        "waiting_resume_action",
 			CurrentNodeID: "build",
@@ -9128,7 +9117,7 @@ func TestResumeWorkflowSessionFailureMarksWorkflowWaitingResumeAction(t *testing
 	got := events.snapshot()
 	found := false
 	for _, event := range got {
-		if event.Type == "workflow.waiting_resume_action" && event.Payload["workflowRunId"] == "workflow-run-1" && event.Payload["currentNodeId"] == "build" {
+		if event.Type == "workflow.waiting_resume_action" && event.Payload["sessionId"] == "session-1" && event.Payload["currentNodeId"] == "build" {
 			found = true
 		}
 	}
@@ -10014,14 +10003,14 @@ func TestMarkInterruptedSessionsRecoverableCompletesPendingWorkflowExit(t *testi
 		SessionID: &eventSessionID,
 		Type:      "workflow.exit_pending",
 		Payload: workflowProcessExitPayload(domain.WorkflowProcessExitInput{
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     "node-run-1",
-			Output:        map[string]any{"processRunId": "process-run-1", "exit": "completed"},
+			SessionID: "session-1",
+			NodeRunID: "node-run-1",
+			Output:    map[string]any{"processRunId": "process-run-1", "exit": "completed"},
 		}),
 	}}}
 	nextNodeRunID := domain.NodeRunID("node-run-2")
 	advance := domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
+		SessionID:     "session-1",
 		NodeRunID:     &nextNodeRunID,
 		CurrentNodeID: "verify",
 		RequiresCodex: true,
@@ -10039,10 +10028,10 @@ func TestMarkInterruptedSessionsRecoverableCompletesPendingWorkflowExit(t *testi
 	if count != 1 {
 		t.Fatalf("recoverable count = %d", count)
 	}
-	if got := repo.sessions[session.ID]; got.Status != domain.StatusQueued || got.Queue.WorkflowRunID != "workflow-run-1" || got.Queue.NodeRunID == nil || *got.Queue.NodeRunID != "node-run-2" {
+	if got := repo.sessions[session.ID]; got.Status != domain.StatusQueued || got.ID != "session-1" || got.Queue.NodeRunID == nil || *got.Queue.NodeRunID != "node-run-2" {
 		t.Fatalf("recovered session = %#v", got)
 	}
-	if workflows.recoverInput.WorkflowRunID != "workflow-run-1" || workflows.recoverInput.NodeRunID != "node-run-1" {
+	if workflows.recoverInput.SessionID != "session-1" || workflows.recoverInput.NodeRunID != "node-run-1" {
 		t.Fatalf("recover input = %#v", workflows.recoverInput)
 	}
 	for _, event := range events.snapshot() {
@@ -10070,14 +10059,14 @@ func TestMarkInterruptedSessionsRecoverableDefersPendingWorkflowSideEffect(t *te
 		SessionID: &eventSessionID,
 		Type:      "workflow.exit_pending",
 		Payload: workflowProcessExitPayload(domain.WorkflowProcessExitInput{
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     "node-run-1",
-			Output:        map[string]any{"processRunId": "process-run-1", "exit": "completed"},
+			SessionID: "session-1",
+			NodeRunID: "node-run-1",
+			Output:    map[string]any{"processRunId": "process-run-1", "exit": "completed"},
 		}),
 	}}}
 	exprNodeRunID := domain.NodeRunID("node-run-expr")
 	advance := domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
+		SessionID:     "session-1",
 		NodeRunID:     &exprNodeRunID,
 		CurrentNodeID: "expr",
 		Expr:          &domain.WorkflowExpr{Script: `{status: "ready"}`},
@@ -10119,11 +10108,11 @@ func TestMarkInterruptedSessionsRecoverableExecutesPersistedSystemAdvances(t *te
 	}{
 		{
 			name: "expr",
-			advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", CurrentNodeID: "expr", Expr: &domain.WorkflowExpr{
+			advance: domain.WorkflowAdvance{SessionID: "session-1", CurrentNodeID: "expr", Expr: &domain.WorkflowExpr{
 				Script: `{status: "ready"}`, Params: map[string]any{"input": "value"},
 			}},
 			setup: func(service *Service, _ *fakeRepository) {
-				service.workflows = &fakeWorkflowStarter{advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Completed: true}}
+				service.workflows = &fakeWorkflowStarter{advance: domain.WorkflowAdvance{SessionID: "session-1", Completed: true}}
 			},
 			verify: func(t *testing.T, service *Service, _ *fakeRepository) {
 				if service.workflows.(*fakeWorkflowStarter).completeCalls != 1 {
@@ -10133,16 +10122,16 @@ func TestMarkInterruptedSessionsRecoverableExecutesPersistedSystemAdvances(t *te
 		},
 		{
 			name:    "close",
-			advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", CurrentNodeID: "close", Close: true},
+			advance: domain.WorkflowAdvance{SessionID: "session-1", CurrentNodeID: "close", Close: true},
 		},
 		{
 			name: "merge",
-			advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", CurrentNodeID: "merge", Merge: &domain.WorkflowMerge{
+			advance: domain.WorkflowAdvance{SessionID: "session-1", CurrentNodeID: "merge", Merge: &domain.WorkflowMerge{
 				Strategy: "merge",
 			}},
 			setup: func(service *Service, repo *fakeRepository) {
 				service.merge = &fakeMergePort{result: gitdiffdomain.MergeResult{Status: "merged", Strategy: "merge", BaseBranch: "master"}}
-				service.workflows = &fakeWorkflowStarter{advance: domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Completed: true}}
+				service.workflows = &fakeWorkflowStarter{advance: domain.WorkflowAdvance{SessionID: "session-1", Completed: true}}
 				session := repo.sessions["session-1"]
 				session.BaseBranch = "master"
 				session.WorktreePath = "/tmp/worktree"
@@ -10205,14 +10194,14 @@ func TestPendingSystemAdvancesReturnsEveryUnacknowledgedCommandInOrder(t *testin
 	sessionID := eventdomain.SessionID("session-1")
 	events := &fakeEventStore{events: []eventdomain.DomainEvent{
 		{ID: "command-1", SessionID: &sessionID, Type: workflowSystemAdvancePendingEvent, Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{
-			WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-1"), CurrentNodeID: "expr-1", Expr: &domain.WorkflowExpr{Script: `{ok: true}`},
+			SessionID: "run-1", NodeRunID: nodeRunIDPtr("node-1"), CurrentNodeID: "expr-1", Expr: &domain.WorkflowExpr{Script: `{ok: true}`},
 		})},
 		{ID: "command-2", SessionID: &sessionID, Type: workflowSystemAdvancePendingEvent, Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{
-			WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-2"), CurrentNodeID: "close", Close: true,
+			SessionID: "run-1", NodeRunID: nodeRunIDPtr("node-2"), CurrentNodeID: "close", Close: true,
 		})},
 		{ID: "completed-2", SessionID: &sessionID, Type: workflowSystemAdvanceCompletedEvent, Payload: map[string]any{"commandEventId": "command-2"}},
 		{ID: "command-3", SessionID: &sessionID, Type: workflowSystemAdvancePendingEvent, Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{
-			WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-3"), CurrentNodeID: "expr-3", Expr: &domain.WorkflowExpr{Script: `{ok: true}`},
+			SessionID: "run-1", NodeRunID: nodeRunIDPtr("node-3"), CurrentNodeID: "expr-3", Expr: &domain.WorkflowExpr{Script: `{ok: true}`},
 		})},
 	}}
 	service := New(newFakeRepository(), newFakeProjectRepository("project-1"), WithEvents(events))
@@ -10230,7 +10219,7 @@ func TestAppliedSystemCommandSkipsProjectionAfterAckFailure(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Mode: domain.ModeWorkflow, Status: domain.StatusRunning}
 	nodeRunID := domain.NodeRunID("node-1")
-	workflows := &fakeWorkflowStarter{advance: domain.WorkflowAdvance{WorkflowRunID: "run-1", Completed: true}}
+	workflows := &fakeWorkflowStarter{advance: domain.WorkflowAdvance{SessionID: "run-1", Completed: true}}
 	events := &fakeEventStore{appendErrs: []error{nil, errors.New("ack unavailable")}}
 	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
@@ -10241,7 +10230,7 @@ func TestAppliedSystemCommandSkipsProjectionAfterAckFailure(t *testing.T) {
 	}
 	pending := workflowApprovalPostCommitAdvance{
 		session: repo.sessions["session-1"], commandEventID: "command-1",
-		advance: domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", Expr: &domain.WorkflowExpr{Script: `{ok: true}`}},
+		advance: domain.WorkflowAdvance{SessionID: "run-1", NodeRunID: &nodeRunID, CurrentNodeID: "expr", Expr: &domain.WorkflowExpr{Script: `{ok: true}`}},
 	}
 
 	if err := service.executePendingSystemAdvance(context.Background(), pending); err == nil || !strings.Contains(err.Error(), "ack unavailable") {
@@ -10319,7 +10308,7 @@ func TestRecoverCloseSystemCommandAfterPreparedStoppingCrash(t *testing.T) {
 	eventSessionID := eventdomain.SessionID(session.ID)
 	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
 		ID: "command-close", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
-		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-close"), Close: true}),
+		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{SessionID: "run-1", NodeRunID: nodeRunIDPtr("node-close"), Close: true}),
 	}}}
 	processes := newFakeProcessRepository()
 	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithProcesses(processes, nil), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}))
@@ -10360,7 +10349,7 @@ func TestRecoverAllPendingSystemAdvancesUsesStableSnapshotOverPageSize(t *testin
 		eventSessionID := eventdomain.SessionID(id)
 		events.events = append(events.events, eventdomain.DomainEvent{
 			ID: eventdomain.ID(fmt.Sprintf("command-%03d", index)), SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
-			Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: nodeRunIDPtr("node-1"), Close: true}),
+			Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{SessionID: "run-1", NodeRunID: nodeRunIDPtr("node-1"), Close: true}),
 		})
 	}
 	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events}}))
@@ -10385,14 +10374,14 @@ func TestConsecutiveMergeNodesUseDistinctPendingCommands(t *testing.T) {
 	repo.sessions[session.ID] = session
 	node1, node2 := domain.NodeRunID("node-1"), domain.NodeRunID("node-2")
 	workflows := &fakeWorkflowStarter{completeAdvances: []domain.WorkflowAdvance{
-		{WorkflowRunID: "run-1", NodeRunID: &node2, CurrentNodeID: "merge-2", Merge: &domain.WorkflowMerge{Strategy: "merge"}},
-		{WorkflowRunID: "run-1", Completed: true},
+		{SessionID: "run-1", NodeRunID: &node2, CurrentNodeID: "merge-2", Merge: &domain.WorkflowMerge{Strategy: "merge"}},
+		{SessionID: "run-1", Completed: true},
 	}}
 	merge := &fakeMergePort{result: gitdiffdomain.MergeResult{Status: "merged", Strategy: "merge", BaseBranch: "main", MergeCommit: "merge"}}
 	eventSessionID := eventdomain.SessionID(session.ID)
 	events := &fakeEventStore{events: []eventdomain.DomainEvent{{
 		ID: "command-1", SessionID: &eventSessionID, Type: workflowSystemAdvancePendingEvent,
-		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{WorkflowRunID: "run-1", NodeRunID: &node1, CurrentNodeID: "merge-1", Merge: &domain.WorkflowMerge{Strategy: "merge"}}),
+		Payload: workflowAdvancePendingPayload(domain.WorkflowAdvance{SessionID: "run-1", NodeRunID: &node1, CurrentNodeID: "merge-1", Merge: &domain.WorkflowMerge{Strategy: "merge"}}),
 	}}}
 	service := New(repo, newFakeProjectRepository("project-1"), WithWorkflows(workflows), WithMergePort(merge), WithEvents(events), WithProcesses(newFakeProcessRepository(), nil), WithUnitOfWork(&fakeUnitOfWork{tx: fakeTx{sessions: repo, events: events, processes: newFakeProcessRepository()}}))
 	sequence := 0
@@ -10438,12 +10427,12 @@ func TestMarkInterruptedSessionsRecoverableAppliesPersistedWorkflowFailure(t *te
 		SessionID: &eventSessionID,
 		Type:      "workflow.exit_pending",
 		Payload: workflowProcessExitPayload(domain.WorkflowProcessExitInput{
-			WorkflowRunID: "workflow-run-1",
-			NodeRunID:     "node-run-1",
-			Output:        map[string]any{"processRunId": "process-run-1", "exit": "completed"},
+			SessionID: "session-1",
+			NodeRunID: "node-run-1",
+			Output:    map[string]any{"processRunId": "process-run-1", "exit": "completed"},
 		}),
 	}}}
-	failedAdvance := domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Status: "failed"}
+	failedAdvance := domain.WorkflowAdvance{SessionID: "session-1", Status: "failed"}
 	workflows := &fakeWorkflowStarter{recoverAdvance: &failedAdvance}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(newFakeProcessRepository(), nil), WithEvents(events), WithWorkflows(workflows))
 	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
@@ -10561,7 +10550,7 @@ func TestWorkflowProcessExitRetriesApplyWithoutCompletingNodeAgain(t *testing.T)
 	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
 	processes.hasActive = true
 	workflows := &fakeWorkflowStarter{advance: domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
+		SessionID:     "session-1",
 		Blocked:       true,
 		BlockedReason: "blocked",
 	}}
@@ -10578,7 +10567,7 @@ func TestWorkflowProcessExitRetriesApplyWithoutCompletingNodeAgain(t *testing.T)
 	service.handleCodexProcessExit(
 		repo.sessions["session-1"],
 		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
-		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+		codexStartOptions{sessionID: "session-1", nodeRunID: &currentNodeRunID},
 		processdomain.ExitResult{},
 		nil,
 	)
@@ -10596,7 +10585,7 @@ func TestWorkflowProcessExitRetriesApplyWithoutCompletingNodeAgain(t *testing.T)
 			break
 		}
 	}
-	if checkpoint == nil || checkpoint.Payload["workflowRunId"] != "workflow-run-1" || checkpoint.Payload["nodeRunId"] != "node-run-1" {
+	if checkpoint == nil || checkpoint.Payload["sessionId"] != "session-1" || checkpoint.Payload["nodeRunId"] != "node-run-1" {
 		t.Fatalf("workflow exit checkpoint = %#v", checkpoint)
 	}
 }
@@ -10628,7 +10617,7 @@ func TestWorkflowProcessExitRetriesFailureSaveWithoutCompletingNodeAgain(t *test
 	service.handleCodexProcessExit(
 		repo.sessions["session-1"],
 		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
-		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+		codexStartOptions{sessionID: "session-1", nodeRunID: &currentNodeRunID},
 		processdomain.ExitResult{},
 		nil,
 	)
@@ -10658,13 +10647,13 @@ func TestWorkflowProcessExitDoesNotReplayExprAdvanceAfterSideEffectFailure(t *te
 	exprNodeRunID := domain.NodeRunID("node-run-expr")
 	workflows := &fakeWorkflowStarter{}
 	workflows.advance = domain.WorkflowAdvance{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     &exprNodeRunID,
-		Expr:          &domain.WorkflowExpr{Script: `{status: "ready"}`},
+		SessionID: "session-1",
+		NodeRunID: &exprNodeRunID,
+		Expr:      &domain.WorkflowExpr{Script: `{status: "ready"}`},
 	}
 	workflows.completeHook = func() {
 		if workflows.completeCalls == 2 {
-			workflows.advance = domain.WorkflowAdvance{WorkflowRunID: "workflow-run-1", Completed: true}
+			workflows.advance = domain.WorkflowAdvance{SessionID: "session-1", Completed: true}
 		}
 	}
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithEvents(&fakeEventStore{}), WithWorkflows(workflows))
@@ -10679,7 +10668,7 @@ func TestWorkflowProcessExitDoesNotReplayExprAdvanceAfterSideEffectFailure(t *te
 	service.handleCodexProcessExit(
 		repo.sessions["session-1"],
 		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
-		codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+		codexStartOptions{sessionID: "session-1", nodeRunID: &currentNodeRunID},
 		processdomain.ExitResult{},
 		nil,
 	)
@@ -10761,7 +10750,7 @@ func TestWorkflowProcessExitKeepsSessionLockThroughAdvance(t *testing.T) {
 			<-releaseComplete
 		},
 		advance: domain.WorkflowAdvance{
-			WorkflowRunID: "workflow-run-1",
+			SessionID:     "session-1",
 			NodeRunID:     &nextNodeRunID,
 			RequiresCodex: true,
 			Prompt:        "continue",
@@ -10788,7 +10777,7 @@ func TestWorkflowProcessExitKeepsSessionLockThroughAdvance(t *testing.T) {
 		service.handleCodexProcessExit(
 			repo.sessions["session-1"],
 			processdomain.CodexHandle{ProcessRunID: "process-run-1"},
-			codexStartOptions{workflowRunID: "workflow-run-1", nodeRunID: &currentNodeRunID},
+			codexStartOptions{sessionID: "session-1", nodeRunID: &currentNodeRunID},
 			processdomain.ExitResult{},
 			nil,
 		)
@@ -11638,17 +11627,17 @@ func (s *fakeWorkflowStarter) RecoverProcessExit(ctx context.Context, input doma
 	}
 	if input.Failed {
 		return s.FailNode(ctx, domain.WorkflowNodeFailInput{
-			WorkflowRunID: input.WorkflowRunID,
-			NodeRunID:     input.NodeRunID,
-			Code:          input.FailureCode,
-			Message:       input.FailureMessage,
-			Output:        input.Output,
+			SessionID: input.SessionID,
+			NodeRunID: input.NodeRunID,
+			Code:      input.FailureCode,
+			Message:   input.FailureMessage,
+			Output:    input.Output,
 		})
 	}
 	return s.CompleteNode(ctx, domain.WorkflowNodeCompleteInput{
-		WorkflowRunID: input.WorkflowRunID,
-		NodeRunID:     input.NodeRunID,
-		Output:        input.Output,
+		SessionID: input.SessionID,
+		NodeRunID: input.NodeRunID,
+		Output:    input.Output,
 	})
 }
 
@@ -11666,25 +11655,26 @@ func (s *fakeWorkflowStarter) SubmitApprovalForSessionWithRepositories(ctx conte
 }
 
 type fakeProcessRepository struct {
-	mu                 sync.RWMutex
-	created            []processdomain.Run
-	active             processdomain.Run
-	activeBySession    map[processdomain.SessionID]processdomain.Run
-	hasActive          bool
-	activeCount        int
-	runningID          processdomain.RunID
-	runningPID         int
-	runningCodex       string
-	bindErr            error
-	stoppingID         processdomain.RunID
-	exitedID           processdomain.RunID
-	exitedResult       processdomain.ExitResult
-	markExitedCalls    int
-	markExitedFailures int
-	markExitedHook     func()
-	markExitedDoneHook func()
-	transcriptSources  map[string]processdomain.CodexTranscriptSource
-	transcriptMissing  bool
+	mu                        sync.RWMutex
+	created                   []processdomain.Run
+	active                    processdomain.Run
+	activeBySession           map[processdomain.SessionID]processdomain.Run
+	hasActive                 bool
+	activeCount               int
+	runningID                 processdomain.RunID
+	runningPID                int
+	runningCodex              string
+	bindErr                   error
+	stoppingID                processdomain.RunID
+	exitedID                  processdomain.RunID
+	exitedResult              processdomain.ExitResult
+	markExitedCalls           int
+	markExitedFailures        int
+	markExitedHook            func()
+	markExitedDoneHook        func()
+	transcriptSources         map[string]processdomain.CodexTranscriptSource
+	transcriptMissing         bool
+	transcriptLookupSessionID processdomain.SessionID
 }
 
 func newFakeProcessRepository() *fakeProcessRepository {
@@ -11813,9 +11803,10 @@ func (r *fakeProcessRepository) BindTranscript(_ context.Context, id processdoma
 	return nil
 }
 
-func (r *fakeProcessRepository) FindTranscriptSource(_ context.Context, codexSessionID string) (processdomain.CodexTranscriptSource, bool, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *fakeProcessRepository) FindTranscriptSource(_ context.Context, sessionID processdomain.SessionID, codexSessionID string) (processdomain.CodexTranscriptSource, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.transcriptLookupSessionID = sessionID
 	if r.transcriptMissing {
 		return processdomain.CodexTranscriptSource{}, false, nil
 	}
@@ -11932,12 +11923,10 @@ func (c *fakeQuestionCanceller) CreateBatch(_ context.Context, input questionapp
 	}
 	if c.batch.ID == "" {
 		c.batch = questionapp.BatchDTO{
-			ID:            "batch-1",
-			SessionID:     input.SessionID,
-			WorkflowRunID: input.WorkflowRunID,
-			Status:        questiondomain.BatchPending,
-			Questions:     input.Questions,
-			Created:       true,
+			SessionID: input.SessionID,
+			Status:    questiondomain.BatchPending,
+			Questions: input.Questions,
+			Created:   true,
 		}
 	}
 	return c.batch, nil
@@ -12371,12 +12360,12 @@ func TestWorkflowDirectAnswerAckRestoresSameNodeRun(t *testing.T) {
 	if err := store.Workflows().SaveDefinition(ctx, definition); err != nil {
 		t.Fatal(err)
 	}
-	workflowRun := workflowdomain.Run{ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: definition.ID, Status: workflowdomain.RunRunning, CurrentNodeID: "build", StartedAt: &now}
+	workflowRun := workflowdomain.Run{SessionID: "session-1", WorkflowDefinitionID: definition.ID, Status: workflowdomain.RunRunning, CurrentNodeID: "build", StartedAt: &now}
 	if err := store.Workflows().CreateRun(ctx, workflowRun); err != nil {
 		t.Fatal(err)
 	}
 	workflowProcessID := workflowdomain.ProcessRunID("process-1")
-	nodeRun := workflowdomain.NodeRun{ID: "node-run-1", WorkflowRunID: workflowRun.ID, NodeID: "build", Status: workflowdomain.NodeRunning, Attempt: 1, ProcessRunID: &workflowProcessID, StartedAt: &now}
+	nodeRun := workflowdomain.NodeRun{ID: "node-run-1", SessionID: workflowRun.SessionID, NodeID: "build", Status: workflowdomain.NodeRunning, Attempt: 1, ProcessRunID: &workflowProcessID, StartedAt: &now}
 	if err := store.Workflows().SaveNodeRun(ctx, nodeRun); err != nil {
 		t.Fatal(err)
 	}
@@ -12410,7 +12399,7 @@ func TestWorkflowDirectAnswerAckRestoresSameNodeRun(t *testing.T) {
 	if err := service.AcknowledgeUserAnswerDelivery(ctx, AcknowledgeUserAnswerDeliveryInput{SessionID: "session-1", BatchID: answered.ID}); err != nil {
 		t.Fatal(err)
 	}
-	gotNode, err := store.Workflows().FindLatestNodeRun(ctx, workflowRun.ID, "build")
+	gotNode, err := store.Workflows().FindLatestNodeRun(ctx, workflowRun.SessionID, "build")
 	if err != nil {
 		t.Fatal(err)
 	}

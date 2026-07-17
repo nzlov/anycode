@@ -107,7 +107,7 @@ type Repository interface {
 	CountActive(ctx context.Context) (int, error)
 	MarkStarted(ctx context.Context, id RunID, pid int) error
 	BindTranscript(ctx context.Context, id RunID, pid int, source CodexTranscriptSource) error
-	FindTranscriptSource(ctx context.Context, codexSessionID string) (CodexTranscriptSource, bool, error)
+	FindTranscriptSource(ctx context.Context, sessionID SessionID, codexSessionID string) (CodexTranscriptSource, bool, error)
 	TranscriptSources(ctx context.Context, sessionID SessionID) ([]CodexTranscriptSource, error)
 	MarkWaitingUser(ctx context.Context, id RunID) error
 	MarkRunning(ctx context.Context, id RunID, pid int, codexSessionID string) error

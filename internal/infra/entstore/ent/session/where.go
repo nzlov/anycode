@@ -229,11 +229,6 @@ func QueueReviewAfterReuseFailure(v bool) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueReviewAfterReuseFailure, v))
 }
 
-// QueueWorkflowRunID applies equality check predicate on the "queue_workflow_run_id" field. It's identical to QueueWorkflowRunIDEQ.
-func QueueWorkflowRunID(v string) predicate.Session {
-	return predicate.Session(sql.FieldEQ(FieldQueueWorkflowRunID, v))
-}
-
 // QueueNodeRunID applies equality check predicate on the "queue_node_run_id" field. It's identical to QueueNodeRunIDEQ.
 func QueueNodeRunID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueNodeRunID, v))
@@ -257,6 +252,31 @@ func QueueResumeOfProcessRunID(v string) predicate.Session {
 // QueueAnswerBatchID applies equality check predicate on the "queue_answer_batch_id" field. It's identical to QueueAnswerBatchIDEQ.
 func QueueAnswerBatchID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueAnswerBatchID, v))
+}
+
+// WorkflowDefinitionID applies equality check predicate on the "workflow_definition_id" field. It's identical to WorkflowDefinitionIDEQ.
+func WorkflowDefinitionID(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowStatus applies equality check predicate on the "workflow_status" field. It's identical to WorkflowStatusEQ.
+func WorkflowStatus(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowStatus, v))
+}
+
+// WorkflowCurrentNodeID applies equality check predicate on the "workflow_current_node_id" field. It's identical to WorkflowCurrentNodeIDEQ.
+func WorkflowCurrentNodeID(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowStartedAt applies equality check predicate on the "workflow_started_at" field. It's identical to WorkflowStartedAtEQ.
+func WorkflowStartedAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStoppedAt applies equality check predicate on the "workflow_stopped_at" field. It's identical to WorkflowStoppedAtEQ.
+func WorkflowStoppedAt(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowStoppedAt, v))
 }
 
 // LastRunAt applies equality check predicate on the "last_run_at" field. It's identical to LastRunAtEQ.
@@ -2069,71 +2089,6 @@ func QueueReviewAfterReuseFailureNEQ(v bool) predicate.Session {
 	return predicate.Session(sql.FieldNEQ(FieldQueueReviewAfterReuseFailure, v))
 }
 
-// QueueWorkflowRunIDEQ applies the EQ predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDEQ(v string) predicate.Session {
-	return predicate.Session(sql.FieldEQ(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDNEQ applies the NEQ predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDNEQ(v string) predicate.Session {
-	return predicate.Session(sql.FieldNEQ(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDIn applies the In predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDIn(vs ...string) predicate.Session {
-	return predicate.Session(sql.FieldIn(FieldQueueWorkflowRunID, vs...))
-}
-
-// QueueWorkflowRunIDNotIn applies the NotIn predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDNotIn(vs ...string) predicate.Session {
-	return predicate.Session(sql.FieldNotIn(FieldQueueWorkflowRunID, vs...))
-}
-
-// QueueWorkflowRunIDGT applies the GT predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDGT(v string) predicate.Session {
-	return predicate.Session(sql.FieldGT(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDGTE applies the GTE predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDGTE(v string) predicate.Session {
-	return predicate.Session(sql.FieldGTE(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDLT applies the LT predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDLT(v string) predicate.Session {
-	return predicate.Session(sql.FieldLT(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDLTE applies the LTE predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDLTE(v string) predicate.Session {
-	return predicate.Session(sql.FieldLTE(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDContains applies the Contains predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDContains(v string) predicate.Session {
-	return predicate.Session(sql.FieldContains(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDHasPrefix applies the HasPrefix predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDHasPrefix(v string) predicate.Session {
-	return predicate.Session(sql.FieldHasPrefix(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDHasSuffix applies the HasSuffix predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDHasSuffix(v string) predicate.Session {
-	return predicate.Session(sql.FieldHasSuffix(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDEqualFold applies the EqualFold predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDEqualFold(v string) predicate.Session {
-	return predicate.Session(sql.FieldEqualFold(FieldQueueWorkflowRunID, v))
-}
-
-// QueueWorkflowRunIDContainsFold applies the ContainsFold predicate on the "queue_workflow_run_id" field.
-func QueueWorkflowRunIDContainsFold(v string) predicate.Session {
-	return predicate.Session(sql.FieldContainsFold(FieldQueueWorkflowRunID, v))
-}
-
 // QueueNodeRunIDEQ applies the EQ predicate on the "queue_node_run_id" field.
 func QueueNodeRunIDEQ(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueNodeRunID, v))
@@ -2457,6 +2412,301 @@ func QueueAnswerBatchIDEqualFold(v string) predicate.Session {
 // QueueAnswerBatchIDContainsFold applies the ContainsFold predicate on the "queue_answer_batch_id" field.
 func QueueAnswerBatchIDContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldQueueAnswerBatchID, v))
+}
+
+// WorkflowDefinitionIDEQ applies the EQ predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDNEQ applies the NEQ predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDIn applies the In predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorkflowDefinitionID, vs...))
+}
+
+// WorkflowDefinitionIDNotIn applies the NotIn predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorkflowDefinitionID, vs...))
+}
+
+// WorkflowDefinitionIDGT applies the GT predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDGTE applies the GTE predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDLT applies the LT predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDLTE applies the LTE predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDContains applies the Contains predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDHasPrefix applies the HasPrefix predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDHasSuffix applies the HasSuffix predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDEqualFold applies the EqualFold predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowDefinitionIDContainsFold applies the ContainsFold predicate on the "workflow_definition_id" field.
+func WorkflowDefinitionIDContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorkflowDefinitionID, v))
+}
+
+// WorkflowStatusEQ applies the EQ predicate on the "workflow_status" field.
+func WorkflowStatusEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusNEQ applies the NEQ predicate on the "workflow_status" field.
+func WorkflowStatusNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusIn applies the In predicate on the "workflow_status" field.
+func WorkflowStatusIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorkflowStatus, vs...))
+}
+
+// WorkflowStatusNotIn applies the NotIn predicate on the "workflow_status" field.
+func WorkflowStatusNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorkflowStatus, vs...))
+}
+
+// WorkflowStatusGT applies the GT predicate on the "workflow_status" field.
+func WorkflowStatusGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusGTE applies the GTE predicate on the "workflow_status" field.
+func WorkflowStatusGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusLT applies the LT predicate on the "workflow_status" field.
+func WorkflowStatusLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusLTE applies the LTE predicate on the "workflow_status" field.
+func WorkflowStatusLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusContains applies the Contains predicate on the "workflow_status" field.
+func WorkflowStatusContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusHasPrefix applies the HasPrefix predicate on the "workflow_status" field.
+func WorkflowStatusHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusHasSuffix applies the HasSuffix predicate on the "workflow_status" field.
+func WorkflowStatusHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusEqualFold applies the EqualFold predicate on the "workflow_status" field.
+func WorkflowStatusEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorkflowStatus, v))
+}
+
+// WorkflowStatusContainsFold applies the ContainsFold predicate on the "workflow_status" field.
+func WorkflowStatusContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorkflowStatus, v))
+}
+
+// WorkflowCurrentNodeIDEQ applies the EQ predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDNEQ applies the NEQ predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDIn applies the In predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorkflowCurrentNodeID, vs...))
+}
+
+// WorkflowCurrentNodeIDNotIn applies the NotIn predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorkflowCurrentNodeID, vs...))
+}
+
+// WorkflowCurrentNodeIDGT applies the GT predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDGTE applies the GTE predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDLT applies the LT predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDLTE applies the LTE predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDContains applies the Contains predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDHasPrefix applies the HasPrefix predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDHasSuffix applies the HasSuffix predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDEqualFold applies the EqualFold predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowCurrentNodeIDContainsFold applies the ContainsFold predicate on the "workflow_current_node_id" field.
+func WorkflowCurrentNodeIDContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorkflowCurrentNodeID, v))
+}
+
+// WorkflowStartedAtEQ applies the EQ predicate on the "workflow_started_at" field.
+func WorkflowStartedAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStartedAtNEQ applies the NEQ predicate on the "workflow_started_at" field.
+func WorkflowStartedAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStartedAtIn applies the In predicate on the "workflow_started_at" field.
+func WorkflowStartedAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorkflowStartedAt, vs...))
+}
+
+// WorkflowStartedAtNotIn applies the NotIn predicate on the "workflow_started_at" field.
+func WorkflowStartedAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorkflowStartedAt, vs...))
+}
+
+// WorkflowStartedAtGT applies the GT predicate on the "workflow_started_at" field.
+func WorkflowStartedAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStartedAtGTE applies the GTE predicate on the "workflow_started_at" field.
+func WorkflowStartedAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStartedAtLT applies the LT predicate on the "workflow_started_at" field.
+func WorkflowStartedAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStartedAtLTE applies the LTE predicate on the "workflow_started_at" field.
+func WorkflowStartedAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorkflowStartedAt, v))
+}
+
+// WorkflowStartedAtIsNil applies the IsNil predicate on the "workflow_started_at" field.
+func WorkflowStartedAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorkflowStartedAt))
+}
+
+// WorkflowStartedAtNotNil applies the NotNil predicate on the "workflow_started_at" field.
+func WorkflowStartedAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorkflowStartedAt))
+}
+
+// WorkflowStoppedAtEQ applies the EQ predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorkflowStoppedAt, v))
+}
+
+// WorkflowStoppedAtNEQ applies the NEQ predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtNEQ(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorkflowStoppedAt, v))
+}
+
+// WorkflowStoppedAtIn applies the In predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorkflowStoppedAt, vs...))
+}
+
+// WorkflowStoppedAtNotIn applies the NotIn predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtNotIn(vs ...time.Time) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorkflowStoppedAt, vs...))
+}
+
+// WorkflowStoppedAtGT applies the GT predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtGT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorkflowStoppedAt, v))
+}
+
+// WorkflowStoppedAtGTE applies the GTE predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtGTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorkflowStoppedAt, v))
+}
+
+// WorkflowStoppedAtLT applies the LT predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtLT(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorkflowStoppedAt, v))
+}
+
+// WorkflowStoppedAtLTE applies the LTE predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtLTE(v time.Time) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorkflowStoppedAt, v))
+}
+
+// WorkflowStoppedAtIsNil applies the IsNil predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldWorkflowStoppedAt))
+}
+
+// WorkflowStoppedAtNotNil applies the NotNil predicate on the "workflow_stopped_at" field.
+func WorkflowStoppedAtNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldWorkflowStoppedAt))
 }
 
 // AppliedSystemCommandsIsNil applies the IsNil predicate on the "applied_system_commands" field.

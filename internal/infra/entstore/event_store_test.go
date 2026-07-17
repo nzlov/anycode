@@ -155,7 +155,7 @@ func TestEventStorePreservesPayload(t *testing.T) {
 			"accessKey":    "secret",
 			"worktreePath": "/home/nzlov/workspaces/github/project",
 		},
-		Causality: event.Causality{ProcessRunID: "process-1", WorkflowRunID: "workflow-1", NodeRunID: "node-1", CorrelationID: "correlation-1", SessionStatus: "running"},
+		Causality: event.Causality{ProcessRunID: "process-1", NodeRunID: "node-1", CorrelationID: "correlation-1", SessionStatus: "running"},
 		CreatedAt: time.Now(),
 	})
 
@@ -166,7 +166,7 @@ func TestEventStorePreservesPayload(t *testing.T) {
 	if got[0].Payload["accessKey"] != "secret" || got[0].Payload["worktreePath"] != "/home/nzlov/workspaces/github/project" {
 		t.Fatalf("payload changed: %#v", got[0].Payload)
 	}
-	if got[0].Causality.ProcessRunID != "process-1" || got[0].Causality.WorkflowRunID != "workflow-1" || got[0].Causality.NodeRunID != "node-1" || got[0].Causality.CorrelationID != "correlation-1" || got[0].Causality.SessionStatus != "running" {
+	if got[0].Causality.ProcessRunID != "process-1" || got[0].Causality.NodeRunID != "node-1" || got[0].Causality.CorrelationID != "correlation-1" || got[0].Causality.SessionStatus != "running" {
 		t.Fatalf("causality changed: %#v", got[0].Causality)
 	}
 }

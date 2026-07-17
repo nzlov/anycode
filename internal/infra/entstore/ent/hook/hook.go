@@ -9,18 +9,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 )
 
-// The CodexTranscriptSourceFunc type is an adapter to allow the use of ordinary
-// function as CodexTranscriptSource mutator.
-type CodexTranscriptSourceFunc func(context.Context, *ent.CodexTranscriptSourceMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f CodexTranscriptSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.CodexTranscriptSourceMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.CodexTranscriptSourceMutation", m)
-}
-
 // The EventRecordFunc type is an adapter to allow the use of ordinary
 // function as EventRecord mutator.
 type EventRecordFunc func(context.Context, *ent.EventRecordMutation) (ent.Value, error)
@@ -163,18 +151,6 @@ func (f WorkflowDefinitionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkflowDefinitionMutation", m)
-}
-
-// The WorkflowRunFunc type is an adapter to allow the use of ordinary
-// function as WorkflowRun mutator.
-type WorkflowRunFunc func(context.Context, *ent.WorkflowRunMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f WorkflowRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.WorkflowRunMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.WorkflowRunMutation", m)
 }
 
 // Condition is a hook condition function.

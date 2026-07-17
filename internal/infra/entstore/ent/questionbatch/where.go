@@ -69,11 +69,6 @@ func SessionID(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldSessionID, v))
 }
 
-// WorkflowRunID applies equality check predicate on the "workflow_run_id" field. It's identical to WorkflowRunIDEQ.
-func WorkflowRunID(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldEQ(FieldWorkflowRunID, v))
-}
-
 // OriginProcessRunID applies equality check predicate on the "origin_process_run_id" field. It's identical to OriginProcessRunIDEQ.
 func OriginProcessRunID(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldEQ(FieldOriginProcessRunID, v))
@@ -177,81 +172,6 @@ func SessionIDEqualFold(v string) predicate.QuestionBatch {
 // SessionIDContainsFold applies the ContainsFold predicate on the "session_id" field.
 func SessionIDContainsFold(v string) predicate.QuestionBatch {
 	return predicate.QuestionBatch(sql.FieldContainsFold(FieldSessionID, v))
-}
-
-// WorkflowRunIDEQ applies the EQ predicate on the "workflow_run_id" field.
-func WorkflowRunIDEQ(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldEQ(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDNEQ applies the NEQ predicate on the "workflow_run_id" field.
-func WorkflowRunIDNEQ(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldNEQ(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDIn applies the In predicate on the "workflow_run_id" field.
-func WorkflowRunIDIn(vs ...string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldIn(FieldWorkflowRunID, vs...))
-}
-
-// WorkflowRunIDNotIn applies the NotIn predicate on the "workflow_run_id" field.
-func WorkflowRunIDNotIn(vs ...string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldNotIn(FieldWorkflowRunID, vs...))
-}
-
-// WorkflowRunIDGT applies the GT predicate on the "workflow_run_id" field.
-func WorkflowRunIDGT(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldGT(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDGTE applies the GTE predicate on the "workflow_run_id" field.
-func WorkflowRunIDGTE(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldGTE(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDLT applies the LT predicate on the "workflow_run_id" field.
-func WorkflowRunIDLT(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldLT(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDLTE applies the LTE predicate on the "workflow_run_id" field.
-func WorkflowRunIDLTE(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldLTE(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDContains applies the Contains predicate on the "workflow_run_id" field.
-func WorkflowRunIDContains(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldContains(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDHasPrefix applies the HasPrefix predicate on the "workflow_run_id" field.
-func WorkflowRunIDHasPrefix(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldHasPrefix(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDHasSuffix applies the HasSuffix predicate on the "workflow_run_id" field.
-func WorkflowRunIDHasSuffix(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldHasSuffix(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDIsNil applies the IsNil predicate on the "workflow_run_id" field.
-func WorkflowRunIDIsNil() predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldIsNull(FieldWorkflowRunID))
-}
-
-// WorkflowRunIDNotNil applies the NotNil predicate on the "workflow_run_id" field.
-func WorkflowRunIDNotNil() predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldNotNull(FieldWorkflowRunID))
-}
-
-// WorkflowRunIDEqualFold applies the EqualFold predicate on the "workflow_run_id" field.
-func WorkflowRunIDEqualFold(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldEqualFold(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDContainsFold applies the ContainsFold predicate on the "workflow_run_id" field.
-func WorkflowRunIDContainsFold(v string) predicate.QuestionBatch {
-	return predicate.QuestionBatch(sql.FieldContainsFold(FieldWorkflowRunID, v))
 }
 
 // OriginProcessRunIDEQ applies the EQ predicate on the "origin_process_run_id" field.

@@ -836,6 +836,8 @@ func TestSessionRepositoryMigrateAddsFieldsToExistingTursoSessions(t *testing.T)
 		queue_node_run_id text NOT NULL DEFAULT '',
 		queue_prompt text NOT NULL DEFAULT '',
 		queue_resume_codex_session_id text NOT NULL DEFAULT '',
+		workflow_context json NOT NULL DEFAULT '{}',
+		workflow_pending_approval json NOT NULL DEFAULT '{}',
 		last_run_at datetime NULL,
 		created_at datetime NOT NULL,
 		updated_at datetime NOT NULL,

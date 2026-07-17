@@ -362,10 +362,10 @@ func (r *mutationResolver) SubmitWorkflowApproval(ctx context.Context, input mod
 		return nil, missingUseCase("sessions")
 	}
 	dto, err := r.UseCases.Sessions.SubmitWorkflowApproval(ctx, sessionapp.SubmitWorkflowApprovalInput{
-		WorkflowRunID: sessiondomain.WorkflowRunID(input.WorkflowRunID),
-		NodeID:        input.NodeID,
-		Approved:      input.Approved,
-		Comment:       stringValue(input.Comment, ""),
+		SessionID: sessiondomain.ID(input.SessionID),
+		NodeID:    input.NodeID,
+		Approved:  input.Approved,
+		Comment:   stringValue(input.Comment, ""),
 	})
 	if err != nil {
 		return nil, err

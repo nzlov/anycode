@@ -13,7 +13,7 @@ type NodeRun struct {
 func (NodeRun) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Immutable(),
-		field.String("workflow_run_id").NotEmpty(),
+		field.String("session_id").NotEmpty(),
 		field.String("node_id").NotEmpty(),
 		field.String("status").NotEmpty(),
 		field.Int("attempt").Default(1),
@@ -26,7 +26,7 @@ func (NodeRun) Fields() []ent.Field {
 
 func (NodeRun) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("workflow_run_id", "node_id"),
-		index.Fields("workflow_run_id", "status"),
+		index.Fields("session_id", "node_id"),
+		index.Fields("session_id", "status"),
 	}
 }

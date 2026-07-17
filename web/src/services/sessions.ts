@@ -64,7 +64,7 @@ export interface SessionCard {
 }
 
 export interface PendingApproval {
-  workflowRunId: string;
+  sessionId: string;
   nodeId: string;
   nodeRunId: string | null;
   currentNodeTitle: string;
@@ -164,7 +164,7 @@ export interface QuestionAnswerInput {
 }
 
 export interface SubmitWorkflowApprovalInput {
-  workflowRunId: string;
+  sessionId: string;
   nodeId: string;
   approved: boolean;
   comment?: string;
@@ -257,7 +257,7 @@ interface GraphQLSessionCard {
 }
 
 interface GraphQLPendingApproval {
-  workflowRunId: string;
+  sessionId: string;
   nodeId: string;
   nodeRunId: string | null;
   currentNodeTitle: string;
@@ -361,7 +361,7 @@ const sessionCardFields = `
   worktreeBranch
   currentNodeTitle
   pendingApproval {
-    workflowRunId
+    sessionId
     nodeId
     nodeRunId
     currentNodeTitle
@@ -408,7 +408,7 @@ const sessionDetailFields = `
   }
   currentNodeTitle
   pendingApproval {
-    workflowRunId
+    sessionId
     nodeId
     nodeRunId
     currentNodeTitle
@@ -889,7 +889,6 @@ export async function submitWorkflowApproval(input: SubmitWorkflowApprovalInput)
   const data = await graphqlFetch<
     {
       submitWorkflowApproval: {
-        id: string;
         sessionId: string;
         status: string;
         currentNodeId: string;
@@ -901,7 +900,6 @@ export async function submitWorkflowApproval(input: SubmitWorkflowApprovalInput)
     query: `
       mutation SubmitWorkflowApproval($input: SubmitWorkflowApprovalInput!) {
         submitWorkflowApproval(input: $input) {
-          id
           sessionId
           status
           currentNodeId
@@ -966,7 +964,7 @@ function normalizePendingApproval(
   if (!approval) return null;
   const result = normalizeWorkflowNodeResult(approval.result);
   return {
-    workflowRunId: approval.workflowRunId,
+    sessionId: approval.sessionId,
     nodeId: approval.nodeId,
     nodeRunId: approval.nodeRunId,
     currentNodeTitle: approval.currentNodeTitle,

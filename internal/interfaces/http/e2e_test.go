@@ -636,9 +636,9 @@ func TestRestartReconcilesWorkflowAnswerResumeFailure(t *testing.T) {
 	}
 	processRunID := workflowdomain.ProcessRunID("process-origin")
 	if err := store.Workflows().CreateInitialRun(ctx, workflowdomain.Run{
-		ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: definition.ID, Status: workflowdomain.RunRunning, CurrentNodeID: "node-1", Context: workflowdomain.Context{Values: map[string]any{}}, StartedAt: &now,
+		SessionID: "session-1", WorkflowDefinitionID: definition.ID, Status: workflowdomain.RunRunning, CurrentNodeID: "node-1", Context: workflowdomain.Context{Values: map[string]any{}}, StartedAt: &now,
 	}, workflowdomain.NodeRun{
-		ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "node-1", Status: workflowdomain.NodeWaitingUser, Attempt: 1, ProcessRunID: &processRunID, StartedAt: &now,
+		ID: "node-run-1", SessionID: "session-1", NodeID: "node-1", Status: workflowdomain.NodeWaitingUser, Attempt: 1, ProcessRunID: &processRunID, StartedAt: &now,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -649,11 +649,10 @@ func TestRestartReconcilesWorkflowAnswerResumeFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	origin := questiondomain.ProcessRunID("process-origin")
-	workflowRunID := questiondomain.WorkflowRunID("workflow-run-1")
 	selected := questiondomain.OptionID("continue")
 	answeredAt := now.Add(time.Minute)
 	if err := store.Questions().CreateBatch(ctx, questiondomain.Batch{
-		ID: "batch-1", SessionID: "session-1", WorkflowRunID: &workflowRunID, OriginProcessRunID: &origin, Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryAwaitingResume,
+		ID: "batch-1", SessionID: "session-1", OriginProcessRunID: &origin, Status: questiondomain.BatchAnswered, DeliveryStatus: questiondomain.DeliveryAwaitingResume,
 		Questions: []questiondomain.Question{{ID: "question-1", BatchID: "batch-1", Type: "choice", Status: "answered", SelectedOptionID: &selected, Options: []questiondomain.Option{{ID: selected, Label: "Continue"}}}}, CreatedAt: now, AnsweredAt: &answeredAt,
 	}); err != nil {
 		t.Fatal(err)
@@ -665,7 +664,7 @@ func TestRestartReconcilesWorkflowAnswerResumeFailure(t *testing.T) {
 	if count, err := service.MarkInterruptedSessionsRecoverable(ctx); err != nil || count != 1 {
 		t.Fatalf("MarkInterruptedSessionsRecoverable() = %d, %v", count, err)
 	}
-	run, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	run, err := store.Workflows().FindRun(ctx, "session-1")
 	if err != nil || run.Status != workflowdomain.RunWaitingResumeAction {
 		t.Fatalf("workflow run = %#v, %v", run, err)
 	}

@@ -12,8 +12,6 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
-	// CodexTranscriptSource is the client for interacting with the CodexTranscriptSource builders.
-	CodexTranscriptSource *CodexTranscriptSourceClient
 	// EventRecord is the client for interacting with the EventRecord builders.
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
@@ -38,8 +36,6 @@ type Tx struct {
 	StagedAttachment *StagedAttachmentClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
-	// WorkflowRun is the client for interacting with the WorkflowRun builders.
-	WorkflowRun *WorkflowRunClient
 
 	// lazily loaded.
 	client     *Client
@@ -171,7 +167,6 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
-	tx.CodexTranscriptSource = NewCodexTranscriptSourceClient(tx.config)
 	tx.EventRecord = NewEventRecordClient(tx.config)
 	tx.MergeRecord = NewMergeRecordClient(tx.config)
 	tx.NodeRun = NewNodeRunClient(tx.config)
@@ -184,7 +179,6 @@ func (tx *Tx) init() {
 	tx.SessionAttachment = NewSessionAttachmentClient(tx.config)
 	tx.StagedAttachment = NewStagedAttachmentClient(tx.config)
 	tx.WorkflowDefinition = NewWorkflowDefinitionClient(tx.config)
-	tx.WorkflowRun = NewWorkflowRunClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -194,7 +188,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: CodexTranscriptSource.QueryXXX(), the query will be executed
+// applies a query, for example: EventRecord.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

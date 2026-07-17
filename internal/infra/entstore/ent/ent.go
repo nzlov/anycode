@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/codextranscriptsource"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -26,7 +25,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowrun"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -87,20 +85,18 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			codextranscriptsource.Table: codextranscriptsource.ValidColumn,
-			eventrecord.Table:           eventrecord.ValidColumn,
-			mergerecord.Table:           mergerecord.ValidColumn,
-			noderun.Table:               noderun.ValidColumn,
-			processrun.Table:            processrun.ValidColumn,
-			project.Table:               project.ValidColumn,
-			promptappend.Table:          promptappend.ValidColumn,
-			questionbatch.Table:         questionbatch.ValidColumn,
-			quickcommand.Table:          quickcommand.ValidColumn,
-			entsession.Table:            entsession.ValidColumn,
-			sessionattachment.Table:     sessionattachment.ValidColumn,
-			stagedattachment.Table:      stagedattachment.ValidColumn,
-			workflowdefinition.Table:    workflowdefinition.ValidColumn,
-			workflowrun.Table:           workflowrun.ValidColumn,
+			eventrecord.Table:        eventrecord.ValidColumn,
+			mergerecord.Table:        mergerecord.ValidColumn,
+			noderun.Table:            noderun.ValidColumn,
+			processrun.Table:         processrun.ValidColumn,
+			project.Table:            project.ValidColumn,
+			promptappend.Table:       promptappend.ValidColumn,
+			questionbatch.Table:      questionbatch.ValidColumn,
+			quickcommand.Table:       quickcommand.ValidColumn,
+			entsession.Table:         entsession.ValidColumn,
+			sessionattachment.Table:  sessionattachment.ValidColumn,
+			stagedattachment.Table:   stagedattachment.ValidColumn,
+			workflowdefinition.Table: workflowdefinition.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

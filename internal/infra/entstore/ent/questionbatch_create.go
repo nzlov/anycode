@@ -26,20 +26,6 @@ func (_c *QuestionBatchCreate) SetSessionID(v string) *QuestionBatchCreate {
 	return _c
 }
 
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_c *QuestionBatchCreate) SetWorkflowRunID(v string) *QuestionBatchCreate {
-	_c.mutation.SetWorkflowRunID(v)
-	return _c
-}
-
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_c *QuestionBatchCreate) SetNillableWorkflowRunID(v *string) *QuestionBatchCreate {
-	if v != nil {
-		_c.SetWorkflowRunID(*v)
-	}
-	return _c
-}
-
 // SetOriginProcessRunID sets the "origin_process_run_id" field.
 func (_c *QuestionBatchCreate) SetOriginProcessRunID(v string) *QuestionBatchCreate {
 	_c.mutation.SetOriginProcessRunID(v)
@@ -304,10 +290,6 @@ func (_c *QuestionBatchCreate) createSpec() (*QuestionBatch, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.SessionID(); ok {
 		_spec.SetField(questionbatch.FieldSessionID, field.TypeString, value)
 		_node.SessionID = value
-	}
-	if value, ok := _c.mutation.WorkflowRunID(); ok {
-		_spec.SetField(questionbatch.FieldWorkflowRunID, field.TypeString, value)
-		_node.WorkflowRunID = &value
 	}
 	if value, ok := _c.mutation.OriginProcessRunID(); ok {
 		_spec.SetField(questionbatch.FieldOriginProcessRunID, field.TypeString, value)

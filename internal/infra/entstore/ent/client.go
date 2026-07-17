@@ -14,7 +14,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/codextranscriptsource"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
@@ -27,7 +26,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowrun"
 )
 
 // Client is the client that holds all ent builders.
@@ -35,8 +33,6 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
-	// CodexTranscriptSource is the client for interacting with the CodexTranscriptSource builders.
-	CodexTranscriptSource *CodexTranscriptSourceClient
 	// EventRecord is the client for interacting with the EventRecord builders.
 	EventRecord *EventRecordClient
 	// MergeRecord is the client for interacting with the MergeRecord builders.
@@ -61,8 +57,6 @@ type Client struct {
 	StagedAttachment *StagedAttachmentClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
-	// WorkflowRun is the client for interacting with the WorkflowRun builders.
-	WorkflowRun *WorkflowRunClient
 }
 
 // NewClient creates a new client configured with the given options.
@@ -74,7 +68,6 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
-	c.CodexTranscriptSource = NewCodexTranscriptSourceClient(c.config)
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.NodeRun = NewNodeRunClient(c.config)
@@ -87,7 +80,6 @@ func (c *Client) init() {
 	c.SessionAttachment = NewSessionAttachmentClient(c.config)
 	c.StagedAttachment = NewStagedAttachmentClient(c.config)
 	c.WorkflowDefinition = NewWorkflowDefinitionClient(c.config)
-	c.WorkflowRun = NewWorkflowRunClient(c.config)
 }
 
 type (
@@ -178,22 +170,20 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		CodexTranscriptSource: NewCodexTranscriptSourceClient(cfg),
-		EventRecord:           NewEventRecordClient(cfg),
-		MergeRecord:           NewMergeRecordClient(cfg),
-		NodeRun:               NewNodeRunClient(cfg),
-		ProcessRun:            NewProcessRunClient(cfg),
-		Project:               NewProjectClient(cfg),
-		PromptAppend:          NewPromptAppendClient(cfg),
-		QuestionBatch:         NewQuestionBatchClient(cfg),
-		QuickCommand:          NewQuickCommandClient(cfg),
-		Session:               NewSessionClient(cfg),
-		SessionAttachment:     NewSessionAttachmentClient(cfg),
-		StagedAttachment:      NewStagedAttachmentClient(cfg),
-		WorkflowDefinition:    NewWorkflowDefinitionClient(cfg),
-		WorkflowRun:           NewWorkflowRunClient(cfg),
+		ctx:                ctx,
+		config:             cfg,
+		EventRecord:        NewEventRecordClient(cfg),
+		MergeRecord:        NewMergeRecordClient(cfg),
+		NodeRun:            NewNodeRunClient(cfg),
+		ProcessRun:         NewProcessRunClient(cfg),
+		Project:            NewProjectClient(cfg),
+		PromptAppend:       NewPromptAppendClient(cfg),
+		QuestionBatch:      NewQuestionBatchClient(cfg),
+		QuickCommand:       NewQuickCommandClient(cfg),
+		Session:            NewSessionClient(cfg),
+		SessionAttachment:  NewSessionAttachmentClient(cfg),
+		StagedAttachment:   NewStagedAttachmentClient(cfg),
+		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
 
@@ -211,29 +201,27 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		CodexTranscriptSource: NewCodexTranscriptSourceClient(cfg),
-		EventRecord:           NewEventRecordClient(cfg),
-		MergeRecord:           NewMergeRecordClient(cfg),
-		NodeRun:               NewNodeRunClient(cfg),
-		ProcessRun:            NewProcessRunClient(cfg),
-		Project:               NewProjectClient(cfg),
-		PromptAppend:          NewPromptAppendClient(cfg),
-		QuestionBatch:         NewQuestionBatchClient(cfg),
-		QuickCommand:          NewQuickCommandClient(cfg),
-		Session:               NewSessionClient(cfg),
-		SessionAttachment:     NewSessionAttachmentClient(cfg),
-		StagedAttachment:      NewStagedAttachmentClient(cfg),
-		WorkflowDefinition:    NewWorkflowDefinitionClient(cfg),
-		WorkflowRun:           NewWorkflowRunClient(cfg),
+		ctx:                ctx,
+		config:             cfg,
+		EventRecord:        NewEventRecordClient(cfg),
+		MergeRecord:        NewMergeRecordClient(cfg),
+		NodeRun:            NewNodeRunClient(cfg),
+		ProcessRun:         NewProcessRunClient(cfg),
+		Project:            NewProjectClient(cfg),
+		PromptAppend:       NewPromptAppendClient(cfg),
+		QuestionBatch:      NewQuestionBatchClient(cfg),
+		QuickCommand:       NewQuickCommandClient(cfg),
+		Session:            NewSessionClient(cfg),
+		SessionAttachment:  NewSessionAttachmentClient(cfg),
+		StagedAttachment:   NewStagedAttachmentClient(cfg),
+		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		CodexTranscriptSource.
+//		EventRecord.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -256,9 +244,9 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.CodexTranscriptSource, c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun,
-		c.Project, c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session,
-		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
+		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session,
+		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -268,9 +256,9 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.CodexTranscriptSource, c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun,
-		c.Project, c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session,
-		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition, c.WorkflowRun,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
+		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session,
+		c.SessionAttachment, c.StagedAttachment, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -279,8 +267,6 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
-	case *CodexTranscriptSourceMutation:
-		return c.CodexTranscriptSource.mutate(ctx, m)
 	case *EventRecordMutation:
 		return c.EventRecord.mutate(ctx, m)
 	case *MergeRecordMutation:
@@ -305,143 +291,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.StagedAttachment.mutate(ctx, m)
 	case *WorkflowDefinitionMutation:
 		return c.WorkflowDefinition.mutate(ctx, m)
-	case *WorkflowRunMutation:
-		return c.WorkflowRun.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
-	}
-}
-
-// CodexTranscriptSourceClient is a client for the CodexTranscriptSource schema.
-type CodexTranscriptSourceClient struct {
-	config
-}
-
-// NewCodexTranscriptSourceClient returns a client for the CodexTranscriptSource from the given config.
-func NewCodexTranscriptSourceClient(c config) *CodexTranscriptSourceClient {
-	return &CodexTranscriptSourceClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `codextranscriptsource.Hooks(f(g(h())))`.
-func (c *CodexTranscriptSourceClient) Use(hooks ...Hook) {
-	c.hooks.CodexTranscriptSource = append(c.hooks.CodexTranscriptSource, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `codextranscriptsource.Intercept(f(g(h())))`.
-func (c *CodexTranscriptSourceClient) Intercept(interceptors ...Interceptor) {
-	c.inters.CodexTranscriptSource = append(c.inters.CodexTranscriptSource, interceptors...)
-}
-
-// Create returns a builder for creating a CodexTranscriptSource entity.
-func (c *CodexTranscriptSourceClient) Create() *CodexTranscriptSourceCreate {
-	mutation := newCodexTranscriptSourceMutation(c.config, OpCreate)
-	return &CodexTranscriptSourceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of CodexTranscriptSource entities.
-func (c *CodexTranscriptSourceClient) CreateBulk(builders ...*CodexTranscriptSourceCreate) *CodexTranscriptSourceCreateBulk {
-	return &CodexTranscriptSourceCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *CodexTranscriptSourceClient) MapCreateBulk(slice any, setFunc func(*CodexTranscriptSourceCreate, int)) *CodexTranscriptSourceCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &CodexTranscriptSourceCreateBulk{err: fmt.Errorf("calling to CodexTranscriptSourceClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*CodexTranscriptSourceCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &CodexTranscriptSourceCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for CodexTranscriptSource.
-func (c *CodexTranscriptSourceClient) Update() *CodexTranscriptSourceUpdate {
-	mutation := newCodexTranscriptSourceMutation(c.config, OpUpdate)
-	return &CodexTranscriptSourceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *CodexTranscriptSourceClient) UpdateOne(_m *CodexTranscriptSource) *CodexTranscriptSourceUpdateOne {
-	mutation := newCodexTranscriptSourceMutation(c.config, OpUpdateOne, withCodexTranscriptSource(_m))
-	return &CodexTranscriptSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *CodexTranscriptSourceClient) UpdateOneID(id int) *CodexTranscriptSourceUpdateOne {
-	mutation := newCodexTranscriptSourceMutation(c.config, OpUpdateOne, withCodexTranscriptSourceID(id))
-	return &CodexTranscriptSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for CodexTranscriptSource.
-func (c *CodexTranscriptSourceClient) Delete() *CodexTranscriptSourceDelete {
-	mutation := newCodexTranscriptSourceMutation(c.config, OpDelete)
-	return &CodexTranscriptSourceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *CodexTranscriptSourceClient) DeleteOne(_m *CodexTranscriptSource) *CodexTranscriptSourceDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *CodexTranscriptSourceClient) DeleteOneID(id int) *CodexTranscriptSourceDeleteOne {
-	builder := c.Delete().Where(codextranscriptsource.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &CodexTranscriptSourceDeleteOne{builder}
-}
-
-// Query returns a query builder for CodexTranscriptSource.
-func (c *CodexTranscriptSourceClient) Query() *CodexTranscriptSourceQuery {
-	return &CodexTranscriptSourceQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeCodexTranscriptSource},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a CodexTranscriptSource entity by its id.
-func (c *CodexTranscriptSourceClient) Get(ctx context.Context, id int) (*CodexTranscriptSource, error) {
-	return c.Query().Where(codextranscriptsource.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *CodexTranscriptSourceClient) GetX(ctx context.Context, id int) *CodexTranscriptSource {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// Hooks returns the client hooks.
-func (c *CodexTranscriptSourceClient) Hooks() []Hook {
-	return c.hooks.CodexTranscriptSource
-}
-
-// Interceptors returns the client interceptors.
-func (c *CodexTranscriptSourceClient) Interceptors() []Interceptor {
-	return c.inters.CodexTranscriptSource
-}
-
-func (c *CodexTranscriptSourceClient) mutate(ctx context.Context, m *CodexTranscriptSourceMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&CodexTranscriptSourceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&CodexTranscriptSourceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&CodexTranscriptSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&CodexTranscriptSourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown CodexTranscriptSource mutation op: %q", m.Op())
 	}
 }
 
@@ -2041,149 +1892,16 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 	}
 }
 
-// WorkflowRunClient is a client for the WorkflowRun schema.
-type WorkflowRunClient struct {
-	config
-}
-
-// NewWorkflowRunClient returns a client for the WorkflowRun from the given config.
-func NewWorkflowRunClient(c config) *WorkflowRunClient {
-	return &WorkflowRunClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `workflowrun.Hooks(f(g(h())))`.
-func (c *WorkflowRunClient) Use(hooks ...Hook) {
-	c.hooks.WorkflowRun = append(c.hooks.WorkflowRun, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `workflowrun.Intercept(f(g(h())))`.
-func (c *WorkflowRunClient) Intercept(interceptors ...Interceptor) {
-	c.inters.WorkflowRun = append(c.inters.WorkflowRun, interceptors...)
-}
-
-// Create returns a builder for creating a WorkflowRun entity.
-func (c *WorkflowRunClient) Create() *WorkflowRunCreate {
-	mutation := newWorkflowRunMutation(c.config, OpCreate)
-	return &WorkflowRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of WorkflowRun entities.
-func (c *WorkflowRunClient) CreateBulk(builders ...*WorkflowRunCreate) *WorkflowRunCreateBulk {
-	return &WorkflowRunCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *WorkflowRunClient) MapCreateBulk(slice any, setFunc func(*WorkflowRunCreate, int)) *WorkflowRunCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &WorkflowRunCreateBulk{err: fmt.Errorf("calling to WorkflowRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*WorkflowRunCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &WorkflowRunCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for WorkflowRun.
-func (c *WorkflowRunClient) Update() *WorkflowRunUpdate {
-	mutation := newWorkflowRunMutation(c.config, OpUpdate)
-	return &WorkflowRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *WorkflowRunClient) UpdateOne(_m *WorkflowRun) *WorkflowRunUpdateOne {
-	mutation := newWorkflowRunMutation(c.config, OpUpdateOne, withWorkflowRun(_m))
-	return &WorkflowRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *WorkflowRunClient) UpdateOneID(id string) *WorkflowRunUpdateOne {
-	mutation := newWorkflowRunMutation(c.config, OpUpdateOne, withWorkflowRunID(id))
-	return &WorkflowRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for WorkflowRun.
-func (c *WorkflowRunClient) Delete() *WorkflowRunDelete {
-	mutation := newWorkflowRunMutation(c.config, OpDelete)
-	return &WorkflowRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *WorkflowRunClient) DeleteOne(_m *WorkflowRun) *WorkflowRunDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *WorkflowRunClient) DeleteOneID(id string) *WorkflowRunDeleteOne {
-	builder := c.Delete().Where(workflowrun.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &WorkflowRunDeleteOne{builder}
-}
-
-// Query returns a query builder for WorkflowRun.
-func (c *WorkflowRunClient) Query() *WorkflowRunQuery {
-	return &WorkflowRunQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeWorkflowRun},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a WorkflowRun entity by its id.
-func (c *WorkflowRunClient) Get(ctx context.Context, id string) (*WorkflowRun, error) {
-	return c.Query().Where(workflowrun.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *WorkflowRunClient) GetX(ctx context.Context, id string) *WorkflowRun {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// Hooks returns the client hooks.
-func (c *WorkflowRunClient) Hooks() []Hook {
-	return c.hooks.WorkflowRun
-}
-
-// Interceptors returns the client interceptors.
-func (c *WorkflowRunClient) Interceptors() []Interceptor {
-	return c.inters.WorkflowRun
-}
-
-func (c *WorkflowRunClient) mutate(ctx context.Context, m *WorkflowRunMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&WorkflowRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&WorkflowRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&WorkflowRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&WorkflowRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown WorkflowRun mutation op: %q", m.Op())
-	}
-}
-
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		CodexTranscriptSource, EventRecord, MergeRecord, NodeRun, ProcessRun, Project,
-		PromptAppend, QuestionBatch, QuickCommand, Session, SessionAttachment,
-		StagedAttachment, WorkflowDefinition, WorkflowRun []ent.Hook
+		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
+		QuestionBatch, QuickCommand, Session, SessionAttachment, StagedAttachment,
+		WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		CodexTranscriptSource, EventRecord, MergeRecord, NodeRun, ProcessRun, Project,
-		PromptAppend, QuestionBatch, QuickCommand, Session, SessionAttachment,
-		StagedAttachment, WorkflowDefinition, WorkflowRun []ent.Interceptor
+		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
+		QuestionBatch, QuickCommand, Session, SessionAttachment, StagedAttachment,
+		WorkflowDefinition []ent.Interceptor
 	}
 )

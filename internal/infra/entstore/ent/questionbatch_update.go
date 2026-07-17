@@ -43,26 +43,6 @@ func (_u *QuestionBatchUpdate) SetNillableSessionID(v *string) *QuestionBatchUpd
 	return _u
 }
 
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_u *QuestionBatchUpdate) SetWorkflowRunID(v string) *QuestionBatchUpdate {
-	_u.mutation.SetWorkflowRunID(v)
-	return _u
-}
-
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_u *QuestionBatchUpdate) SetNillableWorkflowRunID(v *string) *QuestionBatchUpdate {
-	if v != nil {
-		_u.SetWorkflowRunID(*v)
-	}
-	return _u
-}
-
-// ClearWorkflowRunID clears the value of the "workflow_run_id" field.
-func (_u *QuestionBatchUpdate) ClearWorkflowRunID() *QuestionBatchUpdate {
-	_u.mutation.ClearWorkflowRunID()
-	return _u
-}
-
 // SetOriginProcessRunID sets the "origin_process_run_id" field.
 func (_u *QuestionBatchUpdate) SetOriginProcessRunID(v string) *QuestionBatchUpdate {
 	_u.mutation.SetOriginProcessRunID(v)
@@ -259,12 +239,6 @@ func (_u *QuestionBatchUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(questionbatch.FieldSessionID, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.WorkflowRunID(); ok {
-		_spec.SetField(questionbatch.FieldWorkflowRunID, field.TypeString, value)
-	}
-	if _u.mutation.WorkflowRunIDCleared() {
-		_spec.ClearField(questionbatch.FieldWorkflowRunID, field.TypeString)
-	}
 	if value, ok := _u.mutation.OriginProcessRunID(); ok {
 		_spec.SetField(questionbatch.FieldOriginProcessRunID, field.TypeString, value)
 	}
@@ -339,26 +313,6 @@ func (_u *QuestionBatchUpdateOne) SetNillableSessionID(v *string) *QuestionBatch
 	if v != nil {
 		_u.SetSessionID(*v)
 	}
-	return _u
-}
-
-// SetWorkflowRunID sets the "workflow_run_id" field.
-func (_u *QuestionBatchUpdateOne) SetWorkflowRunID(v string) *QuestionBatchUpdateOne {
-	_u.mutation.SetWorkflowRunID(v)
-	return _u
-}
-
-// SetNillableWorkflowRunID sets the "workflow_run_id" field if the given value is not nil.
-func (_u *QuestionBatchUpdateOne) SetNillableWorkflowRunID(v *string) *QuestionBatchUpdateOne {
-	if v != nil {
-		_u.SetWorkflowRunID(*v)
-	}
-	return _u
-}
-
-// ClearWorkflowRunID clears the value of the "workflow_run_id" field.
-func (_u *QuestionBatchUpdateOne) ClearWorkflowRunID() *QuestionBatchUpdateOne {
-	_u.mutation.ClearWorkflowRunID()
 	return _u
 }
 
@@ -587,12 +541,6 @@ func (_u *QuestionBatchUpdateOne) sqlSave(ctx context.Context) (_node *QuestionB
 	}
 	if value, ok := _u.mutation.SessionID(); ok {
 		_spec.SetField(questionbatch.FieldSessionID, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.WorkflowRunID(); ok {
-		_spec.SetField(questionbatch.FieldWorkflowRunID, field.TypeString, value)
-	}
-	if _u.mutation.WorkflowRunIDCleared() {
-		_spec.ClearField(questionbatch.FieldWorkflowRunID, field.TypeString)
 	}
 	if value, ok := _u.mutation.OriginProcessRunID(); ok {
 		_spec.SetField(questionbatch.FieldOriginProcessRunID, field.TypeString, value)

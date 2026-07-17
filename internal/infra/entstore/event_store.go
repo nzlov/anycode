@@ -28,7 +28,6 @@ func (s *EventStore) Append(ctx context.Context, domainEvent event.DomainEvent) 
 		SetType(domainEvent.Type).
 		SetPayload(payloadOrEmpty(domainEvent.Payload)).
 		SetProcessRunID(domainEvent.Causality.ProcessRunID).
-		SetWorkflowRunID(domainEvent.Causality.WorkflowRunID).
 		SetNodeRunID(domainEvent.Causality.NodeRunID).
 		SetCorrelationID(domainEvent.Causality.CorrelationID).
 		SetSessionStatus(domainEvent.Causality.SessionStatus)
@@ -182,7 +181,6 @@ func toDomainEvent(row *ent.EventRecord) event.DomainEvent {
 		Payload:   payloadOrEmpty(row.Payload),
 		Causality: event.Causality{
 			ProcessRunID:  row.ProcessRunID,
-			WorkflowRunID: row.WorkflowRunID,
 			NodeRunID:     row.NodeRunID,
 			CorrelationID: row.CorrelationID,
 			SessionStatus: row.SessionStatus,

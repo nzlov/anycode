@@ -582,7 +582,7 @@ let suppressedCardClickId = '';
 let cardClickSuppressionTimer: ReturnType<typeof setTimeout> | null = null;
 
 interface ApprovalContext {
-  workflowRunId: string;
+  sessionId: string;
   nodeId: string;
 }
 
@@ -948,7 +948,7 @@ function openApprovalDialog(card: SessionCard) {
   approvalSessionId.value = card.id;
   approvalTab.value = 'output';
   approvalContext.value = card.pendingApproval
-    ? { workflowRunId: card.pendingApproval.workflowRunId, nodeId: card.pendingApproval.nodeId }
+    ? { sessionId: card.pendingApproval.sessionId, nodeId: card.pendingApproval.nodeId }
     : null;
   approvalPending.value = card.pendingApproval ?? null;
   approvalResolvedArtifacts.value = {};
@@ -1053,20 +1053,20 @@ async function submitApproval(approved: boolean, comment: string) {
   )
     return;
   const requestGeneration = approvalContextGeneration;
-  const sessionId = approvalSessionId.value;
-  const workflowRunId = approvalContext.value.workflowRunId;
+  const cardSessionId = approvalSessionId.value;
+  const workflowSessionId = approvalContext.value.sessionId;
   const nodeId = approvalContext.value.nodeId;
   approvalSubmitting.value = true;
   try {
     await submitWorkflowApproval({
-      workflowRunId,
+      sessionId: workflowSessionId,
       nodeId,
       approved,
       comment,
     });
     if (
-      isCurrentApprovalContext(requestGeneration, sessionId) &&
-      approvalContext.value?.workflowRunId === workflowRunId &&
+      isCurrentApprovalContext(requestGeneration, cardSessionId) &&
+      approvalContext.value?.sessionId === workflowSessionId &&
       approvalContext.value?.nodeId === nodeId
     ) {
       approvalDialog.value = false;
