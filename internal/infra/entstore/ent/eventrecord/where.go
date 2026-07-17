@@ -84,11 +84,6 @@ func ProcessRunID(v string) predicate.EventRecord {
 	return predicate.EventRecord(sql.FieldEQ(FieldProcessRunID, v))
 }
 
-// WorkflowRunID applies equality check predicate on the "workflow_run_id" field. It's identical to WorkflowRunIDEQ.
-func WorkflowRunID(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldEQ(FieldWorkflowRunID, v))
-}
-
 // NodeRunID applies equality check predicate on the "node_run_id" field. It's identical to NodeRunIDEQ.
 func NodeRunID(v string) predicate.EventRecord {
 	return predicate.EventRecord(sql.FieldEQ(FieldNodeRunID, v))
@@ -377,71 +372,6 @@ func ProcessRunIDEqualFold(v string) predicate.EventRecord {
 // ProcessRunIDContainsFold applies the ContainsFold predicate on the "process_run_id" field.
 func ProcessRunIDContainsFold(v string) predicate.EventRecord {
 	return predicate.EventRecord(sql.FieldContainsFold(FieldProcessRunID, v))
-}
-
-// WorkflowRunIDEQ applies the EQ predicate on the "workflow_run_id" field.
-func WorkflowRunIDEQ(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldEQ(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDNEQ applies the NEQ predicate on the "workflow_run_id" field.
-func WorkflowRunIDNEQ(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldNEQ(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDIn applies the In predicate on the "workflow_run_id" field.
-func WorkflowRunIDIn(vs ...string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldIn(FieldWorkflowRunID, vs...))
-}
-
-// WorkflowRunIDNotIn applies the NotIn predicate on the "workflow_run_id" field.
-func WorkflowRunIDNotIn(vs ...string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldNotIn(FieldWorkflowRunID, vs...))
-}
-
-// WorkflowRunIDGT applies the GT predicate on the "workflow_run_id" field.
-func WorkflowRunIDGT(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldGT(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDGTE applies the GTE predicate on the "workflow_run_id" field.
-func WorkflowRunIDGTE(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldGTE(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDLT applies the LT predicate on the "workflow_run_id" field.
-func WorkflowRunIDLT(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldLT(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDLTE applies the LTE predicate on the "workflow_run_id" field.
-func WorkflowRunIDLTE(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldLTE(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDContains applies the Contains predicate on the "workflow_run_id" field.
-func WorkflowRunIDContains(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldContains(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDHasPrefix applies the HasPrefix predicate on the "workflow_run_id" field.
-func WorkflowRunIDHasPrefix(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldHasPrefix(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDHasSuffix applies the HasSuffix predicate on the "workflow_run_id" field.
-func WorkflowRunIDHasSuffix(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldHasSuffix(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDEqualFold applies the EqualFold predicate on the "workflow_run_id" field.
-func WorkflowRunIDEqualFold(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldEqualFold(FieldWorkflowRunID, v))
-}
-
-// WorkflowRunIDContainsFold applies the ContainsFold predicate on the "workflow_run_id" field.
-func WorkflowRunIDContainsFold(v string) predicate.EventRecord {
-	return predicate.EventRecord(sql.FieldContainsFold(FieldWorkflowRunID, v))
 }
 
 // NodeRunIDEQ applies the EQ predicate on the "node_run_id" field.

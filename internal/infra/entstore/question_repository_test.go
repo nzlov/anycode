@@ -27,12 +27,10 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	repo := store.Questions()
 	createdAt := time.Date(2026, 7, 2, 9, 0, 0, 0, time.UTC)
 	optionID := question.OptionID("option-1")
-	workflowRunID := question.WorkflowRunID("workflow-run-1")
 	originProcessRunID := question.ProcessRunID("process-run-1")
 	batch := question.Batch{
 		ID:                 question.BatchID("batch-1"),
 		SessionID:          question.SessionID("session-1"),
-		WorkflowRunID:      &workflowRunID,
 		OriginProcessRunID: &originProcessRunID,
 		Status:             question.BatchPending,
 		DeliveryStatus:     question.DeliveryNone,
@@ -68,9 +66,6 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	}
 	if found.ID != batch.ID || found.SessionID != batch.SessionID || found.Status != question.BatchPending || !found.CreatedAt.Equal(createdAt) {
 		t.Fatalf("found batch mismatch: %#v", found)
-	}
-	if found.WorkflowRunID == nil || *found.WorkflowRunID != workflowRunID {
-		t.Fatalf("workflow run id mismatch: %#v", found.WorkflowRunID)
 	}
 	if found.OriginProcessRunID == nil || *found.OriginProcessRunID != originProcessRunID || found.DeliveryStatus != question.DeliveryNone {
 		t.Fatalf("agent delivery fields mismatch: %#v", found)

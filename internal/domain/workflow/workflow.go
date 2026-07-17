@@ -6,7 +6,6 @@ import (
 )
 
 type DefinitionID string
-type RunID string
 type NodeRunID string
 type ProjectID string
 type SessionID string
@@ -96,7 +95,6 @@ const (
 )
 
 type Run struct {
-	ID                   RunID
 	SessionID            SessionID
 	WorkflowDefinitionID DefinitionID
 	Status               RunStatus
@@ -134,15 +132,15 @@ const (
 )
 
 type NodeRun struct {
-	ID            NodeRunID
-	WorkflowRunID RunID
-	NodeID        string
-	Status        NodeRunStatus
-	Attempt       int
-	ProcessRunID  *ProcessRunID
-	StartedAt     *time.Time
-	FinishedAt    *time.Time
-	Result        *Result
+	ID           NodeRunID
+	SessionID    SessionID
+	NodeID       string
+	Status       NodeRunStatus
+	Attempt      int
+	ProcessRunID *ProcessRunID
+	StartedAt    *time.Time
+	FinishedAt   *time.Time
+	Result       *Result
 }
 
 type Context struct {
@@ -173,9 +171,8 @@ type Repository interface {
 	SaveDefinition(ctx context.Context, definition Definition) error
 	FindDefinition(ctx context.Context, id DefinitionID) (Definition, error)
 	FindActive(ctx context.Context, projectID ProjectID) (Definition, error)
-	FindRun(ctx context.Context, id RunID) (Run, error)
-	FindLatestRunBySession(ctx context.Context, sessionID SessionID) (Run, error)
-	FindLatestNodeRun(ctx context.Context, runID RunID, nodeID string) (NodeRun, error)
+	FindRun(ctx context.Context, sessionID SessionID) (Run, error)
+	FindLatestNodeRun(ctx context.Context, sessionID SessionID, nodeID string) (NodeRun, error)
 	ActivateDefinition(ctx context.Context, id DefinitionID) error
 	CreateInitialRun(ctx context.Context, run Run, nodeRun NodeRun) error
 	CreateRun(ctx context.Context, run Run) error
@@ -184,11 +181,11 @@ type Repository interface {
 	CreateNodeRunAndUpdateRun(ctx context.Context, run Run, nodeRun NodeRun) error
 	CompleteNodeAndAdvance(ctx context.Context, completedNodeRun NodeRun, run Run, nextNodeRun *NodeRun) error
 	ResumeNodeAndUpdateRun(ctx context.Context, nodeRun NodeRun, run Run) error
-	MarkRunFailed(ctx context.Context, runID RunID, nodeRunID NodeRunID, failure NodeFailure, finishedAt time.Time) error
-	UpdateRunContext(ctx context.Context, id RunID, context Context) error
+	MarkRunFailed(ctx context.Context, sessionID SessionID, nodeRunID NodeRunID, failure NodeFailure, finishedAt time.Time) error
+	UpdateRunContext(ctx context.Context, sessionID SessionID, context Context) error
 }
 
 type NodeExecutionRepository interface {
-	MarkNodeWaitingUser(ctx context.Context, runID RunID, nodeRunID NodeRunID) error
-	MarkNodeRunning(ctx context.Context, runID RunID, nodeRunID NodeRunID, processRunID ProcessRunID) error
+	MarkNodeWaitingUser(ctx context.Context, sessionID SessionID, nodeRunID NodeRunID) error
+	MarkNodeRunning(ctx context.Context, sessionID SessionID, nodeRunID NodeRunID, processRunID ProcessRunID) error
 }

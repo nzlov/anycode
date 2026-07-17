@@ -20,7 +20,7 @@ const result = {
 
 function approval(phase, approvalResult) {
   return {
-    workflowRunId: 'run-1',
+    sessionId: 'session-1',
     nodeId: 'node-1',
     nodeRunId: 'node-run-1',
     currentNodeTitle: 'Review',

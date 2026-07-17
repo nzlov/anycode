@@ -23,8 +23,6 @@ const (
 	FieldPayload = "payload"
 	// FieldProcessRunID holds the string denoting the process_run_id field in the database.
 	FieldProcessRunID = "process_run_id"
-	// FieldWorkflowRunID holds the string denoting the workflow_run_id field in the database.
-	FieldWorkflowRunID = "workflow_run_id"
 	// FieldNodeRunID holds the string denoting the node_run_id field in the database.
 	FieldNodeRunID = "node_run_id"
 	// FieldCorrelationID holds the string denoting the correlation_id field in the database.
@@ -45,7 +43,6 @@ var Columns = []string{
 	FieldType,
 	FieldPayload,
 	FieldProcessRunID,
-	FieldWorkflowRunID,
 	FieldNodeRunID,
 	FieldCorrelationID,
 	FieldSessionStatus,
@@ -71,8 +68,6 @@ var (
 	DefaultPayload map[string]interface{}
 	// DefaultProcessRunID holds the default value on creation for the "process_run_id" field.
 	DefaultProcessRunID string
-	// DefaultWorkflowRunID holds the default value on creation for the "workflow_run_id" field.
-	DefaultWorkflowRunID string
 	// DefaultNodeRunID holds the default value on creation for the "node_run_id" field.
 	DefaultNodeRunID string
 	// DefaultCorrelationID holds the default value on creation for the "correlation_id" field.
@@ -109,11 +104,6 @@ func ByType(opts ...sql.OrderTermOption) OrderOption {
 // ByProcessRunID orders the results by the process_run_id field.
 func ByProcessRunID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProcessRunID, opts...).ToFunc()
-}
-
-// ByWorkflowRunID orders the results by the workflow_run_id field.
-func ByWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWorkflowRunID, opts...).ToFunc()
 }
 
 // ByNodeRunID orders the results by the node_run_id field.

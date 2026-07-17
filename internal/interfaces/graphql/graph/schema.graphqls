@@ -238,7 +238,7 @@ type WorktreeCleanupError {
 }
 
 type PendingApproval {
-  workflowRunId: ID!
+  sessionId: ID!
   nodeId: ID!
   nodeRunId: ID
   currentNodeTitle: String!
@@ -600,7 +600,6 @@ type WorkflowCondition {
 }
 
 type WorkflowRun {
-  id: ID!
   sessionId: ID!
   status: String!
   currentNodeId: ID!
@@ -804,7 +803,7 @@ input WorkflowConditionInput {
 }
 
 input SubmitWorkflowApprovalInput {
-  workflowRunId: ID!
+  sessionId: ID!
   nodeId: ID!
   approved: Boolean!
   comment: String

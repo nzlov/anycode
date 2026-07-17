@@ -18,8 +18,8 @@ type NodeRun struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
-	// WorkflowRunID holds the value of the "workflow_run_id" field.
-	WorkflowRunID string `json:"workflow_run_id,omitempty"`
+	// SessionID holds the value of the "session_id" field.
+	SessionID string `json:"session_id,omitempty"`
 	// NodeID holds the value of the "node_id" field.
 	NodeID string `json:"node_id,omitempty"`
 	// Status holds the value of the "status" field.
@@ -46,7 +46,7 @@ func (*NodeRun) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case noderun.FieldAttempt:
 			values[i] = new(sql.NullInt64)
-		case noderun.FieldID, noderun.FieldWorkflowRunID, noderun.FieldNodeID, noderun.FieldStatus, noderun.FieldProcessRunID:
+		case noderun.FieldID, noderun.FieldSessionID, noderun.FieldNodeID, noderun.FieldStatus, noderun.FieldProcessRunID:
 			values[i] = new(sql.NullString)
 		case noderun.FieldStartedAt, noderun.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
@@ -71,11 +71,11 @@ func (_m *NodeRun) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ID = value.String
 			}
-		case noderun.FieldWorkflowRunID:
+		case noderun.FieldSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field workflow_run_id", values[i])
+				return fmt.Errorf("unexpected type %T for field session_id", values[i])
 			} else if value.Valid {
-				_m.WorkflowRunID = value.String
+				_m.SessionID = value.String
 			}
 		case noderun.FieldNodeID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -160,8 +160,8 @@ func (_m *NodeRun) String() string {
 	var builder strings.Builder
 	builder.WriteString("NodeRun(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
-	builder.WriteString("workflow_run_id=")
-	builder.WriteString(_m.WorkflowRunID)
+	builder.WriteString("session_id=")
+	builder.WriteString(_m.SessionID)
 	builder.WriteString(", ")
 	builder.WriteString("node_id=")
 	builder.WriteString(_m.NodeID)

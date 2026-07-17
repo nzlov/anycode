@@ -70,7 +70,6 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 			SetQueueInitialStart(s.Queue.InitialStart).
 			SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
-			SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 			SetQueuePrompt(s.Queue.Prompt).
 			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
 			SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
@@ -178,7 +177,6 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueuePriority(string(normalizeQueuePriority(s.Queue.Priority))).
 		SetQueueInitialStart(s.Queue.InitialStart).
 		SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
-		SetQueueWorkflowRunID(string(s.Queue.WorkflowRunID)).
 		SetQueuePrompt(s.Queue.Prompt).
 		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
 		SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
@@ -750,7 +748,6 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			Priority:                normalizeQueuePriority(domainsession.QueuePriority(row.QueuePriority)),
 			InitialStart:            queueInitialStart(row),
 			ReviewAfterReuseFailure: row.QueueReviewAfterReuseFailure,
-			WorkflowRunID:           domainsession.WorkflowRunID(row.QueueWorkflowRunID),
 			NodeRunID:               queueNodeRunID,
 			Prompt:                  row.QueuePrompt,
 			ResumeCodexSessionID:    row.QueueResumeCodexSessionID,

@@ -8,7 +8,6 @@ import (
 type BatchID string
 type QuestionID string
 type SessionID string
-type WorkflowRunID string
 type ProcessRunID string
 type OptionID string
 
@@ -31,7 +30,6 @@ const (
 type Batch struct {
 	ID                   BatchID
 	SessionID            SessionID
-	WorkflowRunID        *WorkflowRunID
 	OriginProcessRunID   *ProcessRunID
 	Status               BatchStatus
 	DeliveryStatus       DeliveryStatus

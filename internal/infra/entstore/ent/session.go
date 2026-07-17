@@ -87,8 +87,6 @@ type Session struct {
 	QueueInitialStart *bool `json:"queue_initial_start,omitempty"`
 	// QueueReviewAfterReuseFailure holds the value of the "queue_review_after_reuse_failure" field.
 	QueueReviewAfterReuseFailure bool `json:"queue_review_after_reuse_failure,omitempty"`
-	// QueueWorkflowRunID holds the value of the "queue_workflow_run_id" field.
-	QueueWorkflowRunID string `json:"queue_workflow_run_id,omitempty"`
 	// QueueNodeRunID holds the value of the "queue_node_run_id" field.
 	QueueNodeRunID string `json:"queue_node_run_id,omitempty"`
 	// QueuePrompt holds the value of the "queue_prompt" field.
@@ -99,6 +97,20 @@ type Session struct {
 	QueueResumeOfProcessRunID string `json:"queue_resume_of_process_run_id,omitempty"`
 	// QueueAnswerBatchID holds the value of the "queue_answer_batch_id" field.
 	QueueAnswerBatchID string `json:"queue_answer_batch_id,omitempty"`
+	// WorkflowDefinitionID holds the value of the "workflow_definition_id" field.
+	WorkflowDefinitionID string `json:"workflow_definition_id,omitempty"`
+	// WorkflowStatus holds the value of the "workflow_status" field.
+	WorkflowStatus string `json:"workflow_status,omitempty"`
+	// WorkflowCurrentNodeID holds the value of the "workflow_current_node_id" field.
+	WorkflowCurrentNodeID string `json:"workflow_current_node_id,omitempty"`
+	// WorkflowContext holds the value of the "workflow_context" field.
+	WorkflowContext map[string]interface{} `json:"workflow_context,omitempty"`
+	// WorkflowPendingApproval holds the value of the "workflow_pending_approval" field.
+	WorkflowPendingApproval map[string]interface{} `json:"workflow_pending_approval,omitempty"`
+	// WorkflowStartedAt holds the value of the "workflow_started_at" field.
+	WorkflowStartedAt *time.Time `json:"workflow_started_at,omitempty"`
+	// WorkflowStoppedAt holds the value of the "workflow_stopped_at" field.
+	WorkflowStoppedAt *time.Time `json:"workflow_stopped_at,omitempty"`
 	// AppliedSystemCommands holds the value of the "applied_system_commands" field.
 	AppliedSystemCommands map[string]bool `json:"applied_system_commands,omitempty"`
 	// LastRunAt holds the value of the "last_run_at" field.
@@ -117,15 +129,15 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case entsession.FieldTodoList, entsession.FieldAppliedSystemCommands:
+		case entsession.FieldTodoList, entsession.FieldWorkflowContext, entsession.FieldWorkflowPendingApproval, entsession.FieldAppliedSystemCommands:
 			values[i] = new([]byte)
 		case entsession.FieldWorktreeCleanupRetryable, entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
 		case entsession.FieldWorktreeCleanupAttempts, entsession.FieldArtifactCount, entsession.FieldFilesChanged:
 			values[i] = new(sql.NullInt64)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueWorkflowRunID, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
 			values[i] = new(sql.NullString)
-		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
+		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldWorkflowStartedAt, entsession.FieldWorkflowStoppedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -362,12 +374,6 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.QueueReviewAfterReuseFailure = value.Bool
 			}
-		case entsession.FieldQueueWorkflowRunID:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field queue_workflow_run_id", values[i])
-			} else if value.Valid {
-				_m.QueueWorkflowRunID = value.String
-			}
 		case entsession.FieldQueueNodeRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field queue_node_run_id", values[i])
@@ -397,6 +403,54 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field queue_answer_batch_id", values[i])
 			} else if value.Valid {
 				_m.QueueAnswerBatchID = value.String
+			}
+		case entsession.FieldWorkflowDefinitionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_definition_id", values[i])
+			} else if value.Valid {
+				_m.WorkflowDefinitionID = value.String
+			}
+		case entsession.FieldWorkflowStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_status", values[i])
+			} else if value.Valid {
+				_m.WorkflowStatus = value.String
+			}
+		case entsession.FieldWorkflowCurrentNodeID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_current_node_id", values[i])
+			} else if value.Valid {
+				_m.WorkflowCurrentNodeID = value.String
+			}
+		case entsession.FieldWorkflowContext:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_context", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.WorkflowContext); err != nil {
+					return fmt.Errorf("unmarshal field workflow_context: %w", err)
+				}
+			}
+		case entsession.FieldWorkflowPendingApproval:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_pending_approval", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.WorkflowPendingApproval); err != nil {
+					return fmt.Errorf("unmarshal field workflow_pending_approval: %w", err)
+				}
+			}
+		case entsession.FieldWorkflowStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_started_at", values[i])
+			} else if value.Valid {
+				_m.WorkflowStartedAt = new(time.Time)
+				*_m.WorkflowStartedAt = value.Time
+			}
+		case entsession.FieldWorkflowStoppedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field workflow_stopped_at", values[i])
+			} else if value.Valid {
+				_m.WorkflowStoppedAt = new(time.Time)
+				*_m.WorkflowStoppedAt = value.Time
 			}
 		case entsession.FieldAppliedSystemCommands:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -586,9 +640,6 @@ func (_m *Session) String() string {
 	builder.WriteString("queue_review_after_reuse_failure=")
 	builder.WriteString(fmt.Sprintf("%v", _m.QueueReviewAfterReuseFailure))
 	builder.WriteString(", ")
-	builder.WriteString("queue_workflow_run_id=")
-	builder.WriteString(_m.QueueWorkflowRunID)
-	builder.WriteString(", ")
 	builder.WriteString("queue_node_run_id=")
 	builder.WriteString(_m.QueueNodeRunID)
 	builder.WriteString(", ")
@@ -603,6 +654,31 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("queue_answer_batch_id=")
 	builder.WriteString(_m.QueueAnswerBatchID)
+	builder.WriteString(", ")
+	builder.WriteString("workflow_definition_id=")
+	builder.WriteString(_m.WorkflowDefinitionID)
+	builder.WriteString(", ")
+	builder.WriteString("workflow_status=")
+	builder.WriteString(_m.WorkflowStatus)
+	builder.WriteString(", ")
+	builder.WriteString("workflow_current_node_id=")
+	builder.WriteString(_m.WorkflowCurrentNodeID)
+	builder.WriteString(", ")
+	builder.WriteString("workflow_context=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WorkflowContext))
+	builder.WriteString(", ")
+	builder.WriteString("workflow_pending_approval=")
+	builder.WriteString(fmt.Sprintf("%v", _m.WorkflowPendingApproval))
+	builder.WriteString(", ")
+	if v := _m.WorkflowStartedAt; v != nil {
+		builder.WriteString("workflow_started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.WorkflowStoppedAt; v != nil {
+		builder.WriteString("workflow_stopped_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("applied_system_commands=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AppliedSystemCommands))

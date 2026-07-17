@@ -53,8 +53,11 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	}
 
 	startedAt := createdAt.Add(time.Minute)
+	createWorkflowTestSession(t, ctx, store, "session-1")
+	if _, err := repo.FindRun(ctx, "session-1"); err == nil {
+		t.Fatal("session without workflow state was returned as a workflow run")
+	}
 	run := workflow.Run{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: definition.ID,
 		Status:               workflow.RunRunning,
@@ -67,19 +70,19 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	}
 	processRunID := workflow.ProcessRunID("process-run-1")
 	nodeRun := workflow.NodeRun{
-		ID:            "node-run-1",
-		WorkflowRunID: run.ID,
-		NodeID:        "build",
-		Status:        workflow.NodeRunning,
-		Attempt:       1,
-		ProcessRunID:  &processRunID,
-		StartedAt:     &startedAt,
-		Result:        &workflow.Result{Version: workflow.ResultVersion, Outcome: workflow.ResultSuccess, Summary: "completed", Data: map[string]any{"ok": true}},
+		ID:           "node-run-1",
+		SessionID:    run.SessionID,
+		NodeID:       "build",
+		Status:       workflow.NodeRunning,
+		Attempt:      1,
+		ProcessRunID: &processRunID,
+		StartedAt:    &startedAt,
+		Result:       &workflow.Result{Version: workflow.ResultVersion, Outcome: workflow.ResultSuccess, Summary: "completed", Data: map[string]any{"ok": true}},
 	}
 	if err := repo.SaveNodeRun(ctx, nodeRun); err != nil {
 		t.Fatalf("save node run: %v", err)
 	}
-	latest, err := repo.FindLatestNodeRun(ctx, run.ID, "build")
+	latest, err := repo.FindLatestNodeRun(ctx, run.SessionID, "build")
 	if err != nil {
 		t.Fatalf("find latest node run: %v", err)
 	}
@@ -87,11 +90,11 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 		t.Fatalf("latest node run mismatch: %#v", latest)
 	}
 
-	persistedRun, err := store.Client().WorkflowRun.Get(ctx, string(run.ID))
+	persistedRun, err := store.Client().Session.Get(ctx, string(run.SessionID))
 	if err != nil {
 		t.Fatalf("find workflow run: %v", err)
 	}
-	if persistedRun.CurrentNodeID != "build" || persistedRun.Context["requirement"] != "ship" {
+	if persistedRun.WorkflowCurrentNodeID != "build" || persistedRun.WorkflowContext["requirement"] != "ship" {
 		t.Fatalf("workflow run mismatch: %#v", persistedRun)
 	}
 	run.Status = workflow.RunWaitingResumeAction
@@ -100,11 +103,11 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	if err := repo.UpdateRunState(ctx, run); err != nil {
 		t.Fatalf("update run state: %v", err)
 	}
-	latestRun, err := repo.FindLatestRunBySession(ctx, run.SessionID)
+	latestRun, err := repo.FindRun(ctx, run.SessionID)
 	if err != nil {
 		t.Fatalf("find latest run by session: %v", err)
 	}
-	if latestRun.ID != run.ID || latestRun.Status != workflow.RunWaitingResumeAction {
+	if latestRun.SessionID != run.SessionID || latestRun.Status != workflow.RunWaitingResumeAction {
 		t.Fatalf("latest run mismatch: %#v", latestRun)
 	}
 	if latestRun.Context.Values["resume"] == nil {
@@ -117,24 +120,24 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	run.PendingApproval = nil
 	run.Context.Values["resume"] = map[string]any{"status": "rerun_requested"}
 	nextNodeRun := workflow.NodeRun{
-		ID:            "node-run-2",
-		WorkflowRunID: run.ID,
-		NodeID:        "build",
-		Status:        workflow.NodeRunning,
-		Attempt:       2,
-		StartedAt:     &startedAt,
+		ID:        "node-run-2",
+		SessionID: run.SessionID,
+		NodeID:    "build",
+		Status:    workflow.NodeRunning,
+		Attempt:   2,
+		StartedAt: &startedAt,
 	}
 	if err := repo.CreateNodeRunAndUpdateRun(ctx, run, nextNodeRun); err != nil {
 		t.Fatalf("create node run and update run: %v", err)
 	}
-	latestRun, err = repo.FindLatestRunBySession(ctx, run.SessionID)
+	latestRun, err = repo.FindRun(ctx, run.SessionID)
 	if err != nil {
 		t.Fatalf("find latest run by session after rerun: %v", err)
 	}
 	if latestRun.Status != workflow.RunRunning || latestRun.Context.Values["resume"] == nil {
 		t.Fatalf("latest rerun run mismatch: %#v", latestRun)
 	}
-	latest, err = repo.FindLatestNodeRun(ctx, run.ID, "build")
+	latest, err = repo.FindLatestNodeRun(ctx, run.SessionID, "build")
 	if err != nil {
 		t.Fatalf("find latest node run after rerun: %v", err)
 	}
@@ -145,7 +148,7 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find node run: %v", err)
 	}
-	if persistedNodeRun.WorkflowRunID != string(run.ID) || persistedNodeRun.ProcessRunID == nil || *persistedNodeRun.ProcessRunID != string(processRunID) {
+	if persistedNodeRun.SessionID != string(run.SessionID) || persistedNodeRun.ProcessRunID == nil || *persistedNodeRun.ProcessRunID != string(processRunID) {
 		t.Fatalf("node run mismatch: %#v", persistedNodeRun)
 	}
 	data, ok := persistedNodeRun.Output["data"].(map[string]any)
@@ -166,23 +169,24 @@ func TestWorkflowRepositoryTransitionsNodeThroughAnswerUserResume(t *testing.T) 
 	}
 	repo := store.Workflows()
 	now := time.Now().UTC()
+	createWorkflowTestSession(t, ctx, store, "session-1")
 	if err := repo.CreateRun(ctx, workflow.Run{
-		ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: workflow.RunRunning, CurrentNodeID: "build", StartedAt: &now,
+		SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: workflow.RunRunning, CurrentNodeID: "build", StartedAt: &now,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.SaveNodeRun(ctx, workflow.NodeRun{
-		ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: workflow.NodeRunning, Attempt: 1, StartedAt: &now,
+		ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: workflow.NodeRunning, Attempt: 1, StartedAt: &now,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MarkNodeWaitingUser(ctx, "workflow-run-1", "node-run-1"); err != nil {
+	if err := repo.MarkNodeWaitingUser(ctx, "session-1", "node-run-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.MarkNodeRunning(ctx, "workflow-run-1", "node-run-1", "process-run-resume"); err != nil {
+	if err := repo.MarkNodeRunning(ctx, "session-1", "node-run-1", "process-run-resume"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := repo.FindLatestNodeRun(ctx, "workflow-run-1", "build")
+	got, err := repo.FindLatestNodeRun(ctx, "session-1", "build")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,8 +230,9 @@ func TestMigrateCanonicalizesWorkflowApprovalFieldsAndPreservesAuditData(t *test
 		t.Fatal(err)
 	}
 	runContext := workflow.Context{Values: map[string]any{"results": map[string]any{"data": map[string]any{"approval": map[string]any{"approved": true}}}}}
+	createWorkflowTestSession(t, ctx, store, "session-1")
 	if err := repo.CreateRun(ctx, workflow.Run{
-		ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: definition.ID,
+		SessionID: "session-1", WorkflowDefinitionID: definition.ID,
 		Status: workflow.RunCompleted, CurrentNodeID: "plan", Context: runContext, StartedAt: &now, StoppedAt: &now,
 	}); err != nil {
 		t.Fatal(err)
@@ -237,7 +242,7 @@ func TestMigrateCanonicalizesWorkflowApprovalFieldsAndPreservesAuditData(t *test
 		Data: map[string]any{"approval": map[string]any{"approved": true}},
 	}
 	if err := repo.SaveNodeRun(ctx, workflow.NodeRun{
-		ID: "node-run-1", WorkflowRunID: "run-1", NodeID: "plan", Status: workflow.NodeSucceeded,
+		ID: "node-run-1", SessionID: "session-1", NodeID: "plan", Status: workflow.NodeSucceeded,
 		Attempt: 1, StartedAt: &now, FinishedAt: &now, Result: historicalResult,
 	}); err != nil {
 		t.Fatal(err)
@@ -305,17 +310,29 @@ func TestMigrateCanonicalizesWorkflowApprovalFieldsAndPreservesAuditData(t *test
 	if !reflect.DeepEqual(raw.Graph, wantRawGraph) {
 		t.Fatalf("migration changed unrelated raw graph data = %#v, want %#v", raw.Graph, wantRawGraph)
 	}
-	gotRun, err := repo.FindRun(ctx, "run-1")
+	gotRun, err := repo.FindRun(ctx, "session-1")
 	if err != nil || !reflect.DeepEqual(gotRun.Context, runContext) {
 		t.Fatalf("historical workflow context changed: %#v, err=%v", gotRun.Context, err)
 	}
-	gotNodeRun, err := repo.FindLatestNodeRun(ctx, "run-1", "plan")
+	gotNodeRun, err := repo.FindLatestNodeRun(ctx, "session-1", "plan")
 	if err != nil || !reflect.DeepEqual(gotNodeRun.Result.Data, historicalResult.Data) {
 		t.Fatalf("historical node result changed: %#v, err=%v", gotNodeRun.Result, err)
 	}
 	events, err := store.Events().After(ctx, event.Scope, "")
 	if err != nil || len(events) != 1 || !reflect.DeepEqual(events[0].Payload, event.Payload) {
 		t.Fatalf("historical event changed: %#v, err=%v", events, err)
+	}
+}
+
+func createWorkflowTestSession(t *testing.T, ctx context.Context, store *Store, id string) {
+	t.Helper()
+	if err := store.Client().Session.Create().
+		SetID(id).
+		SetProjectID("project-1").
+		SetMode("workflow").
+		SetStatus("stopped").
+		Exec(ctx); err != nil {
+		t.Fatalf("create workflow test session: %v", err)
 	}
 }
 

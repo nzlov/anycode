@@ -15,8 +15,6 @@ const (
 	FieldID = "id"
 	// FieldSessionID holds the string denoting the session_id field in the database.
 	FieldSessionID = "session_id"
-	// FieldWorkflowRunID holds the string denoting the workflow_run_id field in the database.
-	FieldWorkflowRunID = "workflow_run_id"
 	// FieldOriginProcessRunID holds the string denoting the origin_process_run_id field in the database.
 	FieldOriginProcessRunID = "origin_process_run_id"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -45,7 +43,6 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldSessionID,
-	FieldWorkflowRunID,
 	FieldOriginProcessRunID,
 	FieldStatus,
 	FieldDeliveryStatus,
@@ -100,11 +97,6 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // BySessionID orders the results by the session_id field.
 func BySessionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSessionID, opts...).ToFunc()
-}
-
-// ByWorkflowRunID orders the results by the workflow_run_id field.
-func ByWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldWorkflowRunID, opts...).ToFunc()
 }
 
 // ByOriginProcessRunID orders the results by the origin_process_run_id field.

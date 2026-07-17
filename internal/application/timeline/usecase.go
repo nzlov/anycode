@@ -604,7 +604,7 @@ func newTimelineGroup(id eventdomain.ID, kind, label string, first DTO) DTO {
 }
 
 func routineGroup(item DTO) (eventdomain.ID, string, string, bool) {
-	key := firstNonEmpty(item.Causality.ProcessRunID, item.Causality.NodeRunID, item.Causality.WorkflowRunID, "session")
+	key := firstNonEmpty(item.Causality.ProcessRunID, item.Causality.NodeRunID, "session")
 	switch content := item.Content.(type) {
 	case processdomain.CodexStatusContent:
 		code := content.Code

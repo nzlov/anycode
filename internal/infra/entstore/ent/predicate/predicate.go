@@ -6,9 +6,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
-// CodexTranscriptSource is the predicate function for codextranscriptsource builders.
-type CodexTranscriptSource func(*sql.Selector)
-
 // EventRecord is the predicate function for eventrecord builders.
 type EventRecord func(*sql.Selector)
 
@@ -44,6 +41,3 @@ type StagedAttachment func(*sql.Selector)
 
 // WorkflowDefinition is the predicate function for workflowdefinition builders.
 type WorkflowDefinition func(*sql.Selector)
-
-// WorkflowRun is the predicate function for workflowrun builders.
-type WorkflowRun func(*sql.Selector)

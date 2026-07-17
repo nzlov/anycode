@@ -28,8 +28,6 @@ type EventRecord struct {
 	Payload map[string]interface{} `json:"payload,omitempty"`
 	// ProcessRunID holds the value of the "process_run_id" field.
 	ProcessRunID string `json:"process_run_id,omitempty"`
-	// WorkflowRunID holds the value of the "workflow_run_id" field.
-	WorkflowRunID string `json:"workflow_run_id,omitempty"`
 	// NodeRunID holds the value of the "node_run_id" field.
 	NodeRunID string `json:"node_run_id,omitempty"`
 	// CorrelationID holds the value of the "correlation_id" field.
@@ -48,7 +46,7 @@ func (*EventRecord) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case eventrecord.FieldPayload:
 			values[i] = new([]byte)
-		case eventrecord.FieldID, eventrecord.FieldSessionID, eventrecord.FieldProjectID, eventrecord.FieldType, eventrecord.FieldProcessRunID, eventrecord.FieldWorkflowRunID, eventrecord.FieldNodeRunID, eventrecord.FieldCorrelationID, eventrecord.FieldSessionStatus:
+		case eventrecord.FieldID, eventrecord.FieldSessionID, eventrecord.FieldProjectID, eventrecord.FieldType, eventrecord.FieldProcessRunID, eventrecord.FieldNodeRunID, eventrecord.FieldCorrelationID, eventrecord.FieldSessionStatus:
 			values[i] = new(sql.NullString)
 		case eventrecord.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -105,12 +103,6 @@ func (_m *EventRecord) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field process_run_id", values[i])
 			} else if value.Valid {
 				_m.ProcessRunID = value.String
-			}
-		case eventrecord.FieldWorkflowRunID:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field workflow_run_id", values[i])
-			} else if value.Valid {
-				_m.WorkflowRunID = value.String
 			}
 		case eventrecord.FieldNodeRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -188,9 +180,6 @@ func (_m *EventRecord) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("process_run_id=")
 	builder.WriteString(_m.ProcessRunID)
-	builder.WriteString(", ")
-	builder.WriteString("workflow_run_id=")
-	builder.WriteString(_m.WorkflowRunID)
 	builder.WriteString(", ")
 	builder.WriteString("node_run_id=")
 	builder.WriteString(_m.NodeRunID)

@@ -37,7 +37,7 @@ func TestTranscriptBindingRollsBackSourceAndRunStateWithTransaction(t *testing.T
 	if !errors.Is(err, injected) {
 		t.Fatalf("transaction error = %v", err)
 	}
-	if _, found, err := store.Processes().FindTranscriptSource(ctx, "codex-1"); err != nil || found {
+	if _, found, err := store.Processes().FindTranscriptSource(ctx, "session-1", "codex-1"); err != nil || found {
 		t.Fatalf("source after rollback found=%v error=%v", found, err)
 	}
 	run, err := store.Processes().FindRun(ctx, "process-1")
@@ -377,6 +377,23 @@ func TestProcessRepositoryBindsAndListsTranscriptSourcesForSession(t *testing.T)
 			t.Fatalf("restore %s exited: %v", binding.run.ID, err)
 		}
 	}
+	if err := store.Sessions().Save(ctx, session.Session{
+		ID: "session-2", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusStopped,
+		CreatedAt: startedAt, UpdatedAt: startedAt,
+	}); err != nil {
+		t.Fatalf("save second session: %v", err)
+	}
+	session2Source := source1
+	session2Source.RelativePath = "2026/07/02/session-2.jsonl"
+	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-4", SessionID: "session-2", Status: process.StatusStarting, StartedAt: startedAt}); err != nil {
+		t.Fatalf("create second session run: %v", err)
+	}
+	if err := repo.BindTranscript(ctx, "process-run-4", 5678, session2Source); err != nil {
+		t.Fatalf("bind second session transcript: %v", err)
+	}
+	if err := repo.MarkExited(ctx, "process-run-4", process.ExitResult{FinishedAt: startedAt.Add(4 * time.Minute)}); err != nil {
+		t.Fatalf("exit second session run: %v", err)
+	}
 	if err := repo.CreateRun(ctx, process.Run{ID: "process-run-empty", SessionID: "session-1", Status: process.StatusExited, StartedAt: startedAt.Add(3 * time.Minute)}); err != nil {
 		t.Fatalf("create empty run: %v", err)
 	}
@@ -409,6 +426,12 @@ func TestProcessRepositoryBindsAndListsTranscriptSourcesForSession(t *testing.T)
 	}
 	if len(got) != 2 || got[0].CodexSessionID != source1.CodexSessionID || got[0].RelativePath != source1.RelativePath || got[1].CodexSessionID != source2.CodexSessionID {
 		t.Fatalf("TranscriptSources() = %#v", got)
+	}
+	if source, found, err := repo.FindTranscriptSource(ctx, "session-1", source1.CodexSessionID); err != nil || !found || source.RelativePath != source1.RelativePath {
+		t.Fatalf("session-1 transcript source = %#v, found=%v, error=%v", source, found, err)
+	}
+	if source, found, err := repo.FindTranscriptSource(ctx, "session-2", source1.CodexSessionID); err != nil || !found || source.RelativePath != session2Source.RelativePath {
+		t.Fatalf("session-2 transcript source = %#v, found=%v, error=%v", source, found, err)
 	}
 	transcriptRuns, err := repo.TranscriptRuns(ctx, "session-1")
 	if err != nil || len(transcriptRuns) != 3 || transcriptRuns[0].ID != "process-run-1" || transcriptRuns[2].ID != "process-run-3" {

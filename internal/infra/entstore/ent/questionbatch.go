@@ -20,8 +20,6 @@ type QuestionBatch struct {
 	ID string `json:"id,omitempty"`
 	// SessionID holds the value of the "session_id" field.
 	SessionID string `json:"session_id,omitempty"`
-	// WorkflowRunID holds the value of the "workflow_run_id" field.
-	WorkflowRunID *string `json:"workflow_run_id,omitempty"`
 	// OriginProcessRunID holds the value of the "origin_process_run_id" field.
 	OriginProcessRunID string `json:"origin_process_run_id,omitempty"`
 	// Status holds the value of the "status" field.
@@ -52,7 +50,7 @@ func (*QuestionBatch) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case questionbatch.FieldQuestions, questionbatch.FieldAnswers:
 			values[i] = new([]byte)
-		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldWorkflowRunID, questionbatch.FieldOriginProcessRunID, questionbatch.FieldStatus, questionbatch.FieldDeliveryStatus, questionbatch.FieldDeliveryProcessRunID, questionbatch.FieldCancelReason:
+		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldOriginProcessRunID, questionbatch.FieldStatus, questionbatch.FieldDeliveryStatus, questionbatch.FieldDeliveryProcessRunID, questionbatch.FieldCancelReason:
 			values[i] = new(sql.NullString)
 		case questionbatch.FieldCreatedAt, questionbatch.FieldAnsweredAt, questionbatch.FieldDeliveredAt:
 			values[i] = new(sql.NullTime)
@@ -82,13 +80,6 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field session_id", values[i])
 			} else if value.Valid {
 				_m.SessionID = value.String
-			}
-		case questionbatch.FieldWorkflowRunID:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field workflow_run_id", values[i])
-			} else if value.Valid {
-				_m.WorkflowRunID = new(string)
-				*_m.WorkflowRunID = value.String
 			}
 		case questionbatch.FieldOriginProcessRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -194,11 +185,6 @@ func (_m *QuestionBatch) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)
-	builder.WriteString(", ")
-	if v := _m.WorkflowRunID; v != nil {
-		builder.WriteString("workflow_run_id=")
-		builder.WriteString(*v)
-	}
 	builder.WriteString(", ")
 	builder.WriteString("origin_process_run_id=")
 	builder.WriteString(_m.OriginProcessRunID)

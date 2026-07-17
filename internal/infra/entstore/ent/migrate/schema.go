@@ -8,19 +8,6 @@ import (
 )
 
 var (
-	// CodexTranscriptSourcesColumns holds the columns for the "codex_transcript_sources" table.
-	CodexTranscriptSourcesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "codex_session_id", Type: field.TypeString, Unique: true},
-		{Name: "relative_path", Type: field.TypeString},
-		{Name: "bound_at", Type: field.TypeTime},
-	}
-	// CodexTranscriptSourcesTable holds the schema information for the "codex_transcript_sources" table.
-	CodexTranscriptSourcesTable = &schema.Table{
-		Name:       "codex_transcript_sources",
-		Columns:    CodexTranscriptSourcesColumns,
-		PrimaryKey: []*schema.Column{CodexTranscriptSourcesColumns[0]},
-	}
 	// EventRecordsColumns holds the columns for the "event_records" table.
 	EventRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -29,7 +16,6 @@ var (
 		{Name: "type", Type: field.TypeString},
 		{Name: "payload", Type: field.TypeJSON},
 		{Name: "process_run_id", Type: field.TypeString, Default: ""},
-		{Name: "workflow_run_id", Type: field.TypeString, Default: ""},
 		{Name: "node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "correlation_id", Type: field.TypeString, Default: ""},
 		{Name: "session_status", Type: field.TypeString, Default: ""},
@@ -44,17 +30,17 @@ var (
 			{
 				Name:    "eventrecord_project_id_created_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{EventRecordsColumns[2], EventRecordsColumns[10], EventRecordsColumns[0]},
+				Columns: []*schema.Column{EventRecordsColumns[2], EventRecordsColumns[9], EventRecordsColumns[0]},
 			},
 			{
 				Name:    "eventrecord_session_id_created_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{EventRecordsColumns[1], EventRecordsColumns[10], EventRecordsColumns[0]},
+				Columns: []*schema.Column{EventRecordsColumns[1], EventRecordsColumns[9], EventRecordsColumns[0]},
 			},
 			{
 				Name:    "eventrecord_created_at_id",
 				Unique:  false,
-				Columns: []*schema.Column{EventRecordsColumns[10], EventRecordsColumns[0]},
+				Columns: []*schema.Column{EventRecordsColumns[9], EventRecordsColumns[0]},
 			},
 		},
 	}
@@ -91,7 +77,7 @@ var (
 	// NodeRunsColumns holds the columns for the "node_runs" table.
 	NodeRunsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
-		{Name: "workflow_run_id", Type: field.TypeString},
+		{Name: "session_id", Type: field.TypeString},
 		{Name: "node_id", Type: field.TypeString},
 		{Name: "status", Type: field.TypeString},
 		{Name: "attempt", Type: field.TypeInt, Default: 1},
@@ -107,12 +93,12 @@ var (
 		PrimaryKey: []*schema.Column{NodeRunsColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "noderun_workflow_run_id_node_id",
+				Name:    "noderun_session_id_node_id",
 				Unique:  false,
 				Columns: []*schema.Column{NodeRunsColumns[1], NodeRunsColumns[2]},
 			},
 			{
-				Name:    "noderun_workflow_run_id_status",
+				Name:    "noderun_session_id_status",
 				Unique:  false,
 				Columns: []*schema.Column{NodeRunsColumns[1], NodeRunsColumns[3]},
 			},
@@ -126,6 +112,8 @@ var (
 		{Name: "status", Type: field.TypeString},
 		{Name: "pid", Type: field.TypeInt, Nullable: true},
 		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
+		{Name: "transcript_relative_path", Type: field.TypeString, Default: ""},
+		{Name: "transcript_bound_at", Type: field.TypeTime, Nullable: true},
 		{Name: "resume_of", Type: field.TypeString, Nullable: true},
 		{Name: "exit_code", Type: field.TypeInt, Nullable: true},
 		{Name: "failure_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
@@ -146,7 +134,12 @@ var (
 			{
 				Name:    "processrun_session_id_started_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[9]},
+				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[11]},
+			},
+			{
+				Name:    "processrun_session_id_codex_session_id_transcript_bound_at",
+				Unique:  false,
+				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[5], ProcessRunsColumns[7]},
 			},
 		},
 	}
@@ -208,7 +201,6 @@ var (
 	QuestionBatchesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
-		{Name: "workflow_run_id", Type: field.TypeString, Nullable: true},
 		{Name: "origin_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "status", Type: field.TypeString},
 		{Name: "delivery_status", Type: field.TypeString, Default: "none"},
@@ -229,27 +221,27 @@ var (
 			{
 				Name:    "questionbatch_session_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[4]},
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[3]},
 			},
 			{
 				Name:    "questionbatch_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[10]},
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[9]},
 			},
 			{
 				Name:    "questionbatch_origin_process_run_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[3], QuestionBatchesColumns[4]},
+				Columns: []*schema.Column{QuestionBatchesColumns[2], QuestionBatchesColumns[3]},
 			},
 			{
 				Name:    "questionbatch_session_id_delivery_status",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[5]},
+				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[4]},
 			},
 			{
 				Name:    "questionbatch_delivery_process_run_id",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[6]},
+				Columns: []*schema.Column{QuestionBatchesColumns[5]},
 			},
 		},
 	}
@@ -302,12 +294,18 @@ var (
 		{Name: "queue_priority", Type: field.TypeString, Default: "medium"},
 		{Name: "queue_initial_start", Type: field.TypeBool, Nullable: true},
 		{Name: "queue_review_after_reuse_failure", Type: field.TypeBool, Default: false},
-		{Name: "queue_workflow_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_node_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_codex_session_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_of_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_answer_batch_id", Type: field.TypeString, Default: ""},
+		{Name: "workflow_definition_id", Type: field.TypeString, Default: ""},
+		{Name: "workflow_status", Type: field.TypeString, Default: ""},
+		{Name: "workflow_current_node_id", Type: field.TypeString, Default: ""},
+		{Name: "workflow_context", Type: field.TypeJSON},
+		{Name: "workflow_pending_approval", Type: field.TypeJSON},
+		{Name: "workflow_started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "workflow_stopped_at", Type: field.TypeTime, Nullable: true},
 		{Name: "applied_system_commands", Type: field.TypeJSON, Nullable: true},
 		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
@@ -328,12 +326,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[44]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[50]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[42]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[48]},
 			},
 			{
 				Name:    "session_status",
@@ -348,7 +346,7 @@ var (
 			{
 				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[44]},
+				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[50]},
 			},
 		},
 	}
@@ -458,39 +456,8 @@ var (
 			},
 		},
 	}
-	// WorkflowRunsColumns holds the columns for the "workflow_runs" table.
-	WorkflowRunsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeString},
-		{Name: "session_id", Type: field.TypeString},
-		{Name: "workflow_definition_id", Type: field.TypeString},
-		{Name: "status", Type: field.TypeString},
-		{Name: "current_node_id", Type: field.TypeString, Default: ""},
-		{Name: "context", Type: field.TypeJSON},
-		{Name: "pending_approval", Type: field.TypeJSON},
-		{Name: "started_at", Type: field.TypeTime, Nullable: true},
-		{Name: "stopped_at", Type: field.TypeTime, Nullable: true},
-	}
-	// WorkflowRunsTable holds the schema information for the "workflow_runs" table.
-	WorkflowRunsTable = &schema.Table{
-		Name:       "workflow_runs",
-		Columns:    WorkflowRunsColumns,
-		PrimaryKey: []*schema.Column{WorkflowRunsColumns[0]},
-		Indexes: []*schema.Index{
-			{
-				Name:    "workflowrun_session_id",
-				Unique:  false,
-				Columns: []*schema.Column{WorkflowRunsColumns[1]},
-			},
-			{
-				Name:    "workflowrun_workflow_definition_id_status",
-				Unique:  false,
-				Columns: []*schema.Column{WorkflowRunsColumns[2], WorkflowRunsColumns[3]},
-			},
-		},
-	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
-		CodexTranscriptSourcesTable,
 		EventRecordsTable,
 		MergeRecordsTable,
 		NodeRunsTable,
@@ -503,7 +470,6 @@ var (
 		SessionAttachmentsTable,
 		StagedAttachmentsTable,
 		WorkflowDefinitionsTable,
-		WorkflowRunsTable,
 	}
 )
 

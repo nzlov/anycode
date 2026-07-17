@@ -15,7 +15,6 @@ type Scope struct {
 
 type Causality struct {
 	ProcessRunID  string
-	WorkflowRunID string
 	NodeRunID     string
 	CorrelationID string
 	SessionStatus string

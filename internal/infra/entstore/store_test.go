@@ -111,6 +111,61 @@ func TestOpenCreatesLocalTursoDataDir(t *testing.T) {
 	}
 }
 
+func TestMigrateDropsSupersededWorkflowStorage(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("create current schema: %v", err)
+	}
+	for _, statement := range []string{
+		`CREATE TABLE workflow_runs (id text PRIMARY KEY)`,
+		`CREATE TABLE codex_transcript_sources (id integer PRIMARY KEY)`,
+		`ALTER TABLE node_runs ADD COLUMN workflow_run_id text NOT NULL DEFAULT ''`,
+		`ALTER TABLE sessions ADD COLUMN queue_workflow_run_id text NOT NULL DEFAULT ''`,
+		`ALTER TABLE question_batches ADD COLUMN workflow_run_id text NULL`,
+		`ALTER TABLE event_records ADD COLUMN workflow_run_id text NOT NULL DEFAULT ''`,
+		`INSERT INTO workflow_runs (id) VALUES ('workflow-run-1')`,
+	} {
+		if _, err := store.db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("prepare superseded storage with %q: %v", statement, err)
+		}
+	}
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	for _, table := range []string{"workflow_runs", "codex_transcript_sources"} {
+		var count int
+		if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
+			t.Fatalf("inspect table %q: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("superseded table %q still exists", table)
+		}
+	}
+	for _, item := range []struct {
+		table  string
+		column string
+	}{
+		{table: "node_runs", column: "workflow_run_id"},
+		{table: "sessions", column: "queue_workflow_run_id"},
+		{table: "question_batches", column: "workflow_run_id"},
+		{table: "event_records", column: "workflow_run_id"},
+	} {
+		if exists, err := store.columnExists(ctx, item.table, item.column); err != nil || exists {
+			t.Fatalf("%s.%s exists = %v, error = %v", item.table, item.column, exists, err)
+		}
+	}
+	if exists, err := store.columnExists(ctx, "node_runs", "session_id"); err != nil || !exists {
+		t.Fatalf("node_runs.session_id exists = %v, error = %v", exists, err)
+	}
+}
+
 func TestProjectRepositoryWithLocalTurso(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{

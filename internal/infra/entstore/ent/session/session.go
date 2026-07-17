@@ -81,8 +81,6 @@ const (
 	FieldQueueInitialStart = "queue_initial_start"
 	// FieldQueueReviewAfterReuseFailure holds the string denoting the queue_review_after_reuse_failure field in the database.
 	FieldQueueReviewAfterReuseFailure = "queue_review_after_reuse_failure"
-	// FieldQueueWorkflowRunID holds the string denoting the queue_workflow_run_id field in the database.
-	FieldQueueWorkflowRunID = "queue_workflow_run_id"
 	// FieldQueueNodeRunID holds the string denoting the queue_node_run_id field in the database.
 	FieldQueueNodeRunID = "queue_node_run_id"
 	// FieldQueuePrompt holds the string denoting the queue_prompt field in the database.
@@ -93,6 +91,20 @@ const (
 	FieldQueueResumeOfProcessRunID = "queue_resume_of_process_run_id"
 	// FieldQueueAnswerBatchID holds the string denoting the queue_answer_batch_id field in the database.
 	FieldQueueAnswerBatchID = "queue_answer_batch_id"
+	// FieldWorkflowDefinitionID holds the string denoting the workflow_definition_id field in the database.
+	FieldWorkflowDefinitionID = "workflow_definition_id"
+	// FieldWorkflowStatus holds the string denoting the workflow_status field in the database.
+	FieldWorkflowStatus = "workflow_status"
+	// FieldWorkflowCurrentNodeID holds the string denoting the workflow_current_node_id field in the database.
+	FieldWorkflowCurrentNodeID = "workflow_current_node_id"
+	// FieldWorkflowContext holds the string denoting the workflow_context field in the database.
+	FieldWorkflowContext = "workflow_context"
+	// FieldWorkflowPendingApproval holds the string denoting the workflow_pending_approval field in the database.
+	FieldWorkflowPendingApproval = "workflow_pending_approval"
+	// FieldWorkflowStartedAt holds the string denoting the workflow_started_at field in the database.
+	FieldWorkflowStartedAt = "workflow_started_at"
+	// FieldWorkflowStoppedAt holds the string denoting the workflow_stopped_at field in the database.
+	FieldWorkflowStoppedAt = "workflow_stopped_at"
 	// FieldAppliedSystemCommands holds the string denoting the applied_system_commands field in the database.
 	FieldAppliedSystemCommands = "applied_system_commands"
 	// FieldLastRunAt holds the string denoting the last_run_at field in the database.
@@ -144,12 +156,18 @@ var Columns = []string{
 	FieldQueuePriority,
 	FieldQueueInitialStart,
 	FieldQueueReviewAfterReuseFailure,
-	FieldQueueWorkflowRunID,
 	FieldQueueNodeRunID,
 	FieldQueuePrompt,
 	FieldQueueResumeCodexSessionID,
 	FieldQueueResumeOfProcessRunID,
 	FieldQueueAnswerBatchID,
+	FieldWorkflowDefinitionID,
+	FieldWorkflowStatus,
+	FieldWorkflowCurrentNodeID,
+	FieldWorkflowContext,
+	FieldWorkflowPendingApproval,
+	FieldWorkflowStartedAt,
+	FieldWorkflowStoppedAt,
 	FieldAppliedSystemCommands,
 	FieldLastRunAt,
 	FieldCreatedAt,
@@ -222,8 +240,6 @@ var (
 	DefaultQueuePriority string
 	// DefaultQueueReviewAfterReuseFailure holds the default value on creation for the "queue_review_after_reuse_failure" field.
 	DefaultQueueReviewAfterReuseFailure bool
-	// DefaultQueueWorkflowRunID holds the default value on creation for the "queue_workflow_run_id" field.
-	DefaultQueueWorkflowRunID string
 	// DefaultQueueNodeRunID holds the default value on creation for the "queue_node_run_id" field.
 	DefaultQueueNodeRunID string
 	// DefaultQueuePrompt holds the default value on creation for the "queue_prompt" field.
@@ -234,6 +250,16 @@ var (
 	DefaultQueueResumeOfProcessRunID string
 	// DefaultQueueAnswerBatchID holds the default value on creation for the "queue_answer_batch_id" field.
 	DefaultQueueAnswerBatchID string
+	// DefaultWorkflowDefinitionID holds the default value on creation for the "workflow_definition_id" field.
+	DefaultWorkflowDefinitionID string
+	// DefaultWorkflowStatus holds the default value on creation for the "workflow_status" field.
+	DefaultWorkflowStatus string
+	// DefaultWorkflowCurrentNodeID holds the default value on creation for the "workflow_current_node_id" field.
+	DefaultWorkflowCurrentNodeID string
+	// DefaultWorkflowContext holds the default value on creation for the "workflow_context" field.
+	DefaultWorkflowContext map[string]interface{}
+	// DefaultWorkflowPendingApproval holds the default value on creation for the "workflow_pending_approval" field.
+	DefaultWorkflowPendingApproval map[string]interface{}
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -415,11 +441,6 @@ func ByQueueReviewAfterReuseFailure(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueueReviewAfterReuseFailure, opts...).ToFunc()
 }
 
-// ByQueueWorkflowRunID orders the results by the queue_workflow_run_id field.
-func ByQueueWorkflowRunID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldQueueWorkflowRunID, opts...).ToFunc()
-}
-
 // ByQueueNodeRunID orders the results by the queue_node_run_id field.
 func ByQueueNodeRunID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueueNodeRunID, opts...).ToFunc()
@@ -443,6 +464,31 @@ func ByQueueResumeOfProcessRunID(opts ...sql.OrderTermOption) OrderOption {
 // ByQueueAnswerBatchID orders the results by the queue_answer_batch_id field.
 func ByQueueAnswerBatchID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueueAnswerBatchID, opts...).ToFunc()
+}
+
+// ByWorkflowDefinitionID orders the results by the workflow_definition_id field.
+func ByWorkflowDefinitionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowDefinitionID, opts...).ToFunc()
+}
+
+// ByWorkflowStatus orders the results by the workflow_status field.
+func ByWorkflowStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowStatus, opts...).ToFunc()
+}
+
+// ByWorkflowCurrentNodeID orders the results by the workflow_current_node_id field.
+func ByWorkflowCurrentNodeID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowCurrentNodeID, opts...).ToFunc()
+}
+
+// ByWorkflowStartedAt orders the results by the workflow_started_at field.
+func ByWorkflowStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowStartedAt, opts...).ToFunc()
+}
+
+// ByWorkflowStoppedAt orders the results by the workflow_stopped_at field.
+func ByWorkflowStoppedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowStoppedAt, opts...).ToFunc()
 }
 
 // ByLastRunAt orders the results by the last_run_at field.

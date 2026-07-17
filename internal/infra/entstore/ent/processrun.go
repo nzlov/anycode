@@ -27,6 +27,10 @@ type ProcessRun struct {
 	Pid *int `json:"pid,omitempty"`
 	// CodexSessionID holds the value of the "codex_session_id" field.
 	CodexSessionID string `json:"codex_session_id,omitempty"`
+	// TranscriptRelativePath holds the value of the "transcript_relative_path" field.
+	TranscriptRelativePath string `json:"transcript_relative_path,omitempty"`
+	// TranscriptBoundAt holds the value of the "transcript_bound_at" field.
+	TranscriptBoundAt *time.Time `json:"transcript_bound_at,omitempty"`
 	// ResumeOf holds the value of the "resume_of" field.
 	ResumeOf *string `json:"resume_of,omitempty"`
 	// ExitCode holds the value of the "exit_code" field.
@@ -47,9 +51,9 @@ func (*ProcessRun) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case processrun.FieldPid, processrun.FieldExitCode:
 			values[i] = new(sql.NullInt64)
-		case processrun.FieldID, processrun.FieldSessionID, processrun.FieldNodeRunID, processrun.FieldStatus, processrun.FieldCodexSessionID, processrun.FieldResumeOf, processrun.FieldFailureReason:
+		case processrun.FieldID, processrun.FieldSessionID, processrun.FieldNodeRunID, processrun.FieldStatus, processrun.FieldCodexSessionID, processrun.FieldTranscriptRelativePath, processrun.FieldResumeOf, processrun.FieldFailureReason:
 			values[i] = new(sql.NullString)
-		case processrun.FieldStartedAt, processrun.FieldFinishedAt:
+		case processrun.FieldTranscriptBoundAt, processrun.FieldStartedAt, processrun.FieldFinishedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -103,6 +107,19 @@ func (_m *ProcessRun) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field codex_session_id", values[i])
 			} else if value.Valid {
 				_m.CodexSessionID = value.String
+			}
+		case processrun.FieldTranscriptRelativePath:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field transcript_relative_path", values[i])
+			} else if value.Valid {
+				_m.TranscriptRelativePath = value.String
+			}
+		case processrun.FieldTranscriptBoundAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field transcript_bound_at", values[i])
+			} else if value.Valid {
+				_m.TranscriptBoundAt = new(time.Time)
+				*_m.TranscriptBoundAt = value.Time
 			}
 		case processrun.FieldResumeOf:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -191,6 +208,14 @@ func (_m *ProcessRun) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("codex_session_id=")
 	builder.WriteString(_m.CodexSessionID)
+	builder.WriteString(", ")
+	builder.WriteString("transcript_relative_path=")
+	builder.WriteString(_m.TranscriptRelativePath)
+	builder.WriteString(", ")
+	if v := _m.TranscriptBoundAt; v != nil {
+		builder.WriteString("transcript_bound_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteString(", ")
 	if v := _m.ResumeOf; v != nil {
 		builder.WriteString("resume_of=")

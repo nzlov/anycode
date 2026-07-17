@@ -64,9 +64,9 @@ func IDContainsFold(id string) predicate.NodeRun {
 	return predicate.NodeRun(sql.FieldContainsFold(FieldID, id))
 }
 
-// WorkflowRunID applies equality check predicate on the "workflow_run_id" field. It's identical to WorkflowRunIDEQ.
-func WorkflowRunID(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldEQ(FieldWorkflowRunID, v))
+// SessionID applies equality check predicate on the "session_id" field. It's identical to SessionIDEQ.
+func SessionID(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldEQ(FieldSessionID, v))
 }
 
 // NodeID applies equality check predicate on the "node_id" field. It's identical to NodeIDEQ.
@@ -99,69 +99,69 @@ func FinishedAt(v time.Time) predicate.NodeRun {
 	return predicate.NodeRun(sql.FieldEQ(FieldFinishedAt, v))
 }
 
-// WorkflowRunIDEQ applies the EQ predicate on the "workflow_run_id" field.
-func WorkflowRunIDEQ(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldEQ(FieldWorkflowRunID, v))
+// SessionIDEQ applies the EQ predicate on the "session_id" field.
+func SessionIDEQ(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldEQ(FieldSessionID, v))
 }
 
-// WorkflowRunIDNEQ applies the NEQ predicate on the "workflow_run_id" field.
-func WorkflowRunIDNEQ(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldNEQ(FieldWorkflowRunID, v))
+// SessionIDNEQ applies the NEQ predicate on the "session_id" field.
+func SessionIDNEQ(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldNEQ(FieldSessionID, v))
 }
 
-// WorkflowRunIDIn applies the In predicate on the "workflow_run_id" field.
-func WorkflowRunIDIn(vs ...string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldIn(FieldWorkflowRunID, vs...))
+// SessionIDIn applies the In predicate on the "session_id" field.
+func SessionIDIn(vs ...string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldIn(FieldSessionID, vs...))
 }
 
-// WorkflowRunIDNotIn applies the NotIn predicate on the "workflow_run_id" field.
-func WorkflowRunIDNotIn(vs ...string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldNotIn(FieldWorkflowRunID, vs...))
+// SessionIDNotIn applies the NotIn predicate on the "session_id" field.
+func SessionIDNotIn(vs ...string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldNotIn(FieldSessionID, vs...))
 }
 
-// WorkflowRunIDGT applies the GT predicate on the "workflow_run_id" field.
-func WorkflowRunIDGT(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldGT(FieldWorkflowRunID, v))
+// SessionIDGT applies the GT predicate on the "session_id" field.
+func SessionIDGT(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldGT(FieldSessionID, v))
 }
 
-// WorkflowRunIDGTE applies the GTE predicate on the "workflow_run_id" field.
-func WorkflowRunIDGTE(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldGTE(FieldWorkflowRunID, v))
+// SessionIDGTE applies the GTE predicate on the "session_id" field.
+func SessionIDGTE(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldGTE(FieldSessionID, v))
 }
 
-// WorkflowRunIDLT applies the LT predicate on the "workflow_run_id" field.
-func WorkflowRunIDLT(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldLT(FieldWorkflowRunID, v))
+// SessionIDLT applies the LT predicate on the "session_id" field.
+func SessionIDLT(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldLT(FieldSessionID, v))
 }
 
-// WorkflowRunIDLTE applies the LTE predicate on the "workflow_run_id" field.
-func WorkflowRunIDLTE(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldLTE(FieldWorkflowRunID, v))
+// SessionIDLTE applies the LTE predicate on the "session_id" field.
+func SessionIDLTE(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldLTE(FieldSessionID, v))
 }
 
-// WorkflowRunIDContains applies the Contains predicate on the "workflow_run_id" field.
-func WorkflowRunIDContains(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldContains(FieldWorkflowRunID, v))
+// SessionIDContains applies the Contains predicate on the "session_id" field.
+func SessionIDContains(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldContains(FieldSessionID, v))
 }
 
-// WorkflowRunIDHasPrefix applies the HasPrefix predicate on the "workflow_run_id" field.
-func WorkflowRunIDHasPrefix(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldHasPrefix(FieldWorkflowRunID, v))
+// SessionIDHasPrefix applies the HasPrefix predicate on the "session_id" field.
+func SessionIDHasPrefix(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldHasPrefix(FieldSessionID, v))
 }
 
-// WorkflowRunIDHasSuffix applies the HasSuffix predicate on the "workflow_run_id" field.
-func WorkflowRunIDHasSuffix(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldHasSuffix(FieldWorkflowRunID, v))
+// SessionIDHasSuffix applies the HasSuffix predicate on the "session_id" field.
+func SessionIDHasSuffix(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldHasSuffix(FieldSessionID, v))
 }
 
-// WorkflowRunIDEqualFold applies the EqualFold predicate on the "workflow_run_id" field.
-func WorkflowRunIDEqualFold(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldEqualFold(FieldWorkflowRunID, v))
+// SessionIDEqualFold applies the EqualFold predicate on the "session_id" field.
+func SessionIDEqualFold(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldEqualFold(FieldSessionID, v))
 }
 
-// WorkflowRunIDContainsFold applies the ContainsFold predicate on the "workflow_run_id" field.
-func WorkflowRunIDContainsFold(v string) predicate.NodeRun {
-	return predicate.NodeRun(sql.FieldContainsFold(FieldWorkflowRunID, v))
+// SessionIDContainsFold applies the ContainsFold predicate on the "session_id" field.
+func SessionIDContainsFold(v string) predicate.NodeRun {
+	return predicate.NodeRun(sql.FieldContainsFold(FieldSessionID, v))
 }
 
 // NodeIDEQ applies the EQ predicate on the "node_id" field.

@@ -211,7 +211,7 @@ type PageInfo struct {
 }
 
 type PendingApproval struct {
-	WorkflowRunID    string         `json:"workflowRunId"`
+	SessionID        string         `json:"sessionId"`
 	NodeID           string         `json:"nodeId"`
 	NodeRunID        *string        `json:"nodeRunId,omitempty"`
 	CurrentNodeTitle string         `json:"currentNodeTitle"`
@@ -486,10 +486,10 @@ type SubmitQuestionBatchInput struct {
 }
 
 type SubmitWorkflowApprovalInput struct {
-	WorkflowRunID string  `json:"workflowRunId"`
-	NodeID        string  `json:"nodeId"`
-	Approved      bool    `json:"approved"`
-	Comment       *string `json:"comment,omitempty"`
+	SessionID string  `json:"sessionId"`
+	NodeID    string  `json:"nodeId"`
+	Approved  bool    `json:"approved"`
+	Comment   *string `json:"comment,omitempty"`
 }
 
 type Subscription struct {
@@ -754,7 +754,6 @@ type WorkflowOutputFieldInput struct {
 }
 
 type WorkflowRun struct {
-	ID            string         `json:"id"`
 	SessionID     string         `json:"sessionId"`
 	Status        string         `json:"status"`
 	CurrentNodeID string         `json:"currentNodeId"`

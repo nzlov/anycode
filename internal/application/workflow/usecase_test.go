@@ -32,7 +32,7 @@ func TestStartForSessionCreatesRunningNodeRunForExecutableStartNode(t *testing.T
 	}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
-	ids := []string{"run-1", "node-run-1"}
+	ids := []string{"node-run-1"}
 	service.generateID = func() (string, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -48,7 +48,7 @@ func TestStartForSessionCreatesRunningNodeRunForExecutableStartNode(t *testing.T
 	if err != nil {
 		t.Fatalf("StartForSession() error = %v", err)
 	}
-	if !got.RequiresCodex || got.WorkflowRunID != "run-1" || got.NodeRunID == nil || *got.NodeRunID != "node-run-1" {
+	if !got.RequiresCodex || got.SessionID != "session-1" || got.NodeRunID == nil || *got.NodeRunID != "node-run-1" {
 		t.Fatalf("StartForSession() = %#v", got)
 	}
 	if got.CurrentNodeID != "build" || got.CurrentNodeTitle != "Build" {
@@ -90,9 +90,17 @@ func TestWorkflowMutationsWriteEventsInUnitOfWorkAndIgnorePublishError(t *testin
 	if err := store.Workflows().SaveDefinition(ctx, definition); err != nil {
 		t.Fatalf("save definition: %v", err)
 	}
+	if err := store.Client().Session.Create().
+		SetID("session-1").
+		SetProjectID("project-1").
+		SetMode("workflow").
+		SetStatus("running").
+		Exec(ctx); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
 	service := New(store.Workflows(), WithUnitOfWork(store), WithEvents(store.Events()), WithEventPublisher(failingPublisher{}))
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
-	ids := []string{"workflow-run-1", "node-run-1", "event-1", "event-2"}
+	ids := []string{"node-run-1", "event-1", "event-2"}
 	service.generateID = func() (string, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -108,14 +116,14 @@ func TestWorkflowMutationsWriteEventsInUnitOfWorkAndIgnorePublishError(t *testin
 		t.Fatalf("StartForSession() error = %v", err)
 	}
 	if _, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: start.WorkflowRunID,
-		NodeRunID:     *start.NodeRunID,
-		Output:        resultOutput(map[string]any{"ok": true}),
+		SessionID: start.SessionID,
+		NodeRunID: *start.NodeRunID,
+		Output:    resultOutput(map[string]any{"ok": true}),
 	}); err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
 	}
 
-	run, err := store.Workflows().FindRun(ctx, "workflow-run-1")
+	run, err := store.Workflows().FindRun(ctx, "session-1")
 	if err != nil {
 		t.Fatalf("find run: %v", err)
 	}
@@ -130,7 +138,7 @@ func TestWorkflowMutationsWriteEventsInUnitOfWorkAndIgnorePublishError(t *testin
 	if len(events) != 2 || events[0].Type != "workflow.started" || events[1].Type != "workflow.completed" {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[0].Payload["currentNodeTitle"] != "Build" || events[1].Payload["workflowRunId"] != "workflow-run-1" {
+	if events[0].Payload["currentNodeTitle"] != "Build" || events[1].Payload["sessionId"] != "session-1" {
 		t.Fatalf("event payloads = %#v / %#v", events[0].Payload, events[1].Payload)
 	}
 	if _, found := events[0].Payload["status"]; found || events[0].Payload["workflowStatus"] == nil || events[0].Payload["workflowAdvanceStatus"] == nil {
@@ -198,15 +206,15 @@ func TestDefinitionRejectsAfterRunApprovalOnApprovalNodes(t *testing.T) {
 			}
 
 			repo.runs = []domain.Run{{
-				ID: "run-invalid", WorkflowDefinitionID: "workflow-invalid",
+				SessionID: "session-invalid", WorkflowDefinitionID: "workflow-invalid",
 				Status: domain.RunWaitingApproval, CurrentNodeID: "approve",
 			}}
 			repo.nodeRuns = []domain.NodeRun{{
-				ID: "node-run-invalid", WorkflowRunID: "run-invalid", NodeID: "approve",
+				ID: "node-run-invalid", SessionID: "session-invalid", NodeID: "approve",
 				Status: domain.NodeWaitingApproval, Attempt: 1,
 			}}
 			if _, err := service.SubmitApproval(ctx, SubmitApprovalInput{
-				WorkflowRunID: "run-invalid", NodeID: "approve", Approved: true,
+				SessionID: "session-invalid", NodeID: "approve", Approved: true,
 			}); err == nil || !strings.Contains(err.Error(), "cannot require after-run approval") {
 				t.Fatalf("SubmitApproval() error = %v", err)
 			}
@@ -343,7 +351,7 @@ func TestLegacyAfterRunApprovalDoesNotBecomeAgentResultData(t *testing.T) {
 		},
 	}
 	service := New(repo)
-	ids := []string{"workflow-run-1", "node-run-1"}
+	ids := []string{"node-run-1"}
 	service.generateID = func() (string, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -364,9 +372,9 @@ func TestLegacyAfterRunApprovalDoesNotBecomeAgentResultData(t *testing.T) {
 	}
 
 	advance, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"planPath": "docs/plan/example.md"}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"planPath": "docs/plan/example.md"}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -392,7 +400,7 @@ func TestStartForSessionWaitsWhenStartNodeRequiresApproval(t *testing.T) {
 	}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
-	ids := []string{"run-1", "node-run-1"}
+	ids := []string{"node-run-1"}
 	service.generateID = func() (string, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -431,7 +439,7 @@ func TestStartForSessionReturnsMergeAdvanceForMergeStartNode(t *testing.T) {
 	}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
-	ids := []string{"run-1", "node-run-1"}
+	ids := []string{"node-run-1"}
 	service.generateID = func() (string, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -462,7 +470,7 @@ func TestStartForSessionClassifiesExprAsReady(t *testing.T) {
 	}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
-	ids := []string{"run-1", "node-run-1"}
+	ids := []string{"node-run-1"}
 	service.generateID = func() (string, error) {
 		id := ids[0]
 		ids = ids[1:]
@@ -499,7 +507,7 @@ func TestStartForSessionDefersSystemNodeSideEffectsUntilBeforeRunApproval(t *tes
 			}
 			service := New(repo)
 			service.now = func() time.Time { return time.Unix(10, 0).UTC() }
-			ids := []string{"run-1", "node-run-1"}
+			ids := []string{"node-run-1"}
 			service.generateID = func() (string, error) {
 				id := ids[0]
 				ids = ids[1:]
@@ -523,7 +531,7 @@ func TestStartForSessionDefersSystemNodeSideEffectsUntilBeforeRunApproval(t *tes
 			}
 
 			approved, err := service.SubmitApprovalForSession(context.Background(), sessiondomain.WorkflowApprovalInput{
-				WorkflowRunID: "run-1", NodeID: tt.node.ID, Approved: true,
+				SessionID: "session-1", NodeID: tt.node.ID, Approved: true,
 			})
 			if err != nil {
 				t.Fatalf("SubmitApproval() error = %v", err)
@@ -566,16 +574,16 @@ func TestCompleteNodeDefersNextSystemNodeSideEffectsUntilBeforeRunApproval(t *te
 				},
 			}
 			repo.runs = []domain.Run{{
-				ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
+				SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
 				Status: domain.RunRunning, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}},
 			}}
-			repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+			repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 			service := New(repo)
 			service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 			service.generateID = func() (string, error) { return "node-run-2", nil }
 
 			advance, err := service.CompleteNode(context.Background(), sessiondomain.WorkflowNodeCompleteInput{
-				WorkflowRunID: "run-1", NodeRunID: "node-run-1", Output: resultOutput(map[string]any{"ok": true}),
+				SessionID: "session-1", NodeRunID: "node-run-1", Output: resultOutput(map[string]any{"ok": true}),
 			})
 			if err != nil {
 				t.Fatalf("CompleteNode() error = %v", err)
@@ -643,7 +651,6 @@ func TestCompleteNodeAdvancesToNextExecutableNode(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
@@ -651,20 +658,20 @@ func TestCompleteNodeAdvancesToNextExecutableNode(t *testing.T) {
 		Context:              domain.Context{Values: map[string]any{"requirement": "ship"}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeRunning,
-		Attempt:       1,
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeRunning,
+		Attempt:   1,
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"ok": true}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"ok": true}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -696,22 +703,21 @@ func TestCompleteNodeWaitsForAfterRunApproval(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"status": "passed"}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"status": "passed"}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -743,7 +749,6 @@ func TestCompleteNodeAdvancesToCloseNode(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
@@ -751,20 +756,20 @@ func TestCompleteNodeAdvancesToCloseNode(t *testing.T) {
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeRunning,
-		Attempt:       1,
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeRunning,
+		Attempt:   1,
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-close", nil }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"status": "done"}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"status": "done"}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -792,7 +797,6 @@ func TestRecoverProcessExitReturnsPersistedAdvanceWithoutCompletingNodeAgain(t *
 		}},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
@@ -800,15 +804,15 @@ func TestRecoverProcessExitReturnsPersistedAdvanceWithoutCompletingNodeAgain(t *
 		Context:              domain.Context{Values: map[string]any{"params": map[string]any{"artifact": "ready"}}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{
-		{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeSucceeded, Attempt: 1},
-		{ID: "node-run-2", WorkflowRunID: "workflow-run-1", NodeID: "verify", Status: domain.NodeRunning, Attempt: 1},
+		{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeSucceeded, Attempt: 1},
+		{ID: "node-run-2", SessionID: "session-1", NodeID: "verify", Status: domain.NodeRunning, Attempt: 1},
 	}
 	service := New(repo)
 
 	got, err := service.RecoverProcessExit(ctx, sessiondomain.WorkflowProcessExitInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"artifact": "ready"}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"artifact": "ready"}),
 	})
 	if err != nil {
 		t.Fatalf("RecoverProcessExit() error = %v", err)
@@ -831,16 +835,16 @@ func TestCompleteNodeReturnsPersistedAdvanceForStaleNodeRun(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
+		SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
 		Status: domain.RunRunning, CurrentNodeID: "verify", Context: domain.Context{Values: map[string]any{}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{
-		{ID: "node-run-build", WorkflowRunID: "run-1", NodeID: "build", Status: domain.NodeSucceeded, Attempt: 1, Result: successResult(map[string]any{})},
-		{ID: "node-run-verify", WorkflowRunID: "run-1", NodeID: "verify", Status: domain.NodeRunning, Attempt: 1},
+		{ID: "node-run-build", SessionID: "session-1", NodeID: "build", Status: domain.NodeSucceeded, Attempt: 1, Result: successResult(map[string]any{})},
+		{ID: "node-run-verify", SessionID: "session-1", NodeID: "verify", Status: domain.NodeRunning, Attempt: 1},
 	}
 
 	advance, err := New(repo).CompleteNode(context.Background(), sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "run-1", NodeRunID: "node-run-build", CommandID: "command-1", Output: resultOutput(map[string]any{}),
+		SessionID: "session-1", NodeRunID: "node-run-build", CommandID: "command-1", Output: resultOutput(map[string]any{}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -862,16 +866,16 @@ func TestRecoverProcessExitKeepsPersistedSystemNodeWaitingForApproval(t *testing
 		}}},
 	}
 	repo.runs = []domain.Run{{
-		ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
+		SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
 		Status: domain.RunWaitingApproval, CurrentNodeID: "merge", Context: domain.Context{Values: map[string]any{}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID: "node-run-1", WorkflowRunID: "run-1", NodeID: "merge", Status: domain.NodeWaitingApproval, Attempt: 1,
+		ID: "node-run-1", SessionID: "session-1", NodeID: "merge", Status: domain.NodeWaitingApproval, Attempt: 1,
 	}}
 	service := New(repo)
 
 	advance, err := service.RecoverProcessExit(context.Background(), sessiondomain.WorkflowProcessExitInput{
-		WorkflowRunID: "run-1", NodeRunID: "node-run-1",
+		SessionID: "session-1", NodeRunID: "node-run-1",
 	})
 	if err != nil {
 		t.Fatalf("RecoverProcessExit() error = %v", err)
@@ -885,23 +889,22 @@ func TestRecoverProcessExitReturnsPersistedFailedRun(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.runs = []domain.Run{{
-		ID:            "workflow-run-1",
 		SessionID:     "session-1",
 		Status:        domain.RunFailed,
 		CurrentNodeID: "build",
 		Context:       domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
 	service := New(repo)
 
 	got, err := service.RecoverProcessExit(ctx, sessiondomain.WorkflowProcessExitInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
 	})
 	if err != nil {
 		t.Fatalf("RecoverProcessExit() error = %v", err)
 	}
-	if got.WorkflowRunID != "workflow-run-1" || got.Status != "failed" {
+	if got.SessionID != "session-1" || got.Status != "failed" {
 		t.Fatalf("RecoverProcessExit() = %#v", got)
 	}
 }
@@ -926,7 +929,6 @@ func TestCompleteNodeEvaluatesExprAndPassesResultsAsNextParams(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
@@ -934,20 +936,20 @@ func TestCompleteNodeEvaluatesExprAndPassesResultsAsNextParams(t *testing.T) {
 		Context:              domain.Context{Values: map[string]any{"params": map[string]any{"requirement": "ship"}}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeRunning,
-		Attempt:       1,
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeRunning,
+		Attempt:   1,
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"status": "passed", "artifact": "ready"}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"status": "passed", "artifact": "ready"}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -981,20 +983,19 @@ func TestCompleteNodeRequestsResultRetryWhenCodexOutputMissingResults(t *testing
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        map[string]any{"text": "done"},
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    map[string]any{"text": "done"},
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -1026,22 +1027,21 @@ func TestCompleteNodeAcceptsEmptyResultsJSON(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -1059,16 +1059,16 @@ func TestCompleteNodeRequiresAnswerUserBeforeFinalResult(t *testing.T) {
 		Graph: domain.Graph{Nodes: []domain.Node{{ID: "build", Type: "codex", Title: "Build"}}},
 	}
 	repo.runs = []domain.Run{{
-		ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
+		SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
 		Status: domain.RunRunning, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 
 	invalid := resultOutput(map[string]any{"status": "ready"})
 	invalid["results"].(map[string]any)["questions"] = []any{"Proceed?"}
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1", NodeRunID: "node-run-1", Output: invalid,
+		SessionID: "session-1", NodeRunID: "node-run-1", Output: invalid,
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -1097,20 +1097,19 @@ func TestCompleteNodeFailsAfterResultRetryStillMissingResults(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 
 	_, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        map[string]any{"resultRetry": true, "text": "still not json"},
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    map[string]any{"resultRetry": true, "text": "still not json"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "workflow node result is invalid after correction") {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -1136,7 +1135,6 @@ func TestCompleteNodeAdvancesToMergeNode(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
@@ -1144,20 +1142,20 @@ func TestCompleteNodeAdvancesToMergeNode(t *testing.T) {
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeRunning,
-		Attempt:       1,
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeRunning,
+		Attempt:   1,
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"ok": true}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"ok": true}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -1186,21 +1184,20 @@ func TestCompleteNodeBlocksWhenNoEdgeMatches(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 
 	got, err := service.CompleteNode(ctx, sessiondomain.WorkflowNodeCompleteInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Output:        resultOutput(map[string]any{"ok": false}),
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Output:    resultOutput(map[string]any{"ok": false}),
 	})
 	if err != nil {
 		t.Fatalf("CompleteNode() error = %v", err)
@@ -1225,23 +1222,22 @@ func TestFailNodeRetriesCurrentNodeBeforeMaxAttempts(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Code:          "codex_start_failed",
-		Message:       "temporary failure",
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Code:      "codex_start_failed",
+		Message:   "temporary failure",
 	})
 	if err != nil {
 		t.Fatalf("FailNode() error = %v", err)
@@ -1291,15 +1287,15 @@ func TestFailNodeBlocksAfterRetriesExhaustedWithoutEvaluatingEdges(t *testing.T)
 				},
 			}
 			repo.runs = []domain.Run{{
-				ID: "workflow-run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
+				SessionID: "session-1", WorkflowDefinitionID: "workflow-1",
 				Status: domain.RunRunning, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}},
 			}}
-			repo.nodeRuns = []domain.NodeRun{{ID: "node-run-2", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 2}}
+			repo.nodeRuns = []domain.NodeRun{{ID: "node-run-2", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 2}}
 			service := New(repo)
 			service.now = func() time.Time { return time.Unix(11, 0).UTC() }
 
 			got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
-				WorkflowRunID: "workflow-run-1", NodeRunID: "node-run-2",
+				SessionID: "session-1", NodeRunID: "node-run-2",
 				Code: "codex_start_failed", Message: "permanent failure",
 			})
 			if err != nil {
@@ -1338,23 +1334,22 @@ func TestFailNodeUsesProvidedOutputForFailureBranchContext(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "merge",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-merge", WorkflowRunID: "workflow-run-1", NodeID: "merge", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-merge", SessionID: "session-1", NodeID: "merge", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-repair", nil }
 
 	got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-merge",
-		Code:          "dirty_worktree",
-		Message:       "worktree has uncommitted changes",
+		SessionID: "session-1",
+		NodeRunID: "node-run-merge",
+		Code:      "dirty_worktree",
+		Message:   "worktree has uncommitted changes",
 		Output: resultOutput(map[string]any{
 			"merge": map[string]any{
 				"status":        "failed",
@@ -1402,22 +1397,21 @@ func TestFailNodeBlocksWhenNoFailureBranchMatches(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
 
 	got, err := service.FailNode(ctx, sessiondomain.WorkflowNodeFailInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeRunID:     "node-run-1",
-		Code:          "codex_start_failed",
-		Message:       "failed",
+		SessionID: "session-1",
+		NodeRunID: "node-run-1",
+		Code:      "codex_start_failed",
+		Message:   "failed",
 	})
 	if err != nil {
 		t.Fatalf("FailNode() error = %v", err)
@@ -1446,14 +1440,13 @@ func TestMarkResumeFailedForSessionKeepsCurrentNodeAndWaitsForAction(t *testing.
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunRunning,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{"requirement": "ship"}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
 
@@ -1485,7 +1478,6 @@ func TestMarkResumeFailedForSessionIsIdempotentWhileWaitingForAction(t *testing.
 	finishedAt := time.Unix(8, 0).UTC()
 	repo := newFakeRepository()
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingResumeAction,
@@ -1493,12 +1485,12 @@ func TestMarkResumeFailedForSessionIsIdempotentWhileWaitingForAction(t *testing.
 		Context:              domain.Context{Values: map[string]any{"resume": map[string]any{"status": "failed"}}},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeFailed,
-		Attempt:       1,
-		FinishedAt:    &finishedAt,
+		ID:         "node-run-1",
+		SessionID:  "session-1",
+		NodeID:     "build",
+		Status:     domain.NodeFailed,
+		Attempt:    1,
+		FinishedAt: &finishedAt,
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
@@ -1531,14 +1523,13 @@ func TestResumeCurrentNodeForSessionBindsExistingAttempt(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingResumeAction,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{"requirement": "ship"}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
 	service := New(repo)
 
 	got, err := service.ResumeCurrentNodeForSession(ctx, sessiondomain.WorkflowResumeCurrentNodeInput{
@@ -1574,14 +1565,13 @@ func TestResumeCurrentNodeForSessionRejectsNonCodexNode(t *testing.T) {
 		}}},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingResumeAction,
 		CurrentNodeID:        "merge",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "merge", Status: domain.NodeFailed, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "merge", Status: domain.NodeFailed, Attempt: 1}}
 	service := New(repo)
 
 	_, err := service.ResumeCurrentNodeForSession(ctx, sessiondomain.WorkflowResumeCurrentNodeInput{SessionID: "session-1"})
@@ -1602,14 +1592,13 @@ func TestRerunCurrentNodeForSessionCreatesNextAttempt(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingResumeAction,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{"requirement": "ship"}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(12, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
@@ -1648,14 +1637,13 @@ func TestRerunCurrentNodeForSessionBlocksWhenRetryLimitReached(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingResumeAction,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
 	}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "workflow-run-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeRunning, Attempt: 1}}
 	service := New(repo)
 
 	got, err := service.RerunCurrentNodeForSession(ctx, sessiondomain.WorkflowRerunCurrentNodeInput{SessionID: "session-1"})
@@ -1675,8 +1663,8 @@ func TestBeforeRunApprovalPreservesRetryAttemptWithoutPlaceholderNodeRun(t *test
 	repo.definitions["workflow-1"] = domain.Definition{ID: "workflow-1", ProjectID: "project-1", Graph: domain.Graph{Nodes: []domain.Node{{
 		ID: "build", Type: "codex", Title: "Build", Approval: domain.ApprovalConfig{BeforeRun: true}, Retry: domain.RetryConfig{MaxAttempts: 2},
 	}}}}
-	repo.runs = []domain.Run{{ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: domain.RunWaitingResumeAction, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}}}}
-	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", WorkflowRunID: "run-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
+	repo.runs = []domain.Run{{SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: domain.RunWaitingResumeAction, CurrentNodeID: "build", Context: domain.Context{Values: map[string]any{}}}}
+	repo.nodeRuns = []domain.NodeRun{{ID: "node-run-1", SessionID: "session-1", NodeID: "build", Status: domain.NodeFailed, Attempt: 1}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
@@ -1688,7 +1676,7 @@ func TestBeforeRunApprovalPreservesRetryAttemptWithoutPlaceholderNodeRun(t *test
 	if advance.NodeRunID != nil || repo.runs[0].PendingApproval == nil || repo.runs[0].PendingApproval.Attempt != 2 || len(repo.nodeRuns) != 1 {
 		t.Fatalf("advance=%#v run=%#v nodeRuns=%#v", advance, repo.runs[0], repo.nodeRuns)
 	}
-	if _, err := service.SubmitApproval(context.Background(), SubmitApprovalInput{WorkflowRunID: "run-1", NodeID: "build", Approved: true}); err != nil {
+	if _, err := service.SubmitApproval(context.Background(), SubmitApprovalInput{SessionID: "session-1", NodeID: "build", Approved: true}); err != nil {
 		t.Fatalf("SubmitApproval() error = %v", err)
 	}
 	if len(repo.nodeRuns) != 2 || repo.nodeRuns[1].Attempt != 2 || repo.nodeRuns[1].ID != "node-run-2" {
@@ -1712,7 +1700,6 @@ func TestSubmitApprovalApprovesAndAdvancesWorkflow(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingApproval,
@@ -1725,10 +1712,10 @@ func TestSubmitApprovalApprovesAndAdvancesWorkflow(t *testing.T) {
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.SubmitApproval(ctx, SubmitApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "approve",
-		Approved:      true,
-		Comment:       "go",
+		SessionID: "session-1",
+		NodeID:    "approve",
+		Approved:  true,
+		Comment:   "go",
 	})
 	if err != nil {
 		t.Fatalf("SubmitApproval() error = %v", err)
@@ -1757,29 +1744,29 @@ func TestSubmitAfterRunApprovalApprovesAndAdvancesWorkflow(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingApproval,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
+		PendingApproval:      &domain.PendingApproval{Phase: domain.ApprovalAfterRun, NodeID: "build", Attempt: 1},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeWaitingApproval,
-		Attempt:       1,
-		Result:        successResult(map[string]any{"status": "passed"}),
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeWaitingApproval,
+		Attempt:   1,
+		Result:    successResult(map[string]any{"status": "passed"}),
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	got, err := service.SubmitApproval(ctx, SubmitApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Approved:      true,
+		SessionID: "session-1",
+		NodeID:    "build",
+		Approved:  true,
 	})
 	if err != nil {
 		t.Fatalf("SubmitApproval() error = %v", err)
@@ -1814,30 +1801,30 @@ func TestSubmitAfterRunApprovalRejectsAndRerunsCurrentNodeWithoutBeforeApproval(
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingApproval,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
+		PendingApproval:      &domain.PendingApproval{Phase: domain.ApprovalAfterRun, NodeID: "build", Attempt: 1},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeWaitingApproval,
-		Attempt:       1,
-		Result:        successResult(map[string]any{"status": "failed"}),
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeWaitingApproval,
+		Attempt:   1,
+		Result:    successResult(map[string]any{"status": "failed"}),
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	result, err := service.SubmitApprovalForSession(ctx, sessiondomain.WorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Approved:      false,
-		Comment:       "fix it",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Approved:  false,
+		Comment:   "fix it",
 	})
 	if err != nil {
 		t.Fatalf("SubmitApprovalForSession() error = %v", err)
@@ -1866,30 +1853,30 @@ func TestSubmitAfterRunApprovalRejectsAndRerunsCurrentNode(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingApproval,
 		CurrentNodeID:        "build",
 		Context:              domain.Context{Values: map[string]any{}},
+		PendingApproval:      &domain.PendingApproval{Phase: domain.ApprovalAfterRun, NodeID: "build", Attempt: 1},
 	}}
 	repo.nodeRuns = []domain.NodeRun{{
-		ID:            "node-run-1",
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Status:        domain.NodeWaitingApproval,
-		Attempt:       1,
-		Result:        successResult(map[string]any{"status": "failed"}),
+		ID:        "node-run-1",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Status:    domain.NodeWaitingApproval,
+		Attempt:   1,
+		Result:    successResult(map[string]any{"status": "failed"}),
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-2", nil }
 
 	result, err := service.SubmitApprovalForSession(ctx, sessiondomain.WorkflowApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "build",
-		Approved:      false,
-		Comment:       "fix the failing checks",
+		SessionID: "session-1",
+		NodeID:    "build",
+		Approved:  false,
+		Comment:   "fix the failing checks",
 	})
 	if err != nil {
 		t.Fatalf("SubmitApprovalForSession() error = %v", err)
@@ -1917,7 +1904,6 @@ func TestSubmitApprovalRejectsTerminalApprovalNodeWithoutNodeRun(t *testing.T) {
 		},
 	}
 	repo.runs = []domain.Run{{
-		ID:                   "workflow-run-1",
 		SessionID:            "session-1",
 		WorkflowDefinitionID: "workflow-1",
 		Status:               domain.RunWaitingApproval,
@@ -1929,10 +1915,10 @@ func TestSubmitApprovalRejectsTerminalApprovalNodeWithoutNodeRun(t *testing.T) {
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 
 	got, err := service.SubmitApproval(ctx, SubmitApprovalInput{
-		WorkflowRunID: "workflow-run-1",
-		NodeID:        "approve",
-		Approved:      false,
-		Comment:       "not now",
+		SessionID: "session-1",
+		NodeID:    "approve",
+		Approved:  false,
+		Comment:   "not now",
 	})
 	if err != nil {
 		t.Fatalf("SubmitApproval() error = %v", err)
@@ -1955,14 +1941,14 @@ func TestSubmitApprovalRejectionUsesApprovalConditionWithoutPlaceholderNodeRun(t
 		},
 	}}
 	repo.runs = []domain.Run{{
-		ID: "run-1", SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: domain.RunWaitingApproval,
+		SessionID: "session-1", WorkflowDefinitionID: "workflow-1", Status: domain.RunWaitingApproval,
 		CurrentNodeID: "approve", Context: domain.Context{Values: map[string]any{}}, PendingApproval: &domain.PendingApproval{Phase: domain.ApprovalBeforeRun, NodeID: "approve", Attempt: 1},
 	}}
 	service := New(repo)
 	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
 	service.generateID = func() (string, error) { return "node-run-revise", nil }
 
-	got, err := service.SubmitApproval(context.Background(), SubmitApprovalInput{WorkflowRunID: "run-1", NodeID: "approve", Approved: false, Comment: "revise"})
+	got, err := service.SubmitApproval(context.Background(), SubmitApprovalInput{SessionID: "session-1", NodeID: "approve", Approved: false, Comment: "revise"})
 	if err != nil {
 		t.Fatalf("SubmitApproval() error = %v", err)
 	}
@@ -2031,27 +2017,18 @@ func (r *fakeRepository) FindActive(_ context.Context, projectID domain.ProjectI
 	return domain.Definition{}, nil
 }
 
-func (r *fakeRepository) FindRun(_ context.Context, id domain.RunID) (domain.Run, error) {
+func (r *fakeRepository) FindRun(_ context.Context, id domain.SessionID) (domain.Run, error) {
 	for _, run := range r.runs {
-		if run.ID == id {
+		if run.SessionID == id {
 			return run, nil
 		}
 	}
 	return domain.Run{}, nil
 }
 
-func (r *fakeRepository) FindLatestRunBySession(_ context.Context, sessionID domain.SessionID) (domain.Run, error) {
-	for i := len(r.runs) - 1; i >= 0; i-- {
-		if r.runs[i].SessionID == sessionID {
-			return r.runs[i], nil
-		}
-	}
-	return domain.Run{}, nil
-}
-
-func (r *fakeRepository) FindLatestNodeRun(_ context.Context, runID domain.RunID, nodeID string) (domain.NodeRun, error) {
+func (r *fakeRepository) FindLatestNodeRun(_ context.Context, runID domain.SessionID, nodeID string) (domain.NodeRun, error) {
 	for i := len(r.nodeRuns) - 1; i >= 0; i-- {
-		if r.nodeRuns[i].WorkflowRunID == runID && r.nodeRuns[i].NodeID == nodeID {
+		if r.nodeRuns[i].SessionID == runID && r.nodeRuns[i].NodeID == nodeID {
 			return r.nodeRuns[i], nil
 		}
 	}
@@ -2075,7 +2052,7 @@ func (r *fakeRepository) CreateRun(_ context.Context, run domain.Run) error {
 
 func (r *fakeRepository) UpdateRunState(_ context.Context, run domain.Run) error {
 	for i := range r.runs {
-		if r.runs[i].ID == run.ID {
+		if r.runs[i].SessionID == run.SessionID {
 			r.runs[i] = run
 			return nil
 		}
@@ -2091,7 +2068,7 @@ func (r *fakeRepository) SaveNodeRun(_ context.Context, run domain.NodeRun) erro
 
 func (r *fakeRepository) CreateNodeRunAndUpdateRun(_ context.Context, run domain.Run, nodeRun domain.NodeRun) error {
 	for i := range r.runs {
-		if r.runs[i].ID == run.ID {
+		if r.runs[i].SessionID == run.SessionID {
 			r.runs[i] = run
 		}
 	}
@@ -2108,7 +2085,7 @@ func (r *fakeRepository) CompleteNodeAndAdvance(_ context.Context, completedNode
 		}
 	}
 	for i := range r.runs {
-		if r.runs[i].ID == run.ID {
+		if r.runs[i].SessionID == run.SessionID {
 			r.runs[i] = run
 		}
 	}
@@ -2127,13 +2104,13 @@ func (r *fakeRepository) ResumeNodeAndUpdateRun(_ context.Context, nodeRun domai
 	return r.UpdateRunState(context.Background(), run)
 }
 
-func (r *fakeRepository) UpdateRunContext(context.Context, domain.RunID, domain.Context) error {
+func (r *fakeRepository) UpdateRunContext(context.Context, domain.SessionID, domain.Context) error {
 	return nil
 }
 
-func (r *fakeRepository) MarkRunFailed(_ context.Context, runID domain.RunID, nodeRunID domain.NodeRunID, failure domain.NodeFailure, finishedAt time.Time) error {
+func (r *fakeRepository) MarkRunFailed(_ context.Context, runID domain.SessionID, nodeRunID domain.NodeRunID, failure domain.NodeFailure, finishedAt time.Time) error {
 	for i := range r.runs {
-		if r.runs[i].ID == runID {
+		if r.runs[i].SessionID == runID {
 			r.runs[i].Status = domain.RunFailed
 			r.runs[i].StoppedAt = &finishedAt
 		}

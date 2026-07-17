@@ -9,8 +9,8 @@ import (
 	"github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	entnoderun "github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
+	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	entworkflowdefinition "github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
-	entworkflowrun "github.com/nzlov/anycode/internal/infra/entstore/ent/workflowrun"
 )
 
 var _ workflow.Repository = (*WorkflowRepository)(nil)
@@ -82,29 +82,20 @@ func (r *WorkflowRepository) FindActive(ctx context.Context, projectID workflow.
 	return definition, nil
 }
 
-func (r *WorkflowRepository) FindRun(ctx context.Context, id workflow.RunID) (workflow.Run, error) {
-	row, err := r.client.WorkflowRun.Get(ctx, string(id))
+func (r *WorkflowRepository) FindRun(ctx context.Context, sessionID workflow.SessionID) (workflow.Run, error) {
+	row, err := r.client.Session.Query().
+		Where(entsession.IDEQ(string(sessionID)), entsession.WorkflowDefinitionIDNEQ("")).
+		Only(ctx)
 	if err != nil {
 		return workflow.Run{}, fmt.Errorf("find workflow run: %w", err)
 	}
 	return toDomainWorkflowRun(row), nil
 }
 
-func (r *WorkflowRepository) FindLatestRunBySession(ctx context.Context, sessionID workflow.SessionID) (workflow.Run, error) {
-	row, err := r.client.WorkflowRun.Query().
-		Where(entworkflowrun.SessionIDEQ(string(sessionID))).
-		Order(ent.Desc(entworkflowrun.FieldStartedAt), ent.Desc(entworkflowrun.FieldID)).
-		First(ctx)
-	if err != nil {
-		return workflow.Run{}, fmt.Errorf("find latest workflow run by session: %w", err)
-	}
-	return toDomainWorkflowRun(row), nil
-}
-
-func (r *WorkflowRepository) FindLatestNodeRun(ctx context.Context, runID workflow.RunID, nodeID string) (workflow.NodeRun, error) {
+func (r *WorkflowRepository) FindLatestNodeRun(ctx context.Context, sessionID workflow.SessionID, nodeID string) (workflow.NodeRun, error) {
 	row, err := r.client.NodeRun.Query().
 		Where(
-			entnoderun.WorkflowRunIDEQ(string(runID)),
+			entnoderun.SessionIDEQ(string(sessionID)),
 			entnoderun.NodeIDEQ(nodeID),
 		).
 		Order(ent.Desc(entnoderun.FieldStartedAt), ent.Desc(entnoderun.FieldID)).
@@ -119,11 +110,11 @@ func (r *WorkflowRepository) FindLatestNodeRun(ctx context.Context, runID workfl
 	return nodeRun, nil
 }
 
-func (r *WorkflowRepository) MarkNodeWaitingUser(ctx context.Context, runID workflow.RunID, nodeRunID workflow.NodeRunID) error {
+func (r *WorkflowRepository) MarkNodeWaitingUser(ctx context.Context, sessionID workflow.SessionID, nodeRunID workflow.NodeRunID) error {
 	updated, err := r.client.NodeRun.Update().
 		Where(
 			entnoderun.IDEQ(string(nodeRunID)),
-			entnoderun.WorkflowRunIDEQ(string(runID)),
+			entnoderun.SessionIDEQ(string(sessionID)),
 			entnoderun.StatusEQ(string(workflow.NodeRunning)),
 		).
 		SetStatus(string(workflow.NodeWaitingUser)).
@@ -136,18 +127,18 @@ func (r *WorkflowRepository) MarkNodeWaitingUser(ctx context.Context, runID work
 		if err != nil {
 			return fmt.Errorf("find workflow node after waiting transition: %w", err)
 		}
-		if row.WorkflowRunID != string(runID) || row.Status != string(workflow.NodeWaitingUser) {
+		if row.SessionID != string(sessionID) || row.Status != string(workflow.NodeWaitingUser) {
 			return fmt.Errorf("workflow node %s cannot wait for user from status %q", nodeRunID, row.Status)
 		}
 	}
 	return nil
 }
 
-func (r *WorkflowRepository) MarkNodeRunning(ctx context.Context, runID workflow.RunID, nodeRunID workflow.NodeRunID, processRunID workflow.ProcessRunID) error {
+func (r *WorkflowRepository) MarkNodeRunning(ctx context.Context, sessionID workflow.SessionID, nodeRunID workflow.NodeRunID, processRunID workflow.ProcessRunID) error {
 	updated, err := r.client.NodeRun.Update().
 		Where(
 			entnoderun.IDEQ(string(nodeRunID)),
-			entnoderun.WorkflowRunIDEQ(string(runID)),
+			entnoderun.SessionIDEQ(string(sessionID)),
 			entnoderun.StatusIn(string(workflow.NodeWaitingUser), string(workflow.NodeRunning)),
 		).
 		SetStatus(string(workflow.NodeRunning)).
@@ -182,34 +173,34 @@ func (r *WorkflowRepository) ActivateDefinition(ctx context.Context, id workflow
 }
 
 func (r *WorkflowRepository) CreateRun(ctx context.Context, run workflow.Run) error {
-	create := r.client.WorkflowRun.Create().
-		SetID(string(run.ID)).
-		SetSessionID(string(run.SessionID)).
+	update := r.client.Session.UpdateOneID(string(run.SessionID)).
 		SetWorkflowDefinitionID(string(run.WorkflowDefinitionID)).
-		SetStatus(string(run.Status)).
-		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values)).
-		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
+		SetWorkflowStatus(string(run.Status)).
+		SetWorkflowCurrentNodeID(run.CurrentNodeID).
+		SetWorkflowContext(payloadOrEmpty(run.Context.Values)).
+		SetWorkflowPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StartedAt != nil {
-		create.SetStartedAt(*run.StartedAt)
+		update.SetWorkflowStartedAt(*run.StartedAt)
 	}
 	if run.StoppedAt != nil {
-		create.SetStoppedAt(*run.StoppedAt)
+		update.SetWorkflowStoppedAt(*run.StoppedAt)
+	} else {
+		update.ClearWorkflowStoppedAt()
 	}
-	if err := create.Exec(ctx); err != nil {
+	if err := update.Exec(ctx); err != nil {
 		return fmt.Errorf("create workflow run: %w", err)
 	}
 	return nil
 }
 
 func (r *WorkflowRepository) UpdateRunState(ctx context.Context, run workflow.Run) error {
-	update := r.client.WorkflowRun.UpdateOneID(string(run.ID)).
-		SetStatus(string(run.Status)).
-		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values)).
-		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
+	update := r.client.Session.UpdateOneID(string(run.SessionID)).
+		SetWorkflowStatus(string(run.Status)).
+		SetWorkflowCurrentNodeID(run.CurrentNodeID).
+		SetWorkflowContext(payloadOrEmpty(run.Context.Values)).
+		SetWorkflowPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
-		update.SetStoppedAt(*run.StoppedAt)
+		update.SetWorkflowStoppedAt(*run.StoppedAt)
 	}
 	if err := update.Exec(ctx); err != nil {
 		return fmt.Errorf("update workflow run state: %w", err)
@@ -260,13 +251,13 @@ func (r *WorkflowRepository) CreateNodeRunAndUpdateRun(ctx context.Context, run 
 	if err != nil {
 		return fmt.Errorf("begin workflow node rerun transaction: %w", err)
 	}
-	updateRun := tx.WorkflowRun.UpdateOneID(string(run.ID)).
-		SetStatus(string(run.Status)).
-		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values)).
-		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
+	updateRun := tx.Session.UpdateOneID(string(run.SessionID)).
+		SetWorkflowStatus(string(run.Status)).
+		SetWorkflowCurrentNodeID(run.CurrentNodeID).
+		SetWorkflowContext(payloadOrEmpty(run.Context.Values)).
+		SetWorkflowPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
-		updateRun.SetStoppedAt(*run.StoppedAt)
+		updateRun.SetWorkflowStoppedAt(*run.StoppedAt)
 	}
 	if err := updateRun.Exec(ctx); err != nil {
 		_ = tx.Rollback()
@@ -313,13 +304,13 @@ func (r *WorkflowRepository) CompleteNodeAndAdvance(ctx context.Context, complet
 		_ = tx.Rollback()
 		return fmt.Errorf("complete node run: %w", err)
 	}
-	updateRun := tx.WorkflowRun.UpdateOneID(string(run.ID)).
-		SetStatus(string(run.Status)).
-		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values)).
-		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
+	updateRun := tx.Session.UpdateOneID(string(run.SessionID)).
+		SetWorkflowStatus(string(run.Status)).
+		SetWorkflowCurrentNodeID(run.CurrentNodeID).
+		SetWorkflowContext(payloadOrEmpty(run.Context.Values)).
+		SetWorkflowPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
-		updateRun.SetStoppedAt(*run.StoppedAt)
+		updateRun.SetWorkflowStoppedAt(*run.StoppedAt)
 	}
 	if err := updateRun.Exec(ctx); err != nil {
 		_ = tx.Rollback()
@@ -362,9 +353,9 @@ func (r *WorkflowRepository) ResumeNodeAndUpdateRun(ctx context.Context, nodeRun
 	return nil
 }
 
-func (r *WorkflowRepository) MarkRunFailed(ctx context.Context, runID workflow.RunID, nodeRunID workflow.NodeRunID, failure workflow.NodeFailure, finishedAt time.Time) error {
+func (r *WorkflowRepository) MarkRunFailed(ctx context.Context, sessionID workflow.SessionID, nodeRunID workflow.NodeRunID, failure workflow.NodeFailure, finishedAt time.Time) error {
 	if r.inTx {
-		if err := markWorkflowRunFailed(ctx, r.client, runID, finishedAt); err != nil {
+		if err := markWorkflowRunFailed(ctx, r.client, sessionID, finishedAt); err != nil {
 			return err
 		}
 		return markNodeRunFailed(ctx, r.client, nodeRunID, failure, finishedAt)
@@ -377,9 +368,9 @@ func (r *WorkflowRepository) MarkRunFailed(ctx context.Context, runID workflow.R
 	if err != nil {
 		return fmt.Errorf("begin workflow failure transaction: %w", err)
 	}
-	if err := tx.WorkflowRun.UpdateOneID(string(runID)).
-		SetStatus(string(workflow.RunFailed)).
-		SetStoppedAt(finishedAt).
+	if err := tx.Session.UpdateOneID(string(sessionID)).
+		SetWorkflowStatus(string(workflow.RunFailed)).
+		SetWorkflowStoppedAt(finishedAt).
 		Exec(ctx); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("mark workflow run failed: %w", err)
@@ -399,21 +390,21 @@ func (r *WorkflowRepository) MarkRunFailed(ctx context.Context, runID workflow.R
 }
 
 func createWorkflowRun(ctx context.Context, client *ent.Client, run workflow.Run) error {
-	create := client.WorkflowRun.Create().
-		SetID(string(run.ID)).
-		SetSessionID(string(run.SessionID)).
+	update := client.Session.UpdateOneID(string(run.SessionID)).
 		SetWorkflowDefinitionID(string(run.WorkflowDefinitionID)).
-		SetStatus(string(run.Status)).
-		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values)).
-		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
+		SetWorkflowStatus(string(run.Status)).
+		SetWorkflowCurrentNodeID(run.CurrentNodeID).
+		SetWorkflowContext(payloadOrEmpty(run.Context.Values)).
+		SetWorkflowPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StartedAt != nil {
-		create.SetStartedAt(*run.StartedAt)
+		update.SetWorkflowStartedAt(*run.StartedAt)
 	}
 	if run.StoppedAt != nil {
-		create.SetStoppedAt(*run.StoppedAt)
+		update.SetWorkflowStoppedAt(*run.StoppedAt)
+	} else {
+		update.ClearWorkflowStoppedAt()
 	}
-	if err := create.Exec(ctx); err != nil {
+	if err := update.Exec(ctx); err != nil {
 		return fmt.Errorf("create workflow run: %w", err)
 	}
 	return nil
@@ -426,7 +417,7 @@ func createNodeRun(ctx context.Context, client *ent.Client, run workflow.NodeRun
 	}
 	create := client.NodeRun.Create().
 		SetID(string(run.ID)).
-		SetWorkflowRunID(string(run.WorkflowRunID)).
+		SetSessionID(string(run.SessionID)).
 		SetNodeID(run.NodeID).
 		SetStatus(string(run.Status)).
 		SetAttempt(run.Attempt).
@@ -447,13 +438,13 @@ func createNodeRun(ctx context.Context, client *ent.Client, run workflow.NodeRun
 }
 
 func updateWorkflowRun(ctx context.Context, client *ent.Client, run workflow.Run) error {
-	updateRun := client.WorkflowRun.UpdateOneID(string(run.ID)).
-		SetStatus(string(run.Status)).
-		SetCurrentNodeID(run.CurrentNodeID).
-		SetContext(payloadOrEmpty(run.Context.Values)).
-		SetPendingApproval(pendingApprovalToMap(run.PendingApproval))
+	updateRun := client.Session.UpdateOneID(string(run.SessionID)).
+		SetWorkflowStatus(string(run.Status)).
+		SetWorkflowCurrentNodeID(run.CurrentNodeID).
+		SetWorkflowContext(payloadOrEmpty(run.Context.Values)).
+		SetWorkflowPendingApproval(pendingApprovalToMap(run.PendingApproval))
 	if run.StoppedAt != nil {
-		updateRun.SetStoppedAt(*run.StoppedAt)
+		updateRun.SetWorkflowStoppedAt(*run.StoppedAt)
 	}
 	if err := updateRun.Exec(ctx); err != nil {
 		return fmt.Errorf("update workflow run: %w", err)
@@ -489,10 +480,10 @@ func updateNodeRunComplete(ctx context.Context, client *ent.Client, completedNod
 	return nil
 }
 
-func markWorkflowRunFailed(ctx context.Context, client *ent.Client, runID workflow.RunID, finishedAt time.Time) error {
-	if err := client.WorkflowRun.UpdateOneID(string(runID)).
-		SetStatus(string(workflow.RunFailed)).
-		SetStoppedAt(finishedAt).
+func markWorkflowRunFailed(ctx context.Context, client *ent.Client, sessionID workflow.SessionID, finishedAt time.Time) error {
+	if err := client.Session.UpdateOneID(string(sessionID)).
+		SetWorkflowStatus(string(workflow.RunFailed)).
+		SetWorkflowStoppedAt(finishedAt).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("mark workflow run failed: %w", err)
 	}
@@ -514,18 +505,18 @@ func markNodeRunFailed(ctx context.Context, client *ent.Client, nodeRunID workfl
 	return nil
 }
 
-func (r *WorkflowRepository) UpdateRunContext(ctx context.Context, id workflow.RunID, contextValue workflow.Context) error {
-	if err := r.client.WorkflowRun.UpdateOneID(string(id)).
-		SetContext(payloadOrEmpty(contextValue.Values)).
+func (r *WorkflowRepository) UpdateRunContext(ctx context.Context, sessionID workflow.SessionID, contextValue workflow.Context) error {
+	if err := r.client.Session.UpdateOneID(string(sessionID)).
+		SetWorkflowContext(payloadOrEmpty(contextValue.Values)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("update workflow run context: %w", err)
 	}
 	return nil
 }
 
-func (r *WorkflowRepository) setRunStatus(ctx context.Context, id workflow.RunID, status workflow.RunStatus) error {
-	if err := r.client.WorkflowRun.UpdateOneID(string(id)).
-		SetStatus(string(status)).
+func (r *WorkflowRepository) setRunStatus(ctx context.Context, sessionID workflow.SessionID, status workflow.RunStatus) error {
+	if err := r.client.Session.UpdateOneID(string(sessionID)).
+		SetWorkflowStatus(string(status)).
 		Exec(ctx); err != nil {
 		return fmt.Errorf("set workflow run status: %w", err)
 	}
@@ -573,17 +564,16 @@ func mapToGraph(value map[string]any) (workflow.Graph, error) {
 	return graph, nil
 }
 
-func toDomainWorkflowRun(row *ent.WorkflowRun) workflow.Run {
+func toDomainWorkflowRun(row *ent.Session) workflow.Run {
 	return workflow.Run{
-		ID:                   workflow.RunID(row.ID),
-		SessionID:            workflow.SessionID(row.SessionID),
+		SessionID:            workflow.SessionID(row.ID),
 		WorkflowDefinitionID: workflow.DefinitionID(row.WorkflowDefinitionID),
-		Status:               workflow.RunStatus(row.Status),
-		CurrentNodeID:        row.CurrentNodeID,
-		Context:              workflow.Context{Values: payloadOrEmpty(row.Context)},
-		PendingApproval:      pendingApprovalFromMap(row.PendingApproval),
-		StartedAt:            row.StartedAt,
-		StoppedAt:            row.StoppedAt,
+		Status:               workflow.RunStatus(row.WorkflowStatus),
+		CurrentNodeID:        row.WorkflowCurrentNodeID,
+		Context:              workflow.Context{Values: payloadOrEmpty(row.WorkflowContext)},
+		PendingApproval:      pendingApprovalFromMap(row.WorkflowPendingApproval),
+		StartedAt:            row.WorkflowStartedAt,
+		StoppedAt:            row.WorkflowStoppedAt,
 	}
 }
 
@@ -628,21 +618,21 @@ func toDomainNodeRun(row *ent.NodeRun) (workflow.NodeRun, error) {
 		return workflow.NodeRun{}, fmt.Errorf("decode node run result: %w", err)
 	}
 	return workflow.NodeRun{
-		ID:            workflow.NodeRunID(row.ID),
-		WorkflowRunID: workflow.RunID(row.WorkflowRunID),
-		NodeID:        row.NodeID,
-		Status:        workflow.NodeRunStatus(row.Status),
-		Attempt:       row.Attempt,
-		ProcessRunID:  processRunID,
-		StartedAt:     row.StartedAt,
-		FinishedAt:    row.FinishedAt,
-		Result:        result,
+		ID:           workflow.NodeRunID(row.ID),
+		SessionID:    workflow.SessionID(row.SessionID),
+		NodeID:       row.NodeID,
+		Status:       workflow.NodeRunStatus(row.Status),
+		Attempt:      row.Attempt,
+		ProcessRunID: processRunID,
+		StartedAt:    row.StartedAt,
+		FinishedAt:   row.FinishedAt,
+		Result:       result,
 	}, nil
 }
 
-func latestNodeRunQuery(client *ent.Client, workflowRunID workflow.RunID) *ent.NodeRunQuery {
+func latestNodeRunQuery(client *ent.Client, sessionID workflow.SessionID) *ent.NodeRunQuery {
 	return client.NodeRun.Query().
-		Where(entnoderun.WorkflowRunIDEQ(string(workflowRunID))).
+		Where(entnoderun.SessionIDEQ(string(sessionID))).
 		Order(ent.Desc(entnoderun.FieldStartedAt), ent.Desc(entnoderun.FieldID))
 }
 

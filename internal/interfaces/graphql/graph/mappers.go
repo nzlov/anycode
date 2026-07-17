@@ -173,7 +173,7 @@ func mapPendingApproval(dto *sessionapp.PendingApprovalDTO) *model.PendingApprov
 		nodeRunID = &value
 	}
 	return &model.PendingApproval{
-		WorkflowRunID:    string(dto.WorkflowRunID),
+		SessionID:        string(dto.SessionID),
 		NodeID:           dto.NodeID,
 		NodeRunID:        nodeRunID,
 		CurrentNodeTitle: dto.CurrentNodeTitle,
@@ -704,7 +704,6 @@ func mapWorkflowGraph(graph workflowdomain.Graph) *model.WorkflowGraph {
 
 func mapWorkflowRun(dto workflowapp.RunDTO) *model.WorkflowRun {
 	return &model.WorkflowRun{
-		ID:            string(dto.ID),
 		SessionID:     string(dto.SessionID),
 		Status:        string(dto.Status),
 		CurrentNodeID: dto.CurrentNodeID,
@@ -714,7 +713,6 @@ func mapWorkflowRun(dto workflowapp.RunDTO) *model.WorkflowRun {
 
 func mapSessionWorkflowRun(dto sessionapp.WorkflowRunDTO) *model.WorkflowRun {
 	return &model.WorkflowRun{
-		ID:            string(dto.ID),
 		SessionID:     string(dto.SessionID),
 		Status:        dto.Status,
 		CurrentNodeID: dto.CurrentNodeID,
