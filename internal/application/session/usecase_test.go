@@ -7233,7 +7233,7 @@ func (f *fakeSessionDiffCounter) CountSessionChangedFiles(context.Context, domai
 	return f.count, f.err
 }
 
-func TestCompletedCodexFileChange(t *testing.T) {
+func TestHasCodexFileChanges(t *testing.T) {
 	fileChange := processdomain.CodexFileChangeContent{
 		Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}},
 	}
@@ -7242,16 +7242,16 @@ func TestCompletedCodexFileChange(t *testing.T) {
 		event processdomain.CodexEvent
 		want  bool
 	}{
-		{name: "completed file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseCompleted, Content: fileChange}, want: true},
-		{name: "started file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseStarted, Content: fileChange}},
-		{name: "failed file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseFailed, Content: fileChange}},
-		{name: "empty file change", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseCompleted, Content: processdomain.CodexFileChangeContent{}}},
-		{name: "completed command", event: processdomain.CodexEvent{Phase: processdomain.CodexPhaseCompleted, Content: processdomain.CodexCommandContent{}}},
+		{name: "standalone file change", event: processdomain.CodexEvent{Type: processdomain.CodexEventFileChange, Phase: processdomain.CodexPhaseStandalone, Content: fileChange}, want: true},
+		{name: "completed file change", event: processdomain.CodexEvent{Type: processdomain.CodexEventFileChange, Phase: processdomain.CodexPhaseCompleted, Content: fileChange}, want: true},
+		{name: "empty file change", event: processdomain.CodexEvent{Type: processdomain.CodexEventFileChange, Content: processdomain.CodexFileChangeContent{}}},
+		{name: "command with file change content", event: processdomain.CodexEvent{Type: processdomain.CodexEventCommand, Phase: processdomain.CodexPhaseCompleted, Content: fileChange}},
+		{name: "file change with command content", event: processdomain.CodexEvent{Type: processdomain.CodexEventFileChange, Content: processdomain.CodexCommandContent{}}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := completedCodexFileChange(test.event); got != test.want {
-				t.Fatalf("completedCodexFileChange() = %v, want %v", got, test.want)
+			if got := hasCodexFileChanges(test.event); got != test.want {
+				t.Fatalf("hasCodexFileChanges() = %v, want %v", got, test.want)
 			}
 		})
 	}
@@ -7278,7 +7278,7 @@ func TestPersistCodexFileChangeUpdatesDiffCount(t *testing.T) {
 	)
 
 	err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
-		EventID: "file-change-1", Type: "item.completed", Phase: processdomain.CodexPhaseCompleted,
+		EventID: "file-change-1", Type: processdomain.CodexEventFileChange, Phase: processdomain.CodexPhaseStandalone,
 		Content:   processdomain.CodexFileChangeContent{Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}}},
 		CreatedAt: time.Now().UTC(),
 	})
@@ -7307,7 +7307,7 @@ func TestPersistCodexFileChangeKeepsDiffCountOnFailure(t *testing.T) {
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithEvents(events), WithDiffCounter(counter))
 
 	err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
-		EventID: "file-change-1", Type: "item.completed", Phase: processdomain.CodexPhaseCompleted,
+		EventID: "file-change-1", Type: processdomain.CodexEventFileChange, Phase: processdomain.CodexPhaseStandalone,
 		Content:   processdomain.CodexFileChangeContent{Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}}},
 		CreatedAt: time.Now().UTC(),
 	})
@@ -7338,7 +7338,7 @@ func TestPersistCodexFileChangeRejectsNegativeDiffCount(t *testing.T) {
 	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, &fakeCodexProcess{}), WithEvents(events), WithDiffCounter(counter))
 
 	err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
-		EventID: "file-change-1", Type: "item.completed", Phase: processdomain.CodexPhaseCompleted,
+		EventID: "file-change-1", Type: processdomain.CodexEventFileChange, Phase: processdomain.CodexPhaseStandalone,
 		Content:   processdomain.CodexFileChangeContent{Changes: []processdomain.CodexFileChange{{Kind: "update", Path: "main.go"}}},
 		CreatedAt: time.Now().UTC(),
 	})
@@ -7462,31 +7462,73 @@ func TestStartSessionIgnoresPlanUpdateMatchingPersistedTodoList(t *testing.T) {
 	}
 }
 
-func TestConsumeCodexEventsPublishesRuntimeEventBeforeRepositoryHandling(t *testing.T) {
+func TestConsumeCodexFileChangePublishesRuntimeBeforeDiffCountChange(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning, FilesChanged: 1,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	counter := &fakeSessionDiffCounter{count: 3}
+	events := &fakeEventStore{}
+	sequence := make(chan string, 2)
+	publisher := &fakeEventPublisher{
+		onPublishCodex: func(event processdomain.CodexEvent) {
+			if event.Type == processdomain.CodexEventFileChange {
+				sequence <- fmt.Sprintf("runtime:%d", counter.calls)
+			}
+		},
+		onPublish: func(event eventdomain.DomainEvent) {
+			if event.Type == "session.diff_changed" {
+				sequence <- fmt.Sprintf("diff:%d", counter.calls)
+			}
+		},
+	}
 	source := make(chan processdomain.CodexEvent, 1)
 	source <- processdomain.CodexEvent{
-		EventID: "command-1", Type: processdomain.CodexEventCommand,
-		CodexSessionID: "codex-session-1",
-		Content:        processdomain.CodexCommandContent{Commands: []processdomain.CodexCommandInvocation{{Command: "go test ./..."}}},
+		EventID: "file-change-1", Type: processdomain.CodexEventFileChange,
+		Phase: processdomain.CodexPhaseStandalone,
+		Content: processdomain.CodexFileChangeContent{
+			Changes: []processdomain.CodexFileChange{{Kind: "modified", Path: "main.go"}},
+		},
 	}
-	close(source)
-	publisher := &fakeEventPublisher{}
+	codex := &fakeCodexProcess{events: source}
 	service := New(
-		newFakeRepository(),
+		repo,
 		newFakeProjectRepository("project-1"),
-		WithProcesses(newFakeProcessRepository(), &fakeCodexProcess{events: source}),
+		WithProcesses(processes, codex),
+		WithEvents(events),
 		WithEventPublisher(publisher),
+		WithDiffCounter(counter),
 	)
 	service.consumeCodexEvents(
 		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
-		domain.Session{ID: "session-1", ProjectID: "project-1"},
+		repo.sessions["session-1"],
 		codexStartOptions{},
 		"",
 	)
 
-	got := waitForPublishedCodexEventType(t, publisher, processdomain.CodexEventCommand)
-	if got.EventID != "command-1" || got.SessionID != "session-1" {
-		t.Fatalf("runtime event = %#v", got)
+	for index, want := range []string{"runtime:0", "diff:1"} {
+		select {
+		case got := <-sequence:
+			if got != want {
+				t.Fatalf("notification[%d] = %q, want %q", index, got, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("notification[%d] = timeout, want %q; events=%#v", index, want, events.snapshot())
+		}
+	}
+	if got := repo.sessions["session-1"].FilesChanged; got != 3 {
+		t.Fatalf("FilesChanged = %d, want 3", got)
+	}
+	close(source)
+	if done, ok := service.processConsumerDone("process-run-1"); ok {
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Codex event consumer did not stop")
+		}
 	}
 }
 

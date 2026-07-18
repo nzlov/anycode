@@ -4855,7 +4855,7 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 				},
 			})
 		}
-		if completedCodexFileChange(event) && s.diffCounter != nil {
+		if hasCodexFileChanges(event) && s.diffCounter != nil {
 			filesChanged, countErr := s.diffCounter.CountSessionChangedFiles(ctx, sessionID)
 			if countErr != nil {
 				log.Printf("refresh session diff count: session=%s event=%s error=%v", sessionID, event.EventID, countErr)
@@ -4877,8 +4877,8 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveFilesChanged, promptDelivered, extraEvents...)
 }
 
-func completedCodexFileChange(event processdomain.CodexEvent) bool {
-	if event.Phase != processdomain.CodexPhaseCompleted {
+func hasCodexFileChanges(event processdomain.CodexEvent) bool {
+	if event.Type != processdomain.CodexEventFileChange {
 		return false
 	}
 	content, ok := event.Content.(processdomain.CodexFileChangeContent)
