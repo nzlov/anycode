@@ -13,7 +13,7 @@ import {
   closeSession as closeSessionRequest,
   getPendingQuestionBatches,
   getSession,
-  subscribeSessionStateUpdates,
+  subscribeSessionEvents,
   executeSession as executeSessionRequest,
   retrySessionWorktreeCleanup as retrySessionWorktreeCleanupRequest,
   submitQuestionBatch,
@@ -30,7 +30,6 @@ import {
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 import {
   getSessionTranscriptPage,
-  subscribeSessionTranscript,
   type TranscriptTokenUsage,
   type TranscriptUsageAttribution,
 } from '@/services/sessionTimeline';
@@ -67,8 +66,7 @@ export function useSessionDetail(sessionId: string) {
   const error = ref('');
   let liveStopped = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let eventSubscription: { unsubscribe: () => void } | null = null;
-  let stateSubscription: { unsubscribe: () => void } | null = null;
+  let sessionEventSubscription: { unsubscribe: () => void } | null = null;
   let bufferingLiveEvents = false;
   let bufferedLiveEvents: SessionDetailData['events'] = [];
   let bufferedLiveUsage: TranscriptTokenUsage | null = null;
@@ -350,10 +348,8 @@ export function useSessionDetail(sessionId: string) {
     subscriptionGeneration += 1;
     releaseSubscriptionReadiness?.();
     releaseSubscriptionReadiness = null;
-    eventSubscription?.unsubscribe();
-    stateSubscription?.unsubscribe();
-    eventSubscription = null;
-    stateSubscription = null;
+    sessionEventSubscription?.unsubscribe();
+    sessionEventSubscription = null;
     bufferingLiveEvents = false;
     bufferedLiveEvents = [];
     bufferedLiveUsage = null;
@@ -362,54 +358,28 @@ export function useSessionDetail(sessionId: string) {
   function openSubscriptions() {
     const generation = ++subscriptionGeneration;
     releaseSubscriptionReadiness?.();
-    eventSubscription?.unsubscribe();
-    stateSubscription?.unsubscribe();
-    eventSubscription = null;
-    stateSubscription = null;
-    const transcriptReady = createSubscriptionReady();
-    const stateReady = createSubscriptionReady();
-    releaseSubscriptionReadiness = () => {
-      transcriptReady.release();
-      stateReady.release();
-    };
-    eventSubscription = subscribeSessionTranscript(sessionId, {
-      onSubscribed: transcriptReady.resolve,
-      onData: (event) => {
-        if (generation !== subscriptionGeneration) return;
-        if (bufferingLiveEvents) {
-          bufferedLiveEvents = appendLiveEvent(bufferedLiveEvents, event);
-          return;
-        }
-        const nextEvents = appendLiveEvent(events.value, event);
-        events.value = nextEvents;
-      },
-      onUsage: (usage) => {
-        if (generation !== subscriptionGeneration) return;
-        if (bufferingLiveEvents) {
-          bufferedLiveUsage = usage;
-          return;
-        }
-        tokenUsage.value = usage;
-      },
-      onError: (err) => {
-        transcriptReady.release();
-        if (generation !== subscriptionGeneration) return;
-        error.value = err.message;
-        if (shouldReconnectLiveError(err)) {
-          scheduleReconnect();
-        }
-      },
-      onClose: (close) => {
-        transcriptReady.release();
-        if (generation === subscriptionGeneration) {
-          void handleSubscriptionClose(close, generation);
-        }
-      },
-    });
-    stateSubscription = subscribeSessionStateUpdates(sessionId, {
-      onSubscribed: stateReady.resolve,
+    sessionEventSubscription?.unsubscribe();
+    sessionEventSubscription = null;
+    const ready = createSubscriptionReady();
+    releaseSubscriptionReadiness = ready.release;
+    sessionEventSubscription = subscribeSessionEvents(sessionId, {
+      onSubscribed: ready.resolve,
       onData: (update) => {
         if (generation !== subscriptionGeneration) return;
+        if (update.transcript) {
+          if (bufferingLiveEvents) {
+            bufferedLiveEvents = appendLiveEvent(bufferedLiveEvents, update.transcript);
+          } else {
+            events.value = appendLiveEvent(events.value, update.transcript);
+          }
+        }
+        if (update.usage) {
+          if (bufferingLiveEvents) {
+            bufferedLiveUsage = update.usage;
+          } else {
+            tokenUsage.value = update.usage;
+          }
+        }
         if (update.session) {
           sessionRequests.invalidate();
           session.value = update.session;
@@ -424,7 +394,7 @@ export function useSessionDetail(sessionId: string) {
         }
       },
       onError: (err) => {
-        stateReady.release();
+        ready.release();
         if (generation !== subscriptionGeneration) return;
         error.value = err.message;
         if (shouldReconnectLiveError(err)) {
@@ -432,7 +402,7 @@ export function useSessionDetail(sessionId: string) {
         }
       },
       onClose: (close) => {
-        stateReady.release();
+        ready.release();
         if (generation === subscriptionGeneration) {
           void handleSubscriptionClose(close, generation);
         }
@@ -440,8 +410,7 @@ export function useSessionDetail(sessionId: string) {
     });
     return {
       generation,
-      transcriptReady: transcriptReady.promise.then(() => transcriptReady.registered()),
-      stateReady: stateReady.promise.then(() => stateReady.registered()),
+      ready: ready.promise.then(() => ready.registered()),
     };
   }
 
@@ -464,25 +433,18 @@ export function useSessionDetail(sessionId: string) {
 
   async function waitForSubscriptionRegistration(registration: {
     generation: number;
-    transcriptReady: Promise<boolean>;
-    stateReady: Promise<boolean>;
+    ready: Promise<boolean>;
   }) {
-    const [transcriptRegistered, stateRegistered] = await Promise.all([
-      waitWithTimeout(registration.transcriptReady, subscriptionReadyTimeoutMs, false),
-      waitWithTimeout(registration.stateReady, subscriptionReadyTimeoutMs, false),
-    ]);
-    if (!transcriptRegistered) {
-      void registration.transcriptReady.then((lateRegistered) => {
+    const registered = await waitWithTimeout(
+      registration.ready,
+      subscriptionReadyTimeoutMs,
+      false,
+    );
+    if (!registered) {
+      void registration.ready.then((lateRegistered) => {
         if (!lateRegistered || liveStopped || registration.generation !== subscriptionGeneration)
           return;
-        void loadSessionDetail();
-      });
-    }
-    if (!stateRegistered) {
-      void registration.stateReady.then((lateRegistered) => {
-        if (!lateRegistered || liveStopped || registration.generation !== subscriptionGeneration)
-          return;
-        void Promise.all([loadSessionState(), loadPendingQuestions()]);
+        void Promise.all([loadSessionDetail(), loadPendingQuestions()]);
       });
     }
   }

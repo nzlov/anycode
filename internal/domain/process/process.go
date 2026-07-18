@@ -50,19 +50,34 @@ type CodexTranscriptSource struct {
 }
 
 type CodexEvent struct {
-	EventID       string
-	Type          string
-	Payload       map[string]any
-	PlanUpdate    *PlanUpdate
-	RealtimeOnly  bool
-	CorrelationID string
-	Phase         CodexPhase
-	Content       CodexEventContent
-	SourceOffset  int64
-	SourceIndex   int
-	CreatedAt     time.Time
-	Transcript    *CodexTranscriptSource
+	EventID        string
+	Type           CodexEventType
+	SessionID      SessionID
+	ProcessRunID   RunID
+	CodexSessionID string
+	CorrelationID  string
+	Phase          CodexPhase
+	Content        CodexEventContent
+	SourceOffset   int64
+	SourceIndex    int
+	CreatedAt      time.Time
 }
+
+type CodexEventType string
+
+const (
+	CodexEventTranscriptBound CodexEventType = "transcript.bound"
+	CodexEventMessage         CodexEventType = "message"
+	CodexEventReasoning       CodexEventType = "reasoning"
+	CodexEventCommand         CodexEventType = "command"
+	CodexEventTool            CodexEventType = "tool"
+	CodexEventFileChange      CodexEventType = "file_change"
+	CodexEventPlan            CodexEventType = "plan"
+	CodexEventUsage           CodexEventType = "usage"
+	CodexEventStatus          CodexEventType = "status"
+	CodexEventProcessExit     CodexEventType = "process.exit"
+	CodexEventUnknown         CodexEventType = "unknown"
+)
 
 type PlanItemStatus string
 

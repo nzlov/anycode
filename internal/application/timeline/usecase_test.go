@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nzlov/anycode/internal/application/event"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -27,6 +26,11 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 	}
 	transcript := &fakeTranscriptSource{
 		events: []process.CodexEvent{
+			{
+				EventID: "plan-1",
+				Type:    process.CodexEventPlan,
+				Content: process.PlanUpdate{Items: []process.PlanItem{{Step: "Implement", Status: process.PlanItemInProgress}}},
+			},
 			{
 				EventID:       "codex-event-1",
 				Type:          "item.completed",
@@ -131,7 +135,7 @@ func TestListSessionEventsGroupsRoutineEventsBeforePaginationWithoutLosingAuditE
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Total != 7 || len(page.Items) != 4 || page.NextCursor == "" {
+	if page.Total != 6 || len(page.Items) != 4 || page.NextCursor == "" {
 		t.Fatalf("page = %#v", page)
 	}
 	all, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 20})
@@ -148,11 +152,11 @@ func TestListSessionEventsGroupsRoutineEventsBeforePaginationWithoutLosingAuditE
 			auditIDs = append(auditIDs, member.ID)
 		}
 	}
-	want := []eventdomain.ID{"queued", "starting", "running", "todo-1", "todo-2", "artifact-1", "artifact-2", "artifact-3", "waiting", "failed", "failed-exit"}
+	want := []eventdomain.ID{"queued", "starting", "running", "artifact-1", "artifact-2", "artifact-3", "waiting", "failed", "failed-exit"}
 	if !reflect.DeepEqual(auditIDs, want) {
 		t.Fatalf("expanded ids = %#v, want %#v", auditIDs, want)
 	}
-	if all.Items[4].ID != "waiting" || all.Items[5].ID != "failed" || all.Items[6].ID != "failed-exit" {
+	if all.Items[3].ID != "waiting" || all.Items[4].ID != "failed" || all.Items[5].ID != "failed-exit" {
 		t.Fatalf("waiting/error events were grouped: %#v", dtoIDs(all.Items))
 	}
 }
@@ -459,7 +463,7 @@ func TestHistoryAndLiveUseTheSameOrderKeyForTheSameEvent(t *testing.T) {
 		SourceIndex:   1,
 		CreatedAt:     createdAt,
 	}}}
-	live := &fakeLiveSource{ch: make(chan event.DTO, 1)}
+	live := &fakeLiveSource{ch: make(chan process.CodexEvent, 1)}
 	service := New(live, sessions, transcript, transcriptIndex("codex-session-1"))
 	history, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
 	if err != nil {
@@ -467,23 +471,21 @@ func TestHistoryAndLiveUseTheSameOrderKeyForTheSameEvent(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stream, err := service.SessionEvents(ctx, SessionEventsInput{Scope: eventdomain.Scope{SessionID: &sessionID}})
+	stream, err := service.SessionEvents(ctx, SessionEventsInput{SessionID: sessiondomain.ID(sessionID)})
 	if err != nil {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
-	live.ch <- event.DTO{
-		ID:        "codex:codex-session-1:event-1",
-		SessionID: &sessionID,
-		Type:      "process.codex_event",
-		Payload: map[string]any{
-			"codexSessionId":     "codex-session-1",
-			"codexCorrelationId": "call-1",
-			"codexPhase":         string(process.CodexPhaseCompleted),
-			"codexContent":       content,
-			"codexSourceOffset":  int64(42),
-			"codexSourceIndex":   1,
-		},
-		CreatedAt: createdAt.Format(time.RFC3339Nano),
+	live.ch <- process.CodexEvent{
+		EventID:        "event-1",
+		Type:           process.CodexEventTool,
+		SessionID:      process.SessionID(sessionID),
+		CodexSessionID: "codex-session-1",
+		CorrelationID:  "call-1",
+		Phase:          process.CodexPhaseCompleted,
+		Content:        content,
+		SourceOffset:   42,
+		SourceIndex:    1,
+		CreatedAt:      createdAt,
 	}
 	liveEvent := <-stream
 	if history.Items[0].OrderKey != liveEvent.OrderKey {
@@ -531,45 +533,61 @@ func TestListSessionEventsPreservesUnknownCodexPayload(t *testing.T) {
 
 func TestSessionEventsForwardsTypedLiveEventsInArrivalOrder(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
-	liveSource := &fakeLiveSource{ch: make(chan event.DTO, 2)}
+	liveSource := &fakeLiveSource{ch: make(chan process.CodexEvent, 2)}
 	transcript := &fakeTranscriptSource{err: context.Canceled}
 	service := New(liveSource, nil, transcript, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ch, err := service.SessionEvents(ctx, SessionEventsInput{
-		Scope: eventdomain.Scope{SessionID: &sessionID},
-	})
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{SessionID: sessiondomain.ID(sessionID)})
 	if err != nil {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
-	liveSource.ch <- event.DTO{
-		ID:        "event-status",
-		Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
-		SessionID: &sessionID,
-		Type:      "session.running",
-		CreatedAt: time.Unix(1, 0).UTC().Format(time.RFC3339Nano),
+	liveSource.ch <- process.CodexEvent{
+		EventID:        "event-1",
+		Type:           process.CodexEventMessage,
+		SessionID:      process.SessionID(sessionID),
+		CodexSessionID: "codex-session-1",
+		Content:        process.CodexMessageContent{Role: "assistant", Text: "first"},
+		CreatedAt:      time.Unix(1, 0).UTC(),
 	}
-	liveSource.ch <- event.DTO{
-		ID:        "event-2",
-		Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
-		SessionID: &sessionID,
-		Type:      "process.codex_event",
-		Payload: map[string]any{
-			"codexSessionId":     "codex-session-1",
-			"codexCorrelationId": "call-1",
-			"codexPhase":         string(process.CodexPhaseCompleted),
-			"codexContent":       process.CodexToolContent{Output: process.CodexStructuredText{Format: process.CodexTextPlain, Text: "ok"}},
-		},
-		CreatedAt: time.Unix(2, 0).UTC().Format(time.RFC3339Nano),
+	liveSource.ch <- process.CodexEvent{
+		EventID:        "event-2",
+		Type:           process.CodexEventTool,
+		SessionID:      process.SessionID(sessionID),
+		CodexSessionID: "codex-session-1",
+		CorrelationID:  "call-1",
+		Phase:          process.CodexPhaseCompleted,
+		Content:        process.CodexToolContent{Output: process.CodexStructuredText{Format: process.CodexTextPlain, Text: "ok"}},
+		CreatedAt:      time.Unix(2, 0).UTC(),
 	}
-	if got := <-ch; got.ID != "group:lifecycle:session" || got.Group == nil || len(got.Group.Members) != 1 {
-		t.Fatalf("status event = %#v", got)
+	if got := <-ch; got.ID != "codex:codex-session-1:event-1" {
+		t.Fatalf("first event = %#v", got)
 	}
-	if got := <-ch; got.ID != "event-2" || got.CorrelationID != "codex:codex-session-1:call-1" || got.Phase != process.CodexPhaseCompleted {
+	if got := <-ch; got.ID != "codex:codex-session-1:event-2" || got.CorrelationID != "codex:codex-session-1:call-1" || got.Phase != process.CodexPhaseCompleted {
 		t.Fatalf("codex event = %#v", got)
 	}
 	if len(transcript.inputs) != 0 {
 		t.Fatalf("subscription read transcript: %#v", transcript.inputs)
+	}
+}
+
+func TestSessionEventsKeepsPlanUpdatesOutOfTranscript(t *testing.T) {
+	liveSource := &fakeLiveSource{ch: make(chan process.CodexEvent, 1)}
+	service := New(liveSource, nil, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveSource.ch <- process.CodexEvent{
+		EventID: "plan-1", Type: process.CodexEventPlan,
+		Content: process.PlanUpdate{Items: []process.PlanItem{{Step: "Implement", Status: process.PlanItemInProgress}}},
+	}
+	select {
+	case got := <-ch:
+		t.Fatalf("plan update leaked into transcript: %#v", got)
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 
@@ -582,16 +600,16 @@ func dtoIDs(items []DTO) []eventdomain.ID {
 }
 
 type fakeLiveSource struct {
-	ch    chan event.DTO
-	input event.LiveSessionEventsInput
+	ch    chan process.CodexEvent
+	input process.SessionID
 	done  <-chan struct{}
 }
 
-func (s *fakeLiveSource) LiveSessionEvents(ctx context.Context, input event.LiveSessionEventsInput) (<-chan event.DTO, error) {
-	s.input = input
+func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.SessionID) (<-chan process.CodexEvent, error) {
+	s.input = sessionID
 	s.done = ctx.Done()
 	if s.ch == nil {
-		s.ch = make(chan event.DTO, 1)
+		s.ch = make(chan process.CodexEvent, 1)
 	}
 	return s.ch, nil
 }

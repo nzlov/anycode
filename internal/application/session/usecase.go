@@ -221,6 +221,7 @@ type DetailDTO struct {
 	CloseReason      *domain.CloseReason
 	CurrentNodeTitle string
 	PendingApproval  *PendingApprovalDTO
+	TodoList         domain.TodoList
 	Attachments      []domain.SessionAttachment
 	PromptAppends    []PromptAppendDTO
 	AvailableActions []string
@@ -315,6 +316,7 @@ type Service struct {
 	activeWorkdirs      map[string]domain.ID
 	events              eventdomain.Store
 	publisher           eventdomain.Publisher
+	codexPublisher      codexEventPublisher
 	questions           questionCoordinator
 	now                 func() time.Time
 	generateID          func() (domain.ID, error)
@@ -332,6 +334,10 @@ type Service struct {
 type questionCoordinator interface {
 	CreateBatch(ctx context.Context, input questionapp.CreateBatchInput) (questionapp.BatchDTO, error)
 	CancelPendingBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
+}
+
+type codexEventPublisher interface {
+	PublishCodexEvent(ctx context.Context, event processdomain.CodexEvent) error
 }
 
 type artifactScanner interface {
@@ -438,6 +444,9 @@ func WithEvents(store eventdomain.Store) Option {
 func WithEventPublisher(publisher eventdomain.Publisher) Option {
 	return func(s *Service) {
 		s.publisher = publisher
+		if codexPublisher, ok := publisher.(codexEventPublisher); ok {
+			s.codexPublisher = codexPublisher
+		}
 	}
 }
 
@@ -4705,6 +4714,11 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 		workflowResults := map[string]any(nil)
 		var persistenceFailure *processdomain.ExitResult
 		for event := range events {
+			event.SessionID = processdomain.SessionID(session.ID)
+			event.ProcessRunID = handle.ProcessRunID
+			if event.CodexSessionID == "" {
+				event.CodexSessionID = handle.CodexSessionID
+			}
 			if result, ok := exitResultFromEvent(event); ok {
 				exitResult = result
 			}
@@ -4712,13 +4726,15 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			if codexEventAcknowledgesPrompt(event) {
 				options.resumeAcknowledged = true
 			}
-			if event.Type == "process.exit" {
+			if event.Type == processdomain.CodexEventProcessExit {
 				continue
 			}
+			extraEvents := s.archiveCodexEventImages(context.Background(), session, handle, &event)
+			s.publishCodexRuntimeEvent(event)
 			if persistenceFailure != nil {
 				continue
 			}
-			if err := s.persistCodexEventWithRetry(session.ID, handle, event); err != nil {
+			if err := s.handleCodexEventWithRetry(session.ID, handle, event, extraEvents...); err != nil {
 				cleanupCtx, cancel := detachedCleanupContext(context.Background())
 				stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
 				cancel()
@@ -4766,8 +4782,8 @@ func (s *Service) processConsumerDone(runID processdomain.RunID) (<-chan struct{
 	return done, ok
 }
 
-func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) error {
-	retryAcknowledgement := event.Transcript != nil || codexEventAcknowledgesPrompt(event)
+func (s *Service) handleCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent, extraEvents ...sessionEventInput) error {
+	retryPersistence := event.Type == processdomain.CodexEventTranscriptBound || event.Type == processdomain.CodexEventPlan || codexEventAcknowledgesPrompt(event)
 	retryDelay := s.processExitDelay
 	if retryDelay == nil {
 		retryDelay = processExitRetryDelay
@@ -4781,16 +4797,16 @@ func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle process
 			return retryCtx.Err()
 		}
 		err := s.withSessionLock(retryCtx, sessionID, func(ctx context.Context) error {
-			return s.persistCodexEvent(ctx, sessionID, handle, event)
+			return s.handleCodexEvent(ctx, sessionID, handle, event, extraEvents...)
 		})
 		if err == nil {
 			return nil
 		}
-		if event.Transcript != nil {
+		if event.Type == processdomain.CodexEventTranscriptBound {
 			return err
 		}
-		if !retryAcknowledgement {
-			log.Printf("persist codex event: session=%s process_run=%s type=%s error=%v", sessionID, handle.ProcessRunID, event.Type, err)
+		if !retryPersistence {
+			log.Printf("handle codex event: session=%s process_run=%s type=%s error=%v", sessionID, handle.ProcessRunID, event.Type, err)
 			return nil
 		}
 		timer := time.NewTimer(retryDelay(attempt))
@@ -4803,7 +4819,7 @@ func (s *Service) persistCodexEventWithRetry(sessionID domain.ID, handle process
 	}
 }
 
-func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent) error {
+func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent, archivedEvents ...sessionEventInput) error {
 	current, err := s.repo.Find(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("find session for codex event: %w", err)
@@ -4818,14 +4834,14 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 		active = found
 		activeRun = ok && active.ID == handle.ProcessRunID
 	}
-	if activeRun && active.Status == processdomain.StatusStarting && event.Transcript != nil {
-		if err := s.bindProcessTranscript(ctx, &current, handle, *event.Transcript); err != nil {
+	if source, ok := event.Content.(processdomain.CodexTranscriptSource); activeRun && active.Status == processdomain.StatusStarting && ok {
+		if err := s.bindProcessTranscript(ctx, &current, handle, source); err != nil {
 			return err
 		}
 	}
 	saveSession := false
 	saveFilesChanged := false
-	extraEvents := []sessionEventInput(nil)
+	extraEvents := append([]sessionEventInput(nil), archivedEvents...)
 	if activeRun && codexEventCanUpdateSession(current.Status) {
 		if todoList, ok := todoListFromCodexEvent(event); ok && !slices.Equal(current.TodoList.Items, todoList.Items) {
 			current.TodoList = todoList
@@ -4858,7 +4874,6 @@ func (s *Service) persistCodexEvent(ctx context.Context, sessionID domain.ID, ha
 		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
-	extraEvents = append(extraEvents, s.archiveCodexEventImages(ctx, current, handle, &event)...)
 	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveFilesChanged, promptDelivered, extraEvents...)
 }
 
@@ -5085,9 +5100,11 @@ func inlineArtifactFilename(eventID string, index int, mimeType string) string {
 }
 
 func codexEventAcknowledgesPrompt(event processdomain.CodexEvent) bool {
-	switch strings.ToLower(strings.TrimSpace(event.Type)) {
-	case "task.started", "turn.started":
-		return true
+	if status, ok := event.Content.(processdomain.CodexStatusContent); ok {
+		switch status.Code {
+		case "task.started", "turn.started":
+			return true
+		}
 	}
 	message, ok := event.Content.(processdomain.CodexMessageContent)
 	return ok && strings.EqualFold(strings.TrimSpace(message.Role), "user")
@@ -5507,23 +5524,11 @@ func promptAppendSettlementForExitedSession(status domain.Status) promptAppendSe
 }
 
 func exitResultFromEvent(event processdomain.CodexEvent) (processdomain.ExitResult, bool) {
-	if event.Type != "process.exit" {
+	if event.Type != processdomain.CodexEventProcessExit {
 		return processdomain.ExitResult{}, false
 	}
-	result := processdomain.ExitResult{}
-	if value, ok := event.Payload["exitCode"].(int); ok {
-		result.ExitCode = &value
-	} else if value, ok := event.Payload["exitCode"].(float64); ok {
-		code := int(value)
-		result.ExitCode = &code
-	}
-	if reason, ok := event.Payload["failureReason"].(string); ok {
-		result.FailureReason = strings.TrimSpace(reason)
-	}
-	if code, ok := event.Payload["failureCode"].(string); ok {
-		result.FailureCode = strings.TrimSpace(code)
-	}
-	return result, true
+	result, ok := event.Content.(processdomain.ExitResult)
+	return result, ok
 }
 
 func workflowResultsFromEvent(event processdomain.CodexEvent) (map[string]any, bool) {
@@ -5548,15 +5553,14 @@ func isAssistantOutputEvent(event processdomain.CodexEvent) bool {
 }
 
 func completedAssistantOutput(event processdomain.CodexEvent) (string, bool) {
-	if event.Type != "item.completed" {
+	if event.Type != processdomain.CodexEventMessage {
 		return "", false
 	}
-	normalized, ok := event.Payload["normalizedItem"].(map[string]any)
-	if !ok || normalized["type"] != "agent_message" || normalized["status"] != "completed" {
+	message, ok := event.Content.(processdomain.CodexMessageContent)
+	if !ok || message.Role != "assistant" {
 		return "", false
 	}
-	output, _ := normalized["output"].(string)
-	output = strings.TrimSpace(output)
+	output := strings.TrimSpace(message.Text)
 	return output, true
 }
 
@@ -6355,15 +6359,6 @@ type sessionEventInput struct {
 }
 
 func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveFilesChanged bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
-	var codexEvent eventdomain.DomainEvent
-	publishCodexEvent := s.publisher != nil && !event.RealtimeOnly
-	if publishCodexEvent {
-		var err error
-		codexEvent, err = s.newCodexSessionEvent(session, processRunID, event)
-		if err != nil {
-			return err
-		}
-	}
 	extraEvents, err := s.newSessionEvents(session, extraInputs)
 	if err != nil {
 		return err
@@ -6402,9 +6397,6 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 		}); err != nil {
 			return err
 		}
-		if publishCodexEvent {
-			s.publishSessionEvent(ctx, codexEvent)
-		}
 		for _, event := range extraEvents {
 			s.publishSessionEvent(ctx, event)
 		}
@@ -6430,9 +6422,6 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 			return err
 		}
 	}
-	if publishCodexEvent {
-		s.publishSessionEvent(ctx, codexEvent)
-	}
 	for _, event := range extraEvents {
 		if s.events != nil {
 			if err := s.events.Append(ctx, event); err != nil {
@@ -6444,65 +6433,22 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 	return nil
 }
 
+func (s *Service) publishCodexRuntimeEvent(event processdomain.CodexEvent) {
+	if s.codexPublisher == nil {
+		return
+	}
+	switch event.Type {
+	case processdomain.CodexEventPlan, processdomain.CodexEventTranscriptBound, processdomain.CodexEventProcessExit:
+		return
+	}
+	_ = s.codexPublisher.PublishCodexEvent(context.Background(), event)
+}
+
 func promptDeliveryTime(event processdomain.CodexEvent, fallback time.Time) time.Time {
 	if event.CreatedAt.IsZero() {
 		return fallback
 	}
 	return event.CreatedAt
-}
-
-func (s *Service) newCodexSessionEvent(session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent) (eventdomain.DomainEvent, error) {
-	var id domain.ID
-	var err error
-	codexSessionID := strings.TrimSpace(session.CodexSessionID)
-	if codexSessionID == "" {
-		codexSessionID = strings.TrimSpace(codexSessionIDFromEvent(event))
-	}
-	if canonicalID := processdomain.CanonicalCodexEventID(codexSessionID, event.EventID); canonicalID != "" {
-		id = domain.ID(canonicalID)
-	} else {
-		id, err = s.generateID()
-		if err != nil {
-			return eventdomain.DomainEvent{}, err
-		}
-	}
-	sessionID := eventdomain.SessionID(session.ID)
-	payload := codexSessionEventPayload(codexSessionID, event)
-	createdAt := event.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = s.now()
-	}
-	return eventdomain.DomainEvent{
-		ID: eventdomain.ID(id),
-		Scope: eventdomain.Scope{
-			SessionID: &sessionID,
-			ProjectID: string(session.ProjectID),
-		},
-		SessionID: &sessionID,
-		Type:      "process.codex_event",
-		Payload:   payload,
-		Causality: eventdomain.Causality{
-			ProcessRunID:  string(processRunID),
-			CorrelationID: event.CorrelationID,
-			SessionStatus: string(session.Status),
-		},
-		CreatedAt: createdAt,
-	}, nil
-}
-
-func codexSessionEventPayload(codexSessionID string, event processdomain.CodexEvent) map[string]any {
-	payload := processEventPayload(event)
-	payload["codexType"] = event.Type
-	payload["codexSessionId"] = codexSessionID
-	payload["codexCorrelationId"] = event.CorrelationID
-	payload["codexPhase"] = string(event.Phase)
-	payload["codexContent"] = event.Content
-	payload["codexSourceOffset"] = event.SourceOffset
-	payload["codexSourceIndex"] = event.SourceIndex
-	if event.EventID != "" {
-		payload["codexEventId"] = event.EventID
-	}
-	return payload
 }
 
 func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expectedSession domain.Session, run processdomain.Run, session domain.Session, options codexStartOptions, maxActive int, eventType string, payload map[string]any) (port.ExecutionClaimResult, error) {
@@ -7219,14 +7165,6 @@ func (s *Service) publishSessionEvent(ctx context.Context, event eventdomain.Dom
 	}
 }
 
-func processEventPayload(event processdomain.CodexEvent) map[string]any {
-	value, _ := sanitizeCodexPayloadValue(event.Payload, false).(map[string]any)
-	if value == nil {
-		return map[string]any{}
-	}
-	return value
-}
-
 func copyPayload(input map[string]any) map[string]any {
 	payload := make(map[string]any, len(input))
 	for key, value := range input {
@@ -7285,11 +7223,12 @@ func isArtifactSourceField(key string) bool {
 }
 
 func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bool) {
-	if event.PlanUpdate == nil {
+	update, ok := event.Content.(processdomain.PlanUpdate)
+	if !ok {
 		return domain.TodoList{}, false
 	}
-	list := domain.TodoList{Items: make([]domain.TodoItem, 0, len(event.PlanUpdate.Items))}
-	for _, item := range event.PlanUpdate.Items {
+	list := domain.TodoList{Items: make([]domain.TodoItem, 0, len(update.Items))}
+	for _, item := range update.Items {
 		if strings.TrimSpace(item.Step) == "" {
 			continue
 		}
@@ -7299,26 +7238,6 @@ func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bo
 		})
 	}
 	return list, true
-}
-
-func codexSessionIDFromEvent(event processdomain.CodexEvent) string {
-	for _, key := range codexSessionIDKeys() {
-		if value, ok := event.Payload[key].(string); ok && strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	if msg, ok := event.Payload["msg"].(map[string]any); ok {
-		for _, key := range codexSessionIDKeys() {
-			if value, ok := msg[key].(string); ok && strings.TrimSpace(value) != "" {
-				return strings.TrimSpace(value)
-			}
-		}
-	}
-	return ""
-}
-
-func codexSessionIDKeys() []string {
-	return []string{"session_id", "sessionId", "codex_session_id", "codexSessionId", "thread_id", "threadId", "conversation_id", "conversationId"}
 }
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {
@@ -8521,6 +8440,7 @@ func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment,
 		CloseReason:      session.CloseReason,
 		CurrentNodeTitle: currentNodeTitle,
 		PendingApproval:  pendingApproval,
+		TodoList:         session.TodoList,
 		Attachments:      attachments,
 		PromptAppends:    promptAppends,
 		AvailableActions: availableActions(session),

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
@@ -12,21 +13,41 @@ import (
 
 func TestMapTranscriptCommandContentPreservesInvocations(t *testing.T) {
 	mapped, ok := mapTranscriptContent(processdomain.CodexCommandContent{
+		Kind: processdomain.CodexCommandExec,
 		Commands: []processdomain.CodexCommandInvocation{
-			{Command: "npm test", Workdir: "/workspace/web"},
+			{Command: "npm test", Workdir: "/workspace/web", HasOutput: true, Output: "web passed"},
 			{Command: "go test ./..."},
 		},
-		Output: "passed",
 	}).(*model.TranscriptCommandContent)
 	if !ok {
 		t.Fatalf("mapped content = %#v", mapped)
 	}
 	want := []*model.TranscriptCommandInvocation{
-		{Command: "npm test", Workdir: "/workspace/web"},
+		{Command: "npm test", Workdir: "/workspace/web", HasOutput: true, Output: "web passed"},
 		{Command: "go test ./..."},
 	}
-	if !reflect.DeepEqual(mapped.Commands, want) || mapped.Output != "passed" {
+	if mapped.Kind != "exec" || !reflect.DeepEqual(mapped.Commands, want) {
 		t.Fatalf("mapped content = %#v, want commands %#v", mapped, want)
+	}
+}
+
+func TestMapSessionDetailPreservesTodoList(t *testing.T) {
+	mapped := mapSessionDetail(sessionapp.DetailDTO{
+		TodoList: sessiondomain.TodoList{Items: []sessiondomain.TodoItem{
+			{Text: "inspect", Completed: true},
+			{Text: "verify"},
+		}},
+	})
+	want := &model.TodoList{
+		Completed: 1,
+		Total:     2,
+		Items: []*model.TodoItem{
+			{Text: "inspect", Completed: true},
+			{Text: "verify"},
+		},
+	}
+	if !reflect.DeepEqual(mapped.TodoList, want) {
+		t.Fatalf("mapped todo list = %#v, want %#v", mapped.TodoList, want)
 	}
 }
 

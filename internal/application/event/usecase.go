@@ -7,10 +7,12 @@ import (
 	"time"
 
 	domain "github.com/nzlov/anycode/internal/domain/event"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 )
 
 type UseCase interface {
 	LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error)
+	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
 }
 
 type LiveSessionEventsInput struct {
@@ -28,10 +30,11 @@ type DTO struct {
 }
 
 type Service struct {
-	mu          sync.Mutex
-	nextSubID   int64
-	subscribers map[string]map[int64]*subscription
-	observer    Observer
+	mu               sync.Mutex
+	nextSubID        int64
+	subscribers      map[string]map[int64]*subscription
+	codexSubscribers map[processdomain.SessionID]map[int64]*codexSubscription
+	observer         Observer
 }
 
 type Observation struct {
@@ -50,11 +53,53 @@ func WithObserver(observer Observer) Option {
 }
 
 func New(options ...Option) *Service {
-	service := &Service{subscribers: map[string]map[int64]*subscription{}}
+	service := &Service{
+		subscribers:      map[string]map[int64]*subscription{},
+		codexSubscribers: map[processdomain.SessionID]map[int64]*codexSubscription{},
+	}
 	for _, option := range options {
 		option(service)
 	}
 	return service
+}
+
+func (s *Service) LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error) {
+	if s == nil {
+		return nil, errors.New("event usecase: nil service")
+	}
+	if sessionID == "" {
+		return nil, errors.New("session id is required")
+	}
+	out := make(chan processdomain.CodexEvent, 16)
+	sub := s.subscribeCodex(sessionID, out, ctx.Done())
+	go func() {
+		<-ctx.Done()
+		s.removeCodexSubscription(sub)
+	}()
+	return out, nil
+}
+
+func (s *Service) PublishCodexEvent(_ context.Context, event processdomain.CodexEvent) error {
+	if s == nil {
+		return errors.New("event usecase: nil service")
+	}
+	s.mu.Lock()
+	bucket := s.codexSubscribers[event.SessionID]
+	subscribers := make([]*codexSubscription, 0, len(bucket))
+	for _, sub := range bucket {
+		subscribers = append(subscribers, sub)
+	}
+	s.mu.Unlock()
+	for _, sub := range subscribers {
+		switch sub.trySend(event) {
+		case deliveryMailboxFull:
+			s.observe(Observation{Name: "codex_subscription.delivery", Outcome: "overflow"})
+			s.removeCodexSubscription(sub)
+		case deliveryUnavailable:
+			s.removeCodexSubscription(sub)
+		}
+	}
+	return nil
 }
 
 func (s *Service) LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error) {
@@ -96,6 +141,15 @@ type subscription struct {
 	closed bool
 }
 
+type codexSubscription struct {
+	id        int64
+	sessionID processdomain.SessionID
+	ch        chan processdomain.CodexEvent
+	done      <-chan struct{}
+	mu        sync.Mutex
+	closed    bool
+}
+
 type deliveryResult uint8
 
 const (
@@ -135,6 +189,38 @@ func (s *Service) removeSubscription(sub *subscription) {
 	}
 	sub.close()
 	s.observe(Observation{Name: "subscription.lifecycle", Outcome: "closed"})
+}
+
+func (s *Service) subscribeCodex(sessionID processdomain.SessionID, ch chan processdomain.CodexEvent, done <-chan struct{}) *codexSubscription {
+	s.mu.Lock()
+	s.nextSubID++
+	sub := &codexSubscription{id: s.nextSubID, sessionID: sessionID, ch: ch, done: done}
+	if s.codexSubscribers[sessionID] == nil {
+		s.codexSubscribers[sessionID] = map[int64]*codexSubscription{}
+	}
+	s.codexSubscribers[sessionID][sub.id] = sub
+	s.mu.Unlock()
+	s.observe(Observation{Name: "codex_subscription.lifecycle", Outcome: "opened"})
+	return sub
+}
+
+func (s *Service) removeCodexSubscription(sub *codexSubscription) {
+	s.mu.Lock()
+	bucket := s.codexSubscribers[sub.sessionID]
+	removed := false
+	if bucket[sub.id] == sub {
+		delete(bucket, sub.id)
+		removed = true
+		if len(bucket) == 0 {
+			delete(s.codexSubscribers, sub.sessionID)
+		}
+	}
+	s.mu.Unlock()
+	if !removed {
+		return
+	}
+	sub.close()
+	s.observe(Observation{Name: "codex_subscription.lifecycle", Outcome: "closed"})
 }
 
 func (s *Service) observe(observation Observation) {
@@ -182,6 +268,37 @@ func (s *subscription) trySend(dto DTO) deliveryResult {
 }
 
 func (s *subscription) close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
+	close(s.ch)
+}
+
+func (s *codexSubscription) trySend(event processdomain.CodexEvent) deliveryResult {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return deliveryUnavailable
+	}
+	select {
+	case <-s.done:
+		return deliveryUnavailable
+	default:
+	}
+	select {
+	case <-s.done:
+		return deliveryUnavailable
+	case s.ch <- event:
+		return deliverySent
+	default:
+		return deliveryMailboxFull
+	}
+}
+
+func (s *codexSubscription) close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {

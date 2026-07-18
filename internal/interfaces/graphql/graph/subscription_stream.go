@@ -6,7 +6,7 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
 
-func sendSessionStateItem(ctx context.Context, out chan<- *model.SessionStateStreamItem, item *model.SessionStateStreamItem) bool {
+func sendSessionEventItem(ctx context.Context, out chan<- *model.SessionEventStreamItem, item *model.SessionEventStreamItem) bool {
 	select {
 	case out <- item:
 		return true

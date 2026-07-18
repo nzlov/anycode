@@ -68,42 +68,36 @@ EOF
 	}
 	got := collectEvents(t, events, 4)
 
-	if got[0].Type != "thread.started" || got[0].Payload["session_id"] != "codex-session-1" || got[0].Payload["originator"] != "codex_exec" {
+	source := eventContent[process.CodexTranscriptSource](t, got[0])
+	if got[0].Type != process.CodexEventTranscriptBound || source.CodexSessionID != "codex-session-1" {
 		t.Fatalf("first event = %+v", got[0])
 	}
-	if got[1].Type != "item.started" {
+	if got[1].Type != process.CodexEventCommand || got[1].Phase != process.CodexPhaseStarted {
 		t.Fatalf("command start event = %+v", got[1])
 	}
-	item, ok := got[1].Payload["item"].(map[string]any)
-	normalized := eventNormalizedItem(t, got[1])
-	if !ok || normalized["type"] != "command_execution" || normalized["command"] != "go test ./..." || item["call_id"] != "call-command" {
-		t.Fatalf("command item = %#v", got[1].Payload["item"])
+	startedCommand := eventContent[process.CodexCommandContent](t, got[1])
+	if len(startedCommand.Commands) != 1 || startedCommand.Commands[0].Command != "go test ./..." || got[1].CorrelationID != "call-command" {
+		t.Fatalf("command event = %#v", got[1])
 	}
-	if got[2].Type != "item.completed" {
+	if got[2].Type != process.CodexEventCommand || got[2].Phase != process.CodexPhaseCompleted {
 		t.Fatalf("command result event = %+v", got[2])
 	}
 	commandResult, ok := got[2].Content.(process.CodexCommandContent)
-	if !ok || len(commandResult.Commands) != 1 || commandResult.Commands[0].Command != "go test ./..." || commandResult.Output != "ok" {
+	if !ok || commandResult.Kind != process.CodexCommandShell || len(commandResult.Commands) != 1 || commandResult.Commands[0].Command != "go test ./..." || !commandResult.Commands[0].HasOutput || commandResult.Commands[0].Output != "ok" {
 		t.Fatalf("typed command result = %#v", got[2].Content)
 	}
-	resultItem, ok := got[2].Payload["item"].(map[string]any)
-	resultNormalized := eventNormalizedItem(t, got[2])
-	if !ok || resultNormalized["type"] != "tool_result" || resultItem["call_id"] != "call-command" {
-		t.Fatalf("command result item = %#v", got[2].Payload["item"])
+	if got[2].CorrelationID != "call-command" {
+		t.Fatalf("command result correlation = %#v", got[2])
 	}
-	if got[3].Type != "item.completed" {
+	if got[1].EventID == got[2].EventID {
+		t.Fatalf("command lifecycle reused event id %q", got[1].EventID)
+	}
+	if got[3].Type != process.CodexEventFileChange {
 		t.Fatalf("file change event = %+v", got[3])
 	}
-	fileItem, ok := got[3].Payload["item"].(map[string]any)
-	fileNormalized := eventNormalizedItem(t, got[3])
-	if !ok || fileItem["type"] != "patch_apply_end" || fileNormalized["type"] != "file_change" || fileItem["call_id"] != "call-patch" || fileItem["stdout"] != "Success" || fileItem["success"] != true {
-		t.Fatalf("file item = %#v", got[3].Payload["item"])
-	}
-	if _, ok := fileItem["changes"].(map[string]any); !ok {
-		t.Fatalf("original file changes = %#v", fileItem["changes"])
-	}
-	if _, ok := fileNormalized["changes"].([]any); !ok {
-		t.Fatalf("normalized file changes = %#v", fileNormalized["changes"])
+	fileChange := eventContent[process.CodexFileChangeContent](t, got[3])
+	if got[3].CorrelationID != "call-patch" || len(fileChange.Changes) != 1 || fileChange.Changes[0].Path != "probe.txt" {
+		t.Fatalf("file change = %#v", got[3])
 	}
 
 	args := strings.TrimSpace(readFile(t, argsFile))
@@ -147,7 +141,8 @@ printf '%s\n' '{"type":"thread.started","thread_id":"delayed-session"}'
 	startedAt := time.Now()
 	select {
 	case event := <-events:
-		if event.Type != "thread.started" || event.Payload["session_id"] != "delayed-session" {
+		source := eventContent[process.CodexTranscriptSource](t, event)
+		if event.Type != process.CodexEventTranscriptBound || source.CodexSessionID != "delayed-session" {
 			t.Fatalf("first event = %+v", event)
 		}
 		if elapsed := time.Since(startedAt); elapsed < 5*time.Second {
@@ -158,7 +153,8 @@ printf '%s\n' '{"type":"thread.started","thread_id":"delayed-session"}'
 	}
 
 	got := collectEvents(t, events, 1)
-	if got[0].Type != "process.exit" || got[0].Payload["exitCode"] != 0 {
+	exit := eventContent[process.ExitResult](t, got[0])
+	if got[0].Type != process.CodexEventProcessExit || exit.ExitCode == nil || *exit.ExitCode != 0 {
 		t.Fatalf("exit event = %+v", got[0])
 	}
 }
@@ -185,11 +181,12 @@ exit 0
 
 	select {
 	case event := <-events:
-		if event.Type != "process.exit" {
+		if event.Type != process.CodexEventProcessExit {
 			t.Fatalf("event = %+v", event)
 		}
-		if event.Payload["failureCode"] != "codex_transcript_unavailable" || !strings.Contains(event.Payload["failureReason"].(string), process.ErrTranscriptUnavailable.Error()) {
-			t.Fatalf("exit payload = %+v", event.Payload)
+		exit := eventContent[process.ExitResult](t, event)
+		if exit.FailureCode != "codex_transcript_unavailable" || !strings.Contains(exit.FailureReason, process.ErrTranscriptUnavailable.Error()) {
+			t.Fatalf("exit content = %+v", exit)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("process exit did not stop the session log wait")
@@ -235,7 +232,7 @@ func TestPrimeCodexTranscriptProjectorCorrelatesCommandAcrossResumeBaseline(t *t
 	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-shell","output":"ok"}}`), "/workspace/project", filepath.Base(path), int64(len(prefix)))
 	projector.project(completed)
 	command, ok := completed[0].Content.(process.CodexCommandContent)
-	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.Output != "ok" {
+	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || !command.Commands[0].HasOutput || command.Commands[0].Output != "ok" {
 		t.Fatalf("resumed command completion = %#v", completed[0].Content)
 	}
 }
@@ -274,7 +271,7 @@ func TestPrimeCodexTranscriptProjectorDoesNotReplayMessageMirrorAcrossResumeBase
 				t.Fatal("newline-terminated baseline must not skip a future line terminator")
 			}
 
-			var resumed []process.CodexEvent
+			var resumed []codexLogEvent
 			tail := strings.TrimSuffix(full[resumeOffset:], "\n")
 			lineOffset := resumeOffset
 			if tail != "" {
@@ -313,7 +310,7 @@ func TestCodexTranscriptProjectorKeepsMirrorPendingAcrossInterleavedEvent(t *tes
 		`{"timestamp":"2026-07-08T09:00:01.010Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}}`,
 		`{"timestamp":"2026-07-08T09:00:01.022Z","type":"response_item","payload":{"type":"message","id":"msg-working","role":"assistant","content":[{"type":"output_text","text":"working"}]}}`,
 	}
-	var got []process.CodexEvent
+	var got []codexLogEvent
 	for index, line := range lines {
 		parsed := parseSessionLogLine([]byte(line), "/workspace/project", "rollout.jsonl", int64(index))
 		got = append(got, projector.project(parsed)...)
@@ -332,7 +329,7 @@ func TestCodexTranscriptProjectorCorrelatesMultiplePendingMirrors(t *testing.T) 
 		`{"timestamp":"2026-07-08T09:00:01.020Z","type":"response_item","payload":{"type":"message","id":"msg-first","role":"assistant","content":[{"type":"output_text","text":"first"}]}}`,
 		`{"timestamp":"2026-07-08T09:00:01.030Z","type":"response_item","payload":{"type":"message","id":"msg-second","role":"assistant","content":[{"type":"output_text","text":"second"}]}}`,
 	}
-	var got []process.CodexEvent
+	var got []codexLogEvent
 	for index, line := range lines {
 		parsed := parseSessionLogLine([]byte(line), "/workspace/project", "rollout.jsonl", int64(index))
 		got = append(got, projector.project(parsed)...)
@@ -399,7 +396,7 @@ func TestPrimeCodexTranscriptProjectorResumesAtIncompleteLineStart(t *testing.T)
 			}
 			lines := strings.Split(strings.TrimSuffix(tail, "\n"), "\n")
 			lineOffset := resumeOffset
-			var resumed []process.CodexEvent
+			var resumed []codexLogEvent
 			for _, line := range lines {
 				parsed := parseSessionLogLine([]byte(line), "/workspace/project", filepath.Base(path), lineOffset)
 				parsed = projector.project(parsed)
@@ -410,7 +407,7 @@ func TestPrimeCodexTranscriptProjectorResumesAtIncompleteLineStart(t *testing.T)
 				t.Fatalf("resumed events = %d, want %d", len(resumed), test.wantResumedEventCount)
 			}
 			command, ok := resumed[len(resumed)-1].Content.(process.CodexCommandContent)
-			if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.Output != "ok" {
+			if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || !command.Commands[0].HasOutput || command.Commands[0].Output != "ok" {
 				t.Fatalf("resumed command completion = %#v", resumed[len(resumed)-1].Content)
 			}
 			for _, event := range resumed {
@@ -429,7 +426,7 @@ func TestCodexTranscriptProjectorUsesStartedTypeForTimedResults(t *testing.T) {
 	projector.project(commandStarted)
 	projector.project(commandCompleted)
 	command, ok := commandCompleted[0].Content.(process.CodexCommandContent)
-	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.ExitCode == nil || *command.ExitCode != 7 || command.DurationMS == nil || *command.DurationMS != 125 || commandCompleted[0].Phase != process.CodexPhaseFailed {
+	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.Commands[0].ExitCode == nil || *command.Commands[0].ExitCode != 7 || command.Commands[0].DurationMS == nil || *command.Commands[0].DurationMS != 125 || command.DurationMS == nil || *command.DurationMS != 125 || commandCompleted[0].Phase != process.CodexPhaseFailed {
 		t.Fatalf("correlated command result = %#v, phase %q", commandCompleted[0].Content, commandCompleted[0].Phase)
 	}
 
@@ -446,13 +443,17 @@ func TestCodexTranscriptProjectorUsesStartedTypeForTimedResults(t *testing.T) {
 func TestCodexTranscriptProjectorCorrelatesCustomExecBatchOutput(t *testing.T) {
 	projector := newCodexTranscriptProjector()
 	started := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec","name":"exec","input":"const results = await Promise.all([tools.exec_command({\"cmd\":\"npm test\",\"workdir\":\"/workspace/web\"}), tools.exec_command({\"cmd\":\"go test ./...\"})]);"}}`), "/workspace/project", "rollout.jsonl", 0)
-	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-exec","output":"all passed"}}`), "/workspace/project", "rollout.jsonl", 1)
-	projector.project(started)
+	completed := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-exec","output":[{"type":"input_text","text":"Script failed\nWall time 1.2 seconds\nOutput:\n"},{"type":"input_text","text":"transport diagnostic"},{"type":"input_text","text":"result one\n{\"chunk_id\":\"first\",\"wall_time_seconds\":1.001,\"exit_code\":0,\"output\":\"\"}"},{"type":"input_text","text":"result two\n{\"chunk_id\":\"second\",\"wall_time_seconds\":0.157,\"exit_code\":1,\"output\":\"failed tests\\n\"}"}]}}`), "/workspace/project", "rollout.jsonl", 1)
+	projectedStarted := projector.project(started)
 	projector.project(completed)
 
 	command, ok := completed[0].Content.(process.CodexCommandContent)
-	if !ok || completed[0].CorrelationID != "call-exec" || len(command.Commands) != 2 || command.Commands[0].Command != "npm test" || command.Commands[0].Workdir != "/workspace/web" || command.Commands[1].Command != "go test ./..." || command.Output != "all passed" {
+	if !ok || command.Kind != process.CodexCommandExec || completed[0].CorrelationID != "call-exec" || len(command.Commands) != 2 || command.Commands[0].Command != "npm test" || command.Commands[0].Workdir != "/workspace/web" || !command.Commands[0].HasOutput || command.Commands[0].Output != "" || command.Commands[0].ExitCode == nil || *command.Commands[0].ExitCode != 0 || command.Commands[1].Command != "go test ./..." || !command.Commands[1].HasOutput || command.Commands[1].Output != "failed tests\n" || command.Commands[1].ExitCode == nil || *command.Commands[1].ExitCode != 1 || completed[0].Phase != process.CodexPhaseFailed {
 		t.Fatalf("completed batch = %#v, correlationID %q", completed[0].Content, completed[0].CorrelationID)
+	}
+	startedCommand, ok := projectedStarted[0].Content.(process.CodexCommandContent)
+	if !ok || startedCommand.Commands[0].HasOutput || startedCommand.Commands[1].HasOutput {
+		t.Fatalf("started command was mutated by completion: %#v", projectedStarted[0].Content)
 	}
 }
 
@@ -464,7 +465,7 @@ func TestCodexTranscriptProjectorStripsCustomExecTransportSummary(t *testing.T) 
 	projector.project(completed)
 
 	command, ok := completed[0].Content.(process.CodexCommandContent)
-	if !ok || command.Output != "all passed\n" || command.DurationMS == nil || *command.DurationMS != 300 {
+	if !ok || len(command.Commands) != 1 || !command.Commands[0].HasOutput || command.Commands[0].Output != "all passed\n" || command.Commands[0].DurationMS == nil || *command.Commands[0].DurationMS != 300 {
 		t.Fatalf("completed command = %#v", completed[0].Content)
 	}
 }
@@ -477,7 +478,7 @@ func TestCodexTranscriptProjectorUnwrapsWriteStdinResult(t *testing.T) {
 	projector.project(completed)
 
 	command, ok := completed[0].Content.(process.CodexCommandContent)
-	if !ok || command.Output != "remote: Processed 1 reference\nmaster -> master\n" || command.ExitCode == nil || *command.ExitCode != 0 {
+	if !ok || len(command.Commands) != 1 || command.Commands[0].Output != "remote: Processed 1 reference\nmaster -> master\n" || command.Commands[0].ExitCode == nil || *command.Commands[0].ExitCode != 0 {
 		t.Fatalf("write_stdin command = %#v", completed[0].Content)
 	}
 }
@@ -490,8 +491,24 @@ func TestCodexTranscriptProjectorKeepsRunningCommandOutput(t *testing.T) {
 	projector.project(progress)
 
 	command, ok := progress[0].Content.(process.CodexCommandContent)
-	if !ok || progress[0].Phase != process.CodexPhaseProgress || command.Output != "still running\n" {
+	if !ok || len(command.Commands) != 1 || progress[0].Phase != process.CodexPhaseProgress || command.Commands[0].Output != "still running\n" {
 		t.Fatalf("running command = %#v, phase %q", progress[0].Content, progress[0].Phase)
+	}
+}
+
+func TestCodexTranscriptProjectorKeepsBatchRunningWhenOneCommandIsRunning(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	started := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:00Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec-running","name":"exec","input":"const results = await Promise.all([tools.exec_command({\"cmd\":\"npm test\"}), tools.exec_command({\"cmd\":\"go test ./...\"})]);"}}`), "/workspace/project", "rollout.jsonl", 0)
+	progress := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-exec-running","output":[{"type":"input_text","text":"Script completed\nWall time 10.0 seconds\nOutput:\n"},{"type":"input_text","text":"{\"chunk_id\":\"first\",\"wall_time_seconds\":1,\"exit_code\":0,\"original_token_count\":1,\"output\":\"passed\\n\"}"},{"type":"input_text","text":"{\"session_id\":60296,\"wall_time_seconds\":10,\"original_token_count\":2,\"output\":\"still running\\n\"}"}]}}`), "/workspace/project", "rollout.jsonl", 1)
+	projector.project(started)
+	projector.project(progress)
+
+	command, ok := progress[0].Content.(process.CodexCommandContent)
+	if !ok || progress[0].Phase != process.CodexPhaseProgress || len(command.Commands) != 2 || command.Commands[0].Output != "passed\n" || command.Commands[1].Output != "still running\n" {
+		t.Fatalf("running batch = %#v, phase %q", progress[0].Content, progress[0].Phase)
+	}
+	if _, ok := projector.commands["call-exec-running"]; !ok {
+		t.Fatal("running batch command state was discarded")
 	}
 }
 
@@ -499,6 +516,8 @@ func TestNormalizeCustomToolOutputPreservesNonTransportText(t *testing.T) {
 	for _, value := range []any{
 		"Script completed\nWall time 0.3 seconds\nOutput:\nuser-owned text",
 		`{"output":"domain value","kind":"application_result"}`,
+		"command output\n{\"output\":\"domain value\",\"exit_code\":0}",
+		"{\"chunk_id\":\"domain\",\"wall_time_seconds\":1}\n{\"output\":\"business\"}",
 		[]any{map[string]any{"type": "input_text", "text": "Script completed\nWall time unknown\nOutput:\n"}},
 	} {
 		want := textFromValue(value)
@@ -821,10 +840,13 @@ EOF
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := collectEvents(t, events, 1)
-			_, ok := got[0].Payload["item"].(map[string]any)
-			if !ok || eventNormalizedItem(t, got[0])["output"] != "new" {
-				t.Fatalf("resume replayed wrong event = %+v", got[0])
+			got := collectEvents(t, events, 2)
+			if got[0].Type != process.CodexEventTranscriptBound {
+				t.Fatalf("resume transcript binding = %+v", got[0])
+			}
+			message, ok := got[1].Content.(process.CodexMessageContent)
+			if !ok || message.Text != "new" {
+				t.Fatalf("resume replayed wrong event = %+v", got[1])
 			}
 		})
 	}
@@ -871,8 +893,8 @@ EOF
 	}
 	var plans []process.PlanUpdate
 	for event := range events {
-		if event.PlanUpdate != nil {
-			plans = append(plans, *event.PlanUpdate)
+		if update, ok := event.Content.(process.PlanUpdate); ok {
+			plans = append(plans, update)
 		}
 	}
 	if len(plans) != 1 || len(plans[0].Items) != 1 || plans[0].Items[0].Step != "Current plan" {
@@ -883,25 +905,32 @@ EOF
 func TestStdoutPlanUpdateParsesTypedItemsWithStableID(t *testing.T) {
 	raw := []byte(`{"type":"item.updated","item":{"id":"plan-1","type":"todo_list","items":[{"text":"Inspect stream","completed":true},{"text":"Persist TODO","completed":false}]}}`)
 	first, ok := stdoutPlanUpdate(raw)
-	if !ok || first.PlanUpdate == nil {
+	firstUpdate, contentOK := first.Content.(process.PlanUpdate)
+	if !ok || !contentOK {
 		t.Fatalf("stdout plan update = %#v, %v", first, ok)
 	}
 	second, ok := stdoutPlanUpdate(raw)
 	if !ok || second.EventID != first.EventID || first.EventID == "" {
 		t.Fatalf("stable event ids = %q and %q", first.EventID, second.EventID)
 	}
-	if first.CorrelationID != "plan-1" || !first.RealtimeOnly || len(first.PlanUpdate.Items) != 2 {
+	if first.Type != process.CodexEventPlan || first.CorrelationID != "plan-1" || len(firstUpdate.Items) != 2 {
 		t.Fatalf("parsed plan update = %#v", first)
 	}
-	transcript := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"different-call-id","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"},{\"step\":\"Persist TODO\",\"status\":\"in_progress\"}]}"}}`), "", "rollout-plan.jsonl", 10)
-	if len(transcript) != 1 || transcript[0].PlanUpdate == nil || transcript[0].PlanUpdate.EventID != first.PlanUpdate.EventID {
+	transcript := parseSessionLogLine([]byte(`{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"different-call-id","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"},{\"step\":\"Persist TODO\",\"status\":\"pending\"}]}"}}`), "", "rollout-plan.jsonl", 10)
+	if len(transcript) != 1 || transcript[0].PlanUpdate == nil || transcript[0].PlanUpdate.EventID != firstUpdate.EventID {
 		t.Fatalf("cross-source plan ids = %#v and %#v", first, transcript)
 	}
 	if transcript[0].EventID == transcript[0].PlanUpdate.EventID {
 		t.Fatalf("transcript event id was replaced by plan id: %#v", transcript[0])
 	}
-	if first.PlanUpdate.Items[0].Status != process.PlanItemCompleted || first.PlanUpdate.Items[1].Status != process.PlanItemPending {
-		t.Fatalf("plan statuses = %#v", first.PlanUpdate.Items)
+	if firstUpdate.Items[0].Status != process.PlanItemCompleted || firstUpdate.Items[1].Status != process.PlanItemPending {
+		t.Fatalf("plan statuses = %#v", firstUpdate.Items)
+	}
+	inProgress := firstUpdate
+	inProgress.Items = append([]process.PlanItem(nil), firstUpdate.Items...)
+	inProgress.Items[1].Status = process.PlanItemInProgress
+	if stablePlanUpdateEventID(inProgress) == firstUpdate.EventID {
+		t.Fatal("pending and in-progress plans reused one event id")
 	}
 }
 
@@ -937,28 +966,61 @@ EOF
 		t.Fatal(err)
 	}
 	var planEvents []process.CodexEvent
-	var transcriptPlans []process.CodexEvent
 	var allEvents []process.CodexEvent
 	for event := range events {
 		allEvents = append(allEvents, event)
-		if event.PlanUpdate != nil {
+		if event.Type == process.CodexEventPlan {
 			planEvents = append(planEvents, event)
-		}
-		if content, ok := event.Content.(process.CodexToolContent); ok && content.QualifiedName == "update_plan" {
-			transcriptPlans = append(transcriptPlans, event)
 		}
 	}
 	if len(planEvents) != 1 {
 		t.Fatalf("plan event count = %d, want 1: %#v", len(planEvents), planEvents)
 	}
-	if len(planEvents[0].PlanUpdate.Items) != 2 || !planEvents[0].RealtimeOnly || planEvents[0].EventID == "" {
+	update := eventContent[process.PlanUpdate](t, planEvents[0])
+	if len(update.Items) != 2 || planEvents[0].EventID == "" {
 		t.Fatalf("merged plan event = %#v", planEvents[0])
 	}
-	if len(allEvents) == 0 || allEvents[0].PlanUpdate == nil || !allEvents[0].RealtimeOnly {
+	if len(allEvents) == 0 || allEvents[0].Type != process.CodexEventPlan {
 		t.Fatalf("stdout plan was not emitted before delayed transcript: %#v", allEvents)
 	}
-	if len(transcriptPlans) != 1 || transcriptPlans[0].RealtimeOnly || transcriptPlans[0].PlanUpdate != nil {
-		t.Fatalf("transcript plan events = %#v", transcriptPlans)
+}
+
+func TestEventsMergesSessionAndStdoutPlanUpdatesWithoutDuplicates(t *testing.T) {
+	dir := t.TempDir()
+	codexHome := t.TempDir()
+	bin := fakeCodex(t, `#!/bin/sh
+printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan-transcript-first"}'
+mkdir -p "$CODEX_HOME/sessions/2026/07/08"
+cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan-transcript-first.jsonl" <<EOF
+{"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-plan-transcript-first","cwd":"$PWD"}}
+{"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"session-plan-call","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"},{\"step\":\"Persist TODO\",\"status\":\"in_progress\"}]}"}}
+EOF
+sleep 0.2
+printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"},{"text":"Persist TODO","status":"in_progress"}]}}'
+`)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	client := New(bin)
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-transcript-first", Workdir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := client.Events(context.Background(), handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var planEvents []process.CodexEvent
+	for event := range events {
+		if event.Type == process.CodexEventPlan {
+			planEvents = append(planEvents, event)
+		}
+	}
+	if len(planEvents) != 1 {
+		t.Fatalf("plan event count = %d, want 1: %#v", len(planEvents), planEvents)
+	}
+	update := eventContent[process.PlanUpdate](t, planEvents[0])
+	if len(update.Items) != 2 || planEvents[0].EventID == "" {
+		t.Fatalf("merged plan event = %#v", planEvents[0])
 	}
 }
 
@@ -989,8 +1051,8 @@ EOF
 	}
 	var statuses []process.PlanItemStatus
 	for event := range events {
-		if event.PlanUpdate != nil {
-			statuses = append(statuses, event.PlanUpdate.Items[0].Status)
+		if update, ok := event.Content.(process.PlanUpdate); ok {
+			statuses = append(statuses, update.Items[0].Status)
 		}
 	}
 	want := []process.PlanItemStatus{process.PlanItemInProgress, process.PlanItemCompleted, process.PlanItemInProgress}
@@ -1026,8 +1088,8 @@ EOF
 	}
 	var statuses []process.PlanItemStatus
 	for event := range events {
-		if event.PlanUpdate != nil {
-			statuses = append(statuses, event.PlanUpdate.Items[0].Status)
+		if update, ok := event.Content.(process.PlanUpdate); ok {
+			statuses = append(statuses, update.Items[0].Status)
 		}
 	}
 	want := []process.PlanItemStatus{process.PlanItemInProgress, process.PlanItemCompleted, process.PlanItemInProgress}
@@ -1075,7 +1137,7 @@ func TestTailSessionLogDrainsStdoutPlanWhileTranscriptHasBacklog(t *testing.T) {
 	}
 	planIndex := -1
 	for index := 0; len(events) > 0; index++ {
-		if event := <-events; event.PlanUpdate != nil {
+		if event := <-events; event.Type == process.CodexEventPlan {
 			planIndex = index
 			break
 		}
@@ -1115,7 +1177,7 @@ func TestTailSessionLogAnnouncesTranscriptSourceOnce(t *testing.T) {
 	}
 	announcements := 0
 	for len(events) > 0 {
-		if event := <-events; event.Transcript != nil {
+		if event := <-events; event.Type == process.CodexEventTranscriptBound {
 			announcements++
 		}
 	}
@@ -1154,7 +1216,7 @@ EOF
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 3)
-	if got[0].Type != "thread.started" || !strings.Contains(got[1].EventID, "msg-1") || got[2].Type != "process.exit" {
+	if got[0].Type != process.CodexEventTranscriptBound || !strings.Contains(got[1].EventID, "msg-1") || got[2].Type != process.CodexEventProcessExit {
 		t.Fatalf("live mirror events = %#v", got)
 	}
 }
@@ -1186,13 +1248,13 @@ touch "$CODEX_EXIT_MARKER"
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 2)
-	if message, ok := got[1].Content.(process.CodexMessageContent); got[0].Type != "thread.started" || !ok || message.Text != "legacy output" {
+	if message, ok := got[1].Content.(process.CodexMessageContent); got[0].Type != process.CodexEventTranscriptBound || !ok || message.Text != "legacy output" {
 		t.Fatalf("bounded mirror events = %#v", got)
 	}
 	if _, err := os.Stat(exitMarker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("mirror was not flushed before process exit marker: %v", err)
 	}
-	if exit := collectEvents(t, events, 1)[0]; exit.Type != "process.exit" {
+	if exit := collectEvents(t, events, 1)[0]; exit.Type != process.CodexEventProcessExit {
 		t.Fatalf("final event = %#v", exit)
 	}
 }
@@ -1220,7 +1282,7 @@ EOF
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 3)
-	if message, ok := got[1].Content.(process.CodexMessageContent); got[0].Type != "thread.started" || !ok || message.Text != "legacy output" || got[2].Type != "process.exit" {
+	if message, ok := got[1].Content.(process.CodexMessageContent); got[0].Type != process.CodexEventTranscriptBound || !ok || message.Text != "legacy output" || got[2].Type != process.CodexEventProcessExit {
 		t.Fatalf("exit mirror events = %#v", got)
 	}
 }
@@ -1235,7 +1297,7 @@ func TestObserveStdoutDoesNotBlockWhenPlanBufferIsFull(t *testing.T) {
 	for event := range plans {
 		got = append(got, event)
 	}
-	if len(got) == 0 || got[len(got)-1].PlanUpdate.Items[0].Step != "step-99" {
+	if len(got) == 0 || eventContent[process.PlanUpdate](t, got[len(got)-1]).Items[0].Step != "step-99" {
 		t.Fatalf("buffered plans = %#v", got)
 	}
 }
@@ -1313,10 +1375,14 @@ EOF
 
 	firstGot := collectEvents(t, firstEvents, 2)
 	secondGot := collectEvents(t, secondEvents, 2)
-	if firstGot[0].Payload["session_id"] != "codex-session-a" || eventNormalizedItem(t, firstGot[1])["output"] != "message-a" {
+	firstSource := eventContent[process.CodexTranscriptSource](t, firstGot[0])
+	firstMessage := eventContent[process.CodexMessageContent](t, firstGot[1])
+	if firstSource.CodexSessionID != "codex-session-a" || firstMessage.Text != "message-a" {
 		t.Fatalf("first process read wrong transcript = %#v", firstGot)
 	}
-	if secondGot[0].Payload["session_id"] != "codex-session-b" || eventNormalizedItem(t, secondGot[1])["output"] != "message-b" {
+	secondSource := eventContent[process.CodexTranscriptSource](t, secondGot[0])
+	secondMessage := eventContent[process.CodexMessageContent](t, secondGot[1])
+	if secondSource.CodexSessionID != "codex-session-b" || secondMessage.Text != "message-b" {
 		t.Fatalf("second process read wrong transcript = %#v", secondGot)
 	}
 }
@@ -1346,10 +1412,11 @@ printf '%s' 'ial"}]}}' >> "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 2)
-	if got[0].Type != "thread.started" {
+	if got[0].Type != process.CodexEventTranscriptBound {
 		t.Fatalf("first event = %#v", got[0])
 	}
-	if got[1].Type != "item.completed" || eventNormalizedItem(t, got[1])["output"] != "partial" {
+	message := eventContent[process.CodexMessageContent](t, got[1])
+	if got[1].Type != process.CodexEventMessage || message.Text != "partial" {
 		t.Fatalf("partial line event = %#v", got[1])
 	}
 }
@@ -1379,7 +1446,7 @@ EOF
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 2)
-	if got[1].Type != "item.completed" {
+	if got[1].Type != process.CodexEventMessage {
 		t.Fatalf("event after caller context cancel = %+v", got[1])
 	}
 }
@@ -1578,10 +1645,11 @@ EOF
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 3)
-	if got[1].Type != "item.completed" {
+	if got[1].Type != process.CodexEventMessage {
 		t.Fatalf("agent message event = %+v", got[1])
 	}
-	if got[2].Type != "invalid_json" || got[2].Payload["byteCount"] != 8 {
+	status := eventContent[process.CodexStatusContent](t, got[2])
+	if got[2].Type != process.CodexEventStatus || status.Code != "invalid_json" || status.Details["byteCount"] != 8 {
 		t.Fatalf("invalid event = %+v", got[2])
 	}
 	if !strings.HasPrefix(got[2].EventID, "source:rollout-test-invalid-json.jsonl:") {
@@ -1608,13 +1676,9 @@ func TestSessionEventsMapsReasoningResponseItem(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("events len = %d, want 2: %#v", len(got), got)
 	}
-	item, ok := got[1].Payload["item"].(map[string]any)
-	if !ok || item["type"] != "reasoning" || eventNormalizedItem(t, got[1])["type"] != "reasoning" || eventNormalizedItem(t, got[1])["output"] != "Checked the session transcript" {
-		t.Fatalf("reasoning item = %#v", got[1].Payload["item"])
-	}
-	summary, ok := item["summary"].([]any)
-	if !ok || len(summary) != 1 {
-		t.Fatalf("reasoning summary = %#v", item["summary"])
+	reasoning := eventContent[process.CodexReasoningContent](t, got[1])
+	if got[1].Type != process.CodexEventReasoning || reasoning.Text != "Checked the session transcript" {
+		t.Fatalf("reasoning event = %#v", got[1])
 	}
 }
 
@@ -1641,26 +1705,22 @@ func TestSessionEventsUsesResponseItemMessagesAndIgnoresEventMessageMirrors(t *t
 	if len(got) != 4 {
 		t.Fatalf("events len = %d, want 4: %#v", len(got), got)
 	}
-	userItem, ok := got[1].Payload["item"].(map[string]any)
-	if !ok || userItem["type"] != "message" || eventNormalizedItem(t, got[1])["type"] != "user_message" || eventNormalizedItem(t, got[1])["output"] != "clone the repo\nuse the screenshot" {
-		t.Fatalf("user message item = %#v", got[1].Payload["item"])
+	userMessage := eventContent[process.CodexMessageContent](t, got[1])
+	if userMessage.Role != "user" || userMessage.Text != "clone the repo\nuse the screenshot" || len(userMessage.Images) != 1 {
+		t.Fatalf("user message = %#v", userMessage)
 	}
-	content, ok := userItem["content"].([]any)
-	if !ok || len(content) != 3 {
-		t.Fatalf("user message content = %#v", userItem["content"])
-	}
-	image, ok := content[1].(map[string]any)
-	if !ok || image["type"] != "input_image" || image["image_url"] != "data:image/png;base64,AAAA" || image["detail"] != "high" {
-		t.Fatalf("user message image = %#v", content[1])
+	if userMessage.Images[0].Source != "data:image/png;base64,AAAA" || userMessage.Images[0].Detail != "high" {
+		t.Fatalf("user message image = %#v", userMessage.Images[0])
 	}
 	if !strings.Contains(got[1].EventID, "msg-user") {
 		t.Fatalf("user message event id = %q, want response_item id", got[1].EventID)
 	}
-	assistantItem, ok := got[2].Payload["item"].(map[string]any)
-	if !ok || assistantItem["type"] != "message" || eventNormalizedItem(t, got[2])["type"] != "agent_message" || eventNormalizedItem(t, got[2])["output"] != "working" {
-		t.Fatalf("assistant item = %#v", got[2].Payload["item"])
+	assistantMessage := eventContent[process.CodexMessageContent](t, got[2])
+	if assistantMessage.Role != "assistant" || assistantMessage.Text != "working" {
+		t.Fatalf("assistant message = %#v", assistantMessage)
 	}
-	if _, duplicated := got[3].Payload["lastAgentMessage"]; got[3].Type != "task.completed" || duplicated {
+	status := eventContent[process.CodexStatusContent](t, got[3])
+	if got[3].Type != process.CodexEventStatus || status.Code != "task.completed" {
 		t.Fatalf("task completion event = %#v", got[3])
 	}
 }
@@ -1716,9 +1776,6 @@ func TestSessionEventsKeepsEventMessageAgentMessageWhenNoCanonicalMessageExists(
 	if !ok || message.Role != "assistant" || message.Text != "普通助手输出" {
 		t.Fatalf("event_msg agent message content = %#v", got[1].Content)
 	}
-	if eventNormalizedItem(t, got[1])["type"] != "agent_message" {
-		t.Fatalf("event_msg agent message normalized item = %#v", eventNormalizedItem(t, got[1]))
-	}
 }
 
 func TestSessionEventsKeepsRepeatedCanonicalAssistantMessages(t *testing.T) {
@@ -1771,21 +1828,16 @@ func TestSessionEventsPreservesStructuredCustomToolOutput(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("events len = %d, want 2: %#v", len(got), got)
 	}
-	item, ok := got[1].Payload["item"].(map[string]any)
-	if !ok || item["type"] != "custom_tool_call_output" || eventNormalizedItem(t, got[1])["type"] != "custom_tool_call" || eventNormalizedItem(t, got[1])["output"] != "captured screenshot" {
-		t.Fatalf("custom tool output item = %#v", got[1].Payload["item"])
+	tool := eventContent[process.CodexToolContent](t, got[1])
+	if got[1].Type != process.CodexEventTool || tool.Output.Text != "captured screenshot" || len(tool.Images) != 1 {
+		t.Fatalf("custom tool output = %#v", tool)
 	}
-	output, ok := item["output"].([]any)
-	if !ok || len(output) != 2 {
-		t.Fatalf("custom tool output = %#v", item["output"])
-	}
-	image, ok := output[1].(map[string]any)
-	if !ok || image["type"] != "input_image" || image["image_url"] != "data:image/png;base64,AAAA" {
-		t.Fatalf("custom tool image = %#v", output[1])
+	if tool.Images[0].Source != "data:image/png;base64,AAAA" {
+		t.Fatalf("custom tool image = %#v", tool.Images[0])
 	}
 }
 
-func TestSessionEventsKeepsSourceFieldsSeparateFromNormalizedView(t *testing.T) {
+func TestSessionEventsProjectsMessagesIntoCanonicalContent(t *testing.T) {
 	codexHome := t.TempDir()
 	sessionFile := filepath.Join(codexHome, "sessions", "2026", "07", "08", "rollout-normalized-conflict.jsonl")
 	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
@@ -1801,23 +1853,9 @@ func TestSessionEventsKeepsSourceFieldsSeparateFromNormalizedView(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	item := got[1].Payload["item"].(map[string]any)
-	for key, want := range map[string]any{
-		"normalized_type":    "source type",
-		"normalized_status":  "source status",
-		"normalized_output":  "source output",
-		"normalized_input":   "source input",
-		"normalized_command": "source command",
-		"normalized_changes": "source changes",
-		"qualified_name":     "source name",
-	} {
-		if item[key] != want {
-			t.Fatalf("source item %s = %#v, want %#v", key, item[key], want)
-		}
-	}
-	normalized := got[1].Payload["normalizedItem"].(map[string]any)
-	if normalized["type"] != "user_message" || normalized["status"] != "completed" || normalized["output"] != "actual user text" {
-		t.Fatalf("normalized item = %#v", normalized)
+	message := eventContent[process.CodexMessageContent](t, got[1])
+	if got[1].Type != process.CodexEventMessage || message.Role != "user" || message.Text != "actual user text" {
+		t.Fatalf("canonical message = %#v", got[1])
 	}
 }
 
@@ -1857,102 +1895,39 @@ func TestSessionEventsMapsCodexJSONLRecordTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	types := make([]string, 0, len(got))
-	itemTypes := []string{}
+	if len(got) == 0 || got[0].Type != process.CodexEventStatus || eventContent[process.CodexStatusContent](t, got[0]).Code != "thread.started" {
+		t.Fatalf("first event = %#v", got)
+	}
+	var usageCount, toolCount, statusCount, messageCount int
+	messageTexts := map[string]bool{}
 	for _, event := range got {
-		types = append(types, event.Type)
-		if _, ok := event.Payload["item"].(map[string]any); ok {
-			itemTypes = append(itemTypes, stringValue(eventNormalizedItem(t, event), "type"))
+		switch content := event.Content.(type) {
+		case process.CodexUsageContent:
+			usageCount++
+		case process.CodexToolContent:
+			toolCount++
+			if content.QualifiedName == "apply_patch" {
+				t.Fatalf("internal apply_patch event was not filtered: %#v", event)
+			}
+		case process.CodexStatusContent:
+			statusCount++
+		case process.CodexMessageContent:
+			messageCount++
+			messageTexts[content.Text] = true
 		}
-	}
-	wantTypes := []string{
-		"thread.started",
-		"task.started",
-		"token_count",
-		"item.started",
-		"item.completed",
-		"item.started",
-		"item.completed",
-		"item.completed",
-		"mcp_tool_call_end",
-		"turn.aborted",
-		"context.compacted",
-		"turn.context",
-		"world.state",
-		"item.completed",
-		"item.completed",
-		"inter_agent_communication_metadata",
-		"sub_agent_activity",
-		"thread_settings_applied",
-	}
-	if !reflect.DeepEqual(types, wantTypes) {
-		t.Fatalf("types = %#v, want %#v", types, wantTypes)
-	}
-	wantItemTypes := []string{"tool_call", "tool_result", "tool_search", "tool_search", "web_search", "agent_message", "agent_message"}
-	if !reflect.DeepEqual(itemTypes, wantItemTypes) {
-		t.Fatalf("item types = %#v, want %#v", itemTypes, wantItemTypes)
-	}
-	for index, want := range []struct {
-		eventIndex int
-		id         string
-		field      string
-	}{
-		{eventIndex: 3, id: "fc-browser", field: "arguments"},
-		{eventIndex: 5, id: "ts-call", field: "arguments"},
-		{eventIndex: 6, id: "ts-output", field: "tools"},
-		{eventIndex: 7, id: "ws-call", field: "action"},
-	} {
-		item := got[want.eventIndex].Payload["item"].(map[string]any)
-		if item["id"] != want.id || item[want.field] == nil || item["internal_chat_message_metadata_passthrough"] == nil {
-			t.Fatalf("preserved item %d = %#v", index, item)
-		}
-	}
-	functionItem := got[3].Payload["item"].(map[string]any)
-	functionNormalized := eventNormalizedItem(t, got[3])
-	if functionItem["type"] != "function_call" || functionItem["name"] != "browser_resize" || functionNormalized["type"] != "tool_call" || functionNormalized["qualifiedName"] != "mcp__playwright.browser_resize" {
-		t.Fatalf("function item = %#v", functionItem)
-	}
-	for _, event := range got {
-		item := mapValue(event.Payload["item"])
-		if item["name"] == "apply_patch" || item["call_id"] == "call-patch" {
-			t.Fatalf("apply_patch event was not filtered: %#v", event)
-		}
-	}
-	if got[8].Payload["invocation"] == nil || got[8].Payload["result"] == nil {
-		t.Fatalf("mcp tool end payload = %#v", got[8].Payload)
-	}
-	if got[10].Payload["message"] != "summary" {
-		t.Fatalf("compacted payload = %#v", got[10].Payload)
-	}
-	world := got[12].Payload
-	if world["state"] == nil || world["full"] != true {
-		t.Fatalf("world state payload = %#v", world)
-	}
-	message, ok := got[13].Content.(process.CodexMessageContent)
-	if !ok || message.Role != "assistant" || message.Text != "top-level assistant note" {
-		t.Fatalf("agent message content = %#v", got[13].Content)
-	}
-	message, ok = got[14].Content.(process.CodexMessageContent)
-	if !ok || message.Role != "assistant" || message.Text != "sub-agent assistant note" {
-		t.Fatalf("response agent message content = %#v", got[14].Content)
-	}
-	for _, index := range []int{15, 16, 17} {
-		if _, ok := got[index].Content.(process.CodexStatusContent); !ok {
-			t.Fatalf("status event %d content = %#v", index, got[index].Content)
-		}
-	}
-	standardTypes := map[string]struct{}{
-		"agent_message":                      {},
-		"inter_agent_communication_metadata": {},
-		"sub_agent_activity":                 {},
-		"thread_settings_applied":            {},
-	}
-	for _, event := range got {
-		if unknown, ok := event.Content.(process.CodexUnknownContent); ok {
-			if _, exists := standardTypes[unknown.RawType]; exists {
+		if event.Type == process.CodexEventUnknown {
+			unknown := eventContent[process.CodexUnknownContent](t, event)
+			switch unknown.RawType {
+			case "agent_message", "inter_agent_communication_metadata", "sub_agent_activity", "thread_settings_applied":
 				t.Fatalf("standard event fell back to unknown: %#v", event)
 			}
 		}
+	}
+	if usageCount != 1 || toolCount < 4 || statusCount < 5 || messageCount != 2 {
+		t.Fatalf("canonical event category counts: usage=%d tool=%d status=%d message=%d events=%#v", usageCount, toolCount, statusCount, messageCount, got)
+	}
+	if !messageTexts["top-level assistant note"] || !messageTexts["sub-agent assistant note"] {
+		t.Fatalf("assistant messages = %#v", messageTexts)
 	}
 }
 
@@ -2350,15 +2325,19 @@ func TestSessionEventsPreservesUnknownJSONLRecords(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("events len = %d, want 4: %#v", len(got), got)
 	}
-	wantTypes := []string{"thread.started", "future_record", "future_item", "future_event"}
+	wantTypes := []process.CodexEventType{process.CodexEventStatus, process.CodexEventUnknown, process.CodexEventUnknown, process.CodexEventUnknown}
 	for index, wantType := range wantTypes {
 		if got[index].Type != wantType {
 			t.Fatalf("event %d type = %q, want %q", index, got[index].Type, wantType)
 		}
 	}
-	for index, wantValue := range []string{"top-level", "response-item", "event-message"} {
-		if got[index+1].Payload["value"] != wantValue {
-			t.Fatalf("event %d payload = %#v, want value %q", index+1, got[index+1].Payload, wantValue)
+	for index, want := range []struct {
+		rawType string
+		value   string
+	}{{"future_record", "top-level"}, {"future_item", "response-item"}, {"future_event", "event-message"}} {
+		unknown := eventContent[process.CodexUnknownContent](t, got[index+1])
+		if unknown.RawType != want.rawType || unknown.Payload["value"] != want.value {
+			t.Fatalf("event %d content = %#v, want %#v", index+1, unknown, want)
 		}
 	}
 }
@@ -2387,17 +2366,15 @@ exit 7
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 3)
-	if got[2].Type != "process.exit" {
+	if got[2].Type != process.CodexEventProcessExit {
 		t.Fatalf("exit event type = %q", got[2].Type)
 	}
-	if got[2].Payload["exitCode"] != 7 {
-		t.Fatalf("exit payload = %#v", got[2].Payload)
+	exit := eventContent[process.ExitResult](t, got[2])
+	if exit.ExitCode == nil || *exit.ExitCode != 7 || exit.FailureReason == "" {
+		t.Fatalf("exit content = %#v", exit)
 	}
-	if got[2].Payload["failureReason"] == "" {
-		t.Fatalf("exit payload missing failureReason: %#v", got[2].Payload)
-	}
-	if !strings.Contains(got[2].Payload["failureReason"].(string), "model gpt-test is not supported") {
-		t.Fatalf("exit payload missing stderr: %#v", got[2].Payload)
+	if !strings.Contains(exit.FailureReason, "model gpt-test is not supported") {
+		t.Fatalf("exit content missing stderr: %#v", exit)
 	}
 }
 
@@ -2426,11 +2403,11 @@ sleep 0.2
 		t.Fatal(err)
 	}
 	got := collectEvents(t, events, 1)
-	if got[0].Type != "process.exit" {
+	if got[0].Type != process.CodexEventProcessExit {
 		t.Fatalf("ambiguous transcript event = %+v", got[0])
 	}
-	failureReason, _ := got[0].Payload["failureReason"].(string)
-	if !strings.Contains(failureReason, "codex transcript is unavailable") {
+	exit := eventContent[process.ExitResult](t, got[0])
+	if !strings.Contains(exit.FailureReason, "codex transcript is unavailable") {
 		t.Fatalf("ambiguous transcript failure = %+v", got[0])
 	}
 }
@@ -2456,9 +2433,9 @@ func TestSessionEventsReadsLongJSONLLines(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("events length = %d, want 2", len(got))
 	}
-	_, ok := got[1].Payload["item"].(map[string]any)
-	if !ok || eventNormalizedItem(t, got[1])["output"] != longOutput {
-		t.Fatalf("long output item = %#v", got[1].Payload["item"])
+	tool := eventContent[process.CodexToolContent](t, got[1])
+	if tool.Output.Text != longOutput {
+		t.Fatalf("long output = %#v", tool.Output)
 	}
 }
 
@@ -2571,7 +2548,7 @@ func TestSessionEventsIgnoresIncompleteFinalLineUntilNextSnapshot(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(first) != 1 || first[0].Type != "thread.started" {
+	if len(first) != 1 || first[0].Type != process.CodexEventStatus {
 		t.Fatalf("partial snapshot events = %#v", first)
 	}
 
@@ -2592,7 +2569,7 @@ func TestSessionEventsIgnoresIncompleteFinalLineUntilNextSnapshot(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(second) != 2 || second[1].Type != "item.completed" || eventNormalizedItem(t, second[1])["output"] != "partial" {
+	if len(second) != 2 || second[1].Type != process.CodexEventMessage || eventContent[process.CodexMessageContent](t, second[1]).Text != "partial" {
 		t.Fatalf("completed snapshot events = %#v", second)
 	}
 }
@@ -2886,13 +2863,23 @@ func writeTranscript(t *testing.T, codexHome, codexSessionID, relativePath, work
 	return path
 }
 
-func eventNormalizedItem(t *testing.T, event process.CodexEvent) map[string]any {
+func eventNormalizedItem(t *testing.T, event codexLogEvent) map[string]any {
 	t.Helper()
 	item, ok := event.Payload["normalizedItem"].(map[string]any)
 	if !ok {
 		t.Fatalf("normalized item = %#v", event.Payload["normalizedItem"])
 	}
 	return item
+}
+
+func eventContent[T process.CodexEventContent](t *testing.T, event process.CodexEvent) T {
+	t.Helper()
+	content, ok := event.Content.(T)
+	if !ok {
+		var zero T
+		t.Fatalf("event content = %T, want %T: %#v", event.Content, zero, event)
+	}
+	return content
 }
 
 func readFile(t *testing.T, path string) string {

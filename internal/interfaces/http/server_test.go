@@ -19,9 +19,9 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
-	eventapp "github.com/nzlov/anycode/internal/application/event"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
@@ -144,9 +144,9 @@ func TestGraphQLWebSocketTransportSendsGraphQLTransportPing(t *testing.T) {
 	writeSocketJSON(t, conn, map[string]any{"type": "pong"})
 }
 
-func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *testing.T) {
-	timeline := &fakeTimelineUseCase{ch: make(chan timelineapp.DTO, 1), subscribed: make(chan struct{})}
-	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Timeline: timeline}))
+func TestGraphQLWebSocketSessionEventsSubscriptionReceivesTranscript(t *testing.T) {
+	sessionEvents := &fakeSessionEventUseCase{ch: make(chan sessioneventapp.DTO, 1), subscribed: make(chan struct{})}
+	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{SessionEvents: sessionEvents}))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -167,9 +167,10 @@ func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *
 		"type": "subscribe",
 		"payload": map[string]any{
 			"query": `subscription($sessionId: ID!) {
-				sessionTranscript(sessionId: $sessionId) {
+				sessionEvents(sessionId: $sessionId) {
 					ready
-						event {
+						type
+						transcript {
 							id
 							orderKey
 							phase
@@ -187,9 +188,9 @@ func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *
 	})
 
 	select {
-	case <-timeline.subscribed:
+	case <-sessionEvents.subscribed:
 	case <-time.After(time.Second):
-		t.Fatal("sessionTranscript subscription was not opened")
+		t.Fatal("sessionEvents subscription was not opened")
 	}
 	readyMessage := readSocketMessage(t, conn)
 	readyPayload, ok := readyMessage["payload"].(map[string]any)
@@ -200,16 +201,20 @@ func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *
 	if !ok {
 		t.Fatalf("ready data = %#v", readyPayload["data"])
 	}
-	readyItem, ok := readyData["sessionTranscript"].(map[string]any)
-	if !ok || readyItem["ready"] != true || readyItem["event"] != nil {
-		t.Fatalf("sessionTranscript ready item = %#v", readyData["sessionTranscript"])
+	readyItem, ok := readyData["sessionEvents"].(map[string]any)
+	if !ok || readyItem["ready"] != true || readyItem["transcript"] != nil {
+		t.Fatalf("sessionEvents ready item = %#v", readyData["sessionEvents"])
 	}
 
-	timeline.ch <- timelineapp.DTO{
-		ID:         "event-1",
-		OrderKey:   "order-1",
-		Phase:      processdomain.CodexPhaseStandalone,
-		Content:    processdomain.CodexStatusContent{Code: "session.running", Level: "info"},
+	sessionEvents.ch <- sessioneventapp.DTO{
+		ID:   "event-1",
+		Type: string(processdomain.CodexEventStatus),
+		Transcript: &timelineapp.DTO{
+			ID:       "event-1",
+			OrderKey: "order-1",
+			Phase:    processdomain.CodexPhaseStandalone,
+			Content:  processdomain.CodexStatusContent{Code: "session.running", Level: "info"},
+		},
 		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
@@ -225,13 +230,13 @@ func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *
 	if !ok {
 		t.Fatalf("payload data = %#v", payload["data"])
 	}
-	streamItem, ok := data["sessionTranscript"].(map[string]any)
+	streamItem, ok := data["sessionEvents"].(map[string]any)
 	if !ok {
-		t.Fatalf("sessionTranscript payload = %#v", data["sessionTranscript"])
+		t.Fatalf("sessionEvents payload = %#v", data["sessionEvents"])
 	}
-	event, ok := streamItem["event"].(map[string]any)
+	event, ok := streamItem["transcript"].(map[string]any)
 	if !ok || streamItem["ready"] != false {
-		t.Fatalf("sessionTranscript stream item = %#v", streamItem)
+		t.Fatalf("sessionEvents stream item = %#v", streamItem)
 	}
 	content, _ := event["content"].(map[string]any)
 	if event["id"] != "event-1" || event["orderKey"] != "order-1" || event["phase"] != "STANDALONE" || content["code"] != "session.running" {
@@ -239,17 +244,11 @@ func TestGraphQLWebSocketSessionTranscriptSubscriptionReceivesPublishedEvent(t *
 	}
 }
 
-func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing.T) {
-	pending := make(chan questionapp.BatchDTO, 1)
-	questions := &fakeQuestionUseCase{pendingCh: pending}
-	sessions := &fakeGraphQLSessionUseCase{getSessionResult: sessionapp.DetailDTO{DTO: sessionapp.DTO{
-		ID:        "session-1",
-		ProjectID: "project-1",
-		Status:    sessiondomain.StatusWaitingUser,
-	}}}
-	events := &fakeEventUseCase{ch: make(chan eventapp.DTO)}
+func TestGraphQLWebSocketSessionEventsSubscriptionReceivesQuestion(t *testing.T) {
+	stream := make(chan sessioneventapp.DTO, 1)
+	sessionEvents := &fakeSessionEventUseCase{ch: stream}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{
-		Events: events, Questions: questions, Sessions: sessions,
+		SessionEvents: sessionEvents,
 	}))
 	server := httptest.NewServer(handler)
 	defer server.Close()
@@ -271,8 +270,9 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 		"type": "subscribe",
 		"payload": map[string]any{
 			"query": `subscription($sessionId: ID!) {
-				sessionStateUpdates(sessionId: $sessionId) {
+				sessionEvents(sessionId: $sessionId) {
 					ready
+					type
 					session { id status }
 					questionBatch {
 						id
@@ -295,15 +295,13 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 	readyMessage := readSocketMessage(t, conn)
 	readyPayload := readyMessage["payload"].(map[string]any)
 	readyData := readyPayload["data"].(map[string]any)
-	readyItem := readyData["sessionStateUpdates"].(map[string]any)
+	readyItem := readyData["sessionEvents"].(map[string]any)
 	if readyItem["ready"] != true {
 		t.Fatalf("session state ready item = %#v", readyItem)
 	}
 
-	pending <- questionapp.BatchDTO{
-		ID:        "batch-1",
-		SessionID: "session-1",
-		Status:    questiondomain.BatchPending,
+	batchDTO := questionapp.BatchDTO{
+		ID: "batch-1", SessionID: "session-1", Status: questiondomain.BatchPending,
 		Questions: []questiondomain.Question{
 			{
 				ID:      "question-1",
@@ -315,6 +313,11 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 				},
 			},
 		},
+	}
+	stream <- sessioneventapp.DTO{
+		ID: "batch-1", Type: sessioneventapp.TypeQuestion,
+		Session:       &sessionapp.DetailDTO{DTO: sessionapp.DTO{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusWaitingUser}},
+		QuestionBatch: &batchDTO,
 	}
 
 	message := readSocketMessage(t, conn)
@@ -329,9 +332,9 @@ func TestGraphQLWebSocketSessionStateUpdatesSubscriptionReceivesBatch(t *testing
 	if !ok {
 		t.Fatalf("payload data = %#v", payload["data"])
 	}
-	stateItem, ok := data["sessionStateUpdates"].(map[string]any)
+	stateItem, ok := data["sessionEvents"].(map[string]any)
 	if !ok {
-		t.Fatalf("sessionStateUpdates payload = %#v", data["sessionStateUpdates"])
+		t.Fatalf("sessionEvents payload = %#v", data["sessionEvents"])
 	}
 	batch, ok := stateItem["questionBatch"].(map[string]any)
 	if !ok || stateItem["ready"] != false {
@@ -815,38 +818,12 @@ func assertSocketMessageType(t *testing.T, conn *websocket.Conn, want string) {
 	}
 }
 
-type fakeEventUseCase struct {
-	ch         chan eventapp.DTO
+type fakeSessionEventUseCase struct {
+	ch         chan sessioneventapp.DTO
 	subscribed chan struct{}
 }
 
-type fakeTimelineUseCase struct {
-	ch         chan timelineapp.DTO
-	subscribed chan struct{}
-}
-
-type fakeGraphQLSessionUseCase struct {
-	sessionapp.UseCase
-	getSessionResult sessionapp.DetailDTO
-}
-
-func (u *fakeGraphQLSessionUseCase) GetSession(context.Context, sessiondomain.ID) (sessionapp.DetailDTO, error) {
-	return u.getSessionResult, nil
-}
-
-func (u *fakeEventUseCase) LiveSessionEvents(context.Context, eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
-	if u.subscribed == nil {
-		u.subscribed = make(chan struct{})
-	}
-	close(u.subscribed)
-	return u.ch, nil
-}
-
-func (u *fakeTimelineUseCase) ListSessionEvents(context.Context, timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {
-	return timelineapp.Page{}, nil
-}
-
-func (u *fakeTimelineUseCase) SessionEvents(context.Context, timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {
+func (u *fakeSessionEventUseCase) SessionEvents(context.Context, sessiondomain.ID) (<-chan sessioneventapp.DTO, error) {
 	if u.subscribed == nil {
 		u.subscribed = make(chan struct{})
 	}

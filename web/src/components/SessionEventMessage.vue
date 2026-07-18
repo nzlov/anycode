@@ -92,8 +92,6 @@ const groupLabel = computed(() => {
   switch (props.event.group?.kind) {
     case 'lifecycle':
       return '运行状态';
-    case 'todo':
-      return 'TODO 更新';
     case 'artifact':
       return '产物';
     default:

@@ -38,7 +38,8 @@ test('session event presentation moves usage out of the event list into session 
 
   assert.match(timelineSource, /\.\.\. on TranscriptMessageContent/);
   assert.match(timelineSource, /\.\.\. on TranscriptCommandContent/);
-  assert.match(timelineSource, /commands \{ command workdir \}/);
+  assert.match(timelineSource, /kind/);
+  assert.match(timelineSource, /commands \{ command workdir hasOutput output exitCode durationMs \}/);
   assert.doesNotMatch(timelineSource, /TranscriptCommandContent \{ command output/);
   assert.match(timelineSource, /\.\.\. on TranscriptToolContent/);
   assert.match(timelineSource, /usage \{ \$\{transcriptUsageFields\} \}/);
@@ -108,29 +109,38 @@ test('session detail buffers live events while loading the transcript snapshot',
   assert.match(composableSource, /sessionRequests/);
   assert.match(composableSource, /questionRequests/);
   assert.match(composableSource, /mergeSnapshotEvents/);
-  assert.match(composableSource, /subscribeSessionStateUpdates\(sessionId/);
+  assert.match(composableSource, /subscribeSessionEvents\(sessionId/);
   assert.equal(composableSource.includes('subscribeSessionCardChanged'), false);
   assert.equal(composableSource.includes('subscribePendingQuestionBatches'), false);
-  assert.match(timelineSource, /sessionTranscript\(sessionId: \$sessionId\) \{\s*ready\s*event/s);
-  assert.match(timelineSource, /data\.sessionTranscript\.ready/);
+  assert.doesNotMatch(timelineSource, /subscription SessionTranscript/);
   assert.match(
     sessionsSource,
-    /sessionStateUpdates\(sessionId: \$sessionId\) \{\s*ready\s*session/s,
+    /sessionEvents\(sessionId: \$sessionId\) \{\s*ready\s*id\s*type\s*occurredAt\s*transcript/s,
   );
-  assert.match(composableSource, /onSubscribed: transcriptReady\.resolve/);
-  assert.match(composableSource, /onSubscribed: stateReady\.resolve/);
-  assert.equal(
-    composableSource.includes('ready: Promise.all([transcriptReady.promise, stateReady.promise])'),
-    false,
-  );
-  assert.match(composableSource, /waitWithTimeout\(registration\.transcriptReady/);
-  assert.match(composableSource, /waitWithTimeout\(registration\.stateReady/);
-  assert.match(composableSource, /registration\.transcriptReady\.then/);
-  assert.match(composableSource, /registration\.stateReady\.then/);
+  assert.match(composableSource, /onSubscribed: ready\.resolve/);
+  assert.match(composableSource, /waitWithTimeout\(\s*registration\.ready/s);
+  assert.match(composableSource, /registration\.ready\.then/);
   assert.match(
     pageSource,
     /await startLiveUpdates\(\);\s*if \(!mounted\) return;\s*await Promise\.all/s,
   );
+});
+
+test('session detail projects application todo state through the unified stream', () => {
+  const sessionsSource = readFileSync(
+    new URL('../src/services/sessions.ts', import.meta.url),
+    'utf8',
+  );
+  const detailFieldsStart = sessionsSource.indexOf('const sessionDetailFields');
+  const detailFieldsEnd = sessionsSource.indexOf('const sessionFields', detailFieldsStart);
+  const detailFields = sessionsSource.slice(detailFieldsStart, detailFieldsEnd);
+  const normalizerStart = sessionsSource.indexOf('function normalizeSessionDetail');
+  const normalizerEnd = sessionsSource.indexOf('function normalizePromptAppend', normalizerStart);
+  const normalizer = sessionsSource.slice(normalizerStart, normalizerEnd);
+
+  assert.match(detailFields, /todoList \{\s*completed\s*total\s*items \{\s*text\s*completed/s);
+  assert.match(normalizer, /todoList: normalizeTodoList\(session\.todoList\)/);
+  assert.doesNotMatch(normalizer, /todoList: null,/);
 });
 
 test('session detail removes the old pending-question watcher', () => {
@@ -189,7 +199,7 @@ test('session detail replaces the prompt composer with the shared inline approva
   assert.doesNotMatch(approvalPanelSource, /SessionEventMessage|DiffViewer|模型输出|Diff/);
 });
 
-test('subscription schema exposes only session-scoped transcript and unified state streams', () => {
+test('subscription schema exposes one unified session event stream', () => {
   const schemaSource = readFileSync(
     new URL('../../internal/interfaces/graphql/graph/schema.graphqls', import.meta.url),
     'utf8',
@@ -199,41 +209,40 @@ test('subscription schema exposes only session-scoped transcript and unified sta
     'utf8',
   );
 
-  assert.match(schemaSource, /sessionTranscript\(sessionId: ID!\): TranscriptStreamItem!/);
+  assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): SessionEventStreamItem!/);
+  assert.equal(schemaSource.includes('sessionStateUpdates'), false);
+  assert.equal(schemaSource.includes('TranscriptStreamItem'), false);
   assert.equal(schemaSource.includes('sessionStatusChanged'), false);
   assert.equal(schemaSource.includes('input SessionTranscriptInput'), false);
   assert.match(schemaSource, /input ListTranscriptEventsInput/);
   assert.match(schemaSource, /type TranscriptEventGroup/);
   assert.match(schemaSource, /members: \[TranscriptEvent!\]!/);
   assert.match(timelineSource, /group \{/);
-  assert.match(timelineSource, /subscription SessionTranscript\(\$sessionId: ID!\)/);
+  assert.doesNotMatch(timelineSource, /subscription SessionTranscript/);
   assert.equal(timelineSource.includes("codexType === 'process.exit'"), false);
 });
 
-test('session detail uses exactly two logical subscriptions', () => {
+test('session detail uses exactly one logical subscription', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
 
   const calls = composableSource.match(/= subscribe[A-Z][A-Za-z]+\(/g) ?? [];
-  assert.deepEqual(calls.sort(), [
-    '= subscribeSessionStateUpdates(',
-    '= subscribeSessionTranscript(',
-  ]);
+  assert.deepEqual(calls, ['= subscribeSessionEvents(']);
 });
 
-test('late session state readiness does not reload the Codex transcript', () => {
+test('late unified readiness reloads one coherent snapshot', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
-  const stateLateStart = composableSource.indexOf('registration.stateReady.then');
-  const stateLateEnd = composableSource.indexOf('\n      });', stateLateStart);
-  const stateLateHandler = composableSource.slice(stateLateStart, stateLateEnd);
+  const lateStart = composableSource.indexOf('registration.ready.then');
+  const lateEnd = composableSource.indexOf('\n      });', lateStart);
+  const lateHandler = composableSource.slice(lateStart, lateEnd);
 
-  assert.match(stateLateHandler, /loadSessionState\(\)/);
-  assert.doesNotMatch(stateLateHandler, /loadSessionDetail\(\)/);
+  assert.match(lateHandler, /loadSessionDetail\(\)/);
+  assert.match(lateHandler, /loadPendingQuestions\(\)/);
 });
 
 test('session detail never drops distinct transcript events by content or timestamp', () => {
@@ -324,7 +333,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
 });
 
-test('exec events keep the first command in the header and expose additional commands', () => {
+test('exec and shell events share a type-only header and group command input and output', () => {
   const componentSource = readFileSync(
     new URL('../src/components/SessionCommandEvent.vue', import.meta.url),
     'utf8',
@@ -334,18 +343,26 @@ test('exec events keep the first command in the header and expose additional com
     'utf8',
   );
 
-  assert.match(componentSource, /content\.value\.commands\.slice\(1\)/);
-  assert.match(componentSource, /v-for="\(command, index\) in additionalCommands"/);
-  assert.match(componentSource, /命令 \{\{ index \+ 2 \}\}/);
+  assert.match(componentSource, /content\.value\.kind === 'exec' \? 'Exec' : 'Shell'/);
+  assert.match(componentSource, /class="command-event__title">\{\{ title \}\}<\/span>/);
+  assert.doesNotMatch(componentSource, /firstCommand\?\.command/);
+  assert.match(componentSource, /class="command-event__invocation"/);
+  assert.match(componentSource, /class="command-event__input"/);
+  assert.match(componentSource, /class="command-event__label">输入<\/div>/);
+  assert.match(componentSource, /v-for="\(command, index\) in content\.commands"/);
+  assert.match(componentSource, /命令 \{\{ index \+ 1 \}\}/);
   assert.match(componentSource, /<code>\{\{ command\.command \}\}<\/code>/);
-  assert.match(componentSource, /`\+\$\{additionalCommandCount\} 条`/);
+  assert.match(componentSource, /v-if="command\.hasOutput"/);
+  assert.match(componentSource, /<StaticAnsiOutput :text="command\.output" appearance="surface"/);
   assert.match(componentSource, /class="command-event__workdir">\{\{ command\.workdir \}\}/);
-  assert.match(componentSource, /<StaticAnsiOutput :text="content\.output" appearance="surface"/);
+  assert.doesNotMatch(componentSource, /content\.output|unassignedOutput/);
   assert.match(componentSource, /:disabled="!canExpand"/);
-  assert.match(componentSource, /firstCommand\.value\?\.workdir/);
+  assert.match(componentSource, /content\.value\.commands\.length/);
   assert.match(componentSource, /class="command-event__title"/);
   assert.doesNotMatch(componentSource, /\.command-event__header span/);
   assert.match(componentSource, /\.command-event__header:not\(:disabled\):hover/);
+  assert.match(componentSource, /\.command-event__input,[\s\S]*?min-width:\s*0/);
+  assert.match(componentSource, /\.command-event__command\s*\{[^}]*max-width:\s*100%/s);
   assert.doesNotMatch(componentSource, /SessionTerminalOutput/);
   assert.match(ansiSource, /Anser\.ansiToJson/);
   assert.match(ansiSource, /user-select:\s*text/);
@@ -447,7 +464,7 @@ test('live usage is buffered while a transcript snapshot is loading', () => {
 
   assert.match(source, /let bufferedLiveUsage: TranscriptTokenUsage \| null = null/);
   assert.match(source, /tokenUsage\.value = bufferedLiveUsage \?\? eventResult\.value\.usage/);
-  assert.match(source, /if \(bufferingLiveEvents\) \{\s*bufferedLiveUsage = usage;/s);
+  assert.match(source, /if \(bufferingLiveEvents\) \{\s*bufferedLiveUsage = update\.usage;/s);
 });
 
 test('older timeline pages restore a stable visible event anchor', () => {

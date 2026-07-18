@@ -80,7 +80,7 @@ test('prependOlderEvents restores historical members of an already live group', 
 test('mergeSnapshotEvents preserves snapshot and buffered group members', () => {
   const snapshot = {
     ...older,
-    id: 'group:todo:process-1',
+    id: 'group:lifecycle:process-1',
     group: { count: 1, members: [older] },
   };
   const buffered = {

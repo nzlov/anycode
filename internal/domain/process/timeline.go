@@ -24,6 +24,12 @@ type CodexEventContent interface {
 	isCodexEventContent()
 }
 
+func (CodexTranscriptSource) isCodexEventContent() {}
+
+func (PlanUpdate) isCodexEventContent() {}
+
+func (ExitResult) isCodexEventContent() {}
+
 type CodexImage struct {
 	Source     string
 	Detail     string
@@ -52,14 +58,24 @@ type CodexReasoningContent struct {
 func (CodexReasoningContent) isCodexEventContent() {}
 
 type CodexCommandInvocation struct {
-	Command string
-	Workdir string
-}
-
-type CodexCommandContent struct {
-	Commands   []CodexCommandInvocation
+	Command    string
+	Workdir    string
+	HasOutput  bool
 	Output     string
 	ExitCode   *int
+	DurationMS *int
+}
+
+type CodexCommandKind string
+
+const (
+	CodexCommandExec  CodexCommandKind = "exec"
+	CodexCommandShell CodexCommandKind = "shell"
+)
+
+type CodexCommandContent struct {
+	Kind       CodexCommandKind
+	Commands   []CodexCommandInvocation
 	DurationMS *int
 }
 

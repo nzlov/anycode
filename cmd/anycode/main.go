@@ -21,6 +21,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
@@ -215,18 +216,20 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactScanner(artifacts), sessionapp.WithArtifactCleaner(artifacts), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
+	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService, questionService)
 	return graph.UseCases{
-		Projects:    projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
-		Sessions:    sessionService,
-		Events:      eventService,
-		Timeline:    timelineService,
-		Attachments: attachmentapp.New(attachments, files),
-		Artifacts:   artifacts,
-		Diff:        diffService,
-		Workflows:   workflowService,
-		Questions:   questionService,
-		Settings:    settingapp.New(store.Settings()),
-		CodexModels: capabilities.Models,
+		Projects:      projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
+		Sessions:      sessionService,
+		Events:        eventService,
+		Timeline:      timelineService,
+		SessionEvents: sessionEventService,
+		Attachments:   attachmentapp.New(attachments, files),
+		Artifacts:     artifacts,
+		Diff:          diffService,
+		Workflows:     workflowService,
+		Questions:     questionService,
+		Settings:      settingapp.New(store.Settings()),
+		CodexModels:   capabilities.Models,
 	}, nil
 }
 

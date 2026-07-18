@@ -413,6 +413,7 @@ type SessionDetail struct {
 	WorktreeBranch   string               `json:"worktreeBranch"`
 	CurrentNodeTitle string               `json:"currentNodeTitle"`
 	PendingApproval  *PendingApproval     `json:"pendingApproval,omitempty"`
+	TodoList         *TodoList            `json:"todoList,omitempty"`
 	WorktreePath     string               `json:"worktreePath"`
 	WorktreeCleanup  *WorktreeCleanup     `json:"worktreeCleanup"`
 	CodexSessionID   string               `json:"codexSessionId"`
@@ -443,6 +444,17 @@ type SessionDiffInput struct {
 	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
+type SessionEventStreamItem struct {
+	Ready         bool                  `json:"ready"`
+	ID            *string               `json:"id,omitempty"`
+	Type          string                `json:"type"`
+	OccurredAt    *time.Time            `json:"occurredAt,omitempty"`
+	Transcript    *TranscriptEvent      `json:"transcript,omitempty"`
+	Usage         *TranscriptTokenUsage `json:"usage,omitempty"`
+	Session       *SessionDetail        `json:"session,omitempty"`
+	QuestionBatch *QuestionBatch        `json:"questionBatch,omitempty"`
+}
+
 type SessionFile struct {
 	ID            string    `json:"id"`
 	SessionID     string    `json:"sessionId"`
@@ -462,12 +474,6 @@ type SessionFile struct {
 	PreviewURL    *string   `json:"previewUrl,omitempty"`
 	DownloadURL   string    `json:"downloadUrl"`
 	CreatedAt     time.Time `json:"createdAt"`
-}
-
-type SessionStateStreamItem struct {
-	Ready         bool           `json:"ready"`
-	Session       *SessionDetail `json:"session,omitempty"`
-	QuestionBatch *QuestionBatch `json:"questionBatch,omitempty"`
 }
 
 type SetDefaultWorkflowInput struct {
@@ -507,17 +513,20 @@ type TodoList struct {
 }
 
 type TranscriptCommandContent struct {
+	Kind       string                         `json:"kind"`
 	Commands   []*TranscriptCommandInvocation `json:"commands"`
-	Output     string                         `json:"output"`
-	ExitCode   *int                           `json:"exitCode,omitempty"`
 	DurationMs *int                           `json:"durationMs,omitempty"`
 }
 
 func (TranscriptCommandContent) IsTranscriptContent() {}
 
 type TranscriptCommandInvocation struct {
-	Command string `json:"command"`
-	Workdir string `json:"workdir"`
+	Command    string `json:"command"`
+	Workdir    string `json:"workdir"`
+	HasOutput  bool   `json:"hasOutput"`
+	Output     string `json:"output"`
+	ExitCode   *int   `json:"exitCode,omitempty"`
+	DurationMs *int   `json:"durationMs,omitempty"`
 }
 
 type TranscriptEvent struct {
@@ -586,12 +595,6 @@ type TranscriptStatusContent struct {
 }
 
 func (TranscriptStatusContent) IsTranscriptContent() {}
-
-type TranscriptStreamItem struct {
-	Ready bool                  `json:"ready"`
-	Event *TranscriptEvent      `json:"event,omitempty"`
-	Usage *TranscriptTokenUsage `json:"usage,omitempty"`
-}
 
 type TranscriptStructuredText struct {
 	Format TranscriptTextFormat `json:"format"`
