@@ -10,6 +10,7 @@ import (
 
 type DTO struct {
 	ID            eventdomain.ID
+	Type          processdomain.CodexEventType
 	OrderKey      string
 	CorrelationID string
 	Phase         processdomain.CodexPhase

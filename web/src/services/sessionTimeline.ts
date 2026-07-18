@@ -1,8 +1,4 @@
-import {
-  graphqlFetch,
-  graphqlSubscribe,
-  type GraphQLSubscriptionClose,
-} from '@/services/graphqlClient';
+import { graphqlFetch } from '@/services/graphqlClient';
 import { latestTranscriptPageInput } from '@/services/sessionEventPaging';
 import type { PageInfo } from '@/services/sessions';
 
@@ -36,15 +32,18 @@ export interface TranscriptReasoningContent {
 
 export interface TranscriptCommandContent {
   __typename: 'TranscriptCommandContent';
+  kind: 'exec' | 'shell';
   commands: TranscriptCommandInvocation[];
-  output: string;
-  exitCode: number | null;
   durationMs: number | null;
 }
 
 export interface TranscriptCommandInvocation {
   command: string;
   workdir: string;
+  hasOutput: boolean;
+  output: string;
+  exitCode: number | null;
+  durationMs: number | null;
 }
 
 export interface TranscriptToolContent {
@@ -133,15 +132,9 @@ export interface TranscriptUsageAttribution {
   usage: TranscriptTokenUsage;
 }
 
-interface GraphQLTranscriptEvent extends Omit<TranscriptEvent, 'phase' | 'content'> {
+export interface GraphQLTranscriptEvent extends Omit<TranscriptEvent, 'phase' | 'content'> {
   phase: string;
   content: TranscriptContent;
-}
-
-interface GraphQLTranscriptStreamItem {
-  ready: boolean;
-  event?: GraphQLTranscriptEvent | null;
-  usage?: TranscriptTokenUsage | null;
 }
 
 const transcriptContentFields = `
@@ -154,9 +147,8 @@ const transcriptContentFields = `
   }
   ... on TranscriptReasoningContent { text }
   ... on TranscriptCommandContent {
-    commands { command workdir }
-    output
-    exitCode
+    kind
+    commands { command workdir hasOutput output exitCode durationMs }
     durationMs
   }
   ... on TranscriptToolContent {
@@ -182,7 +174,7 @@ const transcriptEventBaseFields = `
   content { ${transcriptContentFields} }
 `;
 
-const transcriptEventFields = `
+export const transcriptEventFields = `
   ${transcriptEventBaseFields}
   group {
     kind
@@ -192,7 +184,7 @@ const transcriptEventFields = `
   }
 `;
 
-const transcriptUsageFields = `
+export const transcriptUsageFields = `
   inputTokens
   cachedInputTokens
   outputTokens
@@ -247,49 +239,7 @@ export async function getSessionTranscriptPage(
   };
 }
 
-export function subscribeSessionTranscript(
-  sessionId: string,
-  handlers: {
-    onData: (event: TranscriptEvent) => void;
-    onUsage?: (usage: TranscriptTokenUsage) => void;
-    onError?: (error: Error) => void;
-    onClose?: (close: GraphQLSubscriptionClose) => void;
-    onSubscribed?: () => void;
-  },
-) {
-  const options = {
-    query: `
-      subscription SessionTranscript($sessionId: ID!) {
-        sessionTranscript(sessionId: $sessionId) {
-          ready
-          event { ${transcriptEventFields} }
-          usage { ${transcriptUsageFields} }
-        }
-      }
-    `,
-    variables: { sessionId },
-    onData: (data: { sessionTranscript: GraphQLTranscriptStreamItem }) => {
-      if (data.sessionTranscript.ready) {
-        handlers.onSubscribed?.();
-        return;
-      }
-      if (data.sessionTranscript.event) {
-        handlers.onData(normalizeTranscriptEvent(data.sessionTranscript.event));
-      }
-      if (data.sessionTranscript.usage) {
-        handlers.onUsage?.(data.sessionTranscript.usage);
-      }
-    },
-  };
-  if (handlers.onError) Object.assign(options, { onError: handlers.onError });
-  if (handlers.onClose) Object.assign(options, { onClose: handlers.onClose });
-  return graphqlSubscribe<
-    { sessionTranscript: GraphQLTranscriptStreamItem },
-    { sessionId: string }
-  >(options);
-}
-
-function normalizeTranscriptEvent(event: GraphQLTranscriptEvent): TranscriptEvent {
+export function normalizeTranscriptEvent(event: GraphQLTranscriptEvent): TranscriptEvent {
   return {
     ...event,
     correlationId: event.correlationId ?? '',

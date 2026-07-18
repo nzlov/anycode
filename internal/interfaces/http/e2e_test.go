@@ -152,10 +152,10 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 		t.Fatalf("codex Start input = %#v", codex.startInput)
 	}
 	codex.events <- processdomain.CodexEvent{
-		Type:         "thread.started",
-		RealtimeOnly: true,
-		Payload:      map[string]any{"thread_id": "codex-smoke-session"},
-		Transcript: &processdomain.CodexTranscriptSource{
+		EventID:        "transcript:codex-smoke-session",
+		Type:           processdomain.CodexEventTranscriptBound,
+		CodexSessionID: "codex-smoke-session",
+		Content: processdomain.CodexTranscriptSource{
 			CodexSessionID: "codex-smoke-session",
 			RelativePath:   "test/codex-smoke-session.jsonl",
 			BoundAt:        time.Now().UTC(),
@@ -939,7 +939,10 @@ func (p *retryCodexProcess) Resume(_ context.Context, input processdomain.CodexR
 		return processdomain.CodexHandle{}, errors.New("resume unavailable")
 	}
 	p.events = make(chan processdomain.CodexEvent, 1)
-	p.events <- processdomain.CodexEvent{Type: "task.started", EventID: "answer-delivered", CreatedAt: time.Now().UTC()}
+	p.events <- processdomain.CodexEvent{
+		Type: processdomain.CodexEventStatus, EventID: "answer-delivered",
+		Content: processdomain.CodexStatusContent{Code: "task.started"}, CreatedAt: time.Now().UTC(),
+	}
 	close(p.events)
 	return processdomain.CodexHandle{ProcessRunID: input.ProcessRunID, PID: 4321, CodexSessionID: input.CodexSessionID}, nil
 }

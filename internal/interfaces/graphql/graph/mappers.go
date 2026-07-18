@@ -9,6 +9,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
@@ -221,6 +222,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		WorktreeBranch:   dto.WorktreeBranch,
 		CurrentNodeTitle: dto.CurrentNodeTitle,
 		PendingApproval:  mapPendingApproval(dto.PendingApproval),
+		TodoList:         mapTodoList(dto.TodoList),
 		WorktreePath:     dto.WorktreePath,
 		WorktreeCleanup:  mapWorktreeCleanup(dto.WorktreeCleanup),
 		CodexSessionID:   dto.CodexSessionID,
@@ -362,11 +364,28 @@ func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 	return event
 }
 
-func mapTranscriptStreamItem(dto timelineapp.DTO) *model.TranscriptStreamItem {
-	if dto.Usage != nil {
-		return &model.TranscriptStreamItem{Usage: mapTranscriptUsage(dto.Usage)}
+func mapSessionEventStreamItem(dto sessioneventapp.DTO) *model.SessionEventStreamItem {
+	item := &model.SessionEventStreamItem{
+		ID:   optionalString(dto.ID),
+		Type: dto.Type,
 	}
-	return &model.TranscriptStreamItem{Event: mapTranscriptEvent(dto)}
+	if dto.OccurredAt != "" {
+		occurredAt, err := time.Parse(time.RFC3339Nano, dto.OccurredAt)
+		if err == nil {
+			item.OccurredAt = &occurredAt
+		}
+	}
+	if dto.Transcript != nil {
+		item.Transcript = mapTranscriptEvent(*dto.Transcript)
+	}
+	item.Usage = mapTranscriptUsage(dto.Usage)
+	if dto.Session != nil {
+		item.Session = mapSessionDetail(*dto.Session)
+	}
+	if dto.QuestionBatch != nil {
+		item.QuestionBatch = mapQuestionBatch(*dto.QuestionBatch)
+	}
+	return item
 }
 
 func mapTranscriptContent(content processdomain.CodexEventContent) model.TranscriptContent {
@@ -381,11 +400,18 @@ func mapTranscriptContent(content processdomain.CodexEventContent) model.Transcr
 	case processdomain.CodexReasoningContent:
 		return &model.TranscriptReasoningContent{Text: value.Text}
 	case processdomain.CodexCommandContent:
+		kind := value.Kind
+		if kind == "" {
+			kind = processdomain.CodexCommandShell
+		}
 		commands := make([]*model.TranscriptCommandInvocation, 0, len(value.Commands))
 		for _, command := range value.Commands {
-			commands = append(commands, &model.TranscriptCommandInvocation{Command: command.Command, Workdir: command.Workdir})
+			commands = append(commands, &model.TranscriptCommandInvocation{
+				Command: command.Command, Workdir: command.Workdir, HasOutput: command.HasOutput,
+				Output: command.Output, ExitCode: command.ExitCode, DurationMs: command.DurationMS,
+			})
 		}
-		return &model.TranscriptCommandContent{Commands: commands, Output: value.Output, ExitCode: value.ExitCode, DurationMs: value.DurationMS}
+		return &model.TranscriptCommandContent{Kind: string(kind), Commands: commands, DurationMs: value.DurationMS}
 	case processdomain.CodexToolContent:
 		return &model.TranscriptToolContent{
 			QualifiedName: value.QualifiedName,

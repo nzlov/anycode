@@ -53,8 +53,7 @@ type Mutation {
 }
 
 type Subscription {
-  sessionTranscript(sessionId: ID!): TranscriptStreamItem!
-  sessionStateUpdates(sessionId: ID!): SessionStateStreamItem!
+  sessionEvents(sessionId: ID!): SessionEventStreamItem!
   sessionCardChanged(projectId: ID): SessionCard!
   sessionCardUpdates(projectId: ID): SessionCardStreamItem!
 }
@@ -210,6 +209,7 @@ type SessionDetail {
   worktreeBranch: String!
   currentNodeTitle: String!
   pendingApproval: PendingApproval
+  todoList: TodoList
   worktreePath: String!
   worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
@@ -398,15 +398,18 @@ type TranscriptReasoningContent {
 }
 
 type TranscriptCommandContent {
+  kind: String!
   commands: [TranscriptCommandInvocation!]!
-  output: String!
-  exitCode: Int
   durationMs: Int
 }
 
 type TranscriptCommandInvocation {
   command: String!
   workdir: String!
+  hasOutput: Boolean!
+  output: String!
+  exitCode: Int
+  durationMs: Int
 }
 
 type TranscriptToolContent {
@@ -455,14 +458,13 @@ type TranscriptTokenUsage {
   compactionCount: Int!
 }
 
-type TranscriptStreamItem {
+type SessionEventStreamItem {
   ready: Boolean!
-  event: TranscriptEvent
+  id: ID
+  type: String!
+  occurredAt: Time
+  transcript: TranscriptEvent
   usage: TranscriptTokenUsage
-}
-
-type SessionStateStreamItem {
-  ready: Boolean!
   session: SessionDetail
   questionBatch: QuestionBatch
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
-	eventapp "github.com/nzlov/anycode/internal/application/event"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
@@ -641,105 +640,30 @@ func (r *queryResolver) ResolveSessionArtifacts(ctx context.Context, input model
 	return resolved, nil
 }
 
-// SessionTranscript is the resolver for the sessionTranscript field.
-func (r *subscriptionResolver) SessionTranscript(ctx context.Context, sessionID string) (<-chan *model.TranscriptStreamItem, error) {
-	if r.UseCases.Timeline == nil {
-		return nil, missingUseCase("timeline")
+// SessionEvents is the resolver for the sessionEvents field.
+func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionEventStreamItem, error) {
+	if r.UseCases.SessionEvents == nil {
+		return nil, missingUseCase("session events")
 	}
-	eventSessionID := eventdomain.SessionID(sessionID)
-	source, err := r.UseCases.Timeline.SessionEvents(ctx, timelineapp.SessionEventsInput{
-		Scope: eventdomain.Scope{SessionID: &eventSessionID},
-	})
+	source, err := r.UseCases.SessionEvents.SessionEvents(ctx, sessiondomain.ID(sessionID))
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.TranscriptStreamItem)
+	out := make(chan *model.SessionEventStreamItem)
 	go func() {
 		defer close(out)
-		select {
-		case <-ctx.Done():
+		if !sendSessionEventItem(ctx, out, &model.SessionEventStreamItem{Ready: true, Type: "ready"}) {
 			return
-		case out <- &model.TranscriptStreamItem{Ready: true}:
 		}
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case eventDTO, ok := <-source:
+			case event, ok := <-source:
 				if !ok {
 					return
 				}
-				select {
-				case <-ctx.Done():
-					return
-				case out <- mapTranscriptStreamItem(eventDTO):
-				}
-			}
-		}
-	}()
-	return out, nil
-}
-
-// SessionStateUpdates is the resolver for the sessionStateUpdates field.
-func (r *subscriptionResolver) SessionStateUpdates(ctx context.Context, sessionID string) (<-chan *model.SessionStateStreamItem, error) {
-	if r.UseCases.Events == nil {
-		return nil, missingUseCase("events")
-	}
-	if r.UseCases.Sessions == nil {
-		return nil, missingUseCase("sessions")
-	}
-	if r.UseCases.Questions == nil {
-		return nil, missingUseCase("questions")
-	}
-	streamCtx, cancel := context.WithCancel(ctx)
-	eventSessionID := eventdomain.SessionID(sessionID)
-	events, err := r.UseCases.Events.LiveSessionEvents(streamCtx, eventapp.LiveSessionEventsInput{
-		Scope: eventdomain.Scope{SessionID: &eventSessionID},
-	})
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	questions, err := r.UseCases.Questions.QuestionBatchUpdates(streamCtx, questiondomain.SessionID(sessionID))
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	out := make(chan *model.SessionStateStreamItem)
-	go func() {
-		defer close(out)
-		defer cancel()
-		if !sendSessionStateItem(streamCtx, out, &model.SessionStateStreamItem{Ready: true}) {
-			return
-		}
-		for events != nil || questions != nil {
-			select {
-			case <-streamCtx.Done():
-				return
-			case eventDTO, ok := <-events:
-				if !ok {
-					return
-				}
-				if !sessionCardChangeEvent(eventDTO, nil) {
-					continue
-				}
-				detail, err := r.UseCases.Sessions.GetSession(streamCtx, sessiondomain.ID(sessionID))
-				if err != nil {
-					continue
-				}
-				if !sendSessionStateItem(streamCtx, out, &model.SessionStateStreamItem{Session: mapSessionDetail(detail)}) {
-					return
-				}
-			case batch, ok := <-questions:
-				if !ok {
-					questions = nil
-					continue
-				}
-				item := &model.SessionStateStreamItem{QuestionBatch: mapQuestionBatch(batch)}
-				if detail, err := r.UseCases.Sessions.GetSession(streamCtx, sessiondomain.ID(sessionID)); err == nil {
-					item.Session = mapSessionDetail(detail)
-				}
-				if !sendSessionStateItem(streamCtx, out, item) {
+				if !sendSessionEventItem(ctx, out, mapSessionEventStreamItem(event)) {
 					return
 				}
 			}

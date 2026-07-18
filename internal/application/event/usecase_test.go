@@ -3,13 +3,64 @@ package event
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	domain "github.com/nzlov/anycode/internal/domain/event"
+	processdomain "github.com/nzlov/anycode/internal/domain/process"
 )
+
+func TestLiveCodexEventsRoutesTypedEventsBySession(t *testing.T) {
+	service := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := service.LiveCodexEvents(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.PublishCodexEvent(context.Background(), processdomain.CodexEvent{
+		EventID: "other", Type: processdomain.CodexEventCommand, SessionID: "session-2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-stream:
+		t.Fatalf("received another session's Codex event: %#v", event)
+	default:
+	}
+	want := processdomain.CodexEvent{
+		EventID: "command-1", Type: processdomain.CodexEventCommand, SessionID: "session-1",
+		CorrelationID: "call-1", Phase: processdomain.CodexPhaseStarted,
+		Content: processdomain.CodexCommandContent{Kind: processdomain.CodexCommandExec},
+	}
+	if err := service.PublishCodexEvent(context.Background(), want); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-stream; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Codex event = %#v, want %#v", got, want)
+	}
+}
+
+func TestLiveCodexEventsClosesWhenSubscriberCancels(t *testing.T) {
+	service := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := service.LiveCodexEvents(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case _, ok := <-stream:
+		if ok {
+			t.Fatal("Codex stream emitted after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Codex stream stayed open after cancellation")
+	}
+}
 
 func TestLiveSessionEventsStreamsOnlyPublishedEvents(t *testing.T) {
 	sessionID := domain.SessionID("session-1")

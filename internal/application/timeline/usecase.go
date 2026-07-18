@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nzlov/anycode/internal/application/event"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -27,7 +26,7 @@ type ListSessionEventsInput struct {
 }
 
 type SessionEventsInput struct {
-	Scope eventdomain.Scope
+	SessionID sessiondomain.ID
 }
 
 type SessionRepository interface {
@@ -47,7 +46,7 @@ type CodexTranscriptRunIndex interface {
 }
 
 type LiveEventSource interface {
-	LiveSessionEvents(ctx context.Context, input event.LiveSessionEventsInput) (<-chan event.DTO, error)
+	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
 }
 
 const (
@@ -131,13 +130,17 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	if s.live == nil {
 		return nil, errors.New("live event source is required")
 	}
-	sourceGroups, err := s.codexSourceGroups(ctx, input.Scope)
+	if input.SessionID == "" {
+		return nil, errors.New("session id is required")
+	}
+	eventSessionID := eventdomain.SessionID(input.SessionID)
+	sourceGroups, err := s.codexSourceGroups(ctx, eventdomain.Scope{SessionID: &eventSessionID})
 	if err != nil {
 		return nil, err
 	}
 	out := make(chan DTO, 16)
 	liveCtx, cancelLive := context.WithCancel(ctx)
-	live, err := s.live.LiveSessionEvents(liveCtx, event.LiveSessionEventsInput{Scope: input.Scope})
+	live, err := s.live.LiveCodexEvents(liveCtx, processdomain.SessionID(input.SessionID))
 	if err != nil {
 		cancelLive()
 		close(out)
@@ -146,40 +149,20 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	go func() {
 		defer close(out)
 		defer cancelLive()
-		seen := map[eventdomain.ID]struct{}{}
-		groups := map[eventdomain.ID]DTO{}
 		for {
 			select {
-			case eventDTO, ok := <-live:
+			case codexEvent, ok := <-live:
 				if !ok {
 					return
 				}
-				if _, ok := seen[eventdomain.ID(eventDTO.ID)]; ok {
-					continue
+				sourceGroup := sourceGroups[codexEvent.CodexSessionID]
+				if sourceGroup == 0 && codexEvent.CodexSessionID != "" {
+					sourceGroup = len(sourceGroups) + 1
+					sourceGroups[codexEvent.CodexSessionID] = sourceGroup
 				}
-				seen[eventdomain.ID(eventDTO.ID)] = struct{}{}
-				sourceGroup := 0
-				if eventDTO.Type == "process.codex_event" {
-					codexSessionID, _ := eventDTO.Payload["codexSessionId"].(string)
-					sourceGroup = sourceGroups[codexSessionID]
-					if sourceGroup == 0 && codexSessionID != "" {
-						sourceGroup = len(sourceGroups) + 1
-						sourceGroups[codexSessionID] = sourceGroup
-					}
-				}
-				item, ok := fromEventDTO(eventDTO, sourceGroup)
+				item, ok := fromCodexEvent(codexEvent, sourceGroup)
 				if !ok {
 					continue
-				}
-				if groupID, kind, label, ok := routineGroup(item); ok {
-					group, found := groups[groupID]
-					if !found {
-						group = newTimelineGroup(groupID, kind, label, item)
-					} else {
-						group.Group.Members = append(group.Group.Members, item)
-					}
-					groups[groupID] = group
-					item = group
 				}
 				select {
 				case out <- item:
@@ -254,7 +237,7 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 			if eventTime.IsZero() {
 				eventTime = current.UpdatedAt
 			}
-			if event.Type == "context.compacted" {
+			if status, ok := event.Content.(processdomain.CodexStatusContent); ok && status.Code == "context.compacted" {
 				compactionCount++
 				compactions[codexSessionID] = append(compactions[codexSessionID], eventTime)
 			}
@@ -269,6 +252,9 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 				usageSamples[codexSessionID] = append(usageSamples[codexSessionID], usageSample{at: eventTime, usage: usage})
 				continue
 			}
+			if !visibleCodexTimelineEvent(event) {
+				continue
+			}
 			eventID := event.EventID
 			if eventID == "" {
 				eventID = fmt.Sprintf("line-%d", index)
@@ -281,6 +267,7 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 			ordered = append(ordered, orderedTranscriptEvent{
 				event: DTO{
 					ID:            eventdomain.ID(canonicalID),
+					Type:          event.Type,
 					OrderKey:      timelineOrderKey(createdAt, sessionIndex+1, event.SourceOffset, event.SourceIndex, canonicalID),
 					CorrelationID: canonicalCorrelationID(codexSessionID, event.CorrelationID),
 					Phase:         normalizedPhase(event.Phase),
@@ -532,42 +519,38 @@ func normalizeLimit(limit int) int {
 	return limit
 }
 
-func fromEventDTO(dto event.DTO, sourceGroup int) (DTO, bool) {
-	createdAt, _ := time.Parse(time.RFC3339Nano, dto.CreatedAt)
-	if dto.Type == "process.codex_event" {
-		content, ok := dto.Payload["codexContent"].(processdomain.CodexEventContent)
-		if !ok || content == nil {
-			return DTO{}, false
-		}
-		if usage, ok := content.(processdomain.CodexUsageContent); ok {
-			return DTO{Usage: usageDTO(usage)}, true
-		}
-		codexSessionID, _ := dto.Payload["codexSessionId"].(string)
-		correlationID, _ := dto.Payload["codexCorrelationId"].(string)
-		phase, _ := dto.Payload["codexPhase"].(string)
-		sourceOffset, _ := dto.Payload["codexSourceOffset"].(int64)
-		sourceIndex, _ := dto.Payload["codexSourceIndex"].(int)
-		return DTO{
-			ID:            dto.ID,
-			OrderKey:      timelineOrderKey(createdAt, sourceGroup, sourceOffset, sourceIndex, string(dto.ID)),
-			CorrelationID: canonicalCorrelationID(codexSessionID, correlationID),
-			Phase:         normalizedPhase(processdomain.CodexPhase(phase)),
-			Content:       content,
-			OccurredAt:    dto.CreatedAt,
-		}, true
-	}
-	content, visible := storedEventContent(dto.Type, dto.Payload)
-	if !visible {
+func fromCodexEvent(event processdomain.CodexEvent, sourceGroup int) (DTO, bool) {
+	if !visibleCodexTimelineEvent(event) {
 		return DTO{}, false
 	}
+	canonicalID := processdomain.CanonicalCodexEventID(event.CodexSessionID, event.EventID)
+	if canonicalID == "" {
+		canonicalID = event.EventID
+	}
+	if usage, ok := event.Content.(processdomain.CodexUsageContent); ok {
+		return DTO{ID: eventdomain.ID(canonicalID), Type: event.Type, Usage: usageDTO(usage), OccurredAt: event.CreatedAt.UTC().Format(time.RFC3339Nano)}, true
+	}
 	return DTO{
-		ID:         dto.ID,
-		OrderKey:   timelineOrderKey(createdAt, 0, 0, 0, string(dto.ID)),
-		Phase:      processdomain.CodexPhaseStandalone,
-		Content:    content,
-		OccurredAt: dto.CreatedAt,
-		Causality:  dto.Causality,
+		ID:            eventdomain.ID(canonicalID),
+		Type:          event.Type,
+		OrderKey:      timelineOrderKey(event.CreatedAt, sourceGroup, event.SourceOffset, event.SourceIndex, canonicalID),
+		CorrelationID: canonicalCorrelationID(event.CodexSessionID, event.CorrelationID),
+		Phase:         normalizedPhase(event.Phase),
+		Content:       event.Content,
+		OccurredAt:    event.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}, true
+}
+
+func visibleCodexTimelineEvent(event processdomain.CodexEvent) bool {
+	if event.Content == nil {
+		return false
+	}
+	switch event.Type {
+	case processdomain.CodexEventPlan, processdomain.CodexEventTranscriptBound, processdomain.CodexEventProcessExit:
+		return false
+	default:
+		return true
+	}
 }
 
 func groupTimelineEvents(events []DTO) []DTO {
@@ -610,9 +593,6 @@ func routineGroup(item DTO) (eventdomain.ID, string, string, bool) {
 		code := content.Code
 		if content.Level == "error" || strings.Contains(code, "waiting_user") || strings.Contains(code, "waiting_approval") || failedProcessExit(code, content.Details) {
 			return "", "", "", false
-		}
-		if code == "session.todo_list_updated" {
-			return eventdomain.ID("group:todo:" + key), "todo", "TODO updates", true
 		}
 		if isLifecycleEvent(code) {
 			return eventdomain.ID("group:lifecycle:" + key), "lifecycle", "Lifecycle", true
@@ -699,6 +679,9 @@ func normalizedPhase(phase processdomain.CodexPhase) processdomain.CodexPhase {
 }
 
 func isVisibleStatusEvent(eventType string) bool {
+	if eventType == "session.todo_list_updated" {
+		return false
+	}
 	return strings.HasPrefix(eventType, "session.") || strings.HasPrefix(eventType, "workflow.") || eventType == "process.exited"
 }
 

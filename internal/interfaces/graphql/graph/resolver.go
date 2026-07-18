@@ -12,6 +12,7 @@ import (
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
@@ -24,18 +25,19 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type UseCases struct {
-	Auth        authapp.UseCase
-	Projects    projectapp.UseCase
-	Sessions    sessionapp.UseCase
-	Events      eventapp.UseCase
-	Timeline    timelineapp.UseCase
-	Attachments attachmentapp.UseCase
-	Artifacts   artifactapp.UseCase
-	Diff        diffapp.UseCase
-	Workflows   workflowapp.UseCase
-	Questions   questionapp.UseCase
-	Settings    settingapp.UseCase
-	CodexModels []processdomain.CodexModel
+	Auth          authapp.UseCase
+	Projects      projectapp.UseCase
+	Sessions      sessionapp.UseCase
+	Events        eventapp.UseCase
+	Timeline      timelineapp.UseCase
+	SessionEvents sessioneventapp.UseCase
+	Attachments   attachmentapp.UseCase
+	Artifacts     artifactapp.UseCase
+	Diff          diffapp.UseCase
+	Workflows     workflowapp.UseCase
+	Questions     questionapp.UseCase
+	Settings      settingapp.UseCase
+	CodexModels   []processdomain.CodexModel
 }
 
 type Resolver struct {

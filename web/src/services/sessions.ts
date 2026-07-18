@@ -5,7 +5,14 @@ import {
 } from '@/services/graphqlClient';
 import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
 import type { SessionFile } from '@/services/sessionFiles';
-import type { TranscriptEvent } from '@/services/sessionTimeline';
+import {
+  normalizeTranscriptEvent,
+  transcriptEventFields,
+  transcriptUsageFields,
+  type GraphQLTranscriptEvent,
+  type TranscriptEvent,
+  type TranscriptTokenUsage,
+} from '@/services/sessionTimeline';
 import { normalizeWorkflowNodeResult } from '@/services/workflowApprovalReview';
 
 export type SessionMode = 'workflow' | 'chat';
@@ -289,6 +296,7 @@ interface GraphQLSessionDetail {
   worktreeCleanup: WorktreeCleanup;
   currentNodeTitle: string;
   pendingApproval?: GraphQLPendingApproval | null;
+  todoList?: GraphQLSessionTodoList | null;
   config: SessionConfig;
   promptAppends?: GraphQLPromptAppend[];
   availableActions?: string[];
@@ -335,10 +343,25 @@ interface GraphQLSession {
   updatedAt: string;
 }
 
-interface GraphQLSessionStateStreamItem {
+interface GraphQLSessionEventStreamItem {
   ready: boolean;
+  id?: string | null;
+  type: string;
+  occurredAt?: string | null;
+  transcript?: GraphQLTranscriptEvent | null;
+  usage?: TranscriptTokenUsage | null;
   session?: GraphQLSessionDetail | null;
   questionBatch?: GraphQLQuestionBatch | null;
+}
+
+export interface SessionEventUpdate {
+  id?: string | null;
+  type: string;
+  occurredAt?: string | null;
+  transcript?: TranscriptEvent;
+  usage?: TranscriptTokenUsage;
+  session?: SessionDetail;
+  questionBatch?: QuestionBatch;
 }
 
 interface GraphQLQuestionBatch {
@@ -414,6 +437,14 @@ const sessionDetailFields = `
     currentNodeTitle
     phase
     result
+  }
+  todoList {
+    completed
+    total
+    items {
+      text
+      completed
+    }
   }
   config {
     codexModel
@@ -611,10 +642,10 @@ export function subscribeSessionCardChanged(
   >(options);
 }
 
-export function subscribeSessionStateUpdates(
+export function subscribeSessionEvents(
   sessionId: string,
   handlers: {
-    onData: (update: { session?: SessionDetail; questionBatch?: QuestionBatch }) => void;
+    onData: (update: SessionEventUpdate) => void;
     onError?: (error: Error) => void;
     onClose?: (close: GraphQLSubscriptionClose) => void;
     onSubscribed?: () => void;
@@ -622,9 +653,14 @@ export function subscribeSessionStateUpdates(
 ) {
   const options = {
     query: `
-      subscription SessionStateUpdates($sessionId: ID!) {
-        sessionStateUpdates(sessionId: $sessionId) {
+      subscription SessionEvents($sessionId: ID!) {
+        sessionEvents(sessionId: $sessionId) {
           ready
+          id
+          type
+          occurredAt
+          transcript { ${transcriptEventFields} }
+          usage { ${transcriptUsageFields} }
           session {
             ${sessionDetailFields}
           }
@@ -635,13 +671,17 @@ export function subscribeSessionStateUpdates(
       }
     `,
     variables: { sessionId },
-    onData: (data: { sessionStateUpdates: GraphQLSessionStateStreamItem }) => {
-      const item = data.sessionStateUpdates;
+    onData: (data: { sessionEvents: GraphQLSessionEventStreamItem }) => {
+      const item = data.sessionEvents;
       if (item.ready) {
         handlers.onSubscribed?.();
         return;
       }
-      const update: { session?: SessionDetail; questionBatch?: QuestionBatch } = {};
+      const update: SessionEventUpdate = { type: item.type };
+      if (item.id !== undefined) update.id = item.id;
+      if (item.occurredAt !== undefined) update.occurredAt = item.occurredAt;
+      if (item.transcript) update.transcript = normalizeTranscriptEvent(item.transcript);
+      if (item.usage) update.usage = item.usage;
       if (item.session) update.session = normalizeSessionDetail(item.session);
       if (item.questionBatch) update.questionBatch = normalizeQuestionBatch(item.questionBatch);
       handlers.onData(update);
@@ -654,7 +694,7 @@ export function subscribeSessionStateUpdates(
     Object.assign(options, { onClose: handlers.onClose });
   }
   return graphqlSubscribe<
-    { sessionStateUpdates: GraphQLSessionStateStreamItem },
+    { sessionEvents: GraphQLSessionEventStreamItem },
     { sessionId: string }
   >(options);
 }
@@ -1021,7 +1061,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     updatedTime: session.updatedAt,
     pendingQuestion: status === 'waiting_user',
     pendingApproval: normalizePendingApproval(session.pendingApproval),
-    todoList: null,
+    todoList: normalizeTodoList(session.todoList),
     artifactCount: 0,
     filesChanged: 0,
     config: session.config,
