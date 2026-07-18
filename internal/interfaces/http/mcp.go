@@ -218,11 +218,8 @@ func (h mcpHandler) callPublishArtifact(ctx context.Context, sessionID string, a
 		return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "artifact path must be relative to ANYCODE_ARTIFACT_DIR")
 	}
 	artifact, err := h.artifacts.Publish(ctx, artifactapp.PublishInput{
-		SessionID:     sessiondomain.ID(sessionID),
-		Path:          path,
-		LogicalPath:   strings.TrimSpace(arguments.LogicalPath),
-		SourceType:    sessiondomain.AttachmentSourceMCP,
-		CorrelationID: strings.TrimSpace(arguments.CorrelationID),
+		SessionID: sessiondomain.ID(sessionID),
+		Path:      path,
 	})
 	if err != nil {
 		return nil, err
@@ -235,7 +232,6 @@ func (h mcpHandler) callPublishArtifact(ctx context.Context, sessionID string, a
 		"artifactKind": string(artifact.ArtifactKind),
 		"previewKind":  string(artifact.PreviewKind),
 		"size":         artifact.Size,
-		"sha256":       artifact.SHA256,
 	})
 	if err != nil {
 		return nil, err
@@ -336,13 +332,11 @@ func answerUserTool() map[string]any {
 func publishArtifactTool() map[string]any {
 	return map[string]any{
 		"name":        "publish_artifact",
-		"description": "Archive a file from this card's ANYCODE_ARTIFACT_DIR and publish it to the AnyCode timeline.",
+		"description": "Inspect a file in this card's ANYCODE_ARTIFACT_DIR and return its stable path-based metadata and preview content.",
 		"inputSchema": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path":          map[string]any{"type": "string", "description": "Path relative to ANYCODE_ARTIFACT_DIR."},
-				"logicalPath":   map[string]any{"type": "string", "description": "Optional display path relative to ANYCODE_ARTIFACT_DIR."},
-				"correlationId": map[string]any{"type": "string", "description": "Optional identifier grouping related outputs."},
+				"path": map[string]any{"type": "string", "description": "Path relative to ANYCODE_ARTIFACT_DIR."},
 			},
 			"required": []string{"path"},
 		},
@@ -362,10 +356,8 @@ type mcpToolCallParams struct {
 }
 
 type mcpToolArguments struct {
-	Questions     []mcpQuestionInput `json:"questions"`
-	Path          string             `json:"path"`
-	LogicalPath   string             `json:"logicalPath"`
-	CorrelationID string             `json:"correlationId"`
+	Questions []mcpQuestionInput `json:"questions"`
+	Path      string             `json:"path"`
 }
 
 type mcpQuestionInput struct {

@@ -7,17 +7,12 @@ export interface SessionFile {
   sessionId: string;
   role: string;
   sourceType: string;
-  sourceId: string;
   artifactKind: string;
   logicalPath: string;
   filename: string;
   mimeType: string;
   size: number;
-  sha256: string;
   previewKind: SessionFilePreviewKind;
-  processRunId: string | null;
-  nodeRunId: string | null;
-  correlationId: string;
   previewUrl: string | null;
   downloadUrl: string;
   createdAt: string;
@@ -44,8 +39,8 @@ export interface SessionArtifactFocusRequest {
 }
 
 const sessionFileFields = `
-  id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
-  previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
+  id sessionId role sourceType artifactKind logicalPath filename mimeType size
+  previewKind previewUrl downloadUrl createdAt
 `;
 
 export async function listSessionFiles(input: ListSessionFilesInput): Promise<SessionFile[]> {

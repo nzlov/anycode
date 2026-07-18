@@ -117,18 +117,6 @@ func (f SessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionMutation", m)
 }
 
-// The SessionAttachmentFunc type is an adapter to allow the use of ordinary
-// function as SessionAttachment mutator.
-type SessionAttachmentFunc func(context.Context, *ent.SessionAttachmentMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f SessionAttachmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.SessionAttachmentMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SessionAttachmentMutation", m)
-}
-
 // The StagedAttachmentFunc type is an adapter to allow the use of ordinary
 // function as StagedAttachment mutator.
 type StagedAttachmentFunc func(context.Context, *ent.StagedAttachmentMutation) (ent.Value, error)

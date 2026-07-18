@@ -809,6 +809,10 @@ func (r *fakeSessionRepository) Create(context.Context, sessiondomain.Session) e
 
 func (r *fakeSessionRepository) Save(context.Context, sessiondomain.Session) error { return nil }
 
+func (r *fakeSessionRepository) UpdateArtifactCount(context.Context, sessiondomain.ID, int) error {
+	return nil
+}
+
 func (r *fakeSessionRepository) UpdateFilesChanged(context.Context, sessiondomain.ID, int) error {
 	return nil
 }
@@ -904,10 +908,6 @@ func (r *fakeSessionRepository) CompletePromptAppends(context.Context, string, t
 }
 func (r *fakeSessionRepository) ReleasePromptAppends(context.Context, string) error {
 	return nil
-}
-
-func (r *fakeSessionRepository) ListPromptAppendAttachments(context.Context, sessiondomain.ID, string) ([]sessiondomain.SessionAttachment, error) {
-	return nil, nil
 }
 
 func (r *fakeSessionRepository) AddMergeRecord(context.Context, sessiondomain.MergeRecord) error {

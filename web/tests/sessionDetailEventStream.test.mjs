@@ -241,8 +241,11 @@ test('late unified readiness reloads one coherent snapshot', () => {
   const lateEnd = composableSource.indexOf('\n      });', lateStart);
   const lateHandler = composableSource.slice(lateStart, lateEnd);
 
-  assert.match(lateHandler, /loadSessionDetail\(\)/);
-  assert.match(lateHandler, /loadPendingQuestions\(\)/);
+  assert.match(lateHandler, /refreshAfterReconnect\(registration\.generation\)/);
+  assert.match(
+    composableSource,
+    /async function refreshAfterReconnect[\s\S]*Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\)/,
+  );
 });
 
 test('session detail never drops distinct transcript events by content or timestamp', () => {

@@ -456,24 +456,19 @@ type SessionEventStreamItem struct {
 }
 
 type SessionFile struct {
-	ID            string    `json:"id"`
-	SessionID     string    `json:"sessionId"`
-	Role          string    `json:"role"`
-	SourceType    string    `json:"sourceType"`
-	SourceID      string    `json:"sourceId"`
-	ArtifactKind  string    `json:"artifactKind"`
-	LogicalPath   string    `json:"logicalPath"`
-	Filename      string    `json:"filename"`
-	MimeType      string    `json:"mimeType"`
-	Size          int64     `json:"size"`
-	Sha256        string    `json:"sha256"`
-	PreviewKind   string    `json:"previewKind"`
-	ProcessRunID  *string   `json:"processRunId,omitempty"`
-	NodeRunID     *string   `json:"nodeRunId,omitempty"`
-	CorrelationID string    `json:"correlationId"`
-	PreviewURL    *string   `json:"previewUrl,omitempty"`
-	DownloadURL   string    `json:"downloadUrl"`
-	CreatedAt     time.Time `json:"createdAt"`
+	ID           string    `json:"id"`
+	SessionID    string    `json:"sessionId"`
+	Role         string    `json:"role"`
+	SourceType   string    `json:"sourceType"`
+	ArtifactKind string    `json:"artifactKind"`
+	LogicalPath  string    `json:"logicalPath"`
+	Filename     string    `json:"filename"`
+	MimeType     string    `json:"mimeType"`
+	Size         int64     `json:"size"`
+	PreviewKind  string    `json:"previewKind"`
+	PreviewURL   *string   `json:"previewUrl,omitempty"`
+	DownloadURL  string    `json:"downloadUrl"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type SetDefaultWorkflowInput struct {

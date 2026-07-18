@@ -19,7 +19,6 @@ import (
 
 	"github.com/expr-lang/expr"
 	"github.com/nzlov/anycode/internal/application/apperror"
-	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	"github.com/nzlov/anycode/internal/application/port"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
@@ -56,6 +55,7 @@ type UseCase interface {
 	SubmitQuestionBatch(ctx context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error)
 	AppendPrompt(ctx context.Context, input AppendPromptInput) (PromptAppendDTO, error)
 	UpdatePromptAppend(ctx context.Context, input UpdatePromptAppendInput) (PromptAppendDTO, error)
+	DeleteSessionFile(ctx context.Context, id domain.SessionFileID) error
 	SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error)
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
 	GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error)
@@ -298,11 +298,9 @@ type Service struct {
 	uow                 port.UnitOfWork
 	locker              port.SessionLocker
 	projects            projectdomain.Repository
-	attachments         domain.AttachmentRepository
+	attachments         domain.StagedAttachmentRepository
 	files               domain.AttachmentStore
 	artifacts           domain.ArtifactStore
-	artifactScanner     artifactScanner
-	artifactCleaner     artifactCleaner
 	artifactPublisher   domain.ArtifactPublisher
 	worktrees           domain.WorktreeManager
 	worktreeInitializer domain.WorktreeInitializer
@@ -340,14 +338,6 @@ type codexEventPublisher interface {
 	PublishCodexEvent(ctx context.Context, event processdomain.CodexEvent) error
 }
 
-type artifactScanner interface {
-	Scan(ctx context.Context, input domain.ArtifactScanRequest) ([]domain.SessionAttachment, error)
-}
-
-type artifactCleaner interface {
-	DeleteArchived(ctx context.Context, artifacts []domain.SessionFile) (int, error)
-}
-
 type sessionDiffCounter interface {
 	CountSessionChangedFiles(ctx context.Context, sessionID domain.ID) (int, error)
 }
@@ -370,25 +360,13 @@ type workflowResumeFailureRepositoryRunner interface {
 
 type Option func(*Service)
 
-func WithAttachments(repo domain.AttachmentRepository, store domain.AttachmentStore) Option {
+func WithAttachments(repo domain.StagedAttachmentRepository, store domain.AttachmentStore) Option {
 	return func(s *Service) {
 		s.attachments = repo
 		s.files = store
 		if artifacts, ok := store.(domain.ArtifactStore); ok {
 			s.artifacts = artifacts
 		}
-	}
-}
-
-func WithArtifactScanner(scanner artifactScanner) Option {
-	return func(s *Service) {
-		s.artifactScanner = scanner
-	}
-}
-
-func WithArtifactCleaner(cleaner artifactCleaner) Option {
-	return func(s *Service) {
-		s.artifactCleaner = cleaner
 	}
 }
 
@@ -4686,8 +4664,10 @@ func promptWithAttachments(prompt string, paths []string) string {
 func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions, workdir string) {
 	done := make(chan struct{})
 	s.processConsumers.Store(handle.ProcessRunID, (<-chan struct{})(done))
+	stopArtifactWatcher := s.startArtifactWatcher(session.ID, handle.ProcessRunID)
 	go func() {
 		defer func() {
+			stopArtifactWatcher()
 			s.processConsumers.Delete(handle.ProcessRunID)
 			close(done)
 		}()
@@ -4703,6 +4683,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				log.Printf("stop codex after event stream failure: session=%s process_run=%s error=%v", session.ID, handle.ProcessRunID, stopErr)
 				return
 			}
+			stopArtifactWatcher()
 			s.releaseWorkdir(workdir, session.ID)
 			s.handleCodexProcessExit(session, handle, options, processdomain.ExitResult{
 				FailureReason: fmt.Sprintf("consume codex events: %v", err),
@@ -4752,6 +4733,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 					FinishedAt:    s.now(),
 				}
 				if stopErr == nil {
+					stopArtifactWatcher()
 					s.releaseWorkdir(workdir, session.ID)
 					s.handleCodexProcessExit(session, handle, options, failure, nil)
 					return
@@ -4763,9 +4745,86 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 			exitResult = *persistenceFailure
 			workflowResults = nil
 		}
+		stopArtifactWatcher()
 		s.releaseWorkdir(workdir, session.ID)
 		s.handleCodexProcessExit(session, handle, options, exitResult, workflowResults)
 	}()
+}
+
+func (s *Service) startArtifactWatcher(sessionID domain.ID, runID processdomain.RunID) func() {
+	if s == nil || s.artifacts == nil || s.processes == nil {
+		return func() {}
+	}
+	parent := s.lifecycleCtx
+	if parent == nil {
+		parent = context.Background()
+	}
+	watchCtx, cancel := context.WithCancel(parent)
+	active, found, err := s.processes.FindActiveBySession(watchCtx, processdomain.SessionID(sessionID))
+	if err != nil || !found || active.ID != runID {
+		cancel()
+		if err != nil {
+			log.Printf("verify active process before watching session artifacts: session=%s process=%s error=%v", sessionID, runID, err)
+		}
+		return func() {}
+	}
+	changes, err := s.artifacts.WatchArtifactDir(watchCtx, sessionID)
+	if err != nil {
+		cancel()
+		log.Printf("watch session artifacts: session=%s process=%s error=%v", sessionID, runID, err)
+		return func() {}
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := s.recordArtifactDirectoryUpdate(watchCtx, sessionID, runID); err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("initialize session artifacts: session=%s process=%s error=%v", sessionID, runID, err)
+		}
+		for range changes {
+			if err := s.recordArtifactDirectoryUpdate(watchCtx, sessionID, runID); err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("update session artifacts: session=%s process=%s error=%v", sessionID, runID, err)
+			}
+		}
+	}()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			cancel()
+			<-done
+			flushCtx, flushCancel := context.WithTimeout(context.Background(), processCleanupTimeout)
+			defer flushCancel()
+			if err := s.recordArtifactDirectoryUpdate(flushCtx, sessionID, runID); err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("flush session artifacts: session=%s process=%s error=%v", sessionID, runID, err)
+			}
+		})
+	}
+}
+
+func (s *Service) recordArtifactDirectoryUpdate(ctx context.Context, sessionID domain.ID, runID processdomain.RunID) error {
+	return s.withSessionLock(ctx, sessionID, func(ctx context.Context) error {
+		if s.processes != nil {
+			active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(sessionID))
+			if err != nil {
+				return fmt.Errorf("find active process for artifact update: %w", err)
+			}
+			if !found || active.ID != runID {
+				return nil
+			}
+		}
+		current, err := s.repo.Find(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("find session for artifact update: %w", err)
+		}
+		count, err := s.artifacts.CountArtifacts(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("count session artifacts: %w", err)
+		}
+		current.ArtifactCount = count
+		return s.updateArtifactCountWithEvent(ctx, current, count, "session.artifacts_updated", map[string]any{
+			"artifactCount": count,
+			"processRunId":  string(runID),
+		})
+	})
 }
 
 func (s *Service) hasProcessConsumer(runID processdomain.RunID) bool {
@@ -4970,15 +5029,10 @@ func (s *Service) archiveCodexEventImages(ctx context.Context, current domain.Se
 				mimeType = image.MimeType
 			}
 			artifact, err := s.artifactPublisher.PublishInlineArtifact(ctx, domain.InlineArtifactRequest{
-				SessionID:     current.ID,
-				Data:          data,
-				Filename:      inlineArtifactFilename(event.EventID, index, mimeType),
-				MimeType:      mimeType,
-				SourceType:    domain.AttachmentSourceCodex,
-				SourceID:      event.EventID,
-				SourceKey:     fmt.Sprintf("%s:%s:%d", handle.ProcessRunID, event.EventID, index),
-				ProcessRunID:  string(handle.ProcessRunID),
-				CorrelationID: event.CorrelationID,
+				SessionID: current.ID,
+				Data:      data,
+				Filename:  inlineArtifactFilename(event.EventID, index, mimeType),
+				SourceKey: fmt.Sprintf("%s:%s:%d", handle.ProcessRunID, event.EventID, index),
 			})
 			if err != nil {
 				failures = append(failures, artifactArchiveFailure(event.EventID, index, mimeType))
@@ -5261,21 +5315,6 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	current, err := s.repo.Find(ctx, session.ID)
 	if err != nil {
 		return domain.Session{}, false, fmt.Errorf("find session after process exit: %w", err)
-	}
-	if s.artifactScanner != nil {
-		nodeRunID := ""
-		if options.nodeRunID != nil {
-			nodeRunID = string(*options.nodeRunID)
-		}
-		if _, scanErr := s.artifactScanner.Scan(ctx, domain.ArtifactScanRequest{
-			SessionID:    session.ID,
-			SourceType:   domain.AttachmentSourceCodex,
-			SourceID:     string(handle.ProcessRunID),
-			ProcessRunID: string(handle.ProcessRunID),
-			NodeRunID:    nodeRunID,
-		}); scanErr != nil {
-			log.Printf("scan session artifacts after process exit: session=%s process=%s error=%v", session.ID, handle.ProcessRunID, scanErr)
-		}
 	}
 	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
 	if err != nil {
@@ -6877,6 +6916,40 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	return s.saveSessionAndEvent(ctx, session, event, ok)
 }
 
+func (s *Service) updateArtifactCountWithEvent(ctx context.Context, session domain.Session, count int, eventType string, payload map[string]any) error {
+	event, ok, err := s.newSessionEvent(session, eventType, payload)
+	if err != nil {
+		return err
+	}
+	if s.uow != nil {
+		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+			if err := tx.Sessions().UpdateArtifactCount(ctx, session.ID, count); err != nil {
+				return err
+			}
+			if ok {
+				return tx.Events().Append(ctx, event)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if ok {
+			s.publishSessionEvent(ctx, event)
+		}
+		return nil
+	}
+	if err := s.repo.UpdateArtifactCount(ctx, session.ID, count); err != nil {
+		return err
+	}
+	if ok {
+		if err := s.events.Append(ctx, event); err != nil {
+			return err
+		}
+		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
 func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Session, inputs []sessionEventInput) (bool, error) {
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
@@ -6886,6 +6959,9 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
+			}
+			if err := tx.Sessions().UpdateArtifactCount(ctx, session.ID, session.ArtifactCount); err != nil {
+				return err
 			}
 			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
@@ -6904,6 +6980,9 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 	if err := s.repo.Save(ctx, session); err != nil {
 		return false, fmt.Errorf("save session: %w", err)
 	}
+	if err := s.repo.UpdateArtifactCount(ctx, session.ID, session.ArtifactCount); err != nil {
+		return true, err
+	}
 	for _, event := range events {
 		if err := s.events.Append(ctx, event); err != nil {
 			return true, err
@@ -6911,58 +6990,6 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 		s.publishSessionEvent(ctx, event)
 	}
 	return true, nil
-}
-
-func (s *Service) saveClosedSessionWithArtifacts(ctx context.Context, session domain.Session, inputs []sessionEventInput, deletedAt time.Time) ([]domain.SessionFile, bool, error) {
-	// GLUE: Legacy in-memory tests omit artifact cleanup; remove this fallback when every constructor requires the transactional cleaner.
-	if s.artifactCleaner == nil {
-		committed, err := s.saveSessionWithEvents(ctx, session, inputs)
-		return nil, committed, err
-	}
-	if s.uow == nil {
-		return nil, false, errors.New("close session artifact cleanup requires a unit of work")
-	}
-	sessionEvents, err := s.newSessionEvents(session, inputs)
-	if err != nil {
-		return nil, false, err
-	}
-	var artifacts []domain.SessionFile
-	var artifactEvents []eventdomain.DomainEvent
-	if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		if err := tx.Sessions().Save(ctx, session); err != nil {
-			return fmt.Errorf("save session: %w", err)
-		}
-		result, err := tx.DeleteSessionArtifacts(ctx, port.DeleteSessionArtifactsInput{SessionID: session.ID, DeletedAt: deletedAt})
-		if err != nil {
-			return err
-		}
-		artifacts = result.Artifacts
-		if s.events != nil {
-			artifactEvents = make([]eventdomain.DomainEvent, 0, len(artifacts))
-			for _, artifact := range artifacts {
-				event := artifactapp.NewDeletedEvent(artifact, string(session.ProjectID), deletedAt)
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-				artifactEvents = append(artifactEvents, event)
-			}
-		}
-		for _, event := range sessionEvents {
-			if err := tx.Events().Append(ctx, event); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return nil, false, err
-	}
-	for _, event := range artifactEvents {
-		s.publishSessionEvent(ctx, event)
-	}
-	for _, event := range sessionEvents {
-		s.publishSessionEvent(ctx, event)
-	}
-	return artifacts, true, nil
 }
 
 func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
@@ -7309,15 +7336,6 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		}
 		return s.releaseClosePreparation(ctx, prepared.Session, cause)
 	}
-	if s.artifactScanner != nil {
-		if _, err := s.artifactScanner.Scan(ctx, domain.ArtifactScanRequest{
-			SessionID:  session.ID,
-			SourceType: domain.AttachmentSourceReconciled,
-			SourceID:   "session_close",
-		}); err != nil {
-			return DTO{}, releaseClose(fmt.Errorf("final artifact scan: %w", err))
-		}
-	}
 	if s.artifacts != nil {
 		token, tokenErr := s.generateID()
 		if tokenErr != nil {
@@ -7357,7 +7375,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		closeErr := fmt.Errorf("close session %s: %w", session.ID, err)
 		return DTO{}, releaseClose(closeErr)
 	}
-	if s.artifactCleaner != nil {
+	if s.artifacts != nil {
 		session.ArtifactCount = 0
 	}
 	events := []sessionEventInput{{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}}}
@@ -7366,7 +7384,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			"worktreeBranch": session.WorktreeBranch,
 		}})
 	}
-	deletedArtifacts, committed, err := s.saveClosedSessionWithArtifacts(ctx, session, events, now)
+	committed, err := s.saveSessionWithEvents(ctx, session, events)
 	if err != nil {
 		if committed {
 			if quarantinePath != "" && s.artifacts != nil {
@@ -7380,11 +7398,6 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 			return DTO{}, err
 		}
 		return DTO{}, releaseClose(err)
-	}
-	if len(deletedArtifacts) > 0 {
-		if _, cleanupErr := s.artifactCleaner.DeleteArchived(context.WithoutCancel(ctx), deletedArtifacts); cleanupErr != nil {
-			log.Printf("delete closed session archived artifacts: session=%s error=%v", session.ID, cleanupErr)
-		}
 	}
 	if quarantinePath != "" && s.artifacts != nil {
 		if cleanupErr := s.artifacts.DeleteQuarantine(context.WithoutCancel(ctx), quarantinePath); cleanupErr != nil {
@@ -7509,6 +7522,33 @@ func (s *Service) withSessionLock(ctx context.Context, id domain.ID, fn func(con
 		return fn(ctx)
 	}
 	return s.locker.WithSessionLock(ctx, id, fn)
+}
+
+func (s *Service) DeleteSessionFile(ctx context.Context, id domain.SessionFileID) error {
+	if s == nil || s.artifacts == nil {
+		return errors.New("session artifact store is not configured")
+	}
+	if id == "" {
+		return errors.New("session file id is required")
+	}
+	artifact, err := s.artifacts.FindArtifact(ctx, id)
+	if err != nil {
+		return err
+	}
+	return s.withSessionLock(ctx, artifact.SessionID, func(ctx context.Context) error {
+		count, err := s.artifacts.CountArtifacts(ctx, artifact.SessionID)
+		if err != nil {
+			return fmt.Errorf("count session artifacts before deletion: %w", err)
+		}
+		if count > 0 {
+			count--
+		}
+		if err := s.repo.UpdateArtifactCount(ctx, artifact.SessionID, count); err != nil {
+			return err
+		}
+		_, err = s.artifacts.DeleteArtifact(ctx, id)
+		return err
+	})
 }
 
 func (s *Service) cancelPendingQuestions(ctx context.Context, sessionID domain.ID, reason string) error {
@@ -7645,12 +7685,12 @@ func (s *Service) resolvePromptArtifacts(ctx context.Context, sessionID domain.I
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	if s.attachments == nil {
-		return nil, errors.New("attachment repository is required")
+	if s.files == nil {
+		return nil, errors.New("session file store is required")
 	}
 	artifacts := make([]domain.SessionFile, 0, len(ids))
 	for _, id := range ids {
-		artifact, err := s.attachments.FindSessionAttachment(ctx, id)
+		artifact, err := s.files.FindSessionFile(ctx, id)
 		if err != nil {
 			if errors.Is(err, domain.ErrSessionFileNotFound) {
 				if allowMissing {
@@ -7660,7 +7700,7 @@ func (s *Service) resolvePromptArtifacts(ctx context.Context, sessionID domain.I
 			}
 			return nil, fmt.Errorf("find prompt artifact %s: %w", id, err)
 		}
-		if artifact.SessionID != sessionID || artifact.Role != domain.FileRoleArtifact || artifact.DeletedAt != nil {
+		if artifact.SessionID != sessionID || artifact.Role != domain.FileRoleArtifact {
 			if allowMissing {
 				continue
 			}
@@ -7693,9 +7733,9 @@ func (s *Service) UpdatePromptAppend(ctx context.Context, input UpdatePromptAppe
 	var updated domain.PromptAppend
 	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
 		var attachments []domain.SessionAttachment
-		if s.attachments != nil {
+		if s.files != nil {
 			var err error
-			attachments, err = s.attachments.ListPromptAppendAttachments(ctx, input.SessionID, promptAppendID)
+			attachments, err = s.files.ListPromptAppendAttachments(ctx, input.SessionID, promptAppendID)
 			if err != nil {
 				return fmt.Errorf("list prompt append attachments: %w", err)
 			}
@@ -8475,15 +8515,14 @@ func (s *Service) findStagedAttachments(ctx context.Context, ids []domain.Staged
 func (s *Service) archiveStagedAttachments(ctx context.Context, sessionID domain.ID, sourceType domain.AttachmentSourceType, sourceID string, stagedAttachments []domain.StagedAttachment) ([]domain.SessionAttachment, error) {
 	archived := make([]domain.SessionAttachment, 0, len(stagedAttachments))
 	for _, staged := range stagedAttachments {
-		attachment, err := s.files.Promote(ctx, staged, sessionID)
+		attachment, err := s.files.Promote(ctx, domain.PromoteAttachmentInput{
+			Staged:     staged,
+			SessionID:  sessionID,
+			SourceType: sourceType,
+			SourceID:   sourceID,
+		})
 		if err != nil {
 			return archived, fmt.Errorf("promote staged attachment %s: %w", staged.ID, err)
-		}
-		attachment.SourceType = sourceType
-		attachment.SourceID = sourceID
-		if err := s.attachments.SaveSessionAttachment(ctx, attachment); err != nil {
-			_ = s.files.DeleteSession(ctx, attachment.ID)
-			return archived, fmt.Errorf("save session attachment %s: %w", attachment.ID, err)
 		}
 		archived = append(archived, attachment)
 		if err := s.attachments.DeleteStagedAttachment(ctx, staged.ID); err != nil {
@@ -8494,10 +8533,10 @@ func (s *Service) archiveStagedAttachments(ctx context.Context, sessionID domain
 }
 
 func (s *Service) listPromptAppendAttachments(ctx context.Context, sessionID domain.ID, appendID string) ([]domain.SessionAttachment, error) {
-	if s.attachments == nil {
+	if s.files == nil {
 		return []domain.SessionAttachment{}, nil
 	}
-	attachments, err := s.attachments.ListPromptAppendAttachments(ctx, sessionID, appendID)
+	attachments, err := s.files.ListPromptAppendAttachments(ctx, sessionID, appendID)
 	if err != nil {
 		return nil, fmt.Errorf("list prompt append attachments: %w", err)
 	}
@@ -8512,11 +8551,6 @@ func (s *Service) rollbackPromptAppendArtifacts(ctx context.Context, appendID st
 		}
 	}
 	for _, attachment := range attachments {
-		if s.attachments != nil {
-			if err := s.attachments.DeleteSessionAttachment(ctx, attachment.ID); err != nil {
-				errs = append(errs, fmt.Errorf("delete session attachment metadata %s: %w", attachment.ID, err))
-			}
-		}
 		if s.files != nil {
 			if err := s.files.DeleteSession(ctx, attachment.ID); err != nil {
 				errs = append(errs, fmt.Errorf("delete session attachment file %s: %w", attachment.ID, err))
@@ -8527,10 +8561,10 @@ func (s *Service) rollbackPromptAppendArtifacts(ctx context.Context, appendID st
 }
 
 func (s *Service) listSessionAttachments(ctx context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
-	if s.attachments == nil {
+	if s.files == nil {
 		return []domain.SessionAttachment{}, nil
 	}
-	attachments, err := s.attachments.ListSessionAttachments(ctx, sessionID)
+	attachments, err := s.files.ListSessionAttachments(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("list session attachments: %w", err)
 	}

@@ -240,9 +240,6 @@ func (h attachmentHandler) serve(w http.ResponseWriter, r *http.Request, mode at
 	if stream.MimeType != "" {
 		w.Header().Set("Content-Type", stream.MimeType)
 	}
-	if stream.ETag != "" {
-		w.Header().Set("ETag", `"`+stream.ETag+`"`)
-	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	disposition := "inline"
 	if mode == attachmentapp.OpenDownload {

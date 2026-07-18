@@ -319,10 +319,10 @@ func (r *mutationResolver) DeleteSessionAttachment(ctx context.Context, id strin
 
 // DeleteSessionFile is the resolver for the deleteSessionFile field.
 func (r *mutationResolver) DeleteSessionFile(ctx context.Context, id string) (bool, error) {
-	if r.UseCases.Artifacts == nil {
-		return false, missingUseCase("artifacts")
+	if r.UseCases.Sessions == nil {
+		return false, missingUseCase("sessions")
 	}
-	if _, err := r.UseCases.Artifacts.Delete(ctx, sessiondomain.SessionAttachmentID(id)); err != nil {
+	if err := r.UseCases.Sessions.DeleteSessionFile(ctx, sessiondomain.SessionFileID(id)); err != nil {
 		return false, err
 	}
 	return true, nil

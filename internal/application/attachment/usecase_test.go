@@ -52,8 +52,8 @@ func TestDeleteAttachmentsRemovesFileAndMetadata(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeAttachmentRepository()
 	repo.staged["staged-1"] = domain.StagedAttachment{ID: "staged-1"}
-	repo.sessions["attachment-1"] = domain.SessionAttachment{ID: "attachment-1", Path: "/attachments/file.txt"}
 	store := newFakeStore()
+	store.sessions["attachment-1"] = domain.SessionAttachment{ID: "attachment-1", Role: domain.FileRoleInput, Path: "/attachments/file.txt"}
 	service := New(repo, store)
 
 	if err := service.DeleteStagedAttachment(ctx, "staged-1"); err != nil {
@@ -72,21 +72,16 @@ func TestDeleteAttachmentsRemovesFileAndMetadata(t *testing.T) {
 	if !store.deletedSessions["attachment-1"] {
 		t.Fatal("session file was not deleted")
 	}
-	if _, ok := repo.sessions["attachment-1"]; ok {
-		t.Fatal("session metadata was not deleted")
-	}
 }
 
 type fakeAttachmentRepository struct {
 	staged        map[domain.StagedAttachmentID]domain.StagedAttachment
-	sessions      map[domain.SessionAttachmentID]domain.SessionAttachment
 	saveStagedErr error
 }
 
 func newFakeAttachmentRepository() *fakeAttachmentRepository {
 	return &fakeAttachmentRepository{
-		staged:   map[domain.StagedAttachmentID]domain.StagedAttachment{},
-		sessions: map[domain.SessionAttachmentID]domain.SessionAttachment{},
+		staged: map[domain.StagedAttachmentID]domain.StagedAttachment{},
 	}
 }
 
@@ -111,47 +106,17 @@ func (r *fakeAttachmentRepository) DeleteStagedAttachment(_ context.Context, id 
 	return nil
 }
 
-func (r *fakeAttachmentRepository) SaveSessionAttachment(_ context.Context, attachment domain.SessionAttachment) error {
-	r.sessions[attachment.ID] = attachment
-	return nil
-}
-
-func (r *fakeAttachmentRepository) FindSessionAttachment(_ context.Context, id domain.SessionAttachmentID) (domain.SessionAttachment, error) {
-	attachment, ok := r.sessions[id]
-	if !ok {
-		return domain.SessionAttachment{}, errors.New("not found")
-	}
-	return attachment, nil
-}
-
-func (r *fakeAttachmentRepository) ListSessionAttachments(_ context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
-	var attachments []domain.SessionAttachment
-	for _, attachment := range r.sessions {
-		if attachment.SessionID == sessionID {
-			attachments = append(attachments, attachment)
-		}
-	}
-	return attachments, nil
-}
-
-func (r *fakeAttachmentRepository) ListPromptAppendAttachments(context.Context, domain.ID, string) ([]domain.SessionAttachment, error) {
-	return nil, nil
-}
-
-func (r *fakeAttachmentRepository) DeleteSessionAttachment(_ context.Context, id domain.SessionAttachmentID) error {
-	delete(r.sessions, id)
-	return nil
-}
-
 type fakeStore struct {
 	deletedStaged   map[domain.StagedAttachmentID]bool
 	deletedSessions map[domain.SessionAttachmentID]bool
+	sessions        map[domain.SessionAttachmentID]domain.SessionAttachment
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		deletedStaged:   map[domain.StagedAttachmentID]bool{},
 		deletedSessions: map[domain.SessionAttachmentID]bool{},
+		sessions:        map[domain.SessionAttachmentID]domain.SessionAttachment{},
 	}
 }
 
@@ -167,16 +132,21 @@ func (s *fakeStore) Stage(_ context.Context, input domain.StageAttachmentInput) 
 	}, nil
 }
 
-func (s *fakeStore) Promote(_ context.Context, staged domain.StagedAttachment, sessionID domain.ID) (domain.SessionAttachment, error) {
-	return domain.SessionAttachment{
-		ID:        domain.SessionAttachmentID(staged.ID),
-		SessionID: sessionID,
-		Filename:  staged.Filename,
-		Path:      "/attachments/session/" + staged.Filename,
-		MimeType:  staged.MimeType,
-		Size:      staged.Size,
-		CreatedAt: time.Unix(11, 0).UTC(),
-	}, nil
+func (s *fakeStore) Promote(_ context.Context, input domain.PromoteAttachmentInput) (domain.SessionAttachment, error) {
+	attachment := domain.SessionAttachment{
+		ID:         domain.SessionAttachmentID(input.Staged.ID),
+		SessionID:  input.SessionID,
+		Role:       domain.FileRoleInput,
+		SourceType: input.SourceType,
+		SourceID:   input.SourceID,
+		Filename:   input.Staged.Filename,
+		Path:       "/attachments/session/" + input.Staged.Filename,
+		MimeType:   input.Staged.MimeType,
+		Size:       input.Staged.Size,
+		CreatedAt:  time.Unix(11, 0).UTC(),
+	}
+	s.sessions[attachment.ID] = attachment
+	return attachment, nil
 }
 
 func (s *fakeStore) DeleteStaged(_ context.Context, id domain.StagedAttachmentID) error {
@@ -186,7 +156,30 @@ func (s *fakeStore) DeleteStaged(_ context.Context, id domain.StagedAttachmentID
 
 func (s *fakeStore) DeleteSession(_ context.Context, id domain.SessionAttachmentID) error {
 	s.deletedSessions[id] = true
+	delete(s.sessions, id)
 	return nil
+}
+
+func (s *fakeStore) FindSessionFile(_ context.Context, id domain.SessionFileID) (domain.SessionFile, error) {
+	attachment, ok := s.sessions[id]
+	if !ok {
+		return domain.SessionFile{}, domain.ErrSessionFileNotFound
+	}
+	return attachment, nil
+}
+
+func (s *fakeStore) ListSessionAttachments(_ context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
+	var attachments []domain.SessionAttachment
+	for _, attachment := range s.sessions {
+		if attachment.SessionID == sessionID {
+			attachments = append(attachments, attachment)
+		}
+	}
+	return attachments, nil
+}
+
+func (s *fakeStore) ListPromptAppendAttachments(context.Context, domain.ID, string) ([]domain.SessionAttachment, error) {
+	return nil, nil
 }
 
 func (s *fakeStore) Open(context.Context, string) (domain.AttachmentStream, error) {

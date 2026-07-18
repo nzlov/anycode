@@ -1,6 +1,7 @@
 package filestore
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -10,11 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
-func TestArchiveArtifactCleansOversizedImage(t *testing.T) {
+func TestInspectArtifactKeepsOversizedImageDownloadableWithoutPreview(t *testing.T) {
 	store := New(t.TempDir())
 	ctx := context.Background()
 	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
@@ -25,11 +27,14 @@ func TestArchiveArtifactCleansOversizedImage(t *testing.T) {
 	if err := os.WriteFile(source, oversizedPNGHeader(10_000, 10_000), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.ArchiveArtifact(ctx, session.ArchiveArtifactInput{
-		SessionID: "session-1", SourcePath: source, LogicalPath: "invalid.png", MaxBytes: 1024,
+	artifact, err := store.InspectArtifact(ctx, session.InspectArtifactInput{
+		SessionID: "session-1", SourcePath: source, MaxBytes: 1024,
 	})
-	if err == nil {
-		t.Fatal("ArchiveArtifact() accepted an oversized image")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifact.PreviewKind != session.PreviewKindNone || artifact.Path != source {
+		t.Fatalf("oversized artifact = %#v", artifact)
 	}
 	archiveRoot := filepath.Join(store.attachmentsRoot(), "sessions", "session-1")
 	entries, readErr := os.ReadDir(archiveRoot)
@@ -54,17 +59,10 @@ func oversizedPNGHeader(width, height uint32) []byte {
 }
 
 func TestValidateWebPDimensions(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "image.webp")
-	if err := os.WriteFile(path, webPVP8XHeader(100, 100), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateImageDimensions(path, "image/webp"); err != nil {
+	if err := validateImageDimensions(bytes.NewReader(webPVP8XHeader(100, 100)), "image/webp", "image.webp"); err != nil {
 		t.Fatalf("validateImageDimensions() small WebP error = %v", err)
 	}
-	if err := os.WriteFile(path, webPVP8XHeader(10_000, 10_000), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	err := validateImageDimensions(path, "image/webp")
+	err := validateImageDimensions(bytes.NewReader(webPVP8XHeader(10_000, 10_000)), "image/webp", "image.webp")
 	var storeErr *Error
 	if !errors.As(err, &storeErr) || storeErr.Code != "image_too_large" {
 		t.Fatalf("validateImageDimensions() large WebP error = %v", err)
@@ -105,11 +103,7 @@ func TestPreviewable(t *testing.T) {
 }
 
 func TestDetectMimeTypeDoesNotTrustPreviewableExtension(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "forged.pdf")
-	if err := os.WriteFile(path, []byte("plain text"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := detectMimeType(path, filepath.Base(path)); got != "text/plain; charset=utf-8" {
+	if got := detectMimeType(strings.NewReader("plain text"), "forged.pdf"); got != "text/plain; charset=utf-8" {
 		t.Fatalf("detectMimeType() = %q", got)
 	}
 }
@@ -138,7 +132,7 @@ func TestClassifyArtifactCoversSupportedKinds(t *testing.T) {
 	}
 }
 
-func TestArchiveArtifactKeepsOutputAndCreatesImmutableCopy(t *testing.T) {
+func TestInspectArtifactUsesOutputFileWithoutCreatingCopy(t *testing.T) {
 	store := New(t.TempDir())
 	ctx := context.Background()
 	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
@@ -149,11 +143,9 @@ func TestArchiveArtifactKeepsOutputAndCreatesImmutableCopy(t *testing.T) {
 	if err := os.WriteFile(sourcePath, []byte("first version"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := store.ArchiveArtifact(ctx, session.ArchiveArtifactInput{
+	artifact, err := store.InspectArtifact(ctx, session.InspectArtifactInput{
 		SessionID:  "session-1",
 		SourcePath: sourcePath,
-		SourceType: session.AttachmentSourceCodex,
-		SourceKey:  "report.txt:13",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -161,25 +153,25 @@ func TestArchiveArtifactKeepsOutputAndCreatesImmutableCopy(t *testing.T) {
 	if artifact.Role != session.FileRoleArtifact || artifact.LogicalPath != "report.txt" || artifact.ArtifactKind != session.ArtifactKindText || artifact.PreviewKind != session.PreviewKindText {
 		t.Fatalf("artifact metadata = %#v", artifact)
 	}
-	if artifact.SHA256 != "80d8f975e768eecac59d22a788bf8e811e51ca85e309ee47f1e821e3e58280f2" {
-		t.Fatalf("SHA256 = %q", artifact.SHA256)
-	}
 	if err := os.WriteFile(sourcePath, []byte("second version"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	archived, err := os.ReadFile(artifact.Path)
+	current, err := os.ReadFile(artifact.Path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(archived) != "first version" {
-		t.Fatalf("archived body = %q", archived)
+	if string(current) != "second version" {
+		t.Fatalf("current body = %q", current)
 	}
-	if matches, _ := filepath.Glob(artifact.Path + ".partial"); len(matches) != 0 {
-		t.Fatalf("partial files = %#v", matches)
+	if artifact.Path != sourcePath {
+		t.Fatalf("artifact path = %q, want %q", artifact.Path, sourcePath)
+	}
+	if _, err := os.Stat(filepath.Join(store.attachmentsRoot(), "sessions", "session-1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("artifact copy exists: %v", err)
 	}
 }
 
-func TestArchiveArtifactRejectsSymlinkAndOutsidePath(t *testing.T) {
+func TestInspectArtifactRejectsSymlinkAndOutsidePath(t *testing.T) {
 	store := New(t.TempDir())
 	ctx := context.Background()
 	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
@@ -190,24 +182,262 @@ func TestArchiveArtifactRejectsSymlinkAndOutsidePath(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("secret"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ArchiveArtifact(ctx, session.ArchiveArtifactInput{SessionID: "session-1", SourcePath: outside}); err == nil {
+	if _, err := store.InspectArtifact(ctx, session.InspectArtifactInput{SessionID: "session-1", SourcePath: outside}); err == nil {
 		t.Fatal("expected outside path rejection")
 	}
 	link := filepath.Join(outputDir, "link.txt")
 	if err := os.Symlink(outside, link); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ArchiveArtifact(ctx, session.ArchiveArtifactInput{SessionID: "session-1", SourcePath: link}); err == nil {
+	if _, err := store.InspectArtifact(ctx, session.InspectArtifactInput{SessionID: "session-1", SourcePath: link}); err == nil {
 		t.Fatal("expected symlink rejection")
 	}
 	directoryLink := filepath.Join(outputDir, "linked-directory")
 	if err := os.Symlink(filepath.Dir(outside), directoryLink); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.ArchiveArtifact(ctx, session.ArchiveArtifactInput{
+	if _, err := store.InspectArtifact(ctx, session.InspectArtifactInput{
 		SessionID: "session-1", SourcePath: filepath.Join(directoryLink, filepath.Base(outside)),
 	}); err == nil {
 		t.Fatal("expected intermediate directory symlink rejection")
+	}
+}
+
+func TestEnsureArtifactDirRejectsSymlinkedDirectories(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		sessionLink bool
+	}{
+		{name: "outputs"},
+		{name: "session", sessionLink: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := New(t.TempDir())
+			attachments := store.attachmentsRoot()
+			outputs := filepath.Join(attachments, "outputs")
+			link := outputs
+			if test.sessionLink {
+				if err := os.MkdirAll(outputs, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				link = filepath.Join(outputs, "session-1")
+			} else if err := os.MkdirAll(attachments, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			outside := t.TempDir()
+			if err := os.Symlink(outside, link); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.EnsureArtifactDir(context.Background(), "session-1"); err == nil {
+				t.Fatal("created artifact directory through a symlink")
+			} else {
+				var storeErr *Error
+				if !errors.As(err, &storeErr) || storeErr.Code != "symlink_rejected" {
+					t.Fatalf("EnsureArtifactDir() error = %v", err)
+				}
+			}
+			entries, err := os.ReadDir(outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("artifact directory escaped output root: %#v", entries)
+			}
+		})
+	}
+}
+
+func TestArtifactRootPathValidationRejectsParentReplacement(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	root, err := store.createArtifactRoot(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+
+	outputs := filepath.Join(store.attachmentsRoot(), "outputs")
+	movedOutputs := outputs + "-moved"
+	outsideOutputs := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outsideOutputs, "session-1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(outputs, movedOutputs); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideOutputs, outputs); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateOpenedRootPath(root, store.ArtifactDir("session-1")); err == nil {
+		t.Fatal("validated an artifact path after its parent was replaced")
+	}
+}
+
+func TestOpenAndDeleteArtifactUseRootedOutputPaths(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(outputDir, "reports", "result.txt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("result"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := store.InspectArtifact(ctx, session.InspectArtifactInput{SessionID: "session-1", SourcePath: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := store.OpenArtifact(ctx, artifact.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, readErr := io.ReadAll(stream.Reader)
+	closeErr := stream.Reader.Close()
+	if readErr != nil || closeErr != nil || string(body) != "result" {
+		t.Fatalf("opened artifact = %q, read error = %v, close error = %v", body, readErr, closeErr)
+	}
+	if _, err := store.DeleteArtifact(ctx, artifact.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deleted artifact still exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Dir(path)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("empty artifact directory still exists: %v", err)
+	}
+}
+
+func TestArtifactOutputRootStaysBoundAfterDirectoryReplacement(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalPath := filepath.Join(outputDir, "result.txt")
+	if err := os.WriteFile(originalPath, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root, err := store.openArtifactRoot(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+
+	outputs := filepath.Dir(outputDir)
+	movedOutputs := outputs + "-moved"
+	outsideOutputs := t.TempDir()
+	outsideSession := filepath.Join(outsideOutputs, "session-1")
+	if err := os.MkdirAll(outsideSession, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outsidePath := filepath.Join(outsideSession, "result.txt")
+	if err := os.WriteFile(outsidePath, []byte("outside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(outputs, movedOutputs); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideOutputs, outputs); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := root.Open("result.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, readErr := io.ReadAll(file)
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil || string(body) != "original" {
+		t.Fatalf("rooted artifact = %q, read error = %v, close error = %v", body, readErr, closeErr)
+	}
+	if err := root.Remove("result.txt"); err != nil {
+		t.Fatal(err)
+	}
+	outsideBody, err := os.ReadFile(outsidePath)
+	if err != nil || string(outsideBody) != "outside" {
+		t.Fatalf("outside artifact = %q, %v", outsideBody, err)
+	}
+	if _, err := store.FindArtifact(ctx, encodeArtifactID("session-1", "result.txt")); err == nil {
+		t.Fatal("found artifact through a symlinked output root")
+	} else {
+		var storeErr *Error
+		if !errors.As(err, &storeErr) || storeErr.Code != "symlink_rejected" {
+			t.Fatalf("symlinked output root error = %v", err)
+		}
+	}
+}
+
+func TestArtifactMetadataRejectsSymlinkReplacement(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetPath := filepath.Join(outputDir, "target.txt")
+	if err := os.WriteFile(targetPath, []byte("target"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifactPath := filepath.Join(outputDir, "result.txt")
+	if err := os.Symlink("target.txt", artifactPath); err != nil {
+		t.Fatal(err)
+	}
+	root, err := store.openArtifactRoot(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if _, err := store.artifactFromFile(root, "session-1", "result.txt"); err == nil {
+		t.Fatal("read artifact metadata through a symlink replacement")
+	}
+}
+
+func TestWriteInlineArtifactRejectsSymlinkedDirectory(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(outputDir, "inline")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.WriteInlineArtifact(ctx, session.WriteInlineArtifactInput{
+		SessionID: "session-1",
+		Data:      []byte("image"),
+		Filename:  "image.png",
+		SourceKey: "event-1:0",
+	}); err == nil {
+		t.Fatal("expected symlinked inline directory rejection")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("inline artifact escaped output directory: %#v", entries)
+	}
+}
+
+func TestSessionDirectoriesRejectPathLikeSessionIDs(t *testing.T) {
+	store := New(t.TempDir())
+	for _, sessionID := range []session.ID{"", "../escape", "nested/session", " padded "} {
+		artifactDir := store.ArtifactDir(sessionID)
+		outputRoot := filepath.Join(store.attachmentsRoot(), "outputs")
+		if !pathWithin(outputRoot, artifactDir) || filepath.Dir(artifactDir) != outputRoot {
+			t.Fatalf("ArtifactDir(%q) escaped output root: %q", sessionID, artifactDir)
+		}
+		inputDir := store.sessionInputDir(sessionID, session.AttachmentSourceRequirement, "source", "file-1")
+		inputRoot := filepath.Join(store.attachmentsRoot(), "sessions")
+		if !pathWithin(inputRoot, inputDir) {
+			t.Fatalf("sessionInputDir(%q) escaped input root: %q", sessionID, inputDir)
+		}
 	}
 }
 
@@ -240,6 +470,53 @@ func TestQuarantineRestoreAndDeleteArtifactDir(t *testing.T) {
 	}
 	if _, err := os.Stat(quarantine); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("quarantine still exists: %v", err)
+	}
+}
+
+func TestWatchArtifactDirReportsOnlyCreateAndDelete(t *testing.T) {
+	store := New(t.TempDir())
+	store.watchInterval = 10 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changes, err := store.WatchArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(store.ArtifactDir("session-1"), "result.txt")
+	if err := os.WriteFile(path, []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changes:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for artifact creation")
+	}
+
+	if err := os.WriteFile(path, []byte("second version"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changes:
+		t.Fatal("content modification emitted an artifact directory change")
+	case <-time.After(75 * time.Millisecond):
+	}
+
+	secondPath := filepath.Join(store.ArtifactDir("session-1"), "second.txt")
+	if err := os.WriteFile(secondPath, []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changes:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for second artifact creation")
+	}
+	if err := os.Remove(secondPath); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changes:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for artifact deletion")
 	}
 }
 
@@ -279,18 +556,33 @@ func TestStageOpenPromoteAndDelete(t *testing.T) {
 		t.Fatalf("body = %q", body)
 	}
 
-	attachment, err := store.Promote(context.Background(), staged, session.ID("session-1"))
+	attachment, err := store.Promote(context.Background(), session.PromoteAttachmentInput{
+		Staged: staged, SessionID: "session-1", SourceType: session.AttachmentSourcePromptAppend, SourceID: "append-1",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if attachment.SessionID != "session-1" {
 		t.Fatalf("SessionID = %q", attachment.SessionID)
 	}
+	if attachment.SourceType != session.AttachmentSourcePromptAppend || attachment.SourceID != "append-1" {
+		t.Fatalf("attachment source = %q/%q", attachment.SourceType, attachment.SourceID)
+	}
+	found, err := store.FindSessionFile(context.Background(), attachment.ID)
+	if err != nil || found.Path != attachment.Path {
+		t.Fatalf("FindSessionFile() = %#v, %v", found, err)
+	}
 	if _, err := os.Stat(staged.Path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("staged file still exists: %v", err)
 	}
 	if _, err := os.Stat(attachment.Path); err != nil {
 		t.Fatal(err)
+	}
+	retried, err := store.Promote(context.Background(), session.PromoteAttachmentInput{
+		Staged: staged, SessionID: "session-1", SourceType: session.AttachmentSourcePromptAppend, SourceID: "append-1",
+	})
+	if err != nil || retried.Path != attachment.Path {
+		t.Fatalf("idempotent Promote() = %#v, %v", retried, err)
 	}
 	if err := store.DeleteSession(context.Background(), attachment.ID); err != nil {
 		t.Fatal(err)

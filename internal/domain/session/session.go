@@ -34,10 +34,7 @@ const (
 	AttachmentSourceRequirement  AttachmentSourceType = "requirement"
 	AttachmentSourcePromptAppend AttachmentSourceType = "prompt_append"
 	AttachmentSourceCodex        AttachmentSourceType = "codex_artifact"
-	AttachmentSourceMCP          AttachmentSourceType = "mcp_artifact"
 	AttachmentSourcePlaywright   AttachmentSourceType = "playwright_artifact"
-	AttachmentSourcePublished    AttachmentSourceType = "published_artifact"
-	AttachmentSourceReconciled   AttachmentSourceType = "reconciled_artifact"
 )
 
 type FileRole string
@@ -463,28 +460,21 @@ func (l TodoList) Completed() int {
 }
 
 type SessionFile struct {
-	ID               SessionFileID
-	SessionID        ID
-	Role             FileRole
-	SourceType       AttachmentSourceType
-	SourceID         string
-	SourceKey        string
-	Kind             string
-	ArtifactKind     ArtifactKind
-	LogicalPath      string
-	SourceModifiedAt *time.Time
-	Filename         string
-	Path             string
-	MimeType         string
-	Size             int64
-	SHA256           string
-	Previewable      bool
-	PreviewKind      PreviewKind
-	ProcessRunID     string
-	NodeRunID        string
-	CorrelationID    string
-	CreatedAt        time.Time
-	DeletedAt        *time.Time
+	ID           SessionFileID
+	SessionID    ID
+	Role         FileRole
+	SourceType   AttachmentSourceType
+	SourceID     string
+	Kind         string
+	ArtifactKind ArtifactKind
+	LogicalPath  string
+	Filename     string
+	Path         string
+	MimeType     string
+	Size         int64
+	Previewable  bool
+	PreviewKind  PreviewKind
+	CreatedAt    time.Time
 }
 
 func (f SessionFile) IsArtifact() bool {
@@ -502,25 +492,11 @@ type ArtifactQuery struct {
 	Sort      string
 }
 
-type ArtifactScanRequest struct {
-	SessionID    ID
-	SourceType   AttachmentSourceType
-	SourceID     string
-	ProcessRunID string
-	NodeRunID    string
-}
-
 type InlineArtifactRequest struct {
-	SessionID     ID
-	Data          []byte
-	Filename      string
-	MimeType      string
-	SourceType    AttachmentSourceType
-	SourceID      string
-	SourceKey     string
-	ProcessRunID  string
-	NodeRunID     string
-	CorrelationID string
+	SessionID ID
+	Data      []byte
+	Filename  string
+	SourceKey string
 }
 
 type ArtifactPublisher interface {
@@ -615,6 +591,7 @@ type ListQuery struct {
 type Repository interface {
 	Create(ctx context.Context, session Session) error
 	Save(ctx context.Context, session Session) error
+	UpdateArtifactCount(ctx context.Context, id ID, artifactCount int) error
 	UpdateFilesChanged(ctx context.Context, id ID, filesChanged int) error
 	Find(ctx context.Context, id ID) (Session, error)
 	ListCards(ctx context.Context, query ListQuery) ([]Session, int, error)
@@ -640,27 +617,10 @@ type MergeCommandRepository interface {
 	FindMergeRecord(ctx context.Context, id string) (MergeRecord, bool, error)
 }
 
-type AttachmentRepository interface {
+type StagedAttachmentRepository interface {
 	SaveStagedAttachment(ctx context.Context, attachment StagedAttachment) error
 	FindStagedAttachment(ctx context.Context, id StagedAttachmentID) (StagedAttachment, error)
 	DeleteStagedAttachment(ctx context.Context, id StagedAttachmentID) error
-	SaveSessionAttachment(ctx context.Context, attachment SessionAttachment) error
-	FindSessionAttachment(ctx context.Context, id SessionAttachmentID) (SessionAttachment, error)
-	ListSessionAttachments(ctx context.Context, sessionID ID) ([]SessionAttachment, error)
-	ListPromptAppendAttachments(ctx context.Context, sessionID ID, appendID string) ([]SessionAttachment, error)
-	DeleteSessionAttachment(ctx context.Context, id SessionAttachmentID) error
-}
-
-type ArtifactRepository interface {
-	FindArtifactBySourceKey(ctx context.Context, sessionID ID, sourceKey string) (SessionFile, bool, error)
-	ListSessionArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, error)
-	ResolveLatestSessionArtifactsByLogicalPaths(ctx context.Context, sessionID ID, logicalPaths []string) ([]SessionFile, error)
-	SumSessionArtifactSize(ctx context.Context, sessionID ID) (int64, error)
-	SoftDeleteArtifact(ctx context.Context, id SessionFileID, deletedAt time.Time) (SessionFile, error)
-	ListArtifactsPendingPhysicalDelete(ctx context.Context, limit int) ([]SessionFile, error)
-	MarkArtifactPhysicalDeleted(ctx context.Context, id SessionFileID) error
-	SaveSessionAttachment(ctx context.Context, attachment SessionFile) error
-	FindSessionAttachment(ctx context.Context, id SessionFileID) (SessionFile, error)
 }
 
 type Policy interface {
@@ -674,46 +634,51 @@ type ConfigPolicy interface {
 	ResolveDefaults(previous *Config, requested Config) Config
 }
 
+type PromoteAttachmentInput struct {
+	Staged     StagedAttachment
+	SessionID  ID
+	SourceType AttachmentSourceType
+	SourceID   string
+}
+
 type AttachmentStore interface {
 	Stage(ctx context.Context, input StageAttachmentInput) (StagedAttachment, error)
-	Promote(ctx context.Context, staged StagedAttachment, sessionID ID) (SessionAttachment, error)
+	Promote(ctx context.Context, input PromoteAttachmentInput) (SessionAttachment, error)
 	DeleteStaged(ctx context.Context, id StagedAttachmentID) error
+	FindSessionFile(ctx context.Context, id SessionFileID) (SessionFile, error)
+	ListSessionAttachments(ctx context.Context, sessionID ID) ([]SessionAttachment, error)
+	ListPromptAppendAttachments(ctx context.Context, sessionID ID, appendID string) ([]SessionAttachment, error)
 	DeleteSession(ctx context.Context, id SessionAttachmentID) error
 	Open(ctx context.Context, path string) (AttachmentStream, error)
 }
 
-type ArchiveArtifactInput struct {
-	SessionID     ID
-	SourcePath    string
-	LogicalPath   string
-	SourceType    AttachmentSourceType
-	SourceID      string
-	SourceKey     string
-	ProcessRunID  string
-	NodeRunID     string
-	CorrelationID string
-	MaxBytes      int64
+type InspectArtifactInput struct {
+	SessionID  ID
+	SourcePath string
+	MaxBytes   int64
 }
 
-type ArchiveInlineArtifactInput struct {
-	SessionID     ID
-	Data          []byte
-	Filename      string
-	DeclaredMIME  string
-	SourceType    AttachmentSourceType
-	SourceID      string
-	SourceKey     string
-	ProcessRunID  string
-	NodeRunID     string
-	CorrelationID string
-	MaxBytes      int64
+type WriteInlineArtifactInput struct {
+	SessionID ID
+	Data      []byte
+	Filename  string
+	SourceKey string
+	MaxBytes  int64
 }
 
 type ArtifactStore interface {
 	EnsureArtifactDir(ctx context.Context, sessionID ID) (string, error)
 	ArtifactDir(sessionID ID) string
-	ArchiveArtifact(ctx context.Context, input ArchiveArtifactInput) (SessionFile, error)
-	ArchiveInlineArtifact(ctx context.Context, input ArchiveInlineArtifactInput) (SessionFile, error)
+	InspectArtifact(ctx context.Context, input InspectArtifactInput) (SessionFile, error)
+	WriteInlineArtifact(ctx context.Context, input WriteInlineArtifactInput) (SessionFile, error)
+	FindArtifact(ctx context.Context, id SessionFileID) (SessionFile, error)
+	ListArtifacts(ctx context.Context, query ArtifactQuery) ([]SessionFile, error)
+	ResolveArtifacts(ctx context.Context, sessionID ID, logicalPaths []string) ([]SessionFile, error)
+	SumArtifactSize(ctx context.Context, sessionID ID) (int64, error)
+	CountArtifacts(ctx context.Context, sessionID ID) (int, error)
+	DeleteArtifact(ctx context.Context, id SessionFileID) (SessionFile, error)
+	OpenArtifact(ctx context.Context, id SessionFileID) (AttachmentStream, error)
+	WatchArtifactDir(ctx context.Context, sessionID ID) (<-chan struct{}, error)
 	QuarantineArtifactDir(ctx context.Context, sessionID ID, token string) (string, error)
 	RestoreArtifactDir(ctx context.Context, sessionID ID, quarantinePath string) error
 	DeleteQuarantine(ctx context.Context, quarantinePath string) error

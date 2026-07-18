@@ -55,9 +55,9 @@ func TestMapSessionFileReturnsAuthenticatedReferencesWithoutDiskPath(t *testing.
 	createdAt := time.Now().UTC()
 	mapped := mapSessionFile(sessiondomain.SessionFile{
 		ID: "artifact-1", SessionID: "session-1", Role: sessiondomain.FileRoleArtifact,
-		SourceType: sessiondomain.AttachmentSourceCodex, SourceID: "event-1", ArtifactKind: sessiondomain.ArtifactKindImage,
+		SourceType: sessiondomain.AttachmentSourceCodex, ArtifactKind: sessiondomain.ArtifactKindImage,
 		LogicalPath: "images/result.png", Filename: "result.png", Path: "/private/archive/result.png",
-		MimeType: "image/png", Size: 12, SHA256: "hash", PreviewKind: sessiondomain.PreviewKindImage, CreatedAt: createdAt,
+		MimeType: "image/png", Size: 12, PreviewKind: sessiondomain.PreviewKindImage, CreatedAt: createdAt,
 	})
 	if mapped.ID != "artifact-1" || mapped.PreviewURL == nil || *mapped.PreviewURL != "/files/artifact-1/preview" || mapped.DownloadURL != "/files/artifact-1/download" {
 		t.Fatalf("mapped session file = %#v", mapped)

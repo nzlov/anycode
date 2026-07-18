@@ -126,7 +126,6 @@ func main() {
 type artifactRecoveryUseCase interface {
 	ReconcileQuarantines(ctx context.Context) (int, error)
 	ReconcileOutputs(ctx context.Context) (int, error)
-	ReconcileDeletedArtifacts(ctx context.Context) (int, error)
 }
 
 func reconcileArtifactOutputs(ctx context.Context, artifacts artifactRecoveryUseCase) {
@@ -141,11 +140,6 @@ func reconcileArtifactOutputs(ctx context.Context, artifacts artifactRecoveryUse
 	}
 	if count > 0 {
 		log.Printf("reconciled artifact outputs: count=%d", count)
-	}
-	if count, err := artifacts.ReconcileDeletedArtifacts(ctx); err != nil {
-		log.Printf("reconcile deleted artifacts: %s", err.Error())
-	} else if count > 0 {
-		log.Printf("reconciled deleted artifacts: count=%d", count)
 	}
 }
 
@@ -181,7 +175,7 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	}
 	files := filestore.New(cfg.DataDir)
 	attachments := store.Attachments()
-	artifacts := artifactapp.New(attachments, files, files, store.Sessions())
+	artifacts := artifactapp.New(files, store.Sessions())
 	artifacts.SetLimits(artifactapp.Limits{MaxFileBytes: cfg.ArtifactMaxFileBytes, MaxSessionBytes: cfg.ArtifactMaxSessionBytes})
 	if cfg.PlaywrightMCPBin != "" {
 		if _, err := exec.LookPath(cfg.PlaywrightMCPBin); err != nil {
@@ -207,7 +201,6 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	log.Printf("codex image generation capability: enabled=%t status=%s", capabilities.SupportsImageGeneration, capabilities.ImageGenerationStatus)
 	events := store.Events()
 	eventService := eventapp.New(eventapp.WithObserver(eventMetricLogger{}))
-	artifacts.SetEvents(events, eventService)
 	processes := store.Processes()
 	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes, timelineapp.WithHistory(events))
 	questions := store.Questions()
@@ -215,7 +208,7 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactScanner(artifacts), sessionapp.WithArtifactCleaner(artifacts), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService, questionService)
 	return graph.UseCases{
 		Projects:      projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),

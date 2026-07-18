@@ -3,12 +3,10 @@ package entstore
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
 
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
@@ -564,21 +562,6 @@ func TestSessionRepositoryUpdatesOnlyMatchingPendingPromptAppendBody(t *testing.
 	}); err != nil {
 		t.Fatalf("append pending prompt: %v", err)
 	}
-	attachment := session.SessionAttachment{
-		ID:         "attachment-1",
-		SessionID:  "session-1",
-		SourceType: session.AttachmentSourcePromptAppend,
-		SourceID:   "append-pending",
-		Kind:       "file",
-		Filename:   "notes.txt",
-		Path:       "/attachments/notes.txt",
-		MimeType:   "text/plain",
-		Size:       12,
-		CreatedAt:  createdAt,
-	}
-	if err := store.Attachments().SaveSessionAttachment(ctx, attachment); err != nil {
-		t.Fatalf("save prompt append attachment: %v", err)
-	}
 	if err := repo.AppendPrompt(ctx, session.PromptAppend{
 		ID:                     "append-dispatched",
 		SessionID:              "session-1",
@@ -611,16 +594,9 @@ func TestSessionRepositoryUpdatesOnlyMatchingPendingPromptAppendBody(t *testing.
 	if len(appends) != 2 || appends[0].Body != "after" || appends[1].Body != "dispatched" || appends[1].DispatchedProcessRunID != "process-1" {
 		t.Fatalf("prompt appends = %#v", appends)
 	}
-	attachments, err := store.Attachments().ListPromptAppendAttachments(ctx, "session-1", "append-pending")
-	if err != nil {
-		t.Fatalf("list prompt append attachments: %v", err)
-	}
-	if len(attachments) != 1 || attachments[0].ID != attachment.ID || attachments[0].SourceID != "append-pending" {
-		t.Fatalf("prompt append attachments = %#v", attachments)
-	}
 }
 
-func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
+func TestStagedAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
 		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
@@ -657,153 +633,8 @@ func TestAttachmentRepositoryPersistsLifecycleMetadata(t *testing.T) {
 		t.Fatalf("staged attachment mismatch: %#v", foundStaged)
 	}
 
-	attachment := session.SessionAttachment{
-		ID:          "attachment-1",
-		SessionID:   "session-1",
-		SourceType:  session.AttachmentSourceRequirement,
-		SourceID:    "session-1",
-		Kind:        "file",
-		Filename:    "note.txt",
-		Path:        "/data/attachments/sessions/session-1/attachment-1/note.txt",
-		MimeType:    "text/plain",
-		Size:        12,
-		Previewable: false,
-		CreatedAt:   createdAt.Add(time.Second),
-	}
-	if err := repo.SaveSessionAttachment(ctx, attachment); err != nil {
-		t.Fatalf("save session attachment: %v", err)
-	}
-	attachments, err := repo.ListSessionAttachments(ctx, "session-1")
-	if err != nil {
-		t.Fatalf("list session attachments: %v", err)
-	}
-	if len(attachments) != 1 || attachments[0].ID != attachment.ID || attachments[0].Path != attachment.Path {
-		t.Fatalf("session attachments mismatch: %#v", attachments)
-	}
 	if err := repo.DeleteStagedAttachment(ctx, staged.ID); err != nil {
 		t.Fatalf("delete staged attachment: %v", err)
-	}
-	if err := repo.DeleteSessionAttachment(ctx, attachment.ID); err != nil {
-		t.Fatalf("delete session attachment: %v", err)
-	}
-}
-
-func TestArtifactMetadataAndEventsCommitAtomically(t *testing.T) {
-	ctx := context.Background()
-	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	repo := store.Attachments()
-	now := time.Now().UTC()
-	if err := store.Sessions().Create(ctx, session.Session{ID: "session-1", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusCreated, CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	sessionID := eventdomain.SessionID("session-1")
-	artifact := session.SessionAttachment{
-		ID: "artifact-1", SessionID: "session-1", Role: session.FileRoleArtifact,
-		SourceType: session.AttachmentSourceCodex, SourceKey: "source-1", ArtifactKind: session.ArtifactKindImage,
-		Filename: "result.png", Path: "/archive/result.png", MimeType: "image/png", PreviewKind: session.PreviewKindImage,
-		CreatedAt: now,
-	}
-	published := eventdomain.DomainEvent{
-		ID: "artifact.published:artifact-1", Scope: eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
-		SessionID: &sessionID, Type: "artifact.published", Payload: map[string]any{"id": "artifact-1"}, CreatedAt: now,
-	}
-	if err := repo.SaveArtifactWithEvent(ctx, artifact, published); err != nil {
-		t.Fatal(err)
-	}
-	if found, err := repo.FindSessionAttachment(ctx, artifact.ID); err != nil || found.ID != artifact.ID {
-		t.Fatalf("stored artifact = %#v err=%v", found, err)
-	}
-	events, err := store.Events().List(ctx, eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"})
-	if err != nil || len(events) != 1 || events[0].Type != "artifact.published" {
-		t.Fatalf("published events = %#v err=%v", events, err)
-	}
-	deletedAt := now.Add(time.Second)
-	artifact.DeletedAt = &deletedAt
-	deleted := eventdomain.DomainEvent{
-		ID: "artifact.deleted:artifact-1", Scope: published.Scope, SessionID: &sessionID,
-		Type: "artifact.deleted", Payload: map[string]any{"id": "artifact-1"}, CreatedAt: deletedAt,
-	}
-	if err := repo.DeleteArtifactWithEvent(ctx, artifact, deleted); err != nil {
-		t.Fatal(err)
-	}
-	if found, err := repo.FindSessionAttachment(ctx, artifact.ID); err != nil || found.DeletedAt == nil {
-		t.Fatalf("deleted artifact = %#v err=%v", found, err)
-	}
-
-	conflict := published
-	conflict.ID = "artifact.published:artifact-conflict"
-	conflict.Type = "other.event"
-	if err := store.Events().Append(ctx, conflict); err != nil {
-		t.Fatal(err)
-	}
-	artifact.ID = "artifact-conflict"
-	artifact.SourceKey = "source-conflict"
-	artifact.DeletedAt = nil
-	published.ID = "artifact.published:artifact-conflict"
-	if err := repo.SaveArtifactWithEvent(ctx, artifact, published); err == nil {
-		t.Fatal("conflicting event transaction succeeded")
-	}
-	if _, err := repo.FindSessionAttachment(ctx, artifact.ID); err == nil {
-		t.Fatal("artifact from rolled back transaction exists")
-	}
-	if card, err := store.Sessions().Find(ctx, "session-1"); err != nil || card.ArtifactCount != 0 {
-		t.Fatalf("artifact count after rollback = %d, %v", card.ArtifactCount, err)
-	}
-}
-
-func TestResolveLatestSessionArtifactsByLogicalPaths(t *testing.T) {
-	ctx := context.Background()
-	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	repo := store.Attachments()
-	now := time.Now().UTC()
-	for _, id := range []session.ID{"session-1", "session-2"} {
-		if err := store.Sessions().Create(ctx, session.Session{ID: id, ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusCreated, CreatedAt: now, UpdatedAt: now}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	deletedAt := now.Add(3 * time.Second)
-	artifacts := []session.SessionFile{
-		{ID: "old", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "old", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now},
-		{ID: "new", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "new", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now.Add(time.Second)},
-		{ID: "deleted", SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: "deleted", LogicalPath: "image.png", Filename: "image.png", CreatedAt: now.Add(2 * time.Second), DeletedAt: &deletedAt},
-		{ID: "other-session", SessionID: "session-2", Role: session.FileRoleArtifact, SourceKey: "other", LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now.Add(4 * time.Second)},
-	}
-	for _, artifact := range artifacts {
-		if err := repo.SaveSessionAttachment(ctx, artifact); err != nil {
-			t.Fatal(err)
-		}
-	}
-	latest, err := repo.ResolveLatestSessionArtifactsByLogicalPaths(ctx, "session-1", []string{"reports/result.txt"})
-	if err != nil || len(latest) != 1 || latest[0].ID != "new" {
-		t.Fatalf("latest artifact = %#v err=%v", latest, err)
-	}
-	if _, err := repo.SoftDeleteArtifact(ctx, "deleted", deletedAt); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.SoftDeleteArtifact(ctx, "new", deletedAt); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := repo.ResolveLatestSessionArtifactsByLogicalPaths(ctx, "session-1", []string{"image.png", "reports/result.txt", "missing.txt"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 1 || got[0].ID != "old" {
-		t.Fatalf("resolved artifacts = %#v", got)
 	}
 }
 
@@ -985,92 +816,6 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 	}
 }
 
-func TestArtifactLatestVersionListAndCount(t *testing.T) {
-	ctx := context.Background()
-	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	if err := store.Sessions().Create(ctx, session.Session{ID: "session-1", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusCreated, CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	repo := store.Attachments()
-	sessionID := eventdomain.SessionID("session-1")
-	publish := func(id string, logicalPath string, createdAt time.Time) session.SessionFile {
-		t.Helper()
-		artifact := session.SessionFile{
-			ID: session.SessionFileID(id), SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: id,
-			LogicalPath: logicalPath, Filename: filepath.Base(logicalPath), CreatedAt: createdAt,
-		}
-		event := eventdomain.DomainEvent{
-			ID: eventdomain.ID("artifact.published:" + id), Scope: eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
-			SessionID: &sessionID, Type: "artifact.published", CreatedAt: createdAt,
-		}
-		if err := repo.SaveArtifactWithEvent(ctx, artifact, event); err != nil {
-			t.Fatal(err)
-		}
-		return artifact
-	}
-	old := publish("old", "reports/result.txt", now)
-	latest := publish("latest", "reports/result.txt", now.Add(time.Second))
-	publish("image", "image.png", now.Add(2*time.Second))
-
-	card, err := store.Sessions().Find(ctx, "session-1")
-	if err != nil || card.ArtifactCount != 2 {
-		t.Fatalf("artifact count after publish = %d, %v", card.ArtifactCount, err)
-	}
-	files, err := repo.ListSessionArtifacts(ctx, session.ArtifactQuery{SessionID: "session-1"})
-	if err != nil || len(files) != 2 || files[0].ID != "image" || files[1].ID != latest.ID {
-		t.Fatalf("current artifacts = %#v, %v", files, err)
-	}
-
-	deleteArtifact := func(artifact session.SessionFile, deletedAt time.Time) {
-		t.Helper()
-		artifact.DeletedAt = &deletedAt
-		event := eventdomain.DomainEvent{
-			ID: eventdomain.ID("artifact.deleted:" + string(artifact.ID)), Scope: eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
-			SessionID: &sessionID, Type: "artifact.deleted", CreatedAt: deletedAt,
-		}
-		if err := repo.DeleteArtifactWithEvent(ctx, artifact, event); err != nil {
-			t.Fatal(err)
-		}
-	}
-	deleteArtifact(latest, now.Add(3*time.Second))
-	card, _ = store.Sessions().Find(ctx, "session-1")
-	files, err = repo.ListSessionArtifacts(ctx, session.ArtifactQuery{SessionID: "session-1"})
-	if err != nil || card.ArtifactCount != 2 || len(files) != 2 || files[1].ID != old.ID {
-		t.Fatalf("artifacts after latest delete: count=%d files=%#v err=%v", card.ArtifactCount, files, err)
-	}
-	deleteArtifact(old, now.Add(4*time.Second))
-	card, _ = store.Sessions().Find(ctx, "session-1")
-	if card.ArtifactCount != 1 {
-		t.Fatalf("artifact count after final version delete = %d", card.ArtifactCount)
-	}
-	filtered, err := repo.ListSessionArtifacts(ctx, session.ArtifactQuery{SessionID: "session-1", Filter: "IMAGE", Sort: "filename_asc"})
-	if err != nil || len(filtered) != 1 || filtered[0].ID != "image" {
-		t.Fatalf("filtered current artifacts = %#v, %v", filtered, err)
-	}
-	for index := range 105 {
-		id := session.SessionFileID(fmt.Sprintf("bulk-%03d", index))
-		if err := repo.SaveSessionAttachment(ctx, session.SessionFile{
-			ID: id, SessionID: "session-1", Role: session.FileRoleArtifact, SourceKey: string(id),
-			LogicalPath: fmt.Sprintf("bulk/%03d.txt", index), Filename: fmt.Sprintf("%03d.txt", index), CreatedAt: now.Add(time.Duration(index+5) * time.Second),
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	files, err = repo.ListSessionArtifacts(ctx, session.ArtifactQuery{SessionID: "session-1"})
-	card, _ = store.Sessions().Find(ctx, "session-1")
-	if err != nil || len(files) != 106 || card.ArtifactCount != 106 {
-		t.Fatalf("unpaginated artifacts: count=%d files=%d err=%v", card.ArtifactCount, len(files), err)
-	}
-}
-
 func TestSessionRepositorySavePreservesCardProjectionCounts(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
@@ -1089,13 +834,13 @@ func TestSessionRepositorySavePreservesCardProjectionCounts(t *testing.T) {
 	if err := store.Sessions().Create(ctx, stale); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Attachments().SaveSessionAttachment(ctx, session.SessionFile{
-		ID: "artifact-1", SessionID: stale.ID, Role: session.FileRoleArtifact, SourceKey: "artifact-1",
-		LogicalPath: "reports/result.txt", Filename: "result.txt", CreatedAt: now,
-	}); err != nil {
+	if _, err := store.db.ExecContext(ctx, `UPDATE sessions SET artifact_count = 1 WHERE id = ?`, stale.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Sessions().UpdateFilesChanged(ctx, stale.ID, 4); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Sessions().UpdateArtifactCount(ctx, stale.ID, 2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1108,11 +853,14 @@ func TestSessionRepositorySavePreservesCardProjectionCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Requirement != "after" || got.ArtifactCount != 1 || got.FilesChanged != 4 {
+	if got.Requirement != "after" || got.ArtifactCount != 2 || got.FilesChanged != 4 {
 		t.Fatalf("session after stale save = %#v", got)
 	}
 	if err := store.Sessions().UpdateFilesChanged(ctx, stale.ID, -1); err == nil {
 		t.Fatal("UpdateFilesChanged(-1) expected error")
+	}
+	if err := store.Sessions().UpdateArtifactCount(ctx, stale.ID, -1); err == nil {
+		t.Fatal("UpdateArtifactCount(-1) expected error")
 	}
 	got, err = store.Sessions().Find(ctx, stale.ID)
 	if err != nil || got.FilesChanged != 4 {
