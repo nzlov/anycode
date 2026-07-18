@@ -25,15 +25,22 @@ const sessionsService = readFileSync(
   new URL('../src/services/sessions.ts', import.meta.url),
   'utf8',
 );
+const sessionDetailComposable = readFileSync(
+  new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+  'utf8',
+);
 
 test('session artifacts use one unpaginated latest-version query and unified file actions', () => {
   assert.match(panel, /listSessionFiles\(input\)/);
   assert.match(panel, /input\.kind = kind\.value/);
   assert.match(panel, /input\.source = source\.value/);
+  assert.doesNotMatch(panel, /mcp_artifact|published_artifact|reconciled_artifact/);
   assert.match(panel, /input\.sort = sort\.value/);
   assert.doesNotMatch(panel, /<AppPagination|pageSize|pageMax|result\.pageInfo/);
   assert.match(panel, /files\.value = result/);
   assert.match(service, /sessionFiles\(input: \$input\) \{ \$\{sessionFileFields\} \}/);
+  assert.doesNotMatch(service, /sourceId/);
+  assert.doesNotMatch(sessionsService, /sourceId/);
   assert.doesNotMatch(service, /SessionFilePage|pageInfo|pageSize/);
   assert.doesNotMatch(panel, /useSessionFileAsInput|copyAsInput/);
   assert.doesNotMatch(service, /useSessionFileAsInput/);
@@ -79,7 +86,27 @@ test('artifact requests ignore stale responses and follow live artifact events',
   assert.match(panel, /previewController\?\.abort\(\)/);
   assert.match(event, /previewController\?\.abort\(\)/);
   assert.match(detailPage, /:refresh-key="artifactRefreshKey"/);
-  assert.match(detailPage, /entry\.content\.rawType\.startsWith\('artifact\.'\)/);
+  assert.match(
+    sessionDetailComposable,
+    /update\.type === 'session\.artifacts_updated'[\s\S]*artifactUpdateVersion\.value \+= 1/,
+  );
+  assert.match(
+    sessionDetailComposable,
+    /async function refreshAfterReconnect[\s\S]*await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);[\s\S]*artifactUpdateVersion\.value \+= 1/,
+  );
+  assert.match(
+    sessionDetailComposable,
+    /lateRegistered[\s\S]*refreshAfterReconnect\(registration\.generation\)/,
+  );
+  assert.match(
+    sessionDetailComposable,
+    /const registered = await waitForSubscriptionRegistration\(registration\);[\s\S]*if \(!registered\) return;[\s\S]*refreshAfterReconnect\(registration\.generation\)/,
+  );
+  assert.match(
+    detailPage,
+    /artifactRefreshKey = computed\(\(\) => String\(artifactUpdateVersion\.value\)\)/,
+  );
+  assert.doesNotMatch(detailPage, /entry\.content\.rawType\.startsWith\('artifact\.'\)/);
 });
 
 test('artifact references normalize only safe relative logical paths', () => {

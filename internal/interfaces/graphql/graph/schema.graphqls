@@ -269,17 +269,12 @@ type SessionFile {
   sessionId: ID!
   role: String!
   sourceType: String!
-  sourceId: String!
   artifactKind: String!
   logicalPath: String!
   filename: String!
   mimeType: String!
   size: Int64!
-  sha256: String!
   previewKind: String!
-  processRunId: ID
-  nodeRunId: ID
-  correlationId: String!
   previewUrl: String
   downloadUrl: String!
   createdAt: Time!

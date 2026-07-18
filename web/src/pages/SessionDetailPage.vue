@@ -659,6 +659,7 @@ const {
   nodeUsage,
   eventsPageInfo,
   pendingQuestionBatches,
+  artifactUpdateVersion,
   loading,
   loadingOlderEvents,
   appending,
@@ -740,21 +741,7 @@ const canSavePromptAppendEdit = computed(() => {
   return Boolean(target && body && body !== target.body.trim() && !promptEditSaving.value);
 });
 const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
-const artifactRefreshKey = computed(() => {
-  for (let index = streamEntries.value.length - 1; index >= 0; index--) {
-    const entry = streamEntries.value[index];
-    if (entry?.group?.kind === 'artifact') {
-      return `${entry.id}:${entry.group.count}`;
-    }
-    if (
-      entry?.content.__typename === 'TranscriptUnknownContent' &&
-      entry.content.rawType.startsWith('artifact.')
-    ) {
-      return entry.id;
-    }
-  }
-  return '';
-});
+const artifactRefreshKey = computed(() => String(artifactUpdateVersion.value));
 const latestTokenUsage = computed(() => tokenUsage.value);
 const contextUsagePercent = (usage: TranscriptTokenUsage) => {
   if (!usage.contextWindow) return '-';
@@ -988,7 +975,7 @@ async function sendAppend() {
     }
     appendUploading.value = false;
     phase = 'append';
-    // GLUE: uploads become staged IDs while archived artifacts already have session file IDs.
+    // GLUE: uploads become staged IDs while directory-backed artifacts already have session file IDs.
     await appendDescription(
       text,
       stagedAttachmentIds,

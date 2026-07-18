@@ -63,6 +63,7 @@ export function useSessionDetail(sessionId: string) {
   const questionsSubmitting = ref(false);
   const approvalSubmitting = ref(false);
   const pendingQuestionBatches = ref<QuestionBatch[]>([]);
+  const artifactUpdateVersion = ref(0);
   const error = ref('');
   let liveStopped = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -366,6 +367,9 @@ export function useSessionDetail(sessionId: string) {
       onSubscribed: ready.resolve,
       onData: (update) => {
         if (generation !== subscriptionGeneration) return;
+        if (update.type === 'session.artifacts_updated') {
+          artifactUpdateVersion.value += 1;
+        }
         if (update.transcript) {
           if (bufferingLiveEvents) {
             bufferedLiveEvents = appendLiveEvent(bufferedLiveEvents, update.transcript);
@@ -426,15 +430,23 @@ export function useSessionDetail(sessionId: string) {
     if (liveStopped) return;
     bufferingLiveEvents = true;
     bufferedLiveUsage = null;
-    await waitForSubscriptionRegistration(openSubscriptions());
-    if (liveStopped) return;
+    const registration = openSubscriptions();
+    const registered = await waitForSubscriptionRegistration(registration);
+    if (!registered) return;
+    await refreshAfterReconnect(registration.generation);
+  }
+
+  async function refreshAfterReconnect(generation: number) {
+    if (liveStopped || generation !== subscriptionGeneration) return;
     await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
+    if (liveStopped || generation !== subscriptionGeneration) return;
+    artifactUpdateVersion.value += 1;
   }
 
   async function waitForSubscriptionRegistration(registration: {
     generation: number;
     ready: Promise<boolean>;
-  }) {
+  }): Promise<boolean> {
     const registered = await waitWithTimeout(
       registration.ready,
       subscriptionReadyTimeoutMs,
@@ -444,9 +456,10 @@ export function useSessionDetail(sessionId: string) {
       void registration.ready.then((lateRegistered) => {
         if (!lateRegistered || liveStopped || registration.generation !== subscriptionGeneration)
           return;
-        void Promise.all([loadSessionDetail(), loadPendingQuestions()]);
+        void refreshAfterReconnect(registration.generation);
       });
     }
+    return registered;
   }
 
   async function handleSubscriptionClose(close: GraphQLSubscriptionClose, generation: number) {
@@ -485,6 +498,7 @@ export function useSessionDetail(sessionId: string) {
     nodeUsage,
     eventsPageInfo,
     pendingQuestionBatches,
+    artifactUpdateVersion,
     loading,
     loadingOlderEvents,
     appending,

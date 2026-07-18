@@ -1,7 +1,6 @@
 package filestore
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -26,9 +25,11 @@ import (
 
 const DefaultArtifactMaxBytes int64 = 512 << 20
 const maxPreviewImagePixels int64 = 40_000_000
+const defaultWatchInterval = 500 * time.Millisecond
 
 type Store struct {
-	dataDir string
+	dataDir       string
+	watchInterval time.Duration
 }
 
 type Error struct {
@@ -61,7 +62,7 @@ func New(dataDir string) *Store {
 	if dataDir == "" {
 		dataDir = "."
 	}
-	return &Store{dataDir: dataDir}
+	return &Store{dataDir: dataDir, watchInterval: defaultWatchInterval}
 }
 
 func (s *Store) Stage(ctx context.Context, input session.StageAttachmentInput) (session.StagedAttachment, error) {
@@ -105,32 +106,41 @@ func (s *Store) Stage(ctx context.Context, input session.StageAttachmentInput) (
 	}, nil
 }
 
-func (s *Store) Promote(ctx context.Context, staged session.StagedAttachment, sessionID session.ID) (session.SessionFile, error) {
+func (s *Store) Promote(ctx context.Context, input session.PromoteAttachmentInput) (session.SessionFile, error) {
+	staged := input.Staged
 	if err := ctx.Err(); err != nil {
 		return session.SessionFile{}, &Error{Code: "canceled", Path: staged.Path, Err: err}
 	}
-	if staged.ID == "" {
+	if staged.ID == "" || input.SessionID == "" || input.SourceType == "" || input.SourceID == "" {
 		return session.SessionFile{}, &Error{Code: "missing_staged_id", Path: staged.Path}
 	}
 	id := session.SessionFileID(staged.ID)
-	dir := s.sessionDir(sessionID, id)
+	dir := s.sessionInputDir(input.SessionID, input.SourceType, input.SourceID, id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return session.SessionFile{}, &Error{Code: classify(err), Path: dir, Err: err}
 	}
 	filename := cleanFilename(staged.Filename)
 	target := filepath.Join(dir, filename)
 	if err := os.Rename(staged.Path, target); err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: target, Err: err}
+		info, targetErr := os.Lstat(target)
+		if !errors.Is(err, os.ErrNotExist) || targetErr != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return session.SessionFile{}, &Error{Code: classify(err), Path: target, Err: err}
+		}
 	}
 	_ = os.Remove(filepath.Dir(staged.Path))
 	return session.SessionFile{
 		ID:          id,
-		SessionID:   sessionID,
+		SessionID:   input.SessionID,
+		Role:        session.FileRoleInput,
+		SourceType:  input.SourceType,
+		SourceID:    input.SourceID,
+		Kind:        "file",
 		Filename:    filename,
 		Path:        target,
 		MimeType:    staged.MimeType,
 		Size:        staged.Size,
 		Previewable: staged.Previewable,
+		PreviewKind: previewKind(staged.MimeType),
 		CreatedAt:   time.Now().UTC(),
 	}, nil
 }
@@ -146,28 +156,18 @@ func (s *Store) DeleteSession(ctx context.Context, id session.SessionFileID) err
 	if err := ctx.Err(); err != nil {
 		return &Error{Code: "canceled", Err: err}
 	}
-	root := filepath.Join(s.attachmentsRoot(), "sessions")
-	var found string
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
-			return err
-		}
-		if !entry.IsDir() || entry.Name() != string(id) {
-			return nil
-		}
-		found = path
-		return filepath.SkipAll
-	})
-	if err != nil {
-		return &Error{Code: classify(err), Path: root, Err: err}
-	}
-	if found == "" {
+	file, err := s.FindSessionFile(ctx, id)
+	if errors.Is(err, session.ErrSessionFileNotFound) {
 		return nil
 	}
-	return removeDir(found)
+	if err != nil {
+		return err
+	}
+	if file.Role == session.FileRoleArtifact {
+		_, err := s.DeleteArtifact(ctx, id)
+		return err
+	}
+	return removeDir(filepath.Dir(file.Path))
 }
 
 func (s *Store) Open(ctx context.Context, path string) (session.AttachmentStream, error) {
@@ -190,214 +190,30 @@ func (s *Store) Open(ctx context.Context, path string) (session.AttachmentStream
 }
 
 func (s *Store) EnsureArtifactDir(ctx context.Context, sessionID session.ID) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", &Error{Code: "canceled", Err: err}
+	root, err := s.createArtifactRoot(ctx, sessionID)
+	if err != nil {
+		return "", err
 	}
-	dir := s.ArtifactDir(sessionID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", &Error{Code: classify(err), Path: dir, Err: err}
+	defer root.Close()
+	path := s.ArtifactDir(sessionID)
+	if err := validateOpenedRootPath(root, path); err != nil {
+		return "", &Error{Code: "symlink_rejected", Path: path, Err: err}
 	}
-	return dir, nil
+	return path, nil
 }
 
 func (s *Store) ArtifactDir(sessionID session.ID) string {
-	return filepath.Join(s.attachmentsRoot(), "outputs", string(sessionID))
+	return filepath.Join(s.attachmentsRoot(), "outputs", safeSessionPathComponent(sessionID))
 }
 
-func (s *Store) ArchiveArtifact(ctx context.Context, input session.ArchiveArtifactInput) (session.SessionFile, error) {
-	if err := ctx.Err(); err != nil {
-		return session.SessionFile{}, &Error{Code: "canceled", Path: input.SourcePath, Err: err}
-	}
-	outputRoot, err := filepath.Abs(s.ArtifactDir(input.SessionID))
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: "invalid_output_root", Path: input.SourcePath, Err: err}
-	}
-	sourcePath, err := filepath.Abs(input.SourcePath)
-	if err != nil || !pathWithin(outputRoot, sourcePath) {
-		return session.SessionFile{}, &Error{Code: "outside_output_root", Path: input.SourcePath, Err: err}
-	}
-	if safe, resolveErr := pathWithinWithoutSymlinks(outputRoot, sourcePath); resolveErr != nil || !safe {
-		return session.SessionFile{}, &Error{Code: "symlink_rejected", Path: input.SourcePath, Err: resolveErr}
-	}
-	info, err := os.Lstat(sourcePath)
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: sourcePath, Err: err}
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return session.SessionFile{}, &Error{Code: "symlink_rejected", Path: sourcePath}
-	}
-	if !info.Mode().IsRegular() {
-		return session.SessionFile{}, &Error{Code: "not_regular_file", Path: sourcePath}
-	}
-	maxBytes := input.MaxBytes
-	if maxBytes <= 0 {
-		maxBytes = DefaultArtifactMaxBytes
-	}
-	if info.Size() > maxBytes {
-		return session.SessionFile{}, &Error{Code: "file_too_large", Path: sourcePath}
-	}
-	idValue, err := newID()
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: "id_failed", Path: sourcePath, Err: err}
-	}
-	id := session.SessionFileID(idValue)
-	filename := cleanFilename(info.Name())
-	targetDir := s.sessionDir(input.SessionID, id)
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: targetDir, Err: err}
-	}
-	target := filepath.Join(targetDir, filename)
-	partial := target + ".partial"
-	removeTarget := true
-	defer func() {
-		if removeTarget {
-			_ = os.RemoveAll(targetDir)
-		}
-	}()
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: sourcePath, Err: err}
-	}
-	defer source.Close()
-	openedInfo, err := source.Stat()
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: sourcePath, Err: err}
-	}
-	if !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
-		return session.SessionFile{}, &Error{Code: "source_changed", Path: sourcePath}
-	}
-	destination, err := os.OpenFile(partial, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: partial, Err: err}
-	}
-	hash := sha256.New()
-	written, copyErr := io.Copy(io.MultiWriter(destination, hash), io.LimitReader(readerWithContext{ctx: ctx, reader: source}, maxBytes+1))
-	closeErr := destination.Close()
-	if copyErr != nil {
-		return session.SessionFile{}, &Error{Code: classify(copyErr), Path: partial, Err: copyErr}
-	}
-	if closeErr != nil {
-		return session.SessionFile{}, &Error{Code: classify(closeErr), Path: partial, Err: closeErr}
-	}
-	if written > maxBytes {
-		return session.SessionFile{}, &Error{Code: "file_too_large", Path: sourcePath}
-	}
-	if synced, err := os.OpenFile(partial, os.O_WRONLY, 0); err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: partial, Err: err}
-	} else if syncErr := synced.Sync(); syncErr != nil {
-		_ = synced.Close()
-		return session.SessionFile{}, &Error{Code: classify(syncErr), Path: partial, Err: syncErr}
-	} else if closeErr := synced.Close(); closeErr != nil {
-		return session.SessionFile{}, &Error{Code: classify(closeErr), Path: partial, Err: closeErr}
-	}
-	if err := os.Rename(partial, target); err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: target, Err: err}
-	}
-	if directory, err := os.Open(targetDir); err != nil {
-		return session.SessionFile{}, &Error{Code: classify(err), Path: targetDir, Err: err}
-	} else if syncErr := directory.Sync(); syncErr != nil {
-		_ = directory.Close()
-		return session.SessionFile{}, &Error{Code: classify(syncErr), Path: targetDir, Err: syncErr}
-	} else if closeErr := directory.Close(); closeErr != nil {
-		return session.SessionFile{}, &Error{Code: classify(closeErr), Path: targetDir, Err: closeErr}
-	}
-	modifiedAt := info.ModTime().UTC()
-	mimeType := detectMimeType(target, filename)
-	artifactKind, previewKind := classifyArtifact(mimeType)
-	if previewKind == session.PreviewKindImage {
-		if err := validateImageDimensions(target, mimeType); err != nil {
-			return session.SessionFile{}, err
-		}
-	}
-	removeTarget = false
-	logicalPath := strings.TrimSpace(input.LogicalPath)
-	if logicalPath == "" {
-		logicalPath, _ = filepath.Rel(outputRoot, sourcePath)
-	}
-	logicalPath = filepath.ToSlash(filepath.Clean(logicalPath))
-	return session.SessionFile{
-		ID:               id,
-		SessionID:        input.SessionID,
-		Role:             session.FileRoleArtifact,
-		SourceType:       input.SourceType,
-		SourceID:         input.SourceID,
-		SourceKey:        input.SourceKey,
-		Kind:             "file",
-		ArtifactKind:     artifactKind,
-		LogicalPath:      logicalPath,
-		SourceModifiedAt: &modifiedAt,
-		Filename:         filename,
-		Path:             target,
-		MimeType:         mimeType,
-		Size:             written,
-		SHA256:           hex.EncodeToString(hash.Sum(nil)),
-		Previewable:      previewKind != session.PreviewKindNone,
-		PreviewKind:      previewKind,
-		ProcessRunID:     input.ProcessRunID,
-		NodeRunID:        input.NodeRunID,
-		CorrelationID:    input.CorrelationID,
-		CreatedAt:        time.Now().UTC(),
-	}, nil
-}
-
-func (s *Store) ArchiveInlineArtifact(ctx context.Context, input session.ArchiveInlineArtifactInput) (session.SessionFile, error) {
-	if err := ctx.Err(); err != nil {
-		return session.SessionFile{}, &Error{Code: "canceled", Err: err}
-	}
-	maxBytes := input.MaxBytes
-	if maxBytes <= 0 {
-		maxBytes = DefaultArtifactMaxBytes
-	}
-	if int64(len(input.Data)) > maxBytes {
-		return session.SessionFile{}, &Error{Code: "file_too_large"}
-	}
-	mimeType := detectInlineMimeType(input.Data, input.DeclaredMIME)
-	staged, err := s.Stage(ctx, session.StageAttachmentInput{
-		Filename: input.Filename,
-		MimeType: mimeType,
-		Reader:   bytes.NewReader(input.Data),
-	})
-	if err != nil {
-		return session.SessionFile{}, err
-	}
-	artifact, err := s.Promote(ctx, staged, input.SessionID)
-	if err != nil {
-		_ = s.DeleteStaged(context.WithoutCancel(ctx), staged.ID)
-		return session.SessionFile{}, err
-	}
-	artifact.Role = session.FileRoleArtifact
-	artifact.SourceType = input.SourceType
-	artifact.SourceID = input.SourceID
-	artifact.SourceKey = input.SourceKey
-	artifact.ArtifactKind, artifact.PreviewKind = classifyArtifact(mimeType)
-	artifact.LogicalPath = artifact.Filename
-	hash := sha256.Sum256(input.Data)
-	artifact.SHA256 = hex.EncodeToString(hash[:])
-	artifact.Previewable = artifact.PreviewKind != session.PreviewKindNone
-	artifact.ProcessRunID = input.ProcessRunID
-	artifact.NodeRunID = input.NodeRunID
-	artifact.CorrelationID = input.CorrelationID
-	if artifact.PreviewKind == session.PreviewKindImage {
-		if err := validateImageDimensions(artifact.Path, mimeType); err != nil {
-			_ = s.DeleteSession(context.WithoutCancel(ctx), artifact.ID)
-			return session.SessionFile{}, err
-		}
-	}
-	return artifact, nil
-}
-
-func validateImageDimensions(path string, mimeType string) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return &Error{Code: classify(err), Path: path, Err: err}
-	}
-	defer file.Close()
+func validateImageDimensions(reader io.Reader, mimeType string, path string) error {
 	width, height := 0, 0
+	var err error
 	if mimeType == "image/webp" {
-		width, height, err = decodeWebPDimensions(file)
+		width, height, err = decodeWebPDimensions(reader)
 	} else {
 		var config image.Config
-		config, _, err = image.DecodeConfig(file)
+		config, _, err = image.DecodeConfig(reader)
 		width, height = config.Width, config.Height
 	}
 	if err != nil {
@@ -449,7 +265,7 @@ func (s *Store) QuarantineArtifactDir(ctx context.Context, sessionID session.ID,
 		return "", &Error{Code: "missing_quarantine_token"}
 	}
 	source := s.ArtifactDir(sessionID)
-	target := filepath.Join(s.attachmentsRoot(), "output-trash", string(sessionID), token)
+	target := filepath.Join(s.attachmentsRoot(), "output-trash", safeSessionPathComponent(sessionID), token)
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", &Error{Code: classify(err), Path: target, Err: err}
 	}
@@ -590,7 +406,7 @@ func (s *Store) StagedPath(id session.StagedAttachmentID, filename string) strin
 }
 
 func (s *Store) SessionPath(sessionID session.ID, id session.SessionFileID, filename string) string {
-	return filepath.Join(s.sessionDir(sessionID, id), cleanFilename(filename))
+	return filepath.Join(s.sessionInputDir(sessionID, session.AttachmentSourceRequirement, string(sessionID), id), cleanFilename(filename))
 }
 
 func (s *Store) attachmentsRoot() string {
@@ -599,10 +415,6 @@ func (s *Store) attachmentsRoot() string {
 
 func (s *Store) stagedDir(id session.StagedAttachmentID) string {
 	return filepath.Join(s.attachmentsRoot(), "staged", string(id))
-}
-
-func (s *Store) sessionDir(sessionID session.ID, id session.SessionFileID) string {
-	return filepath.Join(s.attachmentsRoot(), "sessions", string(sessionID), string(id))
 }
 
 func (s *Store) underAttachments(path string) bool {
@@ -631,38 +443,6 @@ func pathWithin(root string, path string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func pathWithinWithoutSymlinks(root string, path string) (bool, error) {
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return false, err
-	}
-	pathAbs, err := filepath.Abs(path)
-	if err != nil {
-		return false, err
-	}
-	rootInfo, err := os.Lstat(rootAbs)
-	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
-		return false, err
-	}
-	resolvedRoot, err := filepath.EvalSymlinks(rootAbs)
-	if err != nil {
-		return false, err
-	}
-	resolvedPath, err := filepath.EvalSymlinks(pathAbs)
-	if err != nil {
-		return false, err
-	}
-	requestedRelative, err := filepath.Rel(rootAbs, pathAbs)
-	if err != nil {
-		return false, err
-	}
-	resolvedRelative, err := filepath.Rel(resolvedRoot, resolvedPath)
-	if err != nil {
-		return false, err
-	}
-	return requestedRelative == resolvedRelative && pathWithin(resolvedRoot, resolvedPath), nil
-}
-
 func cleanPathComponent(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || value != filepath.Base(value) || value == "." || value == ".." {
@@ -671,13 +451,29 @@ func cleanPathComponent(value string) string {
 	return value
 }
 
-func detectMimeType(path string, filename string) string {
-	detected := "application/octet-stream"
+func safeSessionPathComponent(sessionID session.ID) string {
+	value := string(sessionID)
+	if value != "" && cleanPathComponent(value) == value {
+		return value
+	}
+	hash := sha256.Sum256([]byte(value))
+	return ".invalid-" + hex.EncodeToString(hash[:])
+}
+
+func detectAttachmentMimeType(path string, filename string) string {
 	file, err := os.Open(path)
-	if err == nil {
-		defer file.Close()
+	if err != nil {
+		return detectMimeType(nil, filename)
+	}
+	defer file.Close()
+	return detectMimeType(file, filename)
+}
+
+func detectMimeType(reader io.Reader, filename string) string {
+	detected := "application/octet-stream"
+	if reader != nil {
 		buffer := make([]byte, 512)
-		read, _ := file.Read(buffer)
+		read, _ := reader.Read(buffer)
 		if read > 0 {
 			detected = http.DetectContentType(buffer[:read])
 			if detected != "application/octet-stream" && detected != "text/plain; charset=utf-8" {
@@ -691,18 +487,6 @@ func detectMimeType(path string, filename string) string {
 		return detected
 	}
 	return byExtension
-}
-
-func detectInlineMimeType(data []byte, declared string) string {
-	detected := strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(data), ";")[0]))
-	if detected != "application/octet-stream" && detected != "text/plain" {
-		return detected
-	}
-	declared = strings.ToLower(strings.TrimSpace(strings.Split(declared, ";")[0]))
-	if declared == "application/json" || strings.HasPrefix(declared, "text/") {
-		return declared
-	}
-	return detected
 }
 
 func classifyArtifact(mimeType string) (session.ArtifactKind, session.PreviewKind) {

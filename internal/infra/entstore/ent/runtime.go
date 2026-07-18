@@ -15,7 +15,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
@@ -410,84 +409,6 @@ func init() {
 	entsession.DefaultUpdatedAt = entsessionDescUpdatedAt.Default.(func() time.Time)
 	// entsession.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	entsession.UpdateDefaultUpdatedAt = entsessionDescUpdatedAt.UpdateDefault.(func() time.Time)
-	sessionattachmentFields := schema.SessionAttachment{}.Fields()
-	_ = sessionattachmentFields
-	// sessionattachmentDescSessionID is the schema descriptor for session_id field.
-	sessionattachmentDescSessionID := sessionattachmentFields[1].Descriptor()
-	// sessionattachment.SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
-	sessionattachment.SessionIDValidator = sessionattachmentDescSessionID.Validators[0].(func(string) error)
-	// sessionattachmentDescRole is the schema descriptor for role field.
-	sessionattachmentDescRole := sessionattachmentFields[2].Descriptor()
-	// sessionattachment.DefaultRole holds the default value on creation for the role field.
-	sessionattachment.DefaultRole = sessionattachmentDescRole.Default.(string)
-	// sessionattachmentDescSourceType is the schema descriptor for source_type field.
-	sessionattachmentDescSourceType := sessionattachmentFields[3].Descriptor()
-	// sessionattachment.SourceTypeValidator is a validator for the "source_type" field. It is called by the builders before save.
-	sessionattachment.SourceTypeValidator = sessionattachmentDescSourceType.Validators[0].(func(string) error)
-	// sessionattachmentDescSourceID is the schema descriptor for source_id field.
-	sessionattachmentDescSourceID := sessionattachmentFields[4].Descriptor()
-	// sessionattachment.SourceIDValidator is a validator for the "source_id" field. It is called by the builders before save.
-	sessionattachment.SourceIDValidator = sessionattachmentDescSourceID.Validators[0].(func(string) error)
-	// sessionattachmentDescSourceKey is the schema descriptor for source_key field.
-	sessionattachmentDescSourceKey := sessionattachmentFields[5].Descriptor()
-	// sessionattachment.DefaultSourceKey holds the default value on creation for the source_key field.
-	sessionattachment.DefaultSourceKey = sessionattachmentDescSourceKey.Default.(string)
-	// sessionattachmentDescKind is the schema descriptor for kind field.
-	sessionattachmentDescKind := sessionattachmentFields[6].Descriptor()
-	// sessionattachment.DefaultKind holds the default value on creation for the kind field.
-	sessionattachment.DefaultKind = sessionattachmentDescKind.Default.(string)
-	// sessionattachmentDescArtifactKind is the schema descriptor for artifact_kind field.
-	sessionattachmentDescArtifactKind := sessionattachmentFields[7].Descriptor()
-	// sessionattachment.DefaultArtifactKind holds the default value on creation for the artifact_kind field.
-	sessionattachment.DefaultArtifactKind = sessionattachmentDescArtifactKind.Default.(string)
-	// sessionattachmentDescLogicalPath is the schema descriptor for logical_path field.
-	sessionattachmentDescLogicalPath := sessionattachmentFields[8].Descriptor()
-	// sessionattachment.DefaultLogicalPath holds the default value on creation for the logical_path field.
-	sessionattachment.DefaultLogicalPath = sessionattachmentDescLogicalPath.Default.(string)
-	// sessionattachmentDescFilename is the schema descriptor for filename field.
-	sessionattachmentDescFilename := sessionattachmentFields[10].Descriptor()
-	// sessionattachment.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
-	sessionattachment.FilenameValidator = sessionattachmentDescFilename.Validators[0].(func(string) error)
-	// sessionattachmentDescPath is the schema descriptor for path field.
-	sessionattachmentDescPath := sessionattachmentFields[11].Descriptor()
-	// sessionattachment.PathValidator is a validator for the "path" field. It is called by the builders before save.
-	sessionattachment.PathValidator = sessionattachmentDescPath.Validators[0].(func(string) error)
-	// sessionattachmentDescMimeType is the schema descriptor for mime_type field.
-	sessionattachmentDescMimeType := sessionattachmentFields[12].Descriptor()
-	// sessionattachment.DefaultMimeType holds the default value on creation for the mime_type field.
-	sessionattachment.DefaultMimeType = sessionattachmentDescMimeType.Default.(string)
-	// sessionattachmentDescSize is the schema descriptor for size field.
-	sessionattachmentDescSize := sessionattachmentFields[13].Descriptor()
-	// sessionattachment.DefaultSize holds the default value on creation for the size field.
-	sessionattachment.DefaultSize = sessionattachmentDescSize.Default.(int64)
-	// sessionattachmentDescSha256 is the schema descriptor for sha256 field.
-	sessionattachmentDescSha256 := sessionattachmentFields[14].Descriptor()
-	// sessionattachment.DefaultSha256 holds the default value on creation for the sha256 field.
-	sessionattachment.DefaultSha256 = sessionattachmentDescSha256.Default.(string)
-	// sessionattachmentDescPreviewable is the schema descriptor for previewable field.
-	sessionattachmentDescPreviewable := sessionattachmentFields[15].Descriptor()
-	// sessionattachment.DefaultPreviewable holds the default value on creation for the previewable field.
-	sessionattachment.DefaultPreviewable = sessionattachmentDescPreviewable.Default.(bool)
-	// sessionattachmentDescPreviewKind is the schema descriptor for preview_kind field.
-	sessionattachmentDescPreviewKind := sessionattachmentFields[16].Descriptor()
-	// sessionattachment.DefaultPreviewKind holds the default value on creation for the preview_kind field.
-	sessionattachment.DefaultPreviewKind = sessionattachmentDescPreviewKind.Default.(string)
-	// sessionattachmentDescProcessRunID is the schema descriptor for process_run_id field.
-	sessionattachmentDescProcessRunID := sessionattachmentFields[17].Descriptor()
-	// sessionattachment.DefaultProcessRunID holds the default value on creation for the process_run_id field.
-	sessionattachment.DefaultProcessRunID = sessionattachmentDescProcessRunID.Default.(string)
-	// sessionattachmentDescNodeRunID is the schema descriptor for node_run_id field.
-	sessionattachmentDescNodeRunID := sessionattachmentFields[18].Descriptor()
-	// sessionattachment.DefaultNodeRunID holds the default value on creation for the node_run_id field.
-	sessionattachment.DefaultNodeRunID = sessionattachmentDescNodeRunID.Default.(string)
-	// sessionattachmentDescCorrelationID is the schema descriptor for correlation_id field.
-	sessionattachmentDescCorrelationID := sessionattachmentFields[19].Descriptor()
-	// sessionattachment.DefaultCorrelationID holds the default value on creation for the correlation_id field.
-	sessionattachment.DefaultCorrelationID = sessionattachmentDescCorrelationID.Default.(string)
-	// sessionattachmentDescCreatedAt is the schema descriptor for created_at field.
-	sessionattachmentDescCreatedAt := sessionattachmentFields[20].Descriptor()
-	// sessionattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
-	sessionattachment.DefaultCreatedAt = sessionattachmentDescCreatedAt.Default.(func() time.Time)
 	stagedattachmentFields := schema.StagedAttachment{}.Fields()
 	_ = stagedattachmentFields
 	// stagedattachmentDescOwnerKeyHash is the schema descriptor for owner_key_hash field.

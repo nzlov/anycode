@@ -428,14 +428,13 @@ func TestAttachmentDownloadSetsContentDisposition(t *testing.T) {
 	}
 }
 
-func TestFileDownloadSupportsRangeAndETag(t *testing.T) {
+func TestFileDownloadSupportsRange(t *testing.T) {
 	reader := &testReadSeekCloser{Reader: strings.NewReader("0123456789")}
 	useCase := &fakeAttachmentUseCase{
 		stream: attachmentapp.Stream{
 			Filename:   "video.mp4",
 			MimeType:   "video/mp4",
 			Size:       10,
-			ETag:       "sha256-value",
 			ModifiedAt: time.Unix(100, 0).UTC(),
 			Reader:     reader,
 			Seeker:     reader,
@@ -451,7 +450,7 @@ func TestFileDownloadSupportsRangeAndETag(t *testing.T) {
 	if rec.Code != http.StatusPartialContent || rec.Body.String() != "2345" {
 		t.Fatalf("range response status=%d body=%q", rec.Code, rec.Body.String())
 	}
-	if rec.Header().Get("Content-Range") != "bytes 2-5/10" || rec.Header().Get("ETag") != `"sha256-value"` {
+	if rec.Header().Get("Content-Range") != "bytes 2-5/10" {
 		t.Fatalf("range headers = %#v", rec.Header())
 	}
 }
@@ -530,7 +529,7 @@ func TestMCPRequiresBearerAndListsAnswerUserTool(t *testing.T) {
 func TestMCPPublishArtifactReturnsStoredMetadata(t *testing.T) {
 	artifacts := &fakeArtifactUseCase{}
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{Artifacts: artifacts}))
-	body := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"publish_artifact","arguments":{"path":"screens/home.png","logicalPath":"home.png","correlationId":"group-1"}}}`
+	body := `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"publish_artifact","arguments":{"path":"screens/home.png"}}}`
 	req := httptest.NewRequest(http.MethodPost, "/mcp/sessions/session-1", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer secret")
 	rec := httptest.NewRecorder()
@@ -539,10 +538,10 @@ func TestMCPPublishArtifactReturnsStoredMetadata(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("publish artifact status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if artifacts.publishInput.SessionID != "session-1" || artifacts.publishInput.Path != "screens/home.png" || artifacts.publishInput.SourceType != sessiondomain.AttachmentSourceMCP || artifacts.publishInput.CorrelationID != "group-1" {
+	if artifacts.publishInput.SessionID != "session-1" || artifacts.publishInput.Path != "screens/home.png" {
 		t.Fatalf("publish input = %#v", artifacts.publishInput)
 	}
-	if !strings.Contains(rec.Body.String(), `\"id\":\"artifact-1\"`) || !strings.Contains(rec.Body.String(), `\"sha256\":\"hash\"`) || !strings.Contains(rec.Body.String(), `"type":"image"`) || !strings.Contains(rec.Body.String(), `"data":"cG5n"`) {
+	if !strings.Contains(rec.Body.String(), `\"id\":\"artifact-1\"`) || !strings.Contains(rec.Body.String(), `\"logicalPath\":\"screens/home.png\"`) || !strings.Contains(rec.Body.String(), `"type":"image"`) || !strings.Contains(rec.Body.String(), `"data":"cG5n"`) {
 		t.Fatalf("publish artifact response = %s", rec.Body.String())
 	}
 }
@@ -926,12 +925,8 @@ func (u *fakeArtifactUseCase) Publish(_ context.Context, input artifactapp.Publi
 	return sessiondomain.SessionAttachment{
 		ID: "artifact-1", SessionID: input.SessionID, Role: sessiondomain.FileRoleArtifact,
 		ArtifactKind: sessiondomain.ArtifactKindImage, PreviewKind: sessiondomain.PreviewKindImage,
-		Filename: "home.png", LogicalPath: "home.png", MimeType: "image/png", Size: 12, SHA256: "hash",
+		Filename: "home.png", LogicalPath: "screens/home.png", MimeType: "image/png", Size: 12,
 	}, nil
-}
-
-func (u *fakeArtifactUseCase) Scan(context.Context, artifactapp.ScanInput) ([]sessiondomain.SessionAttachment, error) {
-	return nil, nil
 }
 
 func (u *fakeArtifactUseCase) List(context.Context, sessiondomain.ArtifactQuery) ([]sessiondomain.SessionFile, error) {
@@ -940,10 +935,6 @@ func (u *fakeArtifactUseCase) List(context.Context, sessiondomain.ArtifactQuery)
 
 func (u *fakeArtifactUseCase) Resolve(context.Context, sessiondomain.ID, []string) ([]sessiondomain.SessionAttachment, error) {
 	return nil, nil
-}
-
-func (u *fakeArtifactUseCase) Delete(context.Context, sessiondomain.SessionAttachmentID) (sessiondomain.SessionAttachment, error) {
-	return sessiondomain.SessionAttachment{}, nil
 }
 
 func (u *fakeArtifactUseCase) ReadMCPContent(context.Context, sessiondomain.SessionFileID) (artifactapp.MCPContent, bool, error) {

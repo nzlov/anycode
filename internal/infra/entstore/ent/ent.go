@@ -22,7 +22,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/sessionattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
@@ -94,7 +93,6 @@ func checkColumn(t, c string) error {
 			questionbatch.Table:      questionbatch.ValidColumn,
 			quickcommand.Table:       quickcommand.ValidColumn,
 			entsession.Table:         entsession.ValidColumn,
-			sessionattachment.Table:  sessionattachment.ValidColumn,
 			stagedattachment.Table:   stagedattachment.ValidColumn,
 			workflowdefinition.Table: workflowdefinition.ValidColumn,
 		})

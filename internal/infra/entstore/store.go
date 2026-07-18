@@ -3,6 +3,7 @@ package entstore
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -38,8 +39,9 @@ type OpenOptions struct {
 }
 
 type Store struct {
-	client *ent.Client
-	db     *sql.DB
+	client  *ent.Client
+	db      *sql.DB
+	dataDir string
 }
 
 type databaseTarget struct {
@@ -59,6 +61,14 @@ func OpenFromEnv(ctx context.Context) (*Store, error) {
 }
 
 func Open(ctx context.Context, opts OpenOptions) (*Store, error) {
+	dataDir := strings.TrimSpace(opts.DataDir)
+	if dataDir == "" {
+		dataDir = "./data"
+	}
+	dataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve data directory: %w", err)
+	}
 	target, err := databaseTargetForOptions(opts)
 	if err != nil {
 		return nil, err
@@ -78,8 +88,9 @@ func Open(ctx context.Context, opts OpenOptions) (*Store, error) {
 	}
 	drv := newImmediateTransactionDriver(db)
 	return &Store{
-		client: ent.NewClient(ent.Driver(drv)),
-		db:     db,
+		client:  ent.NewClient(ent.Driver(drv)),
+		db:      db,
+		dataDir: dataDir,
 	}, nil
 }
 
@@ -155,9 +166,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if err := s.migrateWorkflowApprovalOutputFields(ctx); err != nil {
 		return err
 	}
-	if err := s.migrateSessionFileColumns(ctx); err != nil {
-		return err
-	}
 	// GLUE: Backfill queues written before queue_initial_start; remove after legacy databases no longer need upgrading.
 	if _, err := s.db.ExecContext(ctx, `UPDATE sessions
 		SET queue_initial_start = CASE
@@ -220,17 +228,21 @@ func (s *Store) Migrate(ctx context.Context) error {
 
 // GLUE: Remove the superseded schema shape. This is intentionally destructive because legacy data is not supported.
 func (s *Store) dropRemovedStorage(ctx context.Context) error {
+	if err := s.migrateSessionAttachmentFiles(ctx); err != nil {
+		return err
+	}
 	legacyNodeRuns, err := s.columnExists(ctx, "node_runs", "workflow_run_id")
 	if err != nil {
 		return err
 	}
-	statements := make([]string, 0, 3)
+	statements := make([]string, 0, 4)
 	if legacyNodeRuns {
 		statements = append(statements, `DROP TABLE node_runs`)
 	}
 	statements = append(statements,
 		`DROP TABLE IF EXISTS workflow_runs`,
 		`DROP TABLE IF EXISTS codex_transcript_sources`,
+		`DROP TABLE IF EXISTS session_attachments`,
 	)
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -257,6 +269,94 @@ func (s *Store) dropRemovedStorage(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// GLUE: Convert the removed database file catalog into a path-encoded input layout and discard
+// legacy artifact copies. Remove after every supported database has upgraded past session_attachments.
+func (s *Store) migrateSessionAttachmentFiles(ctx context.Context) error {
+	exists, err := s.tableExists(ctx, "session_attachments")
+	if err != nil || !exists {
+		return err
+	}
+	sessionsPath := filepath.Join(s.dataDir, "attachments", "sessions")
+	if err := os.MkdirAll(sessionsPath, 0o755); err != nil {
+		return fmt.Errorf("create session attachment root: %w", err)
+	}
+	rootInfo, err := os.Lstat(sessionsPath)
+	if err != nil {
+		return fmt.Errorf("inspect session attachment root: %w", err)
+	}
+	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return errors.New("open session attachment root: invalid directory")
+	}
+	root, err := os.OpenRoot(sessionsPath)
+	if err != nil {
+		return fmt.Errorf("open session attachment root: %w", err)
+	}
+	defer root.Close()
+	rows, err := s.db.QueryContext(ctx, `SELECT id, session_id, role, source_type, source_id, path
+		FROM session_attachments WHERE path <> ''`)
+	if err != nil {
+		return fmt.Errorf("list legacy session attachment files: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, sessionID, role, sourceType, sourceID, path string
+		if err := rows.Scan(&id, &sessionID, &role, &sourceType, &sourceID, &path); err != nil {
+			return fmt.Errorf("scan legacy session attachment file: %w", err)
+		}
+		if !filepath.IsAbs(path) {
+			continue
+		}
+		relativePath, err := filepath.Rel(sessionsPath, path)
+		if err != nil {
+			continue
+		}
+		relativePath = filepath.ToSlash(relativePath)
+		parts := strings.Split(relativePath, "/")
+		if len(parts) != 3 || parts[0] != sessionID || parts[1] != id || parts[0] == "" || parts[1] == "" || parts[2] == "" || parts[0] == "." || parts[0] == ".." || parts[1] == "." || parts[1] == ".." || parts[2] == "." || parts[2] == ".." {
+			continue
+		}
+		idDir := strings.Join(parts[:2], "/")
+		if role == string(session.FileRoleArtifact) {
+			if err := root.RemoveAll(idDir); err != nil {
+				return fmt.Errorf("remove legacy artifact copy %s: %w", id, err)
+			}
+			continue
+		}
+		if sourceType != string(session.AttachmentSourcePromptAppend) {
+			sourceType = string(session.AttachmentSourceRequirement)
+		}
+		if sourceID == "" {
+			sourceID = sessionID
+		}
+		targetDir := strings.Join([]string{sessionID, sourceType, base64.RawURLEncoding.EncodeToString([]byte(sourceID)), id}, "/")
+		if targetDir == idDir || strings.HasPrefix(targetDir, idDir+"/") {
+			continue
+		}
+		if err := root.MkdirAll(targetDir, 0o755); err != nil {
+			return fmt.Errorf("create migrated session attachment directory %s: %w", id, err)
+		}
+		target := targetDir + "/" + parts[2]
+		if err := root.Rename(relativePath, target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("migrate session attachment %s: %w", id, err)
+		}
+		if err := root.RemoveAll(idDir); err != nil {
+			return fmt.Errorf("remove legacy session attachment directory %s: %w", id, err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list legacy session attachment files: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) tableExists(ctx context.Context, table string) (bool, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&count); err != nil {
+		return false, fmt.Errorf("check table %s: %w", table, err)
+	}
+	return count != 0, nil
 }
 
 func (s *Store) columnExists(ctx context.Context, table string, column string) (bool, error) {
@@ -394,16 +494,7 @@ func (s *Store) Sessions() *SessionRepository {
 }
 
 func (s *Store) Attachments() *AttachmentRepository {
-	return NewAttachmentRepository(s.client, s.db)
-}
-
-func (s *Store) migrateSessionFileColumns(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS session_attachments_session_source_key
-		ON session_attachments(session_id, source_key)
-		WHERE role = 'artifact' AND source_key <> ''`); err != nil {
-		return fmt.Errorf("create session artifact source key index: %w", err)
-	}
-	return nil
+	return NewAttachmentRepository(s.client)
 }
 
 func (s *Store) Events() *EventStore {

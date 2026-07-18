@@ -825,34 +825,20 @@ func mapSessionFile(file sessiondomain.SessionAttachment) *model.SessionFile {
 		value := "/files/" + string(file.ID) + "/preview"
 		previewURL = &value
 	}
-	var processRunID, nodeRunID *string
-	if file.ProcessRunID != "" {
-		value := file.ProcessRunID
-		processRunID = &value
-	}
-	if file.NodeRunID != "" {
-		value := file.NodeRunID
-		nodeRunID = &value
-	}
 	return &model.SessionFile{
-		ID:            string(file.ID),
-		SessionID:     string(file.SessionID),
-		Role:          string(file.Role),
-		SourceType:    string(file.SourceType),
-		SourceID:      file.SourceID,
-		ArtifactKind:  string(file.ArtifactKind),
-		LogicalPath:   file.LogicalPath,
-		Filename:      file.Filename,
-		MimeType:      file.MimeType,
-		Size:          file.Size,
-		Sha256:        file.SHA256,
-		PreviewKind:   string(file.PreviewKind),
-		ProcessRunID:  processRunID,
-		NodeRunID:     nodeRunID,
-		CorrelationID: file.CorrelationID,
-		PreviewURL:    previewURL,
-		DownloadURL:   downloadURL,
-		CreatedAt:     file.CreatedAt,
+		ID:           string(file.ID),
+		SessionID:    string(file.SessionID),
+		Role:         string(file.Role),
+		SourceType:   string(file.SourceType),
+		ArtifactKind: string(file.ArtifactKind),
+		LogicalPath:  file.LogicalPath,
+		Filename:     file.Filename,
+		MimeType:     file.MimeType,
+		Size:         file.Size,
+		PreviewKind:  string(file.PreviewKind),
+		PreviewURL:   previewURL,
+		DownloadURL:  downloadURL,
+		CreatedAt:    file.CreatedAt,
 	}
 }
 

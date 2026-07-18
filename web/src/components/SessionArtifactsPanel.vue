@@ -334,10 +334,7 @@ const kindOptions = [
 ];
 const sourceOptions = [
   { label: 'Codex', value: 'codex_artifact' },
-  { label: 'MCP 发布', value: 'mcp_artifact' },
   { label: 'Playwright', value: 'playwright_artifact' },
-  { label: '显式发布', value: 'published_artifact' },
-  { label: '自动扫描', value: 'reconciled_artifact' },
 ];
 const sortOptions = [
   { label: '最新优先', value: 'created_at_desc' },

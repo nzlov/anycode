@@ -679,7 +679,7 @@ func normalizedPhase(phase processdomain.CodexPhase) processdomain.CodexPhase {
 }
 
 func isVisibleStatusEvent(eventType string) bool {
-	if eventType == "session.todo_list_updated" {
+	if eventType == "session.todo_list_updated" || eventType == "session.artifacts_updated" {
 		return false
 	}
 	return strings.HasPrefix(eventType, "session.") || strings.HasPrefix(eventType, "workflow.") || eventType == "process.exited"

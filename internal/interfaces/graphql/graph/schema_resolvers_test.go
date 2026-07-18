@@ -71,6 +71,17 @@ func TestResolveSessionArtifactsMapsSafeFiles(t *testing.T) {
 	}
 }
 
+func TestDeleteSessionFileUsesSessionCommand(t *testing.T) {
+	sessions := &fakeSessionUseCase{}
+	deleted, err := NewResolver(UseCases{Sessions: sessions}).Mutation().DeleteSessionFile(context.Background(), "artifact-1")
+	if err != nil || !deleted {
+		t.Fatalf("DeleteSessionFile() = %v, %v", deleted, err)
+	}
+	if sessions.gotDeleteSessionFileID != "artifact-1" {
+		t.Fatalf("deleted session file id = %q", sessions.gotDeleteSessionFileID)
+	}
+}
+
 type fakeArtifactUseCase struct {
 	artifactapp.UseCase
 	query        sessiondomain.ArtifactQuery
@@ -607,6 +618,7 @@ func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
 		"session.priority_changed",
 		"session.todo_list_updated",
 		"session.diff_changed",
+		"session.artifacts_updated",
 		"artifact.published",
 		"artifact.deleted",
 		"workflow.blocked",
@@ -1367,6 +1379,12 @@ type fakeSessionUseCase struct {
 	updateAppendResult     sessionapp.PromptAppendDTO
 	gotRetryCleanupID      sessiondomain.ID
 	retryCleanupResult     sessionapp.DTO
+	gotDeleteSessionFileID sessiondomain.SessionFileID
+}
+
+func (f *fakeSessionUseCase) DeleteSessionFile(_ context.Context, id sessiondomain.SessionFileID) error {
+	f.gotDeleteSessionFileID = id
+	return f.err
 }
 
 func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.CreateSessionInput) (sessionapp.DTO, error) {

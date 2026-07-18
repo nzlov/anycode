@@ -51,18 +51,17 @@ type Stream struct {
 	Filename   string
 	MimeType   string
 	Size       int64
-	ETag       string
 	ModifiedAt time.Time
 	Reader     io.ReadCloser
 	Seeker     io.ReadSeeker
 }
 
 type Service struct {
-	repo  domain.AttachmentRepository
+	repo  domain.StagedAttachmentRepository
 	store domain.AttachmentStore
 }
 
-func New(repo domain.AttachmentRepository, store domain.AttachmentStore) *Service {
+func New(repo domain.StagedAttachmentRepository, store domain.AttachmentStore) *Service {
 	return &Service{repo: repo, store: store}
 }
 
@@ -137,14 +136,12 @@ func (s *Service) DeleteSessionAttachment(ctx context.Context, id domain.Session
 	if id == "" {
 		return errors.New("session attachment id is required")
 	}
-	if _, err := s.repo.FindSessionAttachment(ctx, id); err != nil {
+	attachment, err := s.store.FindSessionFile(ctx, id)
+	if err != nil || attachment.Role != domain.FileRoleInput {
 		return apperror.Wrap(fmt.Errorf("%w: %v", ErrAttachmentNotFound, err), apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
 	}
 	if err := s.store.DeleteSession(ctx, id); err != nil {
 		return apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "delete session attachment file failed").WithRetryable(true)
-	}
-	if err := s.repo.DeleteSessionAttachment(ctx, id); err != nil {
-		return apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "delete session attachment failed").WithRetryable(true)
 	}
 	return nil
 }
@@ -162,12 +159,9 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 	if id == "" {
 		return Stream{}, errors.New("attachment id is required")
 	}
-	attachment, err := s.repo.FindSessionAttachment(ctx, domain.SessionAttachmentID(id))
+	attachment, err := s.store.FindSessionFile(ctx, domain.SessionAttachmentID(id))
 	if err != nil {
 		return Stream{}, apperror.Wrap(fmt.Errorf("%w: %v", ErrAttachmentNotFound, err), apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
-	}
-	if attachment.DeletedAt != nil {
-		return Stream{}, apperror.Wrap(ErrAttachmentNotFound, apperror.CodeNotFound, apperror.CategoryValidationError, "attachment not found")
 	}
 	if mode == OpenPreview && !attachment.Previewable {
 		return Stream{}, apperror.Wrap(ErrNotPreviewable, apperror.CodeAttachmentFailed, apperror.CategoryValidationError, "attachment is not previewable")
@@ -180,7 +174,6 @@ func (s *Service) OpenAttachment(ctx context.Context, id domain.AttachmentID, mo
 		Filename:   attachment.Filename,
 		MimeType:   attachment.MimeType,
 		Size:       attachment.Size,
-		ETag:       attachment.SHA256,
 		ModifiedAt: attachment.CreatedAt,
 		Reader:     stream.Reader,
 		Seeker:     stream.Seeker,

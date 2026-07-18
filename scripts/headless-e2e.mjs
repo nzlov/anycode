@@ -1366,8 +1366,6 @@ async function publishThemeAuditArtifact(sessionId) {
   }
   const response = await callSessionMCP(sessionId, 'publish_artifact', {
     path: 'theme-audit.txt',
-    logicalPath: 'theme-audit.txt',
-    correlationId: `theme-audit-${stamp}`,
   });
   assert(response.status === 200, `publish_artifact status = ${response.status}: ${JSON.stringify(response.body)}`);
 }

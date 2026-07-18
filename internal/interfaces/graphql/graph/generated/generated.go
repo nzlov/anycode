@@ -395,24 +395,19 @@ type ComplexityRoot struct {
 	}
 
 	SessionFile struct {
-		ArtifactKind  func(childComplexity int) int
-		CorrelationID func(childComplexity int) int
-		CreatedAt     func(childComplexity int) int
-		DownloadURL   func(childComplexity int) int
-		Filename      func(childComplexity int) int
-		ID            func(childComplexity int) int
-		LogicalPath   func(childComplexity int) int
-		MimeType      func(childComplexity int) int
-		NodeRunID     func(childComplexity int) int
-		PreviewKind   func(childComplexity int) int
-		PreviewURL    func(childComplexity int) int
-		ProcessRunID  func(childComplexity int) int
-		Role          func(childComplexity int) int
-		SessionID     func(childComplexity int) int
-		Sha256        func(childComplexity int) int
-		Size          func(childComplexity int) int
-		SourceID      func(childComplexity int) int
-		SourceType    func(childComplexity int) int
+		ArtifactKind func(childComplexity int) int
+		CreatedAt    func(childComplexity int) int
+		DownloadURL  func(childComplexity int) int
+		Filename     func(childComplexity int) int
+		ID           func(childComplexity int) int
+		LogicalPath  func(childComplexity int) int
+		MimeType     func(childComplexity int) int
+		PreviewKind  func(childComplexity int) int
+		PreviewURL   func(childComplexity int) int
+		Role         func(childComplexity int) int
+		SessionID    func(childComplexity int) int
+		Size         func(childComplexity int) int
+		SourceType   func(childComplexity int) int
 	}
 
 	Subscription struct {
@@ -2374,12 +2369,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionFile.ArtifactKind(childComplexity), true
-	case "SessionFile.correlationId":
-		if e.ComplexityRoot.SessionFile.CorrelationID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFile.CorrelationID(childComplexity), true
 	case "SessionFile.createdAt":
 		if e.ComplexityRoot.SessionFile.CreatedAt == nil {
 			break
@@ -2416,12 +2405,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionFile.MimeType(childComplexity), true
-	case "SessionFile.nodeRunId":
-		if e.ComplexityRoot.SessionFile.NodeRunID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFile.NodeRunID(childComplexity), true
 	case "SessionFile.previewKind":
 		if e.ComplexityRoot.SessionFile.PreviewKind == nil {
 			break
@@ -2434,12 +2417,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionFile.PreviewURL(childComplexity), true
-	case "SessionFile.processRunId":
-		if e.ComplexityRoot.SessionFile.ProcessRunID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFile.ProcessRunID(childComplexity), true
 	case "SessionFile.role":
 		if e.ComplexityRoot.SessionFile.Role == nil {
 			break
@@ -2452,24 +2429,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionFile.SessionID(childComplexity), true
-	case "SessionFile.sha256":
-		if e.ComplexityRoot.SessionFile.Sha256 == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFile.Sha256(childComplexity), true
 	case "SessionFile.size":
 		if e.ComplexityRoot.SessionFile.Size == nil {
 			break
 		}
 
 		return e.ComplexityRoot.SessionFile.Size(childComplexity), true
-	case "SessionFile.sourceId":
-		if e.ComplexityRoot.SessionFile.SourceID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.SessionFile.SourceID(childComplexity), true
 	case "SessionFile.sourceType":
 		if e.ComplexityRoot.SessionFile.SourceType == nil {
 			break
@@ -3639,17 +3604,12 @@ type SessionFile {
   sessionId: ID!
   role: String!
   sourceType: String!
-  sourceId: String!
   artifactKind: String!
   logicalPath: String!
   filename: String!
   mimeType: String!
   size: Int64!
-  sha256: String!
   previewKind: String!
-  processRunId: ID
-  nodeRunId: ID
-  correlationId: String!
   previewUrl: String
   downloadUrl: String!
   createdAt: Time!
@@ -8635,8 +8595,6 @@ func (ec *executionContext) fieldContext_PromptAppend_artifacts(_ context.Contex
 				return ec.fieldContext_SessionFile_role(ctx, field)
 			case "sourceType":
 				return ec.fieldContext_SessionFile_sourceType(ctx, field)
-			case "sourceId":
-				return ec.fieldContext_SessionFile_sourceId(ctx, field)
 			case "artifactKind":
 				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
 			case "logicalPath":
@@ -8647,16 +8605,8 @@ func (ec *executionContext) fieldContext_PromptAppend_artifacts(_ context.Contex
 				return ec.fieldContext_SessionFile_mimeType(ctx, field)
 			case "size":
 				return ec.fieldContext_SessionFile_size(ctx, field)
-			case "sha256":
-				return ec.fieldContext_SessionFile_sha256(ctx, field)
 			case "previewKind":
 				return ec.fieldContext_SessionFile_previewKind(ctx, field)
-			case "processRunId":
-				return ec.fieldContext_SessionFile_processRunId(ctx, field)
-			case "nodeRunId":
-				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
-			case "correlationId":
-				return ec.fieldContext_SessionFile_correlationId(ctx, field)
 			case "previewUrl":
 				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
 			case "downloadUrl":
@@ -9523,8 +9473,6 @@ func (ec *executionContext) fieldContext_Query_sessionFiles(ctx context.Context,
 				return ec.fieldContext_SessionFile_role(ctx, field)
 			case "sourceType":
 				return ec.fieldContext_SessionFile_sourceType(ctx, field)
-			case "sourceId":
-				return ec.fieldContext_SessionFile_sourceId(ctx, field)
 			case "artifactKind":
 				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
 			case "logicalPath":
@@ -9535,16 +9483,8 @@ func (ec *executionContext) fieldContext_Query_sessionFiles(ctx context.Context,
 				return ec.fieldContext_SessionFile_mimeType(ctx, field)
 			case "size":
 				return ec.fieldContext_SessionFile_size(ctx, field)
-			case "sha256":
-				return ec.fieldContext_SessionFile_sha256(ctx, field)
 			case "previewKind":
 				return ec.fieldContext_SessionFile_previewKind(ctx, field)
-			case "processRunId":
-				return ec.fieldContext_SessionFile_processRunId(ctx, field)
-			case "nodeRunId":
-				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
-			case "correlationId":
-				return ec.fieldContext_SessionFile_correlationId(ctx, field)
 			case "previewUrl":
 				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
 			case "downloadUrl":
@@ -10502,8 +10442,6 @@ func (ec *executionContext) fieldContext_ResolvedSessionArtifact_file(_ context.
 				return ec.fieldContext_SessionFile_role(ctx, field)
 			case "sourceType":
 				return ec.fieldContext_SessionFile_sourceType(ctx, field)
-			case "sourceId":
-				return ec.fieldContext_SessionFile_sourceId(ctx, field)
 			case "artifactKind":
 				return ec.fieldContext_SessionFile_artifactKind(ctx, field)
 			case "logicalPath":
@@ -10514,16 +10452,8 @@ func (ec *executionContext) fieldContext_ResolvedSessionArtifact_file(_ context.
 				return ec.fieldContext_SessionFile_mimeType(ctx, field)
 			case "size":
 				return ec.fieldContext_SessionFile_size(ctx, field)
-			case "sha256":
-				return ec.fieldContext_SessionFile_sha256(ctx, field)
 			case "previewKind":
 				return ec.fieldContext_SessionFile_previewKind(ctx, field)
-			case "processRunId":
-				return ec.fieldContext_SessionFile_processRunId(ctx, field)
-			case "nodeRunId":
-				return ec.fieldContext_SessionFile_nodeRunId(ctx, field)
-			case "correlationId":
-				return ec.fieldContext_SessionFile_correlationId(ctx, field)
 			case "previewUrl":
 				return ec.fieldContext_SessionFile_previewUrl(ctx, field)
 			case "downloadUrl":
@@ -13714,35 +13644,6 @@ func (ec *executionContext) fieldContext_SessionFile_sourceType(_ context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionFile_sourceId(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFile_sourceId,
-		func(ctx context.Context) (any, error) {
-			return obj.SourceID, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFile_sourceId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFile",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SessionFile_artifactKind(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13888,35 +13789,6 @@ func (ec *executionContext) fieldContext_SessionFile_size(_ context.Context, fie
 	return fc, nil
 }
 
-func (ec *executionContext) _SessionFile_sha256(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFile_sha256,
-		func(ctx context.Context) (any, error) {
-			return obj.Sha256, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFile_sha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFile",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _SessionFile_previewKind(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13934,93 +13806,6 @@ func (ec *executionContext) _SessionFile_previewKind(ctx context.Context, field 
 }
 
 func (ec *executionContext) fieldContext_SessionFile_previewKind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFile",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionFile_processRunId(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFile_processRunId,
-		func(ctx context.Context) (any, error) {
-			return obj.ProcessRunID, nil
-		},
-		nil,
-		ec.marshalOID2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFile_processRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFile",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionFile_nodeRunId(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFile_nodeRunId,
-		func(ctx context.Context) (any, error) {
-			return obj.NodeRunID, nil
-		},
-		nil,
-		ec.marshalOID2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFile_nodeRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SessionFile",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SessionFile_correlationId(ctx context.Context, field graphql.CollectedField, obj *model.SessionFile) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SessionFile_correlationId,
-		func(ctx context.Context) (any, error) {
-			return obj.CorrelationID, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SessionFile_correlationId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SessionFile",
 		Field:      field,
@@ -23896,11 +23681,6 @@ func (ec *executionContext) _SessionFile(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "sourceId":
-			out.Values[i] = ec._SessionFile_sourceId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "artifactKind":
 			out.Values[i] = ec._SessionFile_artifactKind(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -23926,22 +23706,8 @@ func (ec *executionContext) _SessionFile(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "sha256":
-			out.Values[i] = ec._SessionFile_sha256(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "previewKind":
 			out.Values[i] = ec._SessionFile_previewKind(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "processRunId":
-			out.Values[i] = ec._SessionFile_processRunId(ctx, field, obj)
-		case "nodeRunId":
-			out.Values[i] = ec._SessionFile_nodeRunId(ctx, field, obj)
-		case "correlationId":
-			out.Values[i] = ec._SessionFile_correlationId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

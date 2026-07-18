@@ -147,6 +147,16 @@ func (r *SessionRepository) UpdateFilesChanged(ctx context.Context, id domainses
 	return nil
 }
 
+func (r *SessionRepository) UpdateArtifactCount(ctx context.Context, id domainsession.ID, artifactCount int) error {
+	if artifactCount < 0 {
+		return errors.New("update session artifact count: count must be non-negative")
+	}
+	if err := r.client.Session.UpdateOneID(string(id)).SetArtifactCount(artifactCount).Exec(ctx); err != nil {
+		return fmt.Errorf("update session artifact count: %w", err)
+	}
+	return nil
+}
+
 func (r *SessionRepository) create(ctx context.Context, s domainsession.Session) error {
 	create := r.client.Session.Create().
 		SetID(string(s.ID)).

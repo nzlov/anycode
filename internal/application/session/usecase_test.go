@@ -3475,7 +3475,7 @@ func TestCreateSessionArchivesStagedAttachments(t *testing.T) {
 	if _, ok := repo.stagedAttachments["staged-1"]; ok {
 		t.Fatal("staged attachment metadata was not deleted")
 	}
-	attachment, ok := repo.sessionAttachments["staged-1"]
+	attachment, ok := files.sessionAttachments["staged-1"]
 	if !ok {
 		t.Fatal("session attachment metadata was not saved")
 	}
@@ -3654,14 +3654,16 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 		{ID: "running", ProjectID: projectID, Requirement: "running card", Status: domain.StatusRunning},
 	}
 	repo.listTotal = 7
-	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["attachment-1"] = domain.SessionAttachment{
 		ID:        "attachment-1",
 		SessionID: "created",
+		Role:      domain.FileRoleInput,
 		Filename:  "note.txt",
 	}
 	projects := newFakeProjectRepository("project-1")
 	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Name: "Project One"}
-	service := New(repo, projects, WithAttachments(repo, newFakeAttachmentStore()))
+	service := New(repo, projects, WithAttachments(repo, files))
 
 	got, err := service.ListSessions(ctx, ListSessionsInput{
 		ProjectID: &projectID,
@@ -3711,14 +3713,16 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	repo.appends = []domain.PromptAppend{
 		{ID: "append-1", SessionID: "session-1", Body: "extra context", CreatedAt: time.Unix(11, 0).UTC()},
 	}
-	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["attachment-1"] = domain.SessionAttachment{
 		ID:        "attachment-1",
 		SessionID: "session-1",
+		Role:      domain.FileRoleInput,
 		Filename:  "note.txt",
 		MimeType:  "text/plain",
 		Size:      5,
 	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
 
 	got, err := service.GetSession(ctx, "session-1")
 	if err != nil {
@@ -3815,9 +3819,10 @@ func TestAppendPromptPersistsOrderedArtifactIDsWithoutCopying(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusWaitingApproval}
-	repo.sessionAttachments["artifact-1"] = domain.SessionFile{ID: "artifact-1", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/first.png", MimeType: "image/png"}
-	repo.sessionAttachments["artifact-2"] = domain.SessionFile{ID: "artifact-2", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/second.txt", MimeType: "text/plain"}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil))
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["artifact-1"] = domain.SessionFile{ID: "artifact-1", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/first.png", MimeType: "image/png"}
+	files.sessionAttachments["artifact-2"] = domain.SessionFile{ID: "artifact-2", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/second.txt", MimeType: "text/plain"}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
 	service.generateID = func() (domain.ID, error) { return "append-1", nil }
 
 	got, err := service.AppendPrompt(ctx, AppendPromptInput{
@@ -3835,20 +3840,19 @@ func TestAppendPromptPersistsOrderedArtifactIDsWithoutCopying(t *testing.T) {
 	if len(got.Artifacts) != 2 || got.Artifacts[0].ID != "artifact-2" || got.Artifacts[1].ID != "artifact-1" {
 		t.Fatalf("AppendPrompt() artifacts = %#v", got.Artifacts)
 	}
-	if len(repo.sessionAttachments) != 2 {
-		t.Fatalf("artifact metadata was copied: %#v", repo.sessionAttachments)
+	if len(files.sessionAttachments) != 2 {
+		t.Fatalf("artifact files were copied: %#v", files.sessionAttachments)
 	}
 }
 
 func TestAppendPromptRejectsUnavailableArtifact(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusWaitingApproval}
-	repo.sessionAttachments["other-session"] = domain.SessionFile{ID: "other-session", SessionID: "session-2", Role: domain.FileRoleArtifact}
-	deletedAt := time.Now().UTC()
-	repo.sessionAttachments["deleted"] = domain.SessionFile{ID: "deleted", SessionID: "session-1", Role: domain.FileRoleArtifact, DeletedAt: &deletedAt}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil))
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["other-session"] = domain.SessionFile{ID: "other-session", SessionID: "session-2", Role: domain.FileRoleArtifact}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
 
-	for _, id := range []domain.SessionFileID{"missing", "other-session", "deleted"} {
+	for _, id := range []domain.SessionFileID{"missing", "other-session"} {
 		_, err := service.AppendPrompt(context.Background(), AppendPromptInput{SessionID: "session-1", ArtifactIDs: []domain.SessionFileID{id}})
 		if err == nil {
 			t.Fatalf("AppendPrompt(%s) expected validation error", id)
@@ -3862,13 +3866,14 @@ func TestAppendPromptRejectsUnavailableArtifact(t *testing.T) {
 
 func TestPendingPromptInputUsesLiveArtifactsAndCancelsEmptyStaleAppend(t *testing.T) {
 	repo := newFakeRepository()
-	repo.sessionAttachments["image"] = domain.SessionFile{ID: "image", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/image.png", MimeType: "image/png"}
-	repo.sessionAttachments["note"] = domain.SessionFile{ID: "note", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/note.txt", MimeType: "text/plain"}
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["image"] = domain.SessionFile{ID: "image", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/image.png", MimeType: "image/png"}
+	files.sessionAttachments["note"] = domain.SessionFile{ID: "note", SessionID: "session-1", Role: domain.FileRoleArtifact, Path: "/archive/note.txt", MimeType: "text/plain"}
 	appends := []domain.PromptAppend{
 		{ID: "append-live", SessionID: "session-1", Body: "inspect", Status: domain.PromptAppendPending, ArtifactIDs: []domain.SessionFileID{"image", "note"}},
 		{ID: "append-stale", SessionID: "session-1", Status: domain.PromptAppendPending, ArtifactIDs: []domain.SessionFileID{"missing"}},
 	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
 
 	prompt, ids, paths, images, cancelled, err := service.pendingPromptInput(context.Background(), "session-1", appends)
 	if err != nil {
@@ -3894,7 +3899,7 @@ func TestStartCodexNowCancelsUnavailableAttachmentOnlyPromptWithoutProcess(t *te
 		ID: "append-stale", SessionID: queued.ID, Status: domain.PromptAppendPending,
 		ArtifactIDs: []domain.SessionFileID{"missing"},
 	}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
 	service.now = func() time.Time { return time.Unix(50, 0).UTC() }
 	drainObservedReleasedWorkdir := false
 	service.queueDrainScheduler = func(service *Service) {
@@ -3927,7 +3932,7 @@ func TestStartCodexNowSettlesPromptQueueAfterCancelledAppendWasAlreadyDeleted(t 
 		Queue: domain.QueueIntent{Kind: domain.QueueKindPromptAppend, Priority: domain.QueuePriorityMedium},
 	}
 	repo.sessions[queued.ID] = queued
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
 
 	got, err := service.startCodexNow(context.Background(), queued, codexStartOptions{queueKind: domain.QueueKindPromptAppend}, "/workspace", 1)
 	if err != nil {
@@ -3976,7 +3981,7 @@ func TestAppendPromptArchivesStagedAttachmentsWithBody(t *testing.T) {
 	if _, ok := repo.stagedAttachments["staged-1"]; ok {
 		t.Fatalf("staged attachment was not deleted")
 	}
-	attachment, ok := repo.sessionAttachments["staged-1"]
+	attachment, ok := files.sessionAttachments["staged-1"]
 	if !ok {
 		t.Fatalf("session attachment was not saved")
 	}
@@ -4020,7 +4025,7 @@ func TestAppendPromptArchivesStagedAttachments(t *testing.T) {
 	if _, ok := repo.stagedAttachments["staged-1"]; ok {
 		t.Fatal("staged attachment metadata was not deleted")
 	}
-	attachment, ok := repo.sessionAttachments["staged-1"]
+	attachment, ok := files.sessionAttachments["staged-1"]
 	if !ok {
 		t.Fatal("session attachment metadata was not saved")
 	}
@@ -4048,9 +4053,11 @@ func TestUpdatePromptAppendAllowsPendingAppendBeforeFirstProcessRun(t *testing.T
 		Status:    domain.PromptAppendPending,
 		CreatedAt: createdAt,
 	}}
-	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["attachment-1"] = domain.SessionAttachment{
 		ID:         "attachment-1",
 		SessionID:  "session-1",
+		Role:       domain.FileRoleInput,
 		SourceType: domain.AttachmentSourcePromptAppend,
 		SourceID:   "append-1",
 		Filename:   "notes.txt",
@@ -4061,7 +4068,7 @@ func TestUpdatePromptAppendAllowsPendingAppendBeforeFirstProcessRun(t *testing.T
 	service := New(
 		repo,
 		newFakeProjectRepository("project-1"),
-		WithAttachments(repo, nil),
+		WithAttachments(repo, files),
 		WithProcesses(processes, nil),
 		WithUnitOfWork(uow),
 		WithSessionLocker(locker),
@@ -4237,7 +4244,7 @@ func TestAppendPromptAllowsAttachmentOnlyAppend(t *testing.T) {
 	if got.Body != "" {
 		t.Fatalf("AppendPrompt() body = %q", got.Body)
 	}
-	attachment, ok := repo.sessionAttachments["staged-1"]
+	attachment, ok := files.sessionAttachments["staged-1"]
 	if !ok {
 		t.Fatal("session attachment metadata was not saved")
 	}
@@ -4276,8 +4283,8 @@ func TestAppendPromptRollsBackArchivedAttachmentsWhenAppendSaveFails(t *testing.
 	}); err == nil {
 		t.Fatal("AppendPrompt() expected append save error")
 	}
-	if _, ok := repo.sessionAttachments["staged-1"]; ok {
-		t.Fatal("session attachment metadata was not rolled back")
+	if _, ok := files.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment file was not rolled back")
 	}
 	if !files.deletedSessions["staged-1"] {
 		t.Fatal("session attachment file was not rolled back")
@@ -4314,8 +4321,8 @@ func TestAppendPromptRollsBackArchivedAttachmentsWhenStagedDeleteFails(t *testin
 	}); err == nil {
 		t.Fatal("AppendPrompt() expected staged delete error")
 	}
-	if _, ok := repo.sessionAttachments["staged-1"]; ok {
-		t.Fatal("session attachment metadata was not rolled back")
+	if _, ok := files.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment file was not rolled back")
 	}
 	if !files.deletedSessions["staged-1"] {
 		t.Fatal("session attachment file was not rolled back")
@@ -4350,8 +4357,8 @@ func TestAppendPromptRollbackIgnoresRequestCancellation(t *testing.T) {
 	}); err == nil {
 		t.Fatal("AppendPrompt() expected append save error")
 	}
-	if _, ok := repo.sessionAttachments["staged-1"]; ok {
-		t.Fatal("session attachment metadata was not rolled back")
+	if _, ok := files.sessionAttachments["staged-1"]; ok {
+		t.Fatal("session attachment file was not rolled back")
 	}
 	if !files.deletedSessions["staged-1"] {
 		t.Fatal("session attachment file was not rolled back")
@@ -4388,8 +4395,8 @@ func TestAppendPromptPreservesPendingContentWhenAutoQueueFails(t *testing.T) {
 	}); err == nil {
 		t.Fatal("AppendPrompt() expected auto resume error")
 	}
-	if _, ok := repo.sessionAttachments["staged-1"]; !ok {
-		t.Fatal("session attachment metadata was not preserved")
+	if _, ok := files.sessionAttachments["staged-1"]; !ok {
+		t.Fatal("session attachment file was not preserved")
 	}
 	if files.deletedSessions["staged-1"] {
 		t.Fatal("session attachment file was deleted")
@@ -4575,7 +4582,7 @@ func TestAppendPromptAutoStartsStoppedChatSession(t *testing.T) {
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234, CodexSessionID: "codex-session-1"}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil), WithProcesses(processes, codex))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()), WithProcesses(processes, codex))
 	ids := []domain.ID{"append-1", "process-run-1", "event-starting", "event-transcript-bound", "event-running"}
 	service.generateID = func() (domain.ID, error) {
 		id := ids[0]
@@ -4621,13 +4628,6 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 	}
 	repo.appends = []domain.PromptAppend{
 		{ID: "append-0", SessionID: "session-1", Body: "old context", CreatedAt: time.Unix(10, 0).UTC()},
-	}
-	repo.sessionAttachments["attachment-1"] = domain.SessionAttachment{
-		ID:        "attachment-1",
-		SessionID: "session-1",
-		Filename:  "notes.md",
-		Path:      "/data/attachments/sessions/session-1/notes.md",
-		MimeType:  "text/markdown",
 	}
 	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{
 		ID:       "staged-1",
@@ -4692,8 +4692,8 @@ func TestAppendPromptQueuesStoppedChatSession(t *testing.T) {
 	if strings.Contains(codex.resumeInput.Prompt, "/data/attachments/sessions/session-1/notes.md") {
 		t.Fatalf("codex resume prompt should not include old attachment path: %q", codex.resumeInput.Prompt)
 	}
-	if repo.lastPromptAppendAttachmentSessionID != "session-1" || repo.lastPromptAppendAttachmentID != "append-1" {
-		t.Fatalf("prompt append attachment query session=%q append=%q", repo.lastPromptAppendAttachmentSessionID, repo.lastPromptAppendAttachmentID)
+	if files.lastPromptAppendAttachmentSessionID != "session-1" || files.lastPromptAppendAttachmentID != "append-1" {
+		t.Fatalf("prompt append attachment query session=%q append=%q", files.lastPromptAppendAttachmentSessionID, files.lastPromptAppendAttachmentID)
 	}
 	if len(repo.appends) != 2 || repo.appends[1].Status != domain.PromptAppendInflight || repo.appends[1].DispatchedProcessRunID != "process-run-1" {
 		t.Fatalf("prompt append delivery state = %#v", repo.appends)
@@ -5111,13 +5111,12 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 }
 
-func TestCloseSessionScansQuarantinesAndDeletesArtifactOutput(t *testing.T) {
+func TestCloseSessionQuarantinesAndDeletesArtifactOutput(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusCreated}
 	artifacts := &fakeSessionArtifactStore{}
-	scanner := &fakeSessionArtifactScanner{}
-	service := New(repo, newFakeProjectRepository("project-1"), WithArtifactScanner(scanner))
+	service := New(repo, newFakeProjectRepository("project-1"))
 	service.artifacts = artifacts
 	service.generateID = func() (domain.ID, error) { return "close-token", nil }
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
@@ -5125,64 +5124,12 @@ func TestCloseSessionScansQuarantinesAndDeletesArtifactOutput(t *testing.T) {
 	if _, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"}); err != nil {
 		t.Fatalf("CloseSession() error = %v", err)
 	}
-	if len(scanner.inputs) != 1 || scanner.inputs[0].SourceType != domain.AttachmentSourceReconciled {
-		t.Fatalf("artifact scan inputs = %#v", scanner.inputs)
-	}
 	if artifacts.quarantinedToken != "close-token" || artifacts.deletedQuarantine != "/trash/session-1/close-token" || artifacts.restoredQuarantine != "" {
 		t.Fatalf("artifact lifecycle = %#v", artifacts)
 	}
 }
 
-func TestCloseSessionAtomicallyDeletesArtifactsAndIgnoresPhysicalCleanupFailure(t *testing.T) {
-	ctx := context.Background()
-	repo := newFakeRepository()
-	repo.sessions["session-1"] = domain.Session{
-		ID: "session-1", ProjectID: "project-1", Status: domain.StatusCreated, ArtifactCount: 2,
-	}
-	events := &fakeEventStore{}
-	processes := newFakeProcessRepository()
-	deletedAt := time.Unix(30, 0).UTC()
-	tx := fakeTx{
-		sessions: repo, processes: processes, events: events,
-		artifacts: []domain.SessionFile{
-			{ID: "artifact-1", SessionID: "session-1", Role: domain.FileRoleArtifact, Filename: "one.txt", Path: "/archive/one.txt", CreatedAt: time.Unix(10, 0).UTC()},
-			{ID: "artifact-2", SessionID: "session-1", Role: domain.FileRoleArtifact, Filename: "two.txt", Path: "/archive/two.txt", CreatedAt: time.Unix(20, 0).UTC()},
-		},
-	}
-	cleaner := &fakeSessionArtifactCleaner{err: errors.New("disk unavailable")}
-	service := New(repo, newFakeProjectRepository("project-1"),
-		WithEvents(events),
-		WithProcesses(processes, nil),
-		WithUnitOfWork(&fakeUnitOfWork{tx: tx}),
-		WithArtifactCleaner(cleaner),
-	)
-	service.now = func() time.Time { return deletedAt }
-
-	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
-	if err != nil {
-		t.Fatalf("CloseSession() error = %v", err)
-	}
-	if got.Status != domain.StatusClosed || got.ArtifactCount != 0 {
-		t.Fatalf("closed session = %#v", got)
-	}
-	if len(cleaner.artifacts) != 2 {
-		t.Fatalf("physical cleanup artifacts = %#v", cleaner.artifacts)
-	}
-	for _, artifact := range cleaner.artifacts {
-		if artifact.DeletedAt == nil || !artifact.DeletedAt.Equal(deletedAt) {
-			t.Fatalf("cleanup artifact = %#v", artifact)
-		}
-	}
-	types := make([]string, 0, len(events.snapshot()))
-	for _, event := range events.snapshot() {
-		types = append(types, event.Type)
-	}
-	if !slices.Equal(types, []string{"session.closing", "artifact.deleted", "artifact.deleted", "session.closed"}) {
-		t.Fatalf("event types = %#v", types)
-	}
-}
-
-func TestCloseSessionDeletesArchivedFilesAndPreservesInput(t *testing.T) {
+func TestCloseSessionDeletesOutputDirectoryAndPreservesInput(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
 	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(dataDir, "anycode.db")})
@@ -5202,8 +5149,7 @@ func TestCloseSessionDeletesArchivedFilesAndPreservesInput(t *testing.T) {
 	}
 
 	files := filestore.New(dataDir)
-	artifacts := artifactapp.New(store.Attachments(), files, files, store.Sessions())
-	artifacts.SetEvents(store.Events(), nil)
+	artifacts := artifactapp.New(files, store.Sessions())
 	outputDir, err := files.EnsureArtifactDir(ctx, "session-1")
 	if err != nil {
 		t.Fatal(err)
@@ -5212,29 +5158,25 @@ func TestCloseSessionDeletesArchivedFilesAndPreservesInput(t *testing.T) {
 	if err := os.WriteFile(source, []byte("result"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	archived, err := artifacts.Publish(ctx, artifactapp.PublishInput{SessionID: "session-1", Path: source})
+	artifact, err := artifacts.Publish(ctx, artifactapp.PublishInput{SessionID: "session-1", Path: source})
 	if err != nil {
 		t.Fatal(err)
 	}
-	archivedPath := archived.Path
+	if err := store.Sessions().UpdateArtifactCount(ctx, "session-1", 1); err != nil {
+		t.Fatal(err)
+	}
 	staged, err := files.Stage(ctx, domain.StageAttachmentInput{Filename: "input.txt", Reader: strings.NewReader("input")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := files.Promote(ctx, staged, "session-1")
+	input, err := files.Promote(ctx, domain.PromoteAttachmentInput{
+		Staged: staged, SessionID: "session-1", SourceType: domain.AttachmentSourceRequirement, SourceID: "session-1",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input.SourceType = domain.AttachmentSourceRequirement
-	input.SourceID = "requirement"
-	if err := store.Attachments().SaveSessionAttachment(ctx, input); err != nil {
-		t.Fatal(err)
-	}
-
 	service := New(store.Sessions(), newFakeProjectRepository("project-1"),
 		WithAttachments(store.Attachments(), files),
-		WithArtifactScanner(artifacts),
-		WithArtifactCleaner(artifacts),
 		WithEvents(store.Events()),
 		WithUnitOfWork(store),
 	)
@@ -5246,14 +5188,10 @@ func TestCloseSessionDeletesArchivedFilesAndPreservesInput(t *testing.T) {
 	if closed.Status != domain.StatusClosed || closed.ArtifactCount != 0 {
 		t.Fatalf("closed session = %#v", closed)
 	}
-	found, err := store.Attachments().FindSessionAttachment(ctx, archived.ID)
-	if err != nil || found.DeletedAt == nil || found.Path != "" {
-		t.Fatalf("archived artifact after close = %#v err=%v", found, err)
+	if _, err := files.FindArtifact(ctx, artifact.ID); !errors.Is(err, domain.ErrSessionFileNotFound) {
+		t.Fatalf("artifact after close error = %v", err)
 	}
-	if _, err := os.Stat(archivedPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("archived file still exists: %v", err)
-	}
-	inputs, err := store.Attachments().ListSessionAttachments(ctx, "session-1")
+	inputs, err := files.ListSessionAttachments(ctx, "session-1")
 	if err != nil || len(inputs) != 1 || inputs[0].ID != input.ID {
 		t.Fatalf("inputs after close = %#v err=%v", inputs, err)
 	}
@@ -5263,17 +5201,20 @@ func TestCloseSessionDeletesArchivedFilesAndPreservesInput(t *testing.T) {
 	if _, err := os.Stat(outputDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("artifact output still exists: %v", err)
 	}
+	persisted, err := store.Sessions().Find(ctx, "session-1")
+	if err != nil || persisted.ArtifactCount != 0 {
+		t.Fatalf("persisted artifact count = %d, err=%v", persisted.ArtifactCount, err)
+	}
 	sessionID := eventdomain.SessionID("session-1")
 	events, err := store.Events().List(ctx, eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var deleted, closedEvent bool
+	var closedEvent bool
 	for _, event := range events {
-		deleted = deleted || event.Type == "artifact.deleted"
 		closedEvent = closedEvent || event.Type == "session.closed"
 	}
-	if !deleted || !closedEvent {
+	if !closedEvent {
 		t.Fatalf("close events = %#v", events)
 	}
 }
@@ -5291,7 +5232,7 @@ func TestArchiveCodexEventImagesReplacesInlineDataWithStoredReference(t *testing
 	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event); len(failures) != 0 {
 		t.Fatalf("archive failures = %#v", failures)
 	}
-	if string(publisher.input.Data) != "png" || publisher.input.MimeType != "image/png" || publisher.input.SourceKey != "process-1:event-1:0" {
+	if string(publisher.input.Data) != "png" || publisher.input.SourceKey != "process-1:event-1:0" {
 		t.Fatalf("inline artifact input = %#v", publisher.input)
 	}
 	content := event.Content.(processdomain.CodexToolContent)
@@ -5313,7 +5254,7 @@ func TestArchiveCodexEventImagesArchivesAudioWithoutExposingItAsImage(t *testing
 	if failures := service.archiveCodexEventImages(context.Background(), domain.Session{ID: "session-1"}, processdomain.CodexHandle{ProcessRunID: "process-1"}, &event); len(failures) != 0 {
 		t.Fatalf("archive failures = %#v", failures)
 	}
-	if string(publisher.input.Data) != "audio" || publisher.input.MimeType != "audio/mpeg" || publisher.input.Filename != "event-audio-1.mp3" {
+	if string(publisher.input.Data) != "audio" || publisher.input.Filename != "event-audio-1.mp3" {
 		t.Fatalf("audio artifact input = %#v", publisher.input)
 	}
 	if images := event.Content.(processdomain.CodexToolContent).Images; len(images) != 0 {
@@ -6714,21 +6655,24 @@ func TestStartSessionPassesArchivedAttachmentsToCodex(t *testing.T) {
 		Status:       domain.StatusCreated,
 		WorktreePath: "/workspace/session-1",
 	}
-	repo.sessionAttachments["attachment-image"] = domain.SessionAttachment{
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["attachment-image"] = domain.SessionAttachment{
 		ID:        "attachment-image",
 		SessionID: "session-1",
+		Role:      domain.FileRoleInput,
 		Path:      "/data/attachments/sessions/session-1/screenshot.png",
 		MimeType:  "image/png",
 	}
-	repo.sessionAttachments["attachment-note"] = domain.SessionAttachment{
+	files.sessionAttachments["attachment-note"] = domain.SessionAttachment{
 		ID:        "attachment-note",
 		SessionID: "session-1",
+		Role:      domain.FileRoleInput,
 		Path:      "/data/attachments/sessions/session-1/notes.md",
 		MimeType:  "text/markdown",
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil), WithProcesses(processes, codex))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 
@@ -7254,6 +7198,141 @@ func TestHasCodexFileChanges(t *testing.T) {
 				t.Fatalf("hasCodexFileChanges() = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestArtifactDirectoryUpdateCachesCountAndEmitsForEveryActiveChange(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{
+		ID: "run-1", SessionID: "session-1", Status: processdomain.StatusRunning,
+	}
+	processes.hasActive = true
+	artifacts := &fakeSessionArtifactStore{artifactCount: 2}
+	events := &fakeEventStore{}
+	publisher := &fakeEventPublisher{}
+	service := New(repo, newFakeProjectRepository("project-1"),
+		WithProcesses(processes, nil),
+		WithEvents(events),
+		WithEventPublisher(publisher),
+	)
+	service.artifacts = artifacts
+
+	for range 2 {
+		if err := service.recordArtifactDirectoryUpdate(ctx, "session-1", "run-1"); err != nil {
+			t.Fatalf("recordArtifactDirectoryUpdate() error = %v", err)
+		}
+	}
+	if got := repo.sessions["session-1"].ArtifactCount; got != 2 {
+		t.Fatalf("artifact count = %d, want 2", got)
+	}
+	if repo.updateArtifactCountCalls != 2 {
+		t.Fatalf("artifact count updates = %d, want 2", repo.updateArtifactCountCalls)
+	}
+	stored := events.snapshot()
+	if len(stored) != 2 {
+		t.Fatalf("artifact events = %#v", stored)
+	}
+	for _, event := range stored {
+		if event.Type != "session.artifacts_updated" || event.Payload["artifactCount"] != 2 || event.Payload["processRunId"] != "run-1" {
+			t.Fatalf("artifact event = %#v", event)
+		}
+	}
+	if published := publisher.snapshot(); len(published) != 2 {
+		t.Fatalf("published artifact events = %#v", published)
+	}
+}
+
+func TestArtifactWatcherStartsOnlyForMatchingActiveProcess(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	artifacts := &fakeSessionArtifactStore{artifactCount: 1}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil))
+	service.artifacts = artifacts
+
+	service.startArtifactWatcher("session-1", "run-1")()
+	if artifacts.watchCalls != 0 {
+		t.Fatalf("inactive process watcher calls = %d", artifacts.watchCalls)
+	}
+
+	processes.active = processdomain.Run{
+		ID: "run-2", SessionID: "session-1", Status: processdomain.StatusRunning,
+	}
+	processes.hasActive = true
+	service.startArtifactWatcher("session-1", "run-1")()
+	if artifacts.watchCalls != 0 {
+		t.Fatalf("stale process watcher calls = %d", artifacts.watchCalls)
+	}
+
+	stop := service.startArtifactWatcher("session-1", "run-2")
+	if artifacts.watchCalls != 1 {
+		t.Fatalf("active process watcher calls = %d, want 1", artifacts.watchCalls)
+	}
+	stop()
+	if repo.sessions["session-1"].ArtifactCount != 1 {
+		t.Fatalf("flushed artifact count = %d", repo.sessions["session-1"].ArtifactCount)
+	}
+}
+
+func TestArtifactWatcherCanStartWhileSessionLockIsHeld(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, nil), WithSessionLocker(NewMemorySessionLocker()))
+	service.artifacts = &fakeSessionArtifactStore{artifactCount: 1}
+
+	stopReady := make(chan func())
+	go func() {
+		_ = service.withSessionLock(context.Background(), "session-1", func(context.Context) error {
+			stopReady <- service.startArtifactWatcher("session-1", "run-1")
+			return nil
+		})
+	}()
+	var stop func()
+	select {
+	case stop = <-stopReady:
+	case <-time.After(time.Second):
+		t.Fatal("artifact watcher re-entered the held session lock")
+	}
+	stop()
+}
+
+func TestDeleteSessionFileUpdatesStoppedSessionCountBeforeDeleting(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusStopped, ArtifactCount: 1,
+	}
+	artifacts := &fakeSessionArtifactStore{
+		artifactCount: 1,
+		artifacts: map[domain.SessionFileID]domain.SessionFile{
+			"artifact-1": {ID: "artifact-1", SessionID: "session-1", Role: domain.FileRoleArtifact},
+		},
+	}
+	artifacts.beforeDelete = func() {
+		if repo.sessions["session-1"].ArtifactCount != 0 {
+			t.Fatalf("artifact count at deletion = %d, want 0", repo.sessions["session-1"].ArtifactCount)
+		}
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+	service.artifacts = artifacts
+
+	if err := service.DeleteSessionFile(context.Background(), "artifact-1"); err != nil {
+		t.Fatal(err)
+	}
+	if repo.sessions["session-1"].ArtifactCount != 0 || repo.updateArtifactCountCalls != 1 {
+		t.Fatalf("session artifact count = %d, updates = %d", repo.sessions["session-1"].ArtifactCount, repo.updateArtifactCountCalls)
+	}
+	if _, exists := artifacts.artifacts["artifact-1"]; exists {
+		t.Fatal("artifact was not deleted")
 	}
 }
 
@@ -8680,7 +8759,8 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 			FastMode:        true,
 		},
 	}
-	repo.sessionAttachments["artifact-image"] = domain.SessionFile{
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["artifact-image"] = domain.SessionFile{
 		ID: "artifact-image", SessionID: "session-1", Role: domain.FileRoleArtifact,
 		Path: "/archive/image.png", MimeType: "image/png",
 	}
@@ -8691,7 +8771,7 @@ func TestResumeSessionStartsCodexResume(t *testing.T) {
 	processes := newFakeProcessRepository()
 	stream := make(chan processdomain.CodexEvent)
 	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}, events: stream}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, nil), WithProcesses(processes, codex))
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex))
 	service.now = func() time.Time { return time.Unix(41, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "process-run-2", nil }
 
@@ -10908,43 +10988,40 @@ func TestWorkflowProcessExitKeepsSessionLockThroughAdvance(t *testing.T) {
 }
 
 type fakeRepository struct {
-	saved                               []domain.Session
-	sessions                            map[domain.ID]domain.Session
-	createErr                           error
-	saveErr                             error
-	saveHook                            func(domain.Session) error
-	listSessions                        []domain.Session
-	interruptedSessions                 []domain.Session
-	listQueuedHook                      func()
-	listTotal                           int
-	lastListQuery                       domain.ListQuery
-	lastConfig                          domain.Config
-	hasLastConfig                       bool
-	lastConfigErr                       error
-	lastConfigProjectID                 domain.ProjectID
-	appends                             []domain.PromptAppend
-	deletedAppends                      []string
-	appendPromptHook                    func()
-	appendPromptErr                     error
-	markPromptAppendsInflightErr        error
-	completePromptAppendsErrs           []error
-	completePromptAppendsCalls          int
-	mergeRecords                        []domain.MergeRecord
-	addMergeRecordErr                   error
-	stagedAttachments                   map[domain.StagedAttachmentID]domain.StagedAttachment
-	sessionAttachments                  map[domain.SessionAttachmentID]domain.SessionAttachment
-	deleteStagedAttachmentErr           error
-	lastPromptAppendAttachmentSessionID domain.ID
-	lastPromptAppendAttachmentID        string
-	rejectCanceledContext               bool
-	updateFilesChangedCalls             int
+	saved                        []domain.Session
+	sessions                     map[domain.ID]domain.Session
+	createErr                    error
+	saveErr                      error
+	saveHook                     func(domain.Session) error
+	listSessions                 []domain.Session
+	interruptedSessions          []domain.Session
+	listQueuedHook               func()
+	listTotal                    int
+	lastListQuery                domain.ListQuery
+	lastConfig                   domain.Config
+	hasLastConfig                bool
+	lastConfigErr                error
+	lastConfigProjectID          domain.ProjectID
+	appends                      []domain.PromptAppend
+	deletedAppends               []string
+	appendPromptHook             func()
+	appendPromptErr              error
+	markPromptAppendsInflightErr error
+	completePromptAppendsErrs    []error
+	completePromptAppendsCalls   int
+	mergeRecords                 []domain.MergeRecord
+	addMergeRecordErr            error
+	stagedAttachments            map[domain.StagedAttachmentID]domain.StagedAttachment
+	deleteStagedAttachmentErr    error
+	rejectCanceledContext        bool
+	updateFilesChangedCalls      int
+	updateArtifactCountCalls     int
 }
 
 func newFakeRepository() *fakeRepository {
 	return &fakeRepository{
-		sessions:           map[domain.ID]domain.Session{},
-		stagedAttachments:  map[domain.StagedAttachmentID]domain.StagedAttachment{},
-		sessionAttachments: map[domain.SessionAttachmentID]domain.SessionAttachment{},
+		sessions:          map[domain.ID]domain.Session{},
+		stagedAttachments: map[domain.StagedAttachmentID]domain.StagedAttachment{},
 	}
 }
 
@@ -10991,6 +11068,20 @@ func (r *fakeRepository) UpdateFilesChanged(_ context.Context, id domain.ID, fil
 	current.FilesChanged = filesChanged
 	r.sessions[id] = current
 	r.updateFilesChangedCalls++
+	return nil
+}
+
+func (r *fakeRepository) UpdateArtifactCount(_ context.Context, id domain.ID, artifactCount int) error {
+	if artifactCount < 0 {
+		return errors.New("artifact count must be non-negative")
+	}
+	current, ok := r.sessions[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	current.ArtifactCount = artifactCount
+	r.sessions[id] = current
+	r.updateArtifactCountCalls++
 	return nil
 }
 
@@ -11233,64 +11324,13 @@ func (r *fakeRepository) DeleteStagedAttachment(_ context.Context, id domain.Sta
 	return nil
 }
 
-func (r *fakeRepository) SaveSessionAttachment(_ context.Context, attachment domain.SessionAttachment) error {
-	r.sessionAttachments[attachment.ID] = attachment
-	return nil
-}
-
-func (r *fakeRepository) FindSessionAttachment(_ context.Context, id domain.SessionAttachmentID) (domain.SessionAttachment, error) {
-	attachment, ok := r.sessionAttachments[id]
-	if !ok {
-		return domain.SessionAttachment{}, domain.ErrSessionFileNotFound
-	}
-	return attachment, nil
-}
-
-func (r *fakeRepository) ListSessionAttachments(_ context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
-	attachments := make([]domain.SessionAttachment, 0, len(r.sessionAttachments))
-	for _, attachment := range r.sessionAttachments {
-		if attachment.SessionID == sessionID {
-			attachments = append(attachments, attachment)
-		}
-	}
-	return attachments, nil
-}
-
-func (r *fakeRepository) ListPromptAppendAttachments(_ context.Context, sessionID domain.ID, appendID string) ([]domain.SessionAttachment, error) {
-	r.lastPromptAppendAttachmentSessionID = sessionID
-	r.lastPromptAppendAttachmentID = appendID
-	attachments := make([]domain.SessionAttachment, 0, len(r.sessionAttachments))
-	for _, attachment := range r.sessionAttachments {
-		if attachment.SessionID == sessionID && attachment.SourceType == domain.AttachmentSourcePromptAppend && attachment.SourceID == appendID {
-			attachments = append(attachments, attachment)
-		}
-	}
-	return attachments, nil
-}
-
-func (r *fakeRepository) DeleteSessionAttachment(_ context.Context, id domain.SessionAttachmentID) error {
-	delete(r.sessionAttachments, id)
-	return nil
-}
-
 type fakeAttachmentStore struct {
-	promoted        map[domain.StagedAttachmentID]bool
-	deletedSessions map[domain.SessionAttachmentID]bool
-	promoteErr      error
-}
-
-type fakeSessionArtifactScanner struct {
-	inputs []domain.ArtifactScanRequest
-}
-
-type fakeSessionArtifactCleaner struct {
-	artifacts []domain.SessionFile
-	err       error
-}
-
-func (c *fakeSessionArtifactCleaner) DeleteArchived(_ context.Context, artifacts []domain.SessionFile) (int, error) {
-	c.artifacts = append(c.artifacts, artifacts...)
-	return 0, c.err
+	promoted                            map[domain.StagedAttachmentID]bool
+	deletedSessions                     map[domain.SessionAttachmentID]bool
+	sessionAttachments                  map[domain.SessionAttachmentID]domain.SessionAttachment
+	lastPromptAppendAttachmentSessionID domain.ID
+	lastPromptAppendAttachmentID        string
+	promoteErr                          error
 }
 
 type fakeInlineArtifactPublisher struct {
@@ -11308,18 +11348,21 @@ func (p *fakeInlineArtifactPublisher) PublishInlineArtifact(_ context.Context, i
 	if previewKind == "" {
 		previewKind = domain.PreviewKindImage
 	}
-	return domain.SessionAttachment{ID: "artifact-1", MimeType: input.MimeType, PreviewKind: previewKind}, nil
-}
-
-func (s *fakeSessionArtifactScanner) Scan(_ context.Context, input domain.ArtifactScanRequest) ([]domain.SessionAttachment, error) {
-	s.inputs = append(s.inputs, input)
-	return nil, nil
+	mimeType := "image/png"
+	if previewKind == domain.PreviewKindAudio {
+		mimeType = "audio/mpeg"
+	}
+	return domain.SessionAttachment{ID: "artifact-1", MimeType: mimeType, PreviewKind: previewKind}, nil
 }
 
 type fakeSessionArtifactStore struct {
 	quarantinedToken   string
 	restoredQuarantine string
 	deletedQuarantine  string
+	artifactCount      int
+	watchCalls         int
+	artifacts          map[domain.SessionFileID]domain.SessionFile
+	beforeDelete       func()
 }
 
 func (s *fakeSessionArtifactStore) EnsureArtifactDir(context.Context, domain.ID) (string, error) {
@@ -11330,12 +11373,65 @@ func (s *fakeSessionArtifactStore) ArtifactDir(domain.ID) string {
 	return "/outputs/session-1"
 }
 
-func (s *fakeSessionArtifactStore) ArchiveArtifact(context.Context, domain.ArchiveArtifactInput) (domain.SessionAttachment, error) {
-	return domain.SessionAttachment{}, errors.New("unexpected ArchiveArtifact call")
+func (s *fakeSessionArtifactStore) InspectArtifact(context.Context, domain.InspectArtifactInput) (domain.SessionFile, error) {
+	return domain.SessionFile{}, errors.New("unexpected InspectArtifact call")
 }
 
-func (s *fakeSessionArtifactStore) ArchiveInlineArtifact(context.Context, domain.ArchiveInlineArtifactInput) (domain.SessionFile, error) {
-	return domain.SessionFile{}, errors.New("unexpected ArchiveInlineArtifact call")
+func (s *fakeSessionArtifactStore) WriteInlineArtifact(context.Context, domain.WriteInlineArtifactInput) (domain.SessionFile, error) {
+	return domain.SessionFile{}, errors.New("unexpected WriteInlineArtifact call")
+}
+
+func (s *fakeSessionArtifactStore) FindArtifact(_ context.Context, id domain.SessionFileID) (domain.SessionFile, error) {
+	artifact, ok := s.artifacts[id]
+	if !ok {
+		return domain.SessionFile{}, domain.ErrSessionFileNotFound
+	}
+	return artifact, nil
+}
+
+func (s *fakeSessionArtifactStore) ListArtifacts(context.Context, domain.ArtifactQuery) ([]domain.SessionFile, error) {
+	return nil, nil
+}
+
+func (s *fakeSessionArtifactStore) ResolveArtifacts(context.Context, domain.ID, []string) ([]domain.SessionFile, error) {
+	return nil, nil
+}
+
+func (s *fakeSessionArtifactStore) SumArtifactSize(context.Context, domain.ID) (int64, error) {
+	return 0, nil
+}
+
+func (s *fakeSessionArtifactStore) CountArtifacts(context.Context, domain.ID) (int, error) {
+	return s.artifactCount, nil
+}
+
+func (s *fakeSessionArtifactStore) DeleteArtifact(_ context.Context, id domain.SessionFileID) (domain.SessionFile, error) {
+	if s.beforeDelete != nil {
+		s.beforeDelete()
+	}
+	artifact, ok := s.artifacts[id]
+	if !ok {
+		return domain.SessionFile{}, domain.ErrSessionFileNotFound
+	}
+	delete(s.artifacts, id)
+	if s.artifactCount > 0 {
+		s.artifactCount--
+	}
+	return artifact, nil
+}
+
+func (s *fakeSessionArtifactStore) OpenArtifact(context.Context, domain.SessionFileID) (domain.AttachmentStream, error) {
+	return domain.AttachmentStream{}, domain.ErrSessionFileNotFound
+}
+
+func (s *fakeSessionArtifactStore) WatchArtifactDir(ctx context.Context, _ domain.ID) (<-chan struct{}, error) {
+	s.watchCalls++
+	changes := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		close(changes)
+	}()
+	return changes, nil
 }
 
 func (s *fakeSessionArtifactStore) QuarantineArtifactDir(_ context.Context, sessionID domain.ID, token string) (string, error) {
@@ -11367,8 +11463,9 @@ func (s *fakeSessionArtifactStore) DeleteArtifactOutputDirectory(context.Context
 
 func newFakeAttachmentStore() *fakeAttachmentStore {
 	return &fakeAttachmentStore{
-		promoted:        map[domain.StagedAttachmentID]bool{},
-		deletedSessions: map[domain.SessionAttachmentID]bool{},
+		promoted:           map[domain.StagedAttachmentID]bool{},
+		deletedSessions:    map[domain.SessionAttachmentID]bool{},
+		sessionAttachments: map[domain.SessionAttachmentID]domain.SessionAttachment{},
 	}
 }
 
@@ -11376,22 +11473,28 @@ func (s *fakeAttachmentStore) Stage(context.Context, domain.StageAttachmentInput
 	return domain.StagedAttachment{}, errors.New("unexpected Stage call")
 }
 
-func (s *fakeAttachmentStore) Promote(_ context.Context, staged domain.StagedAttachment, sessionID domain.ID) (domain.SessionAttachment, error) {
+func (s *fakeAttachmentStore) Promote(_ context.Context, input domain.PromoteAttachmentInput) (domain.SessionAttachment, error) {
 	if s.promoteErr != nil {
 		return domain.SessionAttachment{}, s.promoteErr
 	}
+	staged := input.Staged
 	s.promoted[staged.ID] = true
-	return domain.SessionAttachment{
+	attachment := domain.SessionAttachment{
 		ID:          domain.SessionAttachmentID(staged.ID),
-		SessionID:   sessionID,
+		SessionID:   input.SessionID,
+		Role:        domain.FileRoleInput,
+		SourceType:  input.SourceType,
+		SourceID:    input.SourceID,
 		Kind:        "file",
 		Filename:    staged.Filename,
-		Path:        "/attachments/sessions/" + string(sessionID) + "/" + string(staged.ID) + "/" + staged.Filename,
+		Path:        "/attachments/sessions/" + string(input.SessionID) + "/" + string(staged.ID) + "/" + staged.Filename,
 		MimeType:    staged.MimeType,
 		Size:        staged.Size,
 		Previewable: staged.Previewable,
 		CreatedAt:   time.Unix(11, 0).UTC(),
-	}, nil
+	}
+	s.sessionAttachments[attachment.ID] = attachment
+	return attachment, nil
 }
 
 func (s *fakeAttachmentStore) DeleteStaged(context.Context, domain.StagedAttachmentID) error {
@@ -11403,7 +11506,38 @@ func (s *fakeAttachmentStore) DeleteSession(ctx context.Context, id domain.Sessi
 		return err
 	}
 	s.deletedSessions[id] = true
+	delete(s.sessionAttachments, id)
 	return nil
+}
+
+func (s *fakeAttachmentStore) FindSessionFile(_ context.Context, id domain.SessionFileID) (domain.SessionFile, error) {
+	attachment, ok := s.sessionAttachments[id]
+	if !ok {
+		return domain.SessionFile{}, domain.ErrSessionFileNotFound
+	}
+	return attachment, nil
+}
+
+func (s *fakeAttachmentStore) ListSessionAttachments(_ context.Context, sessionID domain.ID) ([]domain.SessionAttachment, error) {
+	attachments := make([]domain.SessionAttachment, 0)
+	for _, attachment := range s.sessionAttachments {
+		if attachment.SessionID == sessionID && attachment.Role == domain.FileRoleInput {
+			attachments = append(attachments, attachment)
+		}
+	}
+	return attachments, nil
+}
+
+func (s *fakeAttachmentStore) ListPromptAppendAttachments(_ context.Context, sessionID domain.ID, appendID string) ([]domain.SessionAttachment, error) {
+	s.lastPromptAppendAttachmentSessionID = sessionID
+	s.lastPromptAppendAttachmentID = appendID
+	attachments := make([]domain.SessionAttachment, 0)
+	for _, attachment := range s.sessionAttachments {
+		if attachment.SessionID == sessionID && attachment.SourceType == domain.AttachmentSourcePromptAppend && attachment.SourceID == appendID {
+			attachments = append(attachments, attachment)
+		}
+	}
+	return attachments, nil
 }
 
 func (s *fakeAttachmentStore) Open(context.Context, string) (domain.AttachmentStream, error) {
@@ -12775,19 +12909,6 @@ type fakeTx struct {
 	questions questiondomain.Repository
 	processes processdomain.Repository
 	events    eventdomain.Store
-	artifacts []domain.SessionFile
-}
-
-func (tx fakeTx) DeleteSessionArtifacts(_ context.Context, input port.DeleteSessionArtifactsInput) (port.DeleteSessionArtifactsResult, error) {
-	artifacts := make([]domain.SessionFile, 0, len(tx.artifacts))
-	for _, artifact := range tx.artifacts {
-		if artifact.SessionID != input.SessionID || artifact.Role != domain.FileRoleArtifact || artifact.DeletedAt != nil {
-			continue
-		}
-		artifact.DeletedAt = &input.DeletedAt
-		artifacts = append(artifacts, artifact)
-	}
-	return port.DeleteSessionArtifactsResult{Artifacts: artifacts}, nil
 }
 
 func (tx fakeTx) ClaimExecution(ctx context.Context, input port.ExecutionClaimInput) (port.ExecutionClaimResult, error) {

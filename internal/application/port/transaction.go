@@ -2,7 +2,6 @@ package port
 
 import (
 	"context"
-	"time"
 
 	"github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/process"
@@ -58,19 +57,9 @@ type ClosePreparationResult struct {
 	ActiveRun *process.Run
 }
 
-type DeleteSessionArtifactsInput struct {
-	SessionID session.ID
-	DeletedAt time.Time
-}
-
-type DeleteSessionArtifactsResult struct {
-	Artifacts []session.SessionFile
-}
-
 type Tx interface {
 	ClaimExecution(ctx context.Context, input ExecutionClaimInput) (ExecutionClaimResult, error)
 	PrepareClose(ctx context.Context, input ClosePreparationInput) (ClosePreparationResult, error)
-	DeleteSessionArtifacts(ctx context.Context, input DeleteSessionArtifactsInput) (DeleteSessionArtifactsResult, error)
 	Projects() project.Repository
 	Sessions() session.Repository
 	Workflows() workflow.Repository

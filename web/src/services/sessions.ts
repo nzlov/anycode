@@ -467,8 +467,8 @@ const sessionDetailFields = `
       createdAt
     }
     artifacts {
-      id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
-      previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
+      id sessionId role sourceType artifactKind logicalPath filename mimeType size
+      previewKind previewUrl downloadUrl createdAt
     }
     createdAt
   }
@@ -746,8 +746,8 @@ export async function appendPrompt(
             createdAt
           }
           artifacts {
-            id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
-            previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
+            id sessionId role sourceType artifactKind logicalPath filename mimeType size
+            previewKind previewUrl downloadUrl createdAt
           }
           createdAt
         }
@@ -783,8 +783,8 @@ export async function updatePromptAppend(
             createdAt
           }
           artifacts {
-            id sessionId role sourceType sourceId artifactKind logicalPath filename mimeType size sha256
-            previewKind processRunId nodeRunId correlationId previewUrl downloadUrl createdAt
+            id sessionId role sourceType artifactKind logicalPath filename mimeType size
+            previewKind previewUrl downloadUrl createdAt
           }
           createdAt
         }

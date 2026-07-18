@@ -2,6 +2,7 @@ package entstore
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 	"github.com/nzlov/anycode/internal/application/port"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	"github.com/nzlov/anycode/internal/domain/project"
-	"github.com/nzlov/anycode/internal/domain/session"
+	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 func TestDatabaseTargetForOptions(t *testing.T) {
@@ -166,6 +167,103 @@ func TestMigrateDropsSupersededWorkflowStorage(t *testing.T) {
 	}
 }
 
+func TestMigrateRemovesSessionAttachmentsAndPreservesInputFiles(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	store, err := Open(ctx, OpenOptions{
+		DatabaseURL: filepath.Join(dataDir, "anycode.db"),
+		DataDir:     dataDir,
+	})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("create current schema: %v", err)
+	}
+	if _, err := store.db.ExecContext(ctx, `CREATE TABLE session_attachments (
+		id text PRIMARY KEY,
+		session_id text NOT NULL,
+		role text NOT NULL,
+		source_type text NOT NULL,
+		source_id text NOT NULL,
+		path text NOT NULL
+	)`); err != nil {
+		t.Fatalf("create legacy session attachments: %v", err)
+	}
+
+	legacyRoot := filepath.Join(dataDir, "attachments", "sessions", "session-1")
+	requirementPath := filepath.Join(legacyRoot, "requirement-file", "requirement.txt")
+	appendPath := filepath.Join(legacyRoot, "append-file", "append.txt")
+	artifactPath := filepath.Join(legacyRoot, "artifact-file", "result.txt")
+	outsideRoot := filepath.Join(t.TempDir(), "sessions", "session-1")
+	outsideInputPath := filepath.Join(outsideRoot, "outside-input", "input.txt")
+	outsideArtifactPath := filepath.Join(outsideRoot, "outside-artifact", "artifact.txt")
+	for path, body := range map[string]string{
+		requirementPath:     "requirement",
+		appendPath:          "append",
+		artifactPath:        "legacy artifact copy",
+		outsideInputPath:    "outside input",
+		outsideArtifactPath: "outside artifact",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, row := range []struct {
+		id, role, sourceType, sourceID, path string
+	}{
+		{id: "requirement-file", role: string(sessiondomain.FileRoleInput), sourceType: string(sessiondomain.AttachmentSourceRequirement), sourceID: "session-1", path: requirementPath},
+		{id: "append-file", role: string(sessiondomain.FileRoleInput), sourceType: string(sessiondomain.AttachmentSourcePromptAppend), sourceID: "append-1", path: appendPath},
+		{id: "artifact-file", role: string(sessiondomain.FileRoleArtifact), sourceType: string(sessiondomain.AttachmentSourceCodex), sourceID: "run-1", path: artifactPath},
+		{id: "outside-input", role: string(sessiondomain.FileRoleInput), sourceType: string(sessiondomain.AttachmentSourceRequirement), sourceID: "session-1", path: outsideInputPath},
+		{id: "outside-artifact", role: string(sessiondomain.FileRoleArtifact), sourceType: string(sessiondomain.AttachmentSourceCodex), sourceID: "run-1", path: outsideArtifactPath},
+	} {
+		if _, err := store.db.ExecContext(ctx, `INSERT INTO session_attachments
+			(id, session_id, role, source_type, source_id, path) VALUES (?, 'session-1', ?, ?, ?, ?)`,
+			row.id, row.role, row.sourceType, row.sourceID, row.path); err != nil {
+			t.Fatalf("insert legacy attachment %s: %v", row.id, err)
+		}
+	}
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	if exists, err := store.tableExists(ctx, "session_attachments"); err != nil || exists {
+		t.Fatalf("session_attachments exists = %v, error = %v", exists, err)
+	}
+	for _, migrated := range []struct {
+		path string
+		body string
+	}{
+		{
+			path: filepath.Join(legacyRoot, string(sessiondomain.AttachmentSourceRequirement), base64.RawURLEncoding.EncodeToString([]byte("session-1")), "requirement-file", "requirement.txt"),
+			body: "requirement",
+		},
+		{
+			path: filepath.Join(legacyRoot, string(sessiondomain.AttachmentSourcePromptAppend), base64.RawURLEncoding.EncodeToString([]byte("append-1")), "append-file", "append.txt"),
+			body: "append",
+		},
+	} {
+		body, err := os.ReadFile(migrated.path)
+		if err != nil || string(body) != migrated.body {
+			t.Fatalf("migrated file %q = %q, %v", migrated.path, body, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Dir(artifactPath)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy artifact copy still exists: %v", err)
+	}
+	for path, want := range map[string]string{outsideInputPath: "outside input", outsideArtifactPath: "outside artifact"} {
+		body, err := os.ReadFile(path)
+		if err != nil || string(body) != want {
+			t.Fatalf("outside file %q = %q, %v", path, body, err)
+		}
+	}
+}
+
 func TestProjectRepositoryWithLocalTurso(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
@@ -305,87 +403,5 @@ func TestUnitOfWorkCommitsAndRollsBackRepositories(t *testing.T) {
 		t.Fatalf("list events after commit: %v", err)
 	} else if len(events) != 1 || events[0].ID != "event-commit" {
 		t.Fatalf("events after commit = %#v", events)
-	}
-}
-
-func TestUnitOfWorkDeletesSessionArtifactsAndPreservesInputs(t *testing.T) {
-	ctx := context.Background()
-	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.Close()
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-
-	now := time.Unix(10, 0).UTC()
-	card := session.Session{
-		ID: "session-1", ProjectID: "project-1", Mode: session.ModeChat, Status: session.StatusCreated,
-		ArtifactCount: 2, CreatedAt: now, UpdatedAt: now,
-	}
-	if err := store.Sessions().Create(ctx, card); err != nil {
-		t.Fatal(err)
-	}
-	files := []session.SessionFile{
-		{ID: "artifact-1", SessionID: card.ID, Role: session.FileRoleArtifact, SourceType: session.AttachmentSourceCodex, SourceID: "run-1", SourceKey: "source-1", LogicalPath: "one.txt", Filename: "one.txt", Path: "/archive/one.txt", CreatedAt: now},
-		{ID: "artifact-2", SessionID: card.ID, Role: session.FileRoleArtifact, SourceType: session.AttachmentSourceCodex, SourceID: "run-1", SourceKey: "source-2", LogicalPath: "two.txt", Filename: "two.txt", Path: "/archive/two.txt", CreatedAt: now.Add(time.Second)},
-		{ID: "input-1", SessionID: card.ID, Role: session.FileRoleInput, SourceType: session.AttachmentSourceRequirement, SourceID: "requirement", Filename: "one.txt", Path: "/inputs/one.txt", CreatedAt: now.Add(2 * time.Second)},
-	}
-	for _, file := range files {
-		if err := store.Attachments().SaveSessionAttachment(ctx, file); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	deletedAt := now.Add(time.Minute)
-	rollbackErr := errors.New("rollback artifact cleanup")
-	err = store.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		result, err := tx.DeleteSessionArtifacts(ctx, port.DeleteSessionArtifactsInput{SessionID: card.ID, DeletedAt: deletedAt})
-		if err != nil {
-			return err
-		}
-		if len(result.Artifacts) != 2 {
-			t.Fatalf("deleted artifacts = %#v", result.Artifacts)
-		}
-		return rollbackErr
-	})
-	if !errors.Is(err, rollbackErr) {
-		t.Fatalf("rollback error = %v", err)
-	}
-	for _, id := range []session.SessionFileID{"artifact-1", "artifact-2"} {
-		found, err := store.Attachments().FindSessionAttachment(ctx, id)
-		if err != nil || found.DeletedAt != nil {
-			t.Fatalf("artifact after rollback = %#v err=%v", found, err)
-		}
-	}
-	if found, err := store.Sessions().Find(ctx, card.ID); err != nil || found.ArtifactCount != 2 {
-		t.Fatalf("session after rollback = %#v err=%v", found, err)
-	}
-
-	var deleted []session.SessionFile
-	err = store.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		result, err := tx.DeleteSessionArtifacts(ctx, port.DeleteSessionArtifactsInput{SessionID: card.ID, DeletedAt: deletedAt})
-		deleted = result.Artifacts
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(deleted) != 2 || deleted[0].DeletedAt == nil || deleted[1].DeletedAt == nil {
-		t.Fatalf("deleted artifacts = %#v", deleted)
-	}
-	for _, id := range []session.SessionFileID{"artifact-1", "artifact-2"} {
-		found, err := store.Attachments().FindSessionAttachment(ctx, id)
-		if err != nil || found.DeletedAt == nil || !found.DeletedAt.Equal(deletedAt) {
-			t.Fatalf("deleted artifact = %#v err=%v", found, err)
-		}
-	}
-	inputs, err := store.Attachments().ListSessionAttachments(ctx, card.ID)
-	if err != nil || len(inputs) != 1 || inputs[0].ID != "input-1" || inputs[0].DeletedAt != nil {
-		t.Fatalf("inputs after cleanup = %#v err=%v", inputs, err)
-	}
-	if found, err := store.Sessions().Find(ctx, card.ID); err != nil || found.ArtifactCount != 0 {
-		t.Fatalf("session after cleanup = %#v err=%v", found, err)
 	}
 }

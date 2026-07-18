@@ -27,6 +27,7 @@ func sessionCardChangeEvent(eventDTO eventapp.DTO, projectID *string) bool {
 		"session.priority_changed",
 		"session.todo_list_updated",
 		"session.diff_changed",
+		"session.artifacts_updated",
 		"artifact.published",
 		"artifact.deleted",
 		"workflow.waiting_resume_action",
