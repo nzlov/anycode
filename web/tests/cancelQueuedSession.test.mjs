@@ -14,7 +14,7 @@ test('queued sessions expose cancel actions without removing force start', () =>
   assert.match(overviewSource, /card\.status === 'queued'[\s\S]*取消排队/);
   assert.match(overviewSource, /@click\.stop="cancelQueuedCard\(card\)"/);
   assert.match(overviewSource, /tooltip: '强制启动排队卡片'/);
-  assert.match(overviewSource, /catch \{[\s\S]*loadOverviewSessions\(\)\.catch/);
+  assert.match(overviewSource, /catch \{[\s\S]*await refreshOverviewCard\(card\.id\)/);
 
   assert.match(detailSource, /const canCancelQueue = computed/);
   assert.match(detailSource, /v-if="canCancelQueue"[\s\S]*aria-label="取消排队"/);

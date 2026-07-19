@@ -128,9 +128,7 @@ func TestRecoverInterruptedSessionCommitsRunQueueAndEventInOneTransaction(t *tes
 		t.Fatalf("transaction result: exited=%q session=%#v", processes.exitedID, repo.sessions[session.ID])
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 2 || gotEvents[0].Type != "process.exited" || gotEvents[1].Type != "session.queued" {
-		t.Fatalf("transaction events = %#v", gotEvents)
-	}
+	requireSessionEventTypes(t, gotEvents, "process.exited", "session.queued", sessionStatusUpdatedEvent)
 }
 
 func TestRecoverInterruptedWorkflowKeepsCurrentNodeAttempt(t *testing.T) {

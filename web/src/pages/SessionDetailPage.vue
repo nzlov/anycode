@@ -85,11 +85,15 @@
               />
             </div>
             <WorkflowApprovalPanel
+              v-if="!approvalLoading"
               :key="approvalPanelKey"
               :context-available="isPendingApprovalReviewable(session?.pendingApproval)"
               :submitting="approvalSubmitting"
               @submit="submitApproval"
             />
+            <q-inner-loading :showing="approvalLoading">
+              <q-spinner color="primary" size="32px" />
+            </q-inner-loading>
           </div>
           <CodexPromptComposer
             v-else
@@ -427,6 +431,7 @@
                 v-model="detailDiffWorkspaceState"
                 :target="detailDiffTarget"
                 :show-file-navigation="false"
+                :refresh-key="diffUpdateVersion"
               />
             </q-tab-panel>
 
@@ -660,6 +665,7 @@ const {
   eventsPageInfo,
   pendingQuestionBatches,
   artifactUpdateVersion,
+  diffUpdateVersion,
   loading,
   loadingOlderEvents,
   appending,
@@ -670,6 +676,7 @@ const {
   updatingConfig,
   questionsLoading,
   questionsSubmitting,
+  approvalLoading,
   approvalSubmitting,
   error: detailError,
   loadSessionDetail,
@@ -689,7 +696,7 @@ const {
 } = useSessionDetail(sessionId);
 
 // GLUE: Persisted prompt text disambiguates user-authored copies of injected guidance.
-// Remove this projection when timeline messages expose their user/injected provenance.
+// Remove this fallback when timeline messages expose their user/injected provenance.
 const knownUserPrompts = computed(() => {
   const current = session.value;
   if (!current) return [];
@@ -708,8 +715,7 @@ const canCancelQueue = computed(
 );
 const isClosed = computed(() => session.value?.status === 'closed');
 const isWaitingForAnswer = computed(
-  () =>
-    !isClosed.value && (session.value?.pendingQuestion || session.value?.status === 'waiting_user'),
+  () => !isClosed.value && session.value?.status === 'waiting_user',
 );
 const isWaitingForApproval = computed(
   () => !isClosed.value && session.value?.status === 'waiting_approval',
@@ -1085,10 +1091,9 @@ onUnmounted(() => {
 });
 
 async function initializeSessionDetail() {
-  await startLiveUpdates();
-  if (!mounted) return;
   await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
   if (!mounted) return;
+  startLiveUpdates();
   await scrollEventsToBottom();
 }
 
@@ -1346,6 +1351,7 @@ async function scrollEventsToBottom() {
 }
 
 .detail-approval-review {
+  position: relative;
   max-height: min(60vh, 640px);
   overflow: auto;
 }

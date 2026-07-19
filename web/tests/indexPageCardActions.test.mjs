@@ -143,6 +143,20 @@ test('overview card backgrounds highlight running and waiting answer states only
   assert.doesNotMatch(stylesSource, /\.overview-session-card--(?:stopped|closed)\s*{/);
 });
 
+test('overview waiting answer card uses one status badge', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+  const chips = overviewSource.slice(
+    overviewSource.indexOf('<div class="overview-card-chips">'),
+    overviewSource.indexOf('<div class="overview-card-title">'),
+  );
+
+  assert.equal((chips.match(/statusLabel\(card\.status\)/g) ?? []).length, 1);
+  assert.doesNotMatch(chips, /v-if="card\.status === 'waiting_user'"/);
+});
+
 test('overview waiting approval dialog shows model output and diff before submit', () => {
   const overviewSource = readFileSync(
     new URL('../src/pages/IndexPage.vue', import.meta.url),
@@ -172,7 +186,9 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /approvalContextGeneration === requestGeneration/);
   assert.doesNotMatch(overviewSource, /getSessionTranscriptPage/);
   assert.doesNotMatch(overviewSource, /getSessionAllDiff/);
-  assert.match(overviewSource, /card\.pendingApproval/);
+  assert.match(overviewSource, /const detail = await getSession\(card\.id\)/);
+  assert.match(overviewSource, /approvalPending\.value = detail\.pendingApproval \?\? null/);
+  assert.doesNotMatch(overviewSource, /card\.pendingApproval/);
   assert.doesNotMatch(overviewSource, /workflow\.waiting_approval/);
   assert.doesNotMatch(overviewSource, /approvalOutputError/);
   assert.match(overviewSource, /:phase="approvalPending\?\.phase \?\? null"/);

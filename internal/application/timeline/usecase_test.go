@@ -161,6 +161,48 @@ func TestListSessionEventsGroupsRoutineEventsBeforePaginationWithoutLosingAuditE
 	}
 }
 
+func TestListSessionEventsHidesCardUpdatesAndMirroredWorkflowWait(t *testing.T) {
+	sessionID := eventdomain.SessionID("session-1")
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(20, 0).UTC()},
+	}}
+	events := []eventdomain.DomainEvent{
+		{ID: "status", Type: "session.status_updated"},
+		{ID: "todo", Type: "session.todo_list_updated"},
+		{ID: "diff", Type: "session.diff_changed"},
+		{ID: "artifacts", Type: "session.artifacts_updated"},
+		{ID: "priority", Type: "session.priority_changed"},
+		{ID: "config", Type: "session.config_changed"},
+		{ID: "cleanup", Type: "session.worktree_cleanup_completed"},
+		{ID: "cleanup-failed", Type: "session.worktree_cleanup_failed"},
+		{ID: "workflow-wait", Type: "workflow.waiting_approval"},
+		{ID: "session-wait", Type: "session.waiting_approval"},
+	}
+	for index := range events {
+		events[index].Scope = eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionID}
+		events[index].SessionID = &sessionID
+		events[index].CreatedAt = time.Unix(int64(index+1), 0).UTC()
+	}
+	service := New(
+		&fakeLiveSource{},
+		sessions,
+		nil,
+		nil,
+		WithHistory(&fakeEventHistory{events: events}),
+	)
+
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
+		SessionID: "session-1",
+		Limit:     20,
+	})
+	if err != nil {
+		t.Fatalf("ListSessionEvents() error = %v", err)
+	}
+	if got := dtoIDs(page.Items); !reflect.DeepEqual(got, []eventdomain.ID{"cleanup-failed", "session-wait"}) {
+		t.Fatalf("visible status events = %#v", got)
+	}
+}
+
 func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	sessionID := eventdomain.SessionID("session-1")
 	sessions := &fakeSessionRepository{
@@ -591,6 +633,48 @@ func TestSessionEventsKeepsPlanUpdatesOutOfTranscript(t *testing.T) {
 	}
 }
 
+func TestSessionEventsKeepsUsageOutOfTranscript(t *testing.T) {
+	liveSource := &fakeLiveSource{ch: make(chan process.CodexEvent, 2)}
+	service := New(liveSource, nil, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := service.SessionEvents(ctx, SessionEventsInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveSource.ch <- process.CodexEvent{
+		EventID: "usage-1", Type: process.CodexEventUsage, SessionID: "session-1",
+		Content: process.CodexUsageContent{InputTokens: 10},
+	}
+	liveSource.ch <- process.CodexEvent{
+		EventID: "message-1", Type: process.CodexEventMessage, SessionID: "session-1",
+		Content: process.CodexMessageContent{Role: "assistant", Text: "visible"},
+	}
+	if got := <-ch; got.ID != "message-1" || got.Type != process.CodexEventMessage {
+		t.Fatalf("transcript event = %#v", got)
+	}
+}
+
+func TestSessionUsageEventsMapsUsageAcrossSessions(t *testing.T) {
+	liveSource := &fakeLiveSource{usageCh: make(chan process.CodexEvent, 2)}
+	service := New(liveSource, nil, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch, err := service.SessionUsageEvents(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveSource.usageCh <- process.CodexEvent{
+		EventID: "usage-1", Type: process.CodexEventUsage, SessionID: "session-1",
+		Content:   process.CodexUsageContent{InputTokens: 10, TotalTokens: 12},
+		CreatedAt: time.Unix(3, 0).UTC(),
+	}
+	got := <-ch
+	if got.SessionID != "session-1" || got.Usage.InputTokens != 10 || got.Usage.TotalTokens != 12 || got.OccurredAt != "1970-01-01T00:00:03Z" {
+		t.Fatalf("usage update = %#v", got)
+	}
+}
+
 func dtoIDs(items []DTO) []eventdomain.ID {
 	ids := make([]eventdomain.ID, 0, len(items))
 	for _, item := range items {
@@ -600,9 +684,10 @@ func dtoIDs(items []DTO) []eventdomain.ID {
 }
 
 type fakeLiveSource struct {
-	ch    chan process.CodexEvent
-	input process.SessionID
-	done  <-chan struct{}
+	ch      chan process.CodexEvent
+	usageCh chan process.CodexEvent
+	input   process.SessionID
+	done    <-chan struct{}
 }
 
 func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.SessionID) (<-chan process.CodexEvent, error) {
@@ -612,6 +697,14 @@ func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.
 		s.ch = make(chan process.CodexEvent, 1)
 	}
 	return s.ch, nil
+}
+
+func (s *fakeLiveSource) LiveCodexUsageEvents(ctx context.Context) (<-chan process.CodexEvent, error) {
+	s.done = ctx.Done()
+	if s.usageCh == nil {
+		s.usageCh = make(chan process.CodexEvent, 1)
+	}
+	return s.usageCh, nil
 }
 
 type fakeSessionRepository struct {

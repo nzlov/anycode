@@ -69,7 +69,6 @@ func TestSmokeHTTPGraphQLMCPAnswerUserSessionLifecycle(t *testing.T) {
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{
 		Projects:    projects,
 		Sessions:    sessions,
-		Events:      events,
 		Attachments: attachments,
 		Workflows:   workflows,
 		Questions:   questions,

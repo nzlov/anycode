@@ -11,6 +11,7 @@ type Query {
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
+  sessionCard(id: ID!): SessionCard!
   lastSessionConfig(projectId: ID!): SessionConfig
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
@@ -53,9 +54,8 @@ type Mutation {
 }
 
 type Subscription {
-  sessionEvents(sessionId: ID!): SessionEventStreamItem!
-  sessionCardChanged(projectId: ID): SessionCard!
-  sessionCardUpdates(projectId: ID): SessionCardStreamItem!
+  sessionEvents(sessionId: ID!): TranscriptEvent!
+  sessionUpdates: SessionUpdateEvent!
 }
 
 type PageInfo {
@@ -169,8 +169,6 @@ type SessionCard {
   baseBranch: String!
   worktreeBranch: String!
   currentNodeTitle: String!
-  pendingApproval: PendingApproval
-  pendingQuestion: Boolean!
   todoList: TodoList
   artifactCount: Int!
   filesChanged: Int!
@@ -453,20 +451,27 @@ type TranscriptTokenUsage {
   compactionCount: Int!
 }
 
-type SessionEventStreamItem {
-  ready: Boolean!
-  id: ID
-  type: String!
-  occurredAt: Time
-  transcript: TranscriptEvent
-  usage: TranscriptTokenUsage
-  session: SessionDetail
-  questionBatch: QuestionBatch
+type SessionStatusUpdate {
+  status: String!
+  currentNodeTitle: String!
+  availableActions: [String!]!
+  updatedAt: Time!
 }
 
-type SessionCardStreamItem {
-  ready: Boolean!
-  card: SessionCard
+type SessionUpdateEvent {
+  eventType: String!
+  sessionId: ID!
+  occurredAt: Time
+  status: SessionStatusUpdate
+  todoList: TodoList
+  usage: TranscriptTokenUsage
+  filesChanged: Int
+  artifactCount: Int
+  priority: String
+  config: SessionConfig
+  worktreeCleanup: WorktreeCleanup
+  availableActions: [String!]
+  updatedAt: Time
 }
 
 type EventScope {

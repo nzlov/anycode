@@ -45,8 +45,16 @@ test('multiple subscriptions share one websocket and route messages by operation
   ]);
 
   first.unsubscribe();
+  assert.deepEqual(
+    socket.sent.filter((message) => message.type === 'complete').map((message) => message.id),
+    [subscriptions[0].id],
+  );
   assert.equal(socket.closed, false);
   second.unsubscribe();
+  assert.deepEqual(
+    socket.sent.filter((message) => message.type === 'complete').map((message) => message.id),
+    [subscriptions[0].id, subscriptions[1].id],
+  );
   assert.equal(socket.closed, true);
 });
 
@@ -162,7 +170,10 @@ test('connection acknowledgement timeout closes active operations and allows a f
   assert.equal(sockets[0].closed, true);
   assert.equal(sockets[0].closeCode, 4408);
   assert.equal(closes.length, 2);
-  assert.equal(closes.every((close) => close.acknowledged === false), true);
+  assert.equal(
+    closes.every((close) => close.acknowledged === false),
+    true,
+  );
   transport.subscribe({ query: 'subscription Third { third }' });
   assert.equal(sockets.length, 2);
 });

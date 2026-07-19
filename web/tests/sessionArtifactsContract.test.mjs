@@ -88,19 +88,11 @@ test('artifact requests ignore stale responses and follow live artifact events',
   assert.match(detailPage, /:refresh-key="artifactRefreshKey"/);
   assert.match(
     sessionDetailComposable,
-    /update\.type === 'session\.artifacts_updated'[\s\S]*artifactUpdateVersion\.value \+= 1/,
+    /typeof update\.artifactCount === 'number'[\s\S]*artifactUpdateVersion\.value \+= 1/,
   );
-  assert.match(
+  assert.doesNotMatch(
     sessionDetailComposable,
-    /async function refreshAfterReconnect[\s\S]*await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);[\s\S]*artifactUpdateVersion\.value \+= 1/,
-  );
-  assert.match(
-    sessionDetailComposable,
-    /lateRegistered[\s\S]*refreshAfterReconnect\(registration\.generation\)/,
-  );
-  assert.match(
-    sessionDetailComposable,
-    /const registered = await waitForSubscriptionRegistration\(registration\);[\s\S]*if \(!registered\) return;[\s\S]*refreshAfterReconnect\(registration\.generation\)/,
+    /refreshAfterReconnect|lateRegistered|registration\.ready/,
   );
   assert.match(
     detailPage,

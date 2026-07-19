@@ -10,6 +10,7 @@ import { darkThemeRoutes, darkThemeViewports } from './lib/dark-theme-scenarios.
 const args = new Set(process.argv.slice(2));
 const manageDocker = args.has('--manage-docker');
 const darkThemeAuditEnabled = args.has('--dark-theme-audit');
+const subscriptionLifecycleOnly = args.has('--subscription-lifecycle-only');
 const accessKey = process.env.ANYCODE_ACCESS_KEY || 'test';
 const baseURL = process.env.ANYCODE_E2E_BASE_URL || 'http://127.0.0.1:8080';
 const codexHome = process.env.ANYCODE_CODEX_HOME || `${homedir()}/.codex`;
@@ -30,6 +31,7 @@ let chrome;
 let page;
 let browserFailures;
 let darkThemeAudit;
+let subscriptionOperations;
 
 try {
   if (manageDocker) {
@@ -53,6 +55,7 @@ try {
   await page.send('Runtime.enable');
   await page.send('Log.enable');
   await page.send('Network.enable');
+  subscriptionOperations = trackGraphQLSubscriptionOperations(page);
   await page.send('Page.addScriptToEvaluateOnNewDocument', {
     source: [
       `localStorage.setItem('anycode.accessKey', ${JSON.stringify(accessKey)});`,
@@ -83,6 +86,40 @@ try {
       },
     });
     await darkThemeAudit.prepare();
+  }
+  if (subscriptionLifecycleOnly) {
+    browserState.clear();
+    const project = await ensureProject({
+      path: plainPath,
+      name: `E2E Subscription ${stamp}`,
+      isGit: false,
+    });
+    const session = await createSession({
+      projectId: project.id,
+      requirement: `E2E_SUBSCRIPTION_LIFECYCLE_${stamp}`,
+      mode: 'chat',
+      config: { permissionMode: 'workspace-write' },
+    });
+    const report = await assertSubscriptionOperationLifecycle(session.id);
+    const reportPath = `${screenshotDir}/subscription-lifecycle.json`;
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    browserState.assertClean();
+    console.log(JSON.stringify({
+      ok: true,
+      mode: 'subscription-lifecycle',
+      sessionId: session.id,
+      subscriptionLifecycle: report,
+      report: reportPath,
+    }, null, 2));
+    page.close();
+    page = undefined;
+    await stopChromium();
+    chrome = undefined;
+    if (manageDocker) {
+      await dockerCompose(['down'], { allowFailure: true });
+      await rm(overrideFile, { force: true });
+    }
+    process.exit(0);
   }
   browserState.clear();
   await waitForText('暂无卡片');
@@ -450,6 +487,171 @@ function trackBrowserFailures(browserPage) {
       };
     },
   };
+}
+
+function trackGraphQLSubscriptionOperations(browserPage) {
+  const sockets = new Map();
+  const history = [];
+
+  browserPage.on('Network.webSocketCreated', ({ requestId, url }) => {
+    if (new URL(url).pathname !== '/graphql') return;
+    sockets.set(requestId, new Map());
+  });
+  browserPage.on('Network.webSocketFrameSent', ({ requestId, response }) => {
+    handleFrame(requestId, response?.payloadData, 'sent');
+  });
+  browserPage.on('Network.webSocketFrameReceived', ({ requestId, response }) => {
+    handleFrame(requestId, response?.payloadData, 'received');
+  });
+  browserPage.on('Network.webSocketClosed', ({ requestId }) => {
+    const operations = sockets.get(requestId);
+    if (operations) {
+      for (const [id, operation] of operations) {
+        history.push({ direction: 'closed', id, operation });
+      }
+    }
+    sockets.delete(requestId);
+  });
+
+  return {
+    reset() {
+      sockets.clear();
+      history.length = 0;
+    },
+    mark: () => history.length,
+    eventsSince(mark) {
+      return history.slice(mark).map((event) => ({ ...event }));
+    },
+    active() {
+      return [...sockets.values()]
+        .flatMap((operations) => [...operations.values()])
+        .sort();
+    },
+  };
+
+  function handleFrame(requestId, payloadData, direction) {
+    const operations = sockets.get(requestId);
+    if (!operations || typeof payloadData !== 'string') return;
+    let message;
+    try {
+      message = JSON.parse(payloadData);
+    } catch {
+      return;
+    }
+    if (direction === 'sent' && message.type === 'subscribe' && typeof message.id === 'string') {
+      const operation = subscriptionOperationName(message.payload?.query, message.payload?.operationName);
+      operations.set(message.id, operation);
+      history.push({ direction, type: 'subscribe', id: message.id, operation });
+      return;
+    }
+    if (
+      typeof message.id === 'string' &&
+      ((direction === 'sent' && message.type === 'complete') ||
+        (direction === 'received' && ['complete', 'error'].includes(message.type)))
+    ) {
+      const operation = operations.get(message.id) || 'unknown';
+      operations.delete(message.id);
+      history.push({ direction, type: message.type, id: message.id, operation });
+    }
+  }
+}
+
+function subscriptionOperationName(query, operationName) {
+  if (typeof query === 'string') {
+    if (/\bsessionEvents\s*\(/.test(query)) return 'sessionEvents';
+    if (/\bsessionUpdates\b/.test(query)) return 'sessionUpdates';
+  }
+  return typeof operationName === 'string' && operationName ? operationName : 'unknown';
+}
+
+async function assertSubscriptionOperationLifecycle(sessionId) {
+  await navigate('/#/sessions');
+  await waitForText('会话表格');
+  subscriptionOperations.reset();
+  const initialList = await waitForActiveSubscriptionOperations('initial sessions list', []);
+  await screenshot('subscription-list.png');
+
+  let mark = subscriptionOperations.mark();
+  await navigateSPA('/');
+  await waitForVisibleSelector('.workbench-page');
+  const overview = await waitForActiveSubscriptionOperations('overview', ['sessionUpdates']);
+  assertNewSubscriptionOperations('list to overview', subscriptionOperations.eventsSince(mark), [
+    'sessionUpdates',
+  ]);
+  await screenshot('subscription-overview.png');
+
+  mark = subscriptionOperations.mark();
+  await navigateSPA('/sessions');
+  await waitForText('会话表格');
+  const list = await waitForActiveSubscriptionOperations('sessions list', []);
+  assertNewSubscriptionOperations('overview to list', subscriptionOperations.eventsSince(mark), []);
+
+  mark = subscriptionOperations.mark();
+  await navigateSPA(`/sessions/${sessionId}`);
+  await waitForText('会话信息');
+  const detail = await waitForActiveSubscriptionOperations('session detail', [
+    'sessionEvents',
+    'sessionUpdates',
+  ]);
+  assertNewSubscriptionOperations('list to detail', subscriptionOperations.eventsSince(mark), [
+    'sessionEvents',
+    'sessionUpdates',
+  ]);
+  await screenshot('subscription-detail.png');
+
+  mark = subscriptionOperations.mark();
+  await navigateSPA('/sessions');
+  await waitForText('会话表格');
+  const listAfterDetail = await waitForActiveSubscriptionOperations('list after detail', []);
+  assertNewSubscriptionOperations('detail to list', subscriptionOperations.eventsSince(mark), []);
+
+  mark = subscriptionOperations.mark();
+  await navigateSPA('/');
+  await waitForVisibleSelector('.workbench-page');
+  const overviewAfterList = await waitForActiveSubscriptionOperations('overview after list', [
+    'sessionUpdates',
+  ]);
+  assertNewSubscriptionOperations('list to overview', subscriptionOperations.eventsSince(mark), [
+    'sessionUpdates',
+  ]);
+  await screenshot('subscription-overview-return.png');
+
+  return { initialList, overview, list, detail, listAfterDetail, overviewAfterList };
+}
+
+async function navigateSPA(route) {
+  const hash = `#${route.startsWith('/') ? route : `/${route}`}`;
+  await evaluate(`window.location.hash = ${JSON.stringify(hash)}`);
+  await waitForCondition(
+    `window.location.hash === ${JSON.stringify(hash)}`,
+    `SPA route ${hash}`,
+  );
+  await sleep(500);
+}
+
+async function waitForActiveSubscriptionOperations(label, expected, timeoutMs = 10_000) {
+  const wanted = [...expected].sort();
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const active = subscriptionOperations.active();
+    if (JSON.stringify(active) === JSON.stringify(wanted)) return active;
+    await sleep(100);
+  }
+  throw new Error(
+    `${label} active subscriptions = ${JSON.stringify(subscriptionOperations.active())}, want ${JSON.stringify(wanted)}`,
+  );
+}
+
+function assertNewSubscriptionOperations(label, events, expected) {
+  const actual = events
+    .filter((event) => event.direction === 'sent' && event.type === 'subscribe')
+    .map((event) => event.operation)
+    .sort();
+  const wanted = [...expected].sort();
+  assert(
+    JSON.stringify(actual) === JSON.stringify(wanted),
+    `${label} opened subscriptions = ${JSON.stringify(actual)}, want ${JSON.stringify(wanted)}; events=${JSON.stringify(events)}`,
+  );
 }
 
 async function setViewport(width, height) {

@@ -12,7 +12,6 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
-	eventapp "github.com/nzlov/anycode/internal/application/event"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
@@ -382,258 +381,136 @@ func TestQueryWorkflowDefinitionForwardsUseCase(t *testing.T) {
 	}
 }
 
-func TestSubscriptionSessionEventsForwardsUnifiedUseCaseEvents(t *testing.T) {
-	sessionID := "session-1"
-	source := make(chan sessioneventapp.DTO, 1)
-	source <- sessioneventapp.DTO{
-		ID:         "event-1",
-		Type:       string(processdomain.CodexEventMessage),
+func TestQuerySessionCardForwardsUseCase(t *testing.T) {
+	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{
+		DTO:         sessionapp.DTO{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusRunning},
+		ProjectName: "AnyCode",
+	}}
+	got, err := NewResolver(UseCases{Sessions: sessions}).Query().SessionCard(context.Background(), "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessions.gotGetCardID != "session-1" || got.ID != "session-1" || got.ProjectName != "AnyCode" {
+		t.Fatalf("session card = %#v, requested = %q", got, sessions.gotGetCardID)
+	}
+}
+
+func TestSubscriptionSessionEventsStartsWithTranscriptEvent(t *testing.T) {
+	source := make(chan timelineapp.DTO, 1)
+	source <- timelineapp.DTO{
+		ID: "event-1", OrderKey: "order-1", Phase: processdomain.CodexPhaseStandalone,
+		Content:    processdomain.CodexMessageContent{Role: "assistant", Text: "hello", Format: processdomain.CodexTextMarkdown},
 		OccurredAt: "2026-07-02T01:02:03Z",
-		Transcript: &timelineapp.DTO{
-			ID:         "event-1",
-			OrderKey:   "order-1",
-			Phase:      processdomain.CodexPhaseStandalone,
-			Content:    processdomain.CodexMessageContent{Role: "assistant", Text: "hello", Format: processdomain.CodexTextMarkdown},
-			OccurredAt: "2026-07-02T01:02:03Z",
-		},
 	}
 	close(source)
-
 	sessionEvents := &fakeSessionEventUseCase{events: source}
-	resolver := NewResolver(UseCases{SessionEvents: sessionEvents}).Subscription()
-	ch, err := resolver.SessionEvents(context.Background(), sessionID)
+	ch, err := NewResolver(UseCases{SessionEvents: sessionEvents}).Subscription().SessionEvents(context.Background(), "session-1")
 	if err != nil {
-		t.Fatalf("SessionEvents() error = %v", err)
+		t.Fatal(err)
 	}
-
-	if sessionEvents.sessionID != sessiondomain.ID(sessionID) {
-		t.Fatalf("SessionEvents() session id = %q", sessionEvents.sessionID)
-	}
-
 	got, ok := <-ch
-	if !ok {
-		t.Fatal("SessionEvents() channel closed before ready item")
+	if !ok || got.ID != "event-1" || got.OrderKey != "order-1" || !got.OccurredAt.Equal(time.Date(2026, 7, 2, 1, 2, 3, 0, time.UTC)) {
+		t.Fatalf("first transcript event = %#v", got)
 	}
-	if !got.Ready || got.Type != "ready" || got.Transcript != nil {
-		t.Fatalf("SessionEvents() ready item = %#v", got)
-	}
-	got, ok = <-ch
-	if !ok || got.Transcript == nil {
-		t.Fatal("SessionEvents() channel closed before event item")
-	}
-	event := got.Transcript
-	if got.Ready || got.Type != string(processdomain.CodexEventMessage) || event.ID != "event-1" || event.OrderKey != "order-1" || !event.OccurredAt.Equal(time.Date(2026, 7, 2, 1, 2, 3, 0, time.UTC)) {
-		t.Fatalf("SessionEvents() event = %#v", got)
-	}
-	content, ok := event.Content.(*model.TranscriptMessageContent)
-	if !ok || content.Role != "assistant" || content.Text != "hello" || content.Format != model.TranscriptTextFormatMarkdown {
-		t.Fatalf("SessionEvents() content = %#v", event.Content)
+	content, ok := got.Content.(*model.TranscriptMessageContent)
+	if !ok || content.Text != "hello" {
+		t.Fatalf("content = %#v", got.Content)
 	}
 	if _, ok := <-ch; ok {
-		t.Fatal("SessionEvents() channel stayed open after source closed")
+		t.Fatal("transcript channel stayed open after source closed")
 	}
 }
 
-func TestSubscriptionSessionCardChangedUsesLiveEventsWithoutHistoryReplay(t *testing.T) {
-	sessionID := "session-1"
-	projectID := "project-1"
-	otherProjectID := "project-2"
-	eventSessionID := eventdomain.SessionID(sessionID)
-	source := make(chan eventapp.DTO, 3)
-	source <- eventapp.DTO{
-		ID:        "ignored-process",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
-		SessionID: &eventSessionID,
-		Type:      "process.codex_event",
-		CreatedAt: "2026-07-02T01:02:03Z",
+func TestMapSessionUpdateEventUsesEventSpecificFields(t *testing.T) {
+	artifactCount := 2
+	filesChanged := 4
+	statusAt := time.Date(2026, 7, 2, 1, 2, 3, 0, time.UTC)
+	metadataAt := statusAt.Add(time.Minute)
+	status := sessionapp.CardStatusDTO{
+		Status: sessiondomain.StatusRunning, CurrentNodeTitle: "Implement",
+		AvailableActions: []string{"stop"}, UpdatedAt: statusAt,
 	}
-	source <- eventapp.DTO{
-		ID:        "ignored-project",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: otherProjectID},
-		SessionID: &eventSessionID,
-		Type:      "session.running",
-		CreatedAt: "2026-07-02T01:02:04Z",
-	}
-	source <- eventapp.DTO{
-		ID:        "card-change",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
-		SessionID: &eventSessionID,
-		Type:      "session.priority_changed",
-		CreatedAt: "2026-07-02T01:02:05Z",
-	}
-	close(source)
+	todo := sessiondomain.TodoList{Items: []sessiondomain.TodoItem{{Text: "Implement", Completed: true}}}
+	usage := timelineapp.TokenUsageDTO{InputTokens: 10, TotalTokens: 12}
+	priority := sessiondomain.PriorityHigh
+	config := sessiondomain.Config{CodexModel: "gpt-5.4", ReasoningEffort: "high", PermissionMode: "workspace-write", FastMode: true}
+	cleanup := sessionapp.WorktreeCleanupDTO{Status: sessiondomain.WorktreeCleanupFailed, Attempts: 2}
+	actions := []string{"retry_worktree_cleanup"}
 
-	events := &fakeEventUseCase{liveSessionTranscript: source}
-	sessions := &fakeSessionUseCase{
-		getCardResult: sessionapp.CardDTO{
-			DTO: sessionapp.DTO{
-				ID:            sessiondomain.ID(sessionID),
-				ProjectID:     sessiondomain.ProjectID(projectID),
-				Status:        sessiondomain.StatusRunning,
-				Priority:      sessiondomain.PriorityHigh,
-				ArtifactCount: 2,
-				FilesChanged:  4,
-			},
-			ProjectName: "AnyCode",
-		},
-	}
-	resolver := NewResolver(UseCases{Events: events, Sessions: sessions}).Subscription()
-	ch, err := resolver.SessionCardChanged(context.Background(), &projectID)
-	if err != nil {
-		t.Fatalf("SessionCardChanged() error = %v", err)
+	tests := []struct {
+		name    string
+		input   sessioneventapp.UpdateDTO
+		present map[string]bool
+	}{
+		{name: "status", input: sessioneventapp.UpdateDTO{Type: sessioneventapp.TypeStatus, SessionID: "session-1", Status: &status}, present: map[string]bool{"status": true}},
+		{name: "todo", input: sessioneventapp.UpdateDTO{Type: "session.todo_list_updated", SessionID: "session-1", TodoList: &todo}, present: map[string]bool{"todo": true}},
+		{name: "usage", input: sessioneventapp.UpdateDTO{Type: sessioneventapp.TypeUsage, SessionID: "session-1", Usage: &usage}, present: map[string]bool{"usage": true}},
+		{name: "diff", input: sessioneventapp.UpdateDTO{Type: "session.diff_changed", SessionID: "session-1", FilesChanged: &filesChanged}, present: map[string]bool{"diff": true}},
+		{name: "artifacts", input: sessioneventapp.UpdateDTO{Type: "session.artifacts_updated", SessionID: "session-1", ArtifactCount: &artifactCount}, present: map[string]bool{"artifacts": true}},
+		{name: "priority", input: sessioneventapp.UpdateDTO{Type: "session.priority_changed", SessionID: "session-1", Priority: &priority, UpdatedAt: &metadataAt}, present: map[string]bool{"priority": true, "updatedAt": true}},
+		{name: "config", input: sessioneventapp.UpdateDTO{Type: "session.config_changed", SessionID: "session-1", Config: &config, UpdatedAt: &metadataAt}, present: map[string]bool{"config": true, "updatedAt": true}},
+		{name: "worktree", input: sessioneventapp.UpdateDTO{Type: "session.worktree_cleanup_failed", SessionID: "session-1", WorktreeCleanup: &cleanup, AvailableActions: actions, UpdatedAt: &metadataAt}, present: map[string]bool{"worktree": true, "actions": true, "updatedAt": true}},
 	}
 
-	wantInput := eventapp.LiveSessionEventsInput{
-		Scope: eventdomain.Scope{ProjectID: projectID},
-	}
-	if !reflect.DeepEqual(events.gotLiveSessionEventsInput, wantInput) {
-		t.Fatalf("LiveSessionEvents() input = %#v, want %#v", events.gotLiveSessionEventsInput, wantInput)
-	}
-
-	got, ok := <-ch
-	if !ok {
-		t.Fatal("SessionCardChanged() channel closed before card")
-	}
-	if got.ID != sessionID || got.ProjectID != projectID || got.ProjectName != "AnyCode" || got.ArtifactCount != 2 || got.FilesChanged != 4 {
-		t.Fatalf("SessionCardChanged() card = %#v", got)
-	}
-	if sessions.gotGetCardID != sessiondomain.ID(sessionID) {
-		t.Fatalf("GetSessionCard() id = %q, want %q", sessions.gotGetCardID, sessionID)
-	}
-	if _, ok := <-ch; ok {
-		t.Fatal("SessionCardChanged() emitted more than matching card changes")
-	}
-}
-
-func TestSubscriptionSessionCardUpdatesSendsReadyBeforeCards(t *testing.T) {
-	sessionID := "session-1"
-	projectID := "project-1"
-	eventSessionID := eventdomain.SessionID(sessionID)
-	source := make(chan eventapp.DTO, 1)
-	source <- eventapp.DTO{
-		ID:        "card-change",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: projectID},
-		SessionID: &eventSessionID,
-		Type:      "session.running",
-	}
-	close(source)
-	events := &fakeEventUseCase{liveSessionTranscript: source}
-	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{DTO: sessionapp.DTO{
-		ID:        sessiondomain.ID(sessionID),
-		ProjectID: sessiondomain.ProjectID(projectID),
-	}}}
-	resolver := NewResolver(UseCases{Events: events, Sessions: sessions}).Subscription()
-
-	ch, err := resolver.SessionCardUpdates(context.Background(), &projectID)
-	if err != nil {
-		t.Fatalf("SessionCardUpdates() error = %v", err)
-	}
-	ready := <-ch
-	if !ready.Ready || ready.Card != nil {
-		t.Fatalf("SessionCardUpdates() ready = %#v", ready)
-	}
-	item := <-ch
-	if item.Card == nil || item.Card.ID != sessionID {
-		t.Fatalf("SessionCardUpdates() card = %#v", item)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapSessionUpdateEvent(tt.input)
+			present := map[string]bool{}
+			if got.Status != nil {
+				present["status"] = true
+			}
+			if got.TodoList != nil {
+				present["todo"] = true
+			}
+			if got.Usage != nil {
+				present["usage"] = true
+			}
+			if got.FilesChanged != nil {
+				present["diff"] = true
+			}
+			if got.ArtifactCount != nil {
+				present["artifacts"] = true
+			}
+			if got.Priority != nil {
+				present["priority"] = true
+			}
+			if got.Config != nil {
+				present["config"] = true
+			}
+			if got.WorktreeCleanup != nil {
+				present["worktree"] = true
+			}
+			if got.AvailableActions != nil {
+				present["actions"] = true
+			}
+			if got.UpdatedAt != nil {
+				present["updatedAt"] = true
+			}
+			if got.EventType != tt.input.Type || got.SessionID != "session-1" || !reflect.DeepEqual(present, tt.present) {
+				t.Fatalf("mapped update = %#v, present = %#v", got, present)
+			}
+		})
 	}
 }
 
 func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
-	sessionID := "session-1"
-	source := make(chan sessioneventapp.DTO, 1)
+	source := make(chan timelineapp.DTO, 1)
 	sessionEvents := &fakeSessionEventUseCase{events: source}
-	resolver := NewResolver(UseCases{SessionEvents: sessionEvents}).Subscription()
 	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := resolver.SessionEvents(ctx, sessionID)
+	ch, err := NewResolver(UseCases{SessionEvents: sessionEvents}).Subscription().SessionEvents(ctx, "session-1")
 	if err != nil {
-		t.Fatalf("SessionEvents() error = %v", err)
+		t.Fatal(err)
 	}
-	if ready := <-ch; !ready.Ready {
-		t.Fatalf("ready item = %#v", ready)
-	}
-	source <- sessioneventapp.DTO{
-		ID:         "event-1",
-		Type:       "session.running",
-		OccurredAt: "2026-07-02T01:02:03Z",
-	}
+	source <- timelineapp.DTO{ID: "event-1", Content: processdomain.CodexMessageContent{Role: "assistant", Text: "blocked"}}
 	time.Sleep(10 * time.Millisecond)
 	cancel()
 	select {
 	case _, ok := <-ch:
 		if ok {
-			t.Fatal("SessionEvents() delivered a blocked event after cancellation")
+			t.Fatal("transcript subscription delivered after cancellation")
 		}
 	case <-time.After(time.Second):
-		t.Fatal("SessionEvents() did not close after cancellation")
-	}
-}
-
-func TestSubscriptionSessionCardChangedStopsBlockedSendAfterCancel(t *testing.T) {
-	sessionID := "session-1"
-	eventSessionID := eventdomain.SessionID(sessionID)
-	source := make(chan eventapp.DTO, 1)
-	events := &fakeEventUseCase{liveSessionTranscript: source}
-	sessions := &fakeSessionUseCase{getCardResult: sessionapp.CardDTO{DTO: sessionapp.DTO{
-		ID:        sessiondomain.ID(sessionID),
-		ProjectID: "project-1",
-	}}}
-	resolver := NewResolver(UseCases{Events: events, Sessions: sessions}).Subscription()
-	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := resolver.SessionCardChanged(ctx, nil)
-	if err != nil {
-		t.Fatalf("SessionCardChanged() error = %v", err)
-	}
-	source <- eventapp.DTO{
-		ID:        "card-change",
-		Scope:     eventdomain.Scope{SessionID: &eventSessionID, ProjectID: "project-1"},
-		SessionID: &eventSessionID,
-		Type:      "session.running",
-	}
-	time.Sleep(10 * time.Millisecond)
-	cancel()
-	select {
-	case _, ok := <-ch:
-		if ok {
-			t.Fatal("SessionCardChanged() delivered a blocked card after cancellation")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("SessionCardChanged() did not close after cancellation")
-	}
-}
-
-func TestSessionCardChangeEventIncludesCardStateChanges(t *testing.T) {
-	sessionID := eventdomain.SessionID("session-1")
-	tests := []string{
-		"session.running",
-		"session.stopped",
-		"session.recoverable",
-		"session.failed",
-		"session.blocked",
-		"session.completed",
-		"session.closed",
-		"session.worktree_cleanup_requested",
-		"session.worktree_cleanup_completed",
-		"session.worktree_cleanup_failed",
-		"session.config_changed",
-		"session.priority_changed",
-		"session.todo_list_updated",
-		"session.diff_changed",
-		"session.artifacts_updated",
-		"artifact.published",
-		"artifact.deleted",
-		"workflow.blocked",
-	}
-	for _, eventType := range tests {
-		t.Run(eventType, func(t *testing.T) {
-			eventDTO := eventapp.DTO{
-				Scope:     eventdomain.Scope{SessionID: &sessionID, ProjectID: "project-1"},
-				SessionID: &sessionID,
-				Type:      eventType,
-			}
-			if !sessionCardChangeEvent(eventDTO, nil) {
-				t.Fatalf("sessionCardChangeEvent(%q) = false, want true", eventType)
-			}
-		})
+		t.Fatal("transcript subscription did not close after cancellation")
 	}
 }
 
@@ -1198,12 +1075,6 @@ func TestDiffFieldSelectedReadsNamedFragments(t *testing.T) {
 	}
 }
 
-type fakeEventUseCase struct {
-	eventapp.UseCase
-	liveSessionTranscript     <-chan eventapp.DTO
-	gotLiveSessionEventsInput eventapp.LiveSessionEventsInput
-}
-
 type fakeDiffUseCase struct {
 	diffapp.UseCase
 }
@@ -1216,7 +1087,8 @@ type fakeTimelineUseCase struct {
 }
 
 type fakeSessionEventUseCase struct {
-	events    <-chan sessioneventapp.DTO
+	events    <-chan timelineapp.DTO
+	updates   <-chan sessioneventapp.UpdateDTO
 	sessionID sessiondomain.ID
 }
 
@@ -1297,11 +1169,6 @@ func (f *fakeProjectUseCase) BrowseDirectory(_ context.Context, input projectapp
 	return f.browseResult, nil
 }
 
-func (f *fakeEventUseCase) LiveSessionEvents(_ context.Context, input eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error) {
-	f.gotLiveSessionEventsInput = input
-	return f.liveSessionTranscript, nil
-}
-
 func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {
 	f.gotListSessionEventsInput = input
 	return timelineapp.Page{}, nil
@@ -1312,9 +1179,13 @@ func (f *fakeTimelineUseCase) SessionEvents(_ context.Context, input timelineapp
 	return f.sessionEvents, nil
 }
 
-func (f *fakeSessionEventUseCase) SessionEvents(_ context.Context, sessionID sessiondomain.ID) (<-chan sessioneventapp.DTO, error) {
+func (f *fakeSessionEventUseCase) SessionEvents(_ context.Context, sessionID sessiondomain.ID) (<-chan timelineapp.DTO, error) {
 	f.sessionID = sessionID
 	return f.events, nil
+}
+
+func (f *fakeSessionEventUseCase) SessionUpdates(context.Context) (<-chan sessioneventapp.UpdateDTO, error) {
+	return f.updates, nil
 }
 
 func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain.DefinitionID) (workflowapp.DefinitionDTO, error) {

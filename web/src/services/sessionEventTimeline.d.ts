@@ -8,17 +8,7 @@ export function prependOlderEvents(
   events: TranscriptEvent[],
   olderEvents: TranscriptEvent[],
 ): TranscriptEvent[];
-export function mergeSnapshotEvents(
-  snapshotEvents: TranscriptEvent[],
-  currentEvents: TranscriptEvent[],
-  bufferedEvents: TranscriptEvent[],
-): TranscriptEvent[];
-export function shouldReconnectAfterClose(
-  acknowledged: boolean,
-  accessKeyValid: boolean | undefined,
-  completedByServer: boolean,
-): boolean;
-export function shouldReconnectCardStream(
+export function shouldReconnectSubscription(
   close: {
     acknowledged: boolean;
     completedByServer: boolean;
@@ -30,4 +20,9 @@ export function createLatestRequestTracker(): {
   isCurrent(requestGeneration: number): boolean;
   invalidate(): void;
 };
-export function sortTranscriptEvents(events: TranscriptEvent[]): TranscriptEvent[];
+export function createKeyedLatestRequestTracker(): {
+  next(key: string): number;
+  isCurrent(key: string, requestGeneration: number): boolean;
+  invalidate(key: string): void;
+  clear(): void;
+};

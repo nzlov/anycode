@@ -39,7 +39,10 @@ test('session event presentation moves usage out of the event list into session 
   assert.match(timelineSource, /\.\.\. on TranscriptMessageContent/);
   assert.match(timelineSource, /\.\.\. on TranscriptCommandContent/);
   assert.match(timelineSource, /kind/);
-  assert.match(timelineSource, /commands \{ command workdir hasOutput output exitCode durationMs \}/);
+  assert.match(
+    timelineSource,
+    /commands \{ command workdir hasOutput output exitCode durationMs \}/,
+  );
   assert.doesNotMatch(timelineSource, /TranscriptCommandContent \{ command output/);
   assert.match(timelineSource, /\.\.\. on TranscriptToolContent/);
   assert.match(timelineSource, /usage \{ \$\{transcriptUsageFields\} \}/);
@@ -86,7 +89,7 @@ test('session text messages fold runtime context and AnyCode guidance', () => {
   assert.match(pageSource, /:workflow-prompt="session\?\.mode === 'workflow'"/);
 });
 
-test('session detail buffers live events while loading the transcript snapshot', () => {
+test('session detail loads the first transcript page before starting subscriptions', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
@@ -104,29 +107,31 @@ test('session detail buffers live events while loading the transcript snapshot',
     'utf8',
   );
 
-  assert.match(composableSource, /bufferedLiveEvents = appendLiveEvent/);
-  assert.match(composableSource, /eventSnapshotRequests/);
+  assert.match(composableSource, /events\.value = eventResult\.value\.items/);
+  assert.match(composableSource, /detailRequests/);
   assert.match(composableSource, /sessionRequests/);
   assert.match(composableSource, /questionRequests/);
-  assert.match(composableSource, /mergeSnapshotEvents/);
   assert.match(composableSource, /subscribeSessionEvents\(sessionId/);
+  assert.match(composableSource, /useSessionUpdates\(\{/);
   assert.equal(composableSource.includes('subscribeSessionCardChanged'), false);
   assert.equal(composableSource.includes('subscribePendingQuestionBatches'), false);
+  assert.doesNotMatch(
+    composableSource,
+    /bufferedLiveEvents|mergeSnapshotEvents|onSubscribed|registration\.ready/,
+  );
   assert.doesNotMatch(timelineSource, /subscription SessionTranscript/);
   assert.match(
     sessionsSource,
-    /sessionEvents\(sessionId: \$sessionId\) \{\s*ready\s*id\s*type\s*occurredAt\s*transcript/s,
+    /sessionEvents\(sessionId: \$sessionId\) \{\s*\$\{transcriptEventFields\}\s*\}/s,
   );
-  assert.match(composableSource, /onSubscribed: ready\.resolve/);
-  assert.match(composableSource, /waitWithTimeout\(\s*registration\.ready/s);
-  assert.match(composableSource, /registration\.ready\.then/);
+  assert.doesNotMatch(sessionsSource, /sessionEvents[\s\S]*ready/);
   assert.match(
     pageSource,
-    /await startLiveUpdates\(\);\s*if \(!mounted\) return;\s*await Promise\.all/s,
+    /await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);\s*if \(!mounted\) return;\s*startLiveUpdates\(\)/s,
   );
 });
 
-test('session detail projects application todo state through the unified stream', () => {
+test('session detail applies todo updates to the existing session state', () => {
   const sessionsSource = readFileSync(
     new URL('../src/services/sessions.ts', import.meta.url),
     'utf8',
@@ -199,7 +204,7 @@ test('session detail replaces the prompt composer with the shared inline approva
   assert.doesNotMatch(approvalPanelSource, /SessionEventMessage|DiffViewer|模型输出|Diff/);
 });
 
-test('subscription schema exposes one unified session event stream', () => {
+test('subscription schema separates transcript events from global session updates', () => {
   const schemaSource = readFileSync(
     new URL('../../internal/interfaces/graphql/graph/schema.graphqls', import.meta.url),
     'utf8',
@@ -209,11 +214,9 @@ test('subscription schema exposes one unified session event stream', () => {
     'utf8',
   );
 
-  assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): SessionEventStreamItem!/);
-  assert.equal(schemaSource.includes('sessionStateUpdates'), false);
-  assert.equal(schemaSource.includes('TranscriptStreamItem'), false);
-  assert.equal(schemaSource.includes('sessionStatusChanged'), false);
-  assert.equal(schemaSource.includes('input SessionTranscriptInput'), false);
+  assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): TranscriptEvent!/);
+  assert.match(schemaSource, /sessionUpdates: SessionUpdateEvent!/);
+  assert.doesNotMatch(schemaSource, /SessionEventStreamItem|ready: Boolean/);
   assert.match(schemaSource, /input ListTranscriptEventsInput/);
   assert.match(schemaSource, /type TranscriptEventGroup/);
   assert.match(schemaSource, /members: \[TranscriptEvent!\]!/);
@@ -222,30 +225,26 @@ test('subscription schema exposes one unified session event stream', () => {
   assert.equal(timelineSource.includes("codexType === 'process.exit'"), false);
 });
 
-test('session detail uses exactly one logical subscription', () => {
+test('session detail uses one transcript subscription and one global update subscription', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
 
-  const calls = composableSource.match(/= subscribe[A-Z][A-Za-z]+\(/g) ?? [];
-  assert.deepEqual(calls, ['= subscribeSessionEvents(']);
+  assert.equal((composableSource.match(/subscribeSessionEvents\(sessionId/g) ?? []).length, 1);
+  assert.equal((composableSource.match(/useSessionUpdates\(\{/g) ?? []).length, 1);
 });
 
-test('late unified readiness reloads one coherent snapshot', () => {
+test('session subscriptions do not wait for readiness or reload on reconnect', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
-  const lateStart = composableSource.indexOf('registration.ready.then');
-  const lateEnd = composableSource.indexOf('\n      });', lateStart);
-  const lateHandler = composableSource.slice(lateStart, lateEnd);
-
-  assert.match(lateHandler, /refreshAfterReconnect\(registration\.generation\)/);
-  assert.match(
+  assert.doesNotMatch(
     composableSource,
-    /async function refreshAfterReconnect[\s\S]*Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\)/,
+    /ready|waitWithTimeout|refreshAfterReconnect|reconnectFromSnapshot/,
   );
+  assert.match(composableSource, /reconnectTimer = setTimeout\([\s\S]*openSessionEvents\(\)/);
 });
 
 test('session detail never drops distinct transcript events by content or timestamp', () => {
@@ -273,7 +272,7 @@ test('session creation preserves the overview page while route changes still rem
   assert.doesNotMatch(newSessionSource, /emit\('create'\)/);
 });
 
-test('subscription close before acknowledgement still releases the snapshot gate', () => {
+test('subscription close reports acknowledgement and completion state', () => {
   const transportSource = readFileSync(
     new URL('../src/services/graphqlSubscriptionTransport.js', import.meta.url),
     'utf8',
@@ -289,6 +288,7 @@ test('subscription close before acknowledgement still releases the snapshot gate
   assert.match(closeHandler, /acknowledged: state\.acknowledged/);
   assert.match(closeHandler, /completedByServer: false/);
   assert.match(transportSource, /completedByServer: true/);
+  assert.doesNotMatch(transportSource, /snapshot/);
 });
 
 test('session detail reopens acknowledged subscriptions completed by the server', () => {
@@ -299,13 +299,9 @@ test('session detail reopens acknowledged subscriptions completed by the server'
 
   assert.match(
     composableSource,
-    /shouldReconnectAfterClose\(\s*close\.acknowledged,\s*accessKeyValid,\s*close\.completedByServer/s,
+    /shouldReconnectSubscription\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
   );
-  assert.match(
-    composableSource,
-    /if \(shouldReconnectAfterClose[\s\S]*?scheduleReconnect\(\);[\s\S]*?if \(close\.completedByServer\) return;/,
-  );
-  assert.match(composableSource, /if \(close\.completedByServer\) return;/);
+  assert.match(composableSource, /if \(reconnect\) \{\s*scheduleReconnect\(\)/);
 });
 
 test('subscription refresh does not force a scrolled transcript back to the bottom', () => {
@@ -320,7 +316,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
   assert.match(
     pageSource,
-    /await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);\s*if \(!mounted\) return;\s*await scrollEventsToBottom\(\)/,
+    /await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);\s*if \(!mounted\) return;\s*startLiveUpdates\(\);\s*await scrollEventsToBottom\(\)/,
   );
   assert.match(pageSource, /function isEventStreamAtBottom\(body: HTMLElement\)[\s\S]*?<= 1/);
   assert.match(pageSource, /\{ flush: 'pre' \}/);
@@ -459,15 +455,14 @@ test('terminal phases and status details remain visible', () => {
   assert.match(statusSource, /status-event--error/);
 });
 
-test('live usage is buffered while a transcript snapshot is loading', () => {
+test('live usage updates token totals directly from the global session stream', () => {
   const source = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
 
-  assert.match(source, /let bufferedLiveUsage: TranscriptTokenUsage \| null = null/);
-  assert.match(source, /tokenUsage\.value = bufferedLiveUsage \?\? eventResult\.value\.usage/);
-  assert.match(source, /if \(bufferingLiveEvents\) \{\s*bufferedLiveUsage = update\.usage;/s);
+  assert.match(source, /if \(update\.usage\) tokenUsage\.value = update\.usage/);
+  assert.doesNotMatch(source, /bufferedLiveUsage|bufferingLiveEvents/);
 });
 
 test('older timeline pages restore a stable visible event anchor', () => {
@@ -493,7 +488,7 @@ test('older event loading crosses pages that add no visible height', () => {
   assert.match(pageSource, /eventsPageInfo\.value\.nextCursor === requestedCursor/);
 });
 
-test('card subscriptions validate pre-ack closes before reconnecting', () => {
+test('the list has no subscription and pages share the global update lifecycle', () => {
   const sessionsPageSource = readFileSync(
     new URL('../src/composables/useSessionsPage.ts', import.meta.url),
     'utf8',
@@ -502,34 +497,155 @@ test('card subscriptions validate pre-ack closes before reconnecting', () => {
     new URL('../src/pages/IndexPage.vue', import.meta.url),
     'utf8',
   );
+  const updateComposableSource = readFileSync(
+    new URL('../src/composables/useSessionUpdates.ts', import.meta.url),
+    'utf8',
+  );
   const sessionsServiceSource = readFileSync(
     new URL('../src/services/sessions.ts', import.meta.url),
     'utf8',
   );
 
-  assert.match(sessionsPageSource, /onClose: \(close\) =>[\s\S]*handleSubscriptionClose\(close\)/);
+  assert.doesNotMatch(sessionsPageSource, /subscribe|startLiveUpdates|stopLiveUpdates/);
+  assert.match(overviewSource, /useSessionUpdates\(\{\s*onData: handleSessionUpdate/s);
+  assert.equal((overviewSource.match(/useSessionUpdates\(\{/g) ?? []).length, 1);
   assert.match(
-    sessionsPageSource,
-    /shouldReconnectCardStream\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
+    updateComposableSource,
+    /shouldReconnectSubscription\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
+  );
+  assert.match(sessionsServiceSource, /sessionUpdates \{[\s\S]*eventType[\s\S]*sessionId/);
+  assert.doesNotMatch(sessionsServiceSource, /sessionCardUpdates|onSubscribed|ready/);
+});
+
+test('headless lifecycle audit observes real GraphQL WebSocket operations across routes', () => {
+  const headlessSource = readFileSync(
+    new URL('../../scripts/headless-e2e.mjs', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(headlessSource, /--subscription-lifecycle-only/);
+  assert.match(headlessSource, /Network\.webSocketFrameSent/);
+  assert.match(headlessSource, /assertSubscriptionOperationLifecycle/);
+  assert.match(headlessSource, /initial sessions list', \[\]/);
+  assert.match(headlessSource, /'overview', \['sessionUpdates'\]/);
+  assert.match(headlessSource, /'session detail', \[\s*'sessionEvents',\s*'sessionUpdates'/s);
+  assert.match(headlessSource, /'list after detail', \[\]/);
+  assert.match(headlessSource, /subscription-lifecycle\.json/);
+});
+
+test('overview invalidates late card requests and waiting dialogs across its subscription lifecycle', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(overviewSource, /onMounted\(\(\) => \{\s*overviewMounted = true;/);
+  assert.match(
+    overviewSource,
+    /onUnmounted\(\(\) => \{\s*overviewMounted = false;\s*cardRefreshRequests\.clear\(\);/,
   );
   assert.match(
     overviewSource,
-    /onClose: \(close\) =>[\s\S]*handleOverviewSubscriptionClose\(close\)/,
+    /await loadOverviewSessions\(\);\s*if \(!overviewMounted\) return;\s*startOverviewLiveUpdates\(\);/,
+  );
+  assert.match(overviewSource, /cardRefreshRequests\.invalidate\(update\.sessionId\)/);
+  assert.match(
+    overviewSource,
+    /!overviewMounted \|\| !cardRefreshRequests\.isCurrent\(sessionId, generation\)/,
+  );
+  assert.doesNotMatch(overviewSource, /activeCardRefreshes|repeatedCardRefreshes/);
+  assert.match(
+    overviewSource,
+    /activeQuestionSessionId\.value === update\.sessionId && status && status !== 'waiting_user'/,
   );
   assert.match(
     overviewSource,
-    /shouldReconnectCardStream\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
-  );
-  assert.match(
-    sessionsPageSource,
-    /async function reconnectFromSnapshot\(\)[\s\S]*await loadSessions\(\);[\s\S]*openSubscription\(refreshAfterSubscriptionReady\)/,
+    /approvalSessionId\.value === update\.sessionId && status && status !== 'waiting_approval'/,
   );
   assert.match(
     overviewSource,
-    /onSubscribed: onSubscribed \?\? refreshOverviewAfterSubscriptionReady/,
+    /detail\.status !== 'waiting_approval' \|\| !detail\.pendingApproval/,
   );
-  assert.match(sessionsServiceSource, /sessionCardUpdates[\s\S]*ready[\s\S]*card \{/);
-  assert.match(sessionsServiceSource, /handlers\.onSubscribed\?\.\(\)/);
+  assert.match(overviewSource, /card\?\.status !== 'waiting_user' \|\| batches\.length === 0/);
+});
+
+test('known session updates patch event payloads without automatic card or detail queries', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+  const detailSource = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+  const sessionsSource = readFileSync(
+    new URL('../src/services/sessions.ts', import.meta.url),
+    'utf8',
+  );
+  const overviewHandler = overviewSource.slice(
+    overviewSource.indexOf('function handleSessionUpdate'),
+    overviewSource.indexOf('function refreshOverviewCard'),
+  );
+  const knownOverviewUpdate = overviewHandler.slice(overviewHandler.indexOf('const current'));
+  const detailHandler = detailSource.slice(
+    detailSource.indexOf('function handleSessionUpdate'),
+    detailSource.indexOf('\n  return {', detailSource.indexOf('function handleSessionUpdate')),
+  );
+
+  assert.equal(
+    (overviewHandler.match(/refreshOverviewCard\(update\.sessionId\)/g) ?? []).length,
+    1,
+  );
+  assert.match(
+    overviewHandler,
+    /if \(index < 0\) \{\s*if \(update\.status\) void refreshOverviewCard\(update\.sessionId\);/,
+  );
+  assert.doesNotMatch(
+    knownOverviewUpdate,
+    /refreshOverviewCard|getSessionCard|loadOverviewSessions/,
+  );
+  assert.match(knownOverviewUpdate, /update\.priority/);
+  assert.match(knownOverviewUpdate, /update\.availableActions !== undefined/);
+  assert.match(knownOverviewUpdate, /update\.updatedAt && update\.updatedTime/);
+  assert.match(detailHandler, /update\.config/);
+  assert.match(detailHandler, /update\.worktreeCleanup/);
+  assert.equal((detailHandler.match(/loadSessionState\(\)/g) ?? []).length, 1);
+  assert.match(
+    detailHandler,
+    /status === 'waiting_approval'[\s\S]*void loadSessionState\(\)\.finally/,
+  );
+  assert.match(sessionsSource, /priority\s+config \{/);
+  assert.match(sessionsSource, /worktreeCleanup \{/);
+  assert.match(sessionsSource, /availableActions\s+updatedAt/);
+});
+
+test('overview answer submission closes the dialog without refetching questions or the card', () => {
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
+  const submitBlock = overviewSource.slice(
+    overviewSource.indexOf('async function submitAnswers'),
+    overviewSource.indexOf('async function openApprovalDialog'),
+  );
+
+  assert.match(submitBlock, /await submitQuestionBatch\(batchId, answers\)/);
+  assert.match(submitBlock, /answerDialog\.value = false/);
+  assert.doesNotMatch(submitBlock, /getPendingQuestionBatches|refreshOverviewCard|getSessionCard/);
+});
+
+test('detail approval loads cannot clear a newer waiting-state request', () => {
+  const composableSource = readFileSync(
+    new URL('../src/composables/useSessionDetail.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(composableSource, /const generation = \+\+approvalLoadGeneration/);
+  assert.match(
+    composableSource,
+    /if \(generation === approvalLoadGeneration\) approvalLoading\.value = false/,
+  );
+  assert.match(composableSource, /else if \(status\) \{\s*approvalLoadGeneration \+= 1;/);
 });
 
 test('session list loads freeze their scope and reject stale responses', () => {
@@ -549,7 +665,7 @@ test('session list loads freeze their scope and reject stale responses', () => {
   );
 });
 
-test('session state remains independent from transcript snapshot failures', () => {
+test('session state remains independent from transcript first-page failures', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',

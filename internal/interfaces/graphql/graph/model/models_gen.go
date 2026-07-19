@@ -354,8 +354,6 @@ type SessionCard struct {
 	BaseBranch         string               `json:"baseBranch"`
 	WorktreeBranch     string               `json:"worktreeBranch"`
 	CurrentNodeTitle   string               `json:"currentNodeTitle"`
-	PendingApproval    *PendingApproval     `json:"pendingApproval,omitempty"`
-	PendingQuestion    bool                 `json:"pendingQuestion"`
 	TodoList           *TodoList            `json:"todoList,omitempty"`
 	ArtifactCount      int                  `json:"artifactCount"`
 	FilesChanged       int                  `json:"filesChanged"`
@@ -369,11 +367,6 @@ type SessionCard struct {
 type SessionCardPage struct {
 	Items    []*SessionCard `json:"items"`
 	PageInfo *PageInfo      `json:"pageInfo"`
-}
-
-type SessionCardStreamItem struct {
-	Ready bool         `json:"ready"`
-	Card  *SessionCard `json:"card,omitempty"`
 }
 
 type SessionCommitHistory struct {
@@ -444,17 +437,6 @@ type SessionDiffInput struct {
 	ContextAfter  *int    `json:"contextAfter,omitempty"`
 }
 
-type SessionEventStreamItem struct {
-	Ready         bool                  `json:"ready"`
-	ID            *string               `json:"id,omitempty"`
-	Type          string                `json:"type"`
-	OccurredAt    *time.Time            `json:"occurredAt,omitempty"`
-	Transcript    *TranscriptEvent      `json:"transcript,omitempty"`
-	Usage         *TranscriptTokenUsage `json:"usage,omitempty"`
-	Session       *SessionDetail        `json:"session,omitempty"`
-	QuestionBatch *QuestionBatch        `json:"questionBatch,omitempty"`
-}
-
 type SessionFile struct {
 	ID           string    `json:"id"`
 	SessionID    string    `json:"sessionId"`
@@ -469,6 +451,29 @@ type SessionFile struct {
 	PreviewURL   *string   `json:"previewUrl,omitempty"`
 	DownloadURL  string    `json:"downloadUrl"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+type SessionStatusUpdate struct {
+	Status           string    `json:"status"`
+	CurrentNodeTitle string    `json:"currentNodeTitle"`
+	AvailableActions []string  `json:"availableActions"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+type SessionUpdateEvent struct {
+	EventType        string                `json:"eventType"`
+	SessionID        string                `json:"sessionId"`
+	OccurredAt       *time.Time            `json:"occurredAt,omitempty"`
+	Status           *SessionStatusUpdate  `json:"status,omitempty"`
+	TodoList         *TodoList             `json:"todoList,omitempty"`
+	Usage            *TranscriptTokenUsage `json:"usage,omitempty"`
+	FilesChanged     *int                  `json:"filesChanged,omitempty"`
+	ArtifactCount    *int                  `json:"artifactCount,omitempty"`
+	Priority         *string               `json:"priority,omitempty"`
+	Config           *SessionConfig        `json:"config,omitempty"`
+	WorktreeCleanup  *WorktreeCleanup      `json:"worktreeCleanup,omitempty"`
+	AvailableActions []string              `json:"availableActions,omitempty"`
+	UpdatedAt        *time.Time            `json:"updatedAt,omitempty"`
 }
 
 type SetDefaultWorkflowInput struct {

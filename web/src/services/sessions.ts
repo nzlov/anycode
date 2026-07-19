@@ -62,8 +62,6 @@ export interface SessionCard {
   createdTime: string;
   updatedAt: string;
   updatedTime: string;
-  pendingQuestion: boolean;
-  pendingApproval?: PendingApproval | null;
   todoList?: SessionTodoList | null;
   artifactCount: number;
   filesChanged: number;
@@ -107,6 +105,7 @@ export interface SessionTodoItem {
 }
 
 export interface SessionDetail extends SessionCard {
+  pendingApproval?: PendingApproval | null;
   config: SessionConfig;
   closeReason?: string | null;
   promptAppends: PromptAppend[];
@@ -205,10 +204,6 @@ export interface SessionDetailData {
   eventsPageInfo: PageInfo;
 }
 
-export interface SessionCardChangedSubscriptionInput {
-  projectId?: string;
-}
-
 export interface CreateSessionInput {
   projectId: string;
   requirement: string;
@@ -252,8 +247,6 @@ interface GraphQLSessionCard {
   baseBranch: string;
   worktreeBranch: string;
   currentNodeTitle: string;
-  pendingQuestion: boolean;
-  pendingApproval?: GraphQLPendingApproval | null;
   todoList?: GraphQLSessionTodoList | null;
   artifactCount: number;
   filesChanged: number;
@@ -343,25 +336,52 @@ interface GraphQLSession {
   updatedAt: string;
 }
 
-interface GraphQLSessionEventStreamItem {
-  ready: boolean;
-  id?: string | null;
-  type: string;
-  occurredAt?: string | null;
-  transcript?: GraphQLTranscriptEvent | null;
-  usage?: TranscriptTokenUsage | null;
-  session?: GraphQLSessionDetail | null;
-  questionBatch?: GraphQLQuestionBatch | null;
+interface GraphQLSessionStatusUpdate {
+  status: string;
+  currentNodeTitle: string;
+  availableActions: string[];
+  updatedAt: string;
 }
 
-export interface SessionEventUpdate {
-  id?: string | null;
-  type: string;
+interface GraphQLSessionUpdateEvent {
+  eventType: string;
+  sessionId: string;
   occurredAt?: string | null;
-  transcript?: TranscriptEvent;
+  status?: GraphQLSessionStatusUpdate | null;
+  todoList?: GraphQLSessionTodoList | null;
+  usage?: TranscriptTokenUsage | null;
+  filesChanged?: number | null;
+  artifactCount?: number | null;
+  priority?: string | null;
+  config?: SessionConfig | null;
+  worktreeCleanup?: WorktreeCleanup | null;
+  availableActions?: string[] | null;
+  updatedAt?: string | null;
+}
+
+export interface SessionStatusUpdate {
+  status: SessionStatus;
+  node: string;
+  availableActions: string[];
+  updatedAt: string;
+  updatedTime: string;
+}
+
+export interface SessionUpdateEvent {
+  eventType: string;
+  sessionId: string;
+  occurredAt?: string | null;
+  status?: SessionStatusUpdate;
+  todoList?: SessionTodoList | null;
   usage?: TranscriptTokenUsage;
-  session?: SessionDetail;
-  questionBatch?: QuestionBatch;
+  filesChanged?: number;
+  artifactCount?: number;
+  priority?: SessionPriority;
+  config?: SessionConfig;
+  worktreeCleanup?: WorktreeCleanup;
+  availableActions?: string[];
+  updatedAt?: string;
+  updatedTime?: string;
 }
 
 interface GraphQLQuestionBatch {
@@ -383,15 +403,6 @@ const sessionCardFields = `
   baseBranch
   worktreeBranch
   currentNodeTitle
-  pendingApproval {
-    sessionId
-    nodeId
-    nodeRunId
-    currentNodeTitle
-    phase
-    result
-  }
-  pendingQuestion
   todoList {
     completed
     total
@@ -576,6 +587,24 @@ export async function getSession(sessionId: string): Promise<SessionDetail> {
   return normalizeSessionDetail(data.session);
 }
 
+export async function getSessionCard(
+  sessionId: string,
+  options: { notify?: boolean } = {},
+): Promise<SessionCard> {
+  const data = await graphqlFetch<{ sessionCard: GraphQLSessionCard }, { id: string }>({
+    query: `
+      query SessionCard($id: ID!) {
+        sessionCard(id: $id) {
+          ${sessionCardFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+    notify: options.notify ?? true,
+  });
+  return normalizeSessionCard(data.sessionCard);
+}
+
 export async function getLastSessionConfig(projectId: string): Promise<SessionConfig | null> {
   const data = await graphqlFetch<
     { lastSessionConfig: SessionConfig | null },
@@ -597,38 +626,60 @@ export async function getLastSessionConfig(projectId: string): Promise<SessionCo
   return data.lastSessionConfig;
 }
 
-export function subscribeSessionCardChanged(
-  input: SessionCardChangedSubscriptionInput,
-  handlers: {
-    onData: (card: SessionCard) => void;
-    onError?: (error: Error) => void;
-    onClose?: (close: GraphQLSubscriptionClose) => void;
-    onSubscribed?: (() => void) | undefined;
-  },
-) {
+export function subscribeSessionUpdates(handlers: {
+  onData: (update: SessionUpdateEvent) => void;
+  onError?: (error: Error) => void;
+  onClose?: (close: GraphQLSubscriptionClose) => void;
+}) {
   const options = {
     query: `
-      subscription SessionCardUpdates($projectId: ID) {
-        sessionCardUpdates(projectId: $projectId) {
-          ready
-          card {
-            ${sessionCardFields}
+      subscription SessionUpdates {
+        sessionUpdates {
+          eventType
+          sessionId
+          occurredAt
+          status {
+            status
+            currentNodeTitle
+            availableActions
+            updatedAt
           }
+          todoList {
+            completed
+            total
+            items {
+              text
+              completed
+            }
+          }
+          usage { ${transcriptUsageFields} }
+          filesChanged
+          artifactCount
+          priority
+          config {
+            codexModel
+            reasoningEffort
+            permissionMode
+            fastMode
+          }
+          worktreeCleanup {
+            status
+            attempts
+            requestedAt
+            completedAt
+            error {
+              code
+              message
+              retryable
+            }
+          }
+          availableActions
+          updatedAt
         }
       }
     `,
-    variables: input.projectId ? { projectId: input.projectId } : {},
-    onData: (data: {
-      sessionCardUpdates: { ready: boolean; card?: GraphQLSessionCard | null };
-    }) => {
-      if (data.sessionCardUpdates.ready) {
-        handlers.onSubscribed?.();
-        return;
-      }
-      if (data.sessionCardUpdates.card) {
-        handlers.onData(normalizeSessionCard(data.sessionCardUpdates.card));
-      }
-    },
+    onData: (data: { sessionUpdates: GraphQLSessionUpdateEvent }) =>
+      handlers.onData(normalizeSessionUpdate(data.sessionUpdates)),
   };
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
@@ -636,56 +687,28 @@ export function subscribeSessionCardChanged(
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
-  return graphqlSubscribe<
-    { sessionCardUpdates: { ready: boolean; card?: GraphQLSessionCard | null } },
-    { projectId?: string }
-  >(options);
+  return graphqlSubscribe<{ sessionUpdates: GraphQLSessionUpdateEvent }>(options);
 }
 
 export function subscribeSessionEvents(
   sessionId: string,
   handlers: {
-    onData: (update: SessionEventUpdate) => void;
+    onData: (event: TranscriptEvent) => void;
     onError?: (error: Error) => void;
     onClose?: (close: GraphQLSubscriptionClose) => void;
-    onSubscribed?: () => void;
   },
 ) {
   const options = {
     query: `
       subscription SessionEvents($sessionId: ID!) {
         sessionEvents(sessionId: $sessionId) {
-          ready
-          id
-          type
-          occurredAt
-          transcript { ${transcriptEventFields} }
-          usage { ${transcriptUsageFields} }
-          session {
-            ${sessionDetailFields}
-          }
-          questionBatch {
-            ${questionBatchFields}
-          }
+          ${transcriptEventFields}
         }
       }
     `,
     variables: { sessionId },
-    onData: (data: { sessionEvents: GraphQLSessionEventStreamItem }) => {
-      const item = data.sessionEvents;
-      if (item.ready) {
-        handlers.onSubscribed?.();
-        return;
-      }
-      const update: SessionEventUpdate = { type: item.type };
-      if (item.id !== undefined) update.id = item.id;
-      if (item.occurredAt !== undefined) update.occurredAt = item.occurredAt;
-      if (item.transcript) update.transcript = normalizeTranscriptEvent(item.transcript);
-      if (item.usage) update.usage = item.usage;
-      if (item.session) update.session = normalizeSessionDetail(item.session);
-      if (item.questionBatch) update.questionBatch = normalizeQuestionBatch(item.questionBatch);
-      handlers.onData(update);
-    },
+    onData: (data: { sessionEvents: GraphQLTranscriptEvent }) =>
+      handlers.onData(normalizeTranscriptEvent(data.sessionEvents)),
   };
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
@@ -693,10 +716,9 @@ export function subscribeSessionEvents(
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
-  return graphqlSubscribe<
-    { sessionEvents: GraphQLSessionEventStreamItem },
-    { sessionId: string }
-  >(options);
+  return graphqlSubscribe<{ sessionEvents: GraphQLTranscriptEvent }, { sessionId: string }>(
+    options,
+  );
 }
 
 export async function appendPrompt(
@@ -1013,6 +1035,45 @@ function normalizePendingApproval(
   };
 }
 
+function normalizeSessionUpdate(item: GraphQLSessionUpdateEvent): SessionUpdateEvent {
+  const update: SessionUpdateEvent = {
+    eventType: item.eventType,
+    sessionId: item.sessionId,
+  };
+  if (item.occurredAt !== undefined) update.occurredAt = item.occurredAt;
+  if (item.status) {
+    const status = normalizeStatus(item.status.status);
+    update.status = {
+      status,
+      node: item.status.currentNodeTitle || statusNode(status),
+      availableActions: normalizeAvailableActions(item.status.availableActions),
+      updatedAt: formatSessionTime(item.status.updatedAt),
+      updatedTime: item.status.updatedAt,
+    };
+  }
+  if (item.eventType === 'session.todo_list_updated') {
+    update.todoList = normalizeTodoList(item.todoList);
+  }
+  if (item.usage) update.usage = item.usage;
+  if (typeof item.filesChanged === 'number') {
+    update.filesChanged = Math.max(0, item.filesChanged);
+  }
+  if (typeof item.artifactCount === 'number') {
+    update.artifactCount = Math.max(0, item.artifactCount);
+  }
+  if (item.priority) update.priority = normalizePriority(item.priority);
+  if (item.config) update.config = item.config;
+  if (item.worktreeCleanup) update.worktreeCleanup = item.worktreeCleanup;
+  if (item.availableActions) {
+    update.availableActions = normalizeAvailableActions(item.availableActions);
+  }
+  if (item.updatedAt) {
+    update.updatedAt = formatSessionTime(item.updatedAt);
+    update.updatedTime = item.updatedAt;
+  }
+  return update;
+}
+
 function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
   return {
     id: session.id,
@@ -1030,8 +1091,6 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     updatedTime: session.updatedAt,
-    pendingQuestion: session.pendingQuestion,
-    pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: normalizeTodoList(session.todoList),
     artifactCount: Math.max(0, session.artifactCount),
     filesChanged: Math.max(0, session.filesChanged),
@@ -1057,7 +1116,6 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     updatedTime: session.updatedAt,
-    pendingQuestion: status === 'waiting_user',
     pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: normalizeTodoList(session.todoList),
     artifactCount: 0,
@@ -1114,8 +1172,6 @@ function normalizeSession(session: GraphQLSession): SessionCard {
     createdTime: formatEventTime(session.createdAt),
     updatedAt: formatSessionTime(session.lastRunAt ?? session.updatedAt),
     updatedTime: session.updatedAt,
-    pendingQuestion: status === 'waiting_user',
-    pendingApproval: null,
     todoList: null,
     artifactCount: 0,
     filesChanged: 0,
