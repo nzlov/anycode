@@ -70,7 +70,11 @@
       </template>
     </q-banner>
 
-    <q-banner v-if="diff && !diff.available" rounded class="state-banner app-feedback app-feedback--neutral">
+    <q-banner
+      v-if="diff && !diff.available"
+      rounded
+      class="state-banner app-feedback app-feedback--neutral"
+    >
       <template #avatar>
         <q-icon name="block" />
       </template>
@@ -219,6 +223,7 @@ const props = withDefaults(
     target: DiffWorkspaceTarget;
     modelValue: DiffWorkspaceState;
     showFileNavigation?: boolean;
+    refreshKey?: string | number;
   }>(),
   { showFileNavigation: true },
 );
@@ -461,6 +466,13 @@ watch(
     void loadDiff();
   },
   { immediate: true },
+);
+
+watch(
+  () => props.refreshKey,
+  (value, previous) => {
+    if (value !== previous) void loadDiff();
+  },
 );
 
 onUnmounted(() => {

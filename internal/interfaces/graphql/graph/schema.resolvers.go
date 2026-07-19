@@ -464,6 +464,18 @@ func (r *queryResolver) Sessions(ctx context.Context, input *model.ListSessionsI
 	return mapSessionCardPage(dto), nil
 }
 
+// SessionCard is the resolver for the sessionCard field.
+func (r *queryResolver) SessionCard(ctx context.Context, id string) (*model.SessionCard, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.GetSessionCard(ctx, sessiondomain.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return mapSessionCard(dto), nil
+}
+
 // LastSessionConfig is the resolver for the lastSessionConfig field.
 func (r *queryResolver) LastSessionConfig(ctx context.Context, projectID string) (*model.SessionConfig, error) {
 	if r.UseCases.Sessions == nil {
@@ -641,7 +653,7 @@ func (r *queryResolver) ResolveSessionArtifacts(ctx context.Context, input model
 }
 
 // SessionEvents is the resolver for the sessionEvents field.
-func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.SessionEventStreamItem, error) {
+func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID string) (<-chan *model.TranscriptEvent, error) {
 	if r.UseCases.SessionEvents == nil {
 		return nil, missingUseCase("session events")
 	}
@@ -649,12 +661,9 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionEventStreamItem)
+	out := make(chan *model.TranscriptEvent)
 	go func() {
 		defer close(out)
-		if !sendSessionEventItem(ctx, out, &model.SessionEventStreamItem{Ready: true, Type: "ready"}) {
-			return
-		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -663,8 +672,10 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 				if !ok {
 					return
 				}
-				if !sendSessionEventItem(ctx, out, mapSessionEventStreamItem(event)) {
+				select {
+				case <-ctx.Done():
 					return
+				case out <- mapTranscriptEvent(event):
 				}
 			}
 		}
@@ -672,37 +683,30 @@ func (r *subscriptionResolver) SessionEvents(ctx context.Context, sessionID stri
 	return out, nil
 }
 
-// SessionCardChanged is the resolver for the sessionCardChanged field.
-func (r *subscriptionResolver) SessionCardChanged(ctx context.Context, projectID *string) (<-chan *model.SessionCard, error) {
-	return r.sessionCardChanges(ctx, projectID)
-}
-
-// SessionCardUpdates is the resolver for the sessionCardUpdates field.
-func (r *subscriptionResolver) SessionCardUpdates(ctx context.Context, projectID *string) (<-chan *model.SessionCardStreamItem, error) {
-	source, err := r.sessionCardChanges(ctx, projectID)
+// SessionUpdates is the resolver for the sessionUpdates field.
+func (r *subscriptionResolver) SessionUpdates(ctx context.Context) (<-chan *model.SessionUpdateEvent, error) {
+	if r.UseCases.SessionEvents == nil {
+		return nil, missingUseCase("session events")
+	}
+	source, err := r.UseCases.SessionEvents.SessionUpdates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan *model.SessionCardStreamItem)
+	out := make(chan *model.SessionUpdateEvent)
 	go func() {
 		defer close(out)
-		select {
-		case <-ctx.Done():
-			return
-		case out <- &model.SessionCardStreamItem{Ready: true}:
-		}
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case card, ok := <-source:
+			case event, ok := <-source:
 				if !ok {
 					return
 				}
 				select {
 				case <-ctx.Done():
 					return
-				case out <- &model.SessionCardStreamItem{Card: card}:
+				case out <- mapSessionUpdateEvent(event):
 				}
 			}
 		}

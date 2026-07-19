@@ -6,6 +6,7 @@ import (
 
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
+	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type DTO struct {
@@ -40,6 +41,12 @@ type TokenUsageDTO struct {
 	CurrentReasoningOutputTokens int
 	CurrentTotalTokens           int
 	CompactionCount              int
+}
+
+type UsageUpdateDTO struct {
+	SessionID  sessiondomain.ID
+	OccurredAt string
+	Usage      TokenUsageDTO
 }
 
 type Page struct {

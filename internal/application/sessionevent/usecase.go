@@ -3,89 +3,90 @@ package sessionevent
 import (
 	"context"
 	"errors"
+	"time"
 
 	eventapp "github.com/nzlov/anycode/internal/application/event"
-	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
-	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 const (
-	TypeUsage    = "usage.updated"
-	TypeQuestion = "question.updated"
+	TypeStatus = "session.status_updated"
+	TypeUsage  = "usage.updated"
 )
 
-type DTO struct {
-	ID            string
-	Type          string
-	OccurredAt    string
-	Transcript    *timelineapp.DTO
-	Usage         *timelineapp.TokenUsageDTO
-	Session       *sessionapp.DetailDTO
-	QuestionBatch *questionapp.BatchDTO
+type UpdateDTO struct {
+	ID               string
+	Type             string
+	SessionID        sessiondomain.ID
+	OccurredAt       string
+	Status           *sessionapp.CardStatusDTO
+	TodoList         *sessiondomain.TodoList
+	Usage            *timelineapp.TokenUsageDTO
+	ArtifactCount    *int
+	FilesChanged     *int
+	Priority         *sessiondomain.Priority
+	Config           *sessiondomain.Config
+	WorktreeCleanup  *sessionapp.WorktreeCleanupDTO
+	AvailableActions []string
+	UpdatedAt        *time.Time
 }
 
 type UseCase interface {
-	SessionEvents(ctx context.Context, sessionID sessiondomain.ID) (<-chan DTO, error)
+	SessionEvents(ctx context.Context, sessionID sessiondomain.ID) (<-chan timelineapp.DTO, error)
+	SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error)
 }
 
 type TimelineSource interface {
 	SessionEvents(ctx context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error)
+	SessionUsageEvents(ctx context.Context) (<-chan timelineapp.UsageUpdateDTO, error)
 }
 
 type DomainEventSource interface {
 	LiveSessionEvents(ctx context.Context, input eventapp.LiveSessionEventsInput) (<-chan eventapp.DTO, error)
 }
 
-type SessionSource interface {
-	GetSession(ctx context.Context, id sessiondomain.ID) (sessionapp.DetailDTO, error)
-}
-
-type QuestionSource interface {
-	QuestionBatchUpdates(ctx context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.BatchDTO, error)
+type SessionStatusSource interface {
+	GetSessionCardStatus(ctx context.Context, id sessiondomain.ID) (sessionapp.CardStatusDTO, error)
 }
 
 type Service struct {
-	timeline  TimelineSource
-	events    DomainEventSource
-	sessions  SessionSource
-	questions QuestionSource
+	timeline TimelineSource
+	events   DomainEventSource
+	sessions SessionStatusSource
 }
 
-func New(timeline TimelineSource, events DomainEventSource, sessions SessionSource, questions QuestionSource) *Service {
-	return &Service{timeline: timeline, events: events, sessions: sessions, questions: questions}
+func New(timeline TimelineSource, events DomainEventSource, sessions SessionStatusSource) *Service {
+	return &Service{timeline: timeline, events: events, sessions: sessions}
 }
 
-func (s *Service) SessionEvents(ctx context.Context, sessionID sessiondomain.ID) (<-chan DTO, error) {
-	if s == nil || s.timeline == nil || s.events == nil || s.sessions == nil || s.questions == nil {
-		return nil, errors.New("session event usecase is not fully configured")
+func (s *Service) SessionEvents(ctx context.Context, sessionID sessiondomain.ID) (<-chan timelineapp.DTO, error) {
+	if s == nil || s.timeline == nil {
+		return nil, errors.New("session event usecase is not configured")
 	}
 	if sessionID == "" {
 		return nil, errors.New("session id is required")
 	}
+	return s.timeline.SessionEvents(ctx, timelineapp.SessionEventsInput{SessionID: sessionID})
+}
+
+func (s *Service) SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error) {
+	if s == nil || s.timeline == nil || s.events == nil || s.sessions == nil {
+		return nil, errors.New("session update usecase is not fully configured")
+	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	transcript, err := s.timeline.SessionEvents(streamCtx, timelineapp.SessionEventsInput{SessionID: sessionID})
+	domainEvents, err := s.events.LiveSessionEvents(streamCtx, eventapp.LiveSessionEventsInput{})
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	eventSessionID := eventdomain.SessionID(sessionID)
-	domainEvents, err := s.events.LiveSessionEvents(streamCtx, eventapp.LiveSessionEventsInput{
-		Scope: eventdomain.Scope{SessionID: &eventSessionID},
-	})
+	usageEvents, err := s.timeline.SessionUsageEvents(streamCtx)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	questions, err := s.questions.QuestionBatchUpdates(streamCtx, questiondomain.SessionID(sessionID))
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	out := make(chan DTO, 16)
+	out := make(chan UpdateDTO, 16)
 	go func() {
 		defer close(out)
 		defer cancel()
@@ -93,44 +94,25 @@ func (s *Service) SessionEvents(ctx context.Context, sessionID sessiondomain.ID)
 			select {
 			case <-streamCtx.Done():
 				return
-			case item, ok := <-transcript:
-				if !ok {
-					return
-				}
-				event := DTO{ID: string(item.ID), Type: string(item.Type), OccurredAt: item.OccurredAt}
-				if item.Usage != nil {
-					event.Type = TypeUsage
-					event.Usage = item.Usage
-				} else {
-					event.Transcript = &item
-				}
-				if !send(streamCtx, out, event) {
-					return
-				}
 			case item, ok := <-domainEvents:
 				if !ok {
 					return
 				}
-				event := DTO{ID: string(item.ID), Type: item.Type, OccurredAt: item.CreatedAt}
-				session, err := s.sessions.GetSession(streamCtx, sessionID)
+				update, ok, err := s.fromDomainEvent(streamCtx, item)
 				if err != nil {
 					return
 				}
-				event.Session = &session
-				if !send(streamCtx, out, event) {
+				if ok && !send(streamCtx, out, update) {
 					return
 				}
-			case batch, ok := <-questions:
+			case item, ok := <-usageEvents:
 				if !ok {
 					return
 				}
-				event := DTO{ID: string(batch.ID), Type: TypeQuestion, QuestionBatch: &batch}
-				session, err := s.sessions.GetSession(streamCtx, sessionID)
-				if err != nil {
-					return
-				}
-				event.Session = &session
-				if !send(streamCtx, out, event) {
+				usage := item.Usage
+				if !send(streamCtx, out, UpdateDTO{
+					Type: TypeUsage, SessionID: item.SessionID, OccurredAt: item.OccurredAt, Usage: &usage,
+				}) {
 					return
 				}
 			}
@@ -139,7 +121,83 @@ func (s *Service) SessionEvents(ctx context.Context, sessionID sessiondomain.ID)
 	return out, nil
 }
 
-func send(ctx context.Context, out chan<- DTO, event DTO) bool {
+func (s *Service) fromDomainEvent(ctx context.Context, item eventapp.DTO) (UpdateDTO, bool, error) {
+	if item.SessionID == nil {
+		return UpdateDTO{}, false, nil
+	}
+	update := UpdateDTO{
+		ID:         string(item.ID),
+		Type:       item.Type,
+		SessionID:  sessiondomain.ID(*item.SessionID),
+		OccurredAt: item.CreatedAt,
+	}
+	switch {
+	case item.Type == TypeStatus:
+		status, err := s.sessions.GetSessionCardStatus(ctx, update.SessionID)
+		if err != nil {
+			return UpdateDTO{}, false, err
+		}
+		update.Status = &status
+	case item.Type == "session.todo_list_updated":
+		todo, ok := item.Payload["todoList"].(sessiondomain.TodoList)
+		if !ok {
+			return UpdateDTO{}, false, nil
+		}
+		update.TodoList = &todo
+	case item.Type == "session.diff_changed":
+		value, ok := eventInt(item.Payload, "filesChanged")
+		if !ok {
+			return UpdateDTO{}, false, nil
+		}
+		update.FilesChanged = &value
+	case item.Type == "session.artifacts_updated":
+		value, ok := eventInt(item.Payload, "artifactCount")
+		if !ok {
+			return UpdateDTO{}, false, nil
+		}
+		update.ArtifactCount = &value
+	case item.Type == "session.priority_changed":
+		priority, priorityOK := item.Payload["priority"].(sessiondomain.Priority)
+		updatedAt, updatedAtOK := item.Payload["updatedAt"].(time.Time)
+		if !priorityOK || !updatedAtOK {
+			return UpdateDTO{}, false, nil
+		}
+		update.Priority = &priority
+		update.UpdatedAt = &updatedAt
+	case item.Type == "session.config_changed":
+		config, configOK := item.Payload["config"].(sessiondomain.Config)
+		updatedAt, updatedAtOK := item.Payload["updatedAt"].(time.Time)
+		if !configOK || !updatedAtOK {
+			return UpdateDTO{}, false, nil
+		}
+		update.Config = &config
+		update.UpdatedAt = &updatedAt
+	case item.Type == "session.worktree_cleanup_requested",
+		item.Type == "session.worktree_cleanup_completed",
+		item.Type == "session.worktree_cleanup_failed",
+		item.Type == "session.worktree_ownership_confirmed":
+		cleanup, cleanupOK := item.Payload["worktreeCleanup"].(sessionapp.WorktreeCleanupDTO)
+		actions, actionsOK := item.Payload["availableActions"].([]string)
+		updatedAt, updatedAtOK := item.Payload["updatedAt"].(time.Time)
+		if !cleanupOK || !actionsOK || !updatedAtOK {
+			return UpdateDTO{}, false, nil
+		}
+		update.WorktreeCleanup = &cleanup
+		update.AvailableActions = actions
+		update.UpdatedAt = &updatedAt
+	default:
+		return UpdateDTO{}, false, nil
+	}
+	return update, true, nil
+}
+
+// GLUE: live domain events still expose map payloads; remove this conversion when their payloads are typed.
+func eventInt(payload map[string]any, key string) (int, bool) {
+	value, ok := payload[key].(int)
+	return value, ok
+}
+
+func send(ctx context.Context, out chan<- UpdateDTO, event UpdateDTO) bool {
 	select {
 	case <-ctx.Done():
 		return false

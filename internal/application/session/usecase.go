@@ -59,6 +59,7 @@ type UseCase interface {
 	SubmitWorkflowApproval(ctx context.Context, input SubmitWorkflowApprovalInput) (WorkflowRunDTO, error)
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
 	GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error)
+	GetSessionCardStatus(ctx context.Context, id domain.ID) (CardStatusDTO, error)
 	LastSessionConfigForProject(ctx context.Context, projectID domain.ProjectID) (*ConfigDTO, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error)
 }
@@ -209,11 +210,16 @@ type CardDTO struct {
 	ProjectName        string
 	RequirementSummary string
 	CurrentNodeTitle   string
-	PendingApproval    *PendingApprovalDTO
-	PendingQuestion    bool
 	TodoList           domain.TodoList
 	Attachments        []domain.SessionAttachment
 	AvailableActions   []string
+}
+
+type CardStatusDTO struct {
+	Status           domain.Status
+	CurrentNodeTitle string
+	AvailableActions []string
+	UpdatedAt        time.Time
 }
 
 type DetailDTO struct {
@@ -272,6 +278,7 @@ type workflowApprovalPostCommitAdvance struct {
 	advance        domain.WorkflowAdvance
 	commandEventID eventdomain.ID
 	pendingEvent   eventdomain.DomainEvent
+	publishEvents  []eventdomain.DomainEvent
 }
 
 var (
@@ -284,6 +291,7 @@ var errWorkflowResultFailureNotPersisted = errors.New("workflow result failure s
 const (
 	workflowSystemAdvancePendingEvent   = "workflow.system_advance_pending"
 	workflowSystemAdvanceCompletedEvent = "workflow.system_advance_completed"
+	sessionStatusUpdatedEvent           = "session.status_updated"
 	answerUserWarmWaitTimeout           = 5 * time.Minute
 )
 
@@ -552,7 +560,8 @@ func (s *Service) ReconcileWorktreeCleanup(ctx context.Context) (int, error) {
 					return nil
 				}
 				now := s.now()
-				if current.Status != domain.StatusClosed && current.Status != domain.StatusFailed {
+				statusChanged := current.Status != domain.StatusClosed && current.Status != domain.StatusFailed
+				if statusChanged {
 					if err := transitionSession(&current, domain.StatusFailed, now); err != nil {
 						return err
 					}
@@ -560,11 +569,18 @@ func (s *Service) ReconcileWorktreeCleanup(ctx context.Context) (int, error) {
 				if err := current.RequestWorktreeCleanup(now); err != nil {
 					return err
 				}
-				if err := s.saveSessionWithEvent(ctx, current, "session.worktree_cleanup_requested", map[string]any{
+				payload := worktreeUpdatePayload(current, map[string]any{
 					"reason":         "service_restarted_during_provisioning",
 					"worktreeBranch": current.WorktreeBranch,
-				}); err != nil {
-					return err
+				})
+				var saveErr error
+				if statusChanged {
+					saveErr = s.saveSessionWithStatusUpdate(ctx, current, "session.worktree_cleanup_requested", payload)
+				} else {
+					saveErr = s.saveSessionWithEvent(ctx, current, "session.worktree_cleanup_requested", payload)
+				}
+				if saveErr != nil {
+					return saveErr
 				}
 				reconciled++
 				return nil
@@ -631,10 +647,10 @@ func (s *Service) RetryWorktreeCleanup(ctx context.Context, id domain.ID) (DTO, 
 		if err := current.RequestWorktreeCleanup(s.now()); err != nil {
 			return err
 		}
-		if err := s.saveSessionWithEvent(ctx, current, "session.worktree_cleanup_requested", map[string]any{
+		if err := s.saveSessionWithEvent(ctx, current, "session.worktree_cleanup_requested", worktreeUpdatePayload(current, map[string]any{
 			"reason":         "user_retry",
 			"worktreeBranch": current.WorktreeBranch,
-		}); err != nil {
+		})); err != nil {
 			return err
 		}
 		dto = toDTO(current)
@@ -696,9 +712,9 @@ func (s *Service) cleanupSessionWorktree(ctx context.Context, session domain.Ses
 		if err := session.ConfirmWorktreeOwnership(now); err != nil {
 			return err
 		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.worktree_ownership_confirmed", map[string]any{
+		if err := s.saveSessionWithEvent(ctx, session, "session.worktree_ownership_confirmed", worktreeUpdatePayload(session, map[string]any{
 			"worktreeBranch": session.WorktreeBranch,
-		}); err != nil {
+		})); err != nil {
 			return err
 		}
 	}
@@ -723,10 +739,10 @@ func (s *Service) completeWorktreeCleanup(ctx context.Context, session domain.Se
 	if err := session.CompleteWorktreeCleanup(s.now()); err != nil {
 		return err
 	}
-	return s.saveSessionWithEvent(ctx, session, "session.worktree_cleanup_completed", map[string]any{
+	return s.saveSessionWithEvent(ctx, session, "session.worktree_cleanup_completed", worktreeUpdatePayload(session, map[string]any{
 		"attempts":       session.WorktreeCleanup.Attempts,
 		"worktreeBranch": session.WorktreeBranch,
-	})
+	}))
 }
 
 func (s *Service) recordWorktreeCleanupFailure(ctx context.Context, session domain.Session, code string, message string, retryable bool) error {
@@ -739,14 +755,14 @@ func (s *Service) recordWorktreeCleanupFailure(ctx context.Context, session doma
 	if err := session.FailWorktreeCleanup(code, message, retryable, nextAt, now); err != nil {
 		return err
 	}
-	return s.saveSessionWithEvent(ctx, session, "session.worktree_cleanup_failed", map[string]any{
+	return s.saveSessionWithEvent(ctx, session, "session.worktree_cleanup_failed", worktreeUpdatePayload(session, map[string]any{
 		"attempts":       session.WorktreeCleanup.Attempts,
 		"code":           code,
 		"error":          message,
 		"retryable":      retryable,
 		"nextAttemptAt":  nextAt,
 		"worktreeBranch": session.WorktreeBranch,
-	})
+	}))
 }
 
 func worktreeCleanupDue(session domain.Session, now time.Time) bool {
@@ -1076,11 +1092,13 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return err
 				}
-				event, ok, err := s.newSessionEvent(session, "session.stopped", map[string]any{"reason": "service_restarted"})
+				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+					eventType: "session.stopped", payload: map[string]any{"reason": "service_restarted"},
+				}))
 				if err != nil {
 					return err
 				}
-				if ok {
+				for _, event := range created {
 					if err := tx.Events().Append(ctx, event); err != nil {
 						return err
 					}
@@ -1160,16 +1178,17 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 				if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
 					return err
 				}
-				event, ok, err := s.newSessionEvent(session, "session.resume_failed", map[string]any{
-					"reason": "legacy_answer_user_origin_ambiguous", "batchId": string(batch.ID),
-				})
+				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+					eventType: "session.resume_failed",
+					payload:   map[string]any{"reason": "legacy_answer_user_origin_ambiguous", "batchId": string(batch.ID)},
+				}))
 				if err != nil {
 					return err
 				}
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return err
 				}
-				if ok {
+				for _, event := range created {
 					if err := tx.Events().Append(ctx, event); err != nil {
 						return err
 					}
@@ -1211,16 +1230,19 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 			if err := markWorkflowNodeWaiting(ctx, tx.Workflows(), batch, origin); err != nil {
 				return err
 			}
-			event, ok, err := s.newSessionEvent(session, "process.suspended_for_user", map[string]any{
-				"processRunId": string(origin.ID), "batchId": string(batch.ID), "reason": "service_restarted",
-			})
+			created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+				eventType: "process.suspended_for_user",
+				payload: map[string]any{
+					"processRunId": string(origin.ID), "batchId": string(batch.ID), "reason": "service_restarted",
+				},
+			}))
 			if err != nil {
 				return err
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return err
 			}
-			if ok {
+			for _, event := range created {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -1268,16 +1290,17 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 				if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
 					return err
 				}
-				event, ok, err := s.newSessionEvent(session, "session.resume_failed", map[string]any{
-					"reason": "answer_user_origin_missing_codex_session", "batchId": string(batch.ID),
-				})
+				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+					eventType: "session.resume_failed",
+					payload:   map[string]any{"reason": "answer_user_origin_missing_codex_session", "batchId": string(batch.ID)},
+				}))
 				if err != nil {
 					return err
 				}
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return err
 				}
-				if ok {
+				for _, event := range created {
 					if err := tx.Events().Append(ctx, event); err != nil {
 						return err
 					}
@@ -1299,11 +1322,19 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 			if err := tx.Sessions().Save(ctx, queued); err != nil {
 				return err
 			}
+			queuedEvents := []eventdomain.DomainEvent{}
 			if hasQueuedEvent {
-				if err := tx.Events().Append(ctx, queuedEvent); err != nil {
+				queuedEvents = append(queuedEvents, queuedEvent)
+			}
+			queuedEvents, err = s.addStatusUpdateEvent(queued, queuedEvents)
+			if err != nil {
+				return err
+			}
+			for _, event := range queuedEvents {
+				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
-				events = append(events, queuedEvent)
+				events = append(events, event)
 			}
 		}
 		result = batch
@@ -1511,7 +1542,7 @@ func (s *Service) saveInterruptedRecoveryState(ctx context.Context, expected dom
 
 func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, expected domain.Session, session domain.Session, run *processdomain.Run, guardReplacement bool, event eventdomain.DomainEvent, hasEvent bool) error {
 	result := processdomain.ExitResult{}
-	events := make([]eventdomain.DomainEvent, 0, 2)
+	events := make([]eventdomain.DomainEvent, 0, 3)
 	superseded := false
 	if run != nil {
 		result = processdomain.ExitResult{FailureReason: "service_restarted", FinishedAt: s.now()}
@@ -1525,6 +1556,11 @@ func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, expe
 	}
 	if hasEvent {
 		events = append(events, event)
+	}
+	var err error
+	events, err = s.addStatusUpdateEvent(session, events)
+	if err != nil {
+		return err
 	}
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
@@ -2078,13 +2114,15 @@ func (s *Service) failCreatedSessionWithCleanup(ctx context.Context, session dom
 		}
 	}
 	eventType := "session.failed"
-	if strings.TrimSpace(session.BaseBranch) != "" {
-		eventType = "session.worktree_cleanup_requested"
-	}
-	if err := s.saveSessionWithEvent(cleanupCtx, session, eventType, map[string]any{
+	payload := map[string]any{
 		"reason":         reason,
 		"worktreeBranch": session.WorktreeBranch,
-	}); err != nil {
+	}
+	if strings.TrimSpace(session.BaseBranch) != "" {
+		eventType = "session.worktree_cleanup_requested"
+		payload = worktreeUpdatePayload(session, payload)
+	}
+	if err := s.saveSessionWithStatusUpdate(cleanupCtx, session, eventType, payload); err != nil {
 		return errors.Join(cause, err)
 	}
 	s.scheduleWorktreeCleanup()
@@ -2274,7 +2312,7 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 		if err := transitionSessionToWaitingApproval(&session, initialStart, s.now()); err != nil {
 			return DTO{}, err
 		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
+		if err := s.saveSessionWithStatusUpdate(ctx, session, "session.waiting_approval", map[string]any{
 			"sessionId":        string(start.SessionID),
 			"nodeRunId":        stringValuePtr(start.NodeRunID),
 			"currentNodeId":    start.CurrentNodeID,
@@ -2452,7 +2490,8 @@ func (s *Service) setSessionPriority(ctx context.Context, input SetSessionPriori
 	session.Priority = normalizePriority(input.Priority)
 	session.UpdatedAt = s.now()
 	if err := s.saveSessionWithEvent(ctx, session, "session.priority_changed", map[string]any{
-		"priority": string(session.Priority),
+		"priority":  session.Priority,
+		"updatedAt": session.UpdatedAt,
 	}); err != nil {
 		return DTO{}, err
 	}
@@ -2497,10 +2536,8 @@ func (s *Service) updateSessionConfig(ctx context.Context, input UpdateSessionCo
 	session.Config = config
 	session.UpdatedAt = s.now()
 	if err := s.saveSessionWithEvent(ctx, session, "session.config_changed", map[string]any{
-		"codexModel":      session.Config.CodexModel,
-		"reasoningEffort": session.Config.ReasoningEffort,
-		"permissionMode":  session.Config.PermissionMode,
-		"fastMode":        session.Config.FastMode,
+		"config":    session.Config,
+		"updatedAt": session.UpdatedAt,
 	}); err != nil {
 		return DTO{}, err
 	}
@@ -2662,7 +2699,7 @@ func (s *Service) stopSessionWithoutActiveProcess(ctx context.Context, session d
 	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
 		return DTO{}, err
 	}
-	if err := s.saveSessionWithEvent(ctx, session, "session.stopped", map[string]any{"reason": reason}); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, session, "session.stopped", map[string]any{"reason": reason}); err != nil {
 		return DTO{}, err
 	}
 	s.scheduleQueueDrain()
@@ -3076,12 +3113,12 @@ func (s *Service) persistAnswerFallbackStopFailure(ctx context.Context, sessionI
 		if err := tx.Sessions().Save(ctx, session); err != nil {
 			return err
 		}
-		events, err = s.newSessionEvents(session, []sessionEventInput{{
+		events, err = s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
 			eventType: "session.resume_failed",
 			payload: map[string]any{
 				"batchId": string(batchID), "processRunId": string(processRunID), "reason": "answer_user_stop_failed", "error": stopErr.Error(),
 			},
-		}})
+		}))
 		if err != nil {
 			return err
 		}
@@ -3194,10 +3231,10 @@ func (s *Service) AcknowledgeUserAnswerDelivery(ctx context.Context, input Ackno
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return err
 			}
-			events, err = s.newSessionEvents(session, []sessionEventInput{
-				{eventType: "question.answer_delivered", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(origin.ID)}},
-				{eventType: "session.running", payload: map[string]any{"processRunId": string(origin.ID), "reason": "answer_user_delivered"}},
-			})
+			events, err = s.newSessionEvents(session, statusUpdateInputs(
+				sessionEventInput{eventType: "question.answer_delivered", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(origin.ID)}},
+				sessionEventInput{eventType: "session.running", payload: map[string]any{"processRunId": string(origin.ID), "reason": "answer_user_delivered"}},
+			))
 			if err != nil {
 				return err
 			}
@@ -3274,10 +3311,10 @@ func (s *Service) requestUserAnswer(ctx context.Context, input RequestUserAnswer
 	if err := transitionSession(&session, domain.StatusWaitingUser, now); err != nil {
 		return questionapp.BatchDTO{}, processdomain.Run{}, err
 	}
-	events, err := s.newSessionEvents(session, []sessionEventInput{
-		{eventType: "question.pending", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(active.ID)}},
-		{eventType: "session.waiting_user", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(active.ID)}},
-	})
+	events, err := s.newSessionEvents(session, statusUpdateInputs(
+		sessionEventInput{eventType: "question.pending", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(active.ID)}},
+		sessionEventInput{eventType: "session.waiting_user", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(active.ID)}},
+	))
 	if err != nil {
 		return questionapp.BatchDTO{}, processdomain.Run{}, err
 	}
@@ -3499,7 +3536,7 @@ func (s *Service) queueAnswerResumeInTx(ctx context.Context, tx port.Tx, batch q
 	if err != nil {
 		return nil, err
 	}
-	events := make([]eventdomain.DomainEvent, 0, 2)
+	events := make([]eventdomain.DomainEvent, 0, 3)
 	for _, item := range []struct {
 		event eventdomain.DomainEvent
 		ok    bool
@@ -3507,10 +3544,16 @@ func (s *Service) queueAnswerResumeInTx(ctx context.Context, tx port.Tx, batch q
 		if !item.ok {
 			continue
 		}
-		if err := tx.Events().Append(ctx, item.event); err != nil {
+		events = append(events, item.event)
+	}
+	events, err = s.addStatusUpdateEvent(queued, events)
+	if err != nil {
+		return nil, err
+	}
+	for _, event := range events {
+		if err := tx.Events().Append(ctx, event); err != nil {
 			return nil, err
 		}
-		events = append(events, item.event)
 	}
 	return events, nil
 }
@@ -4055,7 +4098,15 @@ func (s *Service) queueCodexSession(ctx context.Context, session domain.Session,
 	if err != nil {
 		return domain.Session{}, err
 	}
-	if err := s.saveSessionAndEvent(ctx, queued, event, hasEvent); err != nil {
+	events := []eventdomain.DomainEvent{}
+	if hasEvent {
+		events = append(events, event)
+	}
+	events, err = s.addStatusUpdateEvent(queued, events)
+	if err != nil {
+		return domain.Session{}, err
+	}
+	if err := s.saveSessionAndEvents(ctx, queued, events); err != nil {
 		return domain.Session{}, err
 	}
 	return queued, nil
@@ -4450,7 +4501,7 @@ func (s *Service) settleEmptyPromptAppendQueue(ctx context.Context, session doma
 	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
 		return DTO{}, err
 	}
-	if err := s.saveSessionWithEvent(ctx, session, "session.prompt_append_cancelled", map[string]any{"reason": "attachments_unavailable"}); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, session, "session.prompt_append_cancelled", map[string]any{"reason": "attachments_unavailable"}); err != nil {
 		return DTO{}, err
 	}
 	s.scheduleQueueDrain()
@@ -4911,25 +4962,26 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 				payload: map[string]any{
 					"completed": todoList.Completed(),
 					"total":     todoList.Total(),
+					"todoList":  todoList,
 				},
 			})
 		}
-		if hasCodexFileChanges(event) && s.diffCounter != nil {
-			filesChanged, countErr := s.diffCounter.CountSessionChangedFiles(ctx, sessionID)
-			if countErr != nil {
-				log.Printf("refresh session diff count: session=%s event=%s error=%v", sessionID, event.EventID, countErr)
-			} else if filesChanged < 0 {
-				log.Printf("refresh session diff count: session=%s event=%s error=negative count %d", sessionID, event.EventID, filesChanged)
-			} else if filesChanged != current.FilesChanged {
-				current.FilesChanged = filesChanged
-				current.UpdatedAt = s.now()
-				saveSession = true
-				saveFilesChanged = true
-				extraEvents = append(extraEvents, sessionEventInput{
-					eventType: "session.diff_changed",
-					payload:   map[string]any{"filesChanged": filesChanged},
-				})
-			}
+	}
+	if activeRun && codexEventCanRefreshDiff(current.Status) && shouldReconcileSessionDiff(event) && s.diffCounter != nil {
+		filesChanged, countErr := s.diffCounter.CountSessionChangedFiles(ctx, sessionID)
+		if countErr != nil {
+			log.Printf("refresh session diff count: session=%s event=%s error=%v", sessionID, event.EventID, countErr)
+		} else if filesChanged < 0 {
+			log.Printf("refresh session diff count: session=%s event=%s error=negative count %d", sessionID, event.EventID, filesChanged)
+		} else if filesChanged != current.FilesChanged {
+			current.FilesChanged = filesChanged
+			current.UpdatedAt = s.now()
+			saveSession = true
+			saveFilesChanged = true
+			extraEvents = append(extraEvents, sessionEventInput{
+				eventType: "session.diff_changed",
+				payload:   map[string]any{"filesChanged": filesChanged},
+			})
 		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
@@ -4944,6 +4996,17 @@ func hasCodexFileChanges(event processdomain.CodexEvent) bool {
 	return ok && len(content.Changes) > 0
 }
 
+func shouldReconcileSessionDiff(event processdomain.CodexEvent) bool {
+	if event.Type == processdomain.CodexEventProcessExit || hasCodexFileChanges(event) {
+		return true
+	}
+	status, ok := event.Content.(processdomain.CodexStatusContent)
+	if !ok {
+		return false
+	}
+	return status.Code == "task.completed" || status.Code == "turn.completed"
+}
+
 func (s *Service) bindProcessTranscript(ctx context.Context, current *domain.Session, handle processdomain.CodexHandle, source processdomain.CodexTranscriptSource) error {
 	if current == nil {
 		return errors.New("bind process transcript: nil session")
@@ -4956,14 +5019,14 @@ func (s *Service) bindProcessTranscript(ctx context.Context, current *domain.Ses
 	}
 	current.CodexSessionID = source.CodexSessionID
 	current.UpdatedAt = s.now()
-	events, err := s.newSessionEvents(*current, []sessionEventInput{
-		{eventType: "process.transcript_bound", payload: map[string]any{
+	events, err := s.newSessionEvents(*current, statusUpdateInputs(
+		sessionEventInput{eventType: "process.transcript_bound", payload: map[string]any{
 			"processRunId": string(handle.ProcessRunID), "codexSessionId": source.CodexSessionID,
 		}},
-		{eventType: "session.running", payload: map[string]any{
+		sessionEventInput{eventType: "session.running", payload: map[string]any{
 			"processRunId": string(handle.ProcessRunID), "pid": handle.PID, "codexSessionId": source.CodexSessionID,
 		}},
-	})
+	))
 	if err != nil {
 		return err
 	}
@@ -5173,6 +5236,15 @@ func codexEventCanUpdateSession(status domain.Status) bool {
 	}
 }
 
+func codexEventCanRefreshDiff(status domain.Status) bool {
+	switch status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) handleCodexProcessExit(session domain.Session, handle processdomain.CodexHandle, options codexStartOptions, exitResult processdomain.ExitResult, workflowResults map[string]any) {
 	if exitResult.FinishedAt.IsZero() {
 		exitResult.FinishedAt = s.now()
@@ -5197,6 +5269,15 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 		}
 		err := s.withSessionLock(retryCtx, session.ID, func(ctx context.Context) error {
 			if !processPersisted {
+				if err := s.handleCodexEvent(ctx, session.ID, handle, processdomain.CodexEvent{
+					Type:           processdomain.CodexEventProcessExit,
+					SessionID:      processdomain.SessionID(session.ID),
+					ProcessRunID:   handle.ProcessRunID,
+					CodexSessionID: handle.CodexSessionID,
+					CreatedAt:      exitResult.FinishedAt,
+				}); err != nil {
+					return fmt.Errorf("reconcile session diff after process exit: %w", err)
+				}
 				_, shouldContinue, err := s.persistCodexProcessExit(ctx, session, handle, options, exitResult, workflowResults)
 				if err != nil {
 					return err
@@ -5232,7 +5313,7 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 				if err := transitionSession(&current, domain.StatusFailed, s.now()); err != nil {
 					return err
 				}
-				return s.saveSessionWithEvent(ctx, current, "workflow.failed", map[string]any{
+				return s.saveSessionWithStatusUpdate(ctx, current, "workflow.failed", map[string]any{
 					"sessionId": string(options.sessionID),
 					"nodeRunId": string(domain.NodeRunID(*options.nodeRunID)),
 					"reason":    workflowTransitionErr.Error(),
@@ -5245,7 +5326,7 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 				if err := transitionSession(&current, domain.StatusFailed, s.now()); err != nil {
 					return err
 				}
-				return s.saveSessionWithEvent(ctx, current, "workflow.failed", map[string]any{
+				return s.saveSessionWithStatusUpdate(ctx, current, "workflow.failed", map[string]any{
 					"sessionId": string(options.sessionID),
 					"nodeRunId": string(domain.NodeRunID(*options.nodeRunID)),
 					"reason":    workflowApplyErr.Error(),
@@ -5267,7 +5348,7 @@ func (s *Service) handleCodexProcessExit(session domain.Session, handle processd
 			if err := transitionSession(&latest, domain.StatusFailed, s.now()); err != nil {
 				return err
 			}
-			return s.saveSessionWithEvent(ctx, latest, "workflow.failed", map[string]any{
+			return s.saveSessionWithStatusUpdate(ctx, latest, "workflow.failed", map[string]any{
 				"sessionId": string(options.sessionID),
 				"nodeRunId": string(domain.NodeRunID(*options.nodeRunID)),
 				"reason":    workflowApplyErr.Error(),
@@ -5759,7 +5840,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		if err := transitionSession(&session, domain.StatusBlocked, s.now()); err != nil {
 			return DTO{}, err
 		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.blocked", map[string]any{
+		if err := s.saveSessionWithStatusUpdate(ctx, session, "session.blocked", map[string]any{
 			"sessionId":      string(advance.SessionID),
 			"reason":         advance.BlockedReason,
 			"failureCode":    advance.BlockedCode,
@@ -5774,7 +5855,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		if err := transitionSession(&session, domain.StatusCompleted, s.now()); err != nil {
 			return DTO{}, err
 		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.completed", map[string]any{
+		if err := s.saveSessionWithStatusUpdate(ctx, session, "session.completed", map[string]any{
 			"sessionId": string(advance.SessionID),
 		}); err != nil {
 			return DTO{}, err
@@ -5792,7 +5873,7 @@ func (s *Service) applyWorkflowAdvance(ctx context.Context, session domain.Sessi
 		if err := transitionSessionToWaitingApproval(&session, initialStart, s.now()); err != nil {
 			return DTO{}, err
 		}
-		if err := s.saveSessionWithEvent(ctx, session, "session.waiting_approval", map[string]any{
+		if err := s.saveSessionWithStatusUpdate(ctx, session, "session.waiting_approval", map[string]any{
 			"sessionId":        string(advance.SessionID),
 			"nodeRunId":        stringValuePtr(advance.NodeRunID),
 			"currentNodeId":    advance.CurrentNodeID,
@@ -6086,7 +6167,13 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 	if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
 		return DTO{}, err
 	}
-	if err := s.repo.Save(ctx, session); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, session, "workflow.merge_waiting_user", map[string]any{
+		"sessionId":     string(advance.SessionID),
+		"nodeRunId":     stringValuePtr(advance.NodeRunID),
+		"batchId":       string(batch.ID),
+		"failureCode":   code,
+		"failureReason": result.FailureReason,
+	}); err != nil {
 		if advance.CommandID == "" && batch.Created {
 			if cancelErr := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(session.ID), "merge failure question abandoned"); cancelErr != nil {
 				return DTO{}, fmt.Errorf("save session: %w; cancel merge failure question: %v", err, cancelErr)
@@ -6094,13 +6181,6 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 		}
 		return DTO{}, fmt.Errorf("save session: %w", err)
 	}
-	s.appendSessionEvent(ctx, session, "workflow.merge_waiting_user", map[string]any{
-		"sessionId":     string(advance.SessionID),
-		"nodeRunId":     stringValuePtr(advance.NodeRunID),
-		"batchId":       string(batch.ID),
-		"failureCode":   code,
-		"failureReason": result.FailureReason,
-	})
 	return toDTO(session), nil
 }
 
@@ -6337,8 +6417,10 @@ func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.
 		if err := transitionSession(&session, domain.StatusFailed, s.now()); err != nil {
 			return DTO{}, err
 		}
-		if err := s.repo.Save(ctx, session); err != nil {
-			return DTO{}, fmt.Errorf("save session: %w", err)
+		if err := s.saveSessionWithStatusUpdate(ctx, session, "session.failed", map[string]any{
+			"code": code, "reason": message,
+		}); err != nil {
+			return DTO{}, err
 		}
 		return toDTO(session), nil
 	}
@@ -6368,7 +6450,7 @@ func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.
 			}
 		}
 		if !failurePersisted {
-			if err := s.saveSessionWithEvent(ctx, session, failureEvent.eventType, failureEvent.payload); err != nil {
+			if err := s.saveSessionWithStatusUpdate(ctx, session, failureEvent.eventType, failureEvent.payload); err != nil {
 				return DTO{}, err
 			}
 		}
@@ -6395,6 +6477,29 @@ func (s *Service) handleWorkflowNodeFailure(ctx context.Context, session domain.
 type sessionEventInput struct {
 	eventType string
 	payload   map[string]any
+}
+
+func statusUpdateInputs(inputs ...sessionEventInput) []sessionEventInput {
+	result := make([]sessionEventInput, 0, len(inputs)+1)
+	result = append(result, inputs...)
+	return append(result, sessionEventInput{eventType: sessionStatusUpdatedEvent})
+}
+
+func (s *Service) addStatusUpdateEvent(session domain.Session, events []eventdomain.DomainEvent) ([]eventdomain.DomainEvent, error) {
+	if s.events == nil {
+		return events, nil
+	}
+	var id domain.ID
+	if len(events) > 0 {
+		id = domain.ID(string(events[len(events)-1].ID) + "-status")
+	} else {
+		id = fallbackSessionEventID(session.ID)
+	}
+	event, ok := s.newSessionEventWithID(session, sessionStatusUpdatedEvent, nil, id)
+	if ok {
+		events = append(events, event)
+	}
+	return events, nil
 }
 
 func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveFilesChanged bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
@@ -6492,12 +6597,12 @@ func promptDeliveryTime(event processdomain.CodexEvent, fallback time.Time) time
 
 func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expectedSession domain.Session, run processdomain.Run, session domain.Session, options codexStartOptions, maxActive int, eventType string, payload map[string]any) (port.ExecutionClaimResult, error) {
 	if s.uow != nil {
-		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		events, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
 		if err != nil {
 			return port.ExecutionClaimResult{}, err
 		}
 		var result port.ExecutionClaimResult
-		var publishedEvent *eventdomain.DomainEvent
+		var publishedEvents []eventdomain.DomainEvent
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			claim, err := tx.ClaimExecution(ctx, port.ExecutionClaimInput{
 				ExpectedSession: expectedSession,
@@ -6522,17 +6627,18 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expected
 					return fmt.Errorf("reconcile active execution session: %w", err)
 				}
 				result.Session = reconciled
-				reconcileEvent, hasEvent, err := s.newSessionEvent(reconciled, "session.execution_already_active", map[string]any{
-					"processRunId": string(claim.ActiveRun.ID),
-				})
+				reconcileEvents, err := s.newSessionEvents(reconciled, statusUpdateInputs(sessionEventInput{
+					eventType: "session.execution_already_active",
+					payload:   map[string]any{"processRunId": string(claim.ActiveRun.ID)},
+				}))
 				if err != nil {
 					return err
 				}
-				if hasEvent {
-					if err := tx.Events().Append(ctx, reconcileEvent); err != nil {
+				for _, event := range reconcileEvents {
+					if err := tx.Events().Append(ctx, event); err != nil {
 						return err
 					}
-					publishedEvent = &reconcileEvent
+					publishedEvents = append(publishedEvents, event)
 				}
 				return nil
 			case port.ExecutionStale, port.ExecutionAtCapacity:
@@ -6562,18 +6668,18 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expected
 			if err := tx.Sessions().MarkPromptAppendsInflight(ctx, options.promptAppendIDs, string(run.ID)); err != nil {
 				return err
 			}
-			if ok {
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
-				publishedEvent = &event
+				publishedEvents = append(publishedEvents, event)
 			}
 			return nil
 		}); err != nil {
 			return port.ExecutionClaimResult{}, err
 		}
-		if publishedEvent != nil {
-			s.publishSessionEvent(ctx, *publishedEvent)
+		for _, event := range publishedEvents {
+			s.publishSessionEvent(ctx, event)
 		}
 		return result, nil
 	}
@@ -6590,7 +6696,7 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expected
 		if err != nil {
 			return port.ExecutionClaimResult{}, err
 		}
-		if err := s.saveSessionWithEvent(ctx, reconciled, "session.execution_already_active", map[string]any{"processRunId": string(active.ID)}); err != nil {
+		if err := s.saveSessionWithStatusUpdate(ctx, reconciled, "session.execution_already_active", map[string]any{"processRunId": string(active.ID)}); err != nil {
 			return port.ExecutionClaimResult{}, err
 		}
 		return port.ExecutionClaimResult{Status: port.ExecutionAlreadyActive, Session: reconciled, ActiveRun: &active}, nil
@@ -6611,7 +6717,7 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expected
 		_ = s.processes.MarkExited(ctx, run.ID, processdomain.ExitResult{FailureReason: err.Error(), FinishedAt: s.now()})
 		return port.ExecutionClaimResult{}, err
 	}
-	if err := s.saveSessionWithEvent(ctx, session, eventType, payload); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, session, eventType, payload); err != nil {
 		result := processdomain.ExitResult{FailureReason: err.Error(), FinishedAt: s.now()}
 		_ = s.processes.MarkExited(ctx, run.ID, result)
 		_ = s.repo.ReleasePromptAppends(ctx, string(run.ID))
@@ -6645,7 +6751,7 @@ func reconcileSessionWithActiveRun(session domain.Session, run processdomain.Run
 
 func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session, eventType string, payload map[string]any) error {
 	if s.uow != nil {
-		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		events, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
 		if err != nil {
 			return err
 		}
@@ -6656,7 +6762,7 @@ func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID 
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if ok {
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -6665,7 +6771,7 @@ func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID 
 		}); err != nil {
 			return err
 		}
-		if ok {
+		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
@@ -6673,12 +6779,12 @@ func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID 
 	if err := s.processes.MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
 		return fmt.Errorf("mark process running: %w", err)
 	}
-	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+	return s.saveSessionWithStatusUpdate(ctx, session, eventType, payload)
 }
 
 func (s *Service) markProcessWaitingWithSessionEvent(ctx context.Context, runID processdomain.RunID, session domain.Session, eventType string, payload map[string]any) error {
 	if s.uow != nil {
-		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		events, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
 		if err != nil {
 			return err
 		}
@@ -6689,7 +6795,7 @@ func (s *Service) markProcessWaitingWithSessionEvent(ctx context.Context, runID 
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if ok {
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -6698,7 +6804,7 @@ func (s *Service) markProcessWaitingWithSessionEvent(ctx context.Context, runID 
 		}); err != nil {
 			return err
 		}
-		if ok {
+		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
@@ -6706,12 +6812,12 @@ func (s *Service) markProcessWaitingWithSessionEvent(ctx context.Context, runID 
 	if err := s.processes.MarkWaitingUser(ctx, runID); err != nil {
 		return fmt.Errorf("mark process waiting user: %w", err)
 	}
-	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+	return s.saveSessionWithStatusUpdate(ctx, session, eventType, payload)
 }
 
 func (s *Service) markProcessStoppingWithSessionEvent(ctx context.Context, runID processdomain.RunID, session domain.Session, eventType string, payload map[string]any) error {
 	if s.uow != nil {
-		event, ok, err := s.newSessionEvent(session, eventType, payload)
+		events, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
 		if err != nil {
 			return err
 		}
@@ -6722,7 +6828,7 @@ func (s *Service) markProcessStoppingWithSessionEvent(ctx context.Context, runID
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if ok {
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -6731,7 +6837,7 @@ func (s *Service) markProcessStoppingWithSessionEvent(ctx context.Context, runID
 		}); err != nil {
 			return err
 		}
-		if ok {
+		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
@@ -6739,7 +6845,7 @@ func (s *Service) markProcessStoppingWithSessionEvent(ctx context.Context, runID
 	if err := s.processes.MarkStopping(ctx, runID); err != nil {
 		return fmt.Errorf("mark process stopping: %w", err)
 	}
-	return s.saveSessionWithEvent(ctx, session, eventType, payload)
+	return s.saveSessionWithStatusUpdate(ctx, session, eventType, payload)
 }
 
 func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session) error {
@@ -6776,6 +6882,9 @@ const (
 )
 
 func (s *Service) markProcessExitedWithSessionEventsAndSettlement(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, inputs []sessionEventInput, settlement promptAppendSettlement) error {
+	if saveSession {
+		inputs = statusUpdateInputs(inputs...)
+	}
 	events, err := s.newSessionEvents(session, inputs)
 	if err != nil {
 		return err
@@ -6827,7 +6936,7 @@ func (s *Service) persistWorkflowResumeFailure(ctx context.Context, session doma
 	if err := transitionSession(&session, domain.StatusResumeFailed, result.FinishedAt); err != nil {
 		return err
 	}
-	events, err := s.newSessionEvents(session, inputs)
+	events, err := s.newSessionEvents(session, statusUpdateInputs(inputs...))
 	if err != nil {
 		return err
 	}
@@ -6916,6 +7025,11 @@ func (s *Service) saveSessionWithEvent(ctx context.Context, session domain.Sessi
 	return s.saveSessionAndEvent(ctx, session, event, ok)
 }
 
+func (s *Service) saveSessionWithStatusUpdate(ctx context.Context, session domain.Session, eventType string, payload map[string]any) error {
+	_, err := s.saveSessionWithEvents(ctx, session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
+	return err
+}
+
 func (s *Service) updateArtifactCountWithEvent(ctx context.Context, session domain.Session, count int, eventType string, payload map[string]any) error {
 	event, ok, err := s.newSessionEvent(session, eventType, payload)
 	if err != nil {
@@ -6993,12 +7107,20 @@ func (s *Service) saveSessionWithEvents(ctx context.Context, session domain.Sess
 }
 
 func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Session, event eventdomain.DomainEvent, hasEvent bool) error {
+	events := []eventdomain.DomainEvent{}
+	if hasEvent {
+		events = append(events, event)
+	}
+	return s.saveSessionAndEvents(ctx, session, events)
+}
+
+func (s *Service) saveSessionAndEvents(ctx context.Context, session domain.Session, events []eventdomain.DomainEvent) error {
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if hasEvent {
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -7007,7 +7129,7 @@ func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Sessio
 		}); err != nil {
 			return err
 		}
-		if hasEvent {
+		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
 		return nil
@@ -7015,7 +7137,7 @@ func (s *Service) saveSessionAndEvent(ctx context.Context, session domain.Sessio
 	if err := s.repo.Save(ctx, session); err != nil {
 		return fmt.Errorf("save session: %w", err)
 	}
-	if hasEvent {
+	for _, event := range events {
 		if err := s.events.Append(ctx, event); err != nil {
 			return err
 		}
@@ -7043,7 +7165,7 @@ func (s *Service) saveSession(ctx context.Context, session domain.Session) error
 }
 
 func (s *Service) saveInterruptedSessionWithEvent(ctx context.Context, session domain.Session, finishedAt time.Time, failureReason string, eventType string, payload map[string]any) error {
-	events, err := s.newSessionEvents(session, []sessionEventInput{{eventType: eventType, payload: payload}})
+	events, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
 	if err != nil {
 		return err
 	}
@@ -7116,6 +7238,14 @@ func markInterruptedProcessExited(ctx context.Context, processes processdomain.R
 func (s *Service) newSessionEvents(session domain.Session, inputs []sessionEventInput) ([]eventdomain.DomainEvent, error) {
 	events := make([]eventdomain.DomainEvent, 0, len(inputs))
 	for _, input := range inputs {
+		if input.eventType == sessionStatusUpdatedEvent {
+			var err error
+			events, err = s.addStatusUpdateEvent(session, events)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
 		event, ok, err := s.newSessionEvent(session, input.eventType, input.payload)
 		if err != nil {
 			return nil, err
@@ -7375,14 +7505,20 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		closeErr := fmt.Errorf("close session %s: %w", session.ID, err)
 		return DTO{}, releaseClose(closeErr)
 	}
+	artifactCountChanged := s.artifacts != nil && session.ArtifactCount != 0
 	if s.artifacts != nil {
 		session.ArtifactCount = 0
 	}
-	events := []sessionEventInput{{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}}}
+	events := make([]sessionEventInput, 0, 4)
+	if artifactCountChanged {
+		events = append(events, sessionEventInput{eventType: "session.artifacts_updated", payload: map[string]any{"artifactCount": 0}})
+	}
+	events = append(events, sessionEventInput{eventType: "session.closed", payload: map[string]any{"reason": string(reason)}})
+	events = append(events, sessionEventInput{eventType: sessionStatusUpdatedEvent})
 	if cleanupRequested {
-		events = append(events, sessionEventInput{eventType: "session.worktree_cleanup_requested", payload: map[string]any{
+		events = append(events, sessionEventInput{eventType: "session.worktree_cleanup_requested", payload: worktreeUpdatePayload(session, map[string]any{
 			"worktreeBranch": session.WorktreeBranch,
-		}})
+		})})
 	}
 	committed, err := s.saveSessionWithEvents(ctx, session, events)
 	if err != nil {
@@ -7430,7 +7566,9 @@ func (s *Service) prepareSessionClose(ctx context.Context, expected domain.Sessi
 	}
 	closing.CloseReason = &reason
 	if s.uow != nil {
-		event, hasEvent, err := s.newSessionEvent(closing, "session.closing", map[string]any{"reason": string(reason)})
+		events, err := s.newSessionEvents(closing, statusUpdateInputs(sessionEventInput{
+			eventType: "session.closing", payload: map[string]any{"reason": string(reason)},
+		}))
 		if err != nil {
 			return port.ClosePreparationResult{}, err
 		}
@@ -7442,9 +7580,11 @@ func (s *Service) prepareSessionClose(ctx context.Context, expected domain.Sessi
 				return err
 			}
 			result = prepared
-			if prepared.Status == port.ClosePrepared && hasEvent {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
+			if prepared.Status == port.ClosePrepared {
+				for _, event := range events {
+					if err := tx.Events().Append(ctx, event); err != nil {
+						return err
+					}
 				}
 				publish = true
 			}
@@ -7453,7 +7593,9 @@ func (s *Service) prepareSessionClose(ctx context.Context, expected domain.Sessi
 			return port.ClosePreparationResult{}, err
 		}
 		if publish {
-			s.publishSessionEvent(ctx, event)
+			for _, event := range events {
+				s.publishSessionEvent(ctx, event)
+			}
 		}
 		return result, nil
 	}
@@ -7478,7 +7620,7 @@ func (s *Service) prepareSessionClose(ctx context.Context, expected domain.Sessi
 		}
 		return port.ClosePreparationResult{Status: port.CloseActive, Session: expected, ActiveRun: activeRun}, nil
 	}
-	if err := s.saveSessionWithEvent(ctx, closing, "session.closing", map[string]any{"reason": string(reason)}); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, closing, "session.closing", map[string]any{"reason": string(reason)}); err != nil {
 		return port.ClosePreparationResult{}, err
 	}
 	return port.ClosePreparationResult{Status: port.ClosePrepared, Session: closing}, nil
@@ -7492,7 +7634,7 @@ func (s *Service) releaseClosePreparation(ctx context.Context, closing domain.Se
 	if err := transitionSession(&closing, domain.StatusStopped, s.now()); err != nil {
 		return errors.Join(cause, err)
 	}
-	if err := s.saveSessionWithEvent(ctx, closing, "session.close_failed", map[string]any{"reason": cause.Error()}); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, closing, "session.close_failed", map[string]any{"reason": cause.Error()}); err != nil {
 		return errors.Join(cause, err)
 	}
 	return cause
@@ -7536,18 +7678,19 @@ func (s *Service) DeleteSessionFile(ctx context.Context, id domain.SessionFileID
 		return err
 	}
 	return s.withSessionLock(ctx, artifact.SessionID, func(ctx context.Context) error {
-		count, err := s.artifacts.CountArtifacts(ctx, artifact.SessionID)
-		if err != nil {
-			return fmt.Errorf("count session artifacts before deletion: %w", err)
-		}
-		if count > 0 {
-			count--
-		}
-		if err := s.repo.UpdateArtifactCount(ctx, artifact.SessionID, count); err != nil {
+		if _, err = s.artifacts.DeleteArtifact(ctx, id); err != nil {
 			return err
 		}
-		_, err = s.artifacts.DeleteArtifact(ctx, id)
-		return err
+		count, err := s.artifacts.CountArtifacts(ctx, artifact.SessionID)
+		if err != nil {
+			return fmt.Errorf("count session artifacts after deletion: %w", err)
+		}
+		current, err := s.repo.Find(ctx, artifact.SessionID)
+		if err != nil {
+			return fmt.Errorf("find session after artifact deletion: %w", err)
+		}
+		current.ArtifactCount = count
+		return s.updateArtifactCountWithEvent(ctx, current, count, "session.artifacts_updated", map[string]any{"artifactCount": count})
 	})
 }
 
@@ -7806,6 +7949,14 @@ func (s *Service) appendPromptAndQueue(ctx context.Context, session domain.Sessi
 	if err != nil {
 		return domain.Session{}, false, err
 	}
+	events := []eventdomain.DomainEvent{}
+	if hasEvent {
+		events = append(events, event)
+	}
+	events, err = s.addStatusUpdateEvent(queued, events)
+	if err != nil {
+		return domain.Session{}, false, err
+	}
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			if err := tx.Sessions().AppendPrompt(ctx, promptAppend); err != nil {
@@ -7814,7 +7965,7 @@ func (s *Service) appendPromptAndQueue(ctx context.Context, session domain.Sessi
 			if err := tx.Sessions().Save(ctx, queued); err != nil {
 				return fmt.Errorf("save queued session: %w", err)
 			}
-			if hasEvent {
+			for _, event := range events {
 				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
@@ -7823,7 +7974,7 @@ func (s *Service) appendPromptAndQueue(ctx context.Context, session domain.Sessi
 		}); err != nil {
 			return domain.Session{}, false, err
 		}
-		if hasEvent {
+		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
 		}
 		return queued, true, nil
@@ -7831,7 +7982,7 @@ func (s *Service) appendPromptAndQueue(ctx context.Context, session domain.Sessi
 	if err := s.repo.AppendPrompt(ctx, promptAppend); err != nil {
 		return domain.Session{}, false, fmt.Errorf("append prompt: %w", err)
 	}
-	if err := s.saveSessionAndEvent(ctx, queued, event, hasEvent); err != nil {
+	if err := s.saveSessionAndEvents(ctx, queued, events); err != nil {
 		return domain.Session{}, true, err
 	}
 	return queued, true, nil
@@ -7929,86 +8080,89 @@ func (s *Service) submitWorkflowApprovalInTx(ctx context.Context, input SubmitWo
 				}
 				postCommitAdvance = &pending
 			} else {
-				queued, queuedEvent, hasQueuedEvent, err := s.queueApprovalAdvance(ctx, tx, session, approvalResult.Advance)
+				queued, queuedEvents, err := s.queueApprovalAdvance(ctx, tx, session, approvalResult.Advance)
 				if err != nil {
 					return err
 				}
 				session = queued
-				if hasQueuedEvent {
-					publishEvents = append(publishEvents, queuedEvent)
-				}
+				publishEvents = append(publishEvents, queuedEvents...)
 			}
 		case approvalResult.Advance.Blocked:
 			if err := transitionSession(&session, domain.StatusBlocked, s.now()); err != nil {
 				return err
 			}
-			blockedEvent, hasBlockedEvent, err := s.newSessionEvent(session, "session.blocked", map[string]any{
-				"sessionId": string(approvalResult.Advance.SessionID),
-				"reason":    approvalResult.Advance.BlockedReason,
-			})
+			blockedEvents, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+				eventType: "session.blocked",
+				payload: map[string]any{
+					"sessionId": string(approvalResult.Advance.SessionID),
+					"reason":    approvalResult.Advance.BlockedReason,
+				},
+			}))
 			if err != nil {
 				return err
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if hasBlockedEvent {
-				if err := tx.Events().Append(ctx, blockedEvent); err != nil {
+			for _, event := range blockedEvents {
+				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
-				publishEvents = append(publishEvents, blockedEvent)
+				publishEvents = append(publishEvents, event)
 			}
 		case approvalResult.Advance.Completed:
 			if err := transitionSession(&session, domain.StatusCompleted, s.now()); err != nil {
 				return err
 			}
-			completedEvent, hasCompletedEvent, err := s.newSessionEvent(session, "session.completed", map[string]any{
-				"sessionId": string(approvalResult.Advance.SessionID),
-			})
+			completedEvents, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+				eventType: "session.completed",
+				payload:   map[string]any{"sessionId": string(approvalResult.Advance.SessionID)},
+			}))
 			if err != nil {
 				return err
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if hasCompletedEvent {
-				if err := tx.Events().Append(ctx, completedEvent); err != nil {
+			for _, event := range completedEvents {
+				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
-				publishEvents = append(publishEvents, completedEvent)
+				publishEvents = append(publishEvents, event)
 			}
 		case approvalResult.Advance.RequiresCodex:
-			queued, queuedEvent, hasQueuedEvent, err := s.queueApprovalAdvance(ctx, tx, session, approvalResult.Advance)
+			queued, queuedEvents, err := s.queueApprovalAdvance(ctx, tx, session, approvalResult.Advance)
 			if err != nil {
 				return err
 			}
 			session = queued
-			if hasQueuedEvent {
-				publishEvents = append(publishEvents, queuedEvent)
-			}
+			publishEvents = append(publishEvents, queuedEvents...)
 		case !approvalResult.Advance.RequiresCodex && approvalResult.Advance.Merge == nil && approvalResult.Advance.Expr == nil && !approvalResult.Advance.Close:
 			if err := transitionSessionToWaitingApproval(&session, false, s.now()); err != nil {
 				return err
 			}
-			waitingEvent, hasWaitingEvent, err := s.newSessionEvent(session, "session.waiting_approval", map[string]any{
-				"sessionId":        string(approvalResult.Advance.SessionID),
-				"nodeRunId":        stringValuePtr(approvalResult.Advance.NodeRunID),
-				"currentNodeId":    approvalResult.Advance.CurrentNodeID,
-				"currentNodeTitle": approvalResult.Advance.CurrentNodeTitle,
-				"approvalPhase":    approvalResult.Advance.ApprovalPhase,
-				"result":           approvalResult.Advance.Result,
-			})
+			waitingEvents, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
+				eventType: "session.waiting_approval",
+				payload: map[string]any{
+					"sessionId":        string(approvalResult.Advance.SessionID),
+					"nodeRunId":        stringValuePtr(approvalResult.Advance.NodeRunID),
+					"currentNodeId":    approvalResult.Advance.CurrentNodeID,
+					"currentNodeTitle": approvalResult.Advance.CurrentNodeTitle,
+					"approvalPhase":    approvalResult.Advance.ApprovalPhase,
+					"result":           approvalResult.Advance.Result,
+				},
+			}))
 			if err != nil {
 				return err
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
 				return fmt.Errorf("save session: %w", err)
 			}
-			if hasWaitingEvent {
-				if err := tx.Events().Append(ctx, waitingEvent); err != nil {
+			for _, event := range waitingEvents {
+				if err := tx.Events().Append(ctx, event); err != nil {
 					return err
 				}
-				publishEvents = append(publishEvents, waitingEvent)
+				publishEvents = append(publishEvents, event)
 			}
 		case workflowAdvanceHasExternalEffects(approvalResult.Advance):
 			pending, err := s.persistPendingSystemAdvanceInTx(ctx, tx, session, approvalResult.Advance)
@@ -8029,7 +8183,9 @@ func (s *Service) submitWorkflowApprovalInTx(ctx context.Context, input SubmitWo
 		s.publishSessionEvent(ctx, event)
 	}
 	if postCommitAdvance != nil {
-		s.publishSessionEvent(ctx, postCommitAdvance.pendingEvent)
+		for _, event := range postCommitAdvance.publishEvents {
+			s.publishSessionEvent(ctx, event)
+		}
 		if _, err := s.recoverPendingSystemAdvance(ctx, postCommitAdvance.session); err != nil {
 			return WorkflowRunDTO{}, err
 		}
@@ -8083,7 +8239,8 @@ func (s *Service) persistPendingSystemAdvanceInTx(ctx context.Context, tx port.T
 	if !workflowAdvanceHasExternalEffects(advance) {
 		return workflowApprovalPostCommitAdvance{}, errors.New("workflow system advance has no external effect")
 	}
-	if session.Status != domain.StatusRunning {
+	statusChanged := session.Status != domain.StatusRunning
+	if statusChanged {
 		if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
 			return workflowApprovalPostCommitAdvance{}, err
 		}
@@ -8098,10 +8255,21 @@ func (s *Service) persistPendingSystemAdvanceInTx(ctx context.Context, tx port.T
 	if err := tx.Sessions().Save(ctx, session); err != nil {
 		return workflowApprovalPostCommitAdvance{}, fmt.Errorf("save pending workflow system advance session: %w", err)
 	}
-	if err := tx.Events().Append(ctx, event); err != nil {
-		return workflowApprovalPostCommitAdvance{}, err
+	events := []eventdomain.DomainEvent{event}
+	if statusChanged {
+		events, err = s.addStatusUpdateEvent(session, events)
+		if err != nil {
+			return workflowApprovalPostCommitAdvance{}, err
+		}
 	}
-	return workflowApprovalPostCommitAdvance{session: session, advance: advance, commandEventID: event.ID, pendingEvent: event}, nil
+	for _, published := range events {
+		if err := tx.Events().Append(ctx, published); err != nil {
+			return workflowApprovalPostCommitAdvance{}, err
+		}
+	}
+	return workflowApprovalPostCommitAdvance{
+		session: session, advance: advance, commandEventID: event.ID, pendingEvent: event, publishEvents: events,
+	}, nil
 }
 
 func (s *Service) persistChainedSystemAdvance(ctx context.Context, session domain.Session, advance domain.WorkflowAdvance) error {
@@ -8116,7 +8284,9 @@ func (s *Service) persistChainedSystemAdvance(ctx context.Context, session domai
 	}); err != nil {
 		return err
 	}
-	s.publishSessionEvent(ctx, pending.pendingEvent)
+	for _, event := range pending.publishEvents {
+		s.publishSessionEvent(ctx, event)
+	}
 	return nil
 }
 
@@ -8180,21 +8350,29 @@ func (s *Service) completeSystemAdvanceCommand(ctx context.Context, sessionID do
 	return nil
 }
 
-func (s *Service) queueApprovalAdvance(ctx context.Context, tx port.Tx, session domain.Session, advance domain.WorkflowAdvance) (domain.Session, eventdomain.DomainEvent, bool, error) {
+func (s *Service) queueApprovalAdvance(ctx context.Context, tx port.Tx, session domain.Session, advance domain.WorkflowAdvance) (domain.Session, []eventdomain.DomainEvent, error) {
 	options := workflowCodexStartOptions(session, advance, workflowAdvanceOptions{})
 	queued, event, hasEvent, err := s.prepareQueuedSession(session, options, queuePriorityForSession(session), queueKindForStartOptions(options))
 	if err != nil {
-		return domain.Session{}, eventdomain.DomainEvent{}, false, err
+		return domain.Session{}, nil, err
 	}
 	if err := tx.Sessions().Save(ctx, queued); err != nil {
-		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("save queued session: %w", err)
+		return domain.Session{}, nil, fmt.Errorf("save queued session: %w", err)
 	}
+	events := []eventdomain.DomainEvent{}
 	if hasEvent {
+		events = append(events, event)
+	}
+	events, err = s.addStatusUpdateEvent(queued, events)
+	if err != nil {
+		return domain.Session{}, nil, err
+	}
+	for _, event := range events {
 		if err := tx.Events().Append(ctx, event); err != nil {
-			return domain.Session{}, eventdomain.DomainEvent{}, false, err
+			return domain.Session{}, nil, err
 		}
 	}
-	return queued, event, hasEvent, nil
+	return queued, events, nil
 }
 
 func (s *Service) appendApprovalRejectionPrompt(ctx context.Context, tx port.Tx, session domain.Session, body string) error {
@@ -8273,13 +8451,33 @@ func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, er
 	if err != nil {
 		return CardDTO{}, err
 	}
-	currentNodeTitle, pendingApproval, err := s.currentNodeState(ctx, session)
+	currentNodeTitle, _, err := s.currentNodeState(ctx, session)
 	if err != nil {
 		return CardDTO{}, err
 	}
-	card := toCardDTO(session, attachments, currentNodeTitle, pendingApproval)
+	card := toCardDTO(session, attachments, currentNodeTitle)
 	card.ProjectName = project.Name
 	return card, nil
+}
+
+func (s *Service) GetSessionCardStatus(ctx context.Context, id domain.ID) (CardStatusDTO, error) {
+	if s == nil {
+		return CardStatusDTO{}, errors.New("session usecase: nil service")
+	}
+	session, err := s.repo.Find(ctx, id)
+	if err != nil {
+		return CardStatusDTO{}, fmt.Errorf("find session: %w", err)
+	}
+	currentNodeTitle, _, err := s.currentNodeState(ctx, session)
+	if err != nil {
+		return CardStatusDTO{}, err
+	}
+	return CardStatusDTO{
+		Status:           session.Status,
+		CurrentNodeTitle: currentNodeTitle,
+		AvailableActions: availableActions(session),
+		UpdatedAt:        session.UpdatedAt,
+	}, nil
 }
 
 func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error) {
@@ -8319,11 +8517,11 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		if err != nil {
 			return port.Page[CardDTO]{}, err
 		}
-		currentNodeTitle, pendingApproval, err := s.currentNodeState(ctx, session)
+		currentNodeTitle, _, err := s.currentNodeState(ctx, session)
 		if err != nil {
 			return port.Page[CardDTO]{}, err
 		}
-		item := toCardDTO(session, attachments, currentNodeTitle, pendingApproval)
+		item := toCardDTO(session, attachments, currentNodeTitle)
 		item.ProjectName = projectName
 		items = append(items, item)
 	}
@@ -8385,6 +8583,14 @@ func toWorktreeCleanupDTO(cleanup domain.WorktreeCleanup) WorktreeCleanupDTO {
 		}
 	}
 	return dto
+}
+
+func worktreeUpdatePayload(session domain.Session, payload map[string]any) map[string]any {
+	result := copyPayload(payload)
+	result["worktreeCleanup"] = toWorktreeCleanupDTO(session.WorktreeCleanup)
+	result["availableActions"] = availableActions(session)
+	result["updatedAt"] = session.UpdatedAt
+	return result
 }
 
 func toWorkflowRunDTO(run domain.WorkflowRunSnapshot) WorkflowRunDTO {
@@ -8457,13 +8663,11 @@ func pendingApprovalFromEvent(event eventdomain.DomainEvent) *PendingApprovalDTO
 	}
 }
 
-func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, currentNodeTitle string, pendingApproval *PendingApprovalDTO) CardDTO {
+func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, currentNodeTitle string) CardDTO {
 	return CardDTO{
 		DTO:                toDTO(session),
 		RequirementSummary: session.Requirement,
 		CurrentNodeTitle:   currentNodeTitle,
-		PendingApproval:    pendingApproval,
-		PendingQuestion:    session.Status == domain.StatusWaitingUser,
 		TodoList:           session.TodoList,
 		Attachments:        attachments,
 		AvailableActions:   availableActions(session),

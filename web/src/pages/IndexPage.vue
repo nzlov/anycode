@@ -57,13 +57,6 @@
               />
               <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
               <q-badge rounded class="lane-mode-chip" :label="priorityLabel(card.priority)" />
-              <q-badge
-                v-if="card.pendingQuestion"
-                rounded
-                color="warning"
-                class="app-on-warning"
-                label="待回答"
-              />
             </div>
 
             <div class="overview-card-title">{{ card.title }}</div>
@@ -178,7 +171,7 @@
 
               <div class="overview-card-actions" @contextmenu.stop @touchstart.stop>
                 <q-btn
-                  v-if="card.pendingQuestion"
+                  v-if="card.status === 'waiting_user'"
                   flat
                   dense
                   class="lane-icon-btn app-icon-btn lane-icon-btn--warning"
@@ -362,13 +355,16 @@
         </q-tab-panels>
         <q-separator />
         <WorkflowApprovalPanel
-          v-if="approvalDialog"
+          v-if="approvalDialog && !approvalLoading"
           :context-available="
             Boolean(approvalContext) && isPendingApprovalReviewable(approvalPending)
           "
           :submitting="approvalSubmitting"
           @submit="submitApproval"
         />
+        <q-inner-loading :showing="approvalLoading">
+          <q-spinner color="primary" size="32px" />
+        </q-inner-loading>
       </q-card>
     </q-dialog>
 
@@ -436,15 +432,11 @@ import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
+import { useSessionUpdates } from '@/composables/useSessionUpdates';
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import { type DiffWorkspaceState, type DiffWorkspaceTarget } from '@/services/diff';
-import {
-  getGraphQLAccessKey,
-  verifyGraphQLAccessKey,
-  type GraphQLSubscriptionClose,
-} from '@/services/graphqlClient';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
-import { shouldReconnectCardStream } from '@/services/sessionEventTimeline';
+import { createKeyedLatestRequestTracker } from '@/services/sessionEventTimeline';
 import { normalizeArtifactLogicalPath } from '@/services/artifactLogicalPath';
 import {
   resolveSessionArtifacts,
@@ -456,8 +448,9 @@ import {
   closeSession,
   executeSession,
   getPendingQuestionBatches,
+  getSession,
+  getSessionCard,
   stopSession,
-  subscribeSessionCardChanged,
   submitQuestionBatch,
   submitWorkflowApproval,
   updateSessionPriority,
@@ -468,6 +461,7 @@ import {
   type SessionMode,
   type SessionPriority,
   type SessionStatus,
+  type SessionUpdateEvent,
 } from '@/services/sessions';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 
@@ -524,6 +518,7 @@ const questionsLoading = ref(false);
 const questionsSubmitting = ref(false);
 let questionRequestGeneration = 0;
 const approvalDialog = ref(false);
+const approvalLoading = ref(false);
 const approvalTab = ref<'output' | 'diff' | 'artifacts'>('output');
 const approvalSubmitting = ref(false);
 const approvalSessionId = ref('');
@@ -572,14 +567,16 @@ const diffDialogTarget = computed<DiffWorkspaceTarget>(() => ({
   kind: 'session',
   sessionId: diffDialogSessionId.value,
 }));
-let cardSubscription: ReturnType<typeof subscribeSessionCardChanged> | null = null;
-let cardReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-let cardRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let todoMenuHideTimer: ReturnType<typeof setTimeout> | null = null;
-let liveStopped = true;
+const cardRefreshRequests = createKeyedLatestRequestTracker();
+let overviewMounted = false;
 // GLUE: suppress Quasar's synthetic post-long-press click; remove when QMenu consumes it upstream.
 let suppressedCardClickId = '';
 let cardClickSuppressionTimer: ReturnType<typeof setTimeout> | null = null;
+
+const { start: startOverviewLiveUpdates, stop: stopOverviewLiveUpdates } = useSessionUpdates({
+  onData: handleSessionUpdate,
+});
 
 interface ApprovalContext {
   sessionId: string;
@@ -587,10 +584,13 @@ interface ApprovalContext {
 }
 
 onMounted(() => {
+  overviewMounted = true;
   void startOverview();
 });
 
 onUnmounted(() => {
+  overviewMounted = false;
+  cardRefreshRequests.clear();
   clearTodoMenuHideTimer();
   clearCardClickSuppression();
   stopOverviewLiveUpdates();
@@ -599,9 +599,6 @@ onUnmounted(() => {
 watch(projectScopeId, (value) => {
   latestProjectId.value = value;
   void loadOverviewSessions();
-  if (!liveStopped) {
-    startOverviewLiveUpdates();
-  }
 });
 
 watch(
@@ -609,10 +606,15 @@ watch(
   () => pruneHiddenProjectIds(),
 );
 
+watch(answerDialog, (open) => {
+  if (!open) clearAnswerContext();
+});
+
 async function startOverview() {
   await loadProjects();
   pruneHiddenProjectIds();
   await loadOverviewSessions();
+  if (!overviewMounted) return;
   startOverviewLiveUpdates();
 }
 
@@ -668,77 +670,85 @@ function toggleProjectVisibility(projectId: string) {
   persistHiddenProjectIds();
 }
 
-function startOverviewLiveUpdates(onSubscribed?: () => void) {
-  liveStopped = false;
-  cardSubscription?.unsubscribe();
-  cardSubscription = subscribeSessionCardChanged(
-    projectScopeId.value ? { projectId: projectScopeId.value } : {},
-    {
-      onData: scheduleOverviewRefresh,
-      onError: scheduleOverviewReconnect,
-      onClose: (close) => {
-        void handleOverviewSubscriptionClose(close);
-      },
-      onSubscribed: onSubscribed ?? refreshOverviewAfterSubscriptionReady,
-    },
-  );
-}
-
-async function handleOverviewSubscriptionClose(close: GraphQLSubscriptionClose) {
-  const reconnect = await shouldReconnectCardStream(close, () =>
-    verifyGraphQLAccessKey(getGraphQLAccessKey()),
-  );
-  if (liveStopped) return;
-  if (reconnect) {
-    scheduleOverviewReconnect();
+function handleSessionUpdate(update: SessionUpdateEvent) {
+  if (update.eventType === 'usage.updated') return;
+  cardRefreshRequests.invalidate(update.sessionId);
+  const status = update.status?.status;
+  if (activeQuestionSessionId.value === update.sessionId && status && status !== 'waiting_user') {
+    answerDialog.value = false;
+    clearAnswerContext();
+  }
+  if (approvalSessionId.value === update.sessionId && status && status !== 'waiting_approval') {
+    approvalDialog.value = false;
+    clearApprovalContext();
+  }
+  const index = latestRows.value.findIndex((card) => card.id === update.sessionId);
+  if (status === 'closed') {
+    if (index >= 0)
+      latestRows.value = latestRows.value.filter((card) => card.id !== update.sessionId);
     return;
   }
-  if (cardReconnectTimer) {
-    clearTimeout(cardReconnectTimer);
-    cardReconnectTimer = null;
+  if (index < 0) {
+    if (update.status) void refreshOverviewCard(update.sessionId);
+    return;
   }
-}
 
-function stopOverviewLiveUpdates() {
-  liveStopped = true;
-  cardSubscription?.unsubscribe();
-  cardSubscription = null;
-  if (cardReconnectTimer) {
-    clearTimeout(cardReconnectTimer);
-    cardReconnectTimer = null;
+  const current = latestRows.value[index];
+  if (!current) return;
+  let next = current;
+  if (update.status) {
+    next = {
+      ...next,
+      status: update.status.status,
+      node: update.status.node,
+      availableActions: update.status.availableActions,
+      updatedAt: update.status.updatedAt,
+      updatedTime: update.status.updatedTime,
+    };
   }
-  if (cardRefreshTimer) {
-    clearTimeout(cardRefreshTimer);
-    cardRefreshTimer = null;
+  if (update.eventType === 'session.todo_list_updated') {
+    next = { ...next, todoList: update.todoList ?? null };
   }
-}
-
-function scheduleOverviewRefresh() {
-  if (cardRefreshTimer) return;
-  cardRefreshTimer = setTimeout(() => {
-    cardRefreshTimer = null;
-    void loadOverviewSessions();
-  }, 300);
-}
-
-function scheduleOverviewReconnect() {
-  if (liveStopped || cardReconnectTimer) return;
-  cardReconnectTimer = setTimeout(() => {
-    cardReconnectTimer = null;
-    void reconnectOverviewLiveUpdates();
-  }, 1500);
-}
-
-async function reconnectOverviewLiveUpdates() {
-  if (liveStopped) return;
-  await loadOverviewSessions();
-  if (!liveStopped) {
-    startOverviewLiveUpdates();
+  if (typeof update.filesChanged === 'number') {
+    next = { ...next, filesChanged: update.filesChanged };
   }
+  if (typeof update.artifactCount === 'number') {
+    next = { ...next, artifactCount: update.artifactCount };
+  }
+  if (update.priority) {
+    next = { ...next, priority: update.priority };
+  }
+  if (update.availableActions !== undefined) {
+    next = { ...next, availableActions: update.availableActions };
+  }
+  if (update.updatedAt && update.updatedTime) {
+    next = { ...next, updatedAt: update.updatedAt, updatedTime: update.updatedTime };
+  }
+  if (next !== current) replaceOverviewCard(next);
 }
 
-function refreshOverviewAfterSubscriptionReady() {
-  if (!liveStopped) void loadOverviewSessions();
+function refreshOverviewCard(sessionId: string): Promise<void> {
+  const generation = cardRefreshRequests.next(sessionId);
+  return getSessionCard(sessionId, { notify: false })
+    .then((card) => {
+      if (!overviewMounted || !cardRefreshRequests.isCurrent(sessionId, generation)) return;
+      replaceOverviewCard(card);
+    })
+    .catch(() => {
+      // A later event or user action can retry this focused refresh.
+    });
+}
+
+function replaceOverviewCard(card: SessionCard) {
+  const scopedOut = projectScopeId.value && card.projectId !== projectScopeId.value;
+  const withoutCurrent = latestRows.value.filter((item) => item.id !== card.id);
+  if (scopedOut || card.status === 'closed') {
+    latestRows.value = withoutCurrent;
+    return;
+  }
+  latestRows.value = [card, ...withoutCurrent].sort((left, right) =>
+    right.updatedTime.localeCompare(left.updatedTime),
+  );
 }
 
 function modeLabel(mode: SessionMode) {
@@ -827,7 +837,6 @@ function clearCardClickSuppression(sessionId?: string) {
 
 function cardAction(card: SessionCard) {
   if (
-    card.pendingQuestion ||
     card.status === 'waiting_user' ||
     card.status === 'waiting_approval' ||
     card.status === 'closed'
@@ -860,7 +869,7 @@ async function runCardAction(card: SessionCard) {
     } else if (card.availableActions.includes('execute')) {
       await executeSession(card.id, card.status === 'queued');
     }
-    await loadOverviewSessions();
+    await refreshOverviewCard(card.id);
   } finally {
     cardActionLoading.value = false;
     activeActionSessionId.value = '';
@@ -873,9 +882,9 @@ async function cancelQueuedCard(card: SessionCard) {
   cardActionLoading.value = true;
   try {
     await stopSession(card.id);
-    await loadOverviewSessions();
+    await refreshOverviewCard(card.id);
   } catch {
-    await loadOverviewSessions().catch(() => undefined);
+    await refreshOverviewCard(card.id);
   } finally {
     cardActionLoading.value = false;
     activeActionSessionId.value = '';
@@ -888,7 +897,7 @@ async function setCardPriority(card: SessionCard, priority: SessionPriority) {
   activePrioritySessionId.value = card.id;
   try {
     await updateSessionPriority(card.id, priority);
-    await loadOverviewSessions();
+    await refreshOverviewCard(card.id);
   } finally {
     activePrioritySessionId.value = '';
   }
@@ -899,7 +908,7 @@ async function closeCard(card: SessionCard) {
   activeCloseSessionId.value = card.id;
   try {
     await closeSession(card.id);
-    await loadOverviewSessions();
+    latestRows.value = latestRows.value.filter((item) => item.id !== card.id);
   } finally {
     activeCloseSessionId.value = '';
   }
@@ -917,6 +926,12 @@ async function openAnswerDialog(sessionId: string) {
       requestGeneration === questionRequestGeneration &&
       activeQuestionSessionId.value === sessionId
     ) {
+      const card = latestRows.value.find((item) => item.id === sessionId);
+      if (card?.status !== 'waiting_user' || batches.length === 0) {
+        answerDialog.value = false;
+        clearAnswerContext();
+        return;
+      }
       pendingQuestionBatches.value = batches;
     }
   } finally {
@@ -933,29 +948,43 @@ async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
   questionsSubmitting.value = true;
   try {
     await submitQuestionBatch(batchId, answers);
-    if (activeQuestionSessionId.value) {
-      pendingQuestionBatches.value = await getPendingQuestionBatches(activeQuestionSessionId.value);
-    }
-    answerDialog.value = pendingQuestionBatches.value.length > 0;
-    await loadOverviewSessions();
+    answerDialog.value = false;
   } finally {
     questionsSubmitting.value = false;
   }
 }
 
-function openApprovalDialog(card: SessionCard) {
-  approvalContextGeneration += 1;
+async function openApprovalDialog(card: SessionCard) {
+  const requestGeneration = ++approvalContextGeneration;
   approvalSessionId.value = card.id;
   approvalTab.value = 'output';
-  approvalContext.value = card.pendingApproval
-    ? { sessionId: card.pendingApproval.sessionId, nodeId: card.pendingApproval.nodeId }
-    : null;
-  approvalPending.value = card.pendingApproval ?? null;
+  approvalContext.value = null;
+  approvalPending.value = null;
   approvalResolvedArtifacts.value = {};
   approvalArtifactFocus.value = null;
   approvalDiffWorkspaceState.value = initialDiffWorkspaceState();
+  approvalLoading.value = true;
   approvalDialog.value = true;
-  void refreshApprovalArtifactReferences();
+  try {
+    const detail = await getSession(card.id);
+    if (!isCurrentApprovalContext(requestGeneration, card.id)) return;
+    if (detail.status !== 'waiting_approval' || !detail.pendingApproval) {
+      approvalDialog.value = false;
+      clearApprovalContext();
+      return;
+    }
+    approvalPending.value = detail.pendingApproval ?? null;
+    approvalContext.value = detail.pendingApproval
+      ? { sessionId: detail.pendingApproval.sessionId, nodeId: detail.pendingApproval.nodeId }
+      : null;
+    await refreshApprovalArtifactReferences();
+  } catch {
+    // The GraphQL client already reports interactive query failures.
+  } finally {
+    if (isCurrentApprovalContext(requestGeneration, card.id)) {
+      approvalLoading.value = false;
+    }
+  }
 }
 
 async function refreshApprovalArtifactReferences() {
@@ -1008,13 +1037,25 @@ function openApprovalArtifact(file: SessionFile) {
 }
 
 function handleApprovalDialogClosed() {
+  clearApprovalContext();
+}
+
+function clearApprovalContext() {
   approvalContextGeneration += 1;
   approvalArtifactResolveRequest += 1;
   approvalContext.value = null;
   approvalPending.value = null;
+  approvalLoading.value = false;
   approvalSessionId.value = '';
   approvalResolvedArtifacts.value = {};
   approvalArtifactFocus.value = null;
+}
+
+function clearAnswerContext() {
+  questionRequestGeneration += 1;
+  activeQuestionSessionId.value = '';
+  pendingQuestionBatches.value = [];
+  questionsLoading.value = false;
 }
 
 function isCurrentApprovalContext(requestGeneration: number, sessionId: string) {
@@ -1071,7 +1112,7 @@ async function submitApproval(approved: boolean, comment: string) {
     ) {
       approvalDialog.value = false;
     }
-    await loadOverviewSessions();
+    await refreshOverviewCard(cardSessionId);
   } finally {
     approvalSubmitting.value = false;
   }

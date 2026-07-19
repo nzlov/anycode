@@ -3,12 +3,10 @@ import { test } from 'node:test';
 
 import {
   appendLiveEvent,
+  createKeyedLatestRequestTracker,
   createLatestRequestTracker,
-  mergeSnapshotEvents,
   prependOlderEvents,
-  shouldReconnectAfterClose,
-  shouldReconnectCardStream,
-  sortTranscriptEvents,
+  shouldReconnectSubscription,
 } from '../src/services/sessionEventTimeline.js';
 
 const newest = {
@@ -77,27 +75,6 @@ test('prependOlderEvents restores historical members of an already live group', 
   );
 });
 
-test('mergeSnapshotEvents preserves snapshot and buffered group members', () => {
-  const snapshot = {
-    ...older,
-    id: 'group:lifecycle:process-1',
-    group: { count: 1, members: [older] },
-  };
-  const buffered = {
-    ...newest,
-    id: snapshot.id,
-    group: { count: 1, members: [newest] },
-  };
-
-  const next = mergeSnapshotEvents([snapshot], [], [buffered]);
-
-  assert.equal(next[0].group.count, 2);
-  assert.deepEqual(
-    next[0].group.members.map((event) => event.id),
-    ['event-1', 'event-3'],
-  );
-});
-
 test('prependOlderEvents dedupes older page while preserving the viewport anchor order', () => {
   const events = [middle, newest];
   const next = prependOlderEvents(events, [older, middle]);
@@ -108,49 +85,14 @@ test('prependOlderEvents dedupes older page while preserving the viewport anchor
   );
 });
 
-test('mergeSnapshotEvents preserves older pages and live events while replacing duplicate snapshot entries', () => {
-  const snapshotMiddle = { ...middle, title: 'snapshot' };
-  const liveMiddle = { ...middle, title: 'live' };
-  const liveNewest = { ...newest, title: 'live newest' };
-
-  const next = mergeSnapshotEvents([snapshotMiddle], [older, liveMiddle], [liveNewest]);
-
-  assert.deepEqual(
-    next.map((event) => event.id),
-    ['event-1', 'event-2', 'event-3'],
-  );
-  assert.equal(next.find((event) => event.id === 'event-2').title, 'live');
-});
-
-test('mergeSnapshotEvents preserves backend order keys across a page boundary', () => {
-  const started = { ...older, id: 'z-started', orderKey: '01' };
-  const completed = { ...middle, id: 'a-completed', orderKey: '02' };
-
-  const next = mergeSnapshotEvents([completed], [started, completed], []);
-
-  assert.deepEqual(
-    sortTranscriptEvents(next).map((event) => event.id),
-    ['z-started', 'a-completed'],
-  );
-});
-
-test('shouldReconnectAfterClose reopens acknowledged long-lived subscriptions', () => {
-  assert.equal(shouldReconnectAfterClose(true, false, false), true);
-  assert.equal(shouldReconnectAfterClose(false, true, false), true);
-  assert.equal(shouldReconnectAfterClose(false, undefined, false), true);
-  assert.equal(shouldReconnectAfterClose(false, false, false), false);
-  assert.equal(shouldReconnectAfterClose(true, undefined, true), true);
-  assert.equal(shouldReconnectAfterClose(false, undefined, true), false);
-});
-
-test('card streams validate pre-ack closes before deciding whether to reconnect', async () => {
+test('subscriptions validate pre-ack closes before deciding whether to reconnect', async () => {
   let validations = 0;
   const validAccessKey = async () => {
     validations += 1;
     return true;
   };
   assert.equal(
-    await shouldReconnectCardStream(
+    await shouldReconnectSubscription(
       { acknowledged: true, completedByServer: false },
       validAccessKey,
     ),
@@ -158,7 +100,7 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
   );
   assert.equal(validations, 0);
   assert.equal(
-    await shouldReconnectCardStream(
+    await shouldReconnectSubscription(
       { acknowledged: false, completedByServer: false },
       validAccessKey,
     ),
@@ -166,20 +108,23 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
   );
   assert.equal(validations, 1);
   assert.equal(
-    await shouldReconnectCardStream(
+    await shouldReconnectSubscription(
       { acknowledged: false, completedByServer: false },
       async () => false,
     ),
     false,
   );
   assert.equal(
-    await shouldReconnectCardStream({ acknowledged: false, completedByServer: false }, async () => {
-      throw new Error('health check unavailable');
-    }),
+    await shouldReconnectSubscription(
+      { acknowledged: false, completedByServer: false },
+      async () => {
+        throw new Error('health check unavailable');
+      },
+    ),
     true,
   );
   assert.equal(
-    await shouldReconnectCardStream(
+    await shouldReconnectSubscription(
       { acknowledged: true, completedByServer: true },
       validAccessKey,
     ),
@@ -188,23 +133,28 @@ test('card streams validate pre-ack closes before deciding whether to reconnect'
   assert.equal(validations, 1);
 });
 
-test('sortTranscriptEvents follows immutable backend order keys', () => {
-  const completed = { ...newest, id: 'a-completed', orderKey: '02' };
-  const started = { ...middle, id: 'z-started', orderKey: '01' };
-
-  assert.deepEqual(
-    sortTranscriptEvents([started, completed]).map((event) => event.id),
-    ['z-started', 'a-completed'],
-  );
-});
-
-test('latest request tracker invalidates stale snapshots after live state updates', () => {
+test('latest request tracker invalidates stale requests after live state updates', () => {
   const tracker = createLatestRequestTracker();
-  const snapshot = tracker.next();
+  const request = tracker.next();
 
   tracker.invalidate();
 
-  assert.equal(tracker.isCurrent(snapshot), false);
+  assert.equal(tracker.isCurrent(request), false);
   const refresh = tracker.next();
   assert.equal(tracker.isCurrent(refresh), true);
+});
+
+test('keyed request tracker rejects late card responses without affecting other cards', () => {
+  const tracker = createKeyedLatestRequestTracker();
+  const staleCardRequest = tracker.next('session-1');
+  const otherCardRequest = tracker.next('session-2');
+
+  tracker.invalidate('session-1');
+
+  assert.equal(tracker.isCurrent('session-1', staleCardRequest), false);
+  assert.equal(tracker.isCurrent('session-2', otherCardRequest), true);
+  const currentCardRequest = tracker.next('session-1');
+  assert.equal(tracker.isCurrent('session-1', currentCardRequest), true);
+  tracker.clear();
+  assert.equal(tracker.isCurrent('session-1', currentCardRequest), false);
 });

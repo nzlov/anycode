@@ -18,6 +18,7 @@ test('statusLabel describes durable answer_user suspension events', () => {
     '答案已提交，等待恢复',
   );
   assert.equal(statusLabel({ code: 'question.cancelled', level: 'info' }), '待回答问题已取消');
+  assert.equal(statusLabel({ code: 'session.waiting_approval', level: 'warning' }), '待审批');
 });
 
 test('formatTokenCount converts token counts to compact decimal units', () => {

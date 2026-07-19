@@ -16,6 +16,7 @@ import (
 type UseCase interface {
 	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (Page, error)
 	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
+	SessionUsageEvents(ctx context.Context) (<-chan UsageUpdateDTO, error)
 }
 
 type ListSessionEventsInput struct {
@@ -47,6 +48,7 @@ type CodexTranscriptRunIndex interface {
 
 type LiveEventSource interface {
 	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
+	LiveCodexUsageEvents(ctx context.Context) (<-chan processdomain.CodexEvent, error)
 }
 
 const (
@@ -155,6 +157,9 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 				if !ok {
 					return
 				}
+				if _, ok := codexEvent.Content.(processdomain.CodexUsageContent); ok {
+					continue
+				}
 				sourceGroup := sourceGroups[codexEvent.CodexSessionID]
 				if sourceGroup == 0 && codexEvent.CodexSessionID != "" {
 					sourceGroup = len(sourceGroups) + 1
@@ -163,6 +168,51 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 				item, ok := fromCodexEvent(codexEvent, sourceGroup)
 				if !ok {
 					continue
+				}
+				select {
+				case out <- item:
+				case <-ctx.Done():
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return out, nil
+}
+
+func (s *Service) SessionUsageEvents(ctx context.Context) (<-chan UsageUpdateDTO, error) {
+	if s == nil {
+		return nil, errors.New("timeline usecase: nil service")
+	}
+	if s.live == nil {
+		return nil, errors.New("live event source is required")
+	}
+	liveCtx, cancelLive := context.WithCancel(ctx)
+	live, err := s.live.LiveCodexUsageEvents(liveCtx)
+	if err != nil {
+		cancelLive()
+		return nil, err
+	}
+	out := make(chan UsageUpdateDTO, 16)
+	go func() {
+		defer close(out)
+		defer cancelLive()
+		for {
+			select {
+			case event, ok := <-live:
+				if !ok {
+					return
+				}
+				usage, ok := event.Content.(processdomain.CodexUsageContent)
+				if !ok || event.SessionID == "" {
+					continue
+				}
+				item := UsageUpdateDTO{
+					SessionID:  sessiondomain.ID(event.SessionID),
+					OccurredAt: event.CreatedAt.UTC().Format(time.RFC3339Nano),
+					Usage:      *usageDTO(usage),
 				}
 				select {
 				case out <- item:
@@ -679,10 +729,37 @@ func normalizedPhase(phase processdomain.CodexPhase) processdomain.CodexPhase {
 }
 
 func isVisibleStatusEvent(eventType string) bool {
-	if eventType == "session.todo_list_updated" || eventType == "session.artifacts_updated" {
+	switch eventType {
+	case "session.answer_resume_queued",
+		"session.artifact_archive_failed",
+		"session.blocked",
+		"session.close_failed",
+		"session.closed",
+		"session.closing",
+		"session.completed",
+		"session.execution_already_active",
+		"session.failed",
+		"session.prompt_append_cancelled",
+		"session.queued",
+		"session.recovery_waiting_user",
+		"session.resume_failed",
+		"session.running",
+		"session.starting",
+		"session.stopped",
+		"session.stopping",
+		"session.waiting_approval",
+		"session.waiting_user",
+		"session.worktree_cleanup_failed",
+		"session.worktree_init_failed",
+		"workflow.approval_submitted",
+		"workflow.failed",
+		"workflow.merge",
+		"workflow.resume_action_failed",
+		"process.exited":
+		return true
+	default:
 		return false
 	}
-	return strings.HasPrefix(eventType, "session.") || strings.HasPrefix(eventType, "workflow.") || eventType == "process.exited"
 }
 
 func statusContent(code string, payload map[string]any) processdomain.CodexStatusContent {

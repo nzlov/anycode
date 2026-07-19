@@ -1,18 +1,8 @@
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 
-import {
-  AnyCodeGraphQLError,
-  getGraphQLAccessKey,
-  verifyGraphQLAccessKey,
-  type GraphQLSubscriptionClose,
-} from '@/services/graphqlClient';
-import {
-  createLatestRequestTracker,
-  shouldReconnectCardStream,
-} from '@/services/sessionEventTimeline';
+import { createLatestRequestTracker } from '@/services/sessionEventTimeline';
 import {
   listSessions,
-  subscribeSessionCardChanged,
   type ListSessionsInput,
   type PageInfo,
   type SessionPage,
@@ -40,10 +30,6 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   const page = ref(defaultInput.page ?? 1);
   const pageSize = ref(defaultInput.pageSize ?? 8);
   const sort = ref(defaultInput.sort ?? 'updated_at desc');
-  let liveStopped = true;
-  let eventSubscription: { unsubscribe: () => void } | null = null;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   const loadRequests = createLatestRequestTracker();
 
   const input = computed<ListSessionsInput>(() => {
@@ -57,11 +43,6 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     if (filter.value.trim()) value.filter = filter.value.trim();
     if (sort.value) value.sort = sort.value;
     return value;
-  });
-
-  watch(projectId, () => {
-    if (liveStopped) return;
-    restartLiveSubscription();
   });
 
   async function loadSessions() {
@@ -103,95 +84,6 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     }
   }
 
-  function startLiveUpdates() {
-    liveStopped = false;
-    openSubscription(refreshAfterSubscriptionReady);
-  }
-
-  function stopLiveUpdates() {
-    liveStopped = true;
-    eventSubscription?.unsubscribe();
-    eventSubscription = null;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-      refreshTimer = null;
-    }
-  }
-
-  function openSubscription(onSubscribed?: () => void) {
-    eventSubscription?.unsubscribe();
-    eventSubscription = subscribeSessionCardChanged(
-      projectId.value ? { projectId: projectId.value } : {},
-      {
-        onData: scheduleRefresh,
-        onError: (err) => {
-          if (shouldReconnectLiveError(err)) {
-            scheduleReconnect();
-          }
-        },
-        onClose: (close) => {
-          void handleSubscriptionClose(close);
-        },
-        onSubscribed,
-      },
-    );
-  }
-
-  async function handleSubscriptionClose(close: GraphQLSubscriptionClose) {
-    const reconnect = await shouldReconnectCardStream(close, () =>
-      verifyGraphQLAccessKey(getGraphQLAccessKey()),
-    );
-    if (liveStopped) return;
-    if (reconnect) {
-      scheduleReconnect();
-      return;
-    }
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-  }
-
-  function restartLiveSubscription() {
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    openSubscription(refreshAfterSubscriptionReady);
-  }
-
-  function scheduleRefresh() {
-    if (refreshTimer) return;
-    refreshTimer = setTimeout(() => {
-      refreshTimer = null;
-      void loadSessions();
-    }, 300);
-  }
-
-  function scheduleReconnect() {
-    if (liveStopped || reconnectTimer) return;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      void reconnectFromSnapshot();
-    }, 1500);
-  }
-
-  async function reconnectFromSnapshot() {
-    if (liveStopped) return;
-    await loadSessions();
-    if (!liveStopped) {
-      openSubscription(refreshAfterSubscriptionReady);
-    }
-  }
-
-  function refreshAfterSubscriptionReady() {
-    if (!liveStopped) void loadSessions();
-  }
-
   return {
     rows,
     pageInfo,
@@ -204,11 +96,5 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     pageSize,
     sort,
     loadSessions,
-    startLiveUpdates,
-    stopLiveUpdates,
   };
-}
-
-function shouldReconnectLiveError(err: Error) {
-  return !(err instanceof AnyCodeGraphQLError && err.code === 'auth_failed');
 }

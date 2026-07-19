@@ -26,6 +26,7 @@ const statusLabels: Record<string, string> = {
   'session.started': '已启动',
   'session.running': '运行中',
   'session.waiting_user': '待回答',
+  'session.waiting_approval': '待审批',
   'session.stopping': '停止中',
   'session.stopped': '已停止',
   'session.failed': '会话失败',

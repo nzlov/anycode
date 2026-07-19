@@ -151,8 +151,6 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		BaseBranch:         dto.BaseBranch,
 		WorktreeBranch:     dto.WorktreeBranch,
 		CurrentNodeTitle:   dto.CurrentNodeTitle,
-		PendingApproval:    mapPendingApproval(dto.PendingApproval),
-		PendingQuestion:    dto.PendingQuestion,
 		TodoList:           mapTodoList(dto.TodoList),
 		ArtifactCount:      dto.ArtifactCount,
 		FilesChanged:       dto.FilesChanged,
@@ -364,10 +362,14 @@ func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 	return event
 }
 
-func mapSessionEventStreamItem(dto sessioneventapp.DTO) *model.SessionEventStreamItem {
-	item := &model.SessionEventStreamItem{
-		ID:   optionalString(dto.ID),
-		Type: dto.Type,
+func mapSessionUpdateEvent(dto sessioneventapp.UpdateDTO) *model.SessionUpdateEvent {
+	item := &model.SessionUpdateEvent{
+		EventType:        dto.Type,
+		SessionID:        string(dto.SessionID),
+		ArtifactCount:    dto.ArtifactCount,
+		FilesChanged:     dto.FilesChanged,
+		AvailableActions: dto.AvailableActions,
+		UpdatedAt:        dto.UpdatedAt,
 	}
 	if dto.OccurredAt != "" {
 		occurredAt, err := time.Parse(time.RFC3339Nano, dto.OccurredAt)
@@ -375,16 +377,28 @@ func mapSessionEventStreamItem(dto sessioneventapp.DTO) *model.SessionEventStrea
 			item.OccurredAt = &occurredAt
 		}
 	}
-	if dto.Transcript != nil {
-		item.Transcript = mapTranscriptEvent(*dto.Transcript)
+	if dto.Status != nil {
+		item.Status = &model.SessionStatusUpdate{
+			Status:           string(dto.Status.Status),
+			CurrentNodeTitle: dto.Status.CurrentNodeTitle,
+			AvailableActions: dto.Status.AvailableActions,
+			UpdatedAt:        dto.Status.UpdatedAt,
+		}
+	}
+	if dto.TodoList != nil {
+		item.TodoList = mapTodoList(*dto.TodoList)
+	}
+	if dto.Priority != nil {
+		priority := string(*dto.Priority)
+		item.Priority = &priority
+	}
+	if dto.Config != nil {
+		item.Config = mapSessionConfig(*dto.Config)
+	}
+	if dto.WorktreeCleanup != nil {
+		item.WorktreeCleanup = mapWorktreeCleanup(*dto.WorktreeCleanup)
 	}
 	item.Usage = mapTranscriptUsage(dto.Usage)
-	if dto.Session != nil {
-		item.Session = mapSessionDetail(*dto.Session)
-	}
-	if dto.QuestionBatch != nil {
-		item.QuestionBatch = mapQuestionBatch(*dto.QuestionBatch)
-	}
 	return item
 }
 

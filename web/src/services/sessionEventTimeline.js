@@ -25,19 +25,6 @@ export function prependOlderEvents(events, olderEvents) {
   return [...older, ...next];
 }
 
-export function mergeSnapshotEvents(snapshotEvents, currentEvents, bufferedEvents) {
-  const merged = new Map(currentEvents.map((event) => [event.id, event]));
-  for (const event of snapshotEvents) {
-    const current = merged.get(event.id);
-    merged.set(event.id, current ? mergeTimelineEvent(event, current) : event);
-  }
-  for (const event of bufferedEvents) {
-    const current = merged.get(event.id);
-    merged.set(event.id, current ? mergeTimelineEvent(current, event) : event);
-  }
-  return [...merged.values()];
-}
-
 function mergeTimelineEvent(existing, incoming) {
   if (!existing?.group || !incoming?.group) return incoming;
   const members = new Map(existing.group.members.map((member) => [member.id, member]));
@@ -58,12 +45,7 @@ function mergeTimelineEvent(existing, incoming) {
   };
 }
 
-export function shouldReconnectAfterClose(acknowledged, accessKeyValid, completedByServer) {
-  if (completedByServer) return acknowledged;
-  return acknowledged || accessKeyValid !== false;
-}
-
-export async function shouldReconnectCardStream(close, validateAccessKey) {
+export async function shouldReconnectSubscription(close, validateAccessKey) {
   if (close.completedByServer) return close.acknowledged;
   if (close.acknowledged) return true;
   try {
@@ -89,6 +71,22 @@ export function createLatestRequestTracker() {
   };
 }
 
-export function sortTranscriptEvents(events) {
-  return [...events].sort((left, right) => left.orderKey.localeCompare(right.orderKey));
+export function createKeyedLatestRequestTracker() {
+  const generations = new Map();
+  return {
+    next(key) {
+      const generation = (generations.get(key) ?? 0) + 1;
+      generations.set(key, generation);
+      return generation;
+    },
+    isCurrent(key, requestGeneration) {
+      return generations.get(key) === requestGeneration;
+    },
+    invalidate(key) {
+      generations.set(key, (generations.get(key) ?? 0) + 1);
+    },
+    clear() {
+      generations.clear();
+    },
+  };
 }

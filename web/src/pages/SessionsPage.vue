@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
@@ -122,8 +122,6 @@ const {
   pageSize,
   sort,
   loadSessions,
-  startLiveUpdates,
-  stopLiveUpdates,
 } = useSessionsPage({
   page: 1,
   pageSize: 8,
@@ -231,11 +229,6 @@ watch(projectScopeId, (value) => {
 onMounted(() => {
   projectId.value = projectScopeId.value;
   void loadSessions();
-  startLiveUpdates();
-});
-
-onUnmounted(() => {
-  stopLiveUpdates();
 });
 
 function onTableRequest(props: {

@@ -975,9 +975,7 @@ func TestWorkflowAdvanceClosesRunningSessionWithoutActiveProcess(t *testing.T) {
 		t.Fatalf("close reason = %#v", saved.CloseReason)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 2 || gotEvents[0].Type != "session.closing" || gotEvents[1].Type != "session.closed" {
-		t.Fatalf("events = %#v", gotEvents)
-	}
+	requireSessionEventTypes(t, gotEvents, "session.closing", sessionStatusUpdatedEvent, "session.closed", sessionStatusUpdatedEvent)
 }
 
 func TestStartWorkflowSessionUsesWorkflowStarterInsteadOfPlainCodex(t *testing.T) {
@@ -1838,6 +1836,27 @@ func TestAskMergeFailureCancelsQuestionWhenSessionSaveFails(t *testing.T) {
 	if questions.cancelledSessionID != "session-1" || questions.cancelReason != "merge failure question abandoned" {
 		t.Fatalf("cancelled questions = %q %q", questions.cancelledSessionID, questions.cancelReason)
 	}
+}
+
+func TestAskMergeFailurePublishesWaitingUserStatusUpdate(t *testing.T) {
+	repo := newFakeRepository()
+	questions := &fakeQuestionCanceller{batch: questionapp.BatchDTO{ID: "batch-1", SessionID: "session-1", Status: questiondomain.BatchPending, Created: true}}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithQuestions(questions), WithEvents(events))
+	nodeRunID := domain.NodeRunID("node-run-merge")
+
+	got, err := service.askMergeFailure(context.Background(), domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning,
+	}, domain.WorkflowAdvance{
+		SessionID: "session-1", NodeRunID: &nodeRunID,
+	}, gitdiffdomain.MergeResult{Strategy: "merge", Status: "failed", FailureReason: "conflict"}, "merge_conflict")
+	if err != nil {
+		t.Fatalf("askMergeFailure() error = %v", err)
+	}
+	if got.Status != domain.StatusWaitingUser || repo.sessions["session-1"].Status != domain.StatusWaitingUser {
+		t.Fatalf("waiting session = %#v persisted=%#v", got, repo.sessions["session-1"])
+	}
+	requireSessionEventTypes(t, events.snapshot(), "workflow.merge_waiting_user", sessionStatusUpdatedEvent)
 }
 
 func TestAskMergeFailureKeepsStableBatchWhenSessionSaveFails(t *testing.T) {
@@ -3118,12 +3137,13 @@ func TestSubmitWorkflowApprovalRejectsAfterRunSystemNodeWithoutStartingCodex(t *
 	if len(repo.appends) != 1 || repo.appends[0].Status != domain.PromptAppendPending || repo.sessions["session-1"].Status != domain.StatusWaitingApproval || repo.sessions["session-1"].Queue.Kind != "" {
 		t.Fatalf("session=%#v appends=%#v", repo.sessions["session-1"], repo.appends)
 	}
-	var pending, completed bool
+	var pending, completed, runningStatus bool
 	for _, event := range events.snapshot() {
 		pending = pending || event.Type == workflowSystemAdvancePendingEvent
 		completed = completed || event.Type == workflowSystemAdvanceCompletedEvent
+		runningStatus = runningStatus || event.Type == sessionStatusUpdatedEvent && event.Causality.SessionStatus == string(domain.StatusRunning)
 	}
-	if !pending || !completed {
+	if !pending || !completed || !runningStatus {
 		t.Fatalf("system advance events = %#v", events.snapshot())
 	}
 }
@@ -3748,6 +3768,28 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	}
 }
 
+func TestGetSessionCardStatusReturnsOnlyLiveStatusFields(t *testing.T) {
+	ctx := context.Background()
+	updatedAt := time.Unix(12, 0).UTC()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat,
+		Status: domain.StatusStopped, UpdatedAt: updatedAt,
+	}
+	service := New(repo, newFakeProjectRepository("project-1"))
+
+	got, err := service.GetSessionCardStatus(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("GetSessionCardStatus() error = %v", err)
+	}
+	if got.Status != domain.StatusStopped || got.CurrentNodeTitle != "" || !got.UpdatedAt.Equal(updatedAt) {
+		t.Fatalf("status = %#v", got)
+	}
+	if !slices.Equal(got.AvailableActions, []string{"execute", "close"}) {
+		t.Fatalf("actions = %#v", got.AvailableActions)
+	}
+}
+
 func TestSetSessionPriorityNormalizesAndSaves(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -3776,7 +3818,7 @@ func TestSetSessionPriorityNormalizesAndSaves(t *testing.T) {
 		t.Fatalf("saved priority = %q", repo.sessions["session-1"].Priority)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 1 || gotEvents[0].Type != "session.priority_changed" || gotEvents[0].Payload["priority"] != string(domain.PriorityHigh) {
+	if len(gotEvents) != 1 || gotEvents[0].Type != "session.priority_changed" || gotEvents[0].Payload["priority"] != domain.PriorityHigh || gotEvents[0].Payload["updatedAt"] != time.Unix(40, 0).UTC() {
 		t.Fatalf("events = %#v", gotEvents)
 	}
 }
@@ -3899,7 +3941,8 @@ func TestStartCodexNowCancelsUnavailableAttachmentOnlyPromptWithoutProcess(t *te
 		ID: "append-stale", SessionID: queued.ID, Status: domain.PromptAppendPending,
 		ArtifactIDs: []domain.SessionFileID{"missing"},
 	}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()))
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, newFakeAttachmentStore()), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(50, 0).UTC() }
 	drainObservedReleasedWorkdir := false
 	service.queueDrainScheduler = func(service *Service) {
@@ -3923,6 +3966,7 @@ func TestStartCodexNowCancelsUnavailableAttachmentOnlyPromptWithoutProcess(t *te
 	if !service.reserveWorkdir(queued.WorktreePath, "session-2") {
 		t.Fatal("workdir remained reserved after prompt queue settled without a process")
 	}
+	requireSessionEventTypes(t, events.snapshot(), "session.prompt_append_cancelled", sessionStatusUpdatedEvent)
 }
 
 func TestStartCodexNowSettlesPromptQueueAfterCancelledAppendWasAlreadyDeleted(t *testing.T) {
@@ -4443,9 +4487,7 @@ func TestAppendPromptQueuesStoppedChatInOneUnitOfWork(t *testing.T) {
 	if queued.Status != domain.StatusQueued || queued.Queue.Kind != domain.QueueKindPromptAppend || queued.Queue.ResumeCodexSessionID != "codex-session-1" {
 		t.Fatalf("queued session = %#v", queued)
 	}
-	if len(events.events) != 1 || events.events[0].Type != "session.queued" {
-		t.Fatalf("events = %#v", events.events)
-	}
+	requireSessionEventTypes(t, events.events, "session.queued", sessionStatusUpdatedEvent)
 }
 
 func TestAnswerDeliveryWorkdirContentionKeepsAnswerQueueKind(t *testing.T) {
@@ -4559,7 +4601,12 @@ func TestUpdateSessionConfigPersistsTrimmedConfig(t *testing.T) {
 		t.Fatalf("explicit FastMode false was not persisted: got=%#v saved=%#v err=%v", got.Config, repo.sessions["session-1"].Config, err)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 2 || gotEvents[0].Payload["fastMode"] != true || gotEvents[1].Payload["fastMode"] != false {
+	if len(gotEvents) != 2 {
+		t.Fatalf("session.config_changed events = %#v", gotEvents)
+	}
+	firstConfig, firstOK := gotEvents[0].Payload["config"].(domain.Config)
+	secondConfig, secondOK := gotEvents[1].Payload["config"].(domain.Config)
+	if !firstOK || !secondOK || !firstConfig.FastMode || secondConfig.FastMode || gotEvents[0].Payload["updatedAt"] != time.Unix(25, 0).UTC() || gotEvents[1].Payload["updatedAt"] != time.Unix(25, 0).UTC() {
 		t.Fatalf("session.config_changed events = %#v", gotEvents)
 	}
 }
@@ -5210,11 +5257,13 @@ func TestCloseSessionDeletesOutputDirectoryAndPreservesInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var closedEvent bool
+	var closedEvent, artifactEvent, statusEvent bool
 	for _, event := range events {
 		closedEvent = closedEvent || event.Type == "session.closed"
+		artifactEvent = artifactEvent || event.Type == "session.artifacts_updated" && fmt.Sprint(event.Payload["artifactCount"]) == "0"
+		statusEvent = statusEvent || event.Type == sessionStatusUpdatedEvent && event.Causality.SessionStatus == string(domain.StatusClosed)
 	}
-	if !closedEvent {
+	if !closedEvent || !artifactEvent || !statusEvent {
 		t.Fatalf("close events = %#v", events)
 	}
 }
@@ -5610,8 +5659,10 @@ func TestRetryWorktreeCleanupQueuesFailedCleanup(t *testing.T) {
 			Retryable: true,
 		},
 	}
-	service := New(repo, newFakeProjectRepository("project-1"))
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(37, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "event-cleanup", nil }
 
 	got, err := service.RetryWorktreeCleanup(ctx, "session-1")
 	if err != nil {
@@ -5619,6 +5670,15 @@ func TestRetryWorktreeCleanupQueuesFailedCleanup(t *testing.T) {
 	}
 	if got.WorktreeCleanup.Status != domain.WorktreeCleanupPending || repo.sessions["session-1"].WorktreeCleanup.NextAt == nil {
 		t.Fatalf("retried cleanup = %#v", got)
+	}
+	gotEvents := events.snapshot()
+	if len(gotEvents) != 1 || gotEvents[0].Type != "session.worktree_cleanup_requested" {
+		t.Fatalf("cleanup events = %#v", gotEvents)
+	}
+	cleanup, cleanupOK := gotEvents[0].Payload["worktreeCleanup"].(WorktreeCleanupDTO)
+	actions, actionsOK := gotEvents[0].Payload["availableActions"].([]string)
+	if !cleanupOK || cleanup.Status != domain.WorktreeCleanupPending || !actionsOK || len(actions) != 0 || gotEvents[0].Payload["updatedAt"] != time.Unix(37, 0).UTC() {
+		t.Fatalf("cleanup event payload = %#v", gotEvents[0].Payload)
 	}
 }
 
@@ -5794,7 +5854,7 @@ func TestCloseSessionKeepsCommittedCleanupRequestWhenEventAppendFails(t *testing
 		IsGit: true,
 	}
 	worktrees := newFakeWorktreeManager()
-	events := &fakeEventStore{appendErrs: []error{nil, errors.New("append closed event failed")}}
+	events := &fakeEventStore{appendErrs: []error{nil, nil, errors.New("append closed event failed")}}
 	service := New(repo, projects, WithWorktrees(worktrees), WithEvents(events))
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
 
@@ -6012,11 +6072,13 @@ func TestCloseSessionRecordsBranchDeleteFailureAndStillCloses(t *testing.T) {
 		t.Fatalf("deleted branches = %#v", worktrees.deletedBranches)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 4 || gotEvents[0].Type != "session.closing" || gotEvents[1].Type != "session.closed" || gotEvents[2].Type != "session.worktree_cleanup_requested" || gotEvents[3].Type != "session.worktree_cleanup_failed" {
-		t.Fatalf("closed events = %#v", gotEvents)
-	}
-	if gotEvents[3].Payload["code"] != "worktree_branch_delete_failed" {
-		t.Fatalf("branch cleanup error = %#v", gotEvents[3].Payload)
+	requireSessionEventTypes(t, gotEvents,
+		"session.closing", sessionStatusUpdatedEvent,
+		"session.closed", sessionStatusUpdatedEvent,
+		"session.worktree_cleanup_requested", "session.worktree_cleanup_failed",
+	)
+	if gotEvents[5].Payload["code"] != "worktree_branch_delete_failed" {
+		t.Fatalf("branch cleanup error = %#v", gotEvents[5].Payload)
 	}
 	if saved := repo.sessions["session-1"]; saved.WorktreeCleanup.Status != domain.WorktreeCleanupFailed || !saved.WorktreeCleanup.Retryable {
 		t.Fatalf("saved cleanup failure = %#v", saved)
@@ -6232,8 +6294,13 @@ func TestCloseSessionWritesClosedAndCleanupRequestedEvents(t *testing.T) {
 		t.Fatalf("close removed worktree = %#v", worktrees.removed)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 3 || gotEvents[0].Type != "session.closing" || gotEvents[1].Type != "session.closed" || gotEvents[1].Payload["reason"] != string(domain.CloseReasonMergedClosed) || gotEvents[2].Type != "session.worktree_cleanup_requested" {
-		t.Fatalf("events = %#v", gotEvents)
+	requireSessionEventTypes(t, gotEvents,
+		"session.closing", sessionStatusUpdatedEvent,
+		"session.closed", sessionStatusUpdatedEvent,
+		"session.worktree_cleanup_requested",
+	)
+	if gotEvents[2].Payload["reason"] != string(domain.CloseReasonMergedClosed) {
+		t.Fatalf("closed event = %#v", gotEvents[2])
 	}
 }
 
@@ -6621,9 +6688,7 @@ func TestStartSessionAppendsLifecycleEvents(t *testing.T) {
 		t.Fatalf("StartSession() error = %v", err)
 	}
 	got := events.snapshot()
-	if len(got) != 1 {
-		t.Fatalf("events before transcript = %d, want 1: %#v", len(got), got)
-	}
+	requireSessionEventTypes(t, got, "session.starting", sessionStatusUpdatedEvent)
 	if got[0].ID != "event-starting" || got[0].Type != "session.starting" || got[0].Scope.ProjectID != "project-1" {
 		t.Fatalf("starting event = %#v", got[0])
 	}
@@ -6633,14 +6698,14 @@ func TestStartSessionAppendsLifecycleEvents(t *testing.T) {
 	stream <- transcriptReadyEvent("codex-session-1")
 	waitForEventType(t, events, "session.running")
 	got = events.snapshot()
-	if len(got) != 3 || got[1].ID != "event-transcript-bound" || got[1].Type != "process.transcript_bound" || got[2].ID != "event-running" || got[2].Type != "session.running" {
+	if len(got) != 5 || got[2].ID != "event-transcript-bound" || got[2].Type != "process.transcript_bound" || got[3].ID != "event-running" || got[3].Type != "session.running" || got[4].Type != sessionStatusUpdatedEvent {
 		t.Fatalf("bound/running events = %#v", got)
 	}
-	if got[2].Payload["pid"] != 1234 || got[2].Payload["codexSessionId"] != "codex-session-1" || got[2].Causality.SessionStatus != "running" {
-		t.Fatalf("running payload = %#v", got[2].Payload)
+	if got[3].Payload["pid"] != 1234 || got[3].Payload["codexSessionId"] != "codex-session-1" || got[3].Causality.SessionStatus != "running" {
+		t.Fatalf("running payload = %#v", got[3].Payload)
 	}
 	published := publisher.snapshot()
-	if len(published) != 3 || published[0].ID != "event-starting" || published[1].ID != "event-transcript-bound" || published[2].ID != "event-running" {
+	if len(published) != 5 || published[0].ID != "event-starting" || published[2].ID != "event-transcript-bound" || published[3].ID != "event-running" {
 		t.Fatalf("published events = %#v", published)
 	}
 }
@@ -7201,6 +7266,84 @@ func TestHasCodexFileChanges(t *testing.T) {
 	}
 }
 
+func TestCodexTaskCompletionReconcilesShellDiffCount(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	counter := &fakeSessionDiffCounter{count: 1}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, &fakeCodexProcess{}),
+		WithEvents(events),
+		WithDiffCounter(counter),
+	)
+
+	err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+		EventID: "task-completed-1",
+		Type:    processdomain.CodexEventStatus,
+		Content: processdomain.CodexStatusContent{Code: "task.completed"},
+	})
+	if err != nil {
+		t.Fatalf("handleCodexEvent() error = %v", err)
+	}
+	if counter.calls != 1 || repo.sessions["session-1"].FilesChanged != 1 {
+		t.Fatalf("diff counter calls=%d session=%#v", counter.calls, repo.sessions["session-1"])
+	}
+	event := waitForEventType(t, events, "session.diff_changed")
+	if event.Payload["filesChanged"] != 1 {
+		t.Fatalf("session.diff_changed = %#v", event)
+	}
+}
+
+func TestHandleCodexProcessExitReconcilesFinalDiffCount(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	counter := &fakeSessionDiffCounter{count: 1}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, nil),
+		WithEvents(events),
+		WithDiffCounter(counter),
+	)
+	service.now = func() time.Time { return time.Unix(100, 0).UTC() }
+	service.queueDrainScheduler = func(*Service) {}
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+
+	service.handleCodexProcessExit(
+		repo.sessions["session-1"],
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{},
+		processdomain.ExitResult{FinishedAt: time.Unix(100, 0).UTC()},
+		nil,
+	)
+
+	if counter.calls != 1 || repo.sessions["session-1"].FilesChanged != 1 {
+		t.Fatalf("diff counter calls=%d session=%#v", counter.calls, repo.sessions["session-1"])
+	}
+	event := waitForEventType(t, events, "session.diff_changed")
+	if event.Payload["filesChanged"] != 1 {
+		t.Fatalf("session.diff_changed = %#v", event)
+	}
+}
+
 func TestArtifactDirectoryUpdateCachesCountAndEmitsForEveryActiveChange(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -7306,7 +7449,7 @@ func TestArtifactWatcherCanStartWhileSessionLockIsHeld(t *testing.T) {
 	stop()
 }
 
-func TestDeleteSessionFileUpdatesStoppedSessionCountBeforeDeleting(t *testing.T) {
+func TestDeleteSessionFileUpdatesCountAndPublishesCanonicalEvent(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
 		ID: "session-1", ProjectID: "project-1", Status: domain.StatusStopped, ArtifactCount: 1,
@@ -7318,12 +7461,16 @@ func TestDeleteSessionFileUpdatesStoppedSessionCountBeforeDeleting(t *testing.T)
 		},
 	}
 	artifacts.beforeDelete = func() {
-		if repo.sessions["session-1"].ArtifactCount != 0 {
-			t.Fatalf("artifact count at deletion = %d, want 0", repo.sessions["session-1"].ArtifactCount)
+		if repo.sessions["session-1"].ArtifactCount != 1 {
+			t.Fatalf("artifact count changed before deletion = %d", repo.sessions["session-1"].ArtifactCount)
 		}
 	}
 	service := New(repo, newFakeProjectRepository("project-1"))
 	service.artifacts = artifacts
+	events := &fakeEventStore{}
+	publisher := &fakeEventPublisher{}
+	service.events = events
+	service.publisher = publisher
 
 	if err := service.DeleteSessionFile(context.Background(), "artifact-1"); err != nil {
 		t.Fatal(err)
@@ -7333,6 +7480,45 @@ func TestDeleteSessionFileUpdatesStoppedSessionCountBeforeDeleting(t *testing.T)
 	}
 	if _, exists := artifacts.artifacts["artifact-1"]; exists {
 		t.Fatal("artifact was not deleted")
+	}
+	stored := events.snapshot()
+	if len(stored) != 1 || stored[0].Type != "session.artifacts_updated" || stored[0].Payload["artifactCount"] != 0 {
+		t.Fatalf("stored artifact event = %#v", stored)
+	}
+	if published := publisher.snapshot(); len(published) != 1 || published[0].Type != "session.artifacts_updated" {
+		t.Fatalf("published artifact event = %#v", published)
+	}
+}
+
+func TestDeleteSessionFileFailureKeepsCountAndPublishesNothing(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusStopped, ArtifactCount: 1,
+	}
+	deleteErr := errors.New("delete artifact failed")
+	artifacts := &fakeSessionArtifactStore{
+		artifactCount: 1,
+		artifacts: map[domain.SessionFileID]domain.SessionFile{
+			"artifact-1": {ID: "artifact-1", SessionID: "session-1", Role: domain.FileRoleArtifact},
+		},
+		deleteErr: deleteErr,
+	}
+	events := &fakeEventStore{}
+	publisher := &fakeEventPublisher{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithEvents(events), WithEventPublisher(publisher))
+	service.artifacts = artifacts
+
+	if err := service.DeleteSessionFile(context.Background(), "artifact-1"); !errors.Is(err, deleteErr) {
+		t.Fatalf("DeleteSessionFile() error = %v, want %v", err, deleteErr)
+	}
+	if repo.sessions["session-1"].ArtifactCount != 1 || repo.updateArtifactCountCalls != 0 {
+		t.Fatalf("session artifact count changed after failed deletion: %#v", repo.sessions["session-1"])
+	}
+	if _, exists := artifacts.artifacts["artifact-1"]; !exists {
+		t.Fatal("artifact was removed after failed deletion")
+	}
+	if len(events.snapshot()) != 0 || len(publisher.snapshot()) != 0 {
+		t.Fatalf("failed deletion published events: stored=%#v published=%#v", events.snapshot(), publisher.snapshot())
 	}
 }
 
@@ -7690,6 +7876,14 @@ func TestStartSessionUpdatesTodoListFromStartedAndUpdatedItems(t *testing.T) {
 	if todoEvents[1].Payload["completed"] != 1 || todoEvents[1].Payload["total"] != 4 {
 		t.Fatalf("updated todo list event payload = %#v, want completed=1 total=4", todoEvents[1].Payload)
 	}
+	startedTodo, ok := todoEvents[0].Payload["todoList"].(domain.TodoList)
+	if !ok || startedTodo.Total() != 3 || startedTodo.Items[0].Text != "Explore project context for Git/worktree creation" {
+		t.Fatalf("started todo list payload = %#v", todoEvents[0].Payload["todoList"])
+	}
+	updatedTodo, ok := todoEvents[1].Payload["todoList"].(domain.TodoList)
+	if !ok || updatedTodo.Total() != 4 || updatedTodo.Completed() != 1 {
+		t.Fatalf("updated todo list payload = %#v", todoEvents[1].Payload["todoList"])
+	}
 
 	got := repo.sessions["session-1"].TodoList
 	if got.Total() != 4 || got.Completed() != 1 {
@@ -7798,6 +7992,9 @@ func TestStartSessionClearsTodoListFromEmptyPlanUpdateEvent(t *testing.T) {
 	}
 	if gotEvent.Payload["total"] != 0 {
 		t.Fatalf("todo list event payload = %#v", gotEvent.Payload)
+	}
+	if todo, ok := gotEvent.Payload["todoList"].(domain.TodoList); !ok || todo.Total() != 0 {
+		t.Fatalf("todo list event full payload = %#v", gotEvent.Payload["todoList"])
 	}
 }
 
@@ -8360,9 +8557,11 @@ func TestDrainQueuedWorkflowStartFailureUsesFallbackEventIDsToExitProcess(t *tes
 		t.Fatalf("process exit = %q active=%v", processes.exitedID, processes.hasActive)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 4 || gotEvents[0].Type != "session.starting" || gotEvents[1].Type != "process.start_failed" || gotEvents[2].Type != "session.failed" || gotEvents[3].Type != "session.waiting_approval" {
-		t.Fatalf("events = %#v", gotEvents)
-	}
+	requireSessionEventTypes(t, gotEvents,
+		"session.starting", sessionStatusUpdatedEvent,
+		"process.start_failed", "session.failed", sessionStatusUpdatedEvent,
+		"session.waiting_approval", sessionStatusUpdatedEvent,
+	)
 }
 
 func TestDrainQueuedWorkflowPreStartFailureNormalizesStateBeforeAdvance(t *testing.T) {
@@ -8463,9 +8662,7 @@ func TestDrainQueuedWorkflowPreStartAndWorkflowFailurePersistsFailedSession(t *t
 	if got := repo.sessions["session-1"]; got.Status != domain.StatusFailed || got.Queue != (domain.QueueIntent{}) || got.QueuedAt != nil {
 		t.Fatalf("failed session = %#v", got)
 	}
-	if got := events.snapshot(); len(got) != 1 || got[0].Type != "session.failed" {
-		t.Fatalf("events = %#v", got)
-	}
+	requireSessionEventTypes(t, events.snapshot(), "session.failed", sessionStatusUpdatedEvent)
 }
 
 func TestDrainQueuedWorkflowKeepsActiveProcessWhenRunningPersistenceAndStopFail(t *testing.T) {
@@ -9762,7 +9959,8 @@ func TestStopSessionFromQueuedCancelsQueue(t *testing.T) {
 		t.Fatalf("saved queue = %#v queuedAt=%v", saved.Queue, saved.QueuedAt)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 1 || gotEvents[0].Type != "session.stopped" || gotEvents[0].Payload["reason"] != "queue_cancelled" {
+	requireSessionEventTypes(t, gotEvents, "session.stopped", sessionStatusUpdatedEvent)
+	if gotEvents[0].Payload["reason"] != "queue_cancelled" {
 		t.Fatalf("events = %#v", gotEvents)
 	}
 	if questions.cancelledSessionID != "" {
@@ -9848,9 +10046,10 @@ func TestStopSessionUsesUnitOfWorkForProcessExitAndStoppedEvent(t *testing.T) {
 	if txRepo.sessions["session-1"].Status != domain.StatusStopped {
 		t.Fatalf("tx session = %#v", txRepo.sessions["session-1"])
 	}
-	if events := txEvents.snapshot(); len(events) != 2 || events[0].Type != "session.stopping" || events[1].Type != "session.stopped" {
-		t.Fatalf("tx events = %#v", events)
-	}
+	requireSessionEventTypes(t, txEvents.snapshot(),
+		"session.stopping", sessionStatusUpdatedEvent,
+		"session.stopped", sessionStatusUpdatedEvent,
+	)
 }
 
 func TestLifecycleActionsUseSessionLocker(t *testing.T) {
@@ -10044,9 +10243,10 @@ func TestResumeFailureUsesUnitOfWorkForProcessEventAndSessionEvents(t *testing.T
 	if txRepo.sessions["session-1"].Status != domain.StatusResumeFailed {
 		t.Fatalf("tx session = %#v", txRepo.sessions["session-1"])
 	}
-	if got := txEvents.snapshot(); len(got) != 3 || got[1].Type != "process.resume_failed" || got[2].Type != "session.resume_failed" {
-		t.Fatalf("tx events = %#v", got)
-	}
+	requireSessionEventTypes(t, txEvents.snapshot(),
+		"session.starting", sessionStatusUpdatedEvent,
+		"process.resume_failed", "session.resume_failed", sessionStatusUpdatedEvent,
+	)
 }
 
 func TestLifecycleActionsDoNotMutateBeforeProcessAdapterIsWired(t *testing.T) {
@@ -10628,8 +10828,9 @@ func TestMarkInterruptedSessionsRecoverableAppliesPersistedWorkflowFailure(t *te
 	if got := repo.sessions[session.ID].Status; got != domain.StatusFailed {
 		t.Fatalf("session status = %q", got)
 	}
-	if got := events.snapshot()[len(events.snapshot())-1].Type; got != "workflow.failed" {
-		t.Fatalf("last event type = %q", got)
+	gotEvents := events.snapshot()
+	if len(gotEvents) < 2 || gotEvents[len(gotEvents)-2].Type != "workflow.failed" || gotEvents[len(gotEvents)-1].Type != sessionStatusUpdatedEvent {
+		t.Fatalf("failure events = %#v", gotEvents)
 	}
 }
 
@@ -10668,9 +10869,7 @@ func TestHandleCodexProcessExitRetriesOnlyFailedProcessRun(t *testing.T) {
 		t.Fatalf("session status = %q", got)
 	}
 	gotEvents := events.snapshot()
-	if len(gotEvents) != 2 || gotEvents[0].Type != "process.exited" || gotEvents[1].Type != "session.stopped" {
-		t.Fatalf("events = %#v", gotEvents)
-	}
+	requireSessionEventTypes(t, gotEvents, "process.exited", "session.stopped", sessionStatusUpdatedEvent)
 }
 
 func TestHandleCodexProcessExitStopsRetryingWhenServiceCloses(t *testing.T) {
@@ -11363,6 +11562,7 @@ type fakeSessionArtifactStore struct {
 	watchCalls         int
 	artifacts          map[domain.SessionFileID]domain.SessionFile
 	beforeDelete       func()
+	deleteErr          error
 }
 
 func (s *fakeSessionArtifactStore) EnsureArtifactDir(context.Context, domain.ID) (string, error) {
@@ -11408,6 +11608,9 @@ func (s *fakeSessionArtifactStore) CountArtifacts(context.Context, domain.ID) (i
 func (s *fakeSessionArtifactStore) DeleteArtifact(_ context.Context, id domain.SessionFileID) (domain.SessionFile, error) {
 	if s.beforeDelete != nil {
 		s.beforeDelete()
+	}
+	if s.deleteErr != nil {
+		return domain.SessionFile{}, s.deleteErr
 	}
 	artifact, ok := s.artifacts[id]
 	if !ok {
@@ -13127,6 +13330,17 @@ func waitForEventType(t *testing.T, store *fakeEventStore, eventType string) eve
 	}
 	t.Fatalf("event type %q not found in %#v", eventType, store.snapshot())
 	return eventdomain.DomainEvent{}
+}
+
+func requireSessionEventTypes(t *testing.T, events []eventdomain.DomainEvent, want ...string) {
+	t.Helper()
+	got := make([]string, len(events))
+	for index, event := range events {
+		got[index] = event.Type
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("event types = %#v, want %#v; events=%#v", got, want, events)
+	}
 }
 
 func waitForSessionStatus(t *testing.T, repo *fakeRepository, sessionID domain.ID, status domain.Status) domain.Session {

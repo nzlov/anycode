@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 
+import { useSessionUpdates } from '@/composables/useSessionUpdates';
 import { deleteStagedAttachment } from '@/services/attachments';
 import {
   AnyCodeGraphQLError,
@@ -26,6 +27,7 @@ import {
   updatePromptAppend,
   type SessionConfigInput,
   type SessionDetailData,
+  type SessionUpdateEvent,
 } from '@/services/sessions';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 import {
@@ -36,13 +38,11 @@ import {
 import {
   appendLiveEvent,
   createLatestRequestTracker,
-  mergeSnapshotEvents,
   prependOlderEvents,
-  shouldReconnectAfterClose,
+  shouldReconnectSubscription,
 } from '@/services/sessionEventTimeline';
 
 const eventPageSize = 50;
-const subscriptionReadyTimeoutMs = 3000;
 const emptyPageInfo: PageInfo = { page: 1, pageSize: eventPageSize, total: 0, nextCursor: '' };
 
 export function useSessionDetail(sessionId: string) {
@@ -61,31 +61,32 @@ export function useSessionDetail(sessionId: string) {
   const updatingConfig = ref(false);
   const questionsLoading = ref(false);
   const questionsSubmitting = ref(false);
+  const approvalLoading = ref(false);
   const approvalSubmitting = ref(false);
   const pendingQuestionBatches = ref<QuestionBatch[]>([]);
   const artifactUpdateVersion = ref(0);
+  const diffUpdateVersion = ref(0);
   const error = ref('');
   let liveStopped = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let sessionEventSubscription: { unsubscribe: () => void } | null = null;
-  let bufferingLiveEvents = false;
-  let bufferedLiveEvents: SessionDetailData['events'] = [];
-  let bufferedLiveUsage: TranscriptTokenUsage | null = null;
-  let releaseSubscriptionReadiness: (() => void) | null = null;
   let subscriptionGeneration = 0;
-  const eventSnapshotRequests = createLatestRequestTracker();
+  let approvalLoadGeneration = 0;
+  const detailRequests = createLatestRequestTracker();
   const sessionRequests = createLatestRequestTracker();
   const questionRequests = createLatestRequestTracker();
-  let accessValidation: Promise<boolean> | null = null;
+
+  const { start: startSessionUpdates, stop: stopSessionUpdates } = useSessionUpdates({
+    onData: handleSessionUpdate,
+    onError: (updateError) => {
+      error.value = updateError.message;
+    },
+  });
 
   async function loadSessionDetail() {
-    const eventRequest = eventSnapshotRequests.next();
+    const detailRequest = detailRequests.next();
     const sessionRequest = sessionRequests.next();
     loading.value = true;
-    if (!liveStopped && !bufferingLiveEvents) {
-      bufferingLiveEvents = true;
-      bufferedLiveUsage = null;
-    }
     error.value = '';
     try {
       const [sessionResult, eventResult] = await Promise.allSettled([
@@ -102,16 +103,11 @@ export function useSessionDetail(sessionId: string) {
               : '加载会话状态失败';
         }
       }
-      if (eventSnapshotRequests.isCurrent(eventRequest)) {
+      if (detailRequests.isCurrent(detailRequest)) {
         if (eventResult.status === 'fulfilled') {
-          events.value = mergeSnapshotEvents(
-            eventResult.value.items,
-            events.value,
-            bufferedLiveEvents,
-          );
-          bufferedLiveEvents = [];
+          events.value = eventResult.value.items;
           eventsPageInfo.value = eventResult.value.pageInfo;
-          tokenUsage.value = bufferedLiveUsage ?? eventResult.value.usage;
+          tokenUsage.value = eventResult.value.usage;
           nodeUsage.value = eventResult.value.nodeUsage;
         } else {
           error.value =
@@ -119,12 +115,7 @@ export function useSessionDetail(sessionId: string) {
         }
       }
     } finally {
-      if (eventSnapshotRequests.isCurrent(eventRequest)) {
-        events.value = mergeSnapshotEvents([], events.value, bufferedLiveEvents);
-        bufferedLiveEvents = [];
-        if (bufferedLiveUsage) tokenUsage.value = bufferedLiveUsage;
-        bufferedLiveUsage = null;
-        bufferingLiveEvents = false;
+      if (detailRequests.isCurrent(detailRequest)) {
         loading.value = false;
       }
     }
@@ -142,7 +133,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await appendPrompt(sessionId, text, stagedAttachmentIds, artifactIds);
-      await loadSessionDetail();
+      await loadSessionState();
     } catch (err) {
       const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
       const message = err instanceof Error ? err.message : '追加描述失败';
@@ -173,7 +164,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await stopSessionRequest(sessionId);
-      await loadSessionDetail();
+      await loadSessionState();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '停止会话失败';
     } finally {
@@ -186,7 +177,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await closeSessionRequest(sessionId);
-      await loadSessionDetail();
+      await loadSessionState();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '关闭会话失败';
       throw err;
@@ -200,7 +191,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await retrySessionWorktreeCleanupRequest(sessionId);
-      await loadSessionDetail();
+      await loadSessionState();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '重试工作树清理失败';
       throw err;
@@ -231,7 +222,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await executeSessionRequest(sessionId, session.value?.status === 'queued');
-      await loadSessionDetail();
+      await loadSessionState();
     } catch (err) {
       error.value = err instanceof Error ? err.message : '运行会话失败';
       throw err;
@@ -297,7 +288,7 @@ export function useSessionDetail(sessionId: string) {
     error.value = '';
     try {
       await submitQuestionBatch(batchId, answers);
-      await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
+      await Promise.all([loadSessionState(), loadPendingQuestions()]);
     } catch (err) {
       error.value = err instanceof Error ? err.message : '提交回答失败';
       throw err;
@@ -333,162 +324,142 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function startLiveUpdates() {
+  function startLiveUpdates() {
+    if (!liveStopped) return;
     liveStopped = false;
-    bufferingLiveEvents = true;
-    bufferedLiveUsage = null;
-    await waitForSubscriptionRegistration(openSubscriptions());
+    openSessionEvents();
+    startSessionUpdates();
   }
 
   function stopLiveUpdates() {
     liveStopped = true;
+    approvalLoadGeneration += 1;
+    subscriptionGeneration += 1;
+    sessionEventSubscription?.unsubscribe();
+    sessionEventSubscription = null;
+    stopSessionUpdates();
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
-    subscriptionGeneration += 1;
-    releaseSubscriptionReadiness?.();
-    releaseSubscriptionReadiness = null;
-    sessionEventSubscription?.unsubscribe();
-    sessionEventSubscription = null;
-    bufferingLiveEvents = false;
-    bufferedLiveEvents = [];
-    bufferedLiveUsage = null;
   }
 
-  function openSubscriptions() {
+  function openSessionEvents() {
+    if (liveStopped) return;
     const generation = ++subscriptionGeneration;
-    releaseSubscriptionReadiness?.();
     sessionEventSubscription?.unsubscribe();
-    sessionEventSubscription = null;
-    const ready = createSubscriptionReady();
-    releaseSubscriptionReadiness = ready.release;
     sessionEventSubscription = subscribeSessionEvents(sessionId, {
-      onSubscribed: ready.resolve,
-      onData: (update) => {
-        if (generation !== subscriptionGeneration) return;
-        if (update.type === 'session.artifacts_updated') {
-          artifactUpdateVersion.value += 1;
-        }
-        if (update.transcript) {
-          if (bufferingLiveEvents) {
-            bufferedLiveEvents = appendLiveEvent(bufferedLiveEvents, update.transcript);
-          } else {
-            events.value = appendLiveEvent(events.value, update.transcript);
-          }
-        }
-        if (update.usage) {
-          if (bufferingLiveEvents) {
-            bufferedLiveUsage = update.usage;
-          } else {
-            tokenUsage.value = update.usage;
-          }
-        }
-        if (update.session) {
-          sessionRequests.invalidate();
-          session.value = update.session;
-        }
-        if (update.questionBatch) {
-          questionRequests.invalidate();
-          questionsLoading.value = false;
-          pendingQuestionBatches.value = mergeQuestionBatch(
-            pendingQuestionBatches.value,
-            update.questionBatch,
-          );
+      onData: (event) => {
+        if (generation === subscriptionGeneration) {
+          events.value = appendLiveEvent(events.value, event);
         }
       },
-      onError: (err) => {
-        ready.release();
+      onError: (subscriptionError) => {
         if (generation !== subscriptionGeneration) return;
-        error.value = err.message;
-        if (shouldReconnectLiveError(err)) {
-          scheduleReconnect();
-        }
+        error.value = subscriptionError.message;
+        if (shouldReconnectLiveError(subscriptionError)) scheduleReconnect();
       },
       onClose: (close) => {
-        ready.release();
         if (generation === subscriptionGeneration) {
           void handleSubscriptionClose(close, generation);
         }
       },
     });
-    return {
-      generation,
-      ready: ready.promise.then(() => ready.registered()),
-    };
   }
 
   function scheduleReconnect() {
     if (liveStopped || reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      void reconnectFromSnapshot();
+      openSessionEvents();
     }, 1500);
   }
 
-  async function reconnectFromSnapshot() {
-    if (liveStopped) return;
-    bufferingLiveEvents = true;
-    bufferedLiveUsage = null;
-    const registration = openSubscriptions();
-    const registered = await waitForSubscriptionRegistration(registration);
-    if (!registered) return;
-    await refreshAfterReconnect(registration.generation);
-  }
-
-  async function refreshAfterReconnect(generation: number) {
-    if (liveStopped || generation !== subscriptionGeneration) return;
-    await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
-    if (liveStopped || generation !== subscriptionGeneration) return;
-    artifactUpdateVersion.value += 1;
-  }
-
-  async function waitForSubscriptionRegistration(registration: {
-    generation: number;
-    ready: Promise<boolean>;
-  }): Promise<boolean> {
-    const registered = await waitWithTimeout(
-      registration.ready,
-      subscriptionReadyTimeoutMs,
-      false,
-    );
-    if (!registered) {
-      void registration.ready.then((lateRegistered) => {
-        if (!lateRegistered || liveStopped || registration.generation !== subscriptionGeneration)
-          return;
-        void refreshAfterReconnect(registration.generation);
-      });
-    }
-    return registered;
-  }
-
   async function handleSubscriptionClose(close: GraphQLSubscriptionClose, generation: number) {
-    let accessKeyValid: boolean | undefined;
-    if (!close.acknowledged && !close.completedByServer) {
-      accessKeyValid = await validateAccessKeyForReconnect();
-    }
+    const reconnect = await shouldReconnectSubscription(close, () =>
+      verifyGraphQLAccessKey(getGraphQLAccessKey()),
+    );
     if (generation !== subscriptionGeneration || liveStopped) return;
-    if (shouldReconnectAfterClose(close.acknowledged, accessKeyValid, close.completedByServer)) {
+    if (reconnect) {
       scheduleReconnect();
-      return;
+    } else if (!close.completedByServer) {
+      error.value = '访问密钥无效，请重新登录';
     }
-    if (close.completedByServer) return;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    error.value = '访问密钥无效，请重新登录';
   }
 
-  function validateAccessKeyForReconnect() {
-    if (!accessValidation) {
-      accessValidation = verifyGraphQLAccessKey(getGraphQLAccessKey())
-        .catch(() => true)
-        .finally(() => {
-          accessValidation = null;
-        });
+  function handleSessionUpdate(update: SessionUpdateEvent) {
+    if (update.sessionId !== sessionId) return;
+    const current = session.value;
+    const previousStatus = current?.status;
+    let next = current;
+
+    if (current && update.status) {
+      next = {
+        ...current,
+        status: update.status.status,
+        node: update.status.node,
+        availableActions: update.status.availableActions,
+        updatedAt: update.status.updatedAt,
+        updatedTime: update.status.updatedTime,
+      };
     }
-    return accessValidation;
+    if (next && update.eventType === 'session.todo_list_updated') {
+      next = { ...next, todoList: update.todoList ?? null };
+    }
+    if (next && typeof update.filesChanged === 'number') {
+      next = { ...next, filesChanged: update.filesChanged };
+      diffUpdateVersion.value += 1;
+    }
+    if (next && typeof update.artifactCount === 'number') {
+      next = { ...next, artifactCount: update.artifactCount };
+      artifactUpdateVersion.value += 1;
+    }
+    if (next && update.priority) {
+      next = { ...next, priority: update.priority };
+    }
+    if (next && update.config) {
+      next = { ...next, config: update.config };
+    }
+    if (next && update.worktreeCleanup) {
+      next = { ...next, worktreeCleanup: update.worktreeCleanup };
+    }
+    if (next && update.availableActions !== undefined) {
+      next = { ...next, availableActions: update.availableActions };
+    }
+    if (next && update.updatedAt && update.updatedTime) {
+      next = { ...next, updatedAt: update.updatedAt, updatedTime: update.updatedTime };
+    }
+    if (update.usage) tokenUsage.value = update.usage;
+    if (next !== current) {
+      sessionRequests.invalidate();
+      session.value = next;
+    }
+
+    const status = update.status?.status;
+    if (status === 'waiting_user') {
+      if (session.value?.pendingApproval) {
+        session.value = { ...session.value, pendingApproval: null };
+      }
+      if (previousStatus !== 'waiting_user') void loadPendingQuestions();
+    } else if (status) {
+      questionRequests.invalidate();
+      questionsLoading.value = false;
+      pendingQuestionBatches.value = [];
+    }
+
+    if (status === 'waiting_approval') {
+      const generation = ++approvalLoadGeneration;
+      approvalLoading.value = true;
+      void loadSessionState().finally(() => {
+        if (generation === approvalLoadGeneration) approvalLoading.value = false;
+      });
+    } else if (status) {
+      approvalLoadGeneration += 1;
+      approvalLoading.value = false;
+      if (session.value?.pendingApproval) {
+        session.value = { ...session.value, pendingApproval: null };
+      }
+    }
   }
 
   return {
@@ -499,6 +470,7 @@ export function useSessionDetail(sessionId: string) {
     eventsPageInfo,
     pendingQuestionBatches,
     artifactUpdateVersion,
+    diffUpdateVersion,
     loading,
     loadingOlderEvents,
     appending,
@@ -509,6 +481,7 @@ export function useSessionDetail(sessionId: string) {
     updatingConfig,
     questionsLoading,
     questionsSubmitting,
+    approvalLoading,
     approvalSubmitting,
     error,
     loadSessionDetail,
@@ -528,49 +501,8 @@ export function useSessionDetail(sessionId: string) {
   };
 }
 
-function createSubscriptionReady() {
-  let settled = false;
-  let subscribed = false;
-  let settlePromise: (() => void) | null = null;
-  const promise = new Promise<void>((resolve) => {
-    settlePromise = resolve;
-  });
-  const settle = (registered: boolean) => {
-    if (settled) return;
-    settled = true;
-    subscribed = registered;
-    settlePromise?.();
-    settlePromise = null;
-  };
-  return {
-    promise,
-    resolve: () => settle(true),
-    release: () => settle(false),
-    registered: () => subscribed,
-  };
-}
-
-function waitWithTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T) {
-  return new Promise<T>((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), timeoutMs);
-    void promise.then((value) => {
-      clearTimeout(timer);
-      resolve(value);
-    });
-  });
-}
-
 function shouldReconnectLiveError(err: Error) {
   return !(err instanceof AnyCodeGraphQLError && err.code === 'auth_failed');
-}
-
-function mergeQuestionBatch(existing: QuestionBatch[], batch: QuestionBatch) {
-  if (batch.status !== 'pending') {
-    return existing.filter((item) => item.id !== batch.id);
-  }
-  const next = existing.filter((item) => item.id !== batch.id);
-  next.push(batch);
-  return next;
 }
 
 async function cleanupStagedAttachments(ids: string[]) {
