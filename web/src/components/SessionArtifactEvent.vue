@@ -247,6 +247,7 @@ onBeforeUnmount(clearPreview);
 .artifact-event-preview__body pre {
   width: 100%;
   margin: 0;
+  align-self: start;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

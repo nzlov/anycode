@@ -705,6 +705,7 @@ onBeforeUnmount(() => {
 .artifact-text {
   width: 100%;
   margin: 0;
+  align-self: start;
   overflow: auto;
   color: var(--ac-text);
   white-space: pre-wrap;

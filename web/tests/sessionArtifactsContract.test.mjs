@@ -67,12 +67,14 @@ test('session artifacts use one unpaginated latest-version query and unified fil
   assert.match(panel, /downloadSessionFile/);
 });
 
-test('authenticated previews revoke blob URLs and bound text rendering', () => {
+test('authenticated previews revoke blob URLs and keep bounded text fully scrollable', () => {
   assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
   assert.match(service, /URL\.revokeObjectURL\(url\)/);
   assert.match(panel, /URL\.revokeObjectURL\(previewURL\.value\)/);
   assert.match(event, /URL\.revokeObjectURL\(objectUrl\.value\)/);
   assert.match(panel, /file\.size > 1 << 20/);
+  assert.match(panel, /\.artifact-text \{[\s\S]*?align-self: start;/);
+  assert.match(event, /\.artifact-event-preview__body pre \{[\s\S]*?align-self: start;/);
   assert.match(panel, /selected\?\.previewKind === 'image'/);
   assert.match(panel, /selected\?\.previewKind === 'pdf'/);
   assert.match(panel, /selected\?\.previewKind === 'video'/);
