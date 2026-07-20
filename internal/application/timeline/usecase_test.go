@@ -527,6 +527,12 @@ func TestSessionEventsForwardsTypedLiveEventsInArrivalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SessionEvents() error = %v", err)
 	}
+	if cap(ch) != 0 {
+		t.Fatalf("timeline mapper buffer = %d, want 0", cap(ch))
+	}
+	if liveSource.input != process.SessionID(sessionID) {
+		t.Fatalf("live event session = %q, want %q", liveSource.input, sessionID)
+	}
 	liveSource.ch <- process.CodexEvent{
 		EventID:        "event-1",
 		Type:           process.CodexEventMessage,

@@ -58,6 +58,9 @@ func TestSessionUpdatesMapsGlobalCardEvents(t *testing.T) {
 	if events.input.Scope != (eventdomain.Scope{}) {
 		t.Fatalf("domain event scope = %#v", events.input.Scope)
 	}
+	if cap(stream) != 0 {
+		t.Fatalf("session update mapper buffer = %d, want 0", cap(stream))
+	}
 
 	sessionID := eventdomain.SessionID("session-1")
 	domainEvents <- eventapp.DTO{
