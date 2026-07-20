@@ -24,45 +24,14 @@
       <q-tooltip>运行权限：{{ permissionLabel }}</q-tooltip>
     </q-select>
 
-    <div v-if="readonlyConfig" class="prompt-config-chip">
-      <span>{{ modelLabel }}</span>
-      <q-tooltip>Codex 模型：{{ modelLabel }}</q-tooltip>
-    </div>
-    <q-select
-      v-else
-      v-model="modelModel"
-      dense
-      borderless
-      emit-value
-      map-options
-      aria-label="Codex 模型"
-      class="compact-select model-select"
-      hide-dropdown-icon
-      :disable="disabled"
-      :options="modelOptions"
-    >
-      <q-tooltip>Codex 模型：{{ modelLabel }}</q-tooltip>
-    </q-select>
-
-    <div v-if="readonlyConfig" class="prompt-config-chip">
-      <span>{{ effortLabel }}</span>
-      <q-tooltip>思考强度：{{ effortLabel }}</q-tooltip>
-    </div>
-    <q-select
-      v-else
-      v-model="effortModel"
-      dense
-      borderless
-      emit-value
-      map-options
-      aria-label="思考强度"
-      class="compact-select effort-select"
-      hide-dropdown-icon
-      :disable="disabled"
-      :options="reasoningEffortOptions"
-    >
-      <q-tooltip>思考强度：{{ effortLabel }}</q-tooltip>
-    </q-select>
+    <CodexModelSelector
+      :model="model"
+      :effort="effort"
+      :disabled="disabled"
+      :readonly="readonlyConfig"
+      @update:model="emit('update:model', $event)"
+      @update:effort="emit('update:effort', $event)"
+    />
 
     <q-checkbox
       v-model="fastModel"
@@ -78,19 +47,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed } from 'vue';
 
-import {
-  type CodexModelOption,
-  codexModelLabel,
-  normalizeCodexModel,
-  normalizeReasoningEffort,
-  permissionModeLabel,
-  permissionModeOptions,
-  promptConfigUpdatesForModelChange,
-  reasoningEffortLabel,
-  reasoningEffortOptionsForModel,
-} from '@/components/promptOptions';
+import CodexModelSelector from '@/components/CodexModelSelector.vue';
+import { permissionModeLabel, permissionModeOptions } from '@/components/promptOptions';
 
 const props = withDefaults(
   defineProps<{
@@ -98,7 +58,6 @@ const props = withDefaults(
     effort: string;
     permission: string;
     fast: boolean;
-    modelOptions: CodexModelOption[];
     disabled?: boolean;
     readonlyConfig?: boolean;
   }>(),
@@ -115,27 +74,6 @@ const emit = defineEmits<{
   'update:fast': [value: boolean];
 }>();
 
-const modelModel = computed({
-  get: () => props.model,
-  set: (value: string) => {
-    for (const update of promptConfigUpdatesForModelChange(
-      props.modelOptions,
-      value,
-      props.effort,
-    )) {
-      if (update.field === 'model') {
-        emit('update:model', update.value);
-      } else {
-        emit('update:effort', update.value);
-      }
-    }
-  },
-});
-const effortModel = computed({
-  get: () => props.effort,
-  set: (value: string) =>
-    emit('update:effort', normalizeReasoningEffort(props.modelOptions, props.model, value)),
-});
 const permissionModel = computed({
   get: () => props.permission,
   set: (value: string) => emit('update:permission', value),
@@ -149,38 +87,4 @@ const permissionIcon = computed(
     permissionModeOptions.find((option) => option.value === props.permission)?.icon ?? 'edit_note',
 );
 const permissionLabel = computed(() => permissionModeLabel(props.permission));
-const modelLabel = computed(() => codexModelLabel(props.modelOptions, props.model));
-const effortLabel = computed(() =>
-  reasoningEffortLabel(props.modelOptions, props.model, props.effort),
-);
-const reasoningEffortOptions = computed(() =>
-  reasoningEffortOptionsForModel(props.modelOptions, props.model),
-);
-
-watch(
-  () => [props.model, props.modelOptions] as const,
-  ([value]) => {
-    const nextModel = normalizeCodexModel(props.modelOptions, value);
-    if (nextModel !== value) {
-      emit('update:model', nextModel);
-      return;
-    }
-    const nextEffort = normalizeReasoningEffort(props.modelOptions, nextModel, props.effort);
-    if (nextEffort !== props.effort) {
-      emit('update:effort', nextEffort);
-    }
-  },
-  { immediate: true },
-);
-
-watch(
-  () => [props.effort, props.modelOptions] as const,
-  ([value]) => {
-    const nextEffort = normalizeReasoningEffort(props.modelOptions, props.model, value);
-    if (nextEffort !== value) {
-      emit('update:effort', nextEffort);
-    }
-  },
-  { immediate: true },
-);
 </script>

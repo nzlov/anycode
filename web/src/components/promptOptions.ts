@@ -50,21 +50,16 @@ export function defaultReasoningEffortForModel(options: CodexModelOption[], mode
   return modelOption.reasoningEfforts[0]?.value ?? '';
 }
 
-export type PromptConfigUpdate =
-  { field: 'model'; value: string } | { field: 'effort'; value: string };
-
-export function promptConfigUpdatesForModelChange(
+export function normalizeCodexSelection(
   options: CodexModelOption[],
-  value: string,
-  currentEffort: string,
-): PromptConfigUpdate[] {
-  const model = normalizeCodexModel(options, value);
-  const effort = defaultReasoningEffortForModel(options, model);
-  const updates: PromptConfigUpdate[] = [{ field: 'model', value: model }];
-  if (effort !== currentEffort) {
-    updates.push({ field: 'effort', value: effort });
-  }
-  return updates;
+  model: string,
+  effort: string,
+) {
+  const normalizedModel = normalizeCodexModel(options, model);
+  return {
+    model: normalizedModel,
+    effort: normalizeReasoningEffort(options, normalizedModel, effort),
+  };
 }
 
 export function reasoningEffortLabel(options: CodexModelOption[], model: string, value: string) {

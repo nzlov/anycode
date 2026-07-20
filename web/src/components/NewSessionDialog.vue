@@ -131,7 +131,7 @@
                 icon="account_tree"
                 label="流程模式"
                 no-caps
-                :disable="creating || !branchSelectionReady"
+                :disable="creating || !branchSelectionReady || !codexConfigReady"
                 :loading="launchingMode === 'workflow'"
                 @click="createSession('workflow')"
               />
@@ -146,7 +146,7 @@
                 icon="forum"
                 label="会话模式"
                 no-caps
-                :disable="creating || !branchSelectionReady"
+                :disable="creating || !branchSelectionReady || !codexConfigReady"
                 :loading="launchingMode === 'chat'"
                 @click="createSession('chat')"
               />
@@ -170,6 +170,7 @@ import { useProjectBranches } from '@/composables/useProjectBranches';
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
+import { loadStoredSessionConfig, storeSessionConfig } from '@/services/sessionConfigCache';
 import type { CreateSessionInput, SessionConfig, SessionPriority } from '@/services/sessions';
 import { getWorkflowDefinition } from '@/services/workflows';
 
@@ -188,9 +189,14 @@ const { projects, projectOptions, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
 const lastLaunchModeStorageKey = 'anycode.lastNewSessionLaunchMode';
-const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 const overviewInlineConfigMinWidth = 1536;
-const storedRunConfig = storedSessionConfig();
+const cachedRunConfig = loadStoredSessionConfig();
+const storedRunConfig: SessionConfig = {
+  codexModel: cachedRunConfig?.codexModel ?? '',
+  reasoningEffort: cachedRunConfig?.reasoningEffort ?? '',
+  permissionMode: normalizePermissionMode(cachedRunConfig?.permissionMode ?? 'workspace-write'),
+  fastMode: cachedRunConfig?.fastMode ?? false,
+};
 const projectId = ref(projects.value[0]?.id ?? '');
 const branch = ref('');
 const preferredMode = ref<'workflow' | 'chat'>(storedLaunchMode());
@@ -220,6 +226,7 @@ const branchSelectionReady = computed(() => {
   const state = branchCache.value[projectId.value];
   return !branchesLoading.value && Boolean(state?.branches.includes(branch.value));
 });
+const codexConfigReady = computed(() => Boolean(model.value && effort.value));
 const canUseWorkflowMode = computed(() => workflowAvailable.value);
 const preferredAvailableMode = computed<'workflow' | 'chat'>(() =>
   preferredMode.value === 'workflow' && canUseWorkflowMode.value ? 'workflow' : 'chat',
@@ -267,43 +274,6 @@ function rememberLaunchMode(value: 'workflow' | 'chat') {
     window.localStorage.setItem(lastLaunchModeStorageKey, value);
   } catch {
     // Ignore storage failures; the current page still remembers the launch mode.
-  }
-}
-
-function storedSessionConfig(): SessionConfig {
-  const defaults: SessionConfig = {
-    codexModel: '',
-    reasoningEffort: '',
-    permissionMode: normalizePermissionMode('workspace-write'),
-    fastMode: false,
-  };
-  try {
-    const raw = window.localStorage.getItem(lastSessionConfigStorageKey);
-    if (!raw) return defaults;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults;
-    const config = parsed as Record<string, unknown>;
-    return {
-      codexModel: typeof config.codexModel === 'string' ? config.codexModel : '',
-      reasoningEffort:
-        typeof config.reasoningEffort === 'string' ? config.reasoningEffort : '',
-      permissionMode: normalizePermissionMode(
-        typeof config.permissionMode === 'string'
-          ? config.permissionMode
-          : defaults.permissionMode,
-      ),
-      fastMode: typeof config.fastMode === 'boolean' ? config.fastMode : false,
-    };
-  } catch {
-    return defaults;
-  }
-}
-
-function rememberSessionConfig(config: SessionConfig) {
-  try {
-    window.localStorage.setItem(lastSessionConfigStorageKey, JSON.stringify(config));
-  } catch {
-    // Ignore storage failures; the new session still uses the selected config.
   }
 }
 
@@ -381,6 +351,17 @@ async function refreshProjectBranches(value: string) {
 
 async function createSession(requestedMode: 'workflow' | 'chat') {
   if (creating.value) return;
+  if (!codexConfigReady.value) {
+    Notify.create({
+      type: 'negative',
+      icon: 'error',
+      position: 'top-right',
+      message: '请先选择 Codex 模型和思考强度',
+      timeout: 5000,
+      actions: [{ icon: 'close', color: 'white', round: true }],
+    });
+    return;
+  }
   if (!branchSelectionReady.value) {
     Notify.create({
       type: 'negative',
@@ -429,7 +410,7 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     await createSessionRequest(input);
     rememberProjectId(input.projectId);
     rememberLaunchMode(input.mode);
-    rememberSessionConfig(config);
+    storeSessionConfig(config);
     files.value = [];
     prompt.value = '';
     emit('update:modelValue', false);

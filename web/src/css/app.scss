@@ -1336,6 +1336,20 @@ a {
   min-width: 0;
 }
 
+.codex-model-select {
+  max-width: 32ch;
+}
+
+.codex-model-select__status {
+  min-width: min(280px, calc(100vw - 64px));
+  color: var(--ac-text-muted);
+  font-size: 13px;
+}
+
+.codex-model-chip {
+  max-width: 32ch;
+}
+
 .compact-select .q-field__native {
   overflow: hidden;
   text-overflow: ellipsis;

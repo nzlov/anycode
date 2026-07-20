@@ -7,6 +7,7 @@ const {
   defaultReasoningEffortForModel,
   firstCodexModelValue,
   normalizeCodexModel,
+  normalizeCodexSelection,
   normalizeReasoningEffort,
   reasoningEffortOptionsForModel,
 } = promptOptions;
@@ -50,19 +51,16 @@ test('normalization preserves values while the catalog is still loading', () => 
   assert.equal(normalizeReasoningEffort([], 'gpt-5.6-sol', 'ultra'), 'ultra');
 });
 
-test('model change updates preserve supported models and emit model before effort', () => {
-  assert.deepEqual(
-    promptOptions.promptConfigUpdatesForModelChange(dynamicOptions, 'gpt-5.6-sol', 'ultra'),
-    [
-      { field: 'model', value: 'gpt-5.6-sol' },
-      { field: 'effort', value: 'low' },
-    ],
-  );
+test('combined selection preserves a supported model and effort', () => {
+  assert.deepEqual(normalizeCodexSelection(dynamicOptions, 'gpt-5.6-sol', 'ultra'), {
+    model: 'gpt-5.6-sol',
+    effort: 'ultra',
+  });
 });
 
-test('model change updates normalize invalid models and omit unchanged effort', () => {
-  assert.deepEqual(
-    promptOptions.promptConfigUpdatesForModelChange(dynamicOptions, 'unsupported-model', 'low'),
-    [{ field: 'model', value: 'gpt-5.6-sol' }],
-  );
+test('combined selection normalizes an invalid cached pair to catalog defaults', () => {
+  assert.deepEqual(normalizeCodexSelection(dynamicOptions, 'unsupported-model', 'missing-effort'), {
+    model: 'gpt-5.6-sol',
+    effort: 'low',
+  });
 });

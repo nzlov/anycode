@@ -14,7 +14,6 @@
     :show-badge="showBadge"
     :force-config-menu="forceConfigMenu"
     :readonly-config="readonlyConfig"
-    :model-options="modelOptions"
     @update:prompt="emit('update:prompt', $event)"
     @update:files="emit('update:files', $event)"
     @update:artifacts="emit('update:artifacts', $event)"
@@ -93,14 +92,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 
 import AppPagination from '@/components/AppPagination.vue';
 import PromptComposer from '@/components/PromptComposer.vue';
-import type { CodexModelOption } from '@/components/promptOptions';
+import { normalizeCodexSelection } from '@/components/promptOptions';
 import { useQuickCommands } from '@/composables/useQuickCommands';
 import { listCodexModelOptions } from '@/services/codexOptions';
 import { appendQuickCommand } from '@/services/quickCommandText';
+import { hasStoredSessionConfig } from '@/services/sessionConfigCache';
 import type { SessionFile } from '@/services/sessionFiles';
 
 const props = withDefaults(
@@ -143,7 +143,6 @@ const emit = defineEmits<{
   submit: [];
 }>();
 
-const modelOptions = ref<CodexModelOption[]>([]);
 const {
   quickCommands,
   quickCommandsLoading,
@@ -167,7 +166,18 @@ function changeQuickCommandPage(page: number) {
   void loadQuickCommands({ force: true, page }).catch(() => undefined);
 }
 
-onMounted(async () => {
-  modelOptions.value = await listCodexModelOptions();
+async function initializeCodexConfig() {
+  try {
+    const options = await listCodexModelOptions();
+    const normalized = normalizeCodexSelection(options, props.model, props.effort);
+    if (normalized.model !== props.model) emit('update:model', normalized.model);
+    if (normalized.effort !== props.effort) emit('update:effort', normalized.effort);
+  } catch {
+    // graphqlFetch reports the failure; opening the selector retries the request.
+  }
+}
+
+onMounted(() => {
+  if (!hasStoredSessionConfig()) void initializeCodexConfig();
 });
 </script>

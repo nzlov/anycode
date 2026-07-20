@@ -13,6 +13,7 @@ const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const detailSource = readSource('../src/pages/SessionDetailPage.vue');
 const sessionsSource = readSource('../src/services/sessions.ts');
 const indexSource = readSource('../src/pages/IndexPage.vue');
+const sessionConfigCacheSource = readSource('../src/services/sessionConfigCache.ts');
 
 test('Fast uses the shared runtime controls on desktop and mobile prompt surfaces', () => {
   assert.match(controlsSource, /<q-checkbox[\s\S]*v-model="fastModel"[\s\S]*label="Fast"/);
@@ -31,29 +32,33 @@ test('Fast uses the shared runtime controls on desktop and mobile prompt surface
 
 test('new sessions restore and persist one global frontend runtime config', () => {
   assert.doesNotMatch(sessionsSource, /LastSessionConfig|lastSessionConfig/);
-  assert.match(newSessionSource, /const lastSessionConfigStorageKey = 'anycode\.lastSessionConfig'/);
   assert.match(
-    newSessionSource,
-    /window\.localStorage\.getItem\(lastSessionConfigStorageKey\)/,
+    sessionConfigCacheSource,
+    /SESSION_CONFIG_STORAGE_KEY = 'anycode\.lastSessionConfig'/,
   );
+  assert.match(
+    sessionConfigCacheSource,
+    /window\.localStorage\.getItem\(SESSION_CONFIG_STORAGE_KEY\)/,
+  );
+  assert.match(newSessionSource, /const cachedRunConfig = loadStoredSessionConfig\(\)/);
   assert.match(newSessionSource, /const model = ref\(storedRunConfig\.codexModel\)/);
   assert.match(newSessionSource, /const effort = ref\(storedRunConfig\.reasoningEffort\)/);
   assert.match(newSessionSource, /const permission = ref\(storedRunConfig\.permissionMode\)/);
   assert.match(newSessionSource, /const fast = ref\(storedRunConfig\.fastMode\)/);
   assert.match(
-    newSessionSource,
-    /function rememberSessionConfig\(config: SessionConfig\)[\s\S]*window\.localStorage\.setItem\(lastSessionConfigStorageKey, JSON\.stringify\(config\)\)/,
+    sessionConfigCacheSource,
+    /function storeSessionConfig\(config: SessionConfig\)[\s\S]*window\.localStorage\.setItem\(SESSION_CONFIG_STORAGE_KEY, JSON\.stringify\(config\)\)/,
   );
   assert.match(
     newSessionSource,
-    /await createSessionRequest\(input\);[\s\S]*rememberSessionConfig\(config\)/,
+    /await createSessionRequest\(input\);[\s\S]*storeSessionConfig\(config\)/,
   );
   assert.doesNotMatch(
     newSessionSource,
     /getLastSessionConfig|loadLastConfigForProject|lastConfigRequestToken|runConfigLoading|runConfigError/,
   );
   assert.match(
-    newSessionSource,
+    sessionConfigCacheSource,
     /fastMode: typeof config\.fastMode === 'boolean' \? config\.fastMode : false/,
   );
 });

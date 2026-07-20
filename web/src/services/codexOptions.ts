@@ -5,22 +5,31 @@ interface CodexModelOptionsResponse {
   codexModelOptions: CodexModelOption[];
 }
 
-export async function listCodexModelOptions() {
-  const data = await graphqlFetch<CodexModelOptionsResponse>({
-    query: `
-      query CodexModelOptions {
-        codexModelOptions {
-          label
-          value
-          defaultReasoningEffort
-          reasoningEfforts {
+let codexModelOptionsRequest: Promise<CodexModelOption[]> | null = null;
+
+export function listCodexModelOptions() {
+  if (!codexModelOptionsRequest) {
+    codexModelOptionsRequest = graphqlFetch<CodexModelOptionsResponse>({
+      query: `
+        query CodexModelOptions {
+          codexModelOptions {
             label
             value
-            description
+            defaultReasoningEffort
+            reasoningEfforts {
+              label
+              value
+              description
+            }
           }
         }
-      }
-    `,
-  });
-  return data.codexModelOptions;
+      `,
+    })
+      .then((data) => data.codexModelOptions)
+      .catch((error: unknown) => {
+        codexModelOptionsRequest = null;
+        throw error;
+      });
+  }
+  return codexModelOptionsRequest;
 }

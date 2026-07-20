@@ -159,8 +159,7 @@ try {
     await selectNewSessionProject(auditData.project.name);
     await waitForText(auditData.project.defaultBranch || 'main');
     await selectComposerOption('.new-session-dialog', '完全访问');
-    await selectComposerOption('.new-session-dialog', 'gpt-5.5');
-    await selectComposerOption('.new-session-dialog', 'high');
+    await selectComposerModel('.new-session-dialog', 'gpt-5.5', 'high');
     await waitForText('完全访问');
     await waitForText('gpt-5.5');
     await waitForText('high');
@@ -377,8 +376,7 @@ try {
     await clickText('detail-audit.png');
     await waitForVisibleSelector('.attachment-preview-card');
     await clickAria('关闭预览');
-    await selectComposerOption('.detail-composer', 'gpt-5.5');
-    await selectComposerOption('.detail-composer', 'high');
+    await selectComposerModel('.detail-composer', 'gpt-5.5', 'high');
     await selectComposerOption('.detail-composer', '只读');
     await waitForText('gpt-5.5');
     await waitForText('high');
@@ -1268,6 +1266,38 @@ async function selectComposerOption(scopeSelector, optionText) {
   assert(opened, `composer select not found for ${optionText}`);
   await sleep(300);
   await clickText(optionText);
+}
+
+async function selectComposerModel(scopeSelector, model, effort) {
+  const opened = await evaluate(`(() => {
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+    };
+    const scope = document.querySelector(${JSON.stringify(scopeSelector)});
+    if (!scope) return false;
+    const field = Array.from(scope.querySelectorAll('.codex-model-select')).find(visible);
+    if (!field) return false;
+    field.click();
+    return true;
+  })()`);
+  assert(opened, 'Codex model selector not found');
+  await sleep(300);
+  const selected = await evaluate(`(() => {
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight;
+    };
+    const target = Array.from(document.querySelectorAll('.q-menu .q-item'))
+      .find((element) => visible(element)
+        && element.innerText.includes(${JSON.stringify(model)})
+        && element.innerText.includes(${JSON.stringify(effort)}));
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert(selected, `Codex model option not found: ${model} / ${effort}`);
+  await sleep(400);
 }
 
 async function firstWorkflowNodeTransform() {

@@ -86,7 +86,6 @@
         :effort="effort"
         :permission="permission"
         :fast="fast"
-        :model-options="modelOptions"
         :disabled="disabled"
         :readonly-config="readonlyConfig"
         @update:model="emit('update:model', $event)"
@@ -110,7 +109,6 @@
             :effort="effort"
             :permission="permission"
             :fast="fast"
-            :model-options="modelOptions"
             :disabled="disabled"
             :readonly-config="readonlyConfig"
             @update:model="emit('update:model', $event)"
@@ -166,7 +164,6 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import { useQuasar } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
-import type { CodexModelOption } from '@/components/promptOptions';
 import { filesFromTransfer } from '@/services/promptAttachments';
 import type { SessionFile } from '@/services/sessionFiles';
 
@@ -186,7 +183,6 @@ const props = withDefaults(
     showBadge?: boolean;
     forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
-    modelOptions?: CodexModelOption[];
   }>(),
   {
     title: '',
@@ -196,7 +192,6 @@ const props = withDefaults(
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
-    modelOptions: () => [],
     artifacts: () => [],
   },
 );
