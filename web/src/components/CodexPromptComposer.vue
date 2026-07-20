@@ -168,7 +168,6 @@ function changeQuickCommandPage(page: number) {
 }
 
 onMounted(async () => {
-  void loadQuickCommands().catch(() => undefined);
   modelOptions.value = await listCodexModelOptions();
 });
 </script>

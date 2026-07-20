@@ -441,7 +441,11 @@ function changeQuickCommandPage(page: number) {
 
 onMounted(() => {
   void loadProjects();
-  void loadQuickCommands().catch(() => undefined);
+});
+
+watch(activeSection, (section) => {
+  if (section !== 'quick_commands' || !props.modelValue) return;
+  refreshQuickCommands();
 });
 
 watch(
@@ -449,7 +453,7 @@ watch(
   (open) => {
     if (!open) return;
     void loadProjects();
-    refreshQuickCommands();
+    if (activeSection.value === 'quick_commands') refreshQuickCommands();
   },
 );
 </script>

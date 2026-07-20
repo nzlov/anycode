@@ -48,8 +48,18 @@ test('quick reply always opens on the newest first page and disables stale loadi
   const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 
   assert.match(composerSource, /loadQuickCommands\(\{ force: true, page: 1 \}\)/);
+  assert.doesNotMatch(composerSource, /onMounted\([\s\S]*?loadQuickCommands/);
   assert.match(composerSource, /:disable="quickCommandsLoading"/);
   assert.match(settingsSource, /quickCommandsMutating > 0/);
+});
+
+test('global settings load quick commands only while the quick command section is visible', () => {
+  const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+
+  assert.doesNotMatch(settingsSource, /onMounted\([\s\S]*?loadQuickCommands/);
+  assert.match(settingsSource, /watch\(activeSection/);
+  assert.match(settingsSource, /section !== 'quick_commands' \|\| !props\.modelValue/);
+  assert.match(settingsSource, /activeSection\.value === 'quick_commands'/);
 });
 
 test('global settings expose quick command navigation, add FAB, and item deletion', () => {
