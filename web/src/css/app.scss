@@ -19,6 +19,47 @@ body,
   overflow-x: hidden;
 }
 
+#q-app {
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+#q-app::before,
+#q-app::after {
+  position: fixed;
+  z-index: -2;
+  inset: 0;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ac-transition);
+}
+
+#q-app::before {
+  background-image: var(--ac-daily-background-image, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+#q-app::after {
+  z-index: -1;
+  background: var(--ac-daily-veil);
+}
+
+html[data-daily-background='ready'] #q-app::before,
+html[data-daily-background='ready'] #q-app::after {
+  opacity: 1;
+}
+
+html[data-daily-background='ready'] body {
+  --ac-page-layer: color-mix(in srgb, var(--ac-page) 82%, transparent);
+}
+
+html[data-daily-background='ready'] body.body--dark {
+  --ac-page-layer: color-mix(in srgb, var(--ac-page) 78%, transparent);
+}
+
 a {
   color: var(--ac-link);
   text-decoration: none;
@@ -26,12 +67,62 @@ a {
 
 .app-layout,
 .workbench-page {
-  background: var(--ac-page);
+  background: var(--ac-page-layer);
 }
 
 .app-header {
   background: var(--ac-surface);
   color: var(--ac-text);
+}
+
+.app-daily-credit {
+  position: fixed;
+  z-index: 1000;
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: grid;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  min-height: 40px;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  overflow: hidden;
+  color: var(--ac-text);
+  background: color-mix(in srgb, var(--ac-overlay) 92%, transparent);
+  border: 1px solid var(--ac-border);
+  border-radius: var(--ac-radius);
+  box-shadow: var(--ac-shadow-card);
+  backdrop-filter: blur(8px);
+}
+
+.app-daily-credit:focus-visible {
+  outline: 2px solid var(--ac-focus-ring);
+  outline-offset: 2px;
+}
+
+.app-daily-credit__text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.app-daily-credit__title,
+.app-daily-credit__copyright {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-daily-credit__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-daily-credit__copyright {
+  color: var(--ac-text-muted);
+  font-size: 11px;
 }
 
 .app-header__title {
@@ -1684,6 +1775,12 @@ a {
 }
 
 @media (max-width: 699px) {
+  .app-daily-credit {
+    right: 12px;
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px);
+    max-width: calc(100vw - 24px);
+  }
+
   .page-shell {
     padding: 16px;
   }

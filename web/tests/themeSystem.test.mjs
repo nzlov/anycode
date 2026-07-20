@@ -29,6 +29,11 @@ function sourceFiles(directory) {
 const themeSource = readSource('../src/css/theme.scss');
 const appStylesSource = readSource('../src/css/app.scss');
 const runtimeSource = readSource('../src/theme/tokens.ts');
+const dailyBackgroundSource = readSource('../src/theme/dailyBackground.ts');
+const bootSource = readSource('../src/boot/theme.ts');
+const appSource = readSource('../src/App.vue');
+const loginSource = readSource('../src/pages/LoginPage.vue');
+const notFoundSource = readSource('../src/pages/ErrorNotFound.vue');
 
 test('light and dark themes expose the same complete semantic token contract', () => {
   const light = themeVariables(themeSource, ':root');
@@ -77,6 +82,40 @@ test('theme runtime only owns mode persistence and Quasar dark switching', () =>
   assert.doesNotMatch(runtimeSource, /setCssVar|themeTokens|#[0-9a-f]{3,8}/i);
   assert.match(runtimeSource, /Dark\.set/);
   assert.match(runtimeSource, /document\.documentElement\.dataset\.themeMode/);
+});
+
+test('daily background stays inside the theme boundary with static token fallbacks', () => {
+  for (const mode of ['light', 'dark']) {
+    for (const role of ['page', 'surface', 'text', 'text-muted', 'link', 'border', 'primary']) {
+      assert.ok(themeSource.includes(`--ac-daily-${mode}-${role}`), `${mode} ${role} is required`);
+    }
+  }
+  assert.match(themeSource, /--q-primary:\s*var\(--ac-action-primary-bg\)/);
+  assert.match(bootSource, /initializeDailyBackground\(\)/);
+  assert.match(dailyBackgroundSource, /crypto\.subtle\.digest\('SHA-256'/);
+  assert.match(dailyBackgroundSource, /cache:\s*'no-store'/);
+  assert.match(dailyBackgroundSource, /cache:\s*'no-cache'/);
+  assert.match(dailyBackgroundSource, /createImageBitmap/);
+  assert.doesNotMatch(dailyBackgroundSource, /indexedDB|caches\.open|CacheStorage/);
+});
+
+test('root owns safe attribution while all route shells expose the shared background', () => {
+  assert.match(appSource, /class="app-daily-credit"/);
+  assert.match(appSource, /rel="noopener noreferrer"/);
+  assert.doesNotMatch(appSource, /v-html/);
+  assert.match(
+    appStylesSource,
+    /#q-app::before[^}]*background-image:\s*var\(--ac-daily-background-image/s,
+  );
+  assert.match(appStylesSource, /html\[data-daily-background='ready'\]/);
+  assert.match(loginSource, /background:\s*var\(--ac-page-layer\)/);
+  assert.match(notFoundSource, /background:\s*var\(--ac-page-layer\)/);
+  assert.match(notFoundSource, /error-not-found-page__content/);
+  assert.match(notFoundSource, /error-not-found-page__code/);
+  assert.match(notFoundSource, /error-not-found-page__message/);
+  assert.match(notFoundSource, /color:\s*var\(--ac-text-muted\)/);
+  assert.match(notFoundSource, /@media \(max-width: 699px\)/);
+  assert.doesNotMatch(notFoundSource, /style=/);
 });
 
 test('components do not introduce fixed application colors or light-only palette classes', () => {
