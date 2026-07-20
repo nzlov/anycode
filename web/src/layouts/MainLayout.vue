@@ -1,6 +1,6 @@
 <template>
   <q-layout view="hHh lpR fFf" class="app-layout">
-    <q-header bordered class="app-header">
+    <q-header v-if="applicationReady" bordered class="app-header">
       <q-toolbar>
         <q-toolbar-title v-if="$route.name === 'overview'" class="app-header__title">
           AnyCode
@@ -76,7 +76,10 @@
       </q-toolbar>
     </q-header>
 
-    <q-page-container :class="{ 'page-container--detail': $route.name === 'session-detail' }">
+    <q-page-container
+      v-if="applicationReady"
+      :class="{ 'page-container--detail': $route.name === 'session-detail' }"
+    >
       <router-view
         :key="$route.fullPath"
         @create-session="newSessionOpen = true"
@@ -84,8 +87,15 @@
       />
     </q-page-container>
 
+    <q-page-container v-else>
+      <q-page class="flex flex-center">
+        <q-spinner v-if="checkingProjects" color="primary" size="32px" aria-label="正在加载项目" />
+      </q-page>
+    </q-page-container>
+
     <q-page-sticky
       v-if="$route.name === 'overview' && $q.screen.width < overviewDesktopMinWidth"
+      v-show="applicationReady"
       position="bottom-right"
       :offset="[24, 24]"
     >
@@ -102,14 +112,14 @@
     </q-page-sticky>
 
     <new-session-dialog
-      v-if="$route.name === 'overview'"
+      v-if="applicationReady && $route.name === 'overview'"
       v-model="newSessionOpen"
       :default-project-id="newSessionDefaultProjectId"
       :panel="showOverviewCreatePanel"
     />
-    <GlobalSettingsDialog v-model="settingsDialogOpen" />
+    <GlobalSettingsDialog v-model="settingsDialogOpen" v-if="applicationReady" />
 
-    <q-dialog v-model="logoutDialogOpen">
+    <q-dialog v-if="applicationReady" v-model="logoutDialogOpen">
       <q-card class="confirm-dialog">
         <q-card-section>
           <div class="text-subtitle1 text-weight-bold">退出登录</div>
@@ -138,16 +148,22 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+    <ProjectDirectoryDialog
+      :model-value="initialProjectRequired"
+      :persistent="initialProjectRequired"
+    />
   </q-layout>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
+import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
 
@@ -160,6 +176,12 @@ const { themeMode, themeModes } = useThemeMode();
 const route = useRoute();
 const router = useRouter();
 const sessionTitle = ref('');
+const checkingProjects = ref(true);
+const { projects, loaded: projectsLoaded, loadProjects } = useProjects();
+const initialProjectRequired = computed(
+  () => !checkingProjects.value && projectsLoaded.value && projects.value.length === 0,
+);
+const applicationReady = computed(() => !checkingProjects.value && !initialProjectRequired.value);
 const showOverviewCreatePanel = computed(
   () => route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth,
 );
@@ -172,6 +194,14 @@ const sessionsRoute = computed(() => {
   return typeof projectId === 'string'
     ? { name: 'sessions', query: { projectId, scope: 'closed' } }
     : { name: 'sessions', query: { scope: 'closed' } };
+});
+
+onMounted(() => {
+  void loadProjects()
+    .catch(() => undefined)
+    .finally(() => {
+      checkingProjects.value = false;
+    });
 });
 
 watch(

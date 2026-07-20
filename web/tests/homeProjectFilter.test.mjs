@@ -9,6 +9,7 @@ function readSource(relativePath) {
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
 const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
 const projectsComposableSource = readSource('../src/composables/useProjects.ts');
 const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const stylesSource = readSource('../src/css/app.scss');
@@ -101,6 +102,18 @@ test('global settings owns complete project management', () => {
   assert.match(settingsSource, /aria-label="新增项目"/);
   assert.match(settingsSource, /class="global-settings-tabs lt-sm"/);
   assert.match(stylesSource, /\.global-settings-tabs/);
+});
+
+test('an empty first visit requires choosing a project before showing the application shell', () => {
+  assert.match(layoutSource, /<q-header v-if="applicationReady"/);
+  assert.match(
+    layoutSource,
+    /<ProjectDirectoryDialog[\s\S]*:model-value="initialProjectRequired"[\s\S]*:persistent="initialProjectRequired"/,
+  );
+  assert.match(layoutSource, /projectsLoaded\.value && projects\.value\.length === 0/);
+  assert.match(layoutSource, /void loadProjects\(\)[\s\S]*finally\(\(\) => \{/);
+  assert.match(directorySource, /:persistent="persistent"/);
+  assert.equal((directorySource.match(/v-if="!persistent"/g) ?? []).length, 2);
 });
 
 test('drawer removal realigns the persistent create panel', () => {

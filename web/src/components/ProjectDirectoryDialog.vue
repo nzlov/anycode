@@ -2,13 +2,14 @@
   <q-dialog
     :model-value="modelValue"
     :maximized="$q.screen.lt.sm"
+    :persistent="persistent"
     @update:model-value="emitModel"
   >
     <q-card class="directory-dialog app-content-dialog">
       <q-card-section class="row items-center q-pb-sm">
         <div class="text-subtitle1 text-weight-bold">选择项目目录</div>
         <q-space />
-        <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
+        <q-btn v-if="!persistent" v-close-popup flat round dense icon="close" aria-label="关闭">
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
       </q-card-section>
@@ -105,7 +106,7 @@
       </q-card-section>
 
       <q-card-actions class="directory-dialog__actions">
-        <q-btn v-close-popup flat round color="primary" icon="close" aria-label="取消">
+        <q-btn v-if="!persistent" v-close-popup flat round color="primary" icon="close" aria-label="取消">
           <q-tooltip>取消</q-tooltip>
         </q-btn>
         <q-btn
@@ -133,6 +134,7 @@ import { useProjects } from '@/composables/useProjects';
 
 const props = defineProps<{
   modelValue: boolean;
+  persistent?: boolean;
 }>();
 
 const emit = defineEmits<{
