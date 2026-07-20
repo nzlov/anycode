@@ -94,7 +94,7 @@ function notifyError(message: string) {
   min-height: 100vh;
   place-items: center;
   padding: 24px;
-  background: var(--ac-page);
+  background: var(--ac-page-layer);
 }
 
 .login-panel {
