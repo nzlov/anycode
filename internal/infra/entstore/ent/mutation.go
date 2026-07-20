@@ -6585,6 +6585,7 @@ type SessionMutation struct {
 	permission_mode                  *string
 	fast_mode                        *bool
 	todo_list                        *session.TodoList
+	usage                            **session.Usage
 	artifact_count                   *int
 	addartifact_count                *int
 	files_changed                    *int
@@ -7804,6 +7805,55 @@ func (m *SessionMutation) ResetTodoList() {
 	delete(m.clearedFields, entsession.FieldTodoList)
 }
 
+// SetUsage sets the "usage" field.
+func (m *SessionMutation) SetUsage(s *session.Usage) {
+	m.usage = &s
+}
+
+// Usage returns the value of the "usage" field in the mutation.
+func (m *SessionMutation) Usage() (r *session.Usage, exists bool) {
+	v := m.usage
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUsage returns the old "usage" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldUsage(ctx context.Context) (v *session.Usage, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUsage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUsage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUsage: %w", err)
+	}
+	return oldValue.Usage, nil
+}
+
+// ClearUsage clears the value of the "usage" field.
+func (m *SessionMutation) ClearUsage() {
+	m.usage = nil
+	m.clearedFields[entsession.FieldUsage] = struct{}{}
+}
+
+// UsageCleared returns if the "usage" field was cleared in this mutation.
+func (m *SessionMutation) UsageCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldUsage]
+	return ok
+}
+
+// ResetUsage resets all changes to the "usage" field.
+func (m *SessionMutation) ResetUsage() {
+	m.usage = nil
+	delete(m.clearedFields, entsession.FieldUsage)
+}
+
 // SetArtifactCount sets the "artifact_count" field.
 func (m *SessionMutation) SetArtifactCount(i int) {
 	m.artifact_count = &i
@@ -8833,7 +8883,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 51)
+	fields := make([]string, 0, 52)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -8914,6 +8964,9 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.todo_list != nil {
 		fields = append(fields, entsession.FieldTodoList)
+	}
+	if m.usage != nil {
+		fields = append(fields, entsession.FieldUsage)
 	}
 	if m.artifact_count != nil {
 		fields = append(fields, entsession.FieldArtifactCount)
@@ -9049,6 +9102,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.FastMode()
 	case entsession.FieldTodoList:
 		return m.TodoList()
+	case entsession.FieldUsage:
+		return m.Usage()
 	case entsession.FieldArtifactCount:
 		return m.ArtifactCount()
 	case entsession.FieldFilesChanged:
@@ -9160,6 +9215,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldFastMode(ctx)
 	case entsession.FieldTodoList:
 		return m.OldTodoList(ctx)
+	case entsession.FieldUsage:
+		return m.OldUsage(ctx)
 	case entsession.FieldArtifactCount:
 		return m.OldArtifactCount(ctx)
 	case entsession.FieldFilesChanged:
@@ -9405,6 +9462,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetTodoList(v)
+		return nil
+	case entsession.FieldUsage:
+		v, ok := value.(*session.Usage)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUsage(v)
 		return nil
 	case entsession.FieldArtifactCount:
 		v, ok := value.(int)
@@ -9664,6 +9728,9 @@ func (m *SessionMutation) ClearedFields() []string {
 	if m.FieldCleared(entsession.FieldTodoList) {
 		fields = append(fields, entsession.FieldTodoList)
 	}
+	if m.FieldCleared(entsession.FieldUsage) {
+		fields = append(fields, entsession.FieldUsage)
+	}
 	if m.FieldCleared(entsession.FieldQueuedAt) {
 		fields = append(fields, entsession.FieldQueuedAt)
 	}
@@ -9719,6 +9786,9 @@ func (m *SessionMutation) ClearField(name string) error {
 		return nil
 	case entsession.FieldTodoList:
 		m.ClearTodoList()
+		return nil
+	case entsession.FieldUsage:
+		m.ClearUsage()
 		return nil
 	case entsession.FieldQueuedAt:
 		m.ClearQueuedAt()
@@ -9829,6 +9899,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldTodoList:
 		m.ResetTodoList()
+		return nil
+	case entsession.FieldUsage:
+		m.ResetUsage()
 		return nil
 	case entsession.FieldArtifactCount:
 		m.ResetArtifactCount()

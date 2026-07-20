@@ -63,6 +63,10 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 			{Text: "梳理需求", Completed: true},
 			{Text: "实现卡片展示", Completed: false},
 		}},
+		Usage: &session.Usage{
+			InputTokens: 120, CachedInputTokens: 80, OutputTokens: 30, TotalTokens: 150,
+			ContextWindow: 200_000, CurrentInputTokens: 12, CurrentTotalTokens: 15, CompactionCount: 2,
+		},
 		ArtifactCount: 3,
 		FilesChanged:  5,
 		Queue: session.QueueIntent{
@@ -799,6 +803,9 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		if got.TodoList.Items[index] != want.TodoList.Items[index] {
 			t.Fatalf("todo item %d mismatch: got=%#v want=%#v", index, got.TodoList.Items[index], want.TodoList.Items[index])
 		}
+	}
+	if got.Usage == nil || want.Usage == nil || *got.Usage != *want.Usage {
+		t.Fatalf("usage mismatch: got=%#v want=%#v", got.Usage, want.Usage)
 	}
 	if got.LastRunAt == nil || !got.LastRunAt.Equal(*want.LastRunAt) {
 		t.Fatalf("last run mismatch: got=%v want=%v", got.LastRunAt, want.LastRunAt)

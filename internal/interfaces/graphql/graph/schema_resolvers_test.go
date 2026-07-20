@@ -430,7 +430,7 @@ func TestMapSessionUpdateEventUsesEventSpecificFields(t *testing.T) {
 		AvailableActions: []string{"stop"}, UpdatedAt: statusAt,
 	}
 	todo := sessiondomain.TodoList{Items: []sessiondomain.TodoItem{{Text: "Implement", Completed: true}}}
-	usage := timelineapp.TokenUsageDTO{InputTokens: 10, TotalTokens: 12}
+	usage := sessiondomain.Usage{InputTokens: 10, TotalTokens: 12}
 	priority := sessiondomain.PriorityHigh
 	config := sessiondomain.Config{CodexModel: "gpt-5.4", ReasoningEffort: "high", PermissionMode: "workspace-write", FastMode: true}
 	cleanup := sessionapp.WorktreeCleanupDTO{Status: sessiondomain.WorktreeCleanupFailed, Attempts: 2}

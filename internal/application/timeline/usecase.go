@@ -16,7 +16,6 @@ import (
 type UseCase interface {
 	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (Page, error)
 	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
-	SessionUsageEvents(ctx context.Context) (<-chan UsageUpdateDTO, error)
 }
 
 type ListSessionEventsInput struct {
@@ -48,7 +47,6 @@ type CodexTranscriptRunIndex interface {
 
 type LiveEventSource interface {
 	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
-	LiveCodexUsageEvents(ctx context.Context) (<-chan processdomain.CodexEvent, error)
 }
 
 const (
@@ -182,51 +180,6 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	return out, nil
 }
 
-func (s *Service) SessionUsageEvents(ctx context.Context) (<-chan UsageUpdateDTO, error) {
-	if s == nil {
-		return nil, errors.New("timeline usecase: nil service")
-	}
-	if s.live == nil {
-		return nil, errors.New("live event source is required")
-	}
-	liveCtx, cancelLive := context.WithCancel(ctx)
-	live, err := s.live.LiveCodexUsageEvents(liveCtx)
-	if err != nil {
-		cancelLive()
-		return nil, err
-	}
-	out := make(chan UsageUpdateDTO, 16)
-	go func() {
-		defer close(out)
-		defer cancelLive()
-		for {
-			select {
-			case event, ok := <-live:
-				if !ok {
-					return
-				}
-				usage, ok := event.Content.(processdomain.CodexUsageContent)
-				if !ok || event.SessionID == "" {
-					continue
-				}
-				item := UsageUpdateDTO{
-					SessionID:  sessiondomain.ID(event.SessionID),
-					OccurredAt: event.CreatedAt.UTC().Format(time.RFC3339Nano),
-					Usage:      *usageDTO(usage),
-				}
-				select {
-				case out <- item:
-				case <-ctx.Done():
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out, nil
-}
-
 func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID) ([]DTO, *TokenUsageDTO, []UsageAttributionDTO, []UsageAttributionDTO, error) {
 	if s.sessions == nil {
 		return nil, nil, nil, nil, nil
@@ -235,7 +188,7 @@ func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondom
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	events, usage, processUsage, nodeUsage, err := s.codexTranscriptEvents(ctx, current)
+	events, processUsage, nodeUsage, err := s.codexTranscriptEvents(ctx, current)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -247,7 +200,7 @@ func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondom
 	sort.SliceStable(events, func(i, j int) bool {
 		return events[i].OrderKey < events[j].OrderKey
 	})
-	return groupTimelineEvents(events), usage, processUsage, nodeUsage, nil
+	return groupTimelineEvents(events), current.Usage, processUsage, nodeUsage, nil
 }
 
 type orderedTranscriptEvent struct {
@@ -257,21 +210,18 @@ type orderedTranscriptEvent struct {
 	eventIndex   int
 }
 
-func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondomain.Session) ([]DTO, *TokenUsageDTO, []UsageAttributionDTO, []UsageAttributionDTO, error) {
+func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondomain.Session) ([]DTO, []UsageAttributionDTO, []UsageAttributionDTO, error) {
 	if s.transcript == nil {
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	sources, err := s.codexTranscriptSources(ctx, current)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(sources) == 0 {
-		return nil, nil, nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	ordered := []orderedTranscriptEvent(nil)
-	var latestUsage *TokenUsageDTO
-	var latestUsageAt time.Time
-	compactionCount := 0
 	usageSamples := map[string][]usageSample{}
 	compactions := map[string][]time.Time{}
 	for sessionIndex, source := range sources {
@@ -280,7 +230,7 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 			Source: source,
 		})
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, err
 		}
 		for index, event := range events {
 			eventTime := event.CreatedAt
@@ -288,17 +238,12 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 				eventTime = current.UpdatedAt
 			}
 			if status, ok := event.Content.(processdomain.CodexStatusContent); ok && status.Code == "context.compacted" {
-				compactionCount++
 				compactions[codexSessionID] = append(compactions[codexSessionID], eventTime)
 			}
 			if event.Type == "" || event.Content == nil {
 				continue
 			}
 			if usage, ok := event.Content.(processdomain.CodexUsageContent); ok {
-				if latestUsage == nil || !eventTime.Before(latestUsageAt) {
-					latestUsage = usageDTO(usage)
-					latestUsageAt = eventTime
-				}
 				usageSamples[codexSessionID] = append(usageSamples[codexSessionID], usageSample{at: eventTime, usage: usage})
 				continue
 			}
@@ -330,9 +275,6 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 			})
 		}
 	}
-	if latestUsage != nil {
-		latestUsage.CompactionCount = compactionCount
-	}
 	for codexSessionID := range usageSamples {
 		sort.SliceStable(usageSamples[codexSessionID], func(i, j int) bool {
 			return usageSamples[codexSessionID][i].at.Before(usageSamples[codexSessionID][j].at)
@@ -358,9 +300,9 @@ func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondoma
 	}
 	processUsage, nodeUsage, err := s.usageAttributions(ctx, current, usageSamples, compactions)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
-	return result, latestUsage, processUsage, nodeUsage, nil
+	return result, processUsage, nodeUsage, nil
 }
 
 type usageSample struct {

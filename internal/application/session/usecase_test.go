@@ -7136,6 +7136,148 @@ func TestStartSessionPersistsTodoListFromPlanUpdateEvent(t *testing.T) {
 	}
 }
 
+func TestStartSessionPersistsUsageFromCodexEvent(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:           "session-1",
+		ProjectID:    "project-1",
+		Requirement:  "implement session",
+		Status:       domain.StatusCreated,
+		WorktreePath: "/workspace/session-1",
+	}
+	processes := newFakeProcessRepository()
+	source := make(chan processdomain.CodexEvent, 1)
+	source <- processdomain.CodexEvent{
+		EventID: "codex-event-usage",
+		Type:    processdomain.CodexEventUsage,
+		Content: processdomain.CodexUsageContent{
+			InputTokens: 120, CachedInputTokens: 80, OutputTokens: 30, TotalTokens: 150,
+			ContextWindow: 200_000, CurrentInputTokens: 12, CurrentTotalTokens: 15,
+		},
+	}
+	close(source)
+	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{PID: 1234}, events: source}
+	events := &fakeEventStore{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithEvents(events))
+	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
+	ids := []domain.ID{
+		"process-run-1",
+		"event-starting",
+		"event-transcript-bound",
+		"event-running",
+		"event-usage",
+		"event-process-exited",
+		"event-stopped",
+	}
+	service.generateID = func() (domain.ID, error) {
+		if len(ids) == 0 {
+			t.Fatal("generateID called more than expected")
+		}
+		id := ids[0]
+		ids = ids[1:]
+		return id, nil
+	}
+
+	if _, err := service.StartSessionWithOptions(ctx, "session-1", StartSessionOptions{Force: true}); err != nil {
+		t.Fatalf("StartSession() error = %v", err)
+	}
+	usageEvent := waitForEventType(t, events, "usage.updated")
+
+	got := repo.sessions["session-1"].Usage
+	if got == nil || got.InputTokens != 120 || got.CachedInputTokens != 80 || got.OutputTokens != 30 || got.TotalTokens != 150 || got.ContextWindow != 200_000 || got.CurrentInputTokens != 12 || got.CurrentTotalTokens != 15 {
+		t.Fatalf("usage = %#v", got)
+	}
+	if eventUsage, ok := usageEvent.Payload["usage"].(domain.Usage); !ok || eventUsage != *got {
+		t.Fatalf("usage event = %#v", usageEvent)
+	}
+}
+
+func TestCodexUsageUpdatesStoppingSessionWhileTodoRemainsFrozen(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusStopping,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{
+		ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusStopping,
+	}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, nil),
+		WithEvents(events),
+	)
+
+	handle := processdomain.CodexHandle{ProcessRunID: "process-run-1"}
+	if err := service.handleCodexEvent(ctx, "session-1", handle, processdomain.CodexEvent{
+		EventID: "usage-final",
+		Type:    processdomain.CodexEventUsage,
+		Content: processdomain.CodexUsageContent{InputTokens: 120, TotalTokens: 150},
+	}); err != nil {
+		t.Fatalf("handle usage event: %v", err)
+	}
+	if err := service.handleCodexEvent(ctx, "session-1", handle, processdomain.CodexEvent{
+		EventID: "plan-late",
+		Type:    processdomain.CodexEventPlan,
+		Content: processdomain.PlanUpdate{Items: []processdomain.PlanItem{{Step: "late", Status: processdomain.PlanItemCompleted}}},
+	}); err != nil {
+		t.Fatalf("handle plan event: %v", err)
+	}
+
+	got := repo.sessions["session-1"]
+	if got.Usage == nil || got.Usage.InputTokens != 120 || got.Usage.TotalTokens != 150 {
+		t.Fatalf("usage = %#v", got.Usage)
+	}
+	if len(got.TodoList.Items) != 0 {
+		t.Fatalf("todo list = %#v", got.TodoList)
+	}
+	stored := events.snapshot()
+	if len(stored) != 1 || stored[0].Type != "usage.updated" {
+		t.Fatalf("events = %#v", stored)
+	}
+}
+
+func TestCodexUsageIgnoresStaleProcessRun(t *testing.T) {
+	ctx := context.Background()
+	original := &domain.Usage{InputTokens: 80, TotalTokens: 100}
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusRunning, Usage: original,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{
+		ID: "process-run-current", SessionID: "session-1", Status: processdomain.StatusRunning,
+	}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, nil),
+		WithEvents(events),
+	)
+
+	err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-stale"}, processdomain.CodexEvent{
+		EventID: "usage-stale",
+		Type:    processdomain.CodexEventUsage,
+		Content: processdomain.CodexUsageContent{InputTokens: 120, TotalTokens: 150},
+	})
+	if err != nil {
+		t.Fatalf("handle usage event: %v", err)
+	}
+	got := repo.sessions["session-1"].Usage
+	if got == nil || *got != *original {
+		t.Fatalf("usage = %#v, want %#v", got, original)
+	}
+	if stored := events.snapshot(); len(stored) != 0 {
+		t.Fatalf("events = %#v", stored)
+	}
+}
+
 type fakeSessionDiffCounter struct {
 	count int
 	err   error
@@ -7812,6 +7954,22 @@ func TestTodoListFromCodexEventMapsTypedPlanUpdate(t *testing.T) {
 	}
 	if got.Total() != 2 || got.Completed() != 1 {
 		t.Fatalf("todo list counts = %d/%d, want 1/2: %#v", got.Completed(), got.Total(), got)
+	}
+}
+
+func TestUsageFromCodexEventPreservesAndIncrementsCompactionCount(t *testing.T) {
+	current := domain.Usage{InputTokens: 10, TotalTokens: 12, CompactionCount: 2}
+	usage, ok := usageFromCodexEvent(processdomain.CodexEvent{Content: processdomain.CodexUsageContent{
+		InputTokens: 20, TotalTokens: 24,
+	}}, &current)
+	if !ok || usage.InputTokens != 20 || usage.TotalTokens != 24 || usage.CompactionCount != 2 {
+		t.Fatalf("usage update = %#v, %v", usage, ok)
+	}
+	compacted, ok := usageFromCodexEvent(processdomain.CodexEvent{Content: processdomain.CodexStatusContent{
+		Code: "context.compacted",
+	}}, &usage)
+	if !ok || compacted.InputTokens != 20 || compacted.CompactionCount != 3 {
+		t.Fatalf("compaction update = %#v, %v", compacted, ok)
 	}
 }
 

@@ -43,6 +43,7 @@ func (Session) Fields() []ent.Field {
 		field.String("permission_mode").Default(""),
 		field.Bool("fast_mode").Default(false),
 		field.JSON("todo_list", domainsession.TodoList{}).Optional(),
+		field.JSON("usage", &domainsession.Usage{}).Optional(),
 		field.Int("artifact_count").Default(0).NonNegative(),
 		field.Int("files_changed").Default(0).NonNegative(),
 		field.Time("queued_at").Optional().Nillable(),

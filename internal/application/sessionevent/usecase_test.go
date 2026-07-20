@@ -41,8 +41,6 @@ func TestSessionEventsForwardsTranscriptOnly(t *testing.T) {
 
 func TestSessionUpdatesMapsGlobalCardEvents(t *testing.T) {
 	domainEvents := make(chan eventapp.DTO, 10)
-	usageEvents := make(chan timelineapp.UsageUpdateDTO, 1)
-	timeline := &fakeTimelineSource{usageEvents: usageEvents}
 	events := &fakeDomainEventSource{events: domainEvents}
 	status := sessionapp.CardStatusDTO{
 		Status: sessiondomain.StatusRunning, CurrentNodeTitle: "Implement",
@@ -52,7 +50,7 @@ func TestSessionUpdatesMapsGlobalCardEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stream, err := New(timeline, events, statuses).SessionUpdates(ctx)
+	stream, err := New(nil, events, statuses).SessionUpdates(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,23 +129,23 @@ func TestSessionUpdatesMapsGlobalCardEvents(t *testing.T) {
 		t.Fatalf("worktree event = %#v", cleanupEvent)
 	}
 
-	usage := timelineapp.TokenUsageDTO{InputTokens: 10, TotalTokens: 12}
-	usageEvents <- timelineapp.UsageUpdateDTO{
-		SessionID: "session-2", OccurredAt: "2026-07-17T10:00:02Z", Usage: usage,
+	usage := sessiondomain.Usage{InputTokens: 10, TotalTokens: 12}
+	domainEvents <- eventapp.DTO{
+		ID: "usage-1", SessionID: &sessionID, Type: TypeUsage, CreatedAt: "2026-07-17T10:00:02Z",
+		Payload: map[string]any{"usage": usage},
 	}
 	usageEvent := <-stream
-	if usageEvent.Type != TypeUsage || usageEvent.SessionID != "session-2" || usageEvent.Usage == nil || !reflect.DeepEqual(*usageEvent.Usage, usage) {
+	if usageEvent.ID != "usage-1" || usageEvent.Type != TypeUsage || usageEvent.SessionID != "session-1" || usageEvent.OccurredAt != "2026-07-17T10:00:02Z" || usageEvent.Usage == nil || !reflect.DeepEqual(*usageEvent.Usage, usage) {
 		t.Fatalf("usage event = %#v", usageEvent)
 	}
 }
 
 func TestSessionUpdatesIgnoresBusinessAndRawArtifactEvents(t *testing.T) {
 	domainEvents := make(chan eventapp.DTO, 7)
-	usageEvents := make(chan timelineapp.UsageUpdateDTO)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	stream, err := New(
-		&fakeTimelineSource{usageEvents: usageEvents},
+		nil,
 		&fakeDomainEventSource{events: domainEvents},
 		&fakeSessionStatusSource{},
 	).SessionUpdates(ctx)
@@ -175,11 +173,10 @@ func TestSessionUpdatesIgnoresBusinessAndRawArtifactEvents(t *testing.T) {
 
 func TestSessionUpdatesClosesWhenRequiredSourceCloses(t *testing.T) {
 	domainEvents := make(chan eventapp.DTO)
-	usageEvents := make(chan timelineapp.UsageUpdateDTO)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	stream, err := New(
-		&fakeTimelineSource{usageEvents: usageEvents},
+		nil,
 		&fakeDomainEventSource{events: domainEvents},
 		&fakeSessionStatusSource{},
 	).SessionUpdates(ctx)
@@ -199,11 +196,10 @@ func TestSessionUpdatesClosesWhenRequiredSourceCloses(t *testing.T) {
 
 func TestSessionUpdatesClosesWhenStatusReadFails(t *testing.T) {
 	domainEvents := make(chan eventapp.DTO, 1)
-	usageEvents := make(chan timelineapp.UsageUpdateDTO)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	stream, err := New(
-		&fakeTimelineSource{usageEvents: usageEvents},
+		nil,
 		&fakeDomainEventSource{events: domainEvents},
 		&fakeSessionStatusSource{err: errors.New("temporary read failure")},
 	).SessionUpdates(ctx)
@@ -223,18 +219,13 @@ func TestSessionUpdatesClosesWhenStatusReadFails(t *testing.T) {
 }
 
 type fakeTimelineSource struct {
-	events      <-chan timelineapp.DTO
-	usageEvents <-chan timelineapp.UsageUpdateDTO
-	input       timelineapp.SessionEventsInput
+	events <-chan timelineapp.DTO
+	input  timelineapp.SessionEventsInput
 }
 
 func (f *fakeTimelineSource) SessionEvents(_ context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {
 	f.input = input
 	return f.events, nil
-}
-
-func (f *fakeTimelineSource) SessionUsageEvents(context.Context) (<-chan timelineapp.UsageUpdateDTO, error) {
-	return f.usageEvents, nil
 }
 
 type fakeDomainEventSource struct {

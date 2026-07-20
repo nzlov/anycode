@@ -75,6 +75,11 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
 			SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
 		update.SetAppliedSystemCommands(nonNilAppliedSystemCommands(s.AppliedSystemCommands))
+		if s.Usage == nil {
+			update.ClearUsage()
+		} else {
+			update.SetUsage(s.Usage)
+		}
 		if s.Queue.NodeRunID == nil {
 			update.SetQueueNodeRunID("")
 		} else {
@@ -192,6 +197,9 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
 		SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
 	create.SetAppliedSystemCommands(nonNilAppliedSystemCommands(s.AppliedSystemCommands))
+	if s.Usage != nil {
+		create.SetUsage(s.Usage)
+	}
 	if s.Queue.NodeRunID != nil {
 		create.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
 	}
@@ -731,6 +739,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			FastMode:        row.FastMode,
 		},
 		TodoList:      row.TodoList,
+		Usage:         row.Usage,
 		ArtifactCount: row.ArtifactCount,
 		FilesChanged:  row.FilesChanged,
 		QueuedAt:      row.QueuedAt,

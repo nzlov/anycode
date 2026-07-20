@@ -73,6 +73,8 @@ type Session struct {
 	FastMode bool `json:"fast_mode,omitempty"`
 	// TodoList holds the value of the "todo_list" field.
 	TodoList session.TodoList `json:"todo_list,omitempty"`
+	// Usage holds the value of the "usage" field.
+	Usage *session.Usage `json:"usage,omitempty"`
 	// ArtifactCount holds the value of the "artifact_count" field.
 	ArtifactCount int `json:"artifact_count,omitempty"`
 	// FilesChanged holds the value of the "files_changed" field.
@@ -129,7 +131,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case entsession.FieldTodoList, entsession.FieldWorkflowContext, entsession.FieldWorkflowPendingApproval, entsession.FieldAppliedSystemCommands:
+		case entsession.FieldTodoList, entsession.FieldUsage, entsession.FieldWorkflowContext, entsession.FieldWorkflowPendingApproval, entsession.FieldAppliedSystemCommands:
 			values[i] = new([]byte)
 		case entsession.FieldWorktreeCleanupRetryable, entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
@@ -328,6 +330,14 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.TodoList); err != nil {
 					return fmt.Errorf("unmarshal field todo_list: %w", err)
+				}
+			}
+		case entsession.FieldUsage:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field usage", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Usage); err != nil {
+					return fmt.Errorf("unmarshal field usage: %w", err)
 				}
 			}
 		case entsession.FieldArtifactCount:
@@ -614,6 +624,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("todo_list=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TodoList))
+	builder.WriteString(", ")
+	builder.WriteString("usage=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Usage))
 	builder.WriteString(", ")
 	builder.WriteString("artifact_count=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ArtifactCount))

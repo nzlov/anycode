@@ -23,7 +23,7 @@ type UpdateDTO struct {
 	OccurredAt       string
 	Status           *sessionapp.CardStatusDTO
 	TodoList         *sessiondomain.TodoList
-	Usage            *timelineapp.TokenUsageDTO
+	Usage            *sessiondomain.Usage
 	ArtifactCount    *int
 	FilesChanged     *int
 	Priority         *sessiondomain.Priority
@@ -40,7 +40,6 @@ type UseCase interface {
 
 type TimelineSource interface {
 	SessionEvents(ctx context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error)
-	SessionUsageEvents(ctx context.Context) (<-chan timelineapp.UsageUpdateDTO, error)
 }
 
 type DomainEventSource interface {
@@ -72,16 +71,11 @@ func (s *Service) SessionEvents(ctx context.Context, sessionID sessiondomain.ID)
 }
 
 func (s *Service) SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error) {
-	if s == nil || s.timeline == nil || s.events == nil || s.sessions == nil {
+	if s == nil || s.events == nil || s.sessions == nil {
 		return nil, errors.New("session update usecase is not fully configured")
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	domainEvents, err := s.events.LiveSessionEvents(streamCtx, eventapp.LiveSessionEventsInput{})
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	usageEvents, err := s.timeline.SessionUsageEvents(streamCtx)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -103,16 +97,6 @@ func (s *Service) SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error) 
 					return
 				}
 				if ok && !send(streamCtx, out, update) {
-					return
-				}
-			case item, ok := <-usageEvents:
-				if !ok {
-					return
-				}
-				usage := item.Usage
-				if !send(streamCtx, out, UpdateDTO{
-					Type: TypeUsage, SessionID: item.SessionID, OccurredAt: item.OccurredAt, Usage: &usage,
-				}) {
 					return
 				}
 			}
@@ -144,6 +128,12 @@ func (s *Service) fromDomainEvent(ctx context.Context, item eventapp.DTO) (Updat
 			return UpdateDTO{}, false, nil
 		}
 		update.TodoList = &todo
+	case item.Type == TypeUsage:
+		usage, ok := item.Payload["usage"].(sessiondomain.Usage)
+		if !ok {
+			return UpdateDTO{}, false, nil
+		}
+		update.Usage = &usage
 	case item.Type == "session.diff_changed":
 		value, ok := eventInt(item.Payload, "filesChanged")
 		if !ok {

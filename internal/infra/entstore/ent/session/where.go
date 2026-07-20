@@ -1799,6 +1799,16 @@ func TodoListNotNil() predicate.Session {
 	return predicate.Session(sql.FieldNotNull(FieldTodoList))
 }
 
+// UsageIsNil applies the IsNil predicate on the "usage" field.
+func UsageIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldUsage))
+}
+
+// UsageNotNil applies the NotNil predicate on the "usage" field.
+func UsageNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldUsage))
+}
+
 // ArtifactCountEQ applies the EQ predicate on the "artifact_count" field.
 func ArtifactCountEQ(v int) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldArtifactCount, v))

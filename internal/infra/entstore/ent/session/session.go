@@ -67,6 +67,8 @@ const (
 	FieldFastMode = "fast_mode"
 	// FieldTodoList holds the string denoting the todo_list field in the database.
 	FieldTodoList = "todo_list"
+	// FieldUsage holds the string denoting the usage field in the database.
+	FieldUsage = "usage"
 	// FieldArtifactCount holds the string denoting the artifact_count field in the database.
 	FieldArtifactCount = "artifact_count"
 	// FieldFilesChanged holds the string denoting the files_changed field in the database.
@@ -149,6 +151,7 @@ var Columns = []string{
 	FieldPermissionMode,
 	FieldFastMode,
 	FieldTodoList,
+	FieldUsage,
 	FieldArtifactCount,
 	FieldFilesChanged,
 	FieldQueuedAt,

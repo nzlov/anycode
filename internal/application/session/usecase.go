@@ -4826,7 +4826,8 @@ func (s *Service) processConsumerDone(runID processdomain.RunID) (<-chan struct{
 }
 
 func (s *Service) handleCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent, extraEvents ...sessionEventInput) error {
-	retryPersistence := event.Type == processdomain.CodexEventTranscriptBound || event.Type == processdomain.CodexEventPlan || codexEventAcknowledgesPrompt(event)
+	_, updatesUsage := usageFromCodexEvent(event, nil)
+	retryPersistence := event.Type == processdomain.CodexEventTranscriptBound || event.Type == processdomain.CodexEventPlan || updatesUsage || codexEventAcknowledgesPrompt(event)
 	retryDelay := s.processExitDelay
 	if retryDelay == nil {
 		retryDelay = processExitRetryDelay
@@ -4897,6 +4898,17 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 					"total":     todoList.Total(),
 					"todoList":  todoList,
 				},
+			})
+		}
+	}
+	if activeRun {
+		if usage, ok := usageFromCodexEvent(event, current.Usage); ok && (current.Usage == nil || *current.Usage != usage) {
+			current.Usage = &usage
+			current.UpdatedAt = s.now()
+			saveSession = true
+			extraEvents = append(extraEvents, sessionEventInput{
+				eventType: "usage.updated",
+				payload:   map[string]any{"usage": usage},
 			})
 		}
 	}
@@ -6515,7 +6527,7 @@ func (s *Service) publishCodexRuntimeEvent(event processdomain.CodexEvent) {
 		return
 	}
 	switch event.Type {
-	case processdomain.CodexEventPlan, processdomain.CodexEventTranscriptBound, processdomain.CodexEventProcessExit:
+	case processdomain.CodexEventPlan, processdomain.CodexEventUsage, processdomain.CodexEventTranscriptBound, processdomain.CodexEventProcessExit:
 		return
 	}
 	_ = s.codexPublisher.PublishCodexEvent(context.Background(), event)
@@ -7328,6 +7340,38 @@ func todoListFromCodexEvent(event processdomain.CodexEvent) (domain.TodoList, bo
 		})
 	}
 	return list, true
+}
+
+func usageFromCodexEvent(event processdomain.CodexEvent, current *domain.Usage) (domain.Usage, bool) {
+	if content, ok := event.Content.(processdomain.CodexUsageContent); ok {
+		usage := domain.Usage{
+			InputTokens:                  content.InputTokens,
+			CachedInputTokens:            content.CachedInputTokens,
+			OutputTokens:                 content.OutputTokens,
+			ReasoningOutputTokens:        content.ReasoningOutputTokens,
+			TotalTokens:                  content.TotalTokens,
+			ContextWindow:                content.ContextWindow,
+			CurrentInputTokens:           content.CurrentInputTokens,
+			CurrentCachedInputTokens:     content.CurrentCachedInputTokens,
+			CurrentOutputTokens:          content.CurrentOutputTokens,
+			CurrentReasoningOutputTokens: content.CurrentReasoningOutputTokens,
+			CurrentTotalTokens:           content.CurrentTotalTokens,
+		}
+		if current != nil {
+			usage.CompactionCount = current.CompactionCount
+		}
+		return usage, true
+	}
+	status, ok := event.Content.(processdomain.CodexStatusContent)
+	if !ok || status.Code != "context.compacted" {
+		return domain.Usage{}, false
+	}
+	usage := domain.Usage{}
+	if current != nil {
+		usage = *current
+	}
+	usage.CompactionCount++
+	return usage, true
 }
 
 func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error) {

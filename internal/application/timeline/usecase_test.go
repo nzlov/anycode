@@ -20,6 +20,7 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 				ID:             "session-1",
 				ProjectID:      "project-1",
 				CodexSessionID: "codex-session-1",
+				Usage:          &sessiondomain.Usage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14},
 				UpdatedAt:      time.Unix(30, 0).UTC(),
 			},
 		},
@@ -272,7 +273,14 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 
 func TestListSessionEventsProjectsCurrentAndCumulativeUsageWithCompactionCount(t *testing.T) {
 	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
-		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(3, 0).UTC()},
+		"session-1": {
+			ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(3, 0).UTC(),
+			Usage: &sessiondomain.Usage{
+				InputTokens: 46_200_000, CachedInputTokens: 45_000_000, OutputTokens: 200_000, TotalTokens: 46_400_000,
+				CurrentInputTokens: 314_000, CurrentCachedInputTokens: 300_000, CurrentOutputTokens: 2_000, CurrentTotalTokens: 316_000, ContextWindow: 353_000,
+				CompactionCount: 1,
+			},
+		},
 	}}
 	transcript := &fakeTranscriptSource{events: []process.CodexEvent{
 		{Type: "token_count", Content: process.CodexUsageContent{
@@ -292,7 +300,7 @@ func TestListSessionEventsProjectsCurrentAndCumulativeUsageWithCompactionCount(t
 	}
 }
 
-func TestListSessionEventsSelectsLatestUsageByTimestampAcrossSources(t *testing.T) {
+func TestListSessionEventsDoesNotBackfillCurrentUsageFromTranscript(t *testing.T) {
 	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
 		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(30, 0).UTC()},
 	}}
@@ -305,8 +313,28 @@ func TestListSessionEventsSelectsLatestUsageByTimestampAcrossSources(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Usage == nil || page.Usage.InputTokens != 200 {
-		t.Fatalf("latest usage = %#v", page.Usage)
+	if page.Usage != nil {
+		t.Fatalf("usage = %#v, want nil", page.Usage)
+	}
+}
+
+func TestListSessionEventsReadsPersistedSessionUsage(t *testing.T) {
+	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
+		"session-1": {
+			ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(30, 0).UTC(),
+			Usage: &sessiondomain.Usage{InputTokens: 300, TotalTokens: 360, CompactionCount: 2},
+		},
+	}}
+	transcript := &fakeTranscriptSource{events: []process.CodexEvent{{
+		Type: "token_count", Content: process.CodexUsageContent{InputTokens: 200, TotalTokens: 240}, CreatedAt: time.Unix(20, 0).UTC(),
+	}}}
+	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1"))
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Usage == nil || page.Usage.InputTokens != 300 || page.Usage.TotalTokens != 360 || page.Usage.CompactionCount != 2 {
+		t.Fatalf("persisted usage = %#v", page.Usage)
 	}
 }
 
@@ -655,26 +683,6 @@ func TestSessionEventsKeepsUsageOutOfTranscript(t *testing.T) {
 	}
 }
 
-func TestSessionUsageEventsMapsUsageAcrossSessions(t *testing.T) {
-	liveSource := &fakeLiveSource{usageCh: make(chan process.CodexEvent, 2)}
-	service := New(liveSource, nil, nil, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ch, err := service.SessionUsageEvents(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	liveSource.usageCh <- process.CodexEvent{
-		EventID: "usage-1", Type: process.CodexEventUsage, SessionID: "session-1",
-		Content:   process.CodexUsageContent{InputTokens: 10, TotalTokens: 12},
-		CreatedAt: time.Unix(3, 0).UTC(),
-	}
-	got := <-ch
-	if got.SessionID != "session-1" || got.Usage.InputTokens != 10 || got.Usage.TotalTokens != 12 || got.OccurredAt != "1970-01-01T00:00:03Z" {
-		t.Fatalf("usage update = %#v", got)
-	}
-}
-
 func dtoIDs(items []DTO) []eventdomain.ID {
 	ids := make([]eventdomain.ID, 0, len(items))
 	for _, item := range items {
@@ -684,10 +692,9 @@ func dtoIDs(items []DTO) []eventdomain.ID {
 }
 
 type fakeLiveSource struct {
-	ch      chan process.CodexEvent
-	usageCh chan process.CodexEvent
-	input   process.SessionID
-	done    <-chan struct{}
+	ch    chan process.CodexEvent
+	input process.SessionID
+	done  <-chan struct{}
 }
 
 func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.SessionID) (<-chan process.CodexEvent, error) {
@@ -697,14 +704,6 @@ func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.
 		s.ch = make(chan process.CodexEvent, 1)
 	}
 	return s.ch, nil
-}
-
-func (s *fakeLiveSource) LiveCodexUsageEvents(ctx context.Context) (<-chan process.CodexEvent, error) {
-	s.done = ctx.Done()
-	if s.usageCh == nil {
-		s.usageCh = make(chan process.CodexEvent, 1)
-	}
-	return s.usageCh, nil
 }
 
 type fakeSessionRepository struct {

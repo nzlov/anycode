@@ -28,26 +28,7 @@ type GroupDTO struct {
 	Members []DTO
 }
 
-type TokenUsageDTO struct {
-	InputTokens                  int
-	CachedInputTokens            int
-	OutputTokens                 int
-	ReasoningOutputTokens        int
-	TotalTokens                  int
-	ContextWindow                int
-	CurrentInputTokens           int
-	CurrentCachedInputTokens     int
-	CurrentOutputTokens          int
-	CurrentReasoningOutputTokens int
-	CurrentTotalTokens           int
-	CompactionCount              int
-}
-
-type UsageUpdateDTO struct {
-	SessionID  sessiondomain.ID
-	OccurredAt string
-	Usage      TokenUsageDTO
-}
+type TokenUsageDTO = sessiondomain.Usage
 
 type Page struct {
 	Items        []DTO
