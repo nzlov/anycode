@@ -245,7 +245,7 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	if err != nil {
 		return nil, err
 	}
-	out := make(chan DTO, 16)
+	out := make(chan DTO)
 	liveCtx, cancelLive := context.WithCancel(ctx)
 	live, err := s.live.LiveCodexEvents(liveCtx, processdomain.SessionID(input.SessionID))
 	if err != nil {

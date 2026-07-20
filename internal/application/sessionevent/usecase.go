@@ -81,7 +81,7 @@ func (s *Service) SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error) 
 		cancel()
 		return nil, err
 	}
-	out := make(chan UpdateDTO, 16)
+	out := make(chan UpdateDTO)
 	go func() {
 		defer close(out)
 		defer cancel()

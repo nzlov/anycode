@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,9 @@ func TestLiveCodexEventsRoutesTypedEventsBySession(t *testing.T) {
 	stream, err := service.LiveCodexEvents(ctx, "session-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cap(stream) != subscriptionMailboxSize {
+		t.Fatalf("Codex subscription mailbox = %d, want %d", cap(stream), subscriptionMailboxSize)
 	}
 	if err := service.PublishCodexEvent(context.Background(), processdomain.CodexEvent{
 		EventID: "other", Type: processdomain.CodexEventCommand, SessionID: "session-2",
@@ -133,7 +137,7 @@ func TestLiveSessionEventsFiltersPublishedEventsByScope(t *testing.T) {
 	}
 }
 
-func TestPublishAfterCommitRoutesThroughKeyedScopeBuckets(t *testing.T) {
+func TestPublishAfterCommitRoutesByScope(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	otherSessionID := domain.SessionID("session-2")
 	service := New()
@@ -304,6 +308,9 @@ func TestSlowSubscriptionDisconnectsWhenMailboxIsFull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LiveSessionEvents() error = %v", err)
 	}
+	if cap(ch) != subscriptionMailboxSize {
+		t.Fatalf("session subscription mailbox = %d, want %d", cap(ch), subscriptionMailboxSize)
+	}
 	for i := 0; i < cap(ch); i++ {
 		if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
 			ID:        domain.ID("event-fill-" + string(rune('a'+i))),
@@ -336,6 +343,49 @@ func TestSlowSubscriptionDisconnectsWhenMailboxIsFull(t *testing.T) {
 	}
 }
 
+func TestSlowCodexSubscriptionDoesNotAffectAnotherClient(t *testing.T) {
+	service := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	slow, err := service.LiveCodexEvents(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fast, err := service.LiveCodexEvents(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for index := 0; index <= cap(slow); index++ {
+		wantID := fmt.Sprintf("event-%d", index)
+		if err := service.PublishCodexEvent(context.Background(), processdomain.CodexEvent{
+			EventID: wantID, SessionID: "session-1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got := <-fast; got.EventID != wantID {
+			t.Fatalf("fast subscriber event = %q, want %q", got.EventID, wantID)
+		}
+	}
+	for index := 0; index < cap(slow); index++ {
+		if _, ok := <-slow; !ok {
+			t.Fatalf("slow subscriber closed after %d buffered events", index)
+		}
+	}
+	if _, ok := <-slow; ok {
+		t.Fatal("slow Codex subscriber remained open after mailbox overflow")
+	}
+
+	if err := service.PublishCodexEvent(context.Background(), processdomain.CodexEvent{
+		EventID: "event-after-overflow", SessionID: "session-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-fast; got.EventID != "event-after-overflow" {
+		t.Fatalf("fast subscriber after overflow = %#v", got)
+	}
+}
+
 func TestSubscriptionObserverRecordsOverflowWithoutEventContent(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	recorder := &eventObservationRecorder{}
@@ -354,11 +404,12 @@ func TestSubscriptionObserverRecordsOverflowWithoutEventContent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !slices.Contains(recorder.items, (Observation{Name: "subscription.delivery", Outcome: "overflow"})) {
-		t.Fatalf("observations = %#v", recorder.items)
+	observations := recorder.snapshot()
+	if !slices.Contains(observations, (Observation{Name: "subscription.delivery", Outcome: "overflow"})) {
+		t.Fatalf("observations = %#v", observations)
 	}
-	if strings.Contains(fmt.Sprintf("%#v", recorder.items), "must-not-be-observed") || strings.Contains(fmt.Sprintf("%#v", recorder.items), "session-1") {
-		t.Fatalf("observation leaked event content: %#v", recorder.items)
+	if strings.Contains(fmt.Sprintf("%#v", observations), "must-not-be-observed") || strings.Contains(fmt.Sprintf("%#v", observations), "session-1") {
+		t.Fatalf("observation leaked event content: %#v", observations)
 	}
 }
 
@@ -366,26 +417,199 @@ func TestSubscriptionObserverDoesNotReportCancellationAsOverflow(t *testing.T) {
 	sessionID := domain.SessionID("session-1")
 	recorder := &eventObservationRecorder{}
 	service := New(WithObserver(recorder))
-	done := make(chan struct{})
-	sub := service.subscribe(domain.Scope{SessionID: &sessionID}, make(chan DTO, 1), done)
-	close(done)
-	if result := sub.trySend(DTO{ID: "after-cancel"}); result != deliveryUnavailable {
-		t.Fatalf("delivery result = %d", result)
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{Scope: domain.Scope{SessionID: &sessionID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	select {
+	case _, ok := <-stream:
+		if ok {
+			t.Fatal("subscription emitted after cancellation")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscription stayed open after cancellation")
 	}
 	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{ID: "after-cancel", Scope: domain.Scope{SessionID: &sessionID}}); err != nil {
 		t.Fatal(err)
 	}
-	if slices.Contains(recorder.items, (Observation{Name: "subscription.delivery", Outcome: "overflow"})) {
-		t.Fatalf("cancellation observations = %#v", recorder.items)
+	observations := recorder.snapshot()
+	if slices.Contains(observations, (Observation{Name: "subscription.delivery", Outcome: "overflow"})) {
+		t.Fatalf("cancellation observations = %#v", observations)
 	}
 }
 
+func TestHubKeepsSessionChangesAndTranscriptEventsIsolated(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	service := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changes, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{Scope: domain.Scope{SessionID: &sessionID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcript, err := service.LiveCodexEvents(ctx, processdomain.SessionID(sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+		ID: "change-1", Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-changes; got.ID != "change-1" {
+		t.Fatalf("session change = %#v", got)
+	}
+	select {
+	case got := <-transcript:
+		t.Fatalf("transcript received session change = %#v", got)
+	default:
+	}
+
+	wantTranscript := processdomain.CodexEvent{EventID: "transcript-1", SessionID: processdomain.SessionID(sessionID)}
+	if err := service.PublishCodexEvent(context.Background(), wantTranscript); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-transcript; !reflect.DeepEqual(got, wantTranscript) {
+		t.Fatalf("transcript event = %#v, want %#v", got, wantTranscript)
+	}
+	select {
+	case got := <-changes:
+		t.Fatalf("session changes received transcript event = %#v", got)
+	default:
+	}
+}
+
+func TestHubSerializesConcurrentPublishers(t *testing.T) {
+	sessionID := domain.SessionID("session-1")
+	service := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	changes, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{Scope: domain.Scope{SessionID: &sessionID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transcript, err := service.LiveCodexEvents(ctx, processdomain.SessionID(sessionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const eventCount = subscriptionMailboxSize
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var publishers sync.WaitGroup
+	publishers.Add(2)
+	go func() {
+		defer publishers.Done()
+		<-start
+		for index := 0; index < eventCount; index++ {
+			id := domain.ID(fmt.Sprintf("change-%d", index))
+			if err := service.PublishAfterCommit(context.Background(), domain.DomainEvent{
+				ID: id, Scope: domain.Scope{SessionID: &sessionID}, SessionID: &sessionID,
+			}); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	go func() {
+		defer publishers.Done()
+		<-start
+		for index := 0; index < eventCount; index++ {
+			if err := service.PublishCodexEvent(context.Background(), processdomain.CodexEvent{
+				EventID: fmt.Sprintf("transcript-%d", index), SessionID: processdomain.SessionID(sessionID),
+			}); err != nil {
+				errs <- err
+				return
+			}
+		}
+	}()
+	close(start)
+	publishers.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+
+	for index := 0; index < eventCount; index++ {
+		if got, want := (<-changes).ID, domain.ID(fmt.Sprintf("change-%d", index)); got != want {
+			t.Fatalf("session change %d = %q, want %q", index, got, want)
+		}
+		if got, want := (<-transcript).EventID, fmt.Sprintf("transcript-%d", index); got != want {
+			t.Fatalf("transcript event %d = %q, want %q", index, got, want)
+		}
+	}
+}
+
+func TestObserverCanPublishWithoutBlockingHub(t *testing.T) {
+	observer := &reentrantEventObserver{}
+	service := New(WithObserver(observer))
+	observer.service = service
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	type subscriptionResult struct {
+		stream <-chan DTO
+		err    error
+	}
+	result := make(chan subscriptionResult, 1)
+	go func() {
+		stream, err := service.LiveSessionEvents(ctx, LiveSessionEventsInput{})
+		result <- subscriptionResult{stream: stream, err: err}
+	}()
+
+	var subscription subscriptionResult
+	select {
+	case subscription = <-result:
+		if subscription.err != nil {
+			t.Fatal(subscription.err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("observer callback blocked the Hub")
+	}
+	select {
+	case got := <-subscription.stream:
+		if got.ID != "observer-event" {
+			t.Fatalf("observer event = %#v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("observer callback did not publish through the Hub")
+	}
+}
+
+type reentrantEventObserver struct {
+	service *Service
+	once    sync.Once
+}
+
+func (o *reentrantEventObserver) Observe(observation Observation) {
+	if observation.Outcome != "opened" {
+		return
+	}
+	o.once.Do(func() {
+		_ = o.service.PublishAfterCommit(context.Background(), domain.DomainEvent{ID: "observer-event"})
+	})
+}
+
 type eventObservationRecorder struct {
+	mu    sync.Mutex
 	items []Observation
 }
 
 func (r *eventObservationRecorder) Observe(observation Observation) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.items = append(r.items, observation)
+}
+
+func (r *eventObservationRecorder) snapshot() []Observation {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]Observation(nil), r.items...)
 }
 
 func TestPublishAfterCommitDoesNotPanicAfterLiveSubscriberCancels(t *testing.T) {
