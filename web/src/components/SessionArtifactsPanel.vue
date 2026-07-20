@@ -11,8 +11,8 @@
         outlined
         clearable
         debounce="300"
-        placeholder="筛选产物"
-        aria-label="筛选产物"
+        placeholder="筛选临时文件"
+        aria-label="筛选临时文件"
       >
         <template #prepend><q-icon name="search" /></template>
       </q-input>
@@ -25,7 +25,7 @@
         map-options
         :options="kindOptions"
         label="类型"
-        aria-label="产物类型"
+        aria-label="临时文件类型"
       />
       <q-select
         v-model="source"
@@ -36,7 +36,7 @@
         map-options
         :options="sourceOptions"
         label="来源"
-        aria-label="产物来源"
+        aria-label="临时文件来源"
       />
       <q-select
         v-model="sort"
@@ -46,18 +46,18 @@
         map-options
         :options="sortOptions"
         label="排序"
-        aria-label="产物排序"
+        aria-label="临时文件排序"
       />
       <q-btn
         flat
         round
         dense
         icon="refresh"
-        aria-label="刷新产物"
+        aria-label="刷新临时文件"
         :loading="loading"
         @click="refresh"
       >
-        <q-tooltip>刷新产物</q-tooltip>
+        <q-tooltip>刷新临时文件</q-tooltip>
       </q-btn>
     </div>
 
@@ -70,12 +70,12 @@
       <q-list bordered separator class="artifact-list">
         <q-item v-if="loading && files.length === 0">
           <q-item-section avatar><q-spinner color="primary" size="24px" /></q-item-section>
-          <q-item-section>正在读取产物</q-item-section>
+          <q-item-section>正在读取临时文件</q-item-section>
         </q-item>
         <q-item v-else-if="files.length === 0">
           <q-item-section avatar><q-icon name="inventory_2" class="text-muted" /></q-item-section>
           <q-item-section>
-            <q-item-label>暂无产物</q-item-label>
+            <q-item-label>暂无临时文件</q-item-label>
           </q-item-section>
         </q-item>
         <q-item
@@ -142,7 +142,7 @@
         <q-card-section class="artifact-preview-header">
           <div class="artifact-preview-title">
             <q-icon v-if="selected" :name="fileIcon(selected)" />
-            <span>{{ selected?.logicalPath || selected?.filename || '产物' }}</span>
+            <span>{{ selected?.logicalPath || selected?.filename || '临时文件' }}</span>
           </div>
           <q-btn
             v-if="selected"
@@ -198,7 +198,7 @@
           </div>
           <div v-else class="artifact-preview-state text-muted">
             <q-icon name="inventory_2" size="36px" />
-            <span>暂无产物</span>
+            <span>暂无临时文件</span>
           </div>
         </q-card-section>
       </q-card>
@@ -367,7 +367,7 @@ async function load() {
     files.value = result;
     if (inlinePreviewActive.value) void syncInlineSelection(result);
   } catch (err) {
-    if (request === loadRequest) error.value = errorMessage(err, '读取产物失败');
+    if (request === loadRequest) error.value = errorMessage(err, '读取临时文件失败');
   } finally {
     if (request === loadRequest) loading.value = false;
   }
@@ -447,7 +447,7 @@ async function download(file: SessionFile) {
 
 function confirmDelete(file: SessionFile) {
   Dialog.create({
-    title: '删除产物',
+    title: '删除临时文件',
     message: `确定删除“${file.filename}”吗？`,
     cancel: true,
     persistent: true,

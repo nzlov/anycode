@@ -194,7 +194,7 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /openApprovalDialog\(card\)/);
   assert.match(overviewSource, /<q-tab name="output"[^>]*label="审核结果"/);
   assert.match(overviewSource, /<q-tab name="diff"[^>]*label="Diff"/);
-  assert.match(overviewSource, /<q-tab name="artifacts"[^>]*label="产物"/);
+  assert.match(overviewSource, /<q-tab name="artifacts"[^>]*label="临时文件"/);
   assert.match(overviewSource, /<SessionArtifactsPanel/);
   assert.match(overviewSource, /resolveSessionArtifacts/);
   assert.match(overviewSource, /approvalArtifactFocus/);

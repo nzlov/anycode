@@ -93,7 +93,7 @@ const groupLabel = computed(() => {
     case 'lifecycle':
       return '运行状态';
     case 'artifact':
-      return '产物';
+      return '临时文件';
     default:
       return props.event.group?.label ?? '事件';
   }

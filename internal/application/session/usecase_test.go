@@ -34,6 +34,9 @@ func TestPromptWithArtifactGuidanceDoesNotExposeArtifactPath(t *testing.T) {
 	if !strings.Contains(got, "ANYCODE_ARTIFACT_DIR") {
 		t.Fatalf("artifact guidance = %q", got)
 	}
+	if !strings.Contains(got, "临时文件") || strings.Contains(got, "产物") {
+		t.Fatalf("artifact guidance label = %q", got)
+	}
 	if strings.Contains(got, "/data/attachments/outputs/session-1") {
 		t.Fatalf("artifact guidance exposed disk path: %q", got)
 	}
@@ -5231,6 +5234,9 @@ func TestArchiveCodexEventImagesIsolatesCandidateFailure(t *testing.T) {
 	}
 	if payload := failures[0].payload; payload["mimeType"] != "image/png" || strings.Contains(fmt.Sprint(payload), "/private/archive") || strings.Contains(fmt.Sprint(payload), "cG5n") {
 		t.Fatalf("failure payload leaked source data = %#v", payload)
+	}
+	if message := fmt.Sprint(failures[0].payload["message"]); !strings.Contains(message, "临时文件") || strings.Contains(message, "产物") {
+		t.Fatalf("failure message = %q", message)
 	}
 	if images := event.Content.(processdomain.CodexToolContent).Images; len(images) != 0 {
 		t.Fatalf("failed candidate remained in event = %#v", images)

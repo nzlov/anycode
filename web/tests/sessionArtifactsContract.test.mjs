@@ -12,6 +12,15 @@ const event = readFileSync(
   new URL('../src/components/SessionArtifactEvent.vue', import.meta.url),
   'utf8',
 );
+const eventMessage = readFileSync(
+  new URL('../src/components/SessionEventMessage.vue', import.meta.url),
+  'utf8',
+);
+const workflowResult = readFileSync(
+  new URL('../src/components/WorkflowResultReview.vue', import.meta.url),
+  'utf8',
+);
+const overviewPage = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
 const service = readFileSync(new URL('../src/services/sessionFiles.ts', import.meta.url), 'utf8');
 const detailPage = readFileSync(
   new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
@@ -29,6 +38,14 @@ const sessionDetailComposable = readFileSync(
   new URL('../src/composables/useSessionDetail.ts', import.meta.url),
   'utf8',
 );
+
+test('artifact surfaces consistently use the temporary file label', () => {
+  const surfaces = [panel, event, eventMessage, workflowResult, overviewPage, detailPage].join(
+    '\n',
+  );
+  assert.match(surfaces, /临时文件/);
+  assert.doesNotMatch(surfaces, /产物/);
+});
 
 test('session artifacts use one unpaginated latest-version query and unified file actions', () => {
   assert.match(panel, /listSessionFiles\(input\)/);
