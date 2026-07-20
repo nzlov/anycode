@@ -54,6 +54,24 @@ test('overview TODO menu supports hover without removing click, touch, or keyboa
   assert.doesNotMatch(source, /<q-tooltip>TODO List<\/q-tooltip>/);
 });
 
+test('overview token usage separates uncached input, output, and cached totals', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /class="overview-token-usage-btn"[\s\S]*?icon="info_outline"[\s\S]*?aria-label="查看 Token 用量明细"/,
+  );
+  assert.match(
+    source,
+    /class="overview-token-usage-btn"[\s\S]*?@pointerenter="openTokenUsageMenu\(card\.id, \$event\)"[\s\S]*?@pointerleave="scheduleTokenUsageMenuClose\(card\.id, \$event\)"[\s\S]*?@click\.stop="toggleTokenUsageMenu\(card\.id\)"[\s\S]*?@touchstart\.stop/,
+  );
+  assert.match(
+    source,
+    /class="overview-token-usage-menu"[\s\S]*?输入 Token[\s\S]*?formatTokenCount\([\s\S]*?Math\.max\(card\.usage\.inputTokens - card\.usage\.cachedInputTokens, 0\)[\s\S]*?\)[\s\S]*?输出 Token[\s\S]*?formatTokenCount\(card\.usage\.outputTokens\)[\s\S]*?缓存 Token[\s\S]*?formatTokenCount\(card\.usage\.cachedInputTokens\)/,
+  );
+  assert.match(source, /const activeTokenUsageMenuId = ref\(''\);/);
+});
+
 test('overview TODO headless scenario covers pointer, keyboard, and narrow-screen access', () => {
   const source = readFileSync(new URL('../../scripts/headless-e2e.mjs', import.meta.url), 'utf8');
 

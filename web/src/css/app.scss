@@ -292,6 +292,44 @@ a {
   font-size: 11px;
 }
 
+.overview-token-usage-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 3px;
+}
+
+.overview-token-usage-value > span {
+  min-width: 0;
+}
+
+.overview-token-usage-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  color: var(--ac-text-muted);
+}
+
+.overview-token-usage-btn:hover,
+.overview-token-usage-btn:focus-visible {
+  color: var(--q-primary);
+}
+
+.overview-token-usage-btn .q-icon {
+  font-size: 16px;
+}
+
+.overview-token-usage-menu {
+  min-width: 180px;
+}
+
+.overview-token-usage-menu__value {
+  color: var(--ac-text);
+  font-weight: 700;
+}
+
 .overview-card-footer {
   display: flex;
   min-height: 44px;
