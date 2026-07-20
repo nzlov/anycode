@@ -150,7 +150,7 @@
           </q-card-section>
         </q-card>
 
-        <q-card v-else-if="visibleDiffs.length === 0" flat bordered class="diff-state-card">
+        <q-card v-else-if="!hasVisibleFiles" flat bordered class="diff-state-card">
           <q-card-section class="empty-state">
             <q-icon name="data_object" size="32px" class="text-muted" />
             <div class="text-body2">当前范围没有可展示的 Diff</div>
@@ -158,9 +158,11 @@
         </q-card>
 
         <DiffViewer
+          :files="visibleFiles"
           :file-diffs="visibleDiffs"
           :collapsible="workspaceMode === 'all'"
           :collapsed-paths="collapseState.collapsedPaths"
+          :loading-paths="fileLoadingPaths"
           @expand="expandDiff"
           @toggle-collapse="toggleFileCollapsed"
         >
@@ -196,6 +198,7 @@ import {
   getBranchAllDiff,
   getBranchSingleDiff,
   getSessionAllDiff,
+  getSessionDiffFiles,
   getSessionSingleDiff,
 } from '@/services/diff';
 import {
@@ -223,9 +226,10 @@ const props = withDefaults(
     target: DiffWorkspaceTarget;
     modelValue: DiffWorkspaceState;
     showFileNavigation?: boolean;
+    lazyFileDetails?: boolean;
     refreshKey?: string | number;
   }>(),
-  { showFileNavigation: true },
+  { showFileNavigation: true, lazyFileDetails: false },
 );
 
 const emit = defineEmits<{
@@ -239,6 +243,7 @@ const error = ref('');
 const sessionPrefixMap = ref<Record<string, string>>({});
 const diffContext = ref(initialDiffContext());
 const requestGeneration = ref(0);
+const fileLoadingPaths = ref<string[]>([]);
 let skipRequestSignature = '';
 
 const targetKey = computed(() =>
@@ -250,6 +255,9 @@ const collapseState = ref(initialDiffCollapseState(targetKey.value));
 const workspaceMode = computed<DiffMode>(() =>
   props.showFileNavigation ? props.modelValue.mode : 'all',
 );
+const metadataFirst = computed(
+  () => props.lazyFileDetails && props.target.kind === 'session' && workspaceMode.value === 'all',
+);
 const visibleDiffs = computed<FileDiff[]>(() => {
   if (!diff.value?.available) return [];
   return workspaceMode.value === 'all'
@@ -258,7 +266,13 @@ const visibleDiffs = computed<FileDiff[]>(() => {
       ? [diff.value.fileDiff]
       : [];
 });
-const allFilePaths = computed(() => diff.value?.allDiff.map((item) => item.file.path) ?? []);
+const visibleFiles = computed<DiffFile[]>(() =>
+  metadataFirst.value && diff.value?.available ? diff.value.files : [],
+);
+const hasVisibleFiles = computed(
+  () => visibleFiles.value.length > 0 || visibleDiffs.value.length > 0,
+);
+const allFilePaths = computed(() => diff.value?.files.map((file) => file.path) ?? []);
 const hasCollapsedFile = computed(() =>
   allFilePaths.value.some((path) =>
     isDiffFileCollapsed(collapseState.value, workspaceMode.value, path),
@@ -310,9 +324,20 @@ async function loadDiff() {
         ? { filePath: props.modelValue.filePath }
         : {}),
     };
-    const nextDiff = await requestDiff(input);
+    const nextDiff =
+      metadataFirst.value && props.target.kind === 'session'
+        ? await getSessionDiffFiles({ sessionId: props.target.sessionId })
+        : await requestDiff(input);
     if (generation !== requestGeneration.value) return;
     diff.value = nextDiff;
+    if (metadataFirst.value) {
+      collapseState.value = collapseDiffFiles(
+        initialDiffCollapseState(targetKey.value),
+        'all',
+        nextDiff.files.map((file) => file.path),
+      );
+      fileLoadingPaths.value = [];
+    }
     const normalizedState: DiffWorkspaceState = {
       ...props.modelValue,
       mode: workspaceMode.value,
@@ -355,21 +380,88 @@ function requestDiff(input: {
     : getSessionSingleDiff(sessionInput);
 }
 
-function expandDiff(_filePath: string, direction: 'before' | 'after') {
+function expandDiff(filePath: string, direction: 'before' | 'after') {
   diffContext.value = expandDiffContext(diffContext.value, direction);
+  if (metadataFirst.value) {
+    void loadFileDiff(filePath);
+    return;
+  }
   void loadDiff();
 }
 
-function toggleFileCollapsed(filePath: string) {
+async function toggleFileCollapsed(filePath: string) {
+  if (loading.value) return;
+  if (metadataFirst.value && isDiffFileCollapsed(collapseState.value, 'all', filePath)) {
+    if (!(await loadFileDiff(filePath))) return;
+  }
   collapseState.value = toggleDiffFileCollapsed(collapseState.value, workspaceMode.value, filePath);
 }
 
 function expandAllFiles() {
+  if (metadataFirst.value) {
+    void loadAllDiff();
+    return;
+  }
   collapseState.value = expandDiffFiles(
     collapseState.value,
     workspaceMode.value,
     allFilePaths.value,
   );
+}
+
+async function loadFileDiff(filePath: string) {
+  if (props.target.kind !== 'session' || fileLoadingPaths.value.includes(filePath)) return false;
+  const generation = requestGeneration.value;
+  fileLoadingPaths.value = [...fileLoadingPaths.value, filePath];
+  error.value = '';
+  try {
+    const nextDiff = await getSessionSingleDiff({
+      sessionId: props.target.sessionId,
+      mode: 'single',
+      filePath,
+      contextBefore: diffContext.value.before,
+      contextAfter: diffContext.value.after,
+    });
+    if (generation !== requestGeneration.value || !nextDiff.fileDiff || !diff.value) return false;
+    const loadedDiffs = diff.value.allDiff.filter((item) => item.file.path !== filePath);
+    diff.value = {
+      ...diff.value,
+      fileDiff: nextDiff.fileDiff,
+      allDiff: [...loadedDiffs, nextDiff.fileDiff],
+    };
+    return true;
+  } catch (err) {
+    if (generation === requestGeneration.value) {
+      error.value = errorMessage(err, '读取文件变更失败');
+    }
+    return false;
+  } finally {
+    fileLoadingPaths.value = fileLoadingPaths.value.filter((path) => path !== filePath);
+  }
+}
+
+async function loadAllDiff() {
+  const generation = ++requestGeneration.value;
+  loading.value = true;
+  error.value = '';
+  try {
+    const nextDiff = await requestDiff({
+      mode: 'all',
+      contextBefore: diffContext.value.before,
+      contextAfter: diffContext.value.after,
+    });
+    if (generation !== requestGeneration.value) return;
+    diff.value = nextDiff;
+    collapseState.value = expandDiffFiles(
+      collapseState.value,
+      'all',
+      nextDiff.files.map((file) => file.path),
+    );
+  } catch (err) {
+    if (generation === requestGeneration.value) error.value = errorMessage(err, '读取 Diff 失败');
+  } finally {
+    if (generation === requestGeneration.value) loading.value = false;
+  }
 }
 
 function collapseAllFiles() {
@@ -452,6 +544,7 @@ watch(
     diff.value = null;
     error.value = '';
     sessionPrefixMap.value = {};
+    fileLoadingPaths.value = [];
   },
   { immediate: true },
 );

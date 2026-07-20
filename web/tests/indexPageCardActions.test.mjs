@@ -321,7 +321,18 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.doesNotMatch(workspaceSource, /<AppPagination|showPagination|modelValue\.page/);
   assert.match(workspaceSource, /<DiffViewer/);
   assert.match(workspaceSource, /getSessionAllDiff/);
+  assert.match(workspaceSource, /getSessionDiffFiles/);
+  assert.match(workspaceSource, /getSessionSingleDiff/);
   assert.match(workspaceSource, /getBranchAllDiff/);
+  assert.match(
+    workspaceSource,
+    /metadataFirst\.value[\s\S]*getSessionDiffFiles[\s\S]*initialDiffCollapseState\(targetKey\.value\)/,
+  );
+  assert.match(
+    workspaceSource,
+    /toggleFileCollapsed[\s\S]*await loadFileDiff\(filePath\)[\s\S]*toggleDiffFileCollapsed/,
+  );
+  assert.match(workspaceSource, /expandAllFiles[\s\S]*void loadAllDiff\(\)/);
   assert.match(workspaceSource, /aria-label="展开全部文件"/);
   assert.match(workspaceSource, /aria-label="折叠全部文件"/);
   assert.match(workspaceSource, /GLUE: branch Diff paths encode their source session/);
@@ -334,6 +345,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(answerDialogSource, /<DiffWorkspace/);
   assert.match(detailSource, /<DiffWorkspace[\s\S]*:target="detailDiffTarget"/);
   assert.match(detailSource, /:show-file-navigation="false"/);
+  assert.match(detailSource, /lazy-file-details/);
   assert.doesNotMatch(detailSource, /<DiffViewer|getSessionDiffFiles|getSessionFileDiff/);
   assert.match(fileChangeSource, /<DiffViewer[^>]*:file-diffs="diffFileChanges"/);
   assert.doesNotMatch(fileChangeSource, /<DiffWorkspace|getSessionAllDiff|getSessionSingleDiff/);

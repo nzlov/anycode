@@ -127,6 +127,34 @@ interface GraphQLSessionCommitHistory {
   };
 }
 
+export async function getSessionDiffFiles(input: { sessionId: string }): Promise<SessionDiff> {
+  const data = await graphqlFetch<
+    { sessionDiff: GraphQLSessionDiff },
+    { input: { sessionId: string; mode: 'all' } }
+  >({
+    query: `
+      query SessionDiffFiles($input: SessionDiffInput!) {
+        sessionDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            path
+            status
+            additions
+            deletions
+          }
+        }
+      }
+    `,
+    variables: {
+      input: { sessionId: input.sessionId, mode: 'all' },
+    },
+  });
+
+  return normalizeSessionDiff(data.sessionDiff);
+}
+
 export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
   const variablesInput: {
     sessionId: string;

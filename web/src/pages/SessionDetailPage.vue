@@ -431,6 +431,7 @@
                 v-model="detailDiffWorkspaceState"
                 :target="detailDiffTarget"
                 :show-file-navigation="false"
+                lazy-file-details
                 :refresh-key="diffUpdateVersion"
               />
             </q-tab-panel>

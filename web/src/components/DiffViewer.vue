@@ -1,41 +1,39 @@
 <template>
   <div class="diff-viewer">
-    <q-card
-      v-for="fileDiff in fileDiffs"
-      :key="fileDiff.file.path"
-      flat
-      bordered
-      class="diff-file-card"
-    >
+    <q-card v-for="file in visibleFiles" :key="file.path" flat bordered class="diff-file-card">
       <q-card-section class="diff-file-header">
         <div
           class="file-title"
           :class="{ 'file-title--collapsible': collapsible }"
           :role="collapsible ? 'button' : undefined"
           :tabindex="collapsible ? 0 : undefined"
-          :aria-expanded="collapsible ? !isCollapsed(fileDiff.file.path) : undefined"
-          @click="toggleCollapse(fileDiff.file.path)"
-          @keydown.enter.prevent="toggleCollapse(fileDiff.file.path)"
-          @keydown.space.prevent="toggleCollapse(fileDiff.file.path)"
+          :aria-expanded="collapsible ? !isCollapsed(file.path) : undefined"
+          @click="toggleCollapse(file.path)"
+          @keydown.enter.prevent="toggleCollapse(file.path)"
+          @keydown.space.prevent="toggleCollapse(file.path)"
         >
+          <q-spinner v-if="isLoading(file.path)" color="primary" size="18px" />
           <q-icon
-            v-if="collapsible"
-            :name="isCollapsed(fileDiff.file.path) ? 'chevron_right' : 'expand_more'"
+            v-else-if="collapsible"
+            :name="isCollapsed(file.path) ? 'chevron_right' : 'expand_more'"
           />
-          <q-icon :name="fileIcon(fileDiff.file.status)" :color="fileColor(fileDiff.file.status)" />
-          <slot name="file-title" :file="fileDiff.file">
-            <span>{{ fileDiff.file.path }}</span>
+          <q-icon :name="fileIcon(file.status)" :color="fileColor(file.status)" />
+          <slot name="file-title" :file="file">
+            <span>{{ file.path }}</span>
           </slot>
         </div>
         <div class="row items-center q-gutter-sm" @click.stop @keydown.stop>
-          <q-badge outline color="positive" :label="`+${fileDiff.file.additions}`" />
-          <q-badge outline color="negative" :label="`-${fileDiff.file.deletions}`" />
-          <q-badge outline :color="fileColor(fileDiff.file.status)" :label="fileDiff.file.status" />
+          <q-badge outline color="positive" :label="`+${file.additions}`" />
+          <q-badge outline color="negative" :label="`-${file.deletions}`" />
+          <q-badge outline :color="fileColor(file.status)" :label="file.status" />
         </div>
       </q-card-section>
-      <q-separator v-if="!isCollapsed(fileDiff.file.path)" />
-      <q-card-section v-if="!isCollapsed(fileDiff.file.path)" class="diff-code">
-        <template v-for="hunk in fileDiff.hunks" :key="`${fileDiff.file.path}:${hunk.id}`">
+      <q-separator v-if="!isCollapsed(file.path) && fileDiffFor(file.path)" />
+      <q-card-section v-if="!isCollapsed(file.path) && fileDiffFor(file.path)" class="diff-code">
+        <template
+          v-for="hunk in fileDiffFor(file.path)?.hunks ?? []"
+          :key="`${file.path}:${hunk.id}`"
+        >
           <div v-if="hunk.canExpandBefore" class="diff-expand-row">
             <q-btn
               flat
@@ -43,12 +41,12 @@
               no-caps
               icon="expand_less"
               label="向上展开 20 行"
-              @click="$emit('expand', fileDiff.file.path, 'before')"
+              @click="$emit('expand', file.path, 'before')"
             />
           </div>
           <div
             v-for="line in hunk.lines"
-            :key="`${fileDiff.file.path}:${hunk.id}:${line.id}`"
+            :key="`${file.path}:${hunk.id}:${line.id}`"
             class="diff-line"
             :class="lineClass(line.kind)"
           >
@@ -63,7 +61,7 @@
               no-caps
               icon="expand_more"
               label="向下展开 20 行"
-              @click="$emit('expand', fileDiff.file.path, 'after')"
+              @click="$emit('expand', file.path, 'after')"
             />
           </div>
         </template>
@@ -73,17 +71,23 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import type { DiffFile, DiffLineKind, FileDiff } from '@/services/diff';
 
 const props = withDefaults(
   defineProps<{
     fileDiffs: FileDiff[];
+    files?: DiffFile[];
     collapsible?: boolean;
     collapsedPaths?: string[];
+    loadingPaths?: string[];
   }>(),
   {
+    files: () => [],
     collapsible: false,
     collapsedPaths: () => [],
+    loadingPaths: () => [],
   },
 );
 
@@ -91,6 +95,21 @@ const emit = defineEmits<{
   expand: [filePath: string, direction: 'before' | 'after'];
   'toggle-collapse': [filePath: string];
 }>();
+
+const visibleFiles = computed(() =>
+  props.files.length > 0 ? props.files : props.fileDiffs.map((fileDiff) => fileDiff.file),
+);
+const fileDiffsByPath = computed(
+  () => new Map(props.fileDiffs.map((fileDiff) => [fileDiff.file.path, fileDiff])),
+);
+
+function fileDiffFor(filePath: string) {
+  return fileDiffsByPath.value.get(filePath);
+}
+
+function isLoading(filePath: string) {
+  return props.loadingPaths.includes(filePath);
+}
 
 function isCollapsed(filePath: string) {
   return props.collapsible && props.collapsedPaths.includes(filePath);
