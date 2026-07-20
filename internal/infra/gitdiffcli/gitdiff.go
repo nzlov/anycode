@@ -84,7 +84,6 @@ func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.Res
 		{name: "project path", value: projectPath},
 		{name: "base branch", value: baseBranch},
 		{name: "worktree branch", value: worktreeBranch},
-		{name: "worktree base commit", value: baseCommit},
 	}
 	for _, field := range required {
 		if field.value == "" {
@@ -99,12 +98,18 @@ func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.Res
 					return gitdiff.DiffInput{}, false, err
 				}
 				if usable {
-					return gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: baseCommit}, true, nil
+					return gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: baseBranch + "..."}, true, nil
 				}
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return gitdiff.DiffInput{}, false, err
 		}
+	}
+	if !input.UseMergeHistory {
+		return gitdiff.DiffInput{}, false, nil
+	}
+	if baseCommit == "" {
+		return gitdiff.DiffInput{}, false, fmt.Errorf("%w: worktree base commit is required", gitdiff.ErrSessionDiffInvariant)
 	}
 
 	mergeSubject := "Merge branch '" + worktreeBranch + "'"
@@ -112,11 +117,6 @@ func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.Res
 	if err != nil {
 		return gitdiff.DiffInput{}, false, err
 	}
-	type candidate struct {
-		commit      string
-		firstParent string
-	}
-	var found *candidate
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		commit, rest, ok := strings.Cut(line, "\x00")
 		if !ok {
@@ -141,19 +141,13 @@ func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.Res
 		if strings.TrimSpace(mergeBase) != baseCommit {
 			continue
 		}
-		if found != nil {
-			return gitdiff.DiffInput{}, false, fmt.Errorf("%w: branch %q has multiple merge commits", gitdiff.ErrAmbiguousSessionMerge, worktreeBranch)
-		}
-		found = &candidate{commit: strings.TrimSpace(commit), firstParent: parentCommits[0]}
+		return gitdiff.DiffInput{
+			WorktreePath: projectPath,
+			BaseRef:      parentCommits[0],
+			HeadRef:      strings.TrimSpace(commit),
+		}, true, nil
 	}
-	if found == nil {
-		return gitdiff.DiffInput{}, false, nil
-	}
-	return gitdiff.DiffInput{
-		WorktreePath: projectPath,
-		BaseRef:      found.firstParent,
-		HeadRef:      found.commit,
-	}, true, nil
+	return gitdiff.DiffInput{}, false, nil
 }
 
 func (c *Client) isUsableProjectWorktree(ctx context.Context, projectPath string, worktreePath string) (bool, error) {
@@ -456,13 +450,20 @@ func (c *Client) RangeDiff(ctx context.Context, input gitdiff.RangeDiffInput) (g
 }
 
 func (c *Client) CommitHistory(ctx context.Context, input gitdiff.CommitHistoryInput) ([]gitdiff.CommitRecord, error) {
-	baseRef := strings.TrimSpace(input.BaseRef)
 	headRef := strings.TrimSpace(input.HeadRef)
 	if headRef == "" {
 		headRef = "HEAD"
 	}
 	refRange := headRef
-	if baseRef != "" {
+	if strings.TrimSpace(input.BaseRef) != "" {
+		baseRef, err := c.diffBaseRef(ctx, gitdiff.DiffInput{
+			WorktreePath: input.WorktreePath,
+			BaseRef:      input.BaseRef,
+			HeadRef:      headRef,
+		})
+		if err != nil {
+			return nil, err
+		}
 		refRange = baseRef + ".." + headRef
 	}
 	out, err := c.run(ctx, strings.TrimSpace(input.WorktreePath), "log", "--date=iso-strict", "--format=%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%s", refRange)

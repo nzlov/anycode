@@ -270,6 +270,7 @@ var (
 		{Name: "worktree_path", Type: field.TypeString, Default: ""},
 		{Name: "worktree_branch", Type: field.TypeString, Default: ""},
 		{Name: "worktree_base_commit", Type: field.TypeString, Default: ""},
+		{Name: "worktree_head_commit", Type: field.TypeString, Default: ""},
 		{Name: "worktree_cleanup_status", Type: field.TypeString, Default: "not_applicable"},
 		{Name: "worktree_cleanup_attempts", Type: field.TypeInt, Default: 0},
 		{Name: "worktree_ownership_token", Type: field.TypeString, Default: ""},
@@ -327,12 +328,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[51]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[52]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[49]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[50]},
 			},
 			{
 				Name:    "session_status",
@@ -342,12 +343,12 @@ var (
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[33], SessionsColumns[5], SessionsColumns[31]},
+				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[34], SessionsColumns[5], SessionsColumns[32]},
 			},
 			{
 				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[11], SessionsColumns[17], SessionsColumns[51]},
+				Columns: []*schema.Column{SessionsColumns[12], SessionsColumns[18], SessionsColumns[52]},
 			},
 		},
 	}

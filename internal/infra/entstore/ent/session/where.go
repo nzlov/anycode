@@ -114,6 +114,11 @@ func WorktreeBaseCommit(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreeBaseCommit, v))
 }
 
+// WorktreeHeadCommit applies equality check predicate on the "worktree_head_commit" field. It's identical to WorktreeHeadCommitEQ.
+func WorktreeHeadCommit(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeHeadCommit, v))
+}
+
 // WorktreeCleanupStatus applies equality check predicate on the "worktree_cleanup_status" field. It's identical to WorktreeCleanupStatusEQ.
 func WorktreeCleanupStatus(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupStatus, v))
@@ -957,6 +962,71 @@ func WorktreeBaseCommitEqualFold(v string) predicate.Session {
 // WorktreeBaseCommitContainsFold applies the ContainsFold predicate on the "worktree_base_commit" field.
 func WorktreeBaseCommitContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldWorktreeBaseCommit, v))
+}
+
+// WorktreeHeadCommitEQ applies the EQ predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitNEQ applies the NEQ predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitIn applies the In predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldWorktreeHeadCommit, vs...))
+}
+
+// WorktreeHeadCommitNotIn applies the NotIn predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldWorktreeHeadCommit, vs...))
+}
+
+// WorktreeHeadCommitGT applies the GT predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitGTE applies the GTE predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitLT applies the LT predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitLTE applies the LTE predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitContains applies the Contains predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitHasPrefix applies the HasPrefix predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitHasSuffix applies the HasSuffix predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitEqualFold applies the EqualFold predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldWorktreeHeadCommit, v))
+}
+
+// WorktreeHeadCommitContainsFold applies the ContainsFold predicate on the "worktree_head_commit" field.
+func WorktreeHeadCommitContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldWorktreeHeadCommit, v))
 }
 
 // WorktreeCleanupStatusEQ applies the EQ predicate on the "worktree_cleanup_status" field.

@@ -26,7 +26,7 @@ func TestCountSessionChangedFilesUsesSessionDiffSource(t *testing.T) {
 		},
 	}
 	service := New(
-		&fakeSessionRepository{session: sessiondomain.Session{ID: "changed", ProjectID: "git-project", WorktreePath: "/worktrees/changed", WorktreeBaseCommit: "base"}},
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "changed", ProjectID: "git-project", BaseBranch: "main", WorktreePath: "/worktrees/changed", WorktreeBaseCommit: "base"}},
 		&fakeProjectRepository{project: projectdomain.Project{ID: "git-project", IsGit: true}},
 		diffPort,
 	)
@@ -142,7 +142,7 @@ func TestGetSessionDiffReadsSelectedFile(t *testing.T) {
 	if len(got.Files) != 2 {
 		t.Fatalf("GetSessionDiff() files = %#v", got.Files)
 	}
-	if diffPort.lastBaseRef != "base" || diffPort.lastWorktreePath != "/repo" {
+	if diffPort.lastBaseRef != "main..." || diffPort.lastWorktreePath != "/repo" {
 		t.Fatalf("diff input path/base = %q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef)
 	}
 }
@@ -189,12 +189,46 @@ func TestGetSessionDiffUsesResolvedMergeLogRangeWhenWorktreeWasCleaned(t *testin
 	}
 }
 
+func TestGetSessionDiffUsesCapturedHeadAfterSessionClosed(t *testing.T) {
+	diffPort := &fakeDiffPort{
+		files: []gitdiff.DiffFile{{Path: "closed.go", Status: "modified"}},
+	}
+	service := New(
+		&fakeSessionRepository{session: sessiondomain.Session{
+			ID:                 "session-1",
+			ProjectID:          "project-1",
+			Status:             sessiondomain.StatusClosed,
+			BaseBranch:         "main",
+			WorktreePath:       "/missing-worktree",
+			WorktreeBaseCommit: "captured-base",
+			WorktreeHeadCommit: "captured-head",
+		}},
+		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/repo"}, IsGit: true}},
+		diffPort,
+	)
+
+	got, err := service.GetSessionDiff(context.Background(), SessionDiffInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("GetSessionDiff() error = %v", err)
+	}
+	if !got.Available || len(got.Files) != 1 || got.Files[0].Path != "closed.go" {
+		t.Fatalf("GetSessionDiff() = %#v", got)
+	}
+	if diffPort.lastWorktreePath != "/repo" || diffPort.lastBaseRef != "captured-base" || diffPort.lastHeadRef != "captured-head" {
+		t.Fatalf("diff input path/base/head = %q/%q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef, diffPort.lastHeadRef)
+	}
+	if diffPort.lastResolveInput != (gitdiff.ResolveSessionDiffInput{}) {
+		t.Fatalf("captured head unexpectedly used merge history resolver: %#v", diffPort.lastResolveInput)
+	}
+}
+
 func TestGetSessionDiffReturnsUnavailableWhenNoSourceCanBeResolved(t *testing.T) {
 	diffPort := &fakeDiffPort{resolveConfigured: true}
 	service := New(
 		&fakeSessionRepository{session: sessiondomain.Session{
 			ID:                 "session-1",
 			ProjectID:          "project-1",
+			Status:             sessiondomain.StatusClosed,
 			BaseBranch:         "main",
 			WorktreePath:       "/missing-worktree",
 			WorktreeBaseCommit: "cutout",
@@ -215,36 +249,6 @@ func TestGetSessionDiffReturnsUnavailableWhenNoSourceCanBeResolved(t *testing.T)
 	}
 }
 
-func TestGetSessionDiffReturnsStructuredAmbiguousMergeError(t *testing.T) {
-	diffPort := &fakeDiffPort{
-		resolveConfigured: true,
-		resolveErr:        gitdiff.ErrAmbiguousSessionMerge,
-	}
-	service := New(
-		&fakeSessionRepository{session: sessiondomain.Session{
-			ID:                 "session-1",
-			ProjectID:          "project-1",
-			BaseBranch:         "main",
-			WorktreePath:       "/missing-worktree",
-			WorktreeBaseCommit: "cutout",
-		}},
-		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/repo"}, IsGit: true}},
-		diffPort,
-	)
-
-	_, err := service.GetSessionDiff(context.Background(), SessionDiffInput{SessionID: "session-1"})
-	if err == nil {
-		t.Fatal("GetSessionDiff() expected ambiguous merge error")
-	}
-	appErr, ok := apperror.From(err)
-	if !ok || appErr.Code != apperror.CodeDiffUnavailable || appErr.Retryable || appErr.UserAction != "inspect_git_history" {
-		t.Fatalf("GetSessionDiff() error = %#v", err)
-	}
-	if appErr.Details["sessionId"] != "session-1" || appErr.Details["worktreeBranch"] != "session-1" {
-		t.Fatalf("GetSessionDiff() details = %#v", appErr.Details)
-	}
-}
-
 func TestGetSessionDiffReturnsStructuredInvariantError(t *testing.T) {
 	diffPort := &fakeDiffPort{
 		resolveConfigured: true,
@@ -254,6 +258,7 @@ func TestGetSessionDiffReturnsStructuredInvariantError(t *testing.T) {
 		&fakeSessionRepository{session: sessiondomain.Session{
 			ID:           "session-1",
 			ProjectID:    "project-1",
+			Status:       sessiondomain.StatusClosed,
 			BaseBranch:   "main",
 			WorktreePath: "/missing-worktree",
 		}},
@@ -283,6 +288,7 @@ func TestGetSessionDiffAddsSourceDetailsToRetryableResolutionError(t *testing.T)
 		&fakeSessionRepository{session: sessiondomain.Session{
 			ID:                 "session-1",
 			ProjectID:          "project-1",
+			Status:             sessiondomain.StatusClosed,
 			BaseBranch:         "main",
 			WorktreePath:       "/missing-worktree",
 			WorktreeBaseCommit: "cutout",
@@ -301,7 +307,7 @@ func TestGetSessionDiffAddsSourceDetailsToRetryableResolutionError(t *testing.T)
 	}
 }
 
-func TestGetSessionDiffUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
+func TestGetSessionDiffUsesCurrentBaseBranchForLiveWorktree(t *testing.T) {
 	ctx := context.Background()
 	diffPort := &fakeDiffPort{
 		filesByWorktreePath: map[string][]gitdiff.DiffFile{
@@ -328,7 +334,7 @@ func TestGetSessionDiffUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
 	if !got.Available || len(got.Files) != 1 || got.Files[0].Path != "live.go" {
 		t.Fatalf("GetSessionDiff() = %#v", got)
 	}
-	if diffPort.lastWorktreePath != "/live-worktree" || diffPort.lastBaseRef != "stored-base" || diffPort.lastHeadRef != "" {
+	if diffPort.lastWorktreePath != "/live-worktree" || diffPort.lastBaseRef != "main..." || diffPort.lastHeadRef != "" {
 		t.Fatalf("diff input path/base/head = %q/%q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef, diffPort.lastHeadRef)
 	}
 }
@@ -407,7 +413,7 @@ func TestGetSessionDiffFallsBackToFirstFileWhenSelectedFileIsMissing(t *testing.
 		},
 	}
 	service := New(
-		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", WorktreeBaseCommit: "base"}},
+		&fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/repo", BaseBranch: "main", WorktreeBaseCommit: "base"}},
 		&fakeProjectRepository{project: projectdomain.Project{ID: "project-1", IsGit: true}},
 		diffPort,
 	)
@@ -419,8 +425,8 @@ func TestGetSessionDiffFallsBackToFirstFileWhenSelectedFileIsMissing(t *testing.
 	if got.FilePath != "a.go" || got.FileDiff == nil || got.FileDiff.File.Path != "a.go" {
 		t.Fatalf("GetSessionDiff() fallback = filePath %q diff %#v", got.FilePath, got.FileDiff)
 	}
-	if diffPort.lastBaseRef != "base" {
-		t.Fatalf("session base commit used %q, want base", diffPort.lastBaseRef)
+	if diffPort.lastBaseRef != "main..." {
+		t.Fatalf("session base ref used %q, want main...", diffPort.lastBaseRef)
 	}
 }
 
@@ -469,7 +475,7 @@ func TestGetSessionDiffUsesMergeRecordFileDiffWhenWorktreeWasCleaned(t *testing.
 	}
 	service := New(
 		&fakeSessionRepository{
-			session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/removed", BaseBranch: "main"},
+			session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusClosed, WorktreePath: "/removed", BaseBranch: "main"},
 			mergeRecord: sessiondomain.MergeRecord{
 				SessionID:   "session-1",
 				Status:      "merged",
@@ -512,7 +518,7 @@ func TestGetSessionDiffMergeRecordSkipsRangeHunksWhenNotRequested(t *testing.T) 
 	}
 	service := New(
 		&fakeSessionRepository{
-			session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", WorktreePath: "/removed", BaseBranch: "main"},
+			session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusClosed, WorktreePath: "/removed", BaseBranch: "main"},
 			mergeRecord: sessiondomain.MergeRecord{
 				SessionID:   "session-1",
 				Status:      "merged",
@@ -581,7 +587,7 @@ func TestGetBranchDiffAggregatesSessionWorktreesForProjectBranch(t *testing.T) {
 	}
 }
 
-func TestGetBranchDiffUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
+func TestGetBranchDiffUsesCurrentBaseBranchForLiveWorktree(t *testing.T) {
 	ctx := context.Background()
 	diffPort := &fakeDiffPort{
 		files: []gitdiff.DiffFile{{Path: "a.go", Status: "modified", Additions: 1}},
@@ -607,7 +613,7 @@ func TestGetBranchDiffUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
 	if !got.Available || len(got.Files) != 1 {
 		t.Fatalf("GetBranchDiff() = %#v", got)
 	}
-	if diffPort.lastWorktreePath != "/worktrees/session-1" || diffPort.lastBaseRef != "base-commit" || diffPort.lastHeadRef != "" {
+	if diffPort.lastWorktreePath != "/worktrees/session-1" || diffPort.lastBaseRef != "main..." || diffPort.lastHeadRef != "" {
 		t.Fatalf("diff input path/base/head = %q/%q/%q", diffPort.lastWorktreePath, diffPort.lastBaseRef, diffPort.lastHeadRef)
 	}
 }
@@ -626,7 +632,7 @@ func TestGetBranchDiffUsesMergeRecordFileDiffLazily(t *testing.T) {
 	service := New(
 		&fakeSessionRepository{
 			sessions: []sessiondomain.Session{
-				{ID: "session-1", ProjectID: "project-1", BaseBranch: "main", WorktreePath: "/removed"},
+				{ID: "session-1", ProjectID: "project-1", Status: sessiondomain.StatusClosed, BaseBranch: "main", WorktreePath: "/removed"},
 			},
 			mergeRecord: sessiondomain.MergeRecord{
 				SessionID:   "session-1",
@@ -716,7 +722,7 @@ func TestGetCommitHistoryReturnsPagedCommits(t *testing.T) {
 	if !got.Available || got.Commits.Total != 3 || len(got.Commits.Items) != 1 || got.Commits.Items[0].Hash != "commit-1" {
 		t.Fatalf("GetCommitHistory() = %#v", got)
 	}
-	if diffPort.lastCommitWorktreePath != "/repo" || diffPort.lastCommitBaseRef != "base" || diffPort.lastCommitHeadRef != "" {
+	if diffPort.lastCommitWorktreePath != "/repo" || diffPort.lastCommitBaseRef != "main..." || diffPort.lastCommitHeadRef != "" {
 		t.Fatalf("commit input = path %q base %q head %q", diffPort.lastCommitWorktreePath, diffPort.lastCommitBaseRef, diffPort.lastCommitHeadRef)
 	}
 }
@@ -752,7 +758,7 @@ func TestGetCommitHistoryUsesResolvedMergeLogRange(t *testing.T) {
 	}
 }
 
-func TestGetCommitHistoryUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
+func TestGetCommitHistoryUsesCurrentBaseBranchForLiveWorktree(t *testing.T) {
 	ctx := context.Background()
 	diffPort := &fakeDiffPort{
 		commits: []gitdiff.CommitRecord{{Hash: "commit-1", Subject: "change"}},
@@ -776,7 +782,7 @@ func TestGetCommitHistoryUsesStoredBaseCommitForLiveWorktree(t *testing.T) {
 	if !got.Available || got.Commits.Total != 1 {
 		t.Fatalf("GetCommitHistory() = %#v", got)
 	}
-	if diffPort.lastCommitWorktreePath != "/repo" || diffPort.lastCommitBaseRef != "base-commit" || diffPort.lastCommitHeadRef != "" {
+	if diffPort.lastCommitWorktreePath != "/repo" || diffPort.lastCommitBaseRef != "main..." || diffPort.lastCommitHeadRef != "" {
 		t.Fatalf("commit input = path %q base %q head %q", diffPort.lastCommitWorktreePath, diffPort.lastCommitBaseRef, diffPort.lastCommitHeadRef)
 	}
 }
@@ -997,10 +1003,10 @@ func (p *fakeDiffPort) ResolveSessionDiffSource(_ context.Context, input gitdiff
 	if input.WorktreePath == "" {
 		return gitdiff.DiffInput{}, false, nil
 	}
-	if input.WorktreeBaseCommit == "" {
+	if input.BaseBranch == "" {
 		return gitdiff.DiffInput{}, false, gitdiff.ErrSessionDiffInvariant
 	}
-	return gitdiff.DiffInput{WorktreePath: input.WorktreePath, BaseRef: input.WorktreeBaseCommit}, true, nil
+	return gitdiff.DiffInput{WorktreePath: input.WorktreePath, BaseRef: input.BaseBranch + "..."}, true, nil
 }
 
 func (p *fakeDiffPort) ChangedFiles(_ context.Context, input gitdiff.DiffInput) ([]gitdiff.DiffFile, error) {

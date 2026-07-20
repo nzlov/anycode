@@ -5302,6 +5302,7 @@ func TestCloseSessionPersistsCleanupRequestWithoutGitSideEffects(t *testing.T) {
 		IsGit: true,
 	}
 	worktrees := newFakeWorktreeManager()
+	worktrees.headCommit = "closed-head"
 	service := New(repo, projects, WithWorktrees(worktrees))
 	service.now = func() time.Time { return time.Unix(30, 0).UTC() }
 
@@ -5315,6 +5316,12 @@ func TestCloseSessionPersistsCleanupRequestWithoutGitSideEffects(t *testing.T) {
 	if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
 		t.Fatalf("close performed git cleanup: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
 	}
+	if saved := repo.sessions["session-1"]; saved.WorktreeHeadCommit != "closed-head" {
+		t.Fatalf("captured worktree head = %q", saved.WorktreeHeadCommit)
+	}
+	if worktrees.headCommitPath != "/data/worktrees/project-1/session-1" || worktrees.headCommitRef != "" {
+		t.Fatalf("HeadCommit() = path %q ref %q", worktrees.headCommitPath, worktrees.headCommitRef)
+	}
 	if got.WorktreePath != "/data/worktrees/project-1/session-1" || got.WorktreeBaseCommit != "base" || got.WorktreeCleanup.Status != domain.WorktreeCleanupPending {
 		t.Fatalf("closed session worktree fields = %#v", got)
 	}
@@ -5325,12 +5332,13 @@ func TestDrainWorktreeCleanupRemovesPersistedResources(t *testing.T) {
 	repo := newFakeRepository()
 	confirmedAt := time.Unix(34, 0).UTC()
 	repo.sessions["session-1"] = domain.Session{
-		ID:             "session-1",
-		ProjectID:      "project-1",
-		Status:         domain.StatusClosed,
-		BaseBranch:     "main",
-		WorktreePath:   "/data/worktrees/project-1/session-1",
-		WorktreeBranch: "session-1",
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusClosed,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBranch:     "session-1",
+		WorktreeHeadCommit: "closed-head",
 		WorktreeCleanup: domain.WorktreeCleanup{
 			Status:               domain.WorktreeCleanupPending,
 			OwnershipToken:       "test-owner-token",
@@ -5353,11 +5361,58 @@ func TestDrainWorktreeCleanupRemovesPersistedResources(t *testing.T) {
 	if !slices.Equal(worktrees.removed, []string{"/data/worktrees/project-1/session-1"}) || !slices.Equal(worktrees.deletedBranches, []string{"/workspace/project-1:session-1"}) {
 		t.Fatalf("cleanup calls = removed:%#v branches:%#v", worktrees.removed, worktrees.deletedBranches)
 	}
+	if !slices.Equal(worktrees.retainedCommits, []string{"/workspace/project-1:session-1:closed-head"}) {
+		t.Fatalf("retained commits = %#v", worktrees.retainedCommits)
+	}
+	if !slices.Equal(worktrees.operations, []string{"retain", "remove", "delete_branch", "release_ownership"}) {
+		t.Fatalf("cleanup operation order = %#v", worktrees.operations)
+	}
 	if !slices.Equal(worktrees.releasedOwnership, []string{"/data/worktrees/project-1/session-1:test-owner-token"}) {
 		t.Fatalf("released ownership = %#v", worktrees.releasedOwnership)
 	}
 	if saved := repo.sessions["session-1"]; saved.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned || saved.WorktreeCleanup.CompletedAt == nil || saved.WorktreePath == "" {
 		t.Fatalf("cleaned session = %#v", saved)
+	}
+}
+
+func TestDrainWorktreeCleanupKeepsResourcesWhenHeadRetentionFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	confirmedAt := time.Unix(34, 0).UTC()
+	repo.sessions["session-1"] = domain.Session{
+		ID:                 "session-1",
+		ProjectID:          "project-1",
+		Status:             domain.StatusClosed,
+		BaseBranch:         "main",
+		WorktreePath:       "/data/worktrees/project-1/session-1",
+		WorktreeBranch:     "session-1",
+		WorktreeHeadCommit: "closed-head",
+		WorktreeCleanup: domain.WorktreeCleanup{
+			Status:               domain.WorktreeCleanupPending,
+			OwnershipToken:       "test-owner-token",
+			OwnershipConfirmedAt: &confirmedAt,
+		},
+	}
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Path: projectdomain.ProjectPath{Value: "/workspace/project-1"}, IsGit: true}
+	worktrees := newFakeWorktreeManager()
+	worktrees.retainCommitErr = errors.New("update ref failed")
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.now = func() time.Time { return time.Unix(35, 0).UTC() }
+
+	processed, err := service.DrainWorktreeCleanup(ctx)
+	if err != nil {
+		t.Fatalf("DrainWorktreeCleanup() error = %v", err)
+	}
+	if processed != 1 {
+		t.Fatalf("DrainWorktreeCleanup() = %d", processed)
+	}
+	if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 || len(worktrees.releasedOwnership) != 0 {
+		t.Fatalf("cleanup continued after retain failure: %#v", worktrees.operations)
+	}
+	saved := repo.sessions["session-1"]
+	if saved.WorktreeCleanup.Status != domain.WorktreeCleanupFailed || saved.WorktreeCleanup.ErrorCode != "worktree_head_retain_failed" || !saved.WorktreeCleanup.Retryable {
+		t.Fatalf("retention failure = %#v", saved.WorktreeCleanup)
 	}
 }
 
@@ -11715,6 +11770,7 @@ type fakeWorktreeManager struct {
 	headCommitErr     error
 	removeErr         error
 	deleteBranchErr   error
+	retainCommitErr   error
 	releaseOwnerErr   error
 	statErr           error
 	inspectErr        error
@@ -11728,7 +11784,9 @@ type fakeWorktreeManager struct {
 	headCommitRef     string
 	removed           []string
 	deletedBranches   []string
+	retainedCommits   []string
 	releasedOwnership []string
+	operations        []string
 	missingPaths      map[string]bool
 	onCreate          func()
 	createStarted     chan struct{}
@@ -11824,6 +11882,7 @@ func (m *fakeWorktreeManager) InspectOwnership(_ context.Context, _ string, path
 }
 
 func (m *fakeWorktreeManager) Remove(_ context.Context, path string) error {
+	m.operations = append(m.operations, "remove")
 	m.removed = append(m.removed, path)
 	if m.removeErr != nil {
 		return m.removeErr
@@ -11833,6 +11892,7 @@ func (m *fakeWorktreeManager) Remove(_ context.Context, path string) error {
 }
 
 func (m *fakeWorktreeManager) DeleteBranch(_ context.Context, projectPath string, branch string) error {
+	m.operations = append(m.operations, "delete_branch")
 	m.deletedBranches = append(m.deletedBranches, projectPath+":"+branch)
 	if m.deleteBranchErr != nil {
 		return m.deleteBranchErr
@@ -11840,7 +11900,14 @@ func (m *fakeWorktreeManager) DeleteBranch(_ context.Context, projectPath string
 	return nil
 }
 
+func (m *fakeWorktreeManager) RetainCommit(_ context.Context, projectPath string, sessionID domain.ID, commit string) error {
+	m.operations = append(m.operations, "retain")
+	m.retainedCommits = append(m.retainedCommits, projectPath+":"+string(sessionID)+":"+commit)
+	return m.retainCommitErr
+}
+
 func (m *fakeWorktreeManager) ReleaseOwnership(_ context.Context, path string, ownershipToken string) error {
+	m.operations = append(m.operations, "release_ownership")
 	m.releasedOwnership = append(m.releasedOwnership, path+":"+ownershipToken)
 	return m.releaseOwnerErr
 }
@@ -11864,7 +11931,9 @@ func (m *fakeWorktreeManager) resetCallState() {
 	m.headCommitRef = ""
 	m.removed = nil
 	m.deletedBranches = nil
+	m.retainedCommits = nil
 	m.releasedOwnership = nil
+	m.operations = nil
 }
 
 func normalizeFakeSessionWorktree(session domain.Session) domain.Session {

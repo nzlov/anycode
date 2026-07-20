@@ -33,6 +33,8 @@ const (
 	FieldWorktreeBranch = "worktree_branch"
 	// FieldWorktreeBaseCommit holds the string denoting the worktree_base_commit field in the database.
 	FieldWorktreeBaseCommit = "worktree_base_commit"
+	// FieldWorktreeHeadCommit holds the string denoting the worktree_head_commit field in the database.
+	FieldWorktreeHeadCommit = "worktree_head_commit"
 	// FieldWorktreeCleanupStatus holds the string denoting the worktree_cleanup_status field in the database.
 	FieldWorktreeCleanupStatus = "worktree_cleanup_status"
 	// FieldWorktreeCleanupAttempts holds the string denoting the worktree_cleanup_attempts field in the database.
@@ -134,6 +136,7 @@ var Columns = []string{
 	FieldWorktreePath,
 	FieldWorktreeBranch,
 	FieldWorktreeBaseCommit,
+	FieldWorktreeHeadCommit,
 	FieldWorktreeCleanupStatus,
 	FieldWorktreeCleanupAttempts,
 	FieldWorktreeOwnershipToken,
@@ -207,6 +210,8 @@ var (
 	DefaultWorktreeBranch string
 	// DefaultWorktreeBaseCommit holds the default value on creation for the "worktree_base_commit" field.
 	DefaultWorktreeBaseCommit string
+	// DefaultWorktreeHeadCommit holds the default value on creation for the "worktree_head_commit" field.
+	DefaultWorktreeHeadCommit string
 	// DefaultWorktreeCleanupStatus holds the default value on creation for the "worktree_cleanup_status" field.
 	DefaultWorktreeCleanupStatus string
 	// DefaultWorktreeCleanupAttempts holds the default value on creation for the "worktree_cleanup_attempts" field.
@@ -327,6 +332,11 @@ func ByWorktreeBranch(opts ...sql.OrderTermOption) OrderOption {
 // ByWorktreeBaseCommit orders the results by the worktree_base_commit field.
 func ByWorktreeBaseCommit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorktreeBaseCommit, opts...).ToFunc()
+}
+
+// ByWorktreeHeadCommit orders the results by the worktree_head_commit field.
+func ByWorktreeHeadCommit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorktreeHeadCommit, opts...).ToFunc()
 }
 
 // ByWorktreeCleanupStatus orders the results by the worktree_cleanup_status field.

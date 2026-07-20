@@ -339,12 +339,23 @@ func mergeRecordDiffInput(project projectdomain.Project, mergeRecord session.Mer
 }
 
 func (s *Service) resolveSessionDiffInput(ctx context.Context, sess session.Session, project projectdomain.Project) (gitdiff.DiffInput, bool, error) {
-	mergeRecord, hasMergeRecord, err := s.sessions.LatestSuccessfulMergeRecord(ctx, sess.ID)
-	if err != nil {
-		return gitdiff.DiffInput{}, false, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "latest merge record unavailable").WithRetryable(true)
-	}
-	if hasMergeRecord && strings.TrimSpace(mergeRecord.BaseCommit) != "" && strings.TrimSpace(mergeRecord.MergeCommit) != "" {
-		return mergeRecordDiffInput(project, mergeRecord), true, nil
+	if sess.Status == session.StatusClosed {
+		if headCommit := strings.TrimSpace(sess.WorktreeHeadCommit); headCommit != "" {
+			if baseCommit := strings.TrimSpace(sess.WorktreeBaseCommit); baseCommit != "" {
+				return gitdiff.DiffInput{
+					WorktreePath: strings.TrimSpace(project.Path.Value),
+					BaseRef:      baseCommit,
+					HeadRef:      headCommit,
+				}, true, nil
+			}
+		}
+		mergeRecord, hasMergeRecord, err := s.sessions.LatestSuccessfulMergeRecord(ctx, sess.ID)
+		if err != nil {
+			return gitdiff.DiffInput{}, false, apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "latest merge record unavailable").WithRetryable(true)
+		}
+		if hasMergeRecord && strings.TrimSpace(mergeRecord.BaseCommit) != "" && strings.TrimSpace(mergeRecord.MergeCommit) != "" {
+			return mergeRecordDiffInput(project, mergeRecord), true, nil
+		}
 	}
 	diffInput, ok, err := s.diff.ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
 		ProjectPath:        strings.TrimSpace(project.Path.Value),
@@ -352,17 +363,12 @@ func (s *Service) resolveSessionDiffInput(ctx context.Context, sess session.Sess
 		BaseBranch:         strings.TrimSpace(sess.BaseBranch),
 		WorktreeBranch:     strings.TrimSpace(string(sess.ID)),
 		WorktreeBaseCommit: strings.TrimSpace(sess.WorktreeBaseCommit),
+		UseMergeHistory:    sess.Status == session.StatusClosed,
 	})
 	if err == nil {
 		return diffInput, ok, nil
 	}
 	appErr := apperror.Wrap(err, apperror.CodeDiffUnavailable, apperror.CategoryInfraError, "resolve session diff source failed")
-	if errors.Is(err, gitdiff.ErrAmbiguousSessionMerge) {
-		return gitdiff.DiffInput{}, false, appErr.WithDetails(map[string]any{
-			"sessionId":      string(sess.ID),
-			"worktreeBranch": string(sess.ID),
-		}).WithUserAction("inspect_git_history")
-	}
 	if errors.Is(err, gitdiff.ErrSessionDiffInvariant) {
 		return gitdiff.DiffInput{}, false, appErr.WithDetails(map[string]any{
 			"sessionId": string(sess.ID),

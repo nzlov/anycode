@@ -32,14 +32,16 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	projectID := session.ProjectID("project-1")
 	oldProjectID := session.ProjectID("project-2")
 	input := session.Session{
-		ID:             session.ID("session-1"),
-		ProjectID:      projectID,
-		Requirement:    "Build session persistence",
-		Mode:           session.ModeChat,
-		Status:         session.StatusRunning,
-		BaseBranch:     "main",
-		WorktreePath:   "/worktrees/session-1",
-		WorktreeBranch: "session-1",
+		ID:                 session.ID("session-1"),
+		ProjectID:          projectID,
+		Requirement:        "Build session persistence",
+		Mode:               session.ModeChat,
+		Status:             session.StatusRunning,
+		BaseBranch:         "main",
+		WorktreePath:       "/worktrees/session-1",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: "base-commit",
+		WorktreeHeadCommit: "closed-head",
 		WorktreeCleanup: session.WorktreeCleanup{
 			Status:               session.WorktreeCleanupFailed,
 			Attempts:             2,
@@ -785,6 +787,8 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.BaseBranch != want.BaseBranch ||
 		got.WorktreePath != want.WorktreePath ||
 		got.WorktreeBranch != want.WorktreeBranch ||
+		got.WorktreeBaseCommit != want.WorktreeBaseCommit ||
+		got.WorktreeHeadCommit != want.WorktreeHeadCommit ||
 		got.WorktreeCleanup.Status != want.WorktreeCleanup.Status ||
 		got.WorktreeCleanup.Attempts != want.WorktreeCleanup.Attempts ||
 		got.WorktreeCleanup.OwnershipToken != want.WorktreeCleanup.OwnershipToken ||
