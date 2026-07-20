@@ -328,25 +328,6 @@ func (r *SessionRepository) ListProvisioningWorktrees(ctx context.Context, limit
 	return sessions, nil
 }
 
-func (r *SessionRepository) LastConfigForProject(ctx context.Context, projectID domainsession.ProjectID) (domainsession.Config, bool, error) {
-	row, err := r.client.Session.Query().
-		Where(entsession.ProjectIDEQ(string(projectID))).
-		Order(ent.Desc(entsession.FieldCreatedAt)).
-		First(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return domainsession.Config{}, false, nil
-		}
-		return domainsession.Config{}, false, fmt.Errorf("last session config: %w", err)
-	}
-	return domainsession.Config{
-		CodexModel:      row.CodexModel,
-		ReasoningEffort: row.ReasoningEffort,
-		PermissionMode:  row.PermissionMode,
-		FastMode:        row.FastMode,
-	}, true, nil
-}
-
 func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context) ([]domainsession.Session, error) {
 	rows, err := r.client.Session.Query().
 		Where(

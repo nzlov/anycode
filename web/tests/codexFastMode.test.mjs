@@ -29,34 +29,32 @@ test('Fast uses the shared runtime controls on desktop and mobile prompt surface
   assert.match(detailSource, /v-model:fast="composerFast"/);
 });
 
-test('new sessions load project-scoped defaults without global runtime config storage', () => {
-  assert.match(sessionsSource, /query LastSessionConfig\(\$projectId: ID!\)/);
-  assert.match(sessionsSource, /lastSessionConfig\(projectId: \$projectId\)/);
-  assert.match(newSessionSource, /getLastSessionConfig\(value\)/);
-  assert.match(newSessionSource, /watch\(projectId,[\s\S]*loadLastConfigForProject\(value\)/);
+test('new sessions restore and persist one global frontend runtime config', () => {
+  assert.doesNotMatch(sessionsSource, /LastSessionConfig|lastSessionConfig/);
+  assert.match(newSessionSource, /const lastSessionConfigStorageKey = 'anycode\.lastSessionConfig'/);
   assert.match(
     newSessionSource,
-    /lastConfigRequestToken\.value !== token \|\| projectId\.value !== value/,
+    /window\.localStorage\.getItem\(lastSessionConfigStorageKey\)/,
   );
-  assert.match(newSessionSource, /model\.value = config\.codexModel/);
-  assert.match(newSessionSource, /fast\.value = config\.fastMode/);
-  assert.match(newSessionSource, /function resetRunConfig\(\)[\s\S]*fast\.value = false/);
-  assert.match(
-    sessionsSource,
-    /export async function getLastSessionConfig[\s\S]*?variables: \{ projectId \},\s*notify: false,\s*\}\);\s*return data\.lastSessionConfig/,
-  );
-  assert.match(newSessionSource, /v-if="runConfigError"[\s\S]*@click="retryLastConfig"/);
+  assert.match(newSessionSource, /const model = ref\(storedRunConfig\.codexModel\)/);
+  assert.match(newSessionSource, /const effort = ref\(storedRunConfig\.reasoningEffort\)/);
+  assert.match(newSessionSource, /const permission = ref\(storedRunConfig\.permissionMode\)/);
+  assert.match(newSessionSource, /const fast = ref\(storedRunConfig\.fastMode\)/);
   assert.match(
     newSessionSource,
-    /if \(runConfigLoading\.value \|\| runConfigError\.value\) return false/,
+    /function rememberSessionConfig\(config: SessionConfig\)[\s\S]*window\.localStorage\.setItem\(lastSessionConfigStorageKey, JSON\.stringify\(config\)\)/,
   );
   assert.match(
     newSessionSource,
-    /catch \(error\)[\s\S]*runConfigError\.value = `获取项目运行参数失败/,
+    /await createSessionRequest\(input\);[\s\S]*rememberSessionConfig\(config\)/,
   );
   assert.doesNotMatch(
     newSessionSource,
-    /anycode\.lastSessionConfig|rememberSessionConfig|storedSessionConfig/,
+    /getLastSessionConfig|loadLastConfigForProject|lastConfigRequestToken|runConfigLoading|runConfigError/,
+  );
+  assert.match(
+    newSessionSource,
+    /fastMode: typeof config\.fastMode === 'boolean' \? config\.fastMode : false/,
   );
 });
 

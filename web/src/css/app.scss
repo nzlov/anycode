@@ -807,11 +807,6 @@ a {
   overflow-y: auto;
 }
 
-.new-session-dialog--panel .new-session-config-error {
-  order: 0;
-  margin: 8px 8px 0;
-}
-
 .new-session-dialog--panel .prompt-shell {
   order: 1;
   border: 0;
@@ -1105,13 +1100,6 @@ a {
 .prompt-config-controls .q-field__marginal {
   min-height: 44px;
   height: 44px;
-}
-
-.new-session-config-error {
-  border: 1px solid color-mix(in srgb, var(--q-negative) 32%, var(--ac-border));
-  color: var(--q-negative);
-  background: color-mix(in srgb, var(--q-negative) 7%, var(--ac-surface));
-  overflow-wrap: anywhere;
 }
 
 .prompt-shell {

@@ -209,7 +209,6 @@ type ComplexityRoot struct {
 		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions       func(childComplexity int) int
-		LastSessionConfig       func(childComplexity int, projectID string) int
 		PendingQuestionBatches  func(childComplexity int, sessionID string) int
 		ProjectGitState         func(childComplexity int, projectID string, refresh bool) int
 		Projects                func(childComplexity int) int
@@ -657,7 +656,6 @@ type QueryResolver interface {
 	BrowseDirectory(ctx context.Context, input model.BrowseDirectoryInput) (*model.DirectoryPage, error)
 	Sessions(ctx context.Context, input *model.ListSessionsInput) (*model.SessionCardPage, error)
 	SessionCard(ctx context.Context, id string) (*model.SessionCard, error)
-	LastSessionConfig(ctx context.Context, projectID string) (*model.SessionConfig, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
@@ -1493,17 +1491,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.CodexModelOptions(childComplexity), true
 
-	case "Query.lastSessionConfig":
-		if e.ComplexityRoot.Query.LastSessionConfig == nil {
-			break
-		}
-
-		args, err := ec.field_Query_lastSessionConfig_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.LastSessionConfig(childComplexity, args["projectId"].(string)), true
 	case "Query.pendingQuestionBatches":
 		if e.ComplexityRoot.Query.PendingQuestionBatches == nil {
 			break
@@ -3377,7 +3364,6 @@ type Query {
   browseDirectory(input: BrowseDirectoryInput!): DirectoryPage!
   sessions(input: ListSessionsInput): SessionCardPage!
   sessionCard(id: ID!): SessionCard!
-  lastSessionConfig(projectId: ID!): SessionConfig
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
@@ -4515,17 +4501,6 @@ func (ec *executionContext) field_Query_browseDirectory_args(ctx context.Context
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Query_lastSessionConfig_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["projectId"] = arg0
 	return args, nil
 }
 
@@ -9032,57 +9007,6 @@ func (ec *executionContext) fieldContext_Query_sessionCard(ctx context.Context, 
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_sessionCard_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Query_lastSessionConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Query_lastSessionConfig,
-		func(ctx context.Context) (any, error) {
-			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().LastSessionConfig(ctx, fc.Args["projectId"].(string))
-		},
-		nil,
-		ec.marshalOSessionConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionConfig,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Query_lastSessionConfig(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Query",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "codexModel":
-				return ec.fieldContext_SessionConfig_codexModel(ctx, field)
-			case "reasoningEffort":
-				return ec.fieldContext_SessionConfig_reasoningEffort(ctx, field)
-			case "permissionMode":
-				return ec.fieldContext_SessionConfig_permissionMode(ctx, field)
-			case "fastMode":
-				return ec.fieldContext_SessionConfig_fastMode(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type SessionConfig", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_lastSessionConfig_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -22356,25 +22280,6 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
-				return res
-			}
-
-			rrm := func(ctx context.Context) graphql.Marshaler {
-				return ec.OperationContext.RootResolverMiddleware(ctx,
-					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
-			}
-
-			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "lastSessionConfig":
-			field := field
-
-			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
-				defer func() {
-					if r := recover(); r != nil {
-						ec.Error(ctx, ec.Recover(ctx, r))
-					}
-				}()
-				res = ec._Query_lastSessionConfig(ctx, field)
 				return res
 			}
 

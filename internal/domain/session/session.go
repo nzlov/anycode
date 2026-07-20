@@ -600,7 +600,6 @@ type Repository interface {
 	ListWorktreeCleanupDue(ctx context.Context, now time.Time, limit int) ([]Session, error)
 	ListInterruptedWithCodexSession(ctx context.Context) ([]Session, error)
 	CountByProject(ctx context.Context, projectID ProjectID) (int, error)
-	LastConfigForProject(ctx context.Context, projectID ProjectID) (Config, bool, error)
 	AppendPrompt(ctx context.Context, append PromptAppend) error
 	UpdatePendingPromptAppendBody(ctx context.Context, sessionID ID, id string, body string) (PromptAppend, bool, error)
 	DeletePromptAppend(ctx context.Context, id string) error

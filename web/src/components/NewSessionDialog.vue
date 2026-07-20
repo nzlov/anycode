@@ -13,7 +13,7 @@
       class="new-session-dialog app-content-dialog"
       :class="{ 'new-session-dialog--panel': panel }"
       :inert="branchesLoading"
-      :aria-busy="branchesLoading || runConfigLoading"
+      :aria-busy="branchesLoading"
     >
       <q-card-section v-if="!panel" class="new-session-dialog__header row items-center q-pb-sm">
         <div class="text-subtitle1 text-weight-bold">新建卡片</div>
@@ -100,26 +100,6 @@
           />
         </div>
 
-        <q-banner v-if="runConfigError" dense rounded class="new-session-config-error">
-          <template #avatar>
-            <q-icon name="error_outline" color="negative" />
-          </template>
-          {{ runConfigError }}
-          <template #action>
-            <q-btn
-              flat
-              round
-              dense
-              class="app-icon-btn"
-              icon="refresh"
-              aria-label="重试加载项目运行参数"
-              @click="retryLastConfig"
-            >
-              <q-tooltip>重试</q-tooltip>
-            </q-btn>
-          </template>
-        </q-banner>
-
         <!-- GLUE: Half-width panels use the existing menu until the viewport is wide enough for inline controls. -->
         <CodexPromptComposer
           v-model:prompt="prompt"
@@ -134,7 +114,7 @@
           :force-config-menu="
             $q.screen.lt.md || (panel && $q.screen.width < overviewInlineConfigMinWidth)
           "
-          :disabled="creating || runConfigLoading || Boolean(runConfigError)"
+          :disabled="creating"
           @submit="createSession(preferredAvailableMode)"
         >
           <template #actions>
@@ -190,11 +170,7 @@ import { useProjectBranches } from '@/composables/useProjectBranches';
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
-import {
-  getLastSessionConfig,
-  type CreateSessionInput,
-  type SessionPriority,
-} from '@/services/sessions';
+import type { CreateSessionInput, SessionConfig, SessionPriority } from '@/services/sessions';
 import { getWorkflowDefinition } from '@/services/workflows';
 
 const props = defineProps<{
@@ -212,24 +188,23 @@ const { projects, projectOptions, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
 const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
 const lastLaunchModeStorageKey = 'anycode.lastNewSessionLaunchMode';
+const lastSessionConfigStorageKey = 'anycode.lastSessionConfig';
 const overviewInlineConfigMinWidth = 1536;
+const storedRunConfig = storedSessionConfig();
 const projectId = ref(projects.value[0]?.id ?? '');
 const branch = ref('');
 const preferredMode = ref<'workflow' | 'chat'>(storedLaunchMode());
 const priority = ref<SessionPriority>('medium');
 const prompt = ref('');
 const files = ref<File[]>([]);
-const model = ref('');
-const effort = ref('');
-const permission = ref(normalizePermissionMode('workspace-write'));
-const fast = ref(false);
+const model = ref(storedRunConfig.codexModel);
+const effort = ref(storedRunConfig.reasoningEffort);
+const permission = ref(storedRunConfig.permissionMode);
+const fast = ref(storedRunConfig.fastMode);
 const creating = ref(false);
 const launchingMode = ref<'workflow' | 'chat' | ''>('');
-const runConfigLoading = ref(false);
-const runConfigError = ref('');
 const workflowAvailable = ref(false);
 const workflowAvailabilityToken = ref(0);
-const lastConfigRequestToken = ref(0);
 const dialogVisible = computed(() => Boolean(props.panel || props.modelValue));
 
 const branchOptions = computed(() => {
@@ -240,7 +215,6 @@ const selectedProject = computed(() =>
 );
 const branchesLoading = computed(() => Boolean(branchLoading.value[projectId.value]));
 const branchSelectionReady = computed(() => {
-  if (runConfigLoading.value || runConfigError.value) return false;
   if (!selectedProject.value) return false;
   if (!selectedProject.value.isGit) return true;
   const state = branchCache.value[projectId.value];
@@ -296,43 +270,41 @@ function rememberLaunchMode(value: 'workflow' | 'chat') {
   }
 }
 
-function resetRunConfig() {
-  model.value = '';
-  effort.value = '';
-  permission.value = normalizePermissionMode('workspace-write');
-  fast.value = false;
-}
-
-async function loadLastConfigForProject(value: string) {
-  const token = lastConfigRequestToken.value + 1;
-  lastConfigRequestToken.value = token;
-  runConfigError.value = '';
-  resetRunConfig();
-  if (!value) {
-    runConfigLoading.value = false;
-    return;
-  }
-  runConfigLoading.value = true;
+function storedSessionConfig(): SessionConfig {
+  const defaults: SessionConfig = {
+    codexModel: '',
+    reasoningEffort: '',
+    permissionMode: normalizePermissionMode('workspace-write'),
+    fastMode: false,
+  };
   try {
-    const config = await getLastSessionConfig(value);
-    if (lastConfigRequestToken.value !== token || projectId.value !== value) return;
-    if (!config) return;
-    model.value = config.codexModel;
-    effort.value = config.reasoningEffort;
-    permission.value = normalizePermissionMode(config.permissionMode);
-    fast.value = config.fastMode;
-  } catch (error) {
-    if (lastConfigRequestToken.value !== token || projectId.value !== value) return;
-    runConfigError.value = `获取项目运行参数失败：${errorMessage(error)}`;
-  } finally {
-    if (lastConfigRequestToken.value === token) {
-      runConfigLoading.value = false;
-    }
+    const raw = window.localStorage.getItem(lastSessionConfigStorageKey);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults;
+    const config = parsed as Record<string, unknown>;
+    return {
+      codexModel: typeof config.codexModel === 'string' ? config.codexModel : '',
+      reasoningEffort:
+        typeof config.reasoningEffort === 'string' ? config.reasoningEffort : '',
+      permissionMode: normalizePermissionMode(
+        typeof config.permissionMode === 'string'
+          ? config.permissionMode
+          : defaults.permissionMode,
+      ),
+      fastMode: typeof config.fastMode === 'boolean' ? config.fastMode : false,
+    };
+  } catch {
+    return defaults;
   }
 }
 
-function retryLastConfig() {
-  if (projectId.value) void loadLastConfigForProject(projectId.value);
+function rememberSessionConfig(config: SessionConfig) {
+  try {
+    window.localStorage.setItem(lastSessionConfigStorageKey, JSON.stringify(config));
+  } catch {
+    // Ignore storage failures; the new session still uses the selected config.
+  }
 }
 
 function selectInitialProject() {
@@ -421,7 +393,7 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     return;
   }
 
-  const config: CreateSessionInput['config'] = {
+  const config: SessionConfig = {
     codexModel: model.value,
     reasoningEffort: effort.value,
     permissionMode: permission.value,
@@ -457,6 +429,7 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     await createSessionRequest(input);
     rememberProjectId(input.projectId);
     rememberLaunchMode(input.mode);
+    rememberSessionConfig(config);
     files.value = [];
     prompt.value = '';
     emit('update:modelValue', false);
@@ -520,14 +493,8 @@ watch(
 );
 
 watch(dialogVisible, (open) => {
-  if (!open) {
-    lastConfigRequestToken.value += 1;
-    runConfigLoading.value = false;
-    runConfigError.value = '';
-    return;
-  }
-  const projectChanged = selectInitialProject();
-  if (!projectChanged && projectId.value) void loadLastConfigForProject(projectId.value);
+  if (!open) return;
+  selectInitialProject();
   void loadProjects().then(() => {
     selectInitialProject();
     void loadWorkflowAvailability();
@@ -539,20 +506,17 @@ watch(projectId, (value, previous) => {
   branch.value = '';
   void loadBranchesForProject(value, { refresh: true });
   void loadWorkflowAvailability();
-  if (dialogVisible.value) void loadLastConfigForProject(value);
 });
 
 watch(
   () => props.defaultProjectId,
   (value, previous) => {
     if (!dialogVisible.value || value === previous) return;
-    const projectChanged = selectInitialProject();
-    if (!projectChanged && projectId.value) void loadLastConfigForProject(projectId.value);
+    selectInitialProject();
   },
 );
 
 onMounted(() => {
-  if (dialogVisible.value && projectId.value) void loadLastConfigForProject(projectId.value);
   void loadProjects().then(loadWorkflowAvailability);
 });
 </script>

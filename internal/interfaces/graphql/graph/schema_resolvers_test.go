@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -573,37 +572,6 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 	}
 	if got[0].Questions[0].Answer == nil || got[0].Questions[0].Options[0].Payload == nil {
 		t.Fatalf("pending question JSON maps should be non-nil: %#v", got[0].Questions[0])
-	}
-}
-
-func TestQueryLastSessionConfigReturnsNullableProjectConfig(t *testing.T) {
-	sessions := &fakeSessionUseCase{
-		lastConfigResult: &sessionapp.ConfigDTO{
-			CodexModel:      "gpt-5.4",
-			ReasoningEffort: "high",
-			PermissionMode:  "workspace-write",
-			FastMode:        true,
-		},
-	}
-	resolver := NewResolver(UseCases{Sessions: sessions}).Query()
-
-	got, err := resolver.LastSessionConfig(context.Background(), "project-1")
-	if err != nil {
-		t.Fatalf("LastSessionConfig() error = %v", err)
-	}
-	if sessions.gotLastConfigProjectID != "project-1" || got == nil || got.CodexModel != "gpt-5.4" || !got.FastMode {
-		t.Fatalf("LastSessionConfig() = %#v, project = %q", got, sessions.gotLastConfigProjectID)
-	}
-
-	sessions.lastConfigResult = nil
-	got, err = resolver.LastSessionConfig(context.Background(), "project-1")
-	if err != nil || got != nil {
-		t.Fatalf("LastSessionConfig() without history = %#v, %v", got, err)
-	}
-
-	sessions.err = errors.New("repository failed")
-	if _, err := resolver.LastSessionConfig(context.Background(), "project-1"); err == nil || !strings.Contains(err.Error(), "repository failed") {
-		t.Fatalf("LastSessionConfig() error = %v", err)
 	}
 }
 
@@ -1232,8 +1200,6 @@ type fakeSessionUseCase struct {
 	getCardResult          sessionapp.CardDTO
 	gotGetID               sessiondomain.ID
 	getResult              sessionapp.DetailDTO
-	gotLastConfigProjectID sessiondomain.ProjectID
-	lastConfigResult       *sessionapp.ConfigDTO
 	gotCreate              sessionapp.CreateSessionInput
 	createResult           sessionapp.DTO
 	gotResumeID            sessiondomain.ID
@@ -1283,11 +1249,6 @@ func (f *fakeSessionUseCase) ExecuteSessionWithOptions(_ context.Context, id ses
 func (f *fakeSessionUseCase) GetSession(_ context.Context, id sessiondomain.ID) (sessionapp.DetailDTO, error) {
 	f.gotGetID = id
 	return f.getResult, f.err
-}
-
-func (f *fakeSessionUseCase) LastSessionConfigForProject(_ context.Context, projectID sessiondomain.ProjectID) (*sessionapp.ConfigDTO, error) {
-	f.gotLastConfigProjectID = projectID
-	return f.lastConfigResult, f.err
 }
 
 func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batch questionapp.BatchDTO) error {

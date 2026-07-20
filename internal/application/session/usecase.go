@@ -60,7 +60,6 @@ type UseCase interface {
 	GetSession(ctx context.Context, id domain.ID) (DetailDTO, error)
 	GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error)
 	GetSessionCardStatus(ctx context.Context, id domain.ID) (CardStatusDTO, error)
-	LastSessionConfigForProject(ctx context.Context, projectID domain.ProjectID) (*ConfigDTO, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error)
 }
 
@@ -196,13 +195,6 @@ type WorktreeCleanupErrorDTO struct {
 	Code      string
 	Message   string
 	Retryable bool
-}
-
-type ConfigDTO struct {
-	CodexModel      string
-	ReasoningEffort string
-	PermissionMode  string
-	FastMode        bool
 }
 
 type CardDTO struct {
@@ -1905,10 +1897,8 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	if mode != domain.ModeChat && mode != domain.ModeWorkflow {
 		return DTO{}, fmt.Errorf("unsupported session mode %q", mode)
 	}
-	config, err := s.resolveSessionConfig(ctx, input.ProjectID, input.Config)
-	if err != nil {
-		return DTO{}, err
-	}
+	fastMode := input.Config.FastMode != nil && *input.Config.FastMode
+	config := configFromInput(input.Config, fastMode)
 	if mode == domain.ModeWorkflow {
 		if s.workflows == nil {
 			return DTO{}, errors.New("session workflow starter is required for workflow mode")
@@ -2338,41 +2328,6 @@ func (s *Service) startWorkflowSession(ctx context.Context, session domain.Sessi
 	return dto, nil
 }
 
-func (s *Service) resolveSessionConfig(ctx context.Context, projectID domain.ProjectID, requested ConfigInput) (domain.Config, error) {
-	if strings.TrimSpace(requested.CodexModel) != "" &&
-		strings.TrimSpace(requested.ReasoningEffort) != "" &&
-		strings.TrimSpace(requested.PermissionMode) != "" &&
-		requested.FastMode != nil {
-		return configFromInput(requested, *requested.FastMode), nil
-	}
-	previous, ok, err := s.repo.LastConfigForProject(ctx, projectID)
-	if err != nil {
-		return domain.Config{}, fmt.Errorf("last config for project: %w", err)
-	}
-	fastMode := false
-	if requested.FastMode != nil {
-		fastMode = *requested.FastMode
-	}
-	config := configFromInput(requested, fastMode)
-	if !ok {
-		return config, nil
-	}
-	previous = trimConfig(previous)
-	if config.CodexModel == "" {
-		config.CodexModel = previous.CodexModel
-	}
-	if config.ReasoningEffort == "" {
-		config.ReasoningEffort = previous.ReasoningEffort
-	}
-	if config.PermissionMode == "" {
-		config.PermissionMode = previous.PermissionMode
-	}
-	if requested.FastMode == nil {
-		config.FastMode = previous.FastMode
-	}
-	return config, nil
-}
-
 func configFromInput(input ConfigInput, fastMode bool) domain.Config {
 	return domain.Config{
 		CodexModel:      strings.TrimSpace(input.CodexModel),
@@ -2400,28 +2355,6 @@ func (s *Service) sessionIDForProject(ctx context.Context, project projectdomain
 		return "", fmt.Errorf("count project sessions: %w", err)
 	}
 	return domain.ID(fmt.Sprintf("p%s-c%d", projectIDCode(project.ID), count+attempt+1)), nil
-}
-
-func (s *Service) LastSessionConfigForProject(ctx context.Context, projectID domain.ProjectID) (*ConfigDTO, error) {
-	if s == nil {
-		return nil, errors.New("session usecase: nil service")
-	}
-	if projectID == "" {
-		return nil, errors.New("project id is required")
-	}
-	config, ok, err := s.repo.LastConfigForProject(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("last config for project: %w", err)
-	}
-	if !ok {
-		return nil, nil
-	}
-	return &ConfigDTO{
-		CodexModel:      config.CodexModel,
-		ReasoningEffort: config.ReasoningEffort,
-		PermissionMode:  config.PermissionMode,
-		FastMode:        config.FastMode,
-	}, nil
 }
 
 func isRandomHexID(id domain.ID) bool {

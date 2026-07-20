@@ -605,27 +605,6 @@ export async function getSessionCard(
   return normalizeSessionCard(data.sessionCard);
 }
 
-export async function getLastSessionConfig(projectId: string): Promise<SessionConfig | null> {
-  const data = await graphqlFetch<
-    { lastSessionConfig: SessionConfig | null },
-    { projectId: string }
-  >({
-    query: `
-      query LastSessionConfig($projectId: ID!) {
-        lastSessionConfig(projectId: $projectId) {
-          codexModel
-          reasoningEffort
-          permissionMode
-          fastMode
-        }
-      }
-    `,
-    variables: { projectId },
-    notify: false,
-  });
-  return data.lastSessionConfig;
-}
-
 export function subscribeSessionUpdates(handlers: {
   onData: (update: SessionUpdateEvent) => void;
   onError?: (error: Error) => void;

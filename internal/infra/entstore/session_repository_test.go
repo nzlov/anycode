@@ -10,7 +10,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/session"
 )
 
-func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
+func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{
 		DatabaseURL: filepath.Join(t.TempDir(), "anycode.db"),
@@ -324,17 +324,6 @@ func TestSessionRepositorySaveFindListLastConfigAndAppendPrompt(t *testing.T) {
 		if gotInterruptedIDs[i] != wantInterruptedIDs[i] {
 			t.Fatalf("interrupted sessions = %#v, want %#v", gotInterruptedIDs, wantInterruptedIDs)
 		}
-	}
-
-	config, ok, err := repo.LastConfigForProject(ctx, projectID)
-	if err != nil {
-		t.Fatalf("last config: %v", err)
-	}
-	if !ok {
-		t.Fatal("last config not found")
-	}
-	if config.CodexModel != "gpt-5.4-last" || config.ReasoningEffort != "medium" || config.PermissionMode != "read-only" || !config.FastMode {
-		t.Fatalf("last config mismatch: %#v", config)
 	}
 
 	appendAt := now.Add(2 * time.Minute)

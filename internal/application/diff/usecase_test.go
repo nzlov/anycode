@@ -876,10 +876,6 @@ func (r *fakeSessionRepository) CountByProject(context.Context, sessiondomain.Pr
 	return 0, nil
 }
 
-func (r *fakeSessionRepository) LastConfigForProject(context.Context, sessiondomain.ProjectID) (sessiondomain.Config, bool, error) {
-	return sessiondomain.Config{}, false, nil
-}
-
 func (r *fakeSessionRepository) AppendPrompt(context.Context, sessiondomain.PromptAppend) error {
 	return nil
 }
