@@ -6,8 +6,7 @@ import (
 )
 
 var (
-	ErrAmbiguousSessionMerge = errors.New("ambiguous session merge")
-	ErrSessionDiffInvariant  = errors.New("session diff invariant violation")
+	ErrSessionDiffInvariant = errors.New("session diff invariant violation")
 )
 
 type SessionID string
@@ -103,6 +102,7 @@ type ResolveSessionDiffInput struct {
 	BaseBranch         string
 	WorktreeBranch     string
 	WorktreeBaseCommit string
+	UseMergeHistory    bool
 }
 
 type FileDiffInput struct {

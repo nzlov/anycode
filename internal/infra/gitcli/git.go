@@ -157,6 +157,19 @@ func (c *Client) HeadCommit(ctx context.Context, path string, branch string) (st
 	return strings.TrimSpace(out), nil
 }
 
+func (c *Client) RetainCommit(ctx context.Context, projectPath string, sessionID session.ID, commit string) error {
+	commit = strings.TrimSpace(commit)
+	if commit == "" {
+		return nil
+	}
+	ref := "refs/anycode/sessions/" + strings.TrimSpace(string(sessionID))
+	if _, err := c.run(ctx, projectPath, "check-ref-format", ref); err != nil {
+		return err
+	}
+	_, err := c.run(ctx, projectPath, "update-ref", ref, commit)
+	return err
+}
+
 func (c *Client) CurrentBranch(ctx context.Context, path string) (string, error) {
 	out, err := c.run(ctx, path, "branch", "--show-current")
 	if err != nil {

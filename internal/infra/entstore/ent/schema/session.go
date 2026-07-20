@@ -26,6 +26,7 @@ func (Session) Fields() []ent.Field {
 		field.String("worktree_path").Default(""),
 		field.String("worktree_branch").Default(""),
 		field.String("worktree_base_commit").Default(""),
+		field.String("worktree_head_commit").Default(""),
 		field.String("worktree_cleanup_status").Default(string(domainsession.WorktreeCleanupNotApplicable)),
 		field.Int("worktree_cleanup_attempts").Default(0),
 		field.String("worktree_ownership_token").Default(""),

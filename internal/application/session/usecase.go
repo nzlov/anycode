@@ -681,6 +681,9 @@ func (s *Service) cleanupSessionWorktree(ctx context.Context, session domain.Ses
 	noResources := !ownership.PathExists && !ownership.BranchExists && !ownership.Registered
 	if !ownership.TokenMatches {
 		if noResources && !ownership.MarkerExists {
+			if err := s.retainSessionWorktreeHead(ctx, project.Path.Value, session); err != nil {
+				return s.recordWorktreeCleanupFailure(ctx, session, "worktree_head_retain_failed", err.Error(), true)
+			}
 			return s.completeWorktreeCleanup(ctx, session)
 		}
 		code := "worktree_ownership_unconfirmed"
@@ -714,6 +717,9 @@ func (s *Service) cleanupSessionWorktree(ctx context.Context, session domain.Ses
 	if ownership.PathExists && !ownership.Matches {
 		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_ownership_changed", "managed worktree path no longer matches the persisted branch; no resources were deleted", false)
 	}
+	if err := s.retainSessionWorktreeHead(ctx, project.Path.Value, session); err != nil {
+		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_head_retain_failed", err.Error(), true)
+	}
 	if ownership.PathExists {
 		if err := s.worktrees.Remove(ctx, session.WorktreePath); err != nil {
 			return s.recordWorktreeCleanupFailure(ctx, session, "worktree_remove_failed", err.Error(), true)
@@ -726,6 +732,13 @@ func (s *Service) cleanupSessionWorktree(ctx context.Context, session domain.Ses
 		return s.recordWorktreeCleanupFailure(ctx, session, "worktree_ownership_release_failed", err.Error(), true)
 	}
 	return s.completeWorktreeCleanup(ctx, session)
+}
+
+func (s *Service) retainSessionWorktreeHead(ctx context.Context, projectPath string, session domain.Session) error {
+	if strings.TrimSpace(session.WorktreeHeadCommit) == "" {
+		return nil
+	}
+	return s.worktrees.RetainCommit(ctx, projectPath, session.ID, session.WorktreeHeadCommit)
 }
 
 func (s *Service) completeWorktreeCleanup(ctx context.Context, session domain.Session) error {
@@ -7488,6 +7501,16 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
 		return DTO{}, releaseClose(err)
 	}
+	if strings.TrimSpace(session.BaseBranch) != "" {
+		headCommit, headErr := s.captureSessionWorktreeHead(ctx, session)
+		if headErr != nil {
+			closeErr := apperror.Wrap(headErr, apperror.CodeCloseFailed, apperror.CategoryInfraError, "capture session worktree head failed").WithDetails(map[string]any{
+				"sessionId": string(session.ID),
+			}).WithRetryable(true)
+			return DTO{}, releaseClose(closeErr)
+		}
+		session.WorktreeHeadCommit = headCommit
+	}
 	now := s.now()
 	cleanupRequested := false
 	if strings.TrimSpace(session.BaseBranch) != "" {
@@ -7550,6 +7573,31 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		s.scheduleWorktreeCleanup()
 	}
 	return toDTO(session), nil
+}
+
+func (s *Service) captureSessionWorktreeHead(ctx context.Context, session domain.Session) (string, error) {
+	if s.worktrees == nil {
+		return strings.TrimSpace(session.WorktreeHeadCommit), nil
+	}
+	if headCommit := strings.TrimSpace(session.WorktreeHeadCommit); headCommit != "" {
+		return headCommit, nil
+	}
+	headCommit, err := s.worktrees.HeadCommit(ctx, session.WorktreePath, "")
+	if err == nil {
+		return strings.TrimSpace(headCommit), nil
+	}
+	if s.projects == nil {
+		return "", err
+	}
+	project, projectErr := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if projectErr != nil {
+		return "", errors.Join(err, projectErr)
+	}
+	headCommit, branchErr := s.worktrees.HeadCommit(ctx, project.Path.Value, session.WorktreeBranch)
+	if branchErr != nil {
+		return "", errors.Join(err, branchErr)
+	}
+	return strings.TrimSpace(headCommit), nil
 }
 
 func (s *Service) closeWorkflowSession(ctx context.Context, input CloseSessionInput) (DTO, error) {

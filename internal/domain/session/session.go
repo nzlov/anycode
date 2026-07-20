@@ -149,6 +149,7 @@ type Session struct {
 	WorktreePath          string
 	WorktreeBranch        string
 	WorktreeBaseCommit    string
+	WorktreeHeadCommit    string
 	WorktreeCleanup       WorktreeCleanup
 	CodexSessionID        string
 	Config                Config
@@ -714,6 +715,7 @@ type WorktreeManager interface {
 	Create(ctx context.Context, projectPath string, projectID ProjectID, sessionID ID, branch string, baseBranch string, ownershipToken string) (string, error)
 	InspectOwnership(ctx context.Context, projectPath string, path string, branch string, ownershipToken string) (WorktreeOwnership, error)
 	HeadCommit(ctx context.Context, path string, ref string) (string, error)
+	RetainCommit(ctx context.Context, projectPath string, sessionID ID, commit string) error
 	Remove(ctx context.Context, path string) error
 	DeleteBranch(ctx context.Context, projectPath string, branch string) error
 	ReleaseOwnership(ctx context.Context, path string, ownershipToken string) error

@@ -39,6 +39,8 @@ type Session struct {
 	WorktreeBranch string `json:"worktree_branch,omitempty"`
 	// WorktreeBaseCommit holds the value of the "worktree_base_commit" field.
 	WorktreeBaseCommit string `json:"worktree_base_commit,omitempty"`
+	// WorktreeHeadCommit holds the value of the "worktree_head_commit" field.
+	WorktreeHeadCommit string `json:"worktree_head_commit,omitempty"`
 	// WorktreeCleanupStatus holds the value of the "worktree_cleanup_status" field.
 	WorktreeCleanupStatus string `json:"worktree_cleanup_status,omitempty"`
 	// WorktreeCleanupAttempts holds the value of the "worktree_cleanup_attempts" field.
@@ -137,7 +139,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case entsession.FieldWorktreeCleanupAttempts, entsession.FieldArtifactCount, entsession.FieldFilesChanged:
 			values[i] = new(sql.NullInt64)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldWorkflowStartedAt, entsession.FieldWorkflowStoppedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -222,6 +224,12 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field worktree_base_commit", values[i])
 			} else if value.Valid {
 				_m.WorktreeBaseCommit = value.String
+			}
+		case entsession.FieldWorktreeHeadCommit:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field worktree_head_commit", values[i])
+			} else if value.Valid {
+				_m.WorktreeHeadCommit = value.String
 			}
 		case entsession.FieldWorktreeCleanupStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -563,6 +571,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("worktree_base_commit=")
 	builder.WriteString(_m.WorktreeBaseCommit)
+	builder.WriteString(", ")
+	builder.WriteString("worktree_head_commit=")
+	builder.WriteString(_m.WorktreeHeadCommit)
 	builder.WriteString(", ")
 	builder.WriteString("worktree_cleanup_status=")
 	builder.WriteString(_m.WorktreeCleanupStatus)

@@ -54,6 +54,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetWorktreePath(s.WorktreePath).
 			SetWorktreeBranch(s.WorktreeBranch).
 			SetWorktreeBaseCommit(s.WorktreeBaseCommit).
+			SetWorktreeHeadCommit(s.WorktreeHeadCommit).
 			SetWorktreeCleanupStatus(string(normalizeWorktreeCleanupStatus(s.WorktreeCleanup.Status))).
 			SetWorktreeCleanupAttempts(s.WorktreeCleanup.Attempts).
 			SetWorktreeOwnershipToken(s.WorktreeCleanup.OwnershipToken).
@@ -176,6 +177,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetWorktreePath(s.WorktreePath).
 		SetWorktreeBranch(s.WorktreeBranch).
 		SetWorktreeBaseCommit(s.WorktreeBaseCommit).
+		SetWorktreeHeadCommit(s.WorktreeHeadCommit).
 		SetWorktreeCleanupStatus(string(normalizeWorktreeCleanupStatus(s.WorktreeCleanup.Status))).
 		SetWorktreeCleanupAttempts(s.WorktreeCleanup.Attempts).
 		SetWorktreeOwnershipToken(s.WorktreeCleanup.OwnershipToken).
@@ -718,6 +720,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		WorktreePath:       row.WorktreePath,
 		WorktreeBranch:     row.WorktreeBranch,
 		WorktreeBaseCommit: row.WorktreeBaseCommit,
+		WorktreeHeadCommit: row.WorktreeHeadCommit,
 		WorktreeCleanup: domainsession.WorktreeCleanup{
 			Status:               domainsession.WorktreeCleanupStatus(row.WorktreeCleanupStatus),
 			Attempts:             row.WorktreeCleanupAttempts,

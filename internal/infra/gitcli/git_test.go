@@ -64,6 +64,28 @@ func TestHeadCommitReturnsEmptyForUnbornHead(t *testing.T) {
 	}
 }
 
+func TestRetainCommitKeepsClosedSessionHeadReachable(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not available")
+	}
+
+	dir := t.TempDir()
+	runGit(t, dir, "init", "-b", "main")
+	runGit(t, dir, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "base")
+	runGit(t, dir, "switch", "-c", "session-1")
+	runGit(t, dir, "-c", "user.name=AnyCode", "-c", "user.email=anycode@example.test", "commit", "--allow-empty", "-m", "session")
+	head := gitOutput(t, dir, "rev-parse", "HEAD")
+	runGit(t, dir, "switch", "main")
+
+	if err := New("").RetainCommit(context.Background(), dir, "session-1", head); err != nil {
+		t.Fatalf("RetainCommit() error = %v", err)
+	}
+	runGit(t, dir, "branch", "-D", "session-1")
+	if got := gitOutput(t, dir, "rev-parse", "refs/anycode/sessions/session-1"); got != head {
+		t.Fatalf("retained ref = %q, want %q", got, head)
+	}
+}
+
 func TestBranchesFetchesAndIncludesRemoteBranches(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")
