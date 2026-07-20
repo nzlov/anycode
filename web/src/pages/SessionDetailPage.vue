@@ -4,7 +4,7 @@
       <q-tab name="session" icon="forum" label="会话" />
       <q-tab name="info" icon="info" label="信息" />
       <q-tab name="changes" icon="difference" label="变更" />
-      <q-tab name="artifacts" icon="inventory_2" label="产物" />
+      <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
     </q-tabs>
 
     <q-splitter
@@ -174,7 +174,7 @@
           >
             <q-tab name="info" icon="info" label="会话信息" />
             <q-tab name="changes" icon="difference" label="当前变更" />
-            <q-tab name="artifacts" icon="inventory_2" label="产物" />
+            <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
           </q-tabs>
           <q-separator class="gt-sm" />
           <q-tab-panels v-model="rightPanelTab" animated>

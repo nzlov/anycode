@@ -57,7 +57,7 @@
     </q-banner>
 
     <section v-if="normalizedResult.artifacts.length" class="workflow-result-review__section">
-      <div class="text-subtitle2 text-weight-bold">产物</div>
+      <div class="text-subtitle2 text-weight-bold">临时文件</div>
       <q-list dense separator class="workflow-result-review__list">
         <q-item
           v-for="(artifact, index) in normalizedResult.artifacts"

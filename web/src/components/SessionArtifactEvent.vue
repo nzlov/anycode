@@ -16,7 +16,7 @@
         round
         dense
         icon="visibility"
-        aria-label="预览产物"
+        aria-label="预览临时文件"
         @click="openPreview"
       >
         <q-tooltip>预览</q-tooltip>
@@ -26,7 +26,7 @@
         round
         dense
         icon="download"
-        aria-label="下载产物"
+        aria-label="下载临时文件"
         :loading="downloading"
         @click="download"
       >
@@ -73,7 +73,7 @@ const props = defineProps<{
 }>();
 const payload = computed(() => props.event.content.payload);
 const filename = computed(
-  () => payloadString('filename') || payloadString('logicalPath') || '产物',
+  () => payloadString('filename') || payloadString('logicalPath') || '临时文件',
 );
 const artifactKind = computed(() => payloadString('artifactKind', 'file'));
 const previewKind = computed(() => payloadString('previewKind', 'none'));
@@ -111,7 +111,7 @@ async function download() {
   try {
     await downloadSessionFile(access.value);
   } catch (err) {
-    Notify.create({ type: 'negative', message: errorMessage(err, '下载产物失败') });
+    Notify.create({ type: 'negative', message: errorMessage(err, '下载临时文件失败') });
   } finally {
     downloading.value = false;
   }
@@ -138,7 +138,7 @@ async function openPreview() {
     }
   } catch (err) {
     if (!isAbortError(err) && previewController === controller) {
-      previewError.value = errorMessage(err, '预览产物失败');
+      previewError.value = errorMessage(err, '预览临时文件失败');
     }
   } finally {
     if (previewController === controller) {

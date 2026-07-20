@@ -143,12 +143,16 @@ const answerUserPromptGuidance =
 const worktreePromptGuidance =
   '当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；若必须手动合并，请使用当前卡片分支名执行非 fast-forward merge，并保留 Git 默认合并提交信息，以便工作树缺失时从基础分支日志恢复 Diff；卡片关闭时由 AnyCode 负责清理仍存在的工作树。';
 const artifactPromptGuidance =
+  '本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。';
+const legacyArtifactPromptGuidance =
   '本卡片生成的图片、截图、PDF、音视频、压缩包和其他产物统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。';
 const anyCodeGuidanceSuffixes = [
-  `${artifactPromptGuidance}\n\n${answerUserPromptGuidance}\n\n${worktreePromptGuidance}`,
-  `${artifactPromptGuidance}\n\n${answerUserPromptGuidance}`,
+  ...[artifactPromptGuidance, legacyArtifactPromptGuidance].flatMap((guidance) => [
+    `${guidance}\n\n${answerUserPromptGuidance}\n\n${worktreePromptGuidance}`,
+    `${guidance}\n\n${answerUserPromptGuidance}`,
+    guidance,
+  ]),
   `${answerUserPromptGuidance}\n\n${worktreePromptGuidance}`,
-  artifactPromptGuidance,
   answerUserPromptGuidance,
   worktreePromptGuidance,
 ];

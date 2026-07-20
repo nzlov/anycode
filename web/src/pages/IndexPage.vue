@@ -219,12 +219,12 @@
                   class="overview-artifact-btn app-command-btn"
                   icon="inventory_2"
                   :label="String(card.artifactCount)"
-                  :aria-label="`查看 ${card.artifactCount} 个产物`"
+                  :aria-label="`查看 ${card.artifactCount} 个临时文件`"
                   @click.stop="openArtifactDialog(card)"
                   @keyup.enter.stop
                   @keyup.space.stop
                 >
-                  <q-tooltip>查看产物</q-tooltip>
+                  <q-tooltip>查看临时文件</q-tooltip>
                 </q-btn>
               </div>
 
@@ -368,7 +368,7 @@
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
             <q-tab name="output" icon="fact_check" label="审核结果" />
             <q-tab name="diff" icon="difference" label="Diff" />
-            <q-tab name="artifacts" icon="inventory_2" label="产物" />
+            <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
           </q-tabs>
           <div class="forward-approval-dialog__actions">
             <q-btn
@@ -464,8 +464,8 @@
     >
       <q-card class="overview-artifact-dialog app-content-dialog">
         <div class="overview-artifact-dialog__header">
-          <div class="text-subtitle1 text-weight-bold">产物</div>
-          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭产物" />
+          <div class="text-subtitle1 text-weight-bold">临时文件</div>
+          <q-btn v-close-popup flat round dense icon="close" aria-label="关闭临时文件" />
         </div>
         <q-separator />
         <q-card-section class="overview-artifact-dialog__body">
