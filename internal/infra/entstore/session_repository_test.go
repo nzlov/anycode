@@ -63,6 +63,10 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 			{Text: "梳理需求", Completed: true},
 			{Text: "实现卡片展示", Completed: false},
 		}},
+		Usage: session.TokenUsage{
+			InputTokens: 120, CachedInputTokens: 80, OutputTokens: 30, TotalTokens: 150,
+			CurrentInputTokens: 20, CurrentTotalTokens: 25, ContextWindow: 200_000, CompactionCount: 1,
+		},
 		ArtifactCount: 3,
 		FilesChanged:  5,
 		Queue: session.QueueIntent{
@@ -790,6 +794,7 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.WorktreeCleanup.Retryable != want.WorktreeCleanup.Retryable ||
 		got.CodexSessionID != want.CodexSessionID ||
 		got.Config != want.Config ||
+		got.Usage != want.Usage ||
 		got.ArtifactCount != want.ArtifactCount ||
 		got.FilesChanged != want.FilesChanged ||
 		len(got.TodoList.Items) != len(want.TodoList.Items) {
@@ -832,6 +837,10 @@ func TestSessionRepositorySavePreservesCardProjectionCounts(t *testing.T) {
 	if err := store.Sessions().UpdateArtifactCount(ctx, stale.ID, 2); err != nil {
 		t.Fatal(err)
 	}
+	usage := session.TokenUsage{InputTokens: 10, TotalTokens: 12}
+	if err := store.Sessions().UpdateUsage(ctx, stale.ID, usage); err != nil {
+		t.Fatal(err)
+	}
 
 	stale.Requirement = "after"
 	stale.UpdatedAt = now.Add(time.Second)
@@ -842,7 +851,7 @@ func TestSessionRepositorySavePreservesCardProjectionCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Requirement != "after" || got.ArtifactCount != 2 || got.FilesChanged != 4 {
+	if got.Requirement != "after" || got.ArtifactCount != 2 || got.FilesChanged != 4 || got.Usage != usage {
 		t.Fatalf("session after stale save = %#v", got)
 	}
 	if err := store.Sessions().UpdateFilesChanged(ctx, stale.ID, -1); err == nil {

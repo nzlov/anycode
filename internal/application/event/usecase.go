@@ -13,7 +13,6 @@ import (
 type UseCase interface {
 	LiveSessionEvents(ctx context.Context, input LiveSessionEventsInput) (<-chan DTO, error)
 	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
-	LiveCodexUsageEvents(ctx context.Context) (<-chan processdomain.CodexEvent, error)
 }
 
 type LiveSessionEventsInput struct {
@@ -35,7 +34,6 @@ type Service struct {
 	nextSubID        int64
 	subscribers      map[string]map[int64]*subscription
 	codexSubscribers map[processdomain.SessionID]map[int64]*codexSubscription
-	usageSubscribers map[int64]*codexSubscription
 	observer         Observer
 }
 
@@ -58,7 +56,6 @@ func New(options ...Option) *Service {
 	service := &Service{
 		subscribers:      map[string]map[int64]*subscription{},
 		codexSubscribers: map[processdomain.SessionID]map[int64]*codexSubscription{},
-		usageSubscribers: map[int64]*codexSubscription{},
 	}
 	for _, option := range options {
 		option(service)
@@ -82,33 +79,15 @@ func (s *Service) LiveCodexEvents(ctx context.Context, sessionID processdomain.S
 	return out, nil
 }
 
-func (s *Service) LiveCodexUsageEvents(ctx context.Context) (<-chan processdomain.CodexEvent, error) {
-	if s == nil {
-		return nil, errors.New("event usecase: nil service")
-	}
-	out := make(chan processdomain.CodexEvent, 16)
-	sub := s.subscribeCodexUsage(out, ctx.Done())
-	go func() {
-		<-ctx.Done()
-		s.removeCodexSubscription(sub)
-	}()
-	return out, nil
-}
-
 func (s *Service) PublishCodexEvent(_ context.Context, event processdomain.CodexEvent) error {
 	if s == nil {
 		return errors.New("event usecase: nil service")
 	}
 	s.mu.Lock()
 	bucket := s.codexSubscribers[event.SessionID]
-	subscribers := make([]*codexSubscription, 0, len(bucket)+len(s.usageSubscribers))
+	subscribers := make([]*codexSubscription, 0, len(bucket))
 	for _, sub := range bucket {
 		subscribers = append(subscribers, sub)
-	}
-	if _, ok := event.Content.(processdomain.CodexUsageContent); ok {
-		for _, sub := range s.usageSubscribers {
-			subscribers = append(subscribers, sub)
-		}
 	}
 	s.mu.Unlock()
 	for _, sub := range subscribers {
@@ -164,20 +143,12 @@ type subscription struct {
 
 type codexSubscription struct {
 	id        int64
-	kind      codexSubscriptionKind
 	sessionID processdomain.SessionID
 	ch        chan processdomain.CodexEvent
 	done      <-chan struct{}
 	mu        sync.Mutex
 	closed    bool
 }
-
-type codexSubscriptionKind uint8
-
-const (
-	codexSubscriptionSession codexSubscriptionKind = iota
-	codexSubscriptionUsage
-)
 
 type deliveryResult uint8
 
@@ -223,7 +194,7 @@ func (s *Service) removeSubscription(sub *subscription) {
 func (s *Service) subscribeCodex(sessionID processdomain.SessionID, ch chan processdomain.CodexEvent, done <-chan struct{}) *codexSubscription {
 	s.mu.Lock()
 	s.nextSubID++
-	sub := &codexSubscription{id: s.nextSubID, kind: codexSubscriptionSession, sessionID: sessionID, ch: ch, done: done}
+	sub := &codexSubscription{id: s.nextSubID, sessionID: sessionID, ch: ch, done: done}
 	if s.codexSubscribers[sessionID] == nil {
 		s.codexSubscribers[sessionID] = map[int64]*codexSubscription{}
 	}
@@ -233,32 +204,15 @@ func (s *Service) subscribeCodex(sessionID processdomain.SessionID, ch chan proc
 	return sub
 }
 
-func (s *Service) subscribeCodexUsage(ch chan processdomain.CodexEvent, done <-chan struct{}) *codexSubscription {
-	s.mu.Lock()
-	s.nextSubID++
-	sub := &codexSubscription{id: s.nextSubID, kind: codexSubscriptionUsage, ch: ch, done: done}
-	s.usageSubscribers[sub.id] = sub
-	s.mu.Unlock()
-	s.observe(Observation{Name: "codex_usage_subscription.lifecycle", Outcome: "opened"})
-	return sub
-}
-
 func (s *Service) removeCodexSubscription(sub *codexSubscription) {
 	s.mu.Lock()
 	removed := false
-	if sub.kind == codexSubscriptionUsage {
-		if s.usageSubscribers[sub.id] == sub {
-			delete(s.usageSubscribers, sub.id)
-			removed = true
-		}
-	} else {
-		bucket := s.codexSubscribers[sub.sessionID]
-		if bucket[sub.id] == sub {
-			delete(bucket, sub.id)
-			removed = true
-			if len(bucket) == 0 {
-				delete(s.codexSubscribers, sub.sessionID)
-			}
+	bucket := s.codexSubscribers[sub.sessionID]
+	if bucket[sub.id] == sub {
+		delete(bucket, sub.id)
+		removed = true
+		if len(bucket) == 0 {
+			delete(s.codexSubscribers, sub.sessionID)
 		}
 	}
 	s.mu.Unlock()
@@ -266,11 +220,7 @@ func (s *Service) removeCodexSubscription(sub *codexSubscription) {
 		return
 	}
 	sub.close()
-	name := "codex_subscription.lifecycle"
-	if sub.kind == codexSubscriptionUsage {
-		name = "codex_usage_subscription.lifecycle"
-	}
-	s.observe(Observation{Name: name, Outcome: "closed"})
+	s.observe(Observation{Name: "codex_subscription.lifecycle", Outcome: "closed"})
 }
 
 func (s *Service) observe(observation Observation) {

@@ -137,6 +137,13 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 	return r.create(ctx, s)
 }
 
+func (r *SessionRepository) UpdateUsage(ctx context.Context, id domainsession.ID, usage domainsession.TokenUsage) error {
+	if err := r.client.Session.UpdateOneID(string(id)).SetUsage(usage).Exec(ctx); err != nil {
+		return fmt.Errorf("update session usage: %w", err)
+	}
+	return nil
+}
+
 func (r *SessionRepository) UpdateFilesChanged(ctx context.Context, id domainsession.ID, filesChanged int) error {
 	if filesChanged < 0 {
 		return errors.New("update session files changed: count must be non-negative")
@@ -181,6 +188,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetPermissionMode(s.Config.PermissionMode).
 		SetFastMode(s.Config.FastMode).
 		SetTodoList(s.TodoList).
+		SetUsage(s.Usage).
 		SetArtifactCount(s.ArtifactCount).
 		SetFilesChanged(s.FilesChanged).
 		SetQueueKind(string(s.Queue.Kind)).
@@ -731,6 +739,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			FastMode:        row.FastMode,
 		},
 		TodoList:      row.TodoList,
+		Usage:         row.Usage,
 		ArtifactCount: row.ArtifactCount,
 		FilesChanged:  row.FilesChanged,
 		QueuedAt:      row.QueuedAt,

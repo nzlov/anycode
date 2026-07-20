@@ -19,7 +19,6 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
@@ -430,7 +429,7 @@ func TestMapSessionUpdateEventUsesEventSpecificFields(t *testing.T) {
 		AvailableActions: []string{"stop"}, UpdatedAt: statusAt,
 	}
 	todo := sessiondomain.TodoList{Items: []sessiondomain.TodoItem{{Text: "Implement", Completed: true}}}
-	usage := timelineapp.TokenUsageDTO{InputTokens: 10, TotalTokens: 12}
+	usage := sessiondomain.TokenUsage{InputTokens: 10, TotalTokens: 12}
 	priority := sessiondomain.PriorityHigh
 	config := sessiondomain.Config{CodexModel: "gpt-5.4", ReasoningEffort: "high", PermissionMode: "workspace-write", FastMode: true}
 	cleanup := sessionapp.WorktreeCleanupDTO{Status: sessiondomain.WorktreeCleanupFailed, Attempts: 2}
@@ -514,27 +513,27 @@ func TestSubscriptionSessionEventsStopsBlockedSendAfterCancel(t *testing.T) {
 }
 
 func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
-	beforeEventID := "event-40"
+	beforeCursor := "0:40"
 	messageRole := "assistant"
 	limit := 50
 	timeline := &fakeTimelineUseCase{}
 	resolver := NewResolver(UseCases{Timeline: timeline}).Query()
 
 	_, err := resolver.SessionTranscript(context.Background(), model.ListTranscriptEventsInput{
-		SessionID:     "session-1",
-		BeforeEventID: &beforeEventID,
-		MessageRole:   &messageRole,
-		Limit:         &limit,
+		SessionID:    "session-1",
+		BeforeCursor: &beforeCursor,
+		MessageRole:  &messageRole,
+		Limit:        &limit,
 	})
 	if err != nil {
 		t.Fatalf("SessionTranscript() error = %v", err)
 	}
 
 	want := timelineapp.ListSessionEventsInput{
-		SessionID:     "session-1",
-		BeforeEventID: eventdomain.ID(beforeEventID),
-		MessageRole:   messageRole,
-		Limit:         limit,
+		SessionID:    "session-1",
+		BeforeCursor: beforeCursor,
+		MessageRole:  messageRole,
+		Limit:        limit,
 	}
 	if !reflect.DeepEqual(timeline.gotListSessionEventsInput, want) {
 		t.Fatalf("ListSessionEvents() input = %#v, want %#v", timeline.gotListSessionEventsInput, want)

@@ -6,7 +6,6 @@ import (
 
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
-	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 )
 
 type DTO struct {
@@ -17,7 +16,6 @@ type DTO struct {
 	Phase         processdomain.CodexPhase
 	Content       processdomain.CodexEventContent
 	OccurredAt    string
-	Usage         *TokenUsageDTO
 	Causality     eventdomain.Causality
 	Group         *GroupDTO
 }
@@ -43,12 +41,6 @@ type TokenUsageDTO struct {
 	CompactionCount              int
 }
 
-type UsageUpdateDTO struct {
-	SessionID  sessiondomain.ID
-	OccurredAt string
-	Usage      TokenUsageDTO
-}
-
 type Page struct {
 	Items        []DTO
 	Page         int
@@ -68,20 +60,4 @@ type UsageAttributionDTO struct {
 
 func timelineOrderKey(createdAt time.Time, sourceGroup int, sourceOffset int64, sourceIndex int, id string) string {
 	return fmt.Sprintf("%020d:%06d:%020d:%06d:%s", createdAt.UnixNano(), sourceGroup, sourceOffset, sourceIndex, id)
-}
-
-func usageDTO(content processdomain.CodexUsageContent) *TokenUsageDTO {
-	return &TokenUsageDTO{
-		InputTokens:                  content.InputTokens,
-		CachedInputTokens:            content.CachedInputTokens,
-		OutputTokens:                 content.OutputTokens,
-		ReasoningOutputTokens:        content.ReasoningOutputTokens,
-		TotalTokens:                  content.TotalTokens,
-		ContextWindow:                content.ContextWindow,
-		CurrentInputTokens:           content.CurrentInputTokens,
-		CurrentCachedInputTokens:     content.CurrentCachedInputTokens,
-		CurrentOutputTokens:          content.CurrentOutputTokens,
-		CurrentReasoningOutputTokens: content.CurrentReasoningOutputTokens,
-		CurrentTotalTokens:           content.CurrentTotalTokens,
-	}
 }

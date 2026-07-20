@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	TypeStatus = "session.status_updated"
-	TypeUsage  = "usage.updated"
+	TypeStatus      = "session.status_updated"
+	TypeUsage       = "usage.updated"
+	domainTypeUsage = "session.usage_updated"
 )
 
 type UpdateDTO struct {
@@ -23,7 +24,7 @@ type UpdateDTO struct {
 	OccurredAt       string
 	Status           *sessionapp.CardStatusDTO
 	TodoList         *sessiondomain.TodoList
-	Usage            *timelineapp.TokenUsageDTO
+	Usage            *sessiondomain.TokenUsage
 	ArtifactCount    *int
 	FilesChanged     *int
 	Priority         *sessiondomain.Priority
@@ -40,7 +41,6 @@ type UseCase interface {
 
 type TimelineSource interface {
 	SessionEvents(ctx context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error)
-	SessionUsageEvents(ctx context.Context) (<-chan timelineapp.UsageUpdateDTO, error)
 }
 
 type DomainEventSource interface {
@@ -81,11 +81,6 @@ func (s *Service) SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error) 
 		cancel()
 		return nil, err
 	}
-	usageEvents, err := s.timeline.SessionUsageEvents(streamCtx)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
 	out := make(chan UpdateDTO, 16)
 	go func() {
 		defer close(out)
@@ -103,16 +98,6 @@ func (s *Service) SessionUpdates(ctx context.Context) (<-chan UpdateDTO, error) 
 					return
 				}
 				if ok && !send(streamCtx, out, update) {
-					return
-				}
-			case item, ok := <-usageEvents:
-				if !ok {
-					return
-				}
-				usage := item.Usage
-				if !send(streamCtx, out, UpdateDTO{
-					Type: TypeUsage, SessionID: item.SessionID, OccurredAt: item.OccurredAt, Usage: &usage,
-				}) {
 					return
 				}
 			}
@@ -156,6 +141,13 @@ func (s *Service) fromDomainEvent(ctx context.Context, item eventapp.DTO) (Updat
 			return UpdateDTO{}, false, nil
 		}
 		update.ArtifactCount = &value
+	case item.Type == domainTypeUsage:
+		usage, ok := item.Payload["usage"].(sessiondomain.TokenUsage)
+		if !ok {
+			return UpdateDTO{}, false, nil
+		}
+		update.Type = TypeUsage
+		update.Usage = &usage
 	case item.Type == "session.priority_changed":
 		priority, priorityOK := item.Payload["priority"].(sessiondomain.Priority)
 		updatedAt, updatedAtOK := item.Payload["updatedAt"].(time.Time)

@@ -20,6 +20,7 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 				ID:             "session-1",
 				ProjectID:      "project-1",
 				CodexSessionID: "codex-session-1",
+				Usage:          sessiondomain.TokenUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14},
 				UpdatedAt:      time.Unix(30, 0).UTC(),
 			},
 		},
@@ -100,8 +101,8 @@ func TestListSessionEventsCombinesCodexTranscriptAndPersistedStatus(t *testing.T
 	if content, ok := codex.Content.(process.CodexFileChangeContent); !ok || len(content.Changes) != 1 || content.Changes[0].Path != "a.txt" {
 		t.Fatalf("codex content = %#v", codex.Content)
 	}
-	if transcript.input.Source.CodexSessionID != "codex-session-1" {
-		t.Fatalf("transcript input = %#v", transcript.input)
+	if len(transcript.inputs) != 1 || transcript.inputs[0].Source.CodexSessionID != "codex-session-1" {
+		t.Fatalf("transcript inputs = %#v", transcript.inputs)
 	}
 }
 
@@ -236,31 +237,29 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 
 	got, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
 		SessionID: "session-1",
-		Limit:     10,
+		Limit:     1,
 	})
 	if err != nil {
 		t.Fatalf("ListSessionEvents() error = %v", err)
 	}
-	wantIDs := []eventdomain.ID{"codex:codex-session-1:shared-event", "codex:codex-session-2:shared-event"}
+	wantIDs := []eventdomain.ID{"codex:codex-session-2:shared-event"}
 	if gotIDs := dtoIDs(got.Items); !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("items = %#v", gotIDs)
 	}
 	older, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
-		SessionID:     "session-1",
-		BeforeEventID: wantIDs[1],
-		Limit:         1,
+		SessionID:    "session-1",
+		BeforeCursor: got.NextCursor,
+		Limit:        1,
 	})
 	if err != nil {
 		t.Fatalf("ListSessionEvents(before) error = %v", err)
 	}
-	if gotIDs := dtoIDs(older.Items); !reflect.DeepEqual(gotIDs, wantIDs[:1]) {
+	if gotIDs := dtoIDs(older.Items); !reflect.DeepEqual(gotIDs, []eventdomain.ID{"codex:codex-session-1:shared-event"}) {
 		t.Fatalf("older items = %#v", gotIDs)
 	}
-	wantInputs := []process.CodexTranscriptInput{
-		{Source: transcriptSource("codex-session-1")},
-		{Source: transcriptSource("codex-session-2")},
-		{Source: transcriptSource("codex-session-1")},
-		{Source: transcriptSource("codex-session-2")},
+	wantInputs := []process.CodexTranscriptPageInput{
+		{Source: transcriptSource("codex-session-2"), Limit: 1},
+		{Source: transcriptSource("codex-session-1"), Limit: 1},
 	}
 	if !reflect.DeepEqual(transcript.inputs, wantInputs) {
 		t.Fatalf("transcript inputs = %#v", transcript.inputs)
@@ -270,9 +269,13 @@ func TestListSessionEventsReadsAllIndexedCodexSessions(t *testing.T) {
 	}
 }
 
-func TestListSessionEventsProjectsCurrentAndCumulativeUsageWithCompactionCount(t *testing.T) {
+func TestListSessionEventsReadsUsageFromSession(t *testing.T) {
 	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
-		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(3, 0).UTC()},
+		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(3, 0).UTC(), Usage: sessiondomain.TokenUsage{
+			InputTokens: 46_200_000, CachedInputTokens: 45_000_000, OutputTokens: 200_000, TotalTokens: 46_400_000,
+			CurrentInputTokens: 314_000, CurrentCachedInputTokens: 300_000, CurrentOutputTokens: 2_000, CurrentTotalTokens: 316_000,
+			ContextWindow: 353_000, CompactionCount: 1,
+		}},
 	}}
 	transcript := &fakeTranscriptSource{events: []process.CodexEvent{
 		{Type: "token_count", Content: process.CodexUsageContent{
@@ -290,66 +293,6 @@ func TestListSessionEventsProjectsCurrentAndCumulativeUsageWithCompactionCount(t
 	if page.Usage == nil || page.Usage.InputTokens != 46_200_000 || page.Usage.CurrentInputTokens != 314_000 || page.Usage.CurrentCachedInputTokens != 300_000 || page.Usage.ContextWindow != 353_000 || page.Usage.CompactionCount != 1 {
 		t.Fatalf("usage = %#v", page.Usage)
 	}
-}
-
-func TestListSessionEventsSelectsLatestUsageByTimestampAcrossSources(t *testing.T) {
-	sessions := &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
-		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: time.Unix(30, 0).UTC()},
-	}}
-	transcript := &fakeTranscriptSource{eventsByID: map[string][]process.CodexEvent{
-		"codex-session-1": {{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 200}, CreatedAt: time.Unix(20, 0).UTC()}},
-		"codex-session-2": {{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 100}, CreatedAt: time.Unix(10, 0).UTC()}},
-	}}
-	service := New(&fakeLiveSource{}, sessions, transcript, transcriptIndex("codex-session-1", "codex-session-2"))
-	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if page.Usage == nil || page.Usage.InputTokens != 200 {
-		t.Fatalf("latest usage = %#v", page.Usage)
-	}
-}
-
-func TestListSessionEventsAttributesNonNegativeUsageDeltasToProcessAndNodeRuns(t *testing.T) {
-	finishedOne := time.Unix(20, 0).UTC()
-	finishedTwo := time.Unix(30, 0).UTC()
-	index := transcriptIndex("codex-session-1")
-	index.runs = []process.Run{
-		{ID: "process-1", SessionID: "session-1", NodeRunID: nodeRunID("node-1"), CodexSessionID: "codex-session-1", StartedAt: time.Unix(0, 0).UTC(), FinishedAt: &finishedOne},
-		{ID: "process-2", SessionID: "session-1", NodeRunID: nodeRunID("node-2"), CodexSessionID: "codex-session-1", StartedAt: finishedOne, FinishedAt: &finishedTwo},
-	}
-	transcript := &fakeTranscriptSource{events: []process.CodexEvent{
-		{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 100, TotalTokens: 110}, CreatedAt: time.Unix(5, 0).UTC()},
-		{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 160, TotalTokens: 180}, CreatedAt: time.Unix(15, 0).UTC()},
-		{EventID: "compact-boundary", Type: "context.compacted", Content: process.CodexStatusContent{Code: "context.compacted", Level: "warning"}, CreatedAt: finishedOne},
-		{Type: "token_count", Content: process.CodexUsageContent{InputTokens: 250, TotalTokens: 280}, CreatedAt: time.Unix(25, 0).UTC()},
-	}}
-	service := New(&fakeLiveSource{}, &fakeSessionRepository{sessions: map[sessiondomain.ID]sessiondomain.Session{
-		"session-1": {ID: "session-1", ProjectID: "project-1", UpdatedAt: finishedTwo},
-	}}, transcript, index)
-
-	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 10})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(page.ProcessUsage) != 2 || page.ProcessUsage[0].Usage.InputTokens != 160 || page.ProcessUsage[1].Usage.InputTokens != 90 || len(page.NodeUsage) != 2 || page.NodeUsage[1].Usage.TotalTokens != 100 {
-		t.Fatalf("process usage = %#v node usage = %#v", page.ProcessUsage, page.NodeUsage)
-	}
-	if page.ProcessUsage[0].Usage.CompactionCount != 1 || page.ProcessUsage[1].Usage.CompactionCount != 0 {
-		t.Fatalf("boundary compactions = %#v", page.ProcessUsage)
-	}
-}
-
-func TestCumulativeUsageBeforeMissingStartUsesZeroBaseline(t *testing.T) {
-	samples := []usageSample{{at: time.Unix(1, 0).UTC(), usage: process.CodexUsageContent{InputTokens: 10}}}
-	if got := cumulativeUsageBefore(samples, time.Time{}); got.InputTokens != 0 {
-		t.Fatalf("zero-time baseline = %#v", got)
-	}
-}
-
-func nodeRunID(id string) *process.NodeRunID {
-	value := process.NodeRunID(id)
-	return &value
 }
 
 func TestListSessionEventsPreservesTranscriptOrderForEqualTimestamps(t *testing.T) {
@@ -448,15 +391,15 @@ func TestListSessionEventsFiltersMessageRoleBeforePaging(t *testing.T) {
 	if gotIDs := dtoIDs(latest.Items); !reflect.DeepEqual(gotIDs, wantLatest) {
 		t.Fatalf("latest items = %#v, want %#v", gotIDs, wantLatest)
 	}
-	if latest.Total != 12 || latest.NextCursor != "codex:codex-session-1:assistant-03" {
+	if latest.Total != 10 || latest.NextCursor != "0:5" {
 		t.Fatalf("latest page metadata = total %d, next cursor %q", latest.Total, latest.NextCursor)
 	}
 
 	older, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{
-		SessionID:     "session-1",
-		BeforeEventID: "codex:codex-session-1:assistant-03",
-		Limit:         10,
-		MessageRole:   "assistant",
+		SessionID:    "session-1",
+		BeforeCursor: "0:5",
+		Limit:        10,
+		MessageRole:  "assistant",
 	})
 	if err != nil {
 		t.Fatalf("ListSessionEvents(before) error = %v", err)
@@ -468,7 +411,7 @@ func TestListSessionEventsFiltersMessageRoleBeforePaging(t *testing.T) {
 	if gotIDs := dtoIDs(older.Items); !reflect.DeepEqual(gotIDs, wantOlder) {
 		t.Fatalf("older items = %#v, want %#v", gotIDs, wantOlder)
 	}
-	if older.Total != 12 || older.NextCursor != "" {
+	if older.Total != 2 || older.NextCursor != "" {
 		t.Fatalf("older page metadata = total %d, next cursor %q", older.Total, older.NextCursor)
 	}
 
@@ -479,7 +422,7 @@ func TestListSessionEventsFiltersMessageRoleBeforePaging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessionEvents(unfiltered) error = %v", err)
 	}
-	if unfiltered.Total != 24 || len(unfiltered.Items) != 10 {
+	if unfiltered.Total != 10 || len(unfiltered.Items) != 10 {
 		t.Fatalf("unfiltered page metadata = total %d, items %d", unfiltered.Total, len(unfiltered.Items))
 	}
 }
@@ -655,26 +598,6 @@ func TestSessionEventsKeepsUsageOutOfTranscript(t *testing.T) {
 	}
 }
 
-func TestSessionUsageEventsMapsUsageAcrossSessions(t *testing.T) {
-	liveSource := &fakeLiveSource{usageCh: make(chan process.CodexEvent, 2)}
-	service := New(liveSource, nil, nil, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	ch, err := service.SessionUsageEvents(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	liveSource.usageCh <- process.CodexEvent{
-		EventID: "usage-1", Type: process.CodexEventUsage, SessionID: "session-1",
-		Content:   process.CodexUsageContent{InputTokens: 10, TotalTokens: 12},
-		CreatedAt: time.Unix(3, 0).UTC(),
-	}
-	got := <-ch
-	if got.SessionID != "session-1" || got.Usage.InputTokens != 10 || got.Usage.TotalTokens != 12 || got.OccurredAt != "1970-01-01T00:00:03Z" {
-		t.Fatalf("usage update = %#v", got)
-	}
-}
-
 func dtoIDs(items []DTO) []eventdomain.ID {
 	ids := make([]eventdomain.ID, 0, len(items))
 	for _, item := range items {
@@ -684,10 +607,9 @@ func dtoIDs(items []DTO) []eventdomain.ID {
 }
 
 type fakeLiveSource struct {
-	ch      chan process.CodexEvent
-	usageCh chan process.CodexEvent
-	input   process.SessionID
-	done    <-chan struct{}
+	ch    chan process.CodexEvent
+	input process.SessionID
+	done  <-chan struct{}
 }
 
 func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.SessionID) (<-chan process.CodexEvent, error) {
@@ -697,14 +619,6 @@ func (s *fakeLiveSource) LiveCodexEvents(ctx context.Context, sessionID process.
 		s.ch = make(chan process.CodexEvent, 1)
 	}
 	return s.ch, nil
-}
-
-func (s *fakeLiveSource) LiveCodexUsageEvents(ctx context.Context) (<-chan process.CodexEvent, error) {
-	s.done = ctx.Done()
-	if s.usageCh == nil {
-		s.usageCh = make(chan process.CodexEvent, 1)
-	}
-	return s.usageCh, nil
 }
 
 type fakeSessionRepository struct {
@@ -720,20 +634,46 @@ func (r *fakeSessionRepository) Find(_ context.Context, id sessiondomain.ID) (se
 }
 
 type fakeTranscriptSource struct {
-	input      process.CodexTranscriptInput
-	inputs     []process.CodexTranscriptInput
+	inputs     []process.CodexTranscriptPageInput
 	events     []process.CodexEvent
 	eventsByID map[string][]process.CodexEvent
 	err        error
 }
 
-func (s *fakeTranscriptSource) SessionEvents(_ context.Context, input process.CodexTranscriptInput) ([]process.CodexEvent, error) {
-	s.input = input
+func (s *fakeTranscriptSource) SessionEventPage(_ context.Context, input process.CodexTranscriptPageInput) (process.CodexTranscriptPage, error) {
 	s.inputs = append(s.inputs, input)
+	events := s.events
 	if s.eventsByID != nil {
-		return s.eventsByID[input.Source.CodexSessionID], s.err
+		events = s.eventsByID[input.Source.CodexSessionID]
 	}
-	return s.events, s.err
+	if s.err != nil {
+		return process.CodexTranscriptPage{}, s.err
+	}
+	before := len(events) + 1
+	if input.BeforeOffset > 0 && int(input.BeforeOffset) < before {
+		before = int(input.BeforeOffset)
+	}
+	limit := input.Limit
+	if limit < 1 {
+		limit = 50
+	}
+	start := before - limit
+	if start < 1 {
+		start = 1
+	}
+	pageEvents := append([]process.CodexEvent(nil), events[start-1:before-1]...)
+	for index := range pageEvents {
+		pageEvents[index].CodexSessionID = input.Source.CodexSessionID
+		if pageEvents[index].SourceOffset == 0 {
+			pageEvents[index].SourceOffset = int64(start + index)
+		}
+	}
+	if len(pageEvents) == 0 {
+		return process.CodexTranscriptPage{}, nil
+	}
+	return process.CodexTranscriptPage{
+		Events: pageEvents, StartOffset: int64(start), EndOffset: int64(before), HasMore: start > 1,
+	}, nil
 }
 
 type fakeCodexSessionIndex struct {

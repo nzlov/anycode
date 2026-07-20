@@ -1,6 +1,6 @@
 export interface TranscriptPageInput {
   sessionId: string;
-  beforeEventId?: string;
+  beforeCursor?: string;
   messageRole?: string;
   limit: number;
 }
@@ -11,7 +11,7 @@ export interface TranscriptPageInfo {
 
 export function latestTranscriptPageInput(
   sessionId: string,
-  beforeEventId: string,
+  beforeCursor: string,
   limit: number,
   messageRole = '',
 ): TranscriptPageInput {
@@ -19,8 +19,8 @@ export function latestTranscriptPageInput(
     sessionId,
     limit,
   };
-  if (beforeEventId) {
-    input.beforeEventId = beforeEventId;
+  if (beforeCursor) {
+    input.beforeCursor = beforeCursor;
   }
   if (messageRole) {
     input.messageRole = messageRole;

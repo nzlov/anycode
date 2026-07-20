@@ -321,6 +321,7 @@ type ComplexityRoot struct {
 		Status             func(childComplexity int) int
 		TodoList           func(childComplexity int) int
 		UpdatedAt          func(childComplexity int) int
+		Usage              func(childComplexity int) int
 		WorktreeBranch     func(childComplexity int) int
 	}
 
@@ -362,6 +363,7 @@ type ComplexityRoot struct {
 		Status           func(childComplexity int) int
 		TodoList         func(childComplexity int) int
 		UpdatedAt        func(childComplexity int) int
+		Usage            func(childComplexity int) int
 		WorktreeBranch   func(childComplexity int) int
 		WorktreeCleanup  func(childComplexity int) int
 		WorktreePath     func(childComplexity int) int
@@ -2058,6 +2060,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.UpdatedAt(childComplexity), true
+	case "SessionCard.usage":
+		if e.ComplexityRoot.SessionCard.Usage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.Usage(childComplexity), true
 	case "SessionCard.worktreeBranch":
 		if e.ComplexityRoot.SessionCard.WorktreeBranch == nil {
 			break
@@ -2236,6 +2244,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.UpdatedAt(childComplexity), true
+	case "SessionDetail.usage":
+		if e.ComplexityRoot.SessionDetail.Usage == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.Usage(childComplexity), true
 	case "SessionDetail.worktreeBranch":
 		if e.ComplexityRoot.SessionDetail.WorktreeBranch == nil {
 			break
@@ -3523,6 +3537,7 @@ type SessionCard {
   todoList: TodoList
   artifactCount: Int!
   filesChanged: Int!
+  usage: TranscriptTokenUsage
   attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
@@ -3563,6 +3578,7 @@ type SessionDetail {
   worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
   config: SessionConfig!
+  usage: TranscriptTokenUsage
   attachments: [SessionAttachment!]!
   promptAppends: [PromptAppend!]!
   availableActions: [String!]!
@@ -4062,7 +4078,7 @@ input UpdatePromptAppendInput {
 
 input ListTranscriptEventsInput {
   sessionId: ID!
-  beforeEventId: ID
+  beforeCursor: String
   messageRole: String
   limit: Int
 }
@@ -8985,6 +9001,8 @@ func (ec *executionContext) fieldContext_Query_sessionCard(ctx context.Context, 
 				return ec.fieldContext_SessionCard_artifactCount(ctx, field)
 			case "filesChanged":
 				return ec.fieldContext_SessionCard_filesChanged(ctx, field)
+			case "usage":
+				return ec.fieldContext_SessionCard_usage(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
@@ -9070,6 +9088,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_codexSessionId(ctx, field)
 			case "config":
 				return ec.fieldContext_SessionDetail_config(ctx, field)
+			case "usage":
+				return ec.fieldContext_SessionDetail_usage(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionDetail_attachments(ctx, field)
 			case "promptAppends":
@@ -11657,6 +11677,61 @@ func (ec *executionContext) fieldContext_SessionCard_filesChanged(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_usage(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "inputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_cachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_outputTokens(ctx, field)
+			case "reasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_reasoningOutputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
+			case "contextWindow":
+				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			case "currentInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentInputTokens(ctx, field)
+			case "currentCachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentCachedInputTokens(ctx, field)
+			case "currentOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentOutputTokens(ctx, field)
+			case "currentReasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens(ctx, field)
+			case "currentTotalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentTotalTokens(ctx, field)
+			case "compactionCount":
+				return ec.fieldContext_TranscriptTokenUsage_compactionCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_attachments(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11872,6 +11947,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_artifactCount(ctx, field)
 			case "filesChanged":
 				return ec.fieldContext_SessionCard_filesChanged(ctx, field)
+			case "usage":
+				return ec.fieldContext_SessionCard_usage(ctx, field)
 			case "attachments":
 				return ec.fieldContext_SessionCard_attachments(ctx, field)
 			case "availableActions":
@@ -12611,6 +12688,61 @@ func (ec *executionContext) fieldContext_SessionDetail_config(_ context.Context,
 				return ec.fieldContext_SessionConfig_fastMode(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_usage(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_usage,
+		func(ctx context.Context) (any, error) {
+			return obj.Usage, nil
+		},
+		nil,
+		ec.marshalOTranscriptTokenUsage2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptTokenUsage,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_usage(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "inputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_inputTokens(ctx, field)
+			case "cachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_cachedInputTokens(ctx, field)
+			case "outputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_outputTokens(ctx, field)
+			case "reasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_reasoningOutputTokens(ctx, field)
+			case "totalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_totalTokens(ctx, field)
+			case "contextWindow":
+				return ec.fieldContext_TranscriptTokenUsage_contextWindow(ctx, field)
+			case "currentInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentInputTokens(ctx, field)
+			case "currentCachedInputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentCachedInputTokens(ctx, field)
+			case "currentOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentOutputTokens(ctx, field)
+			case "currentReasoningOutputTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentReasoningOutputTokens(ctx, field)
+			case "currentTotalTokens":
+				return ec.fieldContext_TranscriptTokenUsage_currentTotalTokens(ctx, field)
+			case "compactionCount":
+				return ec.fieldContext_TranscriptTokenUsage_compactionCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptTokenUsage", field.Name)
 		},
 	}
 	return fc, nil
@@ -19762,7 +19894,7 @@ func (ec *executionContext) unmarshalInputListTranscriptEventsInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "beforeEventId", "messageRole", "limit"}
+	fieldsInOrder := [...]string{"sessionId", "beforeCursor", "messageRole", "limit"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -19776,13 +19908,13 @@ func (ec *executionContext) unmarshalInputListTranscriptEventsInput(ctx context.
 				return it, err
 			}
 			it.SessionID = data
-		case "beforeEventId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("beforeEventId"))
-			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+		case "beforeCursor":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("beforeCursor"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.BeforeEventID = data
+			it.BeforeCursor = data
 		case "messageRole":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("messageRole"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -23165,6 +23297,8 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "usage":
+			out.Values[i] = ec._SessionCard_usage(ctx, field, obj)
 		case "attachments":
 			out.Values[i] = ec._SessionCard_attachments(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -23434,6 +23568,8 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "usage":
+			out.Values[i] = ec._SessionDetail_usage(ctx, field, obj)
 		case "attachments":
 			out.Values[i] = ec._SessionDetail_attachments(ctx, field, obj)
 			if out.Values[i] == graphql.Null {

@@ -44,59 +44,6 @@ func TestLiveCodexEventsRoutesTypedEventsBySession(t *testing.T) {
 	}
 }
 
-func TestLiveCodexUsageEventsReceivesUsageAcrossSessionsOnly(t *testing.T) {
-	service := New()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	stream, err := service.LiveCodexUsageEvents(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := service.PublishCodexEvent(context.Background(), processdomain.CodexEvent{
-		EventID: "message-1", Type: processdomain.CodexEventMessage, SessionID: "session-1",
-		Content: processdomain.CodexMessageContent{Role: "assistant", Text: "ignored"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case event := <-stream:
-		t.Fatalf("usage stream received transcript event: %#v", event)
-	default:
-	}
-
-	for _, sessionID := range []processdomain.SessionID{"session-1", "session-2"} {
-		want := processdomain.CodexEvent{
-			EventID: string(sessionID) + "-usage", Type: processdomain.CodexEventUsage, SessionID: sessionID,
-			Content: processdomain.CodexUsageContent{InputTokens: len(sessionID)},
-		}
-		if err := service.PublishCodexEvent(context.Background(), want); err != nil {
-			t.Fatal(err)
-		}
-		if got := <-stream; !reflect.DeepEqual(got, want) {
-			t.Fatalf("usage event = %#v, want %#v", got, want)
-		}
-	}
-}
-
-func TestLiveCodexUsageEventsClosesWhenSubscriberCancels(t *testing.T) {
-	service := New()
-	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := service.LiveCodexUsageEvents(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cancel()
-	select {
-	case _, ok := <-stream:
-		if ok {
-			t.Fatal("usage stream emitted after cancellation")
-		}
-	case <-time.After(time.Second):
-		t.Fatal("usage stream stayed open after cancellation")
-	}
-}
-
 func TestLiveCodexEventsClosesWhenSubscriberCancels(t *testing.T) {
 	service := New()
 	ctx, cancel := context.WithCancel(context.Background())

@@ -17,7 +17,7 @@ test('latestTranscriptPageInput requests the newest event page directly', () => 
 test('latestTranscriptPageInput includes before cursor for older pages', () => {
   assert.deepEqual(latestTranscriptPageInput('session-1', 'event-40', 50), {
     sessionId: 'session-1',
-    beforeEventId: 'event-40',
+    beforeCursor: 'event-40',
     limit: 50,
   });
 });
@@ -49,7 +49,7 @@ test('useSessionDetail loads older events with cursor input instead of page numb
   assert.match(match.groups.body, /olderTranscriptCursor\(eventsPageInfo\.value\)/);
   assert.match(
     match.groups.body,
-    /getSessionTranscriptPage\(sessionId, beforeEventId, eventPageSize\)/,
+    /getSessionTranscriptPage\(sessionId, beforeCursor, eventPageSize\)/,
   );
   assert.doesNotMatch(match.groups.body, /page\s*[,+)]/);
   assert.match(match.groups.body, /return result\.pageInfo\.nextCursor/);

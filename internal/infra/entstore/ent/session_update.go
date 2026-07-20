@@ -456,6 +456,26 @@ func (_u *SessionUpdate) ClearTodoList() *SessionUpdate {
 	return _u
 }
 
+// SetUsage sets the "usage" field.
+func (_u *SessionUpdate) SetUsage(v session.TokenUsage) *SessionUpdate {
+	_u.mutation.SetUsage(v)
+	return _u
+}
+
+// SetNillableUsage sets the "usage" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableUsage(v *session.TokenUsage) *SessionUpdate {
+	if v != nil {
+		_u.SetUsage(*v)
+	}
+	return _u
+}
+
+// ClearUsage clears the value of the "usage" field.
+func (_u *SessionUpdate) ClearUsage() *SessionUpdate {
+	_u.mutation.ClearUsage()
+	return _u
+}
+
 // SetArtifactCount sets the "artifact_count" field.
 func (_u *SessionUpdate) SetArtifactCount(v int) *SessionUpdate {
 	_u.mutation.ResetArtifactCount()
@@ -989,6 +1009,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.TodoListCleared() {
 		_spec.ClearField(entsession.FieldTodoList, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Usage(); ok {
+		_spec.SetField(entsession.FieldUsage, field.TypeJSON, value)
+	}
+	if _u.mutation.UsageCleared() {
+		_spec.ClearField(entsession.FieldUsage, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ArtifactCount(); ok {
 		_spec.SetField(entsession.FieldArtifactCount, field.TypeInt, value)
@@ -1530,6 +1556,26 @@ func (_u *SessionUpdateOne) SetNillableTodoList(v *session.TodoList) *SessionUpd
 // ClearTodoList clears the value of the "todo_list" field.
 func (_u *SessionUpdateOne) ClearTodoList() *SessionUpdateOne {
 	_u.mutation.ClearTodoList()
+	return _u
+}
+
+// SetUsage sets the "usage" field.
+func (_u *SessionUpdateOne) SetUsage(v session.TokenUsage) *SessionUpdateOne {
+	_u.mutation.SetUsage(v)
+	return _u
+}
+
+// SetNillableUsage sets the "usage" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableUsage(v *session.TokenUsage) *SessionUpdateOne {
+	if v != nil {
+		_u.SetUsage(*v)
+	}
+	return _u
+}
+
+// ClearUsage clears the value of the "usage" field.
+func (_u *SessionUpdateOne) ClearUsage() *SessionUpdateOne {
+	_u.mutation.ClearUsage()
 	return _u
 }
 
@@ -2096,6 +2142,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if _u.mutation.TodoListCleared() {
 		_spec.ClearField(entsession.FieldTodoList, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Usage(); ok {
+		_spec.SetField(entsession.FieldUsage, field.TypeJSON, value)
+	}
+	if _u.mutation.UsageCleared() {
+		_spec.ClearField(entsession.FieldUsage, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ArtifactCount(); ok {
 		_spec.SetField(entsession.FieldArtifactCount, field.TypeInt, value)

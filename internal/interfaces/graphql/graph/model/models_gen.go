@@ -186,10 +186,10 @@ type ListSessionsInput struct {
 }
 
 type ListTranscriptEventsInput struct {
-	SessionID     string  `json:"sessionId"`
-	BeforeEventID *string `json:"beforeEventId,omitempty"`
-	MessageRole   *string `json:"messageRole,omitempty"`
-	Limit         *int    `json:"limit,omitempty"`
+	SessionID    string  `json:"sessionId"`
+	BeforeCursor *string `json:"beforeCursor,omitempty"`
+	MessageRole  *string `json:"messageRole,omitempty"`
+	Limit        *int    `json:"limit,omitempty"`
 }
 
 type MergeConfig struct {
@@ -343,25 +343,26 @@ type SessionAttachment struct {
 }
 
 type SessionCard struct {
-	ID                 string               `json:"id"`
-	ProjectID          string               `json:"projectId"`
-	ProjectName        string               `json:"projectName"`
-	Requirement        string               `json:"requirement"`
-	RequirementSummary string               `json:"requirementSummary"`
-	Mode               string               `json:"mode"`
-	Status             string               `json:"status"`
-	Priority           string               `json:"priority"`
-	BaseBranch         string               `json:"baseBranch"`
-	WorktreeBranch     string               `json:"worktreeBranch"`
-	CurrentNodeTitle   string               `json:"currentNodeTitle"`
-	TodoList           *TodoList            `json:"todoList,omitempty"`
-	ArtifactCount      int                  `json:"artifactCount"`
-	FilesChanged       int                  `json:"filesChanged"`
-	Attachments        []*SessionAttachment `json:"attachments"`
-	AvailableActions   []string             `json:"availableActions"`
-	LastRunAt          *time.Time           `json:"lastRunAt,omitempty"`
-	CreatedAt          time.Time            `json:"createdAt"`
-	UpdatedAt          time.Time            `json:"updatedAt"`
+	ID                 string                `json:"id"`
+	ProjectID          string                `json:"projectId"`
+	ProjectName        string                `json:"projectName"`
+	Requirement        string                `json:"requirement"`
+	RequirementSummary string                `json:"requirementSummary"`
+	Mode               string                `json:"mode"`
+	Status             string                `json:"status"`
+	Priority           string                `json:"priority"`
+	BaseBranch         string                `json:"baseBranch"`
+	WorktreeBranch     string                `json:"worktreeBranch"`
+	CurrentNodeTitle   string                `json:"currentNodeTitle"`
+	TodoList           *TodoList             `json:"todoList,omitempty"`
+	ArtifactCount      int                   `json:"artifactCount"`
+	FilesChanged       int                   `json:"filesChanged"`
+	Usage              *TranscriptTokenUsage `json:"usage,omitempty"`
+	Attachments        []*SessionAttachment  `json:"attachments"`
+	AvailableActions   []string              `json:"availableActions"`
+	LastRunAt          *time.Time            `json:"lastRunAt,omitempty"`
+	CreatedAt          time.Time             `json:"createdAt"`
+	UpdatedAt          time.Time             `json:"updatedAt"`
 }
 
 type SessionCardPage struct {
@@ -395,29 +396,30 @@ type SessionConfigInput struct {
 }
 
 type SessionDetail struct {
-	ID               string               `json:"id"`
-	ProjectID        string               `json:"projectId"`
-	Requirement      string               `json:"requirement"`
-	Mode             string               `json:"mode"`
-	Status           string               `json:"status"`
-	Priority         string               `json:"priority"`
-	CloseReason      *string              `json:"closeReason,omitempty"`
-	BaseBranch       string               `json:"baseBranch"`
-	WorktreeBranch   string               `json:"worktreeBranch"`
-	CurrentNodeTitle string               `json:"currentNodeTitle"`
-	PendingApproval  *PendingApproval     `json:"pendingApproval,omitempty"`
-	TodoList         *TodoList            `json:"todoList,omitempty"`
-	WorktreePath     string               `json:"worktreePath"`
-	WorktreeCleanup  *WorktreeCleanup     `json:"worktreeCleanup"`
-	CodexSessionID   string               `json:"codexSessionId"`
-	Config           *SessionConfig       `json:"config"`
-	Attachments      []*SessionAttachment `json:"attachments"`
-	PromptAppends    []*PromptAppend      `json:"promptAppends"`
-	AvailableActions []string             `json:"availableActions"`
-	CanResume        bool                 `json:"canResume"`
-	LastRunAt        *time.Time           `json:"lastRunAt,omitempty"`
-	CreatedAt        time.Time            `json:"createdAt"`
-	UpdatedAt        time.Time            `json:"updatedAt"`
+	ID               string                `json:"id"`
+	ProjectID        string                `json:"projectId"`
+	Requirement      string                `json:"requirement"`
+	Mode             string                `json:"mode"`
+	Status           string                `json:"status"`
+	Priority         string                `json:"priority"`
+	CloseReason      *string               `json:"closeReason,omitempty"`
+	BaseBranch       string                `json:"baseBranch"`
+	WorktreeBranch   string                `json:"worktreeBranch"`
+	CurrentNodeTitle string                `json:"currentNodeTitle"`
+	PendingApproval  *PendingApproval      `json:"pendingApproval,omitempty"`
+	TodoList         *TodoList             `json:"todoList,omitempty"`
+	WorktreePath     string                `json:"worktreePath"`
+	WorktreeCleanup  *WorktreeCleanup      `json:"worktreeCleanup"`
+	CodexSessionID   string                `json:"codexSessionId"`
+	Config           *SessionConfig        `json:"config"`
+	Usage            *TranscriptTokenUsage `json:"usage,omitempty"`
+	Attachments      []*SessionAttachment  `json:"attachments"`
+	PromptAppends    []*PromptAppend       `json:"promptAppends"`
+	AvailableActions []string              `json:"availableActions"`
+	CanResume        bool                  `json:"canResume"`
+	LastRunAt        *time.Time            `json:"lastRunAt,omitempty"`
+	CreatedAt        time.Time             `json:"createdAt"`
+	UpdatedAt        time.Time             `json:"updatedAt"`
 }
 
 type SessionDiff struct {

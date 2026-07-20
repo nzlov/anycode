@@ -2439,6 +2439,136 @@ func TestSessionEventsReadsLongJSONLLines(t *testing.T) {
 	}
 }
 
+func TestSessionEventPageUsesLineHeadByteCursor(t *testing.T) {
+	codexHome := t.TempDir()
+	relativePath := "2026/07/08/rollout-page.jsonl"
+	sessionFile := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `{"timestamp":"2026-07-08T09:16:01Z","type":"session_meta","payload":{"session_id":"codex-session-page","cwd":"/workspace/page"}}
+{"timestamp":"2026-07-08T09:16:02Z","type":"agent_message","payload":{"message":"one"}}
+{"timestamp":"2026-07-08T09:16:03Z","type":"agent_message","payload":{"message":"two"}}
+{"timestamp":"2026-07-08T09:16:04Z","type":"agent_message","payload":{"message":"three"}}
+{"timestamp":"2026-07-08T09:16:05Z","type":"agent_message","payload":{"message":"four"}}
+{"timestamp":"2026-07-08T09:16:06Z","type":"agent_message","payload":{"message":"five"}}
+`
+	if err := os.WriteFile(sessionFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := New("codex", WithCodexHome(codexHome))
+	source := process.CodexTranscriptSource{CodexSessionID: "codex-session-page", RelativePath: relativePath}
+	twoOffset := int64(strings.Index(content, `{"timestamp":"2026-07-08T09:16:03Z"`))
+	threeOffset := int64(strings.Index(content, `{"timestamp":"2026-07-08T09:16:04Z"`))
+	fourOffset := int64(strings.Index(content, `{"timestamp":"2026-07-08T09:16:05Z"`))
+	fiveOffset := int64(strings.Index(content, `{"timestamp":"2026-07-08T09:16:06Z"`))
+
+	latest, err := client.SessionEventPage(context.Background(), process.CodexTranscriptPageInput{Source: source, Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest.StartOffset != fourOffset || latest.EndOffset != int64(len(content)) || !latest.HasMore || len(latest.Events) != 2 {
+		t.Fatalf("latest page = %#v", latest)
+	}
+	if latest.Events[0].SourceOffset != fourOffset || latest.Events[1].SourceOffset != fiveOffset {
+		t.Fatalf("latest source offsets = %d, %d", latest.Events[0].SourceOffset, latest.Events[1].SourceOffset)
+	}
+	if got := eventContent[process.CodexMessageContent](t, latest.Events[0]).Text; got != "four" {
+		t.Fatalf("latest first message = %q", got)
+	}
+
+	older, err := client.SessionEventPage(context.Background(), process.CodexTranscriptPageInput{
+		Source: source, BeforeOffset: latest.StartOffset, Limit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if older.StartOffset != twoOffset || older.EndOffset != fourOffset || !older.HasMore || len(older.Events) != 2 {
+		t.Fatalf("older page = %#v", older)
+	}
+	if got := eventContent[process.CodexMessageContent](t, older.Events[0]).Text; got != "two" {
+		t.Fatalf("older first message = %q", got)
+	}
+
+	aligned, err := client.SessionEventPage(context.Background(), process.CodexTranscriptPageInput{
+		Source: source, BeforeOffset: threeOffset + 12, Limit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aligned.EndOffset != threeOffset || len(aligned.Events) != 2 {
+		t.Fatalf("aligned page = %#v", aligned)
+	}
+	if got := eventContent[process.CodexMessageContent](t, aligned.Events[0]).Text; got != "one" {
+		t.Fatalf("aligned first message = %q", got)
+	}
+}
+
+func TestSessionEventPageReadsCompleteFinalJSONAndSkipsPartialLine(t *testing.T) {
+	codexHome := t.TempDir()
+	relativePath := "2026/07/08/rollout-final-line.jsonl"
+	sessionFile := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	message := strings.Repeat("complete", 12*1024)
+	complete := `{"timestamp":"2026-07-08T09:16:01Z","type":"session_meta","payload":{"session_id":"codex-session-final","cwd":"/workspace/final"}}
+{"timestamp":"2026-07-08T09:16:02Z","type":"agent_message","payload":{"message":` + strconv.Quote(message) + `}}`
+	if err := os.WriteFile(sessionFile, []byte(complete), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	client := New("codex", WithCodexHome(codexHome))
+	source := process.CodexTranscriptSource{CodexSessionID: "codex-session-final", RelativePath: relativePath}
+	page, err := client.SessionEventPage(context.Background(), process.CodexTranscriptPageInput{Source: source, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 || eventContent[process.CodexMessageContent](t, page.Events[0]).Text != message {
+		t.Fatalf("complete final line page = %#v", page)
+	}
+	if err := os.WriteFile(sessionFile, []byte(complete+"\n{\"timestamp\":"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	page, err = client.SessionEventPage(context.Background(), process.CodexTranscriptPageInput{Source: source, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 || eventContent[process.CodexMessageContent](t, page.Events[0]).Text != message {
+		t.Fatalf("partial final line page = %#v", page)
+	}
+}
+
+func TestSessionEventPageReadsBoundedTailWindow(t *testing.T) {
+	codexHome := t.TempDir()
+	relativePath := "2026/07/08/rollout-large-page.jsonl"
+	sessionFile := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(sessionFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := `{"timestamp":"2026-07-08T09:16:01Z","type":"session_meta","payload":{"session_id":"codex-session-large","cwd":"/workspace/large","large_after_cwd":"` + strings.Repeat("x", 2*1024*1024) + `"}}` + "\n"
+	line := `{"timestamp":"2026-07-08T09:16:02Z","type":"agent_message","payload":{"message":"page"}}` + "\n"
+	content := meta + strings.Repeat(line, 10_000)
+	if err := os.WriteFile(sessionFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	recorder := &observationRecorder{}
+	client := New("codex", WithCodexHome(codexHome), WithObserver(recorder))
+	page, err := client.SessionEventPage(context.Background(), process.CodexTranscriptPageInput{
+		Source: process.CodexTranscriptSource{CodexSessionID: "codex-session-large", RelativePath: relativePath},
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 || len(recorder.items) != 1 {
+		t.Fatalf("page=%#v observations=%#v", page, recorder.items)
+	}
+	read := recorder.items[0]
+	if read.Name != "transcript.read_page" || read.Bytes >= 256*1024 {
+		t.Fatalf("tail read observation = %#v, file bytes = %d", read, len(content))
+	}
+}
+
 func TestSessionEventsRejectsMissingAndEscapingTranscriptSources(t *testing.T) {
 	codexHome := t.TempDir()
 	client := New("codex", WithCodexHome(codexHome))

@@ -171,6 +171,7 @@ type SessionCard {
   todoList: TodoList
   artifactCount: Int!
   filesChanged: Int!
+  usage: TranscriptTokenUsage
   attachments: [SessionAttachment!]!
   availableActions: [String!]!
   lastRunAt: Time
@@ -211,6 +212,7 @@ type SessionDetail {
   worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
   config: SessionConfig!
+  usage: TranscriptTokenUsage
   attachments: [SessionAttachment!]!
   promptAppends: [PromptAppend!]!
   availableActions: [String!]!
@@ -710,7 +712,7 @@ input UpdatePromptAppendInput {
 
 input ListTranscriptEventsInput {
   sessionId: ID!
-  beforeEventId: ID
+  beforeCursor: String
   messageRole: String
   limit: Int
 }

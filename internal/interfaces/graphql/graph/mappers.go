@@ -154,6 +154,7 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		TodoList:           mapTodoList(dto.TodoList),
 		ArtifactCount:      dto.ArtifactCount,
 		FilesChanged:       dto.FilesChanged,
+		Usage:              mapSessionUsage(dto.Usage),
 		Attachments:        attachments,
 		AvailableActions:   dto.AvailableActions,
 		LastRunAt:          dto.LastRunAt,
@@ -225,6 +226,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		WorktreeCleanup:  mapWorktreeCleanup(dto.WorktreeCleanup),
 		CodexSessionID:   dto.CodexSessionID,
 		Config:           mapSessionConfig(dto.Config),
+		Usage:            mapSessionUsage(dto.Usage),
 		Attachments:      attachments,
 		PromptAppends:    appends,
 		AvailableActions: dto.AvailableActions,
@@ -389,7 +391,7 @@ func mapSessionUpdateEvent(dto sessioneventapp.UpdateDTO) *model.SessionUpdateEv
 	if dto.WorktreeCleanup != nil {
 		item.WorktreeCleanup = mapWorktreeCleanup(*dto.WorktreeCleanup)
 	}
-	item.Usage = mapTranscriptUsage(dto.Usage)
+	item.Usage = mapSessionUsage(dto.Usage)
 	return item
 }
 
@@ -453,6 +455,26 @@ func mapTranscriptImages(values []processdomain.CodexImage) []*model.TranscriptI
 }
 
 func mapTranscriptUsage(value *timelineapp.TokenUsageDTO) *model.TranscriptTokenUsage {
+	if value == nil {
+		return nil
+	}
+	return &model.TranscriptTokenUsage{
+		InputTokens:                  value.InputTokens,
+		CachedInputTokens:            value.CachedInputTokens,
+		OutputTokens:                 value.OutputTokens,
+		ReasoningOutputTokens:        value.ReasoningOutputTokens,
+		TotalTokens:                  value.TotalTokens,
+		ContextWindow:                value.ContextWindow,
+		CurrentInputTokens:           value.CurrentInputTokens,
+		CurrentCachedInputTokens:     value.CurrentCachedInputTokens,
+		CurrentOutputTokens:          value.CurrentOutputTokens,
+		CurrentReasoningOutputTokens: value.CurrentReasoningOutputTokens,
+		CurrentTotalTokens:           value.CurrentTotalTokens,
+		CompactionCount:              value.CompactionCount,
+	}
+}
+
+func mapSessionUsage(value *sessiondomain.TokenUsage) *model.TranscriptTokenUsage {
 	if value == nil {
 		return nil
 	}

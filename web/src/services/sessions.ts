@@ -65,6 +65,7 @@ export interface SessionCard {
   todoList?: SessionTodoList | null;
   artifactCount: number;
   filesChanged: number;
+  usage?: TranscriptTokenUsage | null;
   availableActions: string[];
 }
 
@@ -250,6 +251,7 @@ interface GraphQLSessionCard {
   todoList?: GraphQLSessionTodoList | null;
   artifactCount: number;
   filesChanged: number;
+  usage?: TranscriptTokenUsage | null;
   lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -291,6 +293,7 @@ interface GraphQLSessionDetail {
   pendingApproval?: GraphQLPendingApproval | null;
   todoList?: GraphQLSessionTodoList | null;
   config: SessionConfig;
+  usage?: TranscriptTokenUsage | null;
   promptAppends?: GraphQLPromptAppend[];
   availableActions?: string[];
   canResume: boolean;
@@ -413,6 +416,7 @@ const sessionCardFields = `
   }
   artifactCount
   filesChanged
+  usage { ${transcriptUsageFields} }
   availableActions
   lastRunAt
   createdAt
@@ -463,6 +467,7 @@ const sessionDetailFields = `
     permissionMode
     fastMode
   }
+  usage { ${transcriptUsageFields} }
   promptAppends {
     id
     sessionId
@@ -1073,6 +1078,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     todoList: normalizeTodoList(session.todoList),
     artifactCount: Math.max(0, session.artifactCount),
     filesChanged: Math.max(0, session.filesChanged),
+    usage: session.usage ?? null,
     availableActions: normalizeAvailableActions(session.availableActions),
   };
 }
@@ -1099,6 +1105,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     todoList: normalizeTodoList(session.todoList),
     artifactCount: 0,
     filesChanged: 0,
+    usage: session.usage ?? null,
     config: session.config,
     closeReason: session.closeReason ?? null,
     promptAppends: (session.promptAppends ?? []).map(normalizePromptAppend),

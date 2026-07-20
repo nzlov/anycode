@@ -7207,6 +7207,64 @@ func TestCodexTaskCompletionReconcilesShellDiffCount(t *testing.T) {
 	}
 }
 
+func TestCodexUsagePersistsBeforePublishingSessionUpdate(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusRunning,
+	}
+	processes := newFakeProcessRepository()
+	processes.active = processdomain.Run{ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusRunning}
+	processes.hasActive = true
+	events := &fakeEventStore{}
+	uow := &fakeUnitOfWork{tx: fakeTx{sessions: repo, processes: processes, events: events}}
+	publishedAfterPersist := make(chan bool, 2)
+	publisher := &fakeEventPublisher{onPublish: func(event eventdomain.DomainEvent) {
+		if event.Type == "session.usage_updated" {
+			publishedAfterPersist <- repo.sessions["session-1"].Usage.TotalTokens == 14
+		}
+	}}
+	service := New(
+		repo,
+		newFakeProjectRepository("project-1"),
+		WithProcesses(processes, &fakeCodexProcess{}),
+		WithEvents(events),
+		WithUnitOfWork(uow),
+		WithEventPublisher(publisher),
+	)
+
+	if err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+		EventID: "usage-1", Type: processdomain.CodexEventUsage,
+		Content: processdomain.CodexUsageContent{
+			InputTokens: 10, CachedInputTokens: 4, OutputTokens: 4, TotalTokens: 14,
+			CurrentInputTokens: 6, CurrentTotalTokens: 8, ContextWindow: 200,
+		},
+	}); err != nil {
+		t.Fatalf("handleCodexEvent() error = %v", err)
+	}
+	if got := repo.sessions["session-1"].Usage; got.TotalTokens != 14 || got.CurrentInputTokens != 6 || got.ContextWindow != 200 {
+		t.Fatalf("persisted usage = %#v", got)
+	}
+	select {
+	case ok := <-publishedAfterPersist:
+		if !ok {
+			t.Fatal("usage event published before persistence")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("usage update was not published")
+	}
+
+	if err := service.handleCodexEvent(ctx, "session-1", processdomain.CodexHandle{ProcessRunID: "process-run-1"}, processdomain.CodexEvent{
+		EventID: "compact-1", Type: processdomain.CodexEventStatus,
+		Content: processdomain.CodexStatusContent{Code: "context.compacted"},
+	}); err != nil {
+		t.Fatalf("handle compaction: %v", err)
+	}
+	if got := repo.sessions["session-1"].Usage.CompactionCount; got != 1 {
+		t.Fatalf("compaction count = %d", got)
+	}
+}
+
 func TestHandleCodexProcessExitReconcilesFinalDiffCount(t *testing.T) {
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
@@ -11168,6 +11226,13 @@ func (r *fakeRepository) UpdateFilesChanged(_ context.Context, id domain.ID, fil
 	current.FilesChanged = filesChanged
 	r.sessions[id] = current
 	r.updateFilesChangedCalls++
+	return nil
+}
+
+func (r *fakeRepository) UpdateUsage(_ context.Context, id domain.ID, usage domain.TokenUsage) error {
+	session := r.sessions[id]
+	session.Usage = usage
+	r.sessions[id] = session
 	return nil
 }
 

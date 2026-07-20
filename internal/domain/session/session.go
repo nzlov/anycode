@@ -153,6 +153,7 @@ type Session struct {
 	CodexSessionID        string
 	Config                Config
 	TodoList              TodoList
+	Usage                 TokenUsage
 	ArtifactCount         int
 	FilesChanged          int
 	QueuedAt              *time.Time
@@ -162,6 +163,25 @@ type Session struct {
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 	ClosedAt              *time.Time
+}
+
+type TokenUsage struct {
+	InputTokens                  int `json:"inputTokens"`
+	CachedInputTokens            int `json:"cachedInputTokens"`
+	OutputTokens                 int `json:"outputTokens"`
+	ReasoningOutputTokens        int `json:"reasoningOutputTokens"`
+	TotalTokens                  int `json:"totalTokens"`
+	ContextWindow                int `json:"contextWindow"`
+	CurrentInputTokens           int `json:"currentInputTokens"`
+	CurrentCachedInputTokens     int `json:"currentCachedInputTokens"`
+	CurrentOutputTokens          int `json:"currentOutputTokens"`
+	CurrentReasoningOutputTokens int `json:"currentReasoningOutputTokens"`
+	CurrentTotalTokens           int `json:"currentTotalTokens"`
+	CompactionCount              int `json:"compactionCount"`
+}
+
+func (u TokenUsage) IsZero() bool {
+	return u == (TokenUsage{})
 }
 
 type WorktreeCleanup struct {
@@ -610,6 +630,10 @@ type Repository interface {
 	ReleasePromptAppends(ctx context.Context, processRunID string) error
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
 	LatestSuccessfulMergeRecord(ctx context.Context, sessionID ID) (MergeRecord, bool, error)
+}
+
+type UsageRepository interface {
+	UpdateUsage(ctx context.Context, id ID, usage TokenUsage) error
 }
 
 type MergeCommandRepository interface {

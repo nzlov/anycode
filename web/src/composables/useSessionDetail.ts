@@ -96,6 +96,7 @@ export function useSessionDetail(sessionId: string) {
       if (sessionRequests.isCurrent(sessionRequest)) {
         if (sessionResult.status === 'fulfilled') {
           session.value = sessionResult.value;
+          tokenUsage.value = sessionResult.value.usage ?? null;
         } else {
           error.value =
             sessionResult.reason instanceof Error
@@ -107,7 +108,6 @@ export function useSessionDetail(sessionId: string) {
         if (eventResult.status === 'fulfilled') {
           events.value = eventResult.value.items;
           eventsPageInfo.value = eventResult.value.pageInfo;
-          tokenUsage.value = eventResult.value.usage;
           nodeUsage.value = eventResult.value.nodeUsage;
         } else {
           error.value =
@@ -266,12 +266,12 @@ export function useSessionDetail(sessionId: string) {
   }
 
   async function loadOlderEvents(): Promise<string | null> {
-    const beforeEventId = olderTranscriptCursor(eventsPageInfo.value);
-    if (loadingOlderEvents.value || beforeEventId === null) return null;
+    const beforeCursor = olderTranscriptCursor(eventsPageInfo.value);
+    if (loadingOlderEvents.value || beforeCursor === null) return null;
     loadingOlderEvents.value = true;
     error.value = '';
     try {
-      const result = await getSessionTranscriptPage(sessionId, beforeEventId, eventPageSize);
+      const result = await getSessionTranscriptPage(sessionId, beforeCursor, eventPageSize);
       events.value = prependOlderEvents(events.value, result.items);
       eventsPageInfo.value = result.pageInfo;
       return result.pageInfo.nextCursor || null;

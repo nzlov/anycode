@@ -82,6 +82,10 @@
                 <span class="overview-card-meta__label">最近操作</span>
                 <span>{{ card.updatedAt }}</span>
               </div>
+              <div v-if="card.usage">
+                <span class="overview-card-meta__label">Token 用量</span>
+                <span>{{ formatTokenCount(card.usage.totalTokens) }}</span>
+              </div>
             </div>
 
             <div class="overview-card-footer">
@@ -444,6 +448,7 @@ import {
   type SessionFile,
 } from '@/services/sessionFiles';
 import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
+import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import {
   closeSession,
   executeSession,
@@ -671,7 +676,6 @@ function toggleProjectVisibility(projectId: string) {
 }
 
 function handleSessionUpdate(update: SessionUpdateEvent) {
-  if (update.eventType === 'usage.updated') return;
   cardRefreshRequests.invalidate(update.sessionId);
   const status = update.status?.status;
   if (activeQuestionSessionId.value === update.sessionId && status && status !== 'waiting_user') {
@@ -714,6 +718,9 @@ function handleSessionUpdate(update: SessionUpdateEvent) {
   }
   if (typeof update.artifactCount === 'number') {
     next = { ...next, artifactCount: update.artifactCount };
+  }
+  if (update.usage) {
+    next = { ...next, usage: update.usage };
   }
   if (update.priority) {
     next = { ...next, priority: update.priority };

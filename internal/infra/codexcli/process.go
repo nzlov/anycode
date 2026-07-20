@@ -1159,6 +1159,212 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 	return events, nil
 }
 
+const (
+	defaultTranscriptPageLimit   = 50
+	maxTranscriptPageLimit       = 500
+	transcriptProjectionLookback = 64
+	transcriptReverseReadBlock   = 64 * 1024
+)
+
+type transcriptPageLine struct {
+	offset int64
+	raw    []byte
+}
+
+func (c *Client) SessionEventPage(ctx context.Context, input process.CodexTranscriptPageInput) (process.CodexTranscriptPage, error) {
+	startedAt := time.Now()
+	var bytesRead int64
+	observeRead := func(outcome string, reason string) {
+		observe(c.observer, Observation{Name: "transcript.read_page", Outcome: outcome, Reason: reason, Duration: time.Since(startedAt), Bytes: bytesRead})
+	}
+	path, _, err := resolveTranscriptPath(c.CodexHome(), input.Source)
+	if err != nil {
+		observeRead("failed", transcriptFailureReason(err))
+		return process.CodexTranscriptPage{}, err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		observeRead("failed", "unavailable")
+		return process.CodexTranscriptPage{}, fmt.Errorf("%w: transcript source is not readable", process.ErrTranscriptUnavailable)
+	}
+	defer file.Close()
+
+	limit := input.Limit
+	if limit < 1 {
+		limit = defaultTranscriptPageLimit
+	}
+	if limit > maxTranscriptPageLimit {
+		limit = maxTranscriptPageLimit
+	}
+	keep := limit + transcriptProjectionLookback
+	lines, endOffset, readBytes, err := readTranscriptLinesBackward(ctx, file, input.BeforeOffset, keep)
+	bytesRead += readBytes
+	if err != nil {
+		observeRead("failed", transcriptFailureReason(err))
+		return process.CodexTranscriptPage{}, err
+	}
+	if len(lines) == 0 {
+		observeRead("success", "")
+		return process.CodexTranscriptPage{EndOffset: endOffset}, nil
+	}
+
+	pageStart := len(lines) - limit
+	if pageStart < 0 {
+		pageStart = 0
+	}
+	startOffset := lines[pageStart].offset
+	events := make([]process.CodexEvent, 0, limit)
+	projector := newCodexTranscriptProjector()
+	appendProjected := func(projected []codexLogEvent) {
+		for _, rawEvent := range projected {
+			if rawEvent.SourceOffset < startOffset {
+				continue
+			}
+			event := canonicalCodexEvent(rawEvent)
+			event.CodexSessionID = input.Source.CodexSessionID
+			events = append(events, event)
+		}
+	}
+	sourceID := filepath.Base(path)
+	for _, item := range lines {
+		appendProjected(projector.project(parseSessionLogLine(item.raw, "", sourceID, item.offset)))
+	}
+	appendProjected(projector.flushPending())
+	observeRead("success", "")
+	return process.CodexTranscriptPage{
+		Events: events, StartOffset: startOffset, EndOffset: endOffset, HasMore: startOffset > 0,
+	}, nil
+}
+
+func readTranscriptLinesBackward(ctx context.Context, file *os.File, beforeOffset int64, keep int) ([]transcriptPageLine, int64, int64, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("read codex session log page metadata: %w", err)
+	}
+	endOffset := beforeOffset
+	if endOffset <= 0 || endOffset > info.Size() {
+		endOffset = info.Size()
+	}
+	endOffset, boundaryBytes, err := alignTranscriptOffsetToLineStart(file, endOffset, info.Size())
+	if err != nil {
+		return nil, 0, boundaryBytes, err
+	}
+	if endOffset == 0 || keep < 1 {
+		return nil, endOffset, boundaryBytes, nil
+	}
+
+	position := endOffset
+	newlineCount := 0
+	chunks := make([][]byte, 0, 2)
+	bytesRead := boundaryBytes
+	for position > 0 && newlineCount <= keep {
+		if err := ctx.Err(); err != nil {
+			return nil, endOffset, bytesRead, err
+		}
+		start := position - transcriptReverseReadBlock
+		if start < 0 {
+			start = 0
+		}
+		chunk := make([]byte, position-start)
+		read, readErr := file.ReadAt(chunk, start)
+		bytesRead += int64(read)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return nil, endOffset, bytesRead, fmt.Errorf("read codex session log page: %w", readErr)
+		}
+		chunk = chunk[:read]
+		newlineCount += bytes.Count(chunk, []byte{'\n'})
+		chunks = append(chunks, chunk)
+		position = start
+	}
+
+	windowSize := 0
+	for _, chunk := range chunks {
+		windowSize += len(chunk)
+	}
+	window := make([]byte, 0, windowSize)
+	for index := len(chunks) - 1; index >= 0; index-- {
+		window = append(window, chunks[index]...)
+	}
+	startsAtLineHead := position == 0
+	if !startsAtLineHead {
+		var previous [1]byte
+		read, readErr := file.ReadAt(previous[:], position-1)
+		bytesRead += int64(read)
+		if readErr != nil {
+			return nil, endOffset, bytesRead, fmt.Errorf("align codex session log page start: %w", readErr)
+		}
+		startsAtLineHead = previous[0] == '\n'
+	}
+
+	windowOffset := position
+	if !startsAtLineHead {
+		newline := bytes.IndexByte(window, '\n')
+		if newline < 0 {
+			return nil, endOffset, bytesRead, nil
+		}
+		window = window[newline+1:]
+		windowOffset += int64(newline + 1)
+	}
+	lines := transcriptLinesFromWindow(window, windowOffset)
+	if len(lines) > keep {
+		lines = lines[len(lines)-keep:]
+	}
+	return lines, endOffset, bytesRead, nil
+}
+
+func alignTranscriptOffsetToLineStart(file *os.File, offset int64, size int64) (int64, int64, error) {
+	if offset <= 0 || offset >= size {
+		return offset, 0, nil
+	}
+	var previous [1]byte
+	read, err := file.ReadAt(previous[:], offset-1)
+	if err != nil {
+		return 0, int64(read), fmt.Errorf("align codex transcript cursor: %w", err)
+	}
+	if previous[0] == '\n' {
+		return offset, int64(read), nil
+	}
+
+	position := offset
+	bytesRead := int64(read)
+	for position > 0 {
+		start := position - transcriptReverseReadBlock
+		if start < 0 {
+			start = 0
+		}
+		chunk := make([]byte, position-start)
+		read, readErr := file.ReadAt(chunk, start)
+		bytesRead += int64(read)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return 0, bytesRead, fmt.Errorf("align codex transcript cursor: %w", readErr)
+		}
+		if newline := bytes.LastIndexByte(chunk[:read], '\n'); newline >= 0 {
+			return start + int64(newline) + 1, bytesRead, nil
+		}
+		position = start
+	}
+	return 0, bytesRead, nil
+}
+
+func transcriptLinesFromWindow(window []byte, windowOffset int64) []transcriptPageLine {
+	lines := make([]transcriptPageLine, 0, bytes.Count(window, []byte{'\n'})+1)
+	for len(window) > 0 {
+		newline := bytes.IndexByte(window, '\n')
+		if newline < 0 {
+			raw := bytes.TrimSuffix(window, []byte{'\r'})
+			if json.Valid(raw) {
+				lines = append(lines, transcriptPageLine{offset: windowOffset, raw: append([]byte(nil), raw...)})
+			}
+			break
+		}
+		raw := bytes.TrimSuffix(window[:newline], []byte{'\r'})
+		lines = append(lines, transcriptPageLine{offset: windowOffset, raw: append([]byte(nil), raw...)})
+		window = window[newline+1:]
+		windowOffset += int64(newline + 1)
+	}
+	return lines
+}
+
 func observe(observer Observer, observation Observation) {
 	if observer != nil {
 		observer.Observe(observation)

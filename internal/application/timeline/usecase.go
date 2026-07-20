@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,14 +17,13 @@ import (
 type UseCase interface {
 	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (Page, error)
 	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
-	SessionUsageEvents(ctx context.Context) (<-chan UsageUpdateDTO, error)
 }
 
 type ListSessionEventsInput struct {
-	SessionID     sessiondomain.ID
-	BeforeEventID eventdomain.ID
-	MessageRole   string
-	Limit         int
+	SessionID    sessiondomain.ID
+	BeforeCursor string
+	MessageRole  string
+	Limit        int
 }
 
 type SessionEventsInput struct {
@@ -35,20 +35,15 @@ type SessionRepository interface {
 }
 
 type CodexTranscriptSource interface {
-	SessionEvents(ctx context.Context, input processdomain.CodexTranscriptInput) ([]processdomain.CodexEvent, error)
+	SessionEventPage(ctx context.Context, input processdomain.CodexTranscriptPageInput) (processdomain.CodexTranscriptPage, error)
 }
 
 type CodexTranscriptIndex interface {
 	TranscriptSources(ctx context.Context, sessionID processdomain.SessionID) ([]processdomain.CodexTranscriptSource, error)
 }
 
-type CodexTranscriptRunIndex interface {
-	TranscriptRuns(ctx context.Context, sessionID processdomain.SessionID) ([]processdomain.Run, error)
-}
-
 type LiveEventSource interface {
 	LiveCodexEvents(ctx context.Context, sessionID processdomain.SessionID) (<-chan processdomain.CodexEvent, error)
-	LiveCodexUsageEvents(ctx context.Context) (<-chan processdomain.CodexEvent, error)
 }
 
 const (
@@ -88,41 +83,151 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 		return Page{}, errors.New("session id is required")
 	}
 	limit := normalizeLimit(input.Limit)
-	events, usage, processUsage, nodeUsage, err := s.sessionHistoryEvents(ctx, input.SessionID)
+	current, err := s.sessions.Find(ctx, input.SessionID)
 	if err != nil {
-		return Page{}, fmt.Errorf("list session events: %w", err)
+		return Page{}, fmt.Errorf("find session for timeline: %w", err)
 	}
-	events = filterEventsByMessageRole(events, input.MessageRole)
-	pageEvents, total, hasMore := pageEventsBefore(events, input.BeforeEventID, limit)
+	sources, err := s.codexTranscriptSources(ctx, current)
+	if err != nil {
+		return Page{}, fmt.Errorf("list session transcript sources: %w", err)
+	}
+	if len(sources) == 0 || s.transcript == nil {
+		return s.listStoredSessionEvents(ctx, current, input, limit)
+	}
+	events, nextCursor, err := s.listTranscriptPage(ctx, sources, input.BeforeCursor, input.MessageRole, limit)
+	if err != nil {
+		return Page{}, err
+	}
+	if input.BeforeCursor == "" {
+		statuses, statusErr := s.statusHistoryEvents(ctx, current)
+		if statusErr != nil {
+			return Page{}, statusErr
+		}
+		events = append(events, statuses...)
+		sort.SliceStable(events, func(i, j int) bool { return events[i].OrderKey < events[j].OrderKey })
+	}
+	events = groupTimelineEvents(events)
+	return Page{
+		Items:      events,
+		Page:       1,
+		PageSize:   limit,
+		Total:      len(events),
+		NextCursor: nextCursor,
+		Usage:      tokenUsageFromSession(current.Usage),
+	}, nil
+}
+
+func (s *Service) listStoredSessionEvents(ctx context.Context, current sessiondomain.Session, input ListSessionEventsInput, limit int) (Page, error) {
+	events, err := s.statusHistoryEvents(ctx, current)
+	if err != nil {
+		return Page{}, err
+	}
+	events = groupTimelineEvents(events)
+	pageEvents, total, hasMore := pageEventsBefore(events, eventdomain.ID(input.BeforeCursor), limit)
 	nextCursor := ""
 	if hasMore && len(pageEvents) > 0 {
 		nextCursor = string(pageEvents[0].ID)
 	}
 	return Page{
-		Items:        pageEvents,
-		Page:         1,
-		PageSize:     limit,
-		Total:        total,
-		NextCursor:   nextCursor,
-		Usage:        usage,
-		ProcessUsage: processUsage,
-		NodeUsage:    nodeUsage,
+		Items: pageEvents, Page: 1, PageSize: limit, Total: total, NextCursor: nextCursor,
+		Usage: tokenUsageFromSession(current.Usage),
 	}, nil
 }
 
-func filterEventsByMessageRole(events []DTO, role string) []DTO {
-	role = strings.TrimSpace(role)
-	if role == "" {
-		return events
+func (s *Service) listTranscriptPage(ctx context.Context, sources []processdomain.CodexTranscriptSource, cursor string, messageRole string, limit int) ([]DTO, string, error) {
+	sourceIndex, beforeOffset, err := decodeTranscriptCursor(cursor, len(sources))
+	if err != nil {
+		return nil, "", err
 	}
-	filtered := make([]DTO, 0, len(events))
-	for _, item := range events {
-		content, ok := item.Content.(processdomain.CodexMessageContent)
-		if ok && content.Role == role {
-			filtered = append(filtered, item)
+	collected := []DTO(nil)
+	nextCursor := ""
+	for sourceIndex >= 0 && len(collected) < limit {
+		page, err := s.transcript.SessionEventPage(ctx, processdomain.CodexTranscriptPageInput{
+			Source: sources[sourceIndex], BeforeOffset: beforeOffset, Limit: limit,
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("read session transcript page: %w", err)
+		}
+		pageEvents := transcriptPageEvents(page.Events, sourceIndex+1, messageRole)
+		collected = append(pageEvents, collected...)
+		if page.HasMore {
+			if page.StartOffset <= 0 || (beforeOffset > 0 && page.StartOffset >= beforeOffset) {
+				return nil, "", errors.New("read session transcript page: cursor did not advance")
+			}
+			beforeOffset = page.StartOffset
+			nextCursor = encodeTranscriptCursor(sourceIndex, beforeOffset)
+			continue
+		}
+		sourceIndex--
+		beforeOffset = 0
+		if sourceIndex >= 0 {
+			nextCursor = encodeTranscriptCursor(sourceIndex, 0)
+		} else {
+			nextCursor = ""
 		}
 	}
-	return filtered
+	return collected, nextCursor, nil
+}
+
+func transcriptPageEvents(events []processdomain.CodexEvent, sourceGroup int, messageRole string) []DTO {
+	result := make([]DTO, 0, len(events))
+	for _, event := range events {
+		if _, ok := event.Content.(processdomain.CodexUsageContent); ok {
+			continue
+		}
+		item, ok := fromCodexEvent(event, sourceGroup)
+		if !ok {
+			continue
+		}
+		if messageRole != "" {
+			message, ok := item.Content.(processdomain.CodexMessageContent)
+			if !ok || message.Role != messageRole {
+				continue
+			}
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func encodeTranscriptCursor(sourceIndex int, offset int64) string {
+	return fmt.Sprintf("%d:%d", sourceIndex, offset)
+}
+
+func decodeTranscriptCursor(cursor string, sourceCount int) (int, int64, error) {
+	if sourceCount < 1 {
+		return -1, 0, nil
+	}
+	if strings.TrimSpace(cursor) == "" {
+		return sourceCount - 1, 0, nil
+	}
+	parts := strings.Split(cursor, ":")
+	if len(parts) != 2 {
+		return 0, 0, errors.New("invalid transcript cursor")
+	}
+	sourceIndex, err := strconv.Atoi(parts[0])
+	if err != nil || sourceIndex < 0 || sourceIndex >= sourceCount {
+		return 0, 0, errors.New("invalid transcript cursor source")
+	}
+	offset, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || offset < 0 {
+		return 0, 0, errors.New("invalid transcript cursor offset")
+	}
+	return sourceIndex, offset, nil
+}
+
+func tokenUsageFromSession(usage sessiondomain.TokenUsage) *TokenUsageDTO {
+	if usage.IsZero() {
+		return nil
+	}
+	return &TokenUsageDTO{
+		InputTokens: usage.InputTokens, CachedInputTokens: usage.CachedInputTokens,
+		OutputTokens: usage.OutputTokens, ReasoningOutputTokens: usage.ReasoningOutputTokens,
+		TotalTokens: usage.TotalTokens, ContextWindow: usage.ContextWindow,
+		CurrentInputTokens: usage.CurrentInputTokens, CurrentCachedInputTokens: usage.CurrentCachedInputTokens,
+		CurrentOutputTokens: usage.CurrentOutputTokens, CurrentReasoningOutputTokens: usage.CurrentReasoningOutputTokens,
+		CurrentTotalTokens: usage.CurrentTotalTokens, CompactionCount: usage.CompactionCount,
+	}
 }
 
 func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error) {
@@ -180,309 +285,6 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 		}
 	}()
 	return out, nil
-}
-
-func (s *Service) SessionUsageEvents(ctx context.Context) (<-chan UsageUpdateDTO, error) {
-	if s == nil {
-		return nil, errors.New("timeline usecase: nil service")
-	}
-	if s.live == nil {
-		return nil, errors.New("live event source is required")
-	}
-	liveCtx, cancelLive := context.WithCancel(ctx)
-	live, err := s.live.LiveCodexUsageEvents(liveCtx)
-	if err != nil {
-		cancelLive()
-		return nil, err
-	}
-	out := make(chan UsageUpdateDTO, 16)
-	go func() {
-		defer close(out)
-		defer cancelLive()
-		for {
-			select {
-			case event, ok := <-live:
-				if !ok {
-					return
-				}
-				usage, ok := event.Content.(processdomain.CodexUsageContent)
-				if !ok || event.SessionID == "" {
-					continue
-				}
-				item := UsageUpdateDTO{
-					SessionID:  sessiondomain.ID(event.SessionID),
-					OccurredAt: event.CreatedAt.UTC().Format(time.RFC3339Nano),
-					Usage:      *usageDTO(usage),
-				}
-				select {
-				case out <- item:
-				case <-ctx.Done():
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out, nil
-}
-
-func (s *Service) sessionHistoryEvents(ctx context.Context, sessionID sessiondomain.ID) ([]DTO, *TokenUsageDTO, []UsageAttributionDTO, []UsageAttributionDTO, error) {
-	if s.sessions == nil {
-		return nil, nil, nil, nil, nil
-	}
-	current, err := s.sessions.Find(ctx, sessionID)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	events, usage, processUsage, nodeUsage, err := s.codexTranscriptEvents(ctx, current)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	statuses, err := s.statusHistoryEvents(ctx, current)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	events = append(events, statuses...)
-	sort.SliceStable(events, func(i, j int) bool {
-		return events[i].OrderKey < events[j].OrderKey
-	})
-	return groupTimelineEvents(events), usage, processUsage, nodeUsage, nil
-}
-
-type orderedTranscriptEvent struct {
-	event        DTO
-	createdAt    time.Time
-	sessionIndex int
-	eventIndex   int
-}
-
-func (s *Service) codexTranscriptEvents(ctx context.Context, current sessiondomain.Session) ([]DTO, *TokenUsageDTO, []UsageAttributionDTO, []UsageAttributionDTO, error) {
-	if s.transcript == nil {
-		return nil, nil, nil, nil, nil
-	}
-	sources, err := s.codexTranscriptSources(ctx, current)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	if len(sources) == 0 {
-		return nil, nil, nil, nil, nil
-	}
-	ordered := []orderedTranscriptEvent(nil)
-	var latestUsage *TokenUsageDTO
-	var latestUsageAt time.Time
-	compactionCount := 0
-	usageSamples := map[string][]usageSample{}
-	compactions := map[string][]time.Time{}
-	for sessionIndex, source := range sources {
-		codexSessionID := source.CodexSessionID
-		events, err := s.transcript.SessionEvents(ctx, processdomain.CodexTranscriptInput{
-			Source: source,
-		})
-		if err != nil {
-			return nil, nil, nil, nil, err
-		}
-		for index, event := range events {
-			eventTime := event.CreatedAt
-			if eventTime.IsZero() {
-				eventTime = current.UpdatedAt
-			}
-			if status, ok := event.Content.(processdomain.CodexStatusContent); ok && status.Code == "context.compacted" {
-				compactionCount++
-				compactions[codexSessionID] = append(compactions[codexSessionID], eventTime)
-			}
-			if event.Type == "" || event.Content == nil {
-				continue
-			}
-			if usage, ok := event.Content.(processdomain.CodexUsageContent); ok {
-				if latestUsage == nil || !eventTime.Before(latestUsageAt) {
-					latestUsage = usageDTO(usage)
-					latestUsageAt = eventTime
-				}
-				usageSamples[codexSessionID] = append(usageSamples[codexSessionID], usageSample{at: eventTime, usage: usage})
-				continue
-			}
-			if !visibleCodexTimelineEvent(event) {
-				continue
-			}
-			eventID := event.EventID
-			if eventID == "" {
-				eventID = fmt.Sprintf("line-%d", index)
-			}
-			createdAt := event.CreatedAt
-			if createdAt.IsZero() {
-				createdAt = current.UpdatedAt
-			}
-			canonicalID := processdomain.CanonicalCodexEventID(codexSessionID, eventID)
-			ordered = append(ordered, orderedTranscriptEvent{
-				event: DTO{
-					ID:            eventdomain.ID(canonicalID),
-					Type:          event.Type,
-					OrderKey:      timelineOrderKey(createdAt, sessionIndex+1, event.SourceOffset, event.SourceIndex, canonicalID),
-					CorrelationID: canonicalCorrelationID(codexSessionID, event.CorrelationID),
-					Phase:         normalizedPhase(event.Phase),
-					Content:       event.Content,
-					OccurredAt:    createdAt.UTC().Format(time.RFC3339Nano),
-				},
-				createdAt:    createdAt,
-				sessionIndex: sessionIndex,
-				eventIndex:   index,
-			})
-		}
-	}
-	if latestUsage != nil {
-		latestUsage.CompactionCount = compactionCount
-	}
-	for codexSessionID := range usageSamples {
-		sort.SliceStable(usageSamples[codexSessionID], func(i, j int) bool {
-			return usageSamples[codexSessionID][i].at.Before(usageSamples[codexSessionID][j].at)
-		})
-		sort.SliceStable(compactions[codexSessionID], func(i, j int) bool {
-			return compactions[codexSessionID][i].Before(compactions[codexSessionID][j])
-		})
-	}
-	sort.SliceStable(ordered, func(i, j int) bool {
-		left := ordered[i]
-		right := ordered[j]
-		if !left.createdAt.Equal(right.createdAt) {
-			return left.createdAt.Before(right.createdAt)
-		}
-		if left.sessionIndex != right.sessionIndex {
-			return left.sessionIndex < right.sessionIndex
-		}
-		return left.eventIndex < right.eventIndex
-	})
-	result := make([]DTO, 0, len(ordered))
-	for _, item := range ordered {
-		result = append(result, item.event)
-	}
-	processUsage, nodeUsage, err := s.usageAttributions(ctx, current, usageSamples, compactions)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	return result, latestUsage, processUsage, nodeUsage, nil
-}
-
-type usageSample struct {
-	at    time.Time
-	usage processdomain.CodexUsageContent
-}
-
-func (s *Service) usageAttributions(ctx context.Context, current sessiondomain.Session, samples map[string][]usageSample, compactions map[string][]time.Time) ([]UsageAttributionDTO, []UsageAttributionDTO, error) {
-	index, ok := s.index.(CodexTranscriptRunIndex)
-	if !ok {
-		return nil, nil, nil
-	}
-	runs, err := index.TranscriptRuns(ctx, processdomain.SessionID(current.ID))
-	if err != nil {
-		return nil, nil, err
-	}
-	processUsage := make([]UsageAttributionDTO, 0, len(runs))
-	nodeIndexes := map[string]int{}
-	nodeUsage := []UsageAttributionDTO(nil)
-	for _, run := range runs {
-		runSamples := samples[run.CodexSessionID]
-		start := cumulativeUsageBefore(runSamples, run.StartedAt)
-		endAt := time.Time{}
-		if run.FinishedAt != nil {
-			endAt = *run.FinishedAt
-		}
-		end, currentTurn := cumulativeUsageAt(runSamples, endAt)
-		usage := usageDelta(start, end, currentTurn)
-		usage.CompactionCount = countTimesInWindow(compactions[run.CodexSessionID], run.StartedAt, endAt)
-		attribution := UsageAttributionDTO{ProcessRunID: string(run.ID), Usage: usage}
-		if run.NodeRunID != nil {
-			attribution.NodeRunID = string(*run.NodeRunID)
-		}
-		processUsage = append(processUsage, attribution)
-		if attribution.NodeRunID == "" {
-			continue
-		}
-		if nodeIndex, found := nodeIndexes[attribution.NodeRunID]; found {
-			nodeUsage[nodeIndex].Usage = addUsage(nodeUsage[nodeIndex].Usage, usage)
-		} else {
-			nodeIndexes[attribution.NodeRunID] = len(nodeUsage)
-			nodeUsage = append(nodeUsage, UsageAttributionDTO{NodeRunID: attribution.NodeRunID, Usage: usage})
-		}
-	}
-	return processUsage, nodeUsage, nil
-}
-
-func cumulativeUsageBefore(samples []usageSample, before time.Time) processdomain.CodexUsageContent {
-	var result processdomain.CodexUsageContent
-	if before.IsZero() {
-		return result
-	}
-	for _, sample := range samples {
-		if sample.at.After(before) {
-			break
-		}
-		result = sample.usage
-	}
-	return result
-}
-
-func cumulativeUsageAt(samples []usageSample, at time.Time) (processdomain.CodexUsageContent, processdomain.CodexUsageContent) {
-	var result processdomain.CodexUsageContent
-	var current processdomain.CodexUsageContent
-	for _, sample := range samples {
-		if !at.IsZero() && sample.at.After(at) {
-			break
-		}
-		result = sample.usage
-		current = sample.usage
-	}
-	return result, current
-}
-
-func usageDelta(start, end, current processdomain.CodexUsageContent) TokenUsageDTO {
-	return TokenUsageDTO{
-		InputTokens:                  nonNegative(end.InputTokens - start.InputTokens),
-		CachedInputTokens:            nonNegative(end.CachedInputTokens - start.CachedInputTokens),
-		OutputTokens:                 nonNegative(end.OutputTokens - start.OutputTokens),
-		ReasoningOutputTokens:        nonNegative(end.ReasoningOutputTokens - start.ReasoningOutputTokens),
-		TotalTokens:                  nonNegative(end.TotalTokens - start.TotalTokens),
-		ContextWindow:                end.ContextWindow,
-		CurrentInputTokens:           current.CurrentInputTokens,
-		CurrentCachedInputTokens:     current.CurrentCachedInputTokens,
-		CurrentOutputTokens:          current.CurrentOutputTokens,
-		CurrentReasoningOutputTokens: current.CurrentReasoningOutputTokens,
-		CurrentTotalTokens:           current.CurrentTotalTokens,
-	}
-}
-
-func nonNegative(value int) int {
-	if value < 0 {
-		return 0
-	}
-	return value
-}
-
-func countTimesInWindow(times []time.Time, start, end time.Time) int {
-	count := 0
-	for _, value := range times {
-		if (!start.IsZero() && !value.After(start)) || (!end.IsZero() && value.After(end)) {
-			continue
-		}
-		count++
-	}
-	return count
-}
-
-func addUsage(left, right TokenUsageDTO) TokenUsageDTO {
-	left.InputTokens += right.InputTokens
-	left.CachedInputTokens += right.CachedInputTokens
-	left.OutputTokens += right.OutputTokens
-	left.ReasoningOutputTokens += right.ReasoningOutputTokens
-	left.TotalTokens += right.TotalTokens
-	left.CompactionCount += right.CompactionCount
-	left.CurrentInputTokens = right.CurrentInputTokens
-	left.CurrentCachedInputTokens = right.CurrentCachedInputTokens
-	left.CurrentOutputTokens = right.CurrentOutputTokens
-	left.CurrentReasoningOutputTokens = right.CurrentReasoningOutputTokens
-	left.CurrentTotalTokens = right.CurrentTotalTokens
-	left.ContextWindow = right.ContextWindow
-	return left
 }
 
 func (s *Service) statusHistoryEvents(ctx context.Context, current sessiondomain.Session) ([]DTO, error) {
@@ -576,9 +378,6 @@ func fromCodexEvent(event processdomain.CodexEvent, sourceGroup int) (DTO, bool)
 	canonicalID := processdomain.CanonicalCodexEventID(event.CodexSessionID, event.EventID)
 	if canonicalID == "" {
 		canonicalID = event.EventID
-	}
-	if usage, ok := event.Content.(processdomain.CodexUsageContent); ok {
-		return DTO{ID: eventdomain.ID(canonicalID), Type: event.Type, Usage: usageDTO(usage), OccurredAt: event.CreatedAt.UTC().Format(time.RFC3339Nano)}, true
 	}
 	return DTO{
 		ID:            eventdomain.ID(canonicalID),

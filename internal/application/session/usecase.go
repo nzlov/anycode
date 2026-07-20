@@ -175,6 +175,7 @@ type DTO struct {
 	WorktreeCleanup    WorktreeCleanupDTO
 	CodexSessionID     string
 	Config             domain.Config
+	Usage              *domain.TokenUsage
 	ArtifactCount      int
 	FilesChanged       int
 	AvailableActions   []string
@@ -4883,8 +4884,19 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 		}
 	}
 	saveSession := false
+	saveUsage := false
 	saveFilesChanged := false
 	extraEvents := append([]sessionEventInput(nil), archivedEvents...)
+	if activeRun && updateSessionUsageFromCodexEvent(&current, event) {
+		saveUsage = true
+		extraEvents = append(extraEvents, sessionEventInput{
+			eventType: "session.usage_updated",
+			payload: map[string]any{
+				"processRunId": string(handle.ProcessRunID),
+				"usage":        current.Usage,
+			},
+		})
+	}
 	if activeRun && codexEventCanUpdateSession(current.Status) {
 		if todoList, ok := todoListFromCodexEvent(event); ok && !slices.Equal(current.TodoList.Items, todoList.Items) {
 			current.TodoList = todoList
@@ -4918,7 +4930,47 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 		}
 	}
 	promptDelivered := codexEventAcknowledgesPrompt(event)
-	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveFilesChanged, promptDelivered, extraEvents...)
+	return s.publishCodexEventWithSessionUpdates(ctx, current, handle.ProcessRunID, event, saveSession, saveUsage, saveFilesChanged, promptDelivered, extraEvents...)
+}
+
+func updateSessionUsageFromCodexEvent(current *domain.Session, event processdomain.CodexEvent) bool {
+	if current == nil {
+		return false
+	}
+	if usage, ok := event.Content.(processdomain.CodexUsageContent); ok {
+		next := domain.TokenUsage{
+			InputTokens:                  nonNegativeTokenCount(usage.InputTokens),
+			CachedInputTokens:            nonNegativeTokenCount(usage.CachedInputTokens),
+			OutputTokens:                 nonNegativeTokenCount(usage.OutputTokens),
+			ReasoningOutputTokens:        nonNegativeTokenCount(usage.ReasoningOutputTokens),
+			TotalTokens:                  nonNegativeTokenCount(usage.TotalTokens),
+			ContextWindow:                nonNegativeTokenCount(usage.ContextWindow),
+			CurrentInputTokens:           nonNegativeTokenCount(usage.CurrentInputTokens),
+			CurrentCachedInputTokens:     nonNegativeTokenCount(usage.CurrentCachedInputTokens),
+			CurrentOutputTokens:          nonNegativeTokenCount(usage.CurrentOutputTokens),
+			CurrentReasoningOutputTokens: nonNegativeTokenCount(usage.CurrentReasoningOutputTokens),
+			CurrentTotalTokens:           nonNegativeTokenCount(usage.CurrentTotalTokens),
+			CompactionCount:              current.Usage.CompactionCount,
+		}
+		if next == current.Usage {
+			return false
+		}
+		current.Usage = next
+		return true
+	}
+	status, ok := event.Content.(processdomain.CodexStatusContent)
+	if !ok || status.Code != "context.compacted" {
+		return false
+	}
+	current.Usage.CompactionCount++
+	return true
+}
+
+func nonNegativeTokenCount(value int) int {
+	if value < 0 {
+		return 0
+	}
+	return value
 }
 
 func hasCodexFileChanges(event processdomain.CodexEvent) bool {
@@ -6435,7 +6487,7 @@ func (s *Service) addStatusUpdateEvent(session domain.Session, events []eventdom
 	return events, nil
 }
 
-func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveFilesChanged bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
+func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, session domain.Session, processRunID processdomain.RunID, event processdomain.CodexEvent, saveSession bool, saveUsage bool, saveFilesChanged bool, promptDelivered bool, extraInputs ...sessionEventInput) error {
 	extraEvents, err := s.newSessionEvents(session, extraInputs)
 	if err != nil {
 		return err
@@ -6458,6 +6510,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 			if saveSession {
 				if err := tx.Sessions().Save(ctx, session); err != nil {
 					return fmt.Errorf("save session: %w", err)
+				}
+			}
+			if saveUsage {
+				if err := updateSessionUsage(ctx, tx.Sessions(), session.ID, session.Usage); err != nil {
+					return err
 				}
 			}
 			if saveFilesChanged {
@@ -6494,6 +6551,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 			return fmt.Errorf("save session: %w", err)
 		}
 	}
+	if saveUsage {
+		if err := updateSessionUsage(ctx, s.repo, session.ID, session.Usage); err != nil {
+			return err
+		}
+	}
 	if saveFilesChanged {
 		if err := s.repo.UpdateFilesChanged(ctx, session.ID, session.FilesChanged); err != nil {
 			return err
@@ -6506,6 +6568,17 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 			}
 		}
 		s.publishSessionEvent(ctx, event)
+	}
+	return nil
+}
+
+func updateSessionUsage(ctx context.Context, repo domain.Repository, sessionID domain.ID, usage domain.TokenUsage) error {
+	writer, ok := repo.(domain.UsageRepository)
+	if !ok {
+		return errors.New("session usage repository is required")
+	}
+	if err := writer.UpdateUsage(ctx, sessionID, usage); err != nil {
+		return fmt.Errorf("update session usage: %w", err)
 	}
 	return nil
 }
@@ -8481,6 +8554,7 @@ func toDTO(session domain.Session) DTO {
 		WorktreeCleanup:    toWorktreeCleanupDTO(session.WorktreeCleanup),
 		CodexSessionID:     session.CodexSessionID,
 		Config:             session.Config,
+		Usage:              sessionUsageDTO(session.Usage),
 		ArtifactCount:      session.ArtifactCount,
 		FilesChanged:       session.FilesChanged,
 		AvailableActions:   availableActions(session),
@@ -8488,6 +8562,13 @@ func toDTO(session domain.Session) DTO {
 		CreatedAt:          session.CreatedAt,
 		UpdatedAt:          session.UpdatedAt,
 	}
+}
+
+func sessionUsageDTO(usage domain.TokenUsage) *domain.TokenUsage {
+	if usage.IsZero() {
+		return nil
+	}
+	return &usage
 }
 
 func worktreeBranchForSession(session domain.Session) string {

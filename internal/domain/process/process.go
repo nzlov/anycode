@@ -108,6 +108,19 @@ type CodexTranscriptInput struct {
 	Source CodexTranscriptSource
 }
 
+type CodexTranscriptPageInput struct {
+	Source       CodexTranscriptSource
+	BeforeOffset int64
+	Limit        int
+}
+
+type CodexTranscriptPage struct {
+	Events      []CodexEvent
+	StartOffset int64
+	EndOffset   int64
+	HasMore     bool
+}
+
 type ExitResult struct {
 	ExitCode      *int
 	FailureCode   string

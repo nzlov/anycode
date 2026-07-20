@@ -375,6 +375,20 @@ func (_c *SessionCreate) SetNillableTodoList(v *session.TodoList) *SessionCreate
 	return _c
 }
 
+// SetUsage sets the "usage" field.
+func (_c *SessionCreate) SetUsage(v session.TokenUsage) *SessionCreate {
+	_c.mutation.SetUsage(v)
+	return _c
+}
+
+// SetNillableUsage sets the "usage" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableUsage(v *session.TokenUsage) *SessionCreate {
+	if v != nil {
+		_c.SetUsage(*v)
+	}
+	return _c
+}
+
 // SetArtifactCount sets the "artifact_count" field.
 func (_c *SessionCreate) SetArtifactCount(v int) *SessionCreate {
 	_c.mutation.SetArtifactCount(v)
@@ -1146,6 +1160,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TodoList(); ok {
 		_spec.SetField(entsession.FieldTodoList, field.TypeJSON, value)
 		_node.TodoList = value
+	}
+	if value, ok := _c.mutation.Usage(); ok {
+		_spec.SetField(entsession.FieldUsage, field.TypeJSON, value)
+		_node.Usage = value
 	}
 	if value, ok := _c.mutation.ArtifactCount(); ok {
 		_spec.SetField(entsession.FieldArtifactCount, field.TypeInt, value)

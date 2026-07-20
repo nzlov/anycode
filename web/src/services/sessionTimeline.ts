@@ -201,7 +201,7 @@ export const transcriptUsageFields = `
 
 export async function getSessionTranscriptPage(
   sessionId: string,
-  beforeEventId: string,
+  beforeCursor: string,
   limit: number,
   messageRole = '',
 ) {
@@ -215,7 +215,7 @@ export async function getSessionTranscriptPage(
         pageInfo: PageInfo;
       };
     },
-    { input: { sessionId: string; beforeEventId?: string; messageRole?: string; limit: number } }
+    { input: { sessionId: string; beforeCursor?: string; messageRole?: string; limit: number } }
   >({
     query: `
       query SessionTranscript($input: ListTranscriptEventsInput!) {
@@ -228,7 +228,7 @@ export async function getSessionTranscriptPage(
         }
       }
     `,
-    variables: { input: latestTranscriptPageInput(sessionId, beforeEventId, limit, messageRole) },
+    variables: { input: latestTranscriptPageInput(sessionId, beforeCursor, limit, messageRole) },
   });
   return {
     items: data.sessionTranscript.events.map(normalizeTranscriptEvent),

@@ -16,7 +16,6 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
-	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -494,10 +493,10 @@ func (r *queryResolver) SessionTranscript(ctx context.Context, input model.ListT
 		return nil, missingUseCase("timeline")
 	}
 	dto, err := r.UseCases.Timeline.ListSessionEvents(ctx, timelineapp.ListSessionEventsInput{
-		SessionID:     sessiondomain.ID(input.SessionID),
-		BeforeEventID: eventdomain.ID(stringValue(input.BeforeEventID, "")),
-		MessageRole:   stringValue(input.MessageRole, ""),
-		Limit:         intValue(input.Limit, 0),
+		SessionID:    sessiondomain.ID(input.SessionID),
+		BeforeCursor: stringValue(input.BeforeCursor, ""),
+		MessageRole:  stringValue(input.MessageRole, ""),
+		Limit:        intValue(input.Limit, 0),
 	})
 	if err != nil {
 		return nil, err
