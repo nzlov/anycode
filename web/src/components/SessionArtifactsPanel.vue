@@ -605,7 +605,6 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
 }
 
-.artifact-toolbar,
 .artifact-preview-header,
 .artifact-preview-title,
 .artifact-actions {
@@ -615,19 +614,20 @@ onBeforeUnmount(() => {
 }
 
 .artifact-toolbar {
+  display: grid;
   min-width: 0;
-  flex-wrap: wrap;
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(112px, 160px)) 40px;
+  align-items: center;
+  gap: 8px;
 }
 
 .artifact-toolbar .q-input {
   min-width: 0;
-  flex: 1 1 calc(100% - 40px);
 }
 
 .artifact-toolbar .q-select {
-  width: calc(33.333% - 6px);
+  width: auto;
   min-width: 0;
-  flex: 1 1 calc(33.333% - 6px);
 }
 
 .artifact-preview-header {
@@ -651,9 +651,19 @@ onBeforeUnmount(() => {
   border-radius: var(--ac-radius);
 }
 
+.artifact-list {
+  color: var(--ac-text);
+  background: var(--ac-surface);
+}
+
+.artifact-list-item.q-item--active {
+  color: var(--ac-on-secondary-container);
+  background: var(--ac-secondary-container);
+}
+
 .artifact-error {
-  color: var(--q-negative);
-  background: var(--ac-surface-muted);
+  color: var(--ac-on-error-container);
+  background: var(--ac-error-container);
 }
 
 .artifact-preview-dialog {
@@ -668,6 +678,9 @@ onBeforeUnmount(() => {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+  color: var(--ac-text);
+  background: var(--ac-surface);
+  border-color: var(--ac-border);
 }
 
 .artifact-preview-body {
@@ -738,7 +751,25 @@ onBeforeUnmount(() => {
   }
 }
 
-@media (max-width: 599px) {
+@container (max-width: 639px) {
+  .artifact-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 40px;
+  }
+
+  .artifact-toolbar .q-input {
+    grid-row: 1;
+    grid-column: 1 / 3;
+  }
+
+  .artifact-toolbar > .q-btn {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .artifact-toolbar .q-select:last-of-type {
+    grid-column: 1 / 3;
+  }
+
   .artifact-list-item {
     display: grid !important;
     grid-template-columns: 40px minmax(0, 1fr);

@@ -97,6 +97,22 @@ test('artifact panel enables one-item inline previews only for wide opted-in con
   assert.doesNotMatch(detailPage, /inline-preview/);
 });
 
+test('artifact controls and file actions reflow from the panel width', () => {
+  assert.match(
+    panel,
+    /\.artifact-toolbar\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+repeat\(3,\s*minmax\(112px,\s*160px\)\)\s+40px/s,
+  );
+  assert.match(
+    panel,
+    /@container \(max-width:\s*639px\)[\s\S]*?\.artifact-toolbar\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)\s+40px/s,
+  );
+  assert.match(
+    panel,
+    /@container \(max-width:\s*639px\)[\s\S]*?\.artifact-list-item\s*\{[^}]*grid-template-columns:\s*40px\s+minmax\(0,\s*1fr\)/s,
+  );
+  assert.doesNotMatch(panel, /@media \(max-width:\s*599px\)/);
+});
+
 test('artifact requests ignore stale responses and follow live artifact events', () => {
   assert.match(service, /signal\?: AbortSignal/);
   assert.match(service, /fetch\(url, \{ headers, signal: signal \?\? null \}\)/);

@@ -139,6 +139,8 @@ test('Quasar and application status colors are aliases of M3 dynamic roles', () 
     negative: 'error',
     info: 'secondary',
     warning: 'tertiary',
+    dark: 'surface',
+    'dark-page': 'page',
   };
 
   for (const [quasarRole, appRole] of Object.entries(quasarRoles)) {
@@ -183,6 +185,28 @@ test('Quasar and application status colors are aliases of M3 dynamic roles', () 
     );
   }
   assert.doesNotMatch(themeSource, /--ac-(?:on-warning|status-[\w-]+):\s*#/);
+});
+
+test('shared Quasar page surfaces use the M3 theme boundary', () => {
+  assert.match(
+    themeSource,
+    /\.q-card,\s*\.q-table__card\s*\{[^}]*color:\s*var\(--ac-text\)[^}]*background:\s*var\(--ac-surface\)/s,
+  );
+  assert.match(themeSource, /\.q-card--bordered[^}]*border-color:\s*var\(--ac-border\)/s);
+  assert.match(
+    themeSource,
+    /\.q-tab-panels\s*\{[^}]*color:\s*inherit[^}]*background:\s*transparent/s,
+  );
+  assert.match(themeSource, /\.q-list--bordered[^}]*border-color:\s*var\(--ac-border\)/s);
+  assert.match(themeSource, /\.q-separator\s*\{[^}]*background:\s*var\(--ac-border\)/s);
+  assert.match(
+    appStylesSource,
+    /\.session-table\s*\{[^}]*color:\s*var\(--ac-text\)[^}]*background:\s*var\(--ac-surface\)/s,
+  );
+  assert.match(
+    appStylesSource,
+    /\.session-table thead tr,[^}]*\.q-table__bottom\s*\{[^}]*background:\s*var\(--ac-surface-muted\)/s,
+  );
 });
 
 test('global appearance setting persists the algorithm through GraphQL and applies it immediately', () => {
