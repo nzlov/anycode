@@ -26,6 +26,7 @@ test('Quasar builds the application in PWA InjectManifest mode', () => {
 test('PWA output is the sole frontend artifact embedded by Go', () => {
   const packageJSON = JSON.parse(readSource('../package.json'));
   const configSource = readSource('../quasar.config.ts');
+  const makefileSource = readSource('../../Makefile');
   const staticSource = readSource('../../internal/interfaces/http/static/static.go');
   const serverSource = readSource('../../internal/interfaces/http/server.go');
   const dockerSource = readSource('../../Dockerfile');
@@ -36,6 +37,10 @@ test('PWA output is the sole frontend artifact embedded by Go', () => {
   assert.match(staticSource, /\/\/go:embed all:pwa/);
   assert.match(serverSource, /fs\.Sub\(static\.Files, static\.PWADir\)/);
   assert.match(dockerSource, /static\/pwa \.\/internal\/interfaces\/http\/static\/pwa/);
+  assert.ok(
+    makefileSource.indexOf('npm --prefix web run build') <
+      makefileSource.indexOf('npm --prefix web run typecheck'),
+  );
 
   for (const source of [configSource, staticSource, serverSource, dockerSource]) {
     assert.doesNotMatch(source, /internal\/interfaces\/http\/static\/dist|static\.DistDir/);
