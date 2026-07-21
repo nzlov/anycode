@@ -18,8 +18,8 @@ test('make verify is the documented full-project validation entry point', () => 
     'go test ./...',
     'go vet ./...',
     'node --test web/tests/*.test.mjs',
-    'npm --prefix web run typecheck',
     'npm --prefix web run build',
+    'npm --prefix web run typecheck',
     'git diff --check',
   ]);
   assert.match(agentInstructions, /常规收口统一运行 `make verify`/);
