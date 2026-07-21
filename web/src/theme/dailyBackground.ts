@@ -1,5 +1,3 @@
-import { readonly, shallowRef } from 'vue';
-
 import {
   createDailyPalettes,
   dailyBackgroundStorageKey,
@@ -16,15 +14,6 @@ import {
 const metadataEndpoint = 'https://bing.ee123.net/img/?size=UHD&imgtype=jpg&type=json';
 const imageEndpoint = 'https://bing.ee123.net/img/4k';
 const attributionSource = 'https://bing.ee123.net/' as const;
-
-interface DailyBackgroundView {
-  title: string;
-  copyright: string;
-  sourceUrl: string;
-}
-
-const currentBackground = shallowRef<DailyBackgroundView | null>(null);
-export const dailyBackgroundState = readonly(currentBackground);
 
 let initialized = false;
 
@@ -146,11 +135,6 @@ function applyRecord(record: DailyBackgroundRecord) {
   applyPalette(root, 'dark', record.palettes.dark);
   root.style.setProperty('--ac-daily-background-image', `url(${JSON.stringify(record.imageUrl)})`);
   root.dataset.dailyBackground = 'ready';
-  currentBackground.value = {
-    title: record.attribution.title,
-    copyright: record.attribution.copyright,
-    sourceUrl: record.attribution.sourceUrl,
-  };
 }
 
 function applyPalette(root: HTMLElement, mode: 'light' | 'dark', palette: DailyPalette) {

@@ -99,15 +99,23 @@ test('daily background stays inside the theme boundary with static token fallbac
   assert.doesNotMatch(dailyBackgroundSource, /indexedDB|caches\.open|CacheStorage/);
 });
 
-test('root owns safe attribution while all route shells expose the shared background', () => {
-  assert.match(appSource, /class="app-daily-credit"/);
-  assert.match(appSource, /rel="noopener noreferrer"/);
-  assert.doesNotMatch(appSource, /v-html/);
+test('root exposes the shared background without an image caption', () => {
+  assert.doesNotMatch(appSource, /app-daily-credit|dailyBackgroundState/);
+  assert.doesNotMatch(appStylesSource, /\.app-daily-credit/);
   assert.match(
     appStylesSource,
     /#q-app::before[^}]*background-image:\s*var\(--ac-daily-background-image/s,
   );
   assert.match(appStylesSource, /html\[data-daily-background='ready'\]/);
+  assert.doesNotMatch(appStylesSource, /#q-app::after|--ac-daily-veil/);
+  assert.doesNotMatch(themeSource, /--ac-daily-veil/);
+  assert.equal(
+    appStylesSource.match(/var\(--ac-page\) 16%, transparent/g)?.length,
+    2,
+    'light and dark modes use the reduced page layer',
+  );
+  assert.match(appStylesSource, /\.app-layout\s*\{[^}]*background:\s*var\(--ac-page-layer\)/s);
+  assert.doesNotMatch(appStylesSource, /\.app-layout\s*,\s*\.workbench-page\s*\{/s);
   assert.match(loginSource, /background:\s*var\(--ac-page-layer\)/);
   assert.match(notFoundSource, /background:\s*var\(--ac-page-layer\)/);
   assert.match(notFoundSource, /error-not-found-page__content/);

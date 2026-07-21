@@ -2,7 +2,6 @@
   color-scheme: light;
   --ac-page: var(--ac-daily-light-page, #f6f8fb);
   --ac-page-layer: var(--ac-page);
-  --ac-daily-veil: rgb(248 250 252 / 24%);
   --ac-surface: var(--ac-daily-light-surface, #ffffff);
   --ac-surface-muted: var(--ac-daily-light-surface-muted, #f1f5f9);
   --ac-surface-raised: var(--ac-daily-light-surface-raised, #ffffff);
@@ -76,7 +75,6 @@
   color-scheme: dark;
   --ac-page: var(--ac-daily-dark-page, #0b1120);
   --ac-page-layer: var(--ac-page);
-  --ac-daily-veil: rgb(2 6 23 / 42%);
   --ac-surface: var(--ac-daily-dark-surface, #111827);
   --ac-surface-muted: var(--ac-daily-dark-surface-muted, #0f172a);
   --ac-surface-raised: var(--ac-daily-dark-surface-raised, #172033);
