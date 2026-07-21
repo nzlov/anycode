@@ -1532,8 +1532,12 @@ body.desktop
   min-width: 0;
 }
 
-.codex-model-select {
-  max-width: 32ch;
+.model-select {
+  max-width: 24ch;
+}
+
+.effort-select {
+  max-width: 18ch;
 }
 
 .codex-model-select__status {
@@ -1543,7 +1547,11 @@ body.desktop
 }
 
 .codex-model-chip {
-  max-width: 32ch;
+  max-width: 24ch;
+}
+
+.codex-effort-chip {
+  max-width: 18ch;
 }
 
 .compact-select .q-field__native {

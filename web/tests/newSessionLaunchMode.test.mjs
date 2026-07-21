@@ -73,7 +73,7 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
   assert.match(controlsSource, /运行权限：\{\{ permissionLabel \}\}/);
   assert.doesNotMatch(controlsSource, /name="smart_toy"|name="psychology"/);
   assert.equal((controlsSource.match(/hide-dropdown-icon/g) ?? []).length, 1);
-  assert.equal((modelSelectorSource.match(/hide-dropdown-icon/g) ?? []).length, 1);
+  assert.equal((modelSelectorSource.match(/hide-dropdown-icon/g) ?? []).length, 2);
   assert.doesNotMatch(controlsSource, /dropdown-icon=""/);
   assert.match(
     stylesSource,
@@ -85,7 +85,8 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
   );
   assert.match(stylesSource, /\.permission-select\s*{[^}]*width:\s*44px/s);
   assert.match(controlsSource, /<CodexModelSelector/);
-  assert.match(modelSelectorSource, /class="compact-select codex-model-select"/);
+  assert.match(modelSelectorSource, /class="compact-select model-select"/);
+  assert.match(modelSelectorSource, /class="compact-select effort-select"/);
   assert.match(
     stylesSource,
     /\.compact-select\s*{[^}]*width:\s*max-content[^}]*max-width:\s*20ch/s,
@@ -95,7 +96,8 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
     stylesSource,
     /\.new-session-dialog--panel \.(?:model|effort)-select\s*{[^}]*(?:width|min-width):/s,
   );
-  assert.match(modelSelectorSource, /Codex 模型和思考强度：\{\{ selectionLabel \}\}/);
+  assert.match(modelSelectorSource, /Codex 模型：\{\{ modelLabel \}\}/);
+  assert.match(modelSelectorSource, /思考强度：\{\{ effortLabel \}\}/);
   assert.match(
     dialogSource,
     /:force-config-menu="\s*\$q\.screen\.lt\.md \|\| \(panel && \$q\.screen\.width < overviewInlineConfigMinWidth\)\s*"/,

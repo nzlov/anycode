@@ -100,7 +100,7 @@ import { normalizeCodexSelection } from '@/components/promptOptions';
 import { useQuickCommands } from '@/composables/useQuickCommands';
 import { listCodexModelOptions } from '@/services/codexOptions';
 import { appendQuickCommand } from '@/services/quickCommandText';
-import { hasStoredSessionConfig } from '@/services/sessionConfigCache';
+import { hasStoredSessionConfig } from '@/services/newSessionPreferences';
 import type { SessionFile } from '@/services/sessionFiles';
 
 const props = withDefaults(
