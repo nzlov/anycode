@@ -81,6 +81,17 @@ test('application styles consume the dedicated theme source', () => {
   );
 });
 
+test('native scrollbars follow the global Quasar-style theme treatment', () => {
+  assert.match(appStylesSource, /\*\s*\{[^}]*scrollbar-width:\s*thin/s);
+  assert.match(appStylesSource, /\*\s*\{[^}]*scrollbar-color:[^}]*var\(--ac-text\)/s);
+  assert.match(
+    appStylesSource,
+    /\*::\-webkit-scrollbar\s*\{[^}]*width:\s*10px[^}]*height:\s*10px/s,
+  );
+  assert.match(appStylesSource, /\*::\-webkit-scrollbar-thumb:hover\s*\{/);
+  assert.match(appStylesSource, /\*::\-webkit-scrollbar-thumb:active\s*\{/);
+});
+
 test('theme runtime only owns mode persistence and Quasar dark switching', () => {
   assert.doesNotMatch(runtimeSource, /setCssVar|themeTokens|#[0-9a-f]{3,8}/i);
   assert.match(runtimeSource, /Dark\.set/);
