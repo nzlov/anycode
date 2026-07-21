@@ -17,9 +17,13 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationcheckpoint"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationconfiguration"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationdelivery"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/pushsubscription"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
@@ -39,12 +43,20 @@ type Client struct {
 	MergeRecord *MergeRecordClient
 	// NodeRun is the client for interacting with the NodeRun builders.
 	NodeRun *NodeRunClient
+	// NotificationCheckpoint is the client for interacting with the NotificationCheckpoint builders.
+	NotificationCheckpoint *NotificationCheckpointClient
+	// NotificationConfiguration is the client for interacting with the NotificationConfiguration builders.
+	NotificationConfiguration *NotificationConfigurationClient
+	// NotificationDelivery is the client for interacting with the NotificationDelivery builders.
+	NotificationDelivery *NotificationDeliveryClient
 	// ProcessRun is the client for interacting with the ProcessRun builders.
 	ProcessRun *ProcessRunClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
 	// PromptAppend is the client for interacting with the PromptAppend builders.
 	PromptAppend *PromptAppendClient
+	// PushSubscription is the client for interacting with the PushSubscription builders.
+	PushSubscription *PushSubscriptionClient
 	// QuestionBatch is the client for interacting with the QuestionBatch builders.
 	QuestionBatch *QuestionBatchClient
 	// QuickCommand is the client for interacting with the QuickCommand builders.
@@ -71,9 +83,13 @@ func (c *Client) init() {
 	c.EventRecord = NewEventRecordClient(c.config)
 	c.MergeRecord = NewMergeRecordClient(c.config)
 	c.NodeRun = NewNodeRunClient(c.config)
+	c.NotificationCheckpoint = NewNotificationCheckpointClient(c.config)
+	c.NotificationConfiguration = NewNotificationConfigurationClient(c.config)
+	c.NotificationDelivery = NewNotificationDeliveryClient(c.config)
 	c.ProcessRun = NewProcessRunClient(c.config)
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
+	c.PushSubscription = NewPushSubscriptionClient(c.config)
 	c.QuestionBatch = NewQuestionBatchClient(c.config)
 	c.QuickCommand = NewQuickCommandClient(c.config)
 	c.Session = NewSessionClient(c.config)
@@ -170,20 +186,24 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                 ctx,
-		config:              cfg,
-		EventRecord:         NewEventRecordClient(cfg),
-		MergeRecord:         NewMergeRecordClient(cfg),
-		NodeRun:             NewNodeRunClient(cfg),
-		ProcessRun:          NewProcessRunClient(cfg),
-		Project:             NewProjectClient(cfg),
-		PromptAppend:        NewPromptAppendClient(cfg),
-		QuestionBatch:       NewQuestionBatchClient(cfg),
-		QuickCommand:        NewQuickCommandClient(cfg),
-		Session:             NewSessionClient(cfg),
-		StagedAttachment:    NewStagedAttachmentClient(cfg),
-		SystemConfiguration: NewSystemConfigurationClient(cfg),
-		WorkflowDefinition:  NewWorkflowDefinitionClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		EventRecord:               NewEventRecordClient(cfg),
+		MergeRecord:               NewMergeRecordClient(cfg),
+		NodeRun:                   NewNodeRunClient(cfg),
+		NotificationCheckpoint:    NewNotificationCheckpointClient(cfg),
+		NotificationConfiguration: NewNotificationConfigurationClient(cfg),
+		NotificationDelivery:      NewNotificationDeliveryClient(cfg),
+		ProcessRun:                NewProcessRunClient(cfg),
+		Project:                   NewProjectClient(cfg),
+		PromptAppend:              NewPromptAppendClient(cfg),
+		PushSubscription:          NewPushSubscriptionClient(cfg),
+		QuestionBatch:             NewQuestionBatchClient(cfg),
+		QuickCommand:              NewQuickCommandClient(cfg),
+		Session:                   NewSessionClient(cfg),
+		StagedAttachment:          NewStagedAttachmentClient(cfg),
+		SystemConfiguration:       NewSystemConfigurationClient(cfg),
+		WorkflowDefinition:        NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
 
@@ -201,20 +221,24 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                 ctx,
-		config:              cfg,
-		EventRecord:         NewEventRecordClient(cfg),
-		MergeRecord:         NewMergeRecordClient(cfg),
-		NodeRun:             NewNodeRunClient(cfg),
-		ProcessRun:          NewProcessRunClient(cfg),
-		Project:             NewProjectClient(cfg),
-		PromptAppend:        NewPromptAppendClient(cfg),
-		QuestionBatch:       NewQuestionBatchClient(cfg),
-		QuickCommand:        NewQuickCommandClient(cfg),
-		Session:             NewSessionClient(cfg),
-		StagedAttachment:    NewStagedAttachmentClient(cfg),
-		SystemConfiguration: NewSystemConfigurationClient(cfg),
-		WorkflowDefinition:  NewWorkflowDefinitionClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		EventRecord:               NewEventRecordClient(cfg),
+		MergeRecord:               NewMergeRecordClient(cfg),
+		NodeRun:                   NewNodeRunClient(cfg),
+		NotificationCheckpoint:    NewNotificationCheckpointClient(cfg),
+		NotificationConfiguration: NewNotificationConfigurationClient(cfg),
+		NotificationDelivery:      NewNotificationDeliveryClient(cfg),
+		ProcessRun:                NewProcessRunClient(cfg),
+		Project:                   NewProjectClient(cfg),
+		PromptAppend:              NewPromptAppendClient(cfg),
+		PushSubscription:          NewPushSubscriptionClient(cfg),
+		QuestionBatch:             NewQuestionBatchClient(cfg),
+		QuickCommand:              NewQuickCommandClient(cfg),
+		Session:                   NewSessionClient(cfg),
+		StagedAttachment:          NewStagedAttachmentClient(cfg),
+		SystemConfiguration:       NewSystemConfigurationClient(cfg),
+		WorkflowDefinition:        NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
 
@@ -244,9 +268,10 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
-		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session, c.StagedAttachment,
-		c.SystemConfiguration, c.WorkflowDefinition,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.NotificationCheckpoint,
+		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
+		c.PromptAppend, c.PushSubscription, c.QuestionBatch, c.QuickCommand, c.Session,
+		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -256,9 +281,10 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
-		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session, c.StagedAttachment,
-		c.SystemConfiguration, c.WorkflowDefinition,
+		c.EventRecord, c.MergeRecord, c.NodeRun, c.NotificationCheckpoint,
+		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
+		c.PromptAppend, c.PushSubscription, c.QuestionBatch, c.QuickCommand, c.Session,
+		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -273,12 +299,20 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.MergeRecord.mutate(ctx, m)
 	case *NodeRunMutation:
 		return c.NodeRun.mutate(ctx, m)
+	case *NotificationCheckpointMutation:
+		return c.NotificationCheckpoint.mutate(ctx, m)
+	case *NotificationConfigurationMutation:
+		return c.NotificationConfiguration.mutate(ctx, m)
+	case *NotificationDeliveryMutation:
+		return c.NotificationDelivery.mutate(ctx, m)
 	case *ProcessRunMutation:
 		return c.ProcessRun.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
 	case *PromptAppendMutation:
 		return c.PromptAppend.mutate(ctx, m)
+	case *PushSubscriptionMutation:
+		return c.PushSubscription.mutate(ctx, m)
 	case *QuestionBatchMutation:
 		return c.QuestionBatch.mutate(ctx, m)
 	case *QuickCommandMutation:
@@ -695,6 +729,405 @@ func (c *NodeRunClient) mutate(ctx context.Context, m *NodeRunMutation) (Value, 
 	}
 }
 
+// NotificationCheckpointClient is a client for the NotificationCheckpoint schema.
+type NotificationCheckpointClient struct {
+	config
+}
+
+// NewNotificationCheckpointClient returns a client for the NotificationCheckpoint from the given config.
+func NewNotificationCheckpointClient(c config) *NotificationCheckpointClient {
+	return &NotificationCheckpointClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `notificationcheckpoint.Hooks(f(g(h())))`.
+func (c *NotificationCheckpointClient) Use(hooks ...Hook) {
+	c.hooks.NotificationCheckpoint = append(c.hooks.NotificationCheckpoint, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `notificationcheckpoint.Intercept(f(g(h())))`.
+func (c *NotificationCheckpointClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NotificationCheckpoint = append(c.inters.NotificationCheckpoint, interceptors...)
+}
+
+// Create returns a builder for creating a NotificationCheckpoint entity.
+func (c *NotificationCheckpointClient) Create() *NotificationCheckpointCreate {
+	mutation := newNotificationCheckpointMutation(c.config, OpCreate)
+	return &NotificationCheckpointCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NotificationCheckpoint entities.
+func (c *NotificationCheckpointClient) CreateBulk(builders ...*NotificationCheckpointCreate) *NotificationCheckpointCreateBulk {
+	return &NotificationCheckpointCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NotificationCheckpointClient) MapCreateBulk(slice any, setFunc func(*NotificationCheckpointCreate, int)) *NotificationCheckpointCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NotificationCheckpointCreateBulk{err: fmt.Errorf("calling to NotificationCheckpointClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NotificationCheckpointCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NotificationCheckpointCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NotificationCheckpoint.
+func (c *NotificationCheckpointClient) Update() *NotificationCheckpointUpdate {
+	mutation := newNotificationCheckpointMutation(c.config, OpUpdate)
+	return &NotificationCheckpointUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NotificationCheckpointClient) UpdateOne(_m *NotificationCheckpoint) *NotificationCheckpointUpdateOne {
+	mutation := newNotificationCheckpointMutation(c.config, OpUpdateOne, withNotificationCheckpoint(_m))
+	return &NotificationCheckpointUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NotificationCheckpointClient) UpdateOneID(id string) *NotificationCheckpointUpdateOne {
+	mutation := newNotificationCheckpointMutation(c.config, OpUpdateOne, withNotificationCheckpointID(id))
+	return &NotificationCheckpointUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NotificationCheckpoint.
+func (c *NotificationCheckpointClient) Delete() *NotificationCheckpointDelete {
+	mutation := newNotificationCheckpointMutation(c.config, OpDelete)
+	return &NotificationCheckpointDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NotificationCheckpointClient) DeleteOne(_m *NotificationCheckpoint) *NotificationCheckpointDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NotificationCheckpointClient) DeleteOneID(id string) *NotificationCheckpointDeleteOne {
+	builder := c.Delete().Where(notificationcheckpoint.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NotificationCheckpointDeleteOne{builder}
+}
+
+// Query returns a query builder for NotificationCheckpoint.
+func (c *NotificationCheckpointClient) Query() *NotificationCheckpointQuery {
+	return &NotificationCheckpointQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNotificationCheckpoint},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NotificationCheckpoint entity by its id.
+func (c *NotificationCheckpointClient) Get(ctx context.Context, id string) (*NotificationCheckpoint, error) {
+	return c.Query().Where(notificationcheckpoint.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NotificationCheckpointClient) GetX(ctx context.Context, id string) *NotificationCheckpoint {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *NotificationCheckpointClient) Hooks() []Hook {
+	return c.hooks.NotificationCheckpoint
+}
+
+// Interceptors returns the client interceptors.
+func (c *NotificationCheckpointClient) Interceptors() []Interceptor {
+	return c.inters.NotificationCheckpoint
+}
+
+func (c *NotificationCheckpointClient) mutate(ctx context.Context, m *NotificationCheckpointMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NotificationCheckpointCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NotificationCheckpointUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NotificationCheckpointUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NotificationCheckpointDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown NotificationCheckpoint mutation op: %q", m.Op())
+	}
+}
+
+// NotificationConfigurationClient is a client for the NotificationConfiguration schema.
+type NotificationConfigurationClient struct {
+	config
+}
+
+// NewNotificationConfigurationClient returns a client for the NotificationConfiguration from the given config.
+func NewNotificationConfigurationClient(c config) *NotificationConfigurationClient {
+	return &NotificationConfigurationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `notificationconfiguration.Hooks(f(g(h())))`.
+func (c *NotificationConfigurationClient) Use(hooks ...Hook) {
+	c.hooks.NotificationConfiguration = append(c.hooks.NotificationConfiguration, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `notificationconfiguration.Intercept(f(g(h())))`.
+func (c *NotificationConfigurationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NotificationConfiguration = append(c.inters.NotificationConfiguration, interceptors...)
+}
+
+// Create returns a builder for creating a NotificationConfiguration entity.
+func (c *NotificationConfigurationClient) Create() *NotificationConfigurationCreate {
+	mutation := newNotificationConfigurationMutation(c.config, OpCreate)
+	return &NotificationConfigurationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NotificationConfiguration entities.
+func (c *NotificationConfigurationClient) CreateBulk(builders ...*NotificationConfigurationCreate) *NotificationConfigurationCreateBulk {
+	return &NotificationConfigurationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NotificationConfigurationClient) MapCreateBulk(slice any, setFunc func(*NotificationConfigurationCreate, int)) *NotificationConfigurationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NotificationConfigurationCreateBulk{err: fmt.Errorf("calling to NotificationConfigurationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NotificationConfigurationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NotificationConfigurationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NotificationConfiguration.
+func (c *NotificationConfigurationClient) Update() *NotificationConfigurationUpdate {
+	mutation := newNotificationConfigurationMutation(c.config, OpUpdate)
+	return &NotificationConfigurationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NotificationConfigurationClient) UpdateOne(_m *NotificationConfiguration) *NotificationConfigurationUpdateOne {
+	mutation := newNotificationConfigurationMutation(c.config, OpUpdateOne, withNotificationConfiguration(_m))
+	return &NotificationConfigurationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NotificationConfigurationClient) UpdateOneID(id string) *NotificationConfigurationUpdateOne {
+	mutation := newNotificationConfigurationMutation(c.config, OpUpdateOne, withNotificationConfigurationID(id))
+	return &NotificationConfigurationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NotificationConfiguration.
+func (c *NotificationConfigurationClient) Delete() *NotificationConfigurationDelete {
+	mutation := newNotificationConfigurationMutation(c.config, OpDelete)
+	return &NotificationConfigurationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NotificationConfigurationClient) DeleteOne(_m *NotificationConfiguration) *NotificationConfigurationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NotificationConfigurationClient) DeleteOneID(id string) *NotificationConfigurationDeleteOne {
+	builder := c.Delete().Where(notificationconfiguration.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NotificationConfigurationDeleteOne{builder}
+}
+
+// Query returns a query builder for NotificationConfiguration.
+func (c *NotificationConfigurationClient) Query() *NotificationConfigurationQuery {
+	return &NotificationConfigurationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNotificationConfiguration},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NotificationConfiguration entity by its id.
+func (c *NotificationConfigurationClient) Get(ctx context.Context, id string) (*NotificationConfiguration, error) {
+	return c.Query().Where(notificationconfiguration.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NotificationConfigurationClient) GetX(ctx context.Context, id string) *NotificationConfiguration {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *NotificationConfigurationClient) Hooks() []Hook {
+	return c.hooks.NotificationConfiguration
+}
+
+// Interceptors returns the client interceptors.
+func (c *NotificationConfigurationClient) Interceptors() []Interceptor {
+	return c.inters.NotificationConfiguration
+}
+
+func (c *NotificationConfigurationClient) mutate(ctx context.Context, m *NotificationConfigurationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NotificationConfigurationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NotificationConfigurationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NotificationConfigurationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NotificationConfigurationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown NotificationConfiguration mutation op: %q", m.Op())
+	}
+}
+
+// NotificationDeliveryClient is a client for the NotificationDelivery schema.
+type NotificationDeliveryClient struct {
+	config
+}
+
+// NewNotificationDeliveryClient returns a client for the NotificationDelivery from the given config.
+func NewNotificationDeliveryClient(c config) *NotificationDeliveryClient {
+	return &NotificationDeliveryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `notificationdelivery.Hooks(f(g(h())))`.
+func (c *NotificationDeliveryClient) Use(hooks ...Hook) {
+	c.hooks.NotificationDelivery = append(c.hooks.NotificationDelivery, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `notificationdelivery.Intercept(f(g(h())))`.
+func (c *NotificationDeliveryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.NotificationDelivery = append(c.inters.NotificationDelivery, interceptors...)
+}
+
+// Create returns a builder for creating a NotificationDelivery entity.
+func (c *NotificationDeliveryClient) Create() *NotificationDeliveryCreate {
+	mutation := newNotificationDeliveryMutation(c.config, OpCreate)
+	return &NotificationDeliveryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of NotificationDelivery entities.
+func (c *NotificationDeliveryClient) CreateBulk(builders ...*NotificationDeliveryCreate) *NotificationDeliveryCreateBulk {
+	return &NotificationDeliveryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *NotificationDeliveryClient) MapCreateBulk(slice any, setFunc func(*NotificationDeliveryCreate, int)) *NotificationDeliveryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &NotificationDeliveryCreateBulk{err: fmt.Errorf("calling to NotificationDeliveryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*NotificationDeliveryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &NotificationDeliveryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for NotificationDelivery.
+func (c *NotificationDeliveryClient) Update() *NotificationDeliveryUpdate {
+	mutation := newNotificationDeliveryMutation(c.config, OpUpdate)
+	return &NotificationDeliveryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NotificationDeliveryClient) UpdateOne(_m *NotificationDelivery) *NotificationDeliveryUpdateOne {
+	mutation := newNotificationDeliveryMutation(c.config, OpUpdateOne, withNotificationDelivery(_m))
+	return &NotificationDeliveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NotificationDeliveryClient) UpdateOneID(id string) *NotificationDeliveryUpdateOne {
+	mutation := newNotificationDeliveryMutation(c.config, OpUpdateOne, withNotificationDeliveryID(id))
+	return &NotificationDeliveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for NotificationDelivery.
+func (c *NotificationDeliveryClient) Delete() *NotificationDeliveryDelete {
+	mutation := newNotificationDeliveryMutation(c.config, OpDelete)
+	return &NotificationDeliveryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *NotificationDeliveryClient) DeleteOne(_m *NotificationDelivery) *NotificationDeliveryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *NotificationDeliveryClient) DeleteOneID(id string) *NotificationDeliveryDeleteOne {
+	builder := c.Delete().Where(notificationdelivery.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NotificationDeliveryDeleteOne{builder}
+}
+
+// Query returns a query builder for NotificationDelivery.
+func (c *NotificationDeliveryClient) Query() *NotificationDeliveryQuery {
+	return &NotificationDeliveryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeNotificationDelivery},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a NotificationDelivery entity by its id.
+func (c *NotificationDeliveryClient) Get(ctx context.Context, id string) (*NotificationDelivery, error) {
+	return c.Query().Where(notificationdelivery.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NotificationDeliveryClient) GetX(ctx context.Context, id string) *NotificationDelivery {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *NotificationDeliveryClient) Hooks() []Hook {
+	return c.hooks.NotificationDelivery
+}
+
+// Interceptors returns the client interceptors.
+func (c *NotificationDeliveryClient) Interceptors() []Interceptor {
+	return c.inters.NotificationDelivery
+}
+
+func (c *NotificationDeliveryClient) mutate(ctx context.Context, m *NotificationDeliveryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&NotificationDeliveryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&NotificationDeliveryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&NotificationDeliveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&NotificationDeliveryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown NotificationDelivery mutation op: %q", m.Op())
+	}
+}
+
 // ProcessRunClient is a client for the ProcessRun schema.
 type ProcessRunClient struct {
 	config
@@ -1091,6 +1524,139 @@ func (c *PromptAppendClient) mutate(ctx context.Context, m *PromptAppendMutation
 		return (&PromptAppendDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown PromptAppend mutation op: %q", m.Op())
+	}
+}
+
+// PushSubscriptionClient is a client for the PushSubscription schema.
+type PushSubscriptionClient struct {
+	config
+}
+
+// NewPushSubscriptionClient returns a client for the PushSubscription from the given config.
+func NewPushSubscriptionClient(c config) *PushSubscriptionClient {
+	return &PushSubscriptionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `pushsubscription.Hooks(f(g(h())))`.
+func (c *PushSubscriptionClient) Use(hooks ...Hook) {
+	c.hooks.PushSubscription = append(c.hooks.PushSubscription, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `pushsubscription.Intercept(f(g(h())))`.
+func (c *PushSubscriptionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PushSubscription = append(c.inters.PushSubscription, interceptors...)
+}
+
+// Create returns a builder for creating a PushSubscription entity.
+func (c *PushSubscriptionClient) Create() *PushSubscriptionCreate {
+	mutation := newPushSubscriptionMutation(c.config, OpCreate)
+	return &PushSubscriptionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PushSubscription entities.
+func (c *PushSubscriptionClient) CreateBulk(builders ...*PushSubscriptionCreate) *PushSubscriptionCreateBulk {
+	return &PushSubscriptionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PushSubscriptionClient) MapCreateBulk(slice any, setFunc func(*PushSubscriptionCreate, int)) *PushSubscriptionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PushSubscriptionCreateBulk{err: fmt.Errorf("calling to PushSubscriptionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PushSubscriptionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PushSubscriptionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PushSubscription.
+func (c *PushSubscriptionClient) Update() *PushSubscriptionUpdate {
+	mutation := newPushSubscriptionMutation(c.config, OpUpdate)
+	return &PushSubscriptionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PushSubscriptionClient) UpdateOne(_m *PushSubscription) *PushSubscriptionUpdateOne {
+	mutation := newPushSubscriptionMutation(c.config, OpUpdateOne, withPushSubscription(_m))
+	return &PushSubscriptionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PushSubscriptionClient) UpdateOneID(id string) *PushSubscriptionUpdateOne {
+	mutation := newPushSubscriptionMutation(c.config, OpUpdateOne, withPushSubscriptionID(id))
+	return &PushSubscriptionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PushSubscription.
+func (c *PushSubscriptionClient) Delete() *PushSubscriptionDelete {
+	mutation := newPushSubscriptionMutation(c.config, OpDelete)
+	return &PushSubscriptionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PushSubscriptionClient) DeleteOne(_m *PushSubscription) *PushSubscriptionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PushSubscriptionClient) DeleteOneID(id string) *PushSubscriptionDeleteOne {
+	builder := c.Delete().Where(pushsubscription.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PushSubscriptionDeleteOne{builder}
+}
+
+// Query returns a query builder for PushSubscription.
+func (c *PushSubscriptionClient) Query() *PushSubscriptionQuery {
+	return &PushSubscriptionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePushSubscription},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PushSubscription entity by its id.
+func (c *PushSubscriptionClient) Get(ctx context.Context, id string) (*PushSubscription, error) {
+	return c.Query().Where(pushsubscription.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PushSubscriptionClient) GetX(ctx context.Context, id string) *PushSubscription {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PushSubscriptionClient) Hooks() []Hook {
+	return c.hooks.PushSubscription
+}
+
+// Interceptors returns the client interceptors.
+func (c *PushSubscriptionClient) Interceptors() []Interceptor {
+	return c.inters.PushSubscription
+}
+
+func (c *PushSubscriptionClient) mutate(ctx context.Context, m *PushSubscriptionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PushSubscriptionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PushSubscriptionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PushSubscriptionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PushSubscriptionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PushSubscription mutation op: %q", m.Op())
 	}
 }
 
@@ -1895,13 +2461,15 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
-		QuestionBatch, QuickCommand, Session, StagedAttachment, SystemConfiguration,
-		WorkflowDefinition []ent.Hook
+		EventRecord, MergeRecord, NodeRun, NotificationCheckpoint,
+		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
+		PromptAppend, PushSubscription, QuestionBatch, QuickCommand, Session,
+		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
-		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
-		QuestionBatch, QuickCommand, Session, StagedAttachment, SystemConfiguration,
-		WorkflowDefinition []ent.Interceptor
+		EventRecord, MergeRecord, NodeRun, NotificationCheckpoint,
+		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
+		PromptAppend, PushSubscription, QuestionBatch, QuickCommand, Session,
+		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Interceptor
 	}
 )

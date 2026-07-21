@@ -2,8 +2,6 @@ package http
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -94,7 +92,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
-	mux.Handle("/", newSPAHandler())
+	mux.Handle("/", newPWAHandler())
 
 	return mux
 }
@@ -185,11 +183,7 @@ func withPrincipal(accessKey string, next http.Handler) http.Handler {
 }
 
 func accessPrincipal(accessKey string, kind string) authdomain.AccessPrincipal {
-	sum := sha256.Sum256([]byte(accessKey))
-	return authdomain.AccessPrincipal{
-		KeyHash: hex.EncodeToString(sum[:]),
-		Kind:    kind,
-	}
+	return authdomain.NewAccessPrincipal(accessKey, kind)
 }
 
 func graphqlNotConfigured(w http.ResponseWriter, _ *http.Request) {
@@ -289,19 +283,19 @@ func playgroundHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`<!doctype html><html><head><title>AnyCode GraphQL</title></head><body><main><h1>AnyCode GraphQL</h1><input id="token" placeholder="Bearer token"><br><textarea id="query" rows="12" cols="80">{ __typename }</textarea><br><button id="run">Run</button><pre id="result"></pre></main><script>document.getElementById("run").onclick=async()=>{const token=document.getElementById("token").value.trim();const headers={"Content-Type":"application/json"};if(token)headers.Authorization=token.startsWith("Bearer ")?token:"Bearer "+token;const res=await fetch("/graphql",{method:"POST",headers,body:JSON.stringify({query:document.getElementById("query").value})});document.getElementById("result").textContent=await res.text();};</script></body></html>`))
 }
 
-type spaHandler struct {
+type pwaHandler struct {
 	fsys fs.FS
 }
 
-func newSPAHandler() http.Handler {
-	fsys, err := fs.Sub(static.Files, static.DistDir)
+func newPWAHandler() http.Handler {
+	fsys, err := fs.Sub(static.Files, static.PWADir)
 	if err != nil {
 		panic(err)
 	}
-	return spaHandler{fsys: fsys}
+	return pwaHandler{fsys: fsys}
 }
 
-func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h pwaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/")
 	if name == "" {
 		name = "index.html"

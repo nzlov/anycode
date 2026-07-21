@@ -167,6 +167,7 @@ import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
+import { disablePushNotifications } from '@/services/pushNotifications';
 
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
@@ -213,6 +214,7 @@ watch(
 );
 
 async function logout() {
+  await disablePushNotifications().catch(() => undefined);
   clearGraphQLAccessKey();
   logoutDialogOpen.value = false;
   await router.replace({ name: 'login' });

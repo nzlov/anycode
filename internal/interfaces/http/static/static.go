@@ -2,7 +2,7 @@ package static
 
 import "embed"
 
-const DistDir = "dist"
+const PWADir = "pwa"
 
-//go:embed all:dist
+//go:embed all:pwa
 var Files embed.FS

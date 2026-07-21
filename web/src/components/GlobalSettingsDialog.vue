@@ -18,6 +18,7 @@
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
         <q-tab name="projects" icon="folder" label="项目" />
         <q-tab name="appearance" icon="palette" label="外观" />
+        <q-tab name="notifications" icon="notifications" label="通知" />
         <q-tab name="quick_commands" icon="bolt" label="快捷指令" />
       </q-tabs>
 
@@ -45,6 +46,17 @@
                 <q-icon name="palette" />
               </q-item-section>
               <q-item-section>外观</q-item-section>
+            </q-item>
+            <q-item
+              clickable
+              :active="activeSection === 'notifications'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'notifications'"
+            >
+              <q-item-section avatar>
+                <q-icon name="notifications" />
+              </q-item-section>
+              <q-item-section>通知</q-item-section>
             </q-item>
             <q-item
               clickable
@@ -191,6 +203,56 @@
                   :disable="appearanceLoading || appearanceSaving"
                   aria-label="壁纸选色算法"
                   @update:model-value="saveWallpaperColorScheme"
+                />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </section>
+
+        <section v-else-if="activeSection === 'notifications'" class="global-settings-panel">
+          <div class="global-settings-panel__header">
+            <div class="text-subtitle2 text-weight-bold">通知</div>
+          </div>
+
+          <q-banner v-if="notificationError" dense class="quick-command-error">
+            <template #avatar>
+              <q-icon name="error_outline" color="negative" />
+            </template>
+            {{ notificationError }}
+            <template #action>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="refresh"
+                aria-label="重试加载通知设置"
+                @click="refreshNotifications"
+              >
+                <q-tooltip>重试</q-tooltip>
+              </q-btn>
+            </template>
+          </q-banner>
+
+          <q-linear-progress v-if="notificationLoading" indeterminate color="primary" />
+          <q-list bordered separator class="appearance-settings-list">
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="notifications_active" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>卡片系统通知</q-item-label>
+                <q-item-label caption>{{ notificationCaption }}</q-item-label>
+              </q-item-section>
+              <q-item-section side>
+                <q-toggle
+                  :model-value="notificationState.enabled"
+                  :disable="
+                    notificationLoading || notificationSaving || !notificationToggleAvailable
+                  "
+                  color="primary"
+                  aria-label="卡片系统通知"
+                  @update:model-value="setNotificationsEnabled"
                 />
               </q-item-section>
             </q-item>
@@ -390,6 +452,12 @@ import {
   wallpaperColorSchemeOptions,
 } from '@/services/appearanceSettings';
 import type { ProjectSummary } from '@/services/projects';
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  getPushNotificationState,
+  type PushNotificationState,
+} from '@/services/pushNotifications';
 import { setWallpaperColorScheme } from '@/theme/dailyBackground';
 import type { WallpaperColorScheme } from '@/theme/dailyBackgroundModel';
 
@@ -403,7 +471,9 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
-const activeSection = ref<'projects' | 'appearance' | 'quick_commands'>('projects');
+const activeSection = ref<'projects' | 'appearance' | 'notifications' | 'quick_commands'>(
+  'projects',
+);
 const directoryDialogOpen = ref(false);
 const projectSettingsOpen = ref(false);
 const settingsProject = ref<ProjectSummary | null>(null);
@@ -435,6 +505,58 @@ const appearanceSaving = ref(false);
 const appearanceError = ref('');
 const wallpaperColorScheme = ref<WallpaperColorScheme>('content');
 const persistedWallpaperColorScheme = ref<WallpaperColorScheme>('content');
+const notificationLoading = ref(false);
+const notificationSaving = ref(false);
+const notificationError = ref('');
+const notificationState = ref<PushNotificationState>({
+  supported: true,
+  available: true,
+  permission: 'default',
+  enabled: false,
+});
+const notificationToggleAvailable = computed(
+  () =>
+    notificationState.value.supported &&
+    notificationState.value.available &&
+    notificationState.value.permission !== 'denied',
+);
+const notificationCaption = computed(() => {
+  if (notificationLoading.value) return '正在检查';
+  if (!notificationState.value.supported) return '当前浏览器或连接不支持';
+  if (!notificationState.value.available) return '服务端不可用';
+  if (notificationState.value.permission === 'denied') return '权限已被浏览器阻止';
+  return notificationState.value.enabled ? '已开启' : '未开启';
+});
+
+async function refreshNotifications() {
+  notificationLoading.value = true;
+  notificationError.value = '';
+  try {
+    notificationState.value = await getPushNotificationState();
+  } catch {
+    notificationError.value = '无法加载通知设置';
+  } finally {
+    notificationLoading.value = false;
+  }
+}
+
+async function setNotificationsEnabled(enabled: boolean) {
+  notificationSaving.value = true;
+  notificationError.value = '';
+  try {
+    if (enabled) {
+      notificationState.value = await enablePushNotifications();
+    } else {
+      await disablePushNotifications();
+      notificationState.value = await getPushNotificationState();
+    }
+  } catch {
+    notificationError.value = enabled ? '无法开启系统通知' : '无法关闭系统通知';
+    await refreshNotifications();
+  } finally {
+    notificationSaving.value = false;
+  }
+}
 
 async function refreshAppearance() {
   appearanceLoading.value = true;
@@ -553,6 +675,7 @@ onMounted(() => {
 
 watch(activeSection, (section) => {
   if (section === 'appearance' && props.modelValue) void refreshAppearance();
+  if (section === 'notifications' && props.modelValue) void refreshNotifications();
   if (section !== 'quick_commands' || !props.modelValue) return;
   refreshQuickCommands();
 });
@@ -563,6 +686,7 @@ watch(
     if (!open) return;
     void loadProjects();
     if (activeSection.value === 'appearance') void refreshAppearance();
+    if (activeSection.value === 'notifications') void refreshNotifications();
     if (activeSection.value === 'quick_commands') refreshQuickCommands();
   },
 );

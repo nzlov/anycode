@@ -10038,6 +10038,9 @@ func TestStopSessionFromQueuedCancelsQueue(t *testing.T) {
 	if gotEvents[0].Payload["reason"] != "queue_cancelled" {
 		t.Fatalf("events = %#v", gotEvents)
 	}
+	if gotEvents[0].Payload["cause"] != "stop_requested" {
+		t.Fatalf("session stopped cause = %#v", gotEvents[0].Payload["cause"])
+	}
 	if questions.cancelledSessionID != "" {
 		t.Fatalf("ordinary queued cancellation touched questions: %q", questions.cancelledSessionID)
 	}
@@ -10945,6 +10948,9 @@ func TestHandleCodexProcessExitRetriesOnlyFailedProcessRun(t *testing.T) {
 	}
 	gotEvents := events.snapshot()
 	requireSessionEventTypes(t, gotEvents, "process.exited", "session.stopped", sessionStatusUpdatedEvent)
+	if gotEvents[1].Payload["cause"] != "completed" {
+		t.Fatalf("session stopped cause = %#v", gotEvents[1].Payload["cause"])
+	}
 }
 
 func TestHandleCodexProcessExitStopsRetryingWhenServiceCloses(t *testing.T) {

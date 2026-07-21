@@ -8,6 +8,7 @@ import (
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	authapp "github.com/nzlov/anycode/internal/application/auth"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
@@ -34,6 +35,7 @@ type UseCases struct {
 	Diff          diffapp.UseCase
 	Workflows     workflowapp.UseCase
 	Questions     questionapp.UseCase
+	Notifications notificationapp.UseCase
 	Settings      settingapp.UseCase
 	CodexModels   []processdomain.CodexModel
 }
@@ -55,6 +57,14 @@ func WithPrincipal(ctx context.Context, principal authdomain.AccessPrincipal) co
 func PrincipalFromContext(ctx context.Context) (authdomain.AccessPrincipal, bool) {
 	principal, ok := ctx.Value(principalContextKey{}).(authdomain.AccessPrincipal)
 	return principal, ok && !principal.IsZero()
+}
+
+func notificationPrincipalKeyHash(ctx context.Context) string {
+	principal, ok := PrincipalFromContext(ctx)
+	if ok {
+		return principal.KeyHash
+	}
+	return authdomain.LocalPrincipalKeyHash
 }
 
 func missingUseCase(name string) error {

@@ -24,7 +24,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
-COPY --from=web /src/internal/interfaces/http/static/dist ./internal/interfaces/http/static/dist
+COPY --from=web /src/internal/interfaces/http/static/pwa ./internal/interfaces/http/static/pwa
 RUN go build -o /out/anycode ./cmd/anycode
 
 FROM base
