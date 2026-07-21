@@ -86,62 +86,7 @@
               </div>
               <div v-if="card.usage">
                 <span class="overview-card-meta__label">Token 用量</span>
-                <div class="overview-token-usage-value">
-                  <span>{{ formatTokenCount(card.usage.totalTokens) }}</span>
-                  <q-btn
-                    flat
-                    round
-                    dense
-                    class="overview-token-usage-btn"
-                    icon="info_outline"
-                    aria-label="查看 Token 用量明细"
-                    @pointerenter="openTokenUsageMenu(card.id, $event)"
-                    @pointerleave="scheduleTokenUsageMenuClose(card.id, $event)"
-                    @click.stop="toggleTokenUsageMenu(card.id)"
-                    @contextmenu.stop
-                    @touchstart.stop
-                    @keyup.enter.stop
-                    @keyup.space.stop
-                  >
-                    <q-menu
-                      no-parent-event
-                      no-focus
-                      anchor="bottom right"
-                      self="top right"
-                      class="overview-token-usage-menu"
-                      :model-value="activeTokenUsageMenuId === card.id"
-                      @update:model-value="syncTokenUsageMenuModel(card.id, $event)"
-                      @click.stop
-                      @pointerenter="openTokenUsageMenu(card.id, $event)"
-                      @pointerleave="scheduleTokenUsageMenuClose(card.id, $event)"
-                    >
-                      <q-list dense separator class="app-touch-list">
-                        <q-item>
-                          <q-item-section>输入 Token</q-item-section>
-                          <q-item-section side class="overview-token-usage-menu__value">
-                            {{
-                              formatTokenCount(
-                                Math.max(card.usage.inputTokens - card.usage.cachedInputTokens, 0),
-                              )
-                            }}
-                          </q-item-section>
-                        </q-item>
-                        <q-item>
-                          <q-item-section>输出 Token</q-item-section>
-                          <q-item-section side class="overview-token-usage-menu__value">
-                            {{ formatTokenCount(card.usage.outputTokens) }}
-                          </q-item-section>
-                        </q-item>
-                        <q-item>
-                          <q-item-section>缓存 Token</q-item-section>
-                          <q-item-section side class="overview-token-usage-menu__value">
-                            {{ formatTokenCount(card.usage.cachedInputTokens) }}
-                          </q-item-section>
-                        </q-item>
-                      </q-list>
-                    </q-menu>
-                  </q-btn>
-                </div>
+                <TokenUsageDisplay :usage="card.usage" />
               </div>
             </div>
 
@@ -491,6 +436,7 @@ import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import PageToolbar from '@/components/PageToolbar.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
+import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useProjects } from '@/composables/useProjects';
@@ -506,7 +452,6 @@ import {
   type SessionFile,
 } from '@/services/sessionFiles';
 import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
-import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import {
   closeSession,
   executeSession,
@@ -534,7 +479,6 @@ const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
 const todoMenuHideDelay = 120;
-const tokenUsageMenuHideDelay = 120;
 const showDesktopFocusLayout = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
@@ -575,7 +519,6 @@ const visibleLatestCards = computed(() =>
   latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
 );
 const activeTodoMenuId = ref('');
-const activeTokenUsageMenuId = ref('');
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
 const pendingQuestionBatches = ref<QuestionBatch[]>([]);
@@ -633,7 +576,6 @@ const diffDialogTarget = computed<DiffWorkspaceTarget>(() => ({
   sessionId: diffDialogSessionId.value,
 }));
 let todoMenuHideTimer: ReturnType<typeof setTimeout> | null = null;
-let tokenUsageMenuHideTimer: ReturnType<typeof setTimeout> | null = null;
 const cardRefreshRequests = createKeyedLatestRequestTracker();
 let overviewMounted = false;
 // GLUE: suppress Quasar's synthetic post-long-press click; remove when QMenu consumes it upstream.
@@ -658,7 +600,6 @@ onUnmounted(() => {
   overviewMounted = false;
   cardRefreshRequests.clear();
   clearTodoMenuHideTimer();
-  clearTokenUsageMenuHideTimer();
   clearCardClickSuppression();
   stopOverviewLiveUpdates();
 });
@@ -873,41 +814,6 @@ function syncTodoMenuModel(sessionId: string, showing: boolean) {
     activeTodoMenuId.value = sessionId;
   } else if (activeTodoMenuId.value === sessionId) {
     activeTodoMenuId.value = '';
-  }
-}
-
-function clearTokenUsageMenuHideTimer() {
-  if (!tokenUsageMenuHideTimer) return;
-  clearTimeout(tokenUsageMenuHideTimer);
-  tokenUsageMenuHideTimer = null;
-}
-
-function openTokenUsageMenu(sessionId: string, event: PointerEvent) {
-  if (event.pointerType !== 'mouse') return;
-  clearTokenUsageMenuHideTimer();
-  activeTokenUsageMenuId.value = sessionId;
-}
-
-function toggleTokenUsageMenu(sessionId: string) {
-  clearTokenUsageMenuHideTimer();
-  activeTokenUsageMenuId.value = activeTokenUsageMenuId.value === sessionId ? '' : sessionId;
-}
-
-function scheduleTokenUsageMenuClose(sessionId: string, event: PointerEvent) {
-  if (event.pointerType !== 'mouse') return;
-  clearTokenUsageMenuHideTimer();
-  tokenUsageMenuHideTimer = setTimeout(() => {
-    tokenUsageMenuHideTimer = null;
-    if (activeTokenUsageMenuId.value === sessionId) activeTokenUsageMenuId.value = '';
-  }, tokenUsageMenuHideDelay);
-}
-
-function syncTokenUsageMenuModel(sessionId: string, showing: boolean) {
-  clearTokenUsageMenuHideTimer();
-  if (showing) {
-    activeTokenUsageMenuId.value = sessionId;
-  } else if (activeTokenUsageMenuId.value === sessionId) {
-    activeTokenUsageMenuId.value = '';
   }
 }
 
