@@ -93,7 +93,10 @@ func TestPreviewable(t *testing.T) {
 		{"application/pdf", true},
 		{"audio/mpeg", true},
 		{"text/plain", true},
+		{"application/yaml", true},
+		{"application/problem+json", true},
 		{"image/svg+xml", false},
+		{"application/octet-stream", false},
 	}
 	for _, tc := range cases {
 		if got := Previewable(tc.mime); got != tc.want {
@@ -105,6 +108,12 @@ func TestPreviewable(t *testing.T) {
 func TestDetectMimeTypeDoesNotTrustPreviewableExtension(t *testing.T) {
 	if got := detectMimeType(strings.NewReader("plain text"), "forged.pdf"); got != "text/plain; charset=utf-8" {
 		t.Fatalf("detectMimeType() = %q", got)
+	}
+	if got := detectMimeType(strings.NewReader("plain text"), "README"); got != "text/plain; charset=utf-8" {
+		t.Fatalf("detectMimeType() extensionless text = %q", got)
+	}
+	if got := detectMimeType(strings.NewReader("\x00\x01\x02"), "forged.yml"); got != "application/octet-stream" {
+		t.Fatalf("detectMimeType() binary YAML = %q", got)
 	}
 }
 
@@ -120,6 +129,10 @@ func TestClassifyArtifactCoversSupportedKinds(t *testing.T) {
 		{"audio/mpeg", session.ArtifactKindAudio, session.PreviewKindAudio},
 		{"application/zip", session.ArtifactKindArchive, session.PreviewKindNone},
 		{"application/json", session.ArtifactKindText, session.PreviewKindText},
+		{"application/yaml", session.ArtifactKindText, session.PreviewKindText},
+		{"application/toml", session.ArtifactKindText, session.PreviewKindText},
+		{"application/xml", session.ArtifactKindText, session.PreviewKindText},
+		{"application/problem+json", session.ArtifactKindText, session.PreviewKindText},
 		{"application/octet-stream", session.ArtifactKindFile, session.PreviewKindNone},
 		{"image/svg+xml", session.ArtifactKindImage, session.PreviewKindNone},
 		{"image/bmp", session.ArtifactKindImage, session.PreviewKindNone},
@@ -129,6 +142,33 @@ func TestClassifyArtifactCoversSupportedKinds(t *testing.T) {
 		if kind != test.kind || preview != test.preview {
 			t.Fatalf("classifyArtifact(%q) = %q/%q, want %q/%q", test.mime, kind, preview, test.kind, test.preview)
 		}
+	}
+}
+
+func TestInspectArtifactPreviewsTextFiles(t *testing.T) {
+	store := New(t.TempDir())
+	ctx := context.Background()
+	outputDir, err := store.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"config.yml", "settings.toml", "README"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(outputDir, name)
+			if err := os.WriteFile(path, []byte("enabled: true\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			artifact, err := store.InspectArtifact(ctx, session.InspectArtifactInput{
+				SessionID:  "session-1",
+				SourcePath: path,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if artifact.ArtifactKind != session.ArtifactKindText || artifact.PreviewKind != session.PreviewKindText || !artifact.Previewable {
+				t.Fatalf("InspectArtifact(%q) = kind %q, preview %q, previewable %v", name, artifact.ArtifactKind, artifact.PreviewKind, artifact.Previewable)
+			}
+		})
 	}
 }
 
