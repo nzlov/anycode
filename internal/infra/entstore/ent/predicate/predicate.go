@@ -36,5 +36,8 @@ type Session func(*sql.Selector)
 // StagedAttachment is the predicate function for stagedattachment builders.
 type StagedAttachment func(*sql.Selector)
 
+// SystemConfiguration is the predicate function for systemconfiguration builders.
+type SystemConfiguration func(*sql.Selector)
+
 // WorkflowDefinition is the predicate function for workflowdefinition builders.
 type WorkflowDefinition func(*sql.Selector)

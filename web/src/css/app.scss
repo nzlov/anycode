@@ -9,7 +9,8 @@
 body {
   background: var(--ac-page);
   color: var(--ac-text);
-  font-family: Roboto, 'Noto Sans CJK SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', Arial, sans-serif;
+  font-family:
+    Roboto, 'Noto Sans CJK SC', 'Microsoft YaHei', 'WenQuanYi Micro Hei', Arial, sans-serif;
 }
 
 html,
@@ -1036,6 +1037,23 @@ a {
   border-radius: var(--ac-radius);
 }
 
+.appearance-settings-list {
+  border-color: var(--ac-border);
+  border-radius: var(--ac-radius);
+}
+
+.appearance-settings-list .q-item {
+  min-height: 68px;
+}
+
+.appearance-settings-list__control {
+  width: min(240px, 46%);
+}
+
+.appearance-settings-list__control .q-select {
+  width: 100%;
+}
+
 .global-project-list .q-item {
   min-height: 68px;
 }
@@ -1943,5 +1961,17 @@ a {
 
   .global-project-list__git {
     display: none;
+  }
+
+  .appearance-settings-list .q-item {
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .appearance-settings-list__control {
+    width: 100%;
+    padding-left: 44px;
   }
 }

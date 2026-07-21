@@ -510,7 +510,7 @@ func (s *Store) Questions() *QuestionRepository {
 }
 
 func (s *Store) Settings() setting.Repository {
-	return NewQuickCommandRepository(s.client)
+	return NewSettingRepository(s.client)
 }
 
 func (s *Store) Workflows() *WorkflowRepository {

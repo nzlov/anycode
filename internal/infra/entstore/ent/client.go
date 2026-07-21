@@ -24,6 +24,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -52,6 +53,8 @@ type Client struct {
 	Session *SessionClient
 	// StagedAttachment is the client for interacting with the StagedAttachment builders.
 	StagedAttachment *StagedAttachmentClient
+	// SystemConfiguration is the client for interacting with the SystemConfiguration builders.
+	SystemConfiguration *SystemConfigurationClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
 }
@@ -75,6 +78,7 @@ func (c *Client) init() {
 	c.QuickCommand = NewQuickCommandClient(c.config)
 	c.Session = NewSessionClient(c.config)
 	c.StagedAttachment = NewStagedAttachmentClient(c.config)
+	c.SystemConfiguration = NewSystemConfigurationClient(c.config)
 	c.WorkflowDefinition = NewWorkflowDefinitionClient(c.config)
 }
 
@@ -166,19 +170,20 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                ctx,
-		config:             cfg,
-		EventRecord:        NewEventRecordClient(cfg),
-		MergeRecord:        NewMergeRecordClient(cfg),
-		NodeRun:            NewNodeRunClient(cfg),
-		ProcessRun:         NewProcessRunClient(cfg),
-		Project:            NewProjectClient(cfg),
-		PromptAppend:       NewPromptAppendClient(cfg),
-		QuestionBatch:      NewQuestionBatchClient(cfg),
-		QuickCommand:       NewQuickCommandClient(cfg),
-		Session:            NewSessionClient(cfg),
-		StagedAttachment:   NewStagedAttachmentClient(cfg),
-		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
+		ctx:                 ctx,
+		config:              cfg,
+		EventRecord:         NewEventRecordClient(cfg),
+		MergeRecord:         NewMergeRecordClient(cfg),
+		NodeRun:             NewNodeRunClient(cfg),
+		ProcessRun:          NewProcessRunClient(cfg),
+		Project:             NewProjectClient(cfg),
+		PromptAppend:        NewPromptAppendClient(cfg),
+		QuestionBatch:       NewQuestionBatchClient(cfg),
+		QuickCommand:        NewQuickCommandClient(cfg),
+		Session:             NewSessionClient(cfg),
+		StagedAttachment:    NewStagedAttachmentClient(cfg),
+		SystemConfiguration: NewSystemConfigurationClient(cfg),
+		WorkflowDefinition:  NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
 
@@ -196,19 +201,20 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                ctx,
-		config:             cfg,
-		EventRecord:        NewEventRecordClient(cfg),
-		MergeRecord:        NewMergeRecordClient(cfg),
-		NodeRun:            NewNodeRunClient(cfg),
-		ProcessRun:         NewProcessRunClient(cfg),
-		Project:            NewProjectClient(cfg),
-		PromptAppend:       NewPromptAppendClient(cfg),
-		QuestionBatch:      NewQuestionBatchClient(cfg),
-		QuickCommand:       NewQuickCommandClient(cfg),
-		Session:            NewSessionClient(cfg),
-		StagedAttachment:   NewStagedAttachmentClient(cfg),
-		WorkflowDefinition: NewWorkflowDefinitionClient(cfg),
+		ctx:                 ctx,
+		config:              cfg,
+		EventRecord:         NewEventRecordClient(cfg),
+		MergeRecord:         NewMergeRecordClient(cfg),
+		NodeRun:             NewNodeRunClient(cfg),
+		ProcessRun:          NewProcessRunClient(cfg),
+		Project:             NewProjectClient(cfg),
+		PromptAppend:        NewPromptAppendClient(cfg),
+		QuestionBatch:       NewQuestionBatchClient(cfg),
+		QuickCommand:        NewQuickCommandClient(cfg),
+		Session:             NewSessionClient(cfg),
+		StagedAttachment:    NewStagedAttachmentClient(cfg),
+		SystemConfiguration: NewSystemConfigurationClient(cfg),
+		WorkflowDefinition:  NewWorkflowDefinitionClient(cfg),
 	}, nil
 }
 
@@ -240,7 +246,7 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
 		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session, c.StagedAttachment,
-		c.WorkflowDefinition,
+		c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -252,7 +258,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.EventRecord, c.MergeRecord, c.NodeRun, c.ProcessRun, c.Project,
 		c.PromptAppend, c.QuestionBatch, c.QuickCommand, c.Session, c.StagedAttachment,
-		c.WorkflowDefinition,
+		c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -281,6 +287,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Session.mutate(ctx, m)
 	case *StagedAttachmentMutation:
 		return c.StagedAttachment.mutate(ctx, m)
+	case *SystemConfigurationMutation:
+		return c.SystemConfiguration.mutate(ctx, m)
 	case *WorkflowDefinitionMutation:
 		return c.WorkflowDefinition.mutate(ctx, m)
 	default:
@@ -1618,6 +1626,139 @@ func (c *StagedAttachmentClient) mutate(ctx context.Context, m *StagedAttachment
 	}
 }
 
+// SystemConfigurationClient is a client for the SystemConfiguration schema.
+type SystemConfigurationClient struct {
+	config
+}
+
+// NewSystemConfigurationClient returns a client for the SystemConfiguration from the given config.
+func NewSystemConfigurationClient(c config) *SystemConfigurationClient {
+	return &SystemConfigurationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `systemconfiguration.Hooks(f(g(h())))`.
+func (c *SystemConfigurationClient) Use(hooks ...Hook) {
+	c.hooks.SystemConfiguration = append(c.hooks.SystemConfiguration, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `systemconfiguration.Intercept(f(g(h())))`.
+func (c *SystemConfigurationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SystemConfiguration = append(c.inters.SystemConfiguration, interceptors...)
+}
+
+// Create returns a builder for creating a SystemConfiguration entity.
+func (c *SystemConfigurationClient) Create() *SystemConfigurationCreate {
+	mutation := newSystemConfigurationMutation(c.config, OpCreate)
+	return &SystemConfigurationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SystemConfiguration entities.
+func (c *SystemConfigurationClient) CreateBulk(builders ...*SystemConfigurationCreate) *SystemConfigurationCreateBulk {
+	return &SystemConfigurationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SystemConfigurationClient) MapCreateBulk(slice any, setFunc func(*SystemConfigurationCreate, int)) *SystemConfigurationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SystemConfigurationCreateBulk{err: fmt.Errorf("calling to SystemConfigurationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SystemConfigurationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SystemConfigurationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SystemConfiguration.
+func (c *SystemConfigurationClient) Update() *SystemConfigurationUpdate {
+	mutation := newSystemConfigurationMutation(c.config, OpUpdate)
+	return &SystemConfigurationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SystemConfigurationClient) UpdateOne(_m *SystemConfiguration) *SystemConfigurationUpdateOne {
+	mutation := newSystemConfigurationMutation(c.config, OpUpdateOne, withSystemConfiguration(_m))
+	return &SystemConfigurationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SystemConfigurationClient) UpdateOneID(id string) *SystemConfigurationUpdateOne {
+	mutation := newSystemConfigurationMutation(c.config, OpUpdateOne, withSystemConfigurationID(id))
+	return &SystemConfigurationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SystemConfiguration.
+func (c *SystemConfigurationClient) Delete() *SystemConfigurationDelete {
+	mutation := newSystemConfigurationMutation(c.config, OpDelete)
+	return &SystemConfigurationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SystemConfigurationClient) DeleteOne(_m *SystemConfiguration) *SystemConfigurationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SystemConfigurationClient) DeleteOneID(id string) *SystemConfigurationDeleteOne {
+	builder := c.Delete().Where(systemconfiguration.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SystemConfigurationDeleteOne{builder}
+}
+
+// Query returns a query builder for SystemConfiguration.
+func (c *SystemConfigurationClient) Query() *SystemConfigurationQuery {
+	return &SystemConfigurationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSystemConfiguration},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SystemConfiguration entity by its id.
+func (c *SystemConfigurationClient) Get(ctx context.Context, id string) (*SystemConfiguration, error) {
+	return c.Query().Where(systemconfiguration.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SystemConfigurationClient) GetX(ctx context.Context, id string) *SystemConfiguration {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SystemConfigurationClient) Hooks() []Hook {
+	return c.hooks.SystemConfiguration
+}
+
+// Interceptors returns the client interceptors.
+func (c *SystemConfigurationClient) Interceptors() []Interceptor {
+	return c.inters.SystemConfiguration
+}
+
+func (c *SystemConfigurationClient) mutate(ctx context.Context, m *SystemConfigurationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SystemConfigurationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SystemConfigurationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SystemConfigurationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SystemConfigurationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SystemConfiguration mutation op: %q", m.Op())
+	}
+}
+
 // WorkflowDefinitionClient is a client for the WorkflowDefinition schema.
 type WorkflowDefinitionClient struct {
 	config
@@ -1755,12 +1896,12 @@ func (c *WorkflowDefinitionClient) mutate(ctx context.Context, m *WorkflowDefini
 type (
 	hooks struct {
 		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
-		QuestionBatch, QuickCommand, Session, StagedAttachment,
+		QuestionBatch, QuickCommand, Session, StagedAttachment, SystemConfiguration,
 		WorkflowDefinition []ent.Hook
 	}
 	inters struct {
 		EventRecord, MergeRecord, NodeRun, ProcessRun, Project, PromptAppend,
-		QuestionBatch, QuickCommand, Session, StagedAttachment,
+		QuestionBatch, QuickCommand, Session, StagedAttachment, SystemConfiguration,
 		WorkflowDefinition []ent.Interceptor
 	}
 )

@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"strings"
 	"time"
 
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
@@ -18,6 +19,7 @@ import (
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
@@ -49,6 +51,20 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 		Content:   dto.Content,
 		CreatedAt: dto.CreatedAt,
 	}
+}
+
+func mapAppearanceSettings(dto settingapp.AppearanceSettingsDTO) *model.AppearanceSettings {
+	return &model.AppearanceSettings{
+		WallpaperColorScheme: wallpaperColorSchemeToModel(dto.WallpaperColorScheme),
+	}
+}
+
+func wallpaperColorSchemeFromModel(scheme model.WallpaperColorScheme) settingdomain.WallpaperColorScheme {
+	return settingdomain.WallpaperColorScheme(strings.ToLower(string(scheme)))
+}
+
+func wallpaperColorSchemeToModel(scheme settingdomain.WallpaperColorScheme) model.WallpaperColorScheme {
+	return model.WallpaperColorScheme(strings.ToUpper(string(scheme)))
 }
 
 func mapQuickCommandPage(page port.Page[settingapp.QuickCommandDTO]) *model.QuickCommandPage {

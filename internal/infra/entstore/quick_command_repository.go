@@ -9,15 +9,15 @@ import (
 	entquickcommand "github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 )
 
-type QuickCommandRepository struct {
+type SettingRepository struct {
 	client *ent.Client
 }
 
-func NewQuickCommandRepository(client *ent.Client) *QuickCommandRepository {
-	return &QuickCommandRepository{client: client}
+func NewSettingRepository(client *ent.Client) *SettingRepository {
+	return &SettingRepository{client: client}
 }
 
-func (r *QuickCommandRepository) Create(ctx context.Context, command setting.QuickCommand) error {
+func (r *SettingRepository) Create(ctx context.Context, command setting.QuickCommand) error {
 	create := r.client.QuickCommand.Create().
 		SetID(string(command.ID)).
 		SetContent(command.Content)
@@ -30,7 +30,7 @@ func (r *QuickCommandRepository) Create(ctx context.Context, command setting.Qui
 	return nil
 }
 
-func (r *QuickCommandRepository) List(ctx context.Context, query setting.QuickCommandQuery) (setting.QuickCommandPage, error) {
+func (r *SettingRepository) List(ctx context.Context, query setting.QuickCommandQuery) (setting.QuickCommandPage, error) {
 	query = normalizeQuickCommandQuery(query)
 	total, err := r.client.QuickCommand.Query().Count(ctx)
 	if err != nil {
@@ -80,7 +80,7 @@ func normalizeQuickCommandQuery(query setting.QuickCommandQuery) setting.QuickCo
 	return query
 }
 
-func (r *QuickCommandRepository) Delete(ctx context.Context, id setting.QuickCommandID) error {
+func (r *SettingRepository) Delete(ctx context.Context, id setting.QuickCommandID) error {
 	if err := r.client.QuickCommand.DeleteOneID(string(id)).Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return setting.ErrQuickCommandNotFound

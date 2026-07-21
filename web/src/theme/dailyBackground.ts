@@ -1,14 +1,17 @@
 import {
-  createDailyPalettes,
+  createMaterialPalettes,
   dailyBackgroundStorageKey,
   dailyImageRefreshReason,
-  dailyPaletteKeys,
-  extractSeedColors,
+  extractSourceColor,
+  isWallpaperColorScheme,
+  materialPaletteKeys,
   parseDailyBackgroundRecord,
   parseDailyMetadata,
+  resolveMaterialPaletteCache,
   type DailyBackgroundRecord,
   type DailyMetadata,
-  type DailyPalette,
+  type MaterialPalette,
+  type WallpaperColorScheme,
 } from '@/theme/dailyBackgroundModel';
 
 const metadataEndpoint = 'https://bing.ee123.net/img/?size=UHD&imgtype=jpg&type=json';
@@ -16,6 +19,8 @@ const imageEndpoint = 'https://bing.ee123.net/img/4k';
 const attributionSource = 'https://bing.ee123.net/' as const;
 
 let initialized = false;
+let activeRecord: DailyBackgroundRecord | null = null;
+let activeScheme: WallpaperColorScheme | null = null;
 
 export function initializeDailyBackground() {
   if (initialized) return;
@@ -23,6 +28,12 @@ export function initializeDailyBackground() {
   const cached = readCachedRecord();
   if (cached) applyRecord(cached);
   void refreshDailyBackground(cached);
+}
+
+export function setWallpaperColorScheme(scheme: WallpaperColorScheme) {
+  if (!isWallpaperColorScheme(scheme) || scheme === activeScheme) return;
+  activeScheme = scheme;
+  if (activeRecord) commitRecord(activeRecord);
 }
 
 async function refreshDailyBackground(cached: DailyBackgroundRecord | null) {
@@ -43,10 +54,20 @@ async function refreshDailyBackground(cached: DailyBackgroundRecord | null) {
     const sha256 = await sha256Hex(image.bytes);
     const loadedAt = new Date().toISOString();
     const sameImage = cached?.sha256 === sha256;
-    const seed = sameImage ? cached.seed : await extractImageSeed(image.bytes, image.mimeType);
-    const palettes = sameImage ? cached.palettes : createDailyPalettes(seed);
+    const sourceColor =
+      sameImage && cached
+        ? cached.sourceColor
+        : await extractImageSourceColor(image.bytes, image.mimeType);
+    const colorCache =
+      sameImage && cached
+        ? cached.colorCache
+        : {
+            sha256,
+            wallpaperColorScheme: activeScheme ?? 'content',
+            palettes: createMaterialPalettes(sourceColor, activeScheme ?? 'content'),
+          };
     commitRecord({
-      version: 1,
+      version: 2,
       source: 'ee123',
       localDate,
       sourceDate: metadata.sourceDate,
@@ -55,8 +76,8 @@ async function refreshDailyBackground(cached: DailyBackgroundRecord | null) {
       checkedAt,
       loadedAt,
       attribution: attributionFrom(metadata),
-      seed,
-      palettes,
+      sourceColor,
+      colorCache,
     });
   } catch {
     // The already-applied record or static CSS tokens remain the complete fallback.
@@ -77,7 +98,8 @@ async function fetchImage(metadata: DailyMetadata) {
     mode: 'cors',
     redirect: 'follow',
   });
-  const mimeType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  const mimeType =
+    response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
   if (!response.ok || !['image/jpeg', 'image/webp'].includes(mimeType)) {
     throw new Error(`daily image returned ${response.status} ${mimeType}`);
   }
@@ -92,7 +114,7 @@ async function sha256Hex(bytes: ArrayBuffer) {
   return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
-async function extractImageSeed(bytes: ArrayBuffer, mimeType: string) {
+async function extractImageSourceColor(bytes: ArrayBuffer, mimeType: string) {
   const bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }));
   try {
     const scale = Math.min(64 / bitmap.width, 36 / bitmap.height, 1);
@@ -104,7 +126,7 @@ async function extractImageSeed(bytes: ArrayBuffer, mimeType: string) {
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('daily image canvas is unavailable');
     context.drawImage(bitmap, 0, 0, width, height);
-    return extractSeedColors(context.getImageData(0, 0, width, height).data);
+    return extractSourceColor(context.getImageData(0, 0, width, height).data);
   } finally {
     bitmap.close();
   }
@@ -119,7 +141,7 @@ function readCachedRecord() {
 }
 
 function commitRecord(record: DailyBackgroundRecord) {
-  const validated = parseDailyBackgroundRecord(record);
+  const validated = parseDailyBackgroundRecord(withCurrentPaletteCache(record));
   if (!validated) throw new Error('daily background record is invalid');
   applyRecord(validated);
   try {
@@ -130,16 +152,29 @@ function commitRecord(record: DailyBackgroundRecord) {
 }
 
 function applyRecord(record: DailyBackgroundRecord) {
+  activeRecord = record;
   const root = document.documentElement;
-  applyPalette(root, 'light', record.palettes.light);
-  applyPalette(root, 'dark', record.palettes.dark);
+  const palettes = record.colorCache.palettes;
+  applyPalette(root, 'light', palettes.light);
+  applyPalette(root, 'dark', palettes.dark);
   root.style.setProperty('--ac-daily-background-image', `url(${JSON.stringify(record.imageUrl)})`);
   root.dataset.dailyBackground = 'ready';
 }
 
-function applyPalette(root: HTMLElement, mode: 'light' | 'dark', palette: DailyPalette) {
-  for (const key of dailyPaletteKeys) {
-    root.style.setProperty(`--ac-daily-${mode}-${toKebabCase(key)}`, palette[key]);
+function withCurrentPaletteCache(record: DailyBackgroundRecord): DailyBackgroundRecord {
+  if (!activeScheme) return record;
+  const colorCache = resolveMaterialPaletteCache(
+    record.sha256,
+    record.sourceColor,
+    record.colorCache,
+    activeScheme,
+  );
+  return colorCache === record.colorCache ? record : { ...record, colorCache };
+}
+
+function applyPalette(root: HTMLElement, mode: 'light' | 'dark', palette: MaterialPalette) {
+  for (const key of materialPaletteKeys) {
+    root.style.setProperty(`--ac-m3-${mode}-${toKebabCase(key)}`, palette[key]);
   }
 }
 

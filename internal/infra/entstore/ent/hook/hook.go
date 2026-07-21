@@ -129,6 +129,18 @@ func (f StagedAttachmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StagedAttachmentMutation", m)
 }
 
+// The SystemConfigurationFunc type is an adapter to allow the use of ordinary
+// function as SystemConfiguration mutator.
+type SystemConfigurationFunc func(context.Context, *ent.SystemConfigurationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SystemConfigurationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SystemConfigurationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SystemConfigurationMutation", m)
+}
+
 // The WorkflowDefinitionFunc type is an adapter to allow the use of ordinary
 // function as WorkflowDefinition mutator.
 type WorkflowDefinitionFunc func(context.Context, *ent.WorkflowDefinitionMutation) (ent.Value, error)

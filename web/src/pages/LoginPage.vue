@@ -33,7 +33,15 @@
       </q-card-section>
 
       <q-card-actions align="right">
-        <q-btn unelevated color="primary" icon="login" label="进入" no-caps :loading="loading" @click="login" />
+        <q-btn
+          unelevated
+          color="primary"
+          icon="login"
+          label="进入"
+          no-caps
+          :loading="loading"
+          @click="login"
+        />
       </q-card-actions>
     </q-card>
   </div>
@@ -44,7 +52,9 @@ import { ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
+import { getAppearanceSettings } from '@/services/appearanceSettings';
 import { setGraphQLAccessKey, verifyGraphQLAccessKey } from '@/services/graphqlClient';
+import { setWallpaperColorScheme } from '@/theme/dailyBackground';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -67,6 +77,12 @@ async function login() {
       return;
     }
     setGraphQLAccessKey(key);
+    try {
+      const settings = await getAppearanceSettings({ notify: false });
+      setWallpaperColorScheme(settings.wallpaperColorScheme);
+    } catch {
+      // Appearance settings are non-blocking during authentication.
+    }
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/';
     await router.replace(redirect);
   } catch {

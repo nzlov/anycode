@@ -32,6 +32,8 @@ type Tx struct {
 	Session *SessionClient
 	// StagedAttachment is the client for interacting with the StagedAttachment builders.
 	StagedAttachment *StagedAttachmentClient
+	// SystemConfiguration is the client for interacting with the SystemConfiguration builders.
+	SystemConfiguration *SystemConfigurationClient
 	// WorkflowDefinition is the client for interacting with the WorkflowDefinition builders.
 	WorkflowDefinition *WorkflowDefinitionClient
 
@@ -175,6 +177,7 @@ func (tx *Tx) init() {
 	tx.QuickCommand = NewQuickCommandClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)
 	tx.StagedAttachment = NewStagedAttachmentClient(tx.config)
+	tx.SystemConfiguration = NewSystemConfigurationClient(tx.config)
 	tx.WorkflowDefinition = NewWorkflowDefinitionClient(tx.config)
 }
 

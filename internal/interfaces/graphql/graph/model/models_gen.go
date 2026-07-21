@@ -14,6 +14,10 @@ type TranscriptContent interface {
 	IsTranscriptContent()
 }
 
+type AppearanceSettings struct {
+	WallpaperColorScheme WallpaperColorScheme `json:"wallpaperColorScheme"`
+}
+
 type AppendPromptInput struct {
 	SessionID           string   `json:"sessionId"`
 	Body                string   `json:"body"`
@@ -641,6 +645,10 @@ type TranscriptUsageAttribution struct {
 	Usage        *TranscriptTokenUsage `json:"usage"`
 }
 
+type UpdateAppearanceSettingsInput struct {
+	WallpaperColorScheme WallpaperColorScheme `json:"wallpaperColorScheme"`
+}
+
 type UpdateProjectSettingsInput struct {
 	ProjectID           string `json:"projectId"`
 	WorktreeInitCommand string `json:"worktreeInitCommand"`
@@ -896,6 +904,75 @@ func (e *TranscriptTextFormat) UnmarshalJSON(b []byte) error {
 }
 
 func (e TranscriptTextFormat) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type WallpaperColorScheme string
+
+const (
+	WallpaperColorSchemeContent    WallpaperColorScheme = "CONTENT"
+	WallpaperColorSchemeFidelity   WallpaperColorScheme = "FIDELITY"
+	WallpaperColorSchemeTonalSpot  WallpaperColorScheme = "TONAL_SPOT"
+	WallpaperColorSchemeVibrant    WallpaperColorScheme = "VIBRANT"
+	WallpaperColorSchemeExpressive WallpaperColorScheme = "EXPRESSIVE"
+	WallpaperColorSchemeRainbow    WallpaperColorScheme = "RAINBOW"
+	WallpaperColorSchemeFruitSalad WallpaperColorScheme = "FRUIT_SALAD"
+	WallpaperColorSchemeNeutral    WallpaperColorScheme = "NEUTRAL"
+	WallpaperColorSchemeMonochrome WallpaperColorScheme = "MONOCHROME"
+)
+
+var AllWallpaperColorScheme = []WallpaperColorScheme{
+	WallpaperColorSchemeContent,
+	WallpaperColorSchemeFidelity,
+	WallpaperColorSchemeTonalSpot,
+	WallpaperColorSchemeVibrant,
+	WallpaperColorSchemeExpressive,
+	WallpaperColorSchemeRainbow,
+	WallpaperColorSchemeFruitSalad,
+	WallpaperColorSchemeNeutral,
+	WallpaperColorSchemeMonochrome,
+}
+
+func (e WallpaperColorScheme) IsValid() bool {
+	switch e {
+	case WallpaperColorSchemeContent, WallpaperColorSchemeFidelity, WallpaperColorSchemeTonalSpot, WallpaperColorSchemeVibrant, WallpaperColorSchemeExpressive, WallpaperColorSchemeRainbow, WallpaperColorSchemeFruitSalad, WallpaperColorSchemeNeutral, WallpaperColorSchemeMonochrome:
+		return true
+	}
+	return false
+}
+
+func (e WallpaperColorScheme) String() string {
+	return string(e)
+}
+
+func (e *WallpaperColorScheme) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = WallpaperColorScheme(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid WallpaperColorScheme", str)
+	}
+	return nil
+}
+
+func (e WallpaperColorScheme) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *WallpaperColorScheme) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e WallpaperColorScheme) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

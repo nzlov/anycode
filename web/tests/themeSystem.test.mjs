@@ -30,7 +30,10 @@ const themeSource = readSource('../src/css/theme.scss');
 const appStylesSource = readSource('../src/css/app.scss');
 const runtimeSource = readSource('../src/theme/tokens.ts');
 const dailyBackgroundSource = readSource('../src/theme/dailyBackground.ts');
+const dailyBackgroundModelSource = readSource('../src/theme/dailyBackgroundModel.js');
 const bootSource = readSource('../src/boot/theme.ts');
+const appearanceSettingsSource = readSource('../src/services/appearanceSettings.ts');
+const globalSettingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 const appSource = readSource('../src/App.vue');
 const loginSource = readSource('../src/pages/LoginPage.vue');
 const notFoundSource = readSource('../src/pages/ErrorNotFound.vue');
@@ -84,19 +87,57 @@ test('theme runtime only owns mode persistence and Quasar dark switching', () =>
   assert.match(runtimeSource, /document\.documentElement\.dataset\.themeMode/);
 });
 
-test('daily background stays inside the theme boundary with static token fallbacks', () => {
+test('daily background maps official M3 roles through the theme boundary', () => {
   for (const mode of ['light', 'dark']) {
-    for (const role of ['page', 'surface', 'text', 'text-muted', 'link', 'border', 'primary']) {
-      assert.ok(themeSource.includes(`--ac-daily-${mode}-${role}`), `${mode} ${role} is required`);
+    for (const role of [
+      'background',
+      'surface-container-low',
+      'on-surface',
+      'outline',
+      'primary',
+      'primary-fixed',
+      'secondary-fixed',
+      'tertiary-fixed',
+      'error',
+    ]) {
+      assert.ok(themeSource.includes(`--ac-m3-${mode}-${role}`), `${mode} ${role} is required`);
     }
   }
   assert.match(themeSource, /--q-primary:\s*var\(--ac-action-primary-bg\)/);
   assert.match(bootSource, /initializeDailyBackground\(\)/);
+  assert.match(bootSource, /getAppearanceSettings/);
+  assert.match(bootSource, /setWallpaperColorScheme/);
   assert.match(dailyBackgroundSource, /crypto\.subtle\.digest\('SHA-256'/);
   assert.match(dailyBackgroundSource, /cache:\s*'no-store'/);
   assert.match(dailyBackgroundSource, /cache:\s*'no-cache'/);
   assert.match(dailyBackgroundSource, /createImageBitmap/);
+  assert.match(dailyBackgroundSource, /resolveMaterialPaletteCache/);
+  assert.match(dailyBackgroundModelSource, /QuantizerCelebi\.quantize\(pixels, 128\)/);
+  assert.match(dailyBackgroundModelSource, /Score\.score\(quantized\)/);
+  for (const scheme of [
+    'SchemeContent',
+    'SchemeFidelity',
+    'SchemeTonalSpot',
+    'SchemeVibrant',
+    'SchemeExpressive',
+    'SchemeRainbow',
+    'SchemeFruitSalad',
+    'SchemeNeutral',
+    'SchemeMonochrome',
+  ]) {
+    assert.ok(dailyBackgroundModelSource.includes(scheme), `${scheme} is required`);
+  }
   assert.doesNotMatch(dailyBackgroundSource, /indexedDB|caches\.open|CacheStorage/);
+});
+
+test('global appearance setting persists the algorithm through GraphQL and applies it immediately', () => {
+  assert.match(globalSettingsSource, /name="appearance"[^>]*icon="palette"/);
+  assert.match(globalSettingsSource, /壁纸选色算法/);
+  assert.match(globalSettingsSource, /wallpaperColorSchemeOptions/);
+  assert.match(globalSettingsSource, /setWallpaperColorScheme\(settings\.wallpaperColorScheme\)/);
+  assert.match(appearanceSettingsSource, /query AppearanceSettings/);
+  assert.match(appearanceSettingsSource, /mutation UpdateAppearanceSettings/);
+  assert.equal(appearanceSettingsSource.match(/\{ label: '[^']+', value: '[^']+' \}/g)?.length, 9);
 });
 
 test('root exposes the shared background without an image caption', () => {
@@ -152,12 +193,7 @@ test('components do not introduce fixed application colors or light-only palette
 });
 
 test('shared Quasar portal surfaces use semantic theme roles', () => {
-  for (const selector of [
-    '.q-dialog .q-card',
-    '.q-menu',
-    '.q-tooltip',
-    '.q-notification',
-  ]) {
+  for (const selector of ['.q-dialog .q-card', '.q-menu', '.q-tooltip', '.q-notification']) {
     assert.ok(themeSource.includes(selector), `${selector} theme contract is required`);
   }
   for (const role of ['primary', 'positive', 'warning', 'negative', 'info']) {
@@ -167,8 +203,15 @@ test('shared Quasar portal surfaces use semantic theme roles', () => {
       `dark text-${role} must use a high-contrast semantic foreground`,
     );
   }
-  for (const selector of ['.q-item--active', '.q-tab--active:not(.question-tab--active)', '.q-field--focused']) {
-    assert.ok(themeSource.includes(selector), `${selector} must override Quasar primary in dark mode`);
+  for (const selector of [
+    '.q-item--active',
+    '.q-tab--active:not(.question-tab--active)',
+    '.q-field--focused',
+  ]) {
+    assert.ok(
+      themeSource.includes(selector),
+      `${selector} must override Quasar primary in dark mode`,
+    );
   }
   assert.match(themeSource, /\.body--dark \.text-blue-grey[^}]*var\(--ac-text-muted\)/s);
 });
