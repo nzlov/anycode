@@ -1,12 +1,9 @@
 <template>
   <q-layout view="hHh lpR fFf" class="app-layout">
     <q-header v-if="applicationReady" bordered class="app-header">
-      <q-toolbar>
-        <q-toolbar-title v-if="$route.name === 'overview'" class="app-header__title">
-          AnyCode
-        </q-toolbar-title>
+      <q-toolbar class="app-toolbar">
         <q-btn
-          v-else
+          v-if="$route.name !== 'overview'"
           flat
           round
           dense
@@ -20,7 +17,11 @@
         <q-toolbar-title v-if="$route.name === 'session-detail'" class="app-header__title">
           {{ sessionTitle || '会话详情' }}
         </q-toolbar-title>
-        <q-space v-if="$route.name !== 'overview' && $route.name !== 'session-detail'" />
+        <div
+          v-show="$route.name !== 'session-detail'"
+          id="app-page-toolbar"
+          class="app-page-toolbar-host"
+        />
 
         <q-btn
           v-if="$route.name === 'overview'"

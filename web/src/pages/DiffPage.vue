@@ -1,14 +1,18 @@
 <template>
   <q-page class="page-shell diff-page">
-    <div class="page-heading">
-      <div class="text-h5 text-weight-bold">当前分支变更</div>
-    </div>
+    <PageToolbar v-if="!target" title="当前分支变更" />
 
     <q-banner v-if="!target" rounded class="state-banner app-feedback app-feedback--warning">
       请从会话详情进入 Diff 页面，或在地址 query 中提供 projectId 与 branch。
     </q-banner>
 
-    <DiffWorkspace v-else v-model="workspaceState" :target="target" />
+    <DiffWorkspace
+      v-else
+      v-model="workspaceState"
+      :target="target"
+      toolbar-target="#app-page-toolbar"
+      toolbar-title="当前分支变更"
+    />
   </q-page>
 </template>
 
@@ -17,6 +21,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
+import PageToolbar from '@/components/PageToolbar.vue';
 import type { DiffMode, DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 
 const route = useRoute();
@@ -91,8 +96,7 @@ watch(
 </script>
 
 <style scoped>
-.diff-page,
-.heading-copy {
+.diff-page {
   min-width: 0;
 }
 
@@ -101,13 +105,13 @@ watch(
 }
 
 .diff-page :deep(.diff-workspace) {
-  height: calc(100dvh - 112px);
+  height: calc(100dvh - 82px);
   min-height: 360px;
 }
 
 @media (min-width: 1024px) {
   .diff-page :deep(.diff-workspace) {
-    height: calc(100dvh - 150px);
+    height: calc(100dvh - 98px);
     min-height: 480px;
   }
 }

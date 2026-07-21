@@ -3,32 +3,34 @@
     class="workbench-page page-shell"
     :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
   >
-    <div class="overview-filter-toolbar">
-      <div
-        v-if="projectChips.length"
-        class="overview-project-filters"
-        role="group"
-        aria-label="项目卡片显示筛选"
-      >
-        <q-chip
-          v-for="project in projectChips"
-          :key="project.id"
-          clickable
-          :outline="!isProjectVisible(project.id)"
-          class="overview-project-chip"
-          :class="{
-            'overview-project-chip--visible': isProjectVisible(project.id),
-            'overview-project-chip--hidden': !isProjectVisible(project.id),
-          }"
-          :icon="isProjectVisible(project.id) ? 'visibility' : 'visibility_off'"
-          :aria-pressed="isProjectVisible(project.id)"
-          :aria-label="`${isProjectVisible(project.id) ? '隐藏' : '显示'} ${project.name} 项目卡片`"
-          @click="toggleProjectVisibility(project.id)"
+    <PageToolbar title="AnyCode">
+      <div class="overview-filter-toolbar">
+        <div
+          v-if="projectChips.length"
+          class="overview-project-filters"
+          role="group"
+          aria-label="项目卡片显示筛选"
         >
-          {{ project.name }}
-        </q-chip>
+          <q-chip
+            v-for="project in projectChips"
+            :key="project.id"
+            clickable
+            :outline="!isProjectVisible(project.id)"
+            class="overview-project-chip"
+            :class="{
+              'overview-project-chip--visible': isProjectVisible(project.id),
+              'overview-project-chip--hidden': !isProjectVisible(project.id),
+            }"
+            :icon="isProjectVisible(project.id) ? 'visibility' : 'visibility_off'"
+            :aria-pressed="isProjectVisible(project.id)"
+            :aria-label="`${isProjectVisible(project.id) ? '隐藏' : '显示'} ${project.name} 项目卡片`"
+            @click="toggleProjectVisibility(project.id)"
+          >
+            {{ project.name }}
+          </q-chip>
+        </div>
       </div>
-    </div>
+    </PageToolbar>
 
     <section class="overview-card-section">
       <div v-if="visibleLatestCards.length > 0" class="overview-card-grid">
@@ -487,6 +489,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
+import PageToolbar from '@/components/PageToolbar.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
