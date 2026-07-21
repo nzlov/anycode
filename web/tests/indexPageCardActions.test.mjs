@@ -364,7 +364,11 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(detailSource, /<DiffWorkspace[\s\S]*:target="detailDiffTarget"/);
   assert.match(detailSource, /:show-file-navigation="false"/);
   assert.match(detailSource, /lazy-file-details/);
-  assert.doesNotMatch(detailSource, /<DiffViewer|getSessionDiffFiles|getSessionFileDiff/);
+  assert.doesNotMatch(
+    detailSource,
+    /<DiffViewer|getSessionFileDiff|getSessionSingleDiff|getSessionAllDiff/,
+  );
+  assert.match(detailSource, /resolveSessionEventResource[\s\S]*getSessionDiffFiles/);
   assert.match(fileChangeSource, /<DiffViewer[^>]*:file-diffs="diffFileChanges"/);
   assert.doesNotMatch(fileChangeSource, /<DiffWorkspace|getSessionAllDiff|getSessionSingleDiff/);
   assert.doesNotMatch(answerDialogSource, /SessionDiffPreview/);

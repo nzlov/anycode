@@ -537,6 +537,48 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog
+      v-model="eventResourceDialogOpen"
+      :maximized="$q.screen.lt.sm"
+      @hide="clearEventResource"
+    >
+      <q-card class="event-resource-dialog app-content-dialog" aria-label="事件文件">
+        <q-card-section class="event-resource-dialog__header">
+          <div class="event-resource-dialog__title">
+            <q-icon :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)" />
+            <span>{{ eventResourceTitle }}</span>
+          </div>
+          <div class="row items-center q-gutter-xs">
+            <q-btn
+              v-if="eventResourceKind === 'file' && eventResourceFile"
+              flat
+              round
+              dense
+              icon="download"
+              aria-label="下载文件"
+              :loading="eventResourceDownloading"
+              @click="downloadEventResource"
+            >
+              <q-tooltip>下载</q-tooltip>
+            </q-btn>
+            <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
+              <q-tooltip>关闭</q-tooltip>
+            </q-btn>
+          </div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="event-resource-dialog__body">
+          <DiffWorkspace
+            v-if="eventResourceKind === 'diff'"
+            v-model="eventDiffState"
+            :target="detailDiffTarget"
+            :show-file-navigation="false"
+          />
+          <SessionFilePreview v-else :file="eventResourceFile" />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -550,6 +592,7 @@ import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
+import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -557,13 +600,24 @@ import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
+import { getSessionDiffFiles } from '@/services/diff';
+import {
+  matchChangedFilePath,
+  parseSessionEventResourceReference,
+  provideSessionEventResourceOpener,
+} from '@/services/sessionEventResources';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
 import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
-import type { SessionFile } from '@/services/sessionFiles';
+import {
+  downloadSessionFile,
+  listSessionFiles,
+  resolveSessionArtifacts,
+  type SessionFile,
+} from '@/services/sessionFiles';
 import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 import type { TranscriptTokenUsage } from '@/services/sessionTimeline';
@@ -622,6 +676,12 @@ const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
   mode: 'all',
   filePath: '',
 });
+const eventDiffState = ref<DiffWorkspaceState>({ mode: 'single', filePath: '' });
+const eventResourceDialogOpen = ref(false);
+const eventResourceKind = ref<'diff' | 'file'>('file');
+const eventResourceFile = ref<SessionFile | null>(null);
+const eventResourceDownloading = ref(false);
+let eventResourceRequest = 0;
 let mounted = false;
 let preservingOlderEventScroll = false;
 let previousEventScrollTop = Number.POSITIVE_INFINITY;
@@ -696,6 +756,109 @@ const {
   startLiveUpdates,
   stopLiveUpdates,
 } = useSessionDetail(sessionId);
+
+provideSessionEventResourceOpener(openSessionEventResource);
+
+function openSessionEventResource(reference: string, label = '') {
+  const parsed = parseSessionEventResourceReference(reference, sessionId);
+  if (!parsed) return false;
+  void resolveSessionEventResource(parsed, label);
+  return true;
+}
+
+async function resolveSessionEventResource(
+  reference: NonNullable<ReturnType<typeof parseSessionEventResourceReference>>,
+  label: string,
+) {
+  const request = ++eventResourceRequest;
+  try {
+    if (reference.kind === 'session-file') {
+      const files = await listSessionFiles({ sessionId });
+      if (request !== eventResourceRequest) return;
+      const file = files.find((item) => item.id === reference.fileId);
+      if (file) return focusEventArtifact(file);
+      throw new Error('文件已不存在');
+    }
+    if (reference.kind === 'artifact') {
+      const resolved = await resolveSessionArtifacts(sessionId, [reference.logicalPath]);
+      if (request !== eventResourceRequest) return;
+      const file = resolved[0]?.file;
+      if (file) return focusEventArtifact(file);
+      throw new Error('临时文件已不存在');
+    }
+
+    const [diffResult, artifactResult] = await Promise.allSettled([
+      getSessionDiffFiles({ sessionId }),
+      reference.path.startsWith('/')
+        ? Promise.resolve([])
+        : resolveSessionArtifacts(sessionId, [reference.path]),
+    ]);
+    if (request !== eventResourceRequest) return;
+    if (diffResult.status === 'fulfilled') {
+      const filePath = matchChangedFilePath(
+        reference.path,
+        diffResult.value.files.map((file) => file.path),
+      );
+      if (filePath) return openEventDiff(filePath);
+    }
+    if (artifactResult.status === 'fulfilled' && artifactResult.value[0]?.file) {
+      return focusEventArtifact(artifactResult.value[0].file);
+    }
+    throw new Error(label ? `无法查看“${label}”` : '无法查看此文件');
+  } catch (err) {
+    if (request !== eventResourceRequest) return;
+    Notify.create({ type: 'negative', message: errorMessage(err) || '读取文件失败' });
+  }
+}
+
+function openEventDiff(filePath: string) {
+  eventDiffState.value = { mode: 'single', filePath };
+  eventResourceFile.value = null;
+  eventResourceKind.value = 'diff';
+  eventResourceDialogOpen.value = true;
+}
+
+function focusEventArtifact(file: SessionFile) {
+  eventResourceFile.value = file;
+  eventResourceKind.value = 'file';
+  eventResourceDialogOpen.value = true;
+}
+
+const eventResourceTitle = computed(() =>
+  eventResourceKind.value === 'diff'
+    ? eventDiffState.value.filePath
+    : eventResourceFile.value?.logicalPath || eventResourceFile.value?.filename || '文件预览',
+);
+
+async function downloadEventResource() {
+  const file = eventResourceFile.value;
+  if (!file) return;
+  eventResourceDownloading.value = true;
+  try {
+    await downloadSessionFile(file);
+  } catch (err) {
+    Notify.create({ type: 'negative', message: errorMessage(err) || '下载文件失败' });
+  } finally {
+    eventResourceDownloading.value = false;
+  }
+}
+
+function fileIcon(file: SessionFile | null) {
+  const icons: Record<string, string> = {
+    image: 'image',
+    pdf: 'picture_as_pdf',
+    video: 'movie',
+    audio: 'audio_file',
+    archive: 'folder_zip',
+    text: 'description',
+  };
+  return file ? (icons[file.artifactKind] ?? 'draft') : 'draft';
+}
+
+function clearEventResource() {
+  eventResourceRequest++;
+  eventResourceFile.value = null;
+}
 
 // GLUE: Persisted prompt text disambiguates user-authored copies of injected guidance.
 // Remove this fallback when timeline messages expose their user/injected provenance.
@@ -1286,6 +1449,37 @@ async function scrollEventsToBottom() {
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.event-resource-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.event-resource-dialog__header,
+.event-resource-dialog__title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.event-resource-dialog__header {
+  justify-content: space-between;
+}
+
+.event-resource-dialog__title span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.event-resource-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
 }
 
 .token-usage-summary {

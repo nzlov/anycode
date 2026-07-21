@@ -28,6 +28,7 @@ const contentDialogs = [
   [indexSource, 'overview-diff-dialog'],
   [composerSource, 'attachment-preview-card'],
   [detailSource, 'prompt-edit-dialog'],
+  [detailSource, 'event-resource-dialog'],
 ];
 
 test('one shared class owns content dialog sizing at the 600px breakpoint', () => {
@@ -67,7 +68,7 @@ test('all content dialogs use the shared card class and Quasar mobile maximizati
   }
   assert.equal(
     (detailSource.match(/<q-dialog[^>]*:maximized="\$q\.screen\.lt\.sm"/g) ?? []).length,
-    1,
+    2,
   );
 });
 

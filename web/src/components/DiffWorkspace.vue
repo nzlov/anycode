@@ -262,9 +262,7 @@ const targetKey = computed(() =>
     : `branch:${props.target.projectId}:${props.target.branch}`,
 );
 const collapseState = ref(initialDiffCollapseState(targetKey.value));
-const workspaceMode = computed<DiffMode>(() =>
-  props.showFileNavigation ? props.modelValue.mode : 'all',
-);
+const workspaceMode = computed<DiffMode>(() => props.modelValue.mode);
 const modeOptions = computed(() => [
   {
     ...($q.screen.lt.sm ? {} : { label: '单个文件' }),
