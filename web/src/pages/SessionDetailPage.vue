@@ -45,7 +45,14 @@
           </div>
         </q-card>
 
-        <div v-if="!isClosed" class="detail-composer">
+        <div
+          v-if="!isClosed"
+          class="detail-composer"
+          :class="{
+            'detail-composer--collapsed':
+              composerCollapsed && !isWaitingForAnswer && !isWaitingForApproval,
+          }"
+        >
           <q-banner v-if="detailError" rounded class="detail-error-banner">
             <template #avatar>
               <q-icon name="error_outline" />
@@ -97,7 +104,9 @@
             v-model:effort="composerEffort"
             v-model:permission="composerPermission"
             v-model:fast="composerFast"
+            v-model:collapsed="composerCollapsed"
             compact
+            collapsible
             :show-badge="false"
             title="追加描述"
             placeholder="追加描述，发送给当前会话"
@@ -661,6 +670,7 @@ const composerModel = ref('');
 const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerFast = ref(false);
+const composerCollapsed = ref(true);
 const composerConfigReady = ref(false);
 const detailView = ref<'session' | 'info' | 'changes' | 'artifacts'>('session');
 // GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.
@@ -1155,6 +1165,7 @@ async function sendAppend() {
     appendText.value = '';
     appendFiles.value = [];
     appendArtifacts.value = [];
+    composerCollapsed.value = true;
   } catch (err) {
     appendUploading.value = false;
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
@@ -1534,6 +1545,10 @@ async function scrollEventsToBottom() {
   background: var(--ac-surface-raised);
   border-top-right-radius: 0;
   border-top-left-radius: 0;
+}
+
+.detail-composer--collapsed {
+  min-height: 0;
 }
 
 .detail-answer-card {
