@@ -2824,8 +2824,6 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 		if options.prompt == "" || options.queueKind == domain.QueueKindPromptAppend {
 			options.prompt = advance.Prompt
 		}
-	} else if err := s.requirePendingChatResume(ctx, session.ID); err != nil {
-		return DTO{}, err
 	}
 	if startOptions.Force {
 		return s.startCodex(ctx, session, options, true)
@@ -4424,22 +4422,6 @@ func newCodexStartInput(session domain.Session, runID processdomain.RunID, workd
 	}
 }
 
-func (s *Service) requirePendingChatResume(ctx context.Context, sessionID domain.ID) error {
-	pending, err := s.repo.ListPendingPromptAppends(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("list pending prompt appends: %w", err)
-	}
-	if len(pending) == 0 {
-		return pendingPromptRequiredError(sessionID)
-	}
-	return nil
-}
-
-func pendingPromptRequiredError(sessionID domain.ID) error {
-	return apperror.New(apperror.CodePendingPromptRequired, apperror.CategoryValidationError, "没有待执行的追加描述，请先输入追加描述").
-		WithDetails(map[string]any{"sessionId": string(sessionID)})
-}
-
 var errNoEffectivePromptAppend = errors.New("no effective prompt append")
 
 func (s *Service) settleEmptyPromptAppendQueue(ctx context.Context, session domain.Session) (DTO, error) {
@@ -4487,8 +4469,8 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	} else if options.reviewAfterReuseFailure {
 		prompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
 	} else if options.resumeCodexSessionID != "" {
-		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && len(pendingIDs) == 0 {
-			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
+		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && basePrompt == "" && len(pendingIDs) == 0 {
+			basePrompt = strings.TrimSpace(session.Requirement)
 		}
 		prompt = joinPromptParts(basePrompt, pendingPrompt)
 	} else if session.Mode != domain.ModeWorkflow {
