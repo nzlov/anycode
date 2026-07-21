@@ -161,7 +161,7 @@ a {
 }
 
 .page-shell {
-  padding: 24px;
+  padding: 24px 12px;
 }
 
 .page-shell.workbench-page {
@@ -1789,7 +1789,7 @@ body.desktop
 
 @media (max-width: 699px) {
   .page-shell {
-    padding: 16px;
+    padding: 16px 0;
   }
 
   .new-session-grid,
