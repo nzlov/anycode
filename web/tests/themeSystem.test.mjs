@@ -130,6 +130,61 @@ test('daily background maps official M3 roles through the theme boundary', () =>
   assert.doesNotMatch(dailyBackgroundSource, /indexedDB|caches\.open|CacheStorage/);
 });
 
+test('Quasar and application status colors are aliases of M3 dynamic roles', () => {
+  const quasarRoles = {
+    primary: 'action-primary-bg',
+    secondary: 'secondary',
+    accent: 'tertiary',
+    positive: 'primary',
+    negative: 'error',
+    info: 'secondary',
+    warning: 'tertiary',
+  };
+
+  for (const [quasarRole, appRole] of Object.entries(quasarRoles)) {
+    assert.equal(
+      themeSource.match(
+        new RegExp(`--q-${quasarRole}:\\s*var\\(--ac-${appRole}\\)`, 'g'),
+      )?.length,
+      2,
+      `${quasarRole} must follow the light and dark M3 palettes`,
+    );
+  }
+
+  const statusRoles = {
+    'on-warning': 'on-tertiary',
+    'status-neutral-bg': 'surface-muted',
+    'status-neutral-text': 'text',
+    'status-neutral-border': 'border-strong',
+    'status-success-bg': 'primary-container',
+    'status-success-text': 'on-primary-container',
+    'status-success-border': 'primary',
+    'status-warning-bg': 'tertiary-container',
+    'status-warning-text': 'on-tertiary-container',
+    'status-warning-border': 'tertiary',
+    'status-danger-bg': 'error-container',
+    'status-danger-text': 'on-error-container',
+    'status-danger-border': 'error',
+    'status-info-bg': 'secondary-container',
+    'status-info-text': 'on-secondary-container',
+    'status-info-border': 'secondary',
+    'status-mode-bg': 'secondary-container',
+    'status-mode-text': 'on-secondary-container',
+    'status-mode-border': 'secondary',
+  };
+
+  for (const [statusRole, appRole] of Object.entries(statusRoles)) {
+    assert.equal(
+      themeSource.match(
+        new RegExp(`--ac-${statusRole}:\\s*var\\(--ac-${appRole}\\)`, 'g'),
+      )?.length,
+      2,
+      `${statusRole} must follow the light and dark M3 palettes`,
+    );
+  }
+  assert.doesNotMatch(themeSource, /--ac-(?:on-warning|status-[\w-]+):\s*#/);
+});
+
 test('global appearance setting persists the algorithm through GraphQL and applies it immediately', () => {
   assert.match(globalSettingsSource, /name="appearance"[^>]*icon="palette"/);
   assert.match(globalSettingsSource, /壁纸选色算法/);

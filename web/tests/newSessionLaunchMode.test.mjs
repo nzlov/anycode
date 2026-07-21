@@ -18,8 +18,8 @@ test('launch mode buttons replace the separate mode toggle and create command', 
   assert.doesNotMatch(dialogSource, /label="创建卡片"/);
   assert.match(dialogSource, /label="流程模式"[\s\S]*@click="createSession\('workflow'\)"/);
   assert.match(dialogSource, /label="会话模式"[\s\S]*@click="createSession\('chat'\)"/);
-  assert.match(dialogSource, /preferredAvailableMode === 'workflow' \? 'positive'/);
-  assert.match(dialogSource, /preferredAvailableMode === 'chat' \? 'positive'/);
+  assert.match(dialogSource, /preferredAvailableMode === 'workflow' \? 'primary'/);
+  assert.match(dialogSource, /preferredAvailableMode === 'chat' \? 'primary'/);
   assert.match(dialogSource, /class="new-session-launch-group" role="group" aria-label="启动模式"/);
   assert.match(
     stylesSource,

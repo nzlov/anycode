@@ -12,8 +12,8 @@
         </q-btn>
         <q-btn
           unelevated
-          color="positive"
-          class="app-on-positive"
+          color="primary"
+          class="app-on-primary"
           icon="save"
           label="保存"
           no-caps

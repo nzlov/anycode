@@ -951,10 +951,10 @@ function cardAction(card: SessionCard) {
     return { icon: 'hourglass_top', color: 'warning', tooltip: '停止中', disabled: true };
   }
   if (card.status === 'queued' && card.availableActions.includes('execute')) {
-    return { icon: 'play_arrow', color: 'positive', tooltip: '强制启动排队卡片', disabled: false };
+    return { icon: 'play_arrow', color: 'primary', tooltip: '强制启动排队卡片', disabled: false };
   }
   if (card.availableActions.includes('execute')) {
-    return { icon: 'play_arrow', color: 'positive', tooltip: '运行会话', disabled: false };
+    return { icon: 'play_arrow', color: 'primary', tooltip: '运行会话', disabled: false };
   }
   return null;
 }

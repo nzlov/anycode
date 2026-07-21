@@ -128,7 +128,7 @@
                 v-if="composerAction"
                 unelevated
                 class="detail-composer__primary-btn app-icon-btn"
-                :class="{ 'app-on-positive': composerAction.color === 'positive' }"
+                :class="{ 'app-on-primary': composerAction.color === 'primary' }"
                 :color="composerAction.color"
                 :icon="composerAction.icon"
                 :aria-label="composerAction.tooltip"
@@ -795,7 +795,7 @@ const composerAction = computed(() => {
   if (canExecute.value) {
     return {
       icon: 'play_arrow',
-      color: 'positive',
+      color: 'primary',
       tooltip: composerConfigDirty.value ? '应用配置并运行' : '运行会话',
       loading: executing.value || updatingConfig.value,
       disabled: appending.value || executing.value || stopping.value || updatingConfig.value,

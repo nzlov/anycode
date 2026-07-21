@@ -53,27 +53,29 @@
   --q-primary: var(--ac-action-primary-bg);
   --q-secondary: var(--ac-secondary);
   --q-accent: var(--ac-tertiary);
+  --q-positive: var(--ac-primary);
   --q-negative: var(--ac-error);
-  --ac-on-positive: #052e16;
-  --ac-on-warning: #422006;
-  --ac-status-neutral-bg: #f1f5f9;
-  --ac-status-neutral-text: #334155;
-  --ac-status-neutral-border: #64748b;
-  --ac-status-success-bg: #dcfce7;
-  --ac-status-success-text: #166534;
-  --ac-status-success-border: #15803d;
-  --ac-status-warning-bg: #fef3c7;
-  --ac-status-warning-text: #78350f;
-  --ac-status-warning-border: #b45309;
-  --ac-status-danger-bg: #fee2e2;
-  --ac-status-danger-text: #991b1b;
-  --ac-status-danger-border: #b91c1c;
-  --ac-status-info-bg: #e0f2fe;
-  --ac-status-info-text: #075985;
-  --ac-status-info-border: #0369a1;
-  --ac-status-mode-bg: #eef2ff;
-  --ac-status-mode-text: #3730a3;
-  --ac-status-mode-border: #6366f1;
+  --q-info: var(--ac-secondary);
+  --q-warning: var(--ac-tertiary);
+  --ac-on-warning: var(--ac-on-tertiary);
+  --ac-status-neutral-bg: var(--ac-surface-muted);
+  --ac-status-neutral-text: var(--ac-text);
+  --ac-status-neutral-border: var(--ac-border-strong);
+  --ac-status-success-bg: var(--ac-primary-container);
+  --ac-status-success-text: var(--ac-on-primary-container);
+  --ac-status-success-border: var(--ac-primary);
+  --ac-status-warning-bg: var(--ac-tertiary-container);
+  --ac-status-warning-text: var(--ac-on-tertiary-container);
+  --ac-status-warning-border: var(--ac-tertiary);
+  --ac-status-danger-bg: var(--ac-error-container);
+  --ac-status-danger-text: var(--ac-on-error-container);
+  --ac-status-danger-border: var(--ac-error);
+  --ac-status-info-bg: var(--ac-secondary-container);
+  --ac-status-info-text: var(--ac-on-secondary-container);
+  --ac-status-info-border: var(--ac-secondary);
+  --ac-status-mode-bg: var(--ac-secondary-container);
+  --ac-status-mode-text: var(--ac-on-secondary-container);
+  --ac-status-mode-border: var(--ac-secondary);
   --ac-shadow-card: 0 12px 28px
     color-mix(in srgb, var(--ac-m3-light-shadow, #000000) 10%, transparent);
   --ac-shadow-dialog: 0 18px 46px
@@ -162,27 +164,29 @@
   --q-primary: var(--ac-action-primary-bg);
   --q-secondary: var(--ac-secondary);
   --q-accent: var(--ac-tertiary);
+  --q-positive: var(--ac-primary);
   --q-negative: var(--ac-error);
-  --ac-on-positive: #052e16;
-  --ac-on-warning: #422006;
-  --ac-status-neutral-bg: #263449;
-  --ac-status-neutral-text: #e2e8f0;
-  --ac-status-neutral-border: #94a3b8;
-  --ac-status-success-bg: #123524;
-  --ac-status-success-text: #86efac;
-  --ac-status-success-border: #4ade80;
-  --ac-status-warning-bg: #422f0a;
-  --ac-status-warning-text: #fde68a;
-  --ac-status-warning-border: #fbbf24;
-  --ac-status-danger-bg: #451a1a;
-  --ac-status-danger-text: #fecaca;
-  --ac-status-danger-border: #f87171;
-  --ac-status-info-bg: #082f49;
-  --ac-status-info-text: #bae6fd;
-  --ac-status-info-border: #38bdf8;
-  --ac-status-mode-bg: #312e81;
-  --ac-status-mode-text: #e0e7ff;
-  --ac-status-mode-border: #818cf8;
+  --q-info: var(--ac-secondary);
+  --q-warning: var(--ac-tertiary);
+  --ac-on-warning: var(--ac-on-tertiary);
+  --ac-status-neutral-bg: var(--ac-surface-muted);
+  --ac-status-neutral-text: var(--ac-text);
+  --ac-status-neutral-border: var(--ac-border-strong);
+  --ac-status-success-bg: var(--ac-primary-container);
+  --ac-status-success-text: var(--ac-on-primary-container);
+  --ac-status-success-border: var(--ac-primary);
+  --ac-status-warning-bg: var(--ac-tertiary-container);
+  --ac-status-warning-text: var(--ac-on-tertiary-container);
+  --ac-status-warning-border: var(--ac-tertiary);
+  --ac-status-danger-bg: var(--ac-error-container);
+  --ac-status-danger-text: var(--ac-on-error-container);
+  --ac-status-danger-border: var(--ac-error);
+  --ac-status-info-bg: var(--ac-secondary-container);
+  --ac-status-info-text: var(--ac-on-secondary-container);
+  --ac-status-info-border: var(--ac-secondary);
+  --ac-status-mode-bg: var(--ac-secondary-container);
+  --ac-status-mode-text: var(--ac-on-secondary-container);
+  --ac-status-mode-border: var(--ac-secondary);
   --ac-shadow-card: 0 12px 28px
     color-mix(in srgb, var(--ac-m3-dark-shadow, #000000) 42%, transparent);
   --ac-shadow-dialog: 0 18px 46px
@@ -325,10 +329,29 @@
   border-color: var(--ac-status-info-border);
 }
 
-.app-on-positive {
-  color: var(--ac-on-positive) !important;
+.app-on-primary {
+  color: var(--ac-on-primary) !important;
 }
 
 .app-on-warning {
   color: var(--ac-on-warning) !important;
+}
+
+.bg-primary.text-white,
+.bg-positive.text-white {
+  color: var(--ac-on-primary) !important;
+}
+
+.bg-secondary.text-white,
+.bg-info.text-white {
+  color: var(--ac-on-secondary) !important;
+}
+
+.bg-accent.text-white,
+.bg-warning.text-white {
+  color: var(--ac-on-tertiary) !important;
+}
+
+.bg-negative.text-white {
+  color: var(--ac-on-error) !important;
 }
