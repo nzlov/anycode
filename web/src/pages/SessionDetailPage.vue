@@ -1605,6 +1605,7 @@ async function scrollEventsToBottom() {
 
 .append-history {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -1620,6 +1621,10 @@ async function scrollEventsToBottom() {
   white-space: pre-wrap;
 }
 
+.append-history :deep(.q-item__section--main) {
+  flex-wrap: nowrap;
+}
+
 .append-history__attachments {
   display: flex;
   flex-wrap: wrap;
@@ -1628,6 +1633,7 @@ async function scrollEventsToBottom() {
 }
 
 .append-history__attachments :deep(.q-chip) {
+  margin: 0;
   max-width: 100%;
 }
 
