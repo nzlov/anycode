@@ -156,6 +156,7 @@ test('shared pagination remains available outside the unpaginated diff workspace
 });
 
 test('diff workspace keeps file navigation fixed while content scrolls with sticky file titles', () => {
+  assert.match(diffViewerSource, /\.diff-viewer\s*{[^}]*align-content:\s*start/s);
   assert.match(
     diffWorkspaceSource,
     /\.diff-workspace__layout\s*{[^}]*grid-template-columns:\s*320px\s+minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)/s,
