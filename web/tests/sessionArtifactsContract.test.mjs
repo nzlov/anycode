@@ -12,6 +12,10 @@ const event = readFileSync(
   new URL('../src/components/SessionArtifactEvent.vue', import.meta.url),
   'utf8',
 );
+const preview = readFileSync(
+  new URL('../src/components/SessionFilePreview.vue', import.meta.url),
+  'utf8',
+);
 const eventMessage = readFileSync(
   new URL('../src/components/SessionEventMessage.vue', import.meta.url),
   'utf8',
@@ -70,16 +74,16 @@ test('session artifacts use one unpaginated latest-version query and unified fil
 test('authenticated previews revoke blob URLs and keep bounded text fully scrollable', () => {
   assert.match(service, /headers\.set\('authorization', `Bearer \$\{accessKey\}`\)/);
   assert.match(service, /URL\.revokeObjectURL\(url\)/);
-  assert.match(panel, /URL\.revokeObjectURL\(previewURL\.value\)/);
+  assert.match(preview, /URL\.revokeObjectURL\(objectURL\.value\)/);
   assert.match(event, /URL\.revokeObjectURL\(objectUrl\.value\)/);
-  assert.match(panel, /file\.size > 1 << 20/);
-  assert.match(panel, /\.artifact-text \{[\s\S]*?align-self: start;/);
+  assert.match(preview, /file\.size > 1 << 20/);
+  assert.match(preview, /\.session-file-preview__text \{[\s\S]*?align-self: start;/);
   assert.match(event, /\.artifact-event-preview__body pre \{[\s\S]*?align-self: start;/);
-  assert.match(panel, /selected\?\.previewKind === 'image'/);
-  assert.match(panel, /selected\?\.previewKind === 'pdf'/);
-  assert.match(panel, /selected\?\.previewKind === 'video'/);
-  assert.match(panel, /selected\?\.previewKind === 'audio'/);
-  assert.match(panel, /selected\?\.previewKind === 'text'/);
+  assert.match(preview, /file\?\.previewKind === 'image'/);
+  assert.match(preview, /file\?\.previewKind === 'pdf'/);
+  assert.match(preview, /file\?\.previewKind === 'video'/);
+  assert.match(preview, /file\?\.previewKind === 'audio'/);
+  assert.match(preview, /file\?\.previewKind === 'text'/);
 });
 
 test('artifact panel enables one-item inline previews only for wide opted-in containers', () => {
@@ -94,7 +98,7 @@ test('artifact panel enables one-item inline previews only for wide opted-in con
   );
   assert.match(panel, /nextFiles\.find\(\(file\) => file\.id === selected\.value\?\.id\)/);
   assert.match(panel, /const first = nextFiles\[0\]/);
-  assert.match(panel, /if \(first\) await selectPreview\(first\)/);
+  assert.match(panel, /if \(first\) selected\.value = first/);
   assert.match(panel, /if \(!inlinePreviewActive\.value\) previewOpen\.value = true/);
   assert.match(panel, /panelResizeObserver\?\.disconnect\(\)/);
   assert.doesNotMatch(detailPage, /inline-preview/);
@@ -121,7 +125,7 @@ test('artifact requests ignore stale responses and follow live artifact events',
   assert.match(service, /fetch\(url, \{ headers, signal: signal \?\? null \}\)/);
   assert.match(panel, /const request = \+\+loadRequest/);
   assert.match(panel, /request !== loadRequest/);
-  assert.match(panel, /previewController\?\.abort\(\)/);
+  assert.match(preview, /controller\?\.abort\(\)/);
   assert.match(event, /previewController\?\.abort\(\)/);
   assert.match(detailPage, /:refresh-key="artifactRefreshKey"/);
   assert.match(
@@ -150,7 +154,7 @@ test('artifact references normalize only safe relative logical paths', () => {
 test('artifact panel supports controlled focus without replacing file actions', () => {
   assert.match(panel, /focusRequest/);
   assert.match(panel, /props\.focusRequest\?\.token/);
-  assert.match(panel, /void applyFocus\(request\)/);
+  assert.match(panel, /applyFocus\(request\)/);
   assert.match(panel, /\{ immediate: true \}/);
   assert.match(panel, /emit\('artifactDeleted', file\)/);
   assert.match(panel, /emit\('artifactsRefreshed'\)/);
