@@ -1,0 +1,19 @@
+{
+  "name": "AnyCode",
+  "short_name": "AnyCode",
+  "description": "AnyCode agent workspace",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1976d2",
+  "icons": [
+    {
+      "src": "icons/anycode.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

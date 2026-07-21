@@ -104,6 +104,68 @@ var (
 			},
 		},
 	}
+	// NotificationCheckpointsColumns holds the columns for the "notification_checkpoints" table.
+	NotificationCheckpointsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "last_event_id", Type: field.TypeString, Default: ""},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// NotificationCheckpointsTable holds the schema information for the "notification_checkpoints" table.
+	NotificationCheckpointsTable = &schema.Table{
+		Name:       "notification_checkpoints",
+		Columns:    NotificationCheckpointsColumns,
+		PrimaryKey: []*schema.Column{NotificationCheckpointsColumns[0]},
+	}
+	// NotificationConfigurationsColumns holds the columns for the "notification_configurations" table.
+	NotificationConfigurationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "vapid_public_key", Type: field.TypeString},
+		{Name: "vapid_private_key", Type: field.TypeString},
+		{Name: "vapid_subject", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+	}
+	// NotificationConfigurationsTable holds the schema information for the "notification_configurations" table.
+	NotificationConfigurationsTable = &schema.Table{
+		Name:       "notification_configurations",
+		Columns:    NotificationConfigurationsColumns,
+		PrimaryKey: []*schema.Column{NotificationConfigurationsColumns[0]},
+	}
+	// NotificationDeliveriesColumns holds the columns for the "notification_deliveries" table.
+	NotificationDeliveriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "event_id", Type: field.TypeString},
+		{Name: "subscription_id", Type: field.TypeString},
+		{Name: "payload", Type: field.TypeBytes},
+		{Name: "status", Type: field.TypeString},
+		{Name: "attempts", Type: field.TypeInt, Default: 0},
+		{Name: "next_attempt_at", Type: field.TypeTime},
+		{Name: "last_error", Type: field.TypeString, Default: ""},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// NotificationDeliveriesTable holds the schema information for the "notification_deliveries" table.
+	NotificationDeliveriesTable = &schema.Table{
+		Name:       "notification_deliveries",
+		Columns:    NotificationDeliveriesColumns,
+		PrimaryKey: []*schema.Column{NotificationDeliveriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "notificationdelivery_event_id_subscription_id",
+				Unique:  true,
+				Columns: []*schema.Column{NotificationDeliveriesColumns[1], NotificationDeliveriesColumns[2]},
+			},
+			{
+				Name:    "notificationdelivery_status_next_attempt_at",
+				Unique:  false,
+				Columns: []*schema.Column{NotificationDeliveriesColumns[4], NotificationDeliveriesColumns[6]},
+			},
+			{
+				Name:    "notificationdelivery_subscription_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{NotificationDeliveriesColumns[2], NotificationDeliveriesColumns[4]},
+			},
+		},
+	}
 	// ProcessRunsColumns holds the columns for the "process_runs" table.
 	ProcessRunsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -194,6 +256,30 @@ var (
 				Name:    "promptappend_session_id_status_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[4], PromptAppendsColumns[7]},
+			},
+		},
+	}
+	// PushSubscriptionsColumns holds the columns for the "push_subscriptions" table.
+	PushSubscriptionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "principal_key_hash", Type: field.TypeString},
+		{Name: "endpoint_hash", Type: field.TypeString},
+		{Name: "endpoint", Type: field.TypeString},
+		{Name: "p256dh", Type: field.TypeString},
+		{Name: "auth", Type: field.TypeString},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// PushSubscriptionsTable holds the schema information for the "push_subscriptions" table.
+	PushSubscriptionsTable = &schema.Table{
+		Name:       "push_subscriptions",
+		Columns:    PushSubscriptionsColumns,
+		PrimaryKey: []*schema.Column{PushSubscriptionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "pushsubscription_endpoint_hash",
+				Unique:  true,
+				Columns: []*schema.Column{PushSubscriptionsColumns[2]},
 			},
 		},
 	}
@@ -422,9 +508,13 @@ var (
 		EventRecordsTable,
 		MergeRecordsTable,
 		NodeRunsTable,
+		NotificationCheckpointsTable,
+		NotificationConfigurationsTable,
+		NotificationDeliveriesTable,
 		ProcessRunsTable,
 		ProjectsTable,
 		PromptAppendsTable,
+		PushSubscriptionsTable,
 		QuestionBatchesTable,
 		QuickCommandsTable,
 		SessionsTable,

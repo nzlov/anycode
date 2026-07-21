@@ -15,6 +15,15 @@ type MergeRecord func(*sql.Selector)
 // NodeRun is the predicate function for noderun builders.
 type NodeRun func(*sql.Selector)
 
+// NotificationCheckpoint is the predicate function for notificationcheckpoint builders.
+type NotificationCheckpoint func(*sql.Selector)
+
+// NotificationConfiguration is the predicate function for notificationconfiguration builders.
+type NotificationConfiguration func(*sql.Selector)
+
+// NotificationDelivery is the predicate function for notificationdelivery builders.
+type NotificationDelivery func(*sql.Selector)
+
 // ProcessRun is the predicate function for processrun builders.
 type ProcessRun func(*sql.Selector)
 
@@ -23,6 +32,9 @@ type Project func(*sql.Selector)
 
 // PromptAppend is the predicate function for promptappend builders.
 type PromptAppend func(*sql.Selector)
+
+// PushSubscription is the predicate function for pushsubscription builders.
+type PushSubscription func(*sql.Selector)
 
 // QuestionBatch is the predicate function for questionbatch builders.
 type QuestionBatch func(*sql.Selector)

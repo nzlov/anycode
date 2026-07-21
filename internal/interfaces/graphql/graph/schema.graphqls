@@ -7,6 +7,7 @@ scalar Int64
 type Query {
   codexModelOptions: [CodexModelOption!]!
   appearanceSettings: AppearanceSettings!
+  webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
@@ -27,6 +28,8 @@ type Query {
 
 type Mutation {
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
+  registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
+  unregisterPushSubscription(id: ID!): Boolean!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
@@ -80,6 +83,21 @@ enum WallpaperColorScheme {
 
 type AppearanceSettings {
   wallpaperColorScheme: WallpaperColorScheme!
+}
+
+type WebPushConfig {
+  enabled: Boolean!
+  publicKey: String!
+}
+
+type PushSubscriptionRegistration {
+  id: ID!
+}
+
+input RegisterPushSubscriptionInput {
+  endpoint: String!
+  p256dh: String!
+  auth: String!
 }
 
 input UpdateAppearanceSettingsInput {

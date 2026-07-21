@@ -244,6 +244,10 @@ type PromptAppend struct {
 	CreatedAt   time.Time            `json:"createdAt"`
 }
 
+type PushSubscriptionRegistration struct {
+	ID string `json:"id"`
+}
+
 type Query struct {
 }
 
@@ -290,6 +294,12 @@ type QuickCommand struct {
 type QuickCommandPage struct {
 	Items    []*QuickCommand `json:"items"`
 	PageInfo *PageInfo       `json:"pageInfo"`
+}
+
+type RegisterPushSubscriptionInput struct {
+	Endpoint string `json:"endpoint"`
+	P256dh   string `json:"p256dh"`
+	Auth     string `json:"auth"`
 }
 
 type ResolveSessionArtifactsInput struct {
@@ -664,6 +674,11 @@ type UpdatePromptAppendInput struct {
 type UpdateSessionConfigInput struct {
 	SessionID string              `json:"sessionId"`
 	Config    *SessionConfigInput `json:"config"`
+}
+
+type WebPushConfig struct {
+	Enabled   bool   `json:"enabled"`
+	PublicKey string `json:"publicKey"`
 }
 
 type WorkflowCondition struct {

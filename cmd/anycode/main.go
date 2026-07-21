@@ -18,6 +18,7 @@ import (
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
+	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
@@ -25,6 +26,7 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
+	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	"github.com/nzlov/anycode/internal/infra/codexcli"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -35,6 +37,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/gitdiffcli"
 	"github.com/nzlov/anycode/internal/infra/mcpstdio"
 	"github.com/nzlov/anycode/internal/infra/shellinit"
+	webpushinfra "github.com/nzlov/anycode/internal/infra/webpush"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
 	httpinterface "github.com/nzlov/anycode/internal/interfaces/http"
 )
@@ -93,6 +96,9 @@ func main() {
 	if useCases.Artifacts != nil {
 		reconcileArtifactOutputs(ctx, useCases.Artifacts)
 		go runArtifactReconciliation(ctx, useCases.Artifacts)
+	}
+	if notifications, ok := useCases.Notifications.(*notificationapp.Service); ok {
+		go runNotificationDispatcher(ctx, notifications)
 	}
 	if err := reconcileInterruptedSessions(ctx, useCases.Sessions); err != nil {
 		log.Fatalf("recover sessions: %s", err.Error())
@@ -209,6 +215,12 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
+	pushClient := webpushinfra.New()
+	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
+	notificationService := notificationapp.New(store.Notifications(), events, store.Sessions(), store.Projects(), pushClient, pushClient, principal.KeyHash)
+	if err := notificationService.Initialize(context.Background()); err != nil {
+		return graph.UseCases{}, fmt.Errorf("initialize web push notifications: %w", err)
+	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
 	return graph.UseCases{
 		Projects:      projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
@@ -220,9 +232,27 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 		Diff:          diffService,
 		Workflows:     workflowService,
 		Questions:     questionService,
+		Notifications: notificationService,
 		Settings:      settingapp.New(store.Settings()),
 		CodexModels:   capabilities.Models,
 	}, nil
+}
+
+func runNotificationDispatcher(ctx context.Context, service *notificationapp.Service) {
+	for {
+		err := service.Run(ctx)
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		log.Printf("notification dispatcher stopped: %s", err.Error())
+		timer := time.NewTimer(5 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
 }
 
 type recoverySessionUseCase interface {

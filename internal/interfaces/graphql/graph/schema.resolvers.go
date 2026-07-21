@@ -10,6 +10,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
@@ -37,6 +38,37 @@ func (r *mutationResolver) UpdateAppearanceSettings(ctx context.Context, input m
 		return nil, err
 	}
 	return mapAppearanceSettings(dto), nil
+}
+
+// RegisterPushSubscription is the resolver for the registerPushSubscription field.
+func (r *mutationResolver) RegisterPushSubscription(ctx context.Context, input model.RegisterPushSubscriptionInput) (*model.PushSubscriptionRegistration, error) {
+	if r.UseCases.Notifications == nil {
+		return nil, missingUseCase("notifications")
+	}
+	dto, err := r.UseCases.Notifications.RegisterSubscription(ctx, notificationapp.RegisterSubscriptionInput{
+		PrincipalKeyHash: notificationPrincipalKeyHash(ctx),
+		Endpoint:         input.Endpoint,
+		P256DH:           input.P256dh,
+		Auth:             input.Auth,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &model.PushSubscriptionRegistration{ID: dto.ID}, nil
+}
+
+// UnregisterPushSubscription is the resolver for the unregisterPushSubscription field.
+func (r *mutationResolver) UnregisterPushSubscription(ctx context.Context, id string) (bool, error) {
+	if r.UseCases.Notifications == nil {
+		return false, missingUseCase("notifications")
+	}
+	if err := r.UseCases.Notifications.UnregisterSubscription(ctx, notificationapp.UnregisterSubscriptionInput{
+		PrincipalKeyHash: notificationPrincipalKeyHash(ctx),
+		ID:               id,
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CreateQuickCommand is the resolver for the createQuickCommand field.
@@ -415,6 +447,18 @@ func (r *queryResolver) AppearanceSettings(ctx context.Context) (*model.Appearan
 		return nil, err
 	}
 	return mapAppearanceSettings(dto), nil
+}
+
+// WebPushConfig is the resolver for the webPushConfig field.
+func (r *queryResolver) WebPushConfig(ctx context.Context) (*model.WebPushConfig, error) {
+	if r.UseCases.Notifications == nil {
+		return nil, missingUseCase("notifications")
+	}
+	dto, err := r.UseCases.Notifications.GetConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &model.WebPushConfig{Enabled: dto.Enabled, PublicKey: dto.PublicKey}, nil
 }
 
 // QuickCommands is the resolver for the quickCommands field.

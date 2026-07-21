@@ -156,6 +156,7 @@ type ComplexityRoot struct {
 		DeleteSessionFile           func(childComplexity int, id string) int
 		DeleteStagedAttachment      func(childComplexity int, id string) int
 		ExecuteSession              func(childComplexity int, id string, force *bool) int
+		RegisterPushSubscription    func(childComplexity int, input model.RegisterPushSubscriptionInput) int
 		RemoveProject               func(childComplexity int, id string) int
 		ResumeSession               func(childComplexity int, id string, force *bool) int
 		RetrySessionWorktreeCleanup func(childComplexity int, id string) int
@@ -167,6 +168,7 @@ type ComplexityRoot struct {
 		StopSession                 func(childComplexity int, id string) int
 		SubmitQuestionBatch         func(childComplexity int, input model.SubmitQuestionBatchInput) int
 		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
+		UnregisterPushSubscription  func(childComplexity int, id string) int
 		UpdateAppearanceSettings    func(childComplexity int, input model.UpdateAppearanceSettingsInput) int
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
@@ -210,6 +212,10 @@ type ComplexityRoot struct {
 		SessionID   func(childComplexity int) int
 	}
 
+	PushSubscriptionRegistration struct {
+		ID func(childComplexity int) int
+	}
+
 	Query struct {
 		AppearanceSettings      func(childComplexity int) int
 		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
@@ -228,6 +234,7 @@ type ComplexityRoot struct {
 		SessionFiles            func(childComplexity int, input model.ListSessionFilesInput) int
 		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
 		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
+		WebPushConfig           func(childComplexity int) int
 		WorkflowDefinition      func(childComplexity int, id string) int
 	}
 
@@ -553,6 +560,11 @@ type ComplexityRoot struct {
 		Usage        func(childComplexity int) int
 	}
 
+	WebPushConfig struct {
+		Enabled   func(childComplexity int) int
+		PublicKey func(childComplexity int) int
+	}
+
 	WorkflowCondition struct {
 		All   func(childComplexity int) int
 		Any   func(childComplexity int) int
@@ -632,6 +644,8 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error)
+	RegisterPushSubscription(ctx context.Context, input model.RegisterPushSubscriptionInput) (*model.PushSubscriptionRegistration, error)
+	UnregisterPushSubscription(ctx context.Context, id string) (bool, error)
 	CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error)
 	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
@@ -661,6 +675,7 @@ type MutationResolver interface {
 type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
 	AppearanceSettings(ctx context.Context) (*model.AppearanceSettings, error)
+	WebPushConfig(ctx context.Context) (*model.WebPushConfig, error)
 	QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error)
 	Projects(ctx context.Context) ([]*model.Project, error)
 	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
@@ -1171,6 +1186,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ExecuteSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
+	case "Mutation.registerPushSubscription":
+		if e.ComplexityRoot.Mutation.RegisterPushSubscription == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_registerPushSubscription_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RegisterPushSubscription(childComplexity, args["input"].(model.RegisterPushSubscriptionInput)), true
 	case "Mutation.removeProject":
 		if e.ComplexityRoot.Mutation.RemoveProject == nil {
 			break
@@ -1292,6 +1318,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SubmitWorkflowApproval(childComplexity, args["input"].(model.SubmitWorkflowApprovalInput)), true
+	case "Mutation.unregisterPushSubscription":
+		if e.ComplexityRoot.Mutation.UnregisterPushSubscription == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_unregisterPushSubscription_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UnregisterPushSubscription(childComplexity, args["id"].(string)), true
 	case "Mutation.updateAppearanceSettings":
 		if e.ComplexityRoot.Mutation.UpdateAppearanceSettings == nil {
 			break
@@ -1491,6 +1528,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PromptAppend.SessionID(childComplexity), true
 
+	case "PushSubscriptionRegistration.id":
+		if e.ComplexityRoot.PushSubscriptionRegistration.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PushSubscriptionRegistration.ID(childComplexity), true
+
 	case "Query.appearanceSettings":
 		if e.ComplexityRoot.Query.AppearanceSettings == nil {
 			break
@@ -1664,6 +1708,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Sessions(childComplexity, args["input"].(*model.ListSessionsInput)), true
+	case "Query.webPushConfig":
+		if e.ComplexityRoot.Query.WebPushConfig == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.WebPushConfig(childComplexity), true
 	case "Query.workflowDefinition":
 		if e.ComplexityRoot.Query.WorkflowDefinition == nil {
 			break
@@ -2984,6 +3034,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TranscriptUsageAttribution.Usage(childComplexity), true
 
+	case "WebPushConfig.enabled":
+		if e.ComplexityRoot.WebPushConfig.Enabled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebPushConfig.Enabled(childComplexity), true
+	case "WebPushConfig.publicKey":
+		if e.ComplexityRoot.WebPushConfig.PublicKey == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebPushConfig.PublicKey(childComplexity), true
+
 	case "WorkflowCondition.all":
 		if e.ComplexityRoot.WorkflowCondition.All == nil {
 			break
@@ -3292,6 +3355,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputListTranscriptEventsInput,
 		ec.unmarshalInputMergeConfigInput,
 		ec.unmarshalInputQuestionAnswerInput,
+		ec.unmarshalInputRegisterPushSubscriptionInput,
 		ec.unmarshalInputResolveSessionArtifactsInput,
 		ec.unmarshalInputRetryConfigInput,
 		ec.unmarshalInputSaveWorkflowDefinitionInput,
@@ -3413,6 +3477,7 @@ scalar Int64
 type Query {
   codexModelOptions: [CodexModelOption!]!
   appearanceSettings: AppearanceSettings!
+  webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
@@ -3433,6 +3498,8 @@ type Query {
 
 type Mutation {
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
+  registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
+  unregisterPushSubscription(id: ID!): Boolean!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
@@ -3486,6 +3553,21 @@ enum WallpaperColorScheme {
 
 type AppearanceSettings {
   wallpaperColorScheme: WallpaperColorScheme!
+}
+
+type WebPushConfig {
+  enabled: Boolean!
+  publicKey: String!
+}
+
+type PushSubscriptionRegistration {
+  id: ID!
+}
+
+input RegisterPushSubscriptionInput {
+  endpoint: String!
+  p256dh: String!
+  auth: String!
 }
 
 input UpdateAppearanceSettingsInput {
@@ -4386,6 +4468,17 @@ func (ec *executionContext) field_Mutation_executeSession_args(ctx context.Conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_registerPushSubscription_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRegisterPushSubscriptionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐRegisterPushSubscriptionInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_removeProject_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4514,6 +4607,17 @@ func (ec *executionContext) field_Mutation_submitWorkflowApproval_args(ctx conte
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_unregisterPushSubscription_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -6550,6 +6654,92 @@ func (ec *executionContext) fieldContext_Mutation_updateAppearanceSettings(ctx c
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateAppearanceSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_registerPushSubscription(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_registerPushSubscription,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RegisterPushSubscription(ctx, fc.Args["input"].(model.RegisterPushSubscriptionInput))
+		},
+		nil,
+		ec.marshalNPushSubscriptionRegistration2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPushSubscriptionRegistration,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_registerPushSubscription(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_PushSubscriptionRegistration_id(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PushSubscriptionRegistration", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_registerPushSubscription_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_unregisterPushSubscription(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_unregisterPushSubscription,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UnregisterPushSubscription(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_unregisterPushSubscription(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_unregisterPushSubscription_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -8812,6 +9002,35 @@ func (ec *executionContext) fieldContext_PromptAppend_createdAt(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _PushSubscriptionRegistration_id(ctx context.Context, field graphql.CollectedField, obj *model.PushSubscriptionRegistration) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PushSubscriptionRegistration_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PushSubscriptionRegistration_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PushSubscriptionRegistration",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_codexModelOptions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -8879,6 +9098,41 @@ func (ec *executionContext) fieldContext_Query_appearanceSettings(_ context.Cont
 				return ec.fieldContext_AppearanceSettings_wallpaperColorScheme(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AppearanceSettings", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_webPushConfig(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_webPushConfig,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().WebPushConfig(ctx)
+		},
+		nil,
+		ec.marshalNWebPushConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWebPushConfig,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_webPushConfig(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_WebPushConfig_enabled(ctx, field)
+			case "publicKey":
+				return ec.fieldContext_WebPushConfig_publicKey(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WebPushConfig", field.Name)
 		},
 	}
 	return fc, nil
@@ -16645,6 +16899,64 @@ func (ec *executionContext) fieldContext_TranscriptUsageAttribution_usage(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _WebPushConfig_enabled(ctx context.Context, field graphql.CollectedField, obj *model.WebPushConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WebPushConfig_enabled,
+		func(ctx context.Context) (any, error) {
+			return obj.Enabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WebPushConfig_enabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WebPushConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WebPushConfig_publicKey(ctx context.Context, field graphql.CollectedField, obj *model.WebPushConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WebPushConfig_publicKey,
+		func(ctx context.Context) (any, error) {
+			return obj.PublicKey, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WebPushConfig_publicKey(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WebPushConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkflowCondition_mode(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowCondition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -20227,6 +20539,50 @@ func (ec *executionContext) unmarshalInputQuestionAnswerInput(ctx context.Contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputRegisterPushSubscriptionInput(ctx context.Context, obj any) (model.RegisterPushSubscriptionInput, error) {
+	var it model.RegisterPushSubscriptionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"endpoint", "p256dh", "auth"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "endpoint":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("endpoint"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Endpoint = data
+		case "p256dh":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("p256dh"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.P256dh = data
+		case "auth":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("auth"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Auth = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputResolveSessionArtifactsInput(ctx context.Context, obj any) (model.ResolveSessionArtifactsInput, error) {
 	var it model.ResolveSessionArtifactsInput
 	if obj == nil {
@@ -22086,6 +22442,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "registerPushSubscription":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_registerPushSubscription(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "unregisterPushSubscription":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_unregisterPushSubscription(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createQuickCommand":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createQuickCommand(ctx, field)
@@ -22536,6 +22906,45 @@ func (ec *executionContext) _PromptAppend(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var pushSubscriptionRegistrationImplementors = []string{"PushSubscriptionRegistration"}
+
+func (ec *executionContext) _PushSubscriptionRegistration(ctx context.Context, sel ast.SelectionSet, obj *model.PushSubscriptionRegistration) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, pushSubscriptionRegistrationImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PushSubscriptionRegistration")
+		case "id":
+			out.Values[i] = ec._PushSubscriptionRegistration_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var queryImplementors = []string{"Query"}
 
 func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) graphql.Marshaler {
@@ -22587,6 +22996,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_appearanceSettings(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "webPushConfig":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_webPushConfig(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -25177,6 +25608,50 @@ func (ec *executionContext) _TranscriptUsageAttribution(ctx context.Context, sel
 	return out
 }
 
+var webPushConfigImplementors = []string{"WebPushConfig"}
+
+func (ec *executionContext) _WebPushConfig(ctx context.Context, sel ast.SelectionSet, obj *model.WebPushConfig) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, webPushConfigImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("WebPushConfig")
+		case "enabled":
+			out.Values[i] = ec._WebPushConfig_enabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "publicKey":
+			out.Values[i] = ec._WebPushConfig_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var workflowConditionImplementors = []string{"WorkflowCondition"}
 
 func (ec *executionContext) _WorkflowCondition(ctx context.Context, sel ast.SelectionSet, obj *model.WorkflowCondition) graphql.Marshaler {
@@ -26591,6 +27066,20 @@ func (ec *executionContext) marshalNPromptAppend2ᚖgithubᚗcomᚋnzlovᚋanyco
 	return ec._PromptAppend(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNPushSubscriptionRegistration2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPushSubscriptionRegistration(ctx context.Context, sel ast.SelectionSet, v model.PushSubscriptionRegistration) graphql.Marshaler {
+	return ec._PushSubscriptionRegistration(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNPushSubscriptionRegistration2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPushSubscriptionRegistration(ctx context.Context, sel ast.SelectionSet, v *model.PushSubscriptionRegistration) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PushSubscriptionRegistration(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNQuestion2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Question) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -26735,6 +27224,11 @@ func (ec *executionContext) marshalNQuickCommandPage2ᚖgithubᚗcomᚋnzlovᚋa
 		return graphql.Null
 	}
 	return ec._QuickCommandPage(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRegisterPushSubscriptionInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐRegisterPushSubscriptionInput(ctx context.Context, v any) (model.RegisterPushSubscriptionInput, error) {
+	res, err := ec.unmarshalInputRegisterPushSubscriptionInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNResolveSessionArtifactsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐResolveSessionArtifactsInput(ctx context.Context, v any) (model.ResolveSessionArtifactsInput, error) {
@@ -27324,6 +27818,20 @@ func (ec *executionContext) unmarshalNWallpaperColorScheme2githubᚗcomᚋnzlov�
 
 func (ec *executionContext) marshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme(ctx context.Context, sel ast.SelectionSet, v model.WallpaperColorScheme) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNWebPushConfig2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWebPushConfig(ctx context.Context, sel ast.SelectionSet, v model.WebPushConfig) graphql.Marshaler {
+	return ec._WebPushConfig(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWebPushConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWebPushConfig(ctx context.Context, sel ast.SelectionSet, v *model.WebPushConfig) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._WebPushConfig(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNWorkflowCondition2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowConditionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WorkflowCondition) graphql.Marshaler {

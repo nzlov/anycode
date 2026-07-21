@@ -15,9 +15,13 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/eventrecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/mergerecord"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/noderun"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationcheckpoint"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationconfiguration"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/notificationdelivery"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/pushsubscription"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 
@@ -85,18 +89,22 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			eventrecord.Table:         eventrecord.ValidColumn,
-			mergerecord.Table:         mergerecord.ValidColumn,
-			noderun.Table:             noderun.ValidColumn,
-			processrun.Table:          processrun.ValidColumn,
-			project.Table:             project.ValidColumn,
-			promptappend.Table:        promptappend.ValidColumn,
-			questionbatch.Table:       questionbatch.ValidColumn,
-			quickcommand.Table:        quickcommand.ValidColumn,
-			entsession.Table:          entsession.ValidColumn,
-			stagedattachment.Table:    stagedattachment.ValidColumn,
-			systemconfiguration.Table: systemconfiguration.ValidColumn,
-			workflowdefinition.Table:  workflowdefinition.ValidColumn,
+			eventrecord.Table:               eventrecord.ValidColumn,
+			mergerecord.Table:               mergerecord.ValidColumn,
+			noderun.Table:                   noderun.ValidColumn,
+			notificationcheckpoint.Table:    notificationcheckpoint.ValidColumn,
+			notificationconfiguration.Table: notificationconfiguration.ValidColumn,
+			notificationdelivery.Table:      notificationdelivery.ValidColumn,
+			processrun.Table:                processrun.ValidColumn,
+			project.Table:                   project.ValidColumn,
+			promptappend.Table:              promptappend.ValidColumn,
+			pushsubscription.Table:          pushsubscription.ValidColumn,
+			questionbatch.Table:             questionbatch.ValidColumn,
+			quickcommand.Table:              quickcommand.ValidColumn,
+			entsession.Table:                entsession.ValidColumn,
+			stagedattachment.Table:          stagedattachment.ValidColumn,
+			systemconfiguration.Table:       systemconfiguration.ValidColumn,
+			workflowdefinition.Table:        workflowdefinition.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

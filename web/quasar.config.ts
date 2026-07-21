@@ -13,6 +13,12 @@ export default defineConfig((/* ctx */) => {
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
     boot: ['theme'],
 
+    sourceFiles: {
+      pwaRegisterServiceWorker: 'src-pwa/register-sw',
+      pwaServiceWorker: 'src-pwa/sw/custom-sw',
+      pwaManifestFile: 'src-pwa/manifest.json',
+    },
+
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#css
     css: ['app.scss'],
 
@@ -55,7 +61,7 @@ export default defineConfig((/* ctx */) => {
       // defineEnv: {}
       // ignorePublicFolder: true,
       // minify: false,
-      distDir: '../internal/interfaces/http/static/dist',
+      distDir: '../internal/interfaces/http/static/pwa',
 
       // extendViteConf (viteConf) {},
       // viteVuePluginOptions: {},
@@ -142,8 +148,9 @@ export default defineConfig((/* ctx */) => {
 
     // https://v2.quasar.dev/quasar-cli-vite/developing-pwa/configuring-pwa
     pwa: {
-      workboxMode: 'GenerateSW', // 'GenerateSW' or 'InjectManifest'
-      // swFilename: 'sw.js',
+      workboxMode: 'InjectManifest',
+      swFilename: 'sw.js',
+      injectPWAMetaTags: false,
       // manifestFilename: 'manifest.json',
       // extendPWAManifestJson (json) {},
       // useCredentialsForManifestTag: true,
