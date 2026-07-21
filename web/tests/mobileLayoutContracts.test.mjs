@@ -184,6 +184,11 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
 
 test('session detail mobile navigation shows one scroll owner at a time', () => {
   assert.match(detailSource, /class="detail-mobile-tabs lt-md"/);
+  assert(
+    detailSource.indexOf('<q-splitter') <
+      detailSource.indexOf('<q-tabs v-model="detailView" class="detail-mobile-tabs lt-md"'),
+    'mobile detail navigation should follow the detail content',
+  );
   assert.match(detailSource, /q-tab name="session"/);
   assert.match(detailSource, /q-tab name="info"/);
   assert.match(detailSource, /q-tab name="changes"/);
@@ -194,10 +199,17 @@ test('session detail mobile navigation shows one scroll owner at a time', () => 
   );
   assert.match(detailSource, /const rightPanelTab = computed/);
   assert.match(detailSource, /GLUE: mobile detail navigation/);
-  assert.match(detailSource, /\.detail-mobile-tabs\s*{[^}]*flex:\s*0\s+0\s+auto/s);
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page\s*{[^}]*overflow:\s*hidden/s,
+    /\.detail-mobile-tabs\s*{[^}]*flex:\s*0\s+0\s+auto[^}]*border:\s*0[^}]*border-radius:\s*0/s,
+  );
+  assert.match(
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page\s*{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s,
+  );
+  assert.match(
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.stream-card,\s*\.right-panel-card\s*{[^}]*border:\s*0[^}]*border-radius:\s*0/s,
   );
   assert.match(
     detailSource,
