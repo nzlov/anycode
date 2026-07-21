@@ -20,19 +20,21 @@ func TestResolveSessionDiffSourceUsesLiveWorktree(t *testing.T) {
 	writeFile(t, repo, "base.txt", "base\n")
 	runGit(t, repo, "add", ".")
 	runGit(t, repo, "commit", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
 	worktreePath := filepath.Join(t.TempDir(), "linked\tworktree")
 	runGit(t, repo, "worktree", "add", "-b", "session-1", worktreePath, "main")
 
 	got, ok, err := New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
-		ProjectPath:    repo,
-		WorktreePath:   worktreePath,
-		BaseBranch:     "main",
-		WorktreeBranch: "session-1",
+		ProjectPath:        repo,
+		WorktreePath:       worktreePath,
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
 	})
 	if err != nil {
 		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
 	}
-	if !ok || got.WorktreePath != worktreePath || got.BaseRef != "main..." || got.HeadRef != "" {
+	if !ok || got.WorktreePath != worktreePath || got.BaseRef != baseCommit || got.HeadRef != "" {
 		t.Fatalf("ResolveSessionDiffSource() = %#v, %v", got, ok)
 	}
 	cwd, err := os.Getwd()
@@ -44,16 +46,54 @@ func TestResolveSessionDiffSourceUsesLiveWorktree(t *testing.T) {
 		t.Fatalf("make relative worktree path: %v", err)
 	}
 	got, ok, err = New("").ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
-		ProjectPath:    repo,
-		WorktreePath:   relativeWorktreePath,
-		BaseBranch:     "main",
-		WorktreeBranch: "session-1",
+		ProjectPath:        repo,
+		WorktreePath:       relativeWorktreePath,
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
 	})
 	if err != nil {
 		t.Fatalf("ResolveSessionDiffSource(relative) error = %v", err)
 	}
-	if !ok || got.WorktreePath != relativeWorktreePath || got.BaseRef != "main..." || got.HeadRef != "" {
+	if !ok || got.WorktreePath != relativeWorktreePath || got.BaseRef != baseCommit || got.HeadRef != "" {
 		t.Fatalf("ResolveSessionDiffSource(relative) = %#v, %v", got, ok)
+	}
+}
+
+func TestResolveSessionDiffSourceKeepsFrozenBaseAfterBranchMerged(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	writeFile(t, repo, "base.txt", "base\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "base")
+	baseCommit := gitOutput(t, repo, "rev-parse", "HEAD")
+	worktreePath := filepath.Join(t.TempDir(), "session-worktree")
+	runGit(t, repo, "worktree", "add", "-b", "session-1", worktreePath, "main")
+	writeFile(t, worktreePath, "session.txt", "session\n")
+	runGit(t, worktreePath, "add", ".")
+	runGit(t, worktreePath, "commit", "-m", "session change")
+	runGit(t, repo, "merge", "--no-ff", "session-1")
+
+	client := New("")
+	got, ok, err := client.ResolveSessionDiffSource(ctx, gitdiff.ResolveSessionDiffInput{
+		ProjectPath:        repo,
+		WorktreePath:       worktreePath,
+		BaseBranch:         "main",
+		WorktreeBranch:     "session-1",
+		WorktreeBaseCommit: baseCommit,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSessionDiffSource() error = %v", err)
+	}
+	if !ok || got.WorktreePath != worktreePath || got.BaseRef != baseCommit || got.HeadRef != "" {
+		t.Fatalf("ResolveSessionDiffSource() = %#v, %v", got, ok)
+	}
+	files, err := client.ChangedFiles(ctx, got)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "session.txt" {
+		t.Fatalf("ChangedFiles() = %#v", files)
 	}
 }
 
