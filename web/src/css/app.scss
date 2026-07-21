@@ -633,10 +633,30 @@ a {
 
 .session-table {
   overflow-x: hidden;
+  color: var(--ac-text);
+  background: var(--ac-surface);
 }
 
 .session-table .q-table {
   table-layout: fixed;
+}
+
+.session-table thead tr,
+.session-table .q-table__bottom {
+  background: var(--ac-surface-muted);
+}
+
+.session-table tbody tr {
+  background: var(--ac-surface);
+}
+
+body.desktop
+  .session-table
+  .q-table
+  > tbody
+  > tr:not(.q-tr--no-hover):hover
+  > td:not(.q-td--no-hover)::before {
+  background: color-mix(in srgb, var(--ac-primary) 8%, transparent);
 }
 
 .session-table th,

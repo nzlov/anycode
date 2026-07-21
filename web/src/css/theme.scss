@@ -57,6 +57,8 @@
   --q-negative: var(--ac-error);
   --q-info: var(--ac-secondary);
   --q-warning: var(--ac-tertiary);
+  --q-dark: var(--ac-surface);
+  --q-dark-page: var(--ac-page);
   --ac-on-warning: var(--ac-on-tertiary);
   --ac-status-neutral-bg: var(--ac-surface-muted);
   --ac-status-neutral-text: var(--ac-text);
@@ -168,6 +170,8 @@
   --q-negative: var(--ac-error);
   --q-info: var(--ac-secondary);
   --q-warning: var(--ac-tertiary);
+  --q-dark: var(--ac-surface);
+  --q-dark-page: var(--ac-page);
   --ac-on-warning: var(--ac-on-tertiary);
   --ac-status-neutral-bg: var(--ac-surface-muted);
   --ac-status-neutral-text: var(--ac-text);
@@ -253,6 +257,38 @@
 
 .body--dark .text-info {
   color: var(--ac-status-info-text) !important;
+}
+
+.q-card,
+.q-table__card {
+  color: var(--ac-text);
+  background: var(--ac-surface);
+}
+
+.q-card--bordered,
+.q-list--bordered {
+  border-color: var(--ac-border);
+}
+
+.q-tab-panels {
+  color: inherit;
+  background: transparent;
+}
+
+.q-tab {
+  color: var(--ac-text-muted);
+}
+
+.q-tab--active {
+  color: var(--ac-link);
+}
+
+.q-item__label--caption {
+  color: var(--ac-text-muted);
+}
+
+.q-separator {
+  background: var(--ac-border);
 }
 
 .q-dialog .q-card,
