@@ -53,7 +53,10 @@ test('session event presentation moves usage out of the event list into session 
   );
   assert.doesNotMatch(timelineSource, /TranscriptCommandContent \{ command output/);
   assert.match(timelineSource, /\.\.\. on TranscriptToolContent/);
-  assert.match(sessionsSource, /const sessionDetailFields = `[\s\S]*usage \{ \$\{transcriptUsageFields\} \}/);
+  assert.match(
+    sessionsSource,
+    /const sessionDetailFields = `[\s\S]*usage \{ \$\{transcriptUsageFields\} \}/,
+  );
   assert.match(composableSource, /tokenUsage\.value = sessionResult\.value\.usage \?\? null/);
   assert.doesNotMatch(composableSource, /tokenUsage\.value = eventResult\.value\.usage/);
   assert.match(componentSource, /SessionToolEvent/);
@@ -484,10 +487,21 @@ test('overview cards load persisted usage and apply live usage updates', () => {
     new URL('../src/services/sessions.ts', import.meta.url),
     'utf8',
   );
+  const usageDisplaySource = readFileSync(
+    new URL('../src/components/TokenUsageDisplay.vue', import.meta.url),
+    'utf8',
+  );
 
-  assert.match(sessionsSource, /const sessionCardFields = `[\s\S]*usage \{ \$\{transcriptUsageFields\} \}/);
-  assert.match(overviewSource, /if \(update\.usage\) \{\s*next = \{ \.\.\.next, usage: update\.usage \};/s);
-  assert.match(overviewSource, /formatTokenCount\(card\.usage\.totalTokens\)/);
+  assert.match(
+    sessionsSource,
+    /const sessionCardFields = `[\s\S]*usage \{ \$\{transcriptUsageFields\} \}/,
+  );
+  assert.match(
+    overviewSource,
+    /if \(update\.usage\) \{\s*next = \{ \.\.\.next, usage: update\.usage \};/s,
+  );
+  assert.match(overviewSource, /<TokenUsageDisplay :usage="card\.usage"/);
+  assert.match(usageDisplaySource, /formatTokenCount\(usage\.totalTokens\)/);
 });
 
 test('older timeline pages restore a stable visible event anchor', () => {

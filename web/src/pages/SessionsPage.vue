@@ -59,6 +59,25 @@
           </q-td>
         </template>
 
+        <template #body-cell-node="props">
+          <q-td :props="props">
+            {{ props.row.mode === 'workflow' ? props.row.node : '-' }}
+          </q-td>
+        </template>
+
+        <template #body-cell-diff="props">
+          <q-td :props="props" class="session-table__diff-count">
+            {{ props.row.filesChanged }}
+          </q-td>
+        </template>
+
+        <template #body-cell-tokens="props">
+          <q-td :props="props">
+            <TokenUsageDisplay v-if="props.row.usage" :usage="props.row.usage" />
+            <span v-else>-</span>
+          </q-td>
+        </template>
+
         <template #body-cell-actions="props">
           <q-td :props="props">
             <q-btn
@@ -109,6 +128,7 @@ import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import PageToolbar from '@/components/PageToolbar.vue';
+import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import {
   sessionStatusColor as statusColor,
@@ -180,6 +200,18 @@ const columns = [
   { name: 'branch', label: '分支', field: 'branch', align: 'left' as const, sortable: true },
   { name: 'node', label: '当前节点', field: 'node', align: 'left' as const },
   {
+    name: 'diff',
+    label: 'Diff',
+    field: (row: SessionCard) => row.filesChanged,
+    align: 'left' as const,
+  },
+  {
+    name: 'tokens',
+    label: 'Token 用量',
+    field: (row: SessionCard) => row.usage?.totalTokens ?? 0,
+    align: 'left' as const,
+  },
+  {
     name: 'updatedAt',
     label: '更新时间',
     field: 'updatedAt',
@@ -214,7 +246,9 @@ const pagination = computed({
 const visibleColumns = computed(() =>
   $q.screen.lt.sm
     ? ['title', 'status', 'actions']
-    : ['title', 'project', 'branch', 'node', 'updatedAt', 'status', 'actions'],
+    : $q.screen.lt.md
+      ? ['title', 'diff', 'tokens', 'updatedAt', 'status', 'actions']
+      : ['title', 'project', 'branch', 'node', 'diff', 'tokens', 'updatedAt', 'status', 'actions'],
 );
 
 watch(status, (value) => {
