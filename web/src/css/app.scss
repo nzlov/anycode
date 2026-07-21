@@ -20,6 +20,34 @@ body,
   overflow-x: hidden;
 }
 
+* {
+  scrollbar-color: color-mix(in srgb, var(--ac-text) 20%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ac-text) 20%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ac-text) 30%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--ac-text) 50%, transparent);
+}
+
 #q-app {
   min-height: 100dvh;
   isolation: isolate;
@@ -257,7 +285,6 @@ a {
   gap: 8px;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
 }
 
 .overview-project-filters .q-chip {
