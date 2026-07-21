@@ -263,6 +263,26 @@ test('session detail desktop splitter keeps one persisted and accessible layout 
   );
   assert.match(
     detailSource,
+    /\.right-panel-card\s+:deep\(\.q-tab-panels\)\s*{[^}]*overflow:\s*auto/s,
+  );
+  assert.doesNotMatch(
+    detailSource,
+    /\.right-panel-card\s+:deep\(\.q-tab-panels\)\s*{[^}]*overflow-x:\s*hidden/s,
+  );
+  assert.match(
+    detailSource,
+    /\.append-history\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
+  );
+  assert.match(
+    detailSource,
+    /\.append-history\s+:deep\(\.q-item__section--main\)\s*{[^}]*flex-wrap:\s*nowrap/s,
+  );
+  assert.match(
+    detailSource,
+    /\.append-history__attachments\s+:deep\(\.q-chip\)\s*{[^}]*margin:\s*0[^}]*max-width:\s*100%/s,
+  );
+  assert.match(
+    detailSource,
     /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.q-splitter__separator\)\s*{[^}]*display:\s*none/s,
   );
   assert.match(
