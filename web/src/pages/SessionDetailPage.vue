@@ -1,12 +1,5 @@
 <template>
   <q-page class="page-shell detail-page">
-    <q-tabs v-model="detailView" class="detail-mobile-tabs lt-md" dense align="justify">
-      <q-tab name="session" icon="forum" label="会话" />
-      <q-tab name="info" icon="info" label="信息" />
-      <q-tab name="changes" icon="difference" label="变更" />
-      <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
-    </q-tabs>
-
     <q-splitter
       class="detail-grid detail-splitter"
       reverse
@@ -452,6 +445,13 @@
 
       <q-resize-observer @resize="onDetailSplitterResize" />
     </q-splitter>
+
+    <q-tabs v-model="detailView" class="detail-mobile-tabs lt-md" dense align="justify">
+      <q-tab name="session" icon="forum" label="会话" />
+      <q-tab name="info" icon="info" label="信息" />
+      <q-tab name="changes" icon="difference" label="变更" />
+      <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
+    </q-tabs>
 
     <q-dialog
       v-model="promptEditDialogOpen"
@@ -1177,8 +1177,8 @@ async function scrollEventsToBottom() {
 .detail-mobile-tabs {
   min-height: 56px;
   flex: 0 0 auto;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
+  border: 0;
+  border-radius: 0;
   background: var(--ac-surface);
 }
 
@@ -1483,11 +1483,12 @@ async function scrollEventsToBottom() {
 @media (max-width: 1023.98px) {
   .detail-page {
     height: 100%;
+    padding: 0;
     overflow: hidden;
   }
 
   .detail-mobile-tabs {
-    margin-bottom: 12px;
+    margin: 0;
   }
 
   .detail-page .detail-grid {
@@ -1523,6 +1524,12 @@ async function scrollEventsToBottom() {
   .right-panel-card {
     height: 100%;
     min-height: 0;
+  }
+
+  .stream-card,
+  .right-panel-card {
+    border: 0;
+    border-radius: 0;
   }
 }
 </style>
