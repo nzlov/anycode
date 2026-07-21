@@ -471,10 +471,12 @@ func detectAttachmentMimeType(path string, filename string) string {
 
 func detectMimeType(reader io.Reader, filename string) string {
 	detected := "application/octet-stream"
+	hasSample := false
 	if reader != nil {
 		buffer := make([]byte, 512)
 		read, _ := reader.Read(buffer)
 		if read > 0 {
+			hasSample = true
 			detected = http.DetectContentType(buffer[:read])
 			if detected != "application/octet-stream" && detected != "text/plain; charset=utf-8" {
 				return detected
@@ -482,6 +484,15 @@ func detectMimeType(reader io.Reader, filename string) string {
 		}
 	}
 	byExtension := resolveMimeType(filename, "")
+	if detected == "text/plain; charset=utf-8" {
+		if isTextMimeType(byExtension) {
+			return byExtension
+		}
+		return detected
+	}
+	if hasSample && detected == "application/octet-stream" && isTextMimeType(byExtension) {
+		return detected
+	}
 	_, previewKind := classifyArtifact(byExtension)
 	if previewKind == session.PreviewKindImage || previewKind == session.PreviewKindPDF || previewKind == session.PreviewKindVideo || previewKind == session.PreviewKindAudio {
 		return detected
@@ -505,12 +516,28 @@ func classifyArtifact(mimeType string) (session.ArtifactKind, session.PreviewKin
 		return session.ArtifactKindVideo, session.PreviewKindVideo
 	case strings.HasPrefix(mimeType, "audio/"):
 		return session.ArtifactKindAudio, session.PreviewKindAudio
-	case strings.HasPrefix(mimeType, "text/") || mimeType == "application/json":
+	case isTextMimeType(mimeType):
 		return session.ArtifactKindText, session.PreviewKindText
 	case mimeType == "application/zip" || mimeType == "application/x-tar" || mimeType == "application/gzip" || mimeType == "application/x-7z-compressed" || mimeType == "application/x-rar-compressed":
 		return session.ArtifactKindArchive, session.PreviewKindNone
 	default:
 		return session.ArtifactKindFile, session.PreviewKindNone
+	}
+}
+
+func isTextMimeType(mimeType string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(strings.Split(mimeType, ";")[0]))
+	if strings.HasPrefix(mimeType, "text/") || strings.HasSuffix(mimeType, "+json") || strings.HasSuffix(mimeType, "+xml") {
+		return true
+	}
+	switch mimeType {
+	case "application/json", "application/xml", "application/yaml", "application/x-yaml",
+		"application/toml", "application/javascript", "application/x-javascript",
+		"application/sql", "application/graphql", "application/ndjson", "application/x-ndjson",
+		"application/rtf":
+		return true
+	default:
+		return false
 	}
 }
 
