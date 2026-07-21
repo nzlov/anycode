@@ -101,8 +101,8 @@
     >
       <q-btn
         fab
-        color="positive"
-        class="app-on-positive"
+        color="primary"
+        class="app-on-primary"
         icon="add"
         aria-label="新建卡片"
         @click="newSessionOpen = true"

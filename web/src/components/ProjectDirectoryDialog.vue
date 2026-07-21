@@ -111,8 +111,8 @@
         </q-btn>
         <q-btn
           unelevated
-          color="positive"
-          class="app-on-positive"
+          color="primary"
+          class="app-on-primary"
           icon="folder_open"
           label="打开该项目"
           no-caps

@@ -100,8 +100,8 @@
       <q-space v-else />
       <q-btn
         unelevated
-        color="positive"
-        class="app-on-positive"
+        color="primary"
+        class="app-on-primary"
         icon="send"
         label="提交全部答案并继续"
         no-caps
