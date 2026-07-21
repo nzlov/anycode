@@ -624,6 +624,7 @@ const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
 });
 let mounted = false;
 let preservingOlderEventScroll = false;
+let previousEventScrollTop = Number.POSITIVE_INFINITY;
 
 function readPreferredRightPanelWidth() {
   try {
@@ -1100,7 +1101,11 @@ async function initializeSessionDetail() {
 
 async function onEventScroll() {
   const body = streamBodyRef.value;
-  if (!body || body.scrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
+  if (!body) return;
+  const currentScrollTop = body.scrollTop;
+  const scrollingUp = currentScrollTop < previousEventScrollTop;
+  previousEventScrollTop = currentScrollTop;
+  if (!scrollingUp || currentScrollTop > 64 || loadingOlderEvents.value || preservingOlderEventScroll)
     return;
   const previousHeight = body.scrollHeight;
   const anchor = captureEventScrollAnchor(body);
@@ -1118,6 +1123,7 @@ async function onEventScroll() {
       body.scrollTop = body.scrollHeight - previousHeight + body.scrollTop;
     }
   } finally {
+    previousEventScrollTop = body.scrollTop;
     preservingOlderEventScroll = false;
   }
 }
@@ -1153,6 +1159,7 @@ async function scrollEventsToBottom() {
   const body = streamBodyRef.value;
   if (!body) return;
   body.scrollTop = body.scrollHeight;
+  previousEventScrollTop = body.scrollTop;
 }
 </script>
 

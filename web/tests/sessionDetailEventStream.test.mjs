@@ -338,7 +338,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
   assert.match(
     pageSource,
-    /preservingOlderEventScroll = true;[\s\S]*?finally \{\s*preservingOlderEventScroll = false;/,
+    /preservingOlderEventScroll = true;[\s\S]*?finally \{\s*previousEventScrollTop = body\.scrollTop;\s*preservingOlderEventScroll = false;/,
   );
 });
 
@@ -511,6 +511,21 @@ test('older event loading crosses pages that add no visible height', () => {
   assert.match(pageSource, /while \(mounted && body\.scrollHeight <= previousHeight\)/);
   assert.match(pageSource, /const requestedCursor = eventsPageInfo\.value\.nextCursor/);
   assert.match(pageSource, /eventsPageInfo\.value\.nextCursor === requestedCursor/);
+});
+
+test('older event loading ignores follow-up layout scroll events', () => {
+  const pageSource = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(pageSource, /let previousEventScrollTop = Number\.POSITIVE_INFINITY/);
+  assert.match(pageSource, /const scrollingUp = currentScrollTop < previousEventScrollTop/);
+  assert.match(pageSource, /if \(!scrollingUp \|\| currentScrollTop > 64/);
+  assert.match(
+    pageSource,
+    /finally \{\s*previousEventScrollTop = body\.scrollTop;\s*preservingOlderEventScroll = false;/,
+  );
 });
 
 test('the list has no subscription and pages share the global update lifecycle', () => {
