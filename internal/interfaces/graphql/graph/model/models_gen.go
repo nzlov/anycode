@@ -402,6 +402,7 @@ type SessionConfigInput struct {
 type SessionDetail struct {
 	ID               string                `json:"id"`
 	ProjectID        string                `json:"projectId"`
+	ProjectName      string                `json:"projectName"`
 	Requirement      string                `json:"requirement"`
 	Mode             string                `json:"mode"`
 	Status           string                `json:"status"`
