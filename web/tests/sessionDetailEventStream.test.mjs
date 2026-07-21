@@ -176,7 +176,7 @@ test('closed session detail removes the prompt area instead of showing a hint', 
     'utf8',
   );
 
-  assert.match(pageSource, /<div v-if="!isClosed" class="detail-composer">/);
+  assert.match(pageSource, /<div\s+v-if="!isClosed"\s+class="detail-composer"/);
   assert.doesNotMatch(pageSource, /detail-closed-banner/);
   assert.doesNotMatch(pageSource, /卡片已关闭，工作树与分支已清理/);
 });

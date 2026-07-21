@@ -1256,6 +1256,20 @@ body.desktop
   background: color-mix(in srgb, var(--q-primary) 4%, var(--ac-surface-raised));
 }
 
+.prompt-shell__collapsed {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--ac-surface-muted) 68%, transparent);
+}
+
+.prompt-shell__expand {
+  min-width: 44px;
+  flex: 1 1 auto;
+}
+
 .prompt-shell__header {
   display: flex;
   min-height: 44px;
