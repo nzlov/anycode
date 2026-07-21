@@ -406,7 +406,8 @@ a {
   font-weight: 800;
 }
 
-.overview-diff-btn {
+.overview-diff-btn,
+.overview-artifact-btn {
   min-width: 64px;
   height: 44px;
   min-height: 44px;
@@ -1279,8 +1280,94 @@ body.desktop
   color: var(--ac-text);
 }
 
+.attachment-image-item {
+  position: relative;
+  display: flex;
+  width: min(16vw, 10vh);
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.attachment-image-trigger {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.attachment-image-trigger:disabled {
+  cursor: default;
+}
+
+.attachment-image-trigger:focus-visible {
+  outline: 2px solid var(--ac-primary);
+  outline-offset: 2px;
+}
+
+.attachment-thumbnail {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.attachment-image-remove {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: 4px;
+  padding: 0;
+  background: color-mix(in srgb, var(--ac-surface) 82%, transparent);
+  box-shadow: var(--ac-shadow-card);
+}
+
+.attachment-image-remove.q-btn {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.attachment-image-name {
+  width: 100%;
+  color: var(--ac-text);
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.attachment-image-tooltip {
+  box-sizing: border-box;
+  width: min(40vw, 70vh);
+  max-width: 96vw;
+  padding: 8px;
+  border: 1px solid var(--ac-border);
+  border-radius: 6px;
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-card);
+}
+
+.attachment-hover-preview {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 70vh;
+  margin: 0 auto;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
 .attachment-preview-card {
   display: flex;
+  height: 90dvh;
   flex-direction: column;
   overflow: hidden;
   background: var(--ac-surface);
@@ -1293,15 +1380,16 @@ body.desktop
   flex: 1 1 auto;
   align-items: center;
   justify-content: center;
-  overflow: auto;
+  overflow: hidden;
+  padding: 0;
   background: var(--ac-surface-muted);
 }
 
 .attachment-preview-media {
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  border-radius: var(--ac-radius);
 }
 
 .toolbar-file-picker {

@@ -402,6 +402,10 @@ test('overview cards open the full artifact panel from a subscribed count', () =
   assert.match(overviewSource, /:label="String\(card\.artifactCount\)"/);
   assert.match(overviewSource, /@click\.stop="openArtifactDialog\(card\)"/);
   assert.match(
+    stylesSource,
+    /\.overview-diff-btn,\s*\.overview-artifact-btn\s*\{[^}]*border:\s*1px solid var\(--ac-border\)[^}]*background:\s*var\(--ac-surface-raised\)/s,
+  );
+  assert.match(
     overviewSource,
     /<SessionArtifactsPanel[\s\S]*:session-id="artifactDialogSessionId"/,
   );

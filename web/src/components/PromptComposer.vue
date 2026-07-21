@@ -21,21 +21,60 @@
     <div v-if="showAttachmentZone" class="attachment-zone">
       <div class="text-caption text-muted">附件</div>
       <div v-if="attachmentCount > 0" class="attachment-list">
-        <q-chip
-          v-for="file in files"
-          :key="`${file.name}-${file.size}-${file.lastModified}`"
-          removable
-          square
-          :clickable="!disabled && canPreview(file)"
-          :disable="disabled"
-          class="attachment-chip"
-          :icon="fileIcon(file)"
-          @click="openPreview(file)"
-          @remove="removeFile(file)"
-        >
-          <span class="ellipsis">{{ file.name }}</span>
-          <q-icon v-if="canPreview(file)" name="visibility" class="q-ml-sm" />
-        </q-chip>
+        <template v-for="file in files" :key="`${file.name}-${file.size}-${file.lastModified}`">
+          <div v-if="isImageFile(file)" class="attachment-image-item">
+            <button
+              type="button"
+              class="attachment-image-trigger"
+              :disabled="disabled"
+              :aria-label="`预览图片 ${file.name}`"
+              @click="openPreview(file)"
+            >
+              <img :src="fileThumbnailUrl(file)" alt="" class="attachment-thumbnail" />
+              <q-tooltip
+                v-if="!previewOpen"
+                anchor="top middle"
+                self="bottom middle"
+                :offset="[0, 8]"
+                :delay="200"
+                class="attachment-image-tooltip"
+              >
+                <img
+                  :src="fileThumbnailUrl(file)"
+                  :alt="file.name"
+                  class="attachment-hover-preview"
+                />
+              </q-tooltip>
+            </button>
+            <q-btn
+              flat
+              round
+              dense
+              icon="close"
+              class="attachment-image-remove"
+              :disable="disabled"
+              :aria-label="`移除图片 ${file.name}`"
+              @click.stop="removeFile(file)"
+            >
+              <q-tooltip>移除图片</q-tooltip>
+            </q-btn>
+            <span class="attachment-image-name ellipsis" :title="file.name">{{ file.name }}</span>
+          </div>
+          <q-chip
+            v-else
+            removable
+            square
+            :clickable="!disabled && canPreview(file)"
+            :disable="disabled"
+            class="attachment-chip"
+            :icon="fileIcon(file)"
+            @click="openPreview(file)"
+            @remove="removeFile(file)"
+          >
+            <span class="ellipsis">{{ file.name }}</span>
+            <q-icon v-if="canPreview(file)" name="visibility" class="q-ml-sm" />
+          </q-chip>
+        </template>
         <q-chip
           v-for="artifact in artifacts"
           :key="artifact.id"
@@ -160,7 +199,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
@@ -214,6 +253,7 @@ const previewKind = ref<'image' | 'video' | ''>('');
 const previewUrl = ref('');
 const draggingFiles = ref(false);
 const dragDepth = ref(0);
+const fileThumbnailUrls = reactive(new Map<File, string>());
 
 const promptModel = computed({
   get: () => props.prompt,
@@ -228,9 +268,37 @@ const attachmentCount = computed(() => props.files.length + props.artifacts.leng
 const showAttachmentZone = computed(() => attachmentCount.value > 0 || draggingFiles.value);
 
 function fileIcon(file: File) {
-  if (file.type.startsWith('image/')) return 'image';
   if (file.type.startsWith('video/')) return 'movie';
   return 'description';
+}
+
+function isImageFile(file: File) {
+  return file.type.startsWith('image/');
+}
+
+function fileThumbnailUrl(file: File) {
+  return fileThumbnailUrls.get(file) ?? '';
+}
+
+function syncFileThumbnailUrls(files: File[]) {
+  const imageFiles = new Set(files.filter(isImageFile));
+  for (const [file, url] of fileThumbnailUrls) {
+    if (imageFiles.has(file)) continue;
+    URL.revokeObjectURL(url);
+    fileThumbnailUrls.delete(file);
+  }
+  for (const file of imageFiles) {
+    if (!fileThumbnailUrls.has(file)) {
+      fileThumbnailUrls.set(file, URL.createObjectURL(file));
+    }
+  }
+}
+
+function revokeFileThumbnailUrls() {
+  for (const url of fileThumbnailUrls.values()) {
+    URL.revokeObjectURL(url);
+  }
+  fileThumbnailUrls.clear();
 }
 
 function artifactIcon(artifact: SessionFile) {
@@ -327,5 +395,10 @@ function appendFiles(nextFiles: File[]) {
   emit('update:files', [...props.files, ...nextFiles]);
 }
 
-onBeforeUnmount(revokePreviewUrl);
+watch(() => props.files, syncFileThumbnailUrls, { immediate: true });
+
+onBeforeUnmount(() => {
+  revokePreviewUrl();
+  revokeFileThumbnailUrls();
+});
 </script>
