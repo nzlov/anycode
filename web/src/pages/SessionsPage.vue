@@ -1,22 +1,32 @@
 <template>
   <q-page class="page-shell">
-    <div class="page-heading">
-      <div class="text-h5 text-weight-bold">会话表格</div>
-    </div>
+    <PageToolbar title="会话表格" compact-title-on-mobile>
+      <q-input
+        v-model="filter"
+        dense
+        outlined
+        debounce="200"
+        class="sessions-toolbar__search"
+        placeholder="搜索需求、项目或分支"
+        aria-label="搜索会话"
+      >
+        <template #prepend>
+          <q-icon name="search" />
+        </template>
+      </q-input>
+      <q-select
+        v-model="status"
+        dense
+        outlined
+        emit-value
+        map-options
+        class="sessions-toolbar__status"
+        :options="statusOptions"
+        aria-label="按状态筛选会话"
+      />
+    </PageToolbar>
 
-    <q-card flat bordered class="table-filter-card">
-      <q-card-section class="table-toolbar">
-        <div class="text-subtitle2 text-weight-bold">过滤条件</div>
-        <q-input v-model="filter" dense outlined debounce="200" placeholder="搜索需求、项目或分支">
-          <template #prepend>
-            <q-icon name="search" />
-          </template>
-        </q-input>
-        <q-select v-model="status" dense outlined emit-value map-options :options="statusOptions" />
-      </q-card-section>
-    </q-card>
-
-    <q-card flat bordered class="table-card q-mt-md">
+    <q-card flat bordered class="table-card">
       <q-table
         flat
         wrap-cells
@@ -98,6 +108,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 
+import PageToolbar from '@/components/PageToolbar.vue';
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import {
   sessionStatusColor as statusColor,

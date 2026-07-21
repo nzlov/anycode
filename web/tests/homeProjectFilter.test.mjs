@@ -8,6 +8,7 @@ function readSource(relativePath) {
 
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
+const toolbarSource = readSource('../src/components/PageToolbar.vue');
 const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
 const projectsComposableSource = readSource('../src/composables/useProjects.ts');
@@ -16,10 +17,8 @@ const stylesSource = readSource('../src/css/app.scss');
 
 test('application shell removes the global drawer and duplicate project entry', () => {
   assert.doesNotMatch(layoutSource, /<q-drawer|leftDrawerOpen|toggleLeftDrawer|app-drawer/);
-  assert.match(
-    layoutSource,
-    /<q-toolbar-title v-if="\$route\.name === 'overview'"[^>]*>\s*AnyCode/,
-  );
+  assert.match(indexSource, /<PageToolbar title="AnyCode"/);
+  assert.match(toolbarSource, /<q-toolbar-title/);
   assert.doesNotMatch(layoutSource, /aria-label="选择项目目录"/);
   assert.doesNotMatch(layoutSource, /activeProjectId|refreshActiveProject|projectActive/);
   assert.match(layoutSource, /icon="space_dashboard"/);
@@ -27,10 +26,7 @@ test('application shell removes the global drawer and duplicate project entry', 
   assert.match(layoutSource, /:to="\{ name: 'overview' \}"/);
   assert.match(layoutSource, /\{\{ sessionTitle \|\| '会话详情' \}\}/);
   assert.match(layoutSource, /@session-title="sessionTitle = \$event"/);
-  assert.match(
-    layoutSource,
-    /<q-space v-if="\$route\.name !== 'overview' && \$route\.name !== 'session-detail'"/,
-  );
+  assert.match(layoutSource, /id="app-page-toolbar"/);
   assert.match(layoutSource, /<GlobalSettingsDialog v-model="settingsDialogOpen"/);
 });
 

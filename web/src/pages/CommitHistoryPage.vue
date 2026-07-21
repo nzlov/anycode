@@ -1,7 +1,6 @@
 <template>
   <q-page class="page-shell">
-    <div class="page-heading">
-      <div class="text-h5 text-weight-bold">提交记录</div>
+    <PageToolbar title="提交记录">
       <q-btn
         flat
         round
@@ -12,7 +11,7 @@
       >
         <q-tooltip>返回卡片</q-tooltip>
       </q-btn>
-    </div>
+    </PageToolbar>
 
     <q-card flat bordered class="commit-history-card">
       <q-card-section v-if="loading" class="state-content">
@@ -72,6 +71,7 @@ import { Notify } from 'quasar';
 import { useRoute } from 'vue-router';
 
 import AppPagination from '@/components/AppPagination.vue';
+import PageToolbar from '@/components/PageToolbar.vue';
 import { getSessionCommitHistory, type SessionCommitHistory } from '@/services/diff';
 import { getSession, type SessionDetail } from '@/services/sessions';
 

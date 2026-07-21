@@ -1,56 +1,62 @@
 <template>
   <div class="diff-workspace">
-    <div class="diff-workspace__toolbar">
-      <q-btn-toggle
-        v-if="showFileNavigation"
-        :model-value="workspaceMode"
-        no-caps
-        unelevated
-        toggle-color="primary"
-        :disable="loading"
-        :options="[
-          { label: '单个文件', value: 'single', icon: 'description' },
-          { label: '全部 Diff', value: 'all', icon: 'difference' },
-        ]"
-        @update:model-value="setMode"
-      />
-      <q-space />
-      <template v-if="workspaceMode === 'all'">
-        <q-btn
-          flat
-          round
-          dense
-          icon="unfold_more"
-          aria-label="展开全部文件"
-          :disable="loading || allFilePaths.length === 0 || !hasCollapsedFile"
-          @click="expandAllFiles"
-        >
-          <q-tooltip>展开全部文件</q-tooltip>
-        </q-btn>
-        <q-btn
-          flat
-          round
-          dense
-          icon="unfold_less"
-          aria-label="折叠全部文件"
-          :disable="loading || allFilePaths.length === 0 || allFilesCollapsed"
-          @click="collapseAllFiles"
-        >
-          <q-tooltip>折叠全部文件</q-tooltip>
-        </q-btn>
-      </template>
-      <q-btn
-        flat
-        round
-        dense
-        icon="refresh"
-        aria-label="刷新 Diff"
-        :loading="loading"
-        @click="loadDiff"
+    <!-- GLUE: standalone Diff owns these controls; the target only moves them into the app layout. -->
+    <Teleport defer :to="toolbarTarget || 'body'" :disabled="!toolbarTarget">
+      <div
+        class="diff-workspace__toolbar"
+        :class="{ 'diff-workspace__toolbar--header': toolbarTarget }"
       >
-        <q-tooltip>刷新 Diff</q-tooltip>
-      </q-btn>
-    </div>
+        <q-toolbar-title v-if="toolbarTitle" class="app-header__title diff-workspace__title">
+          {{ toolbarTitle }}
+        </q-toolbar-title>
+        <q-btn-toggle
+          v-if="showFileNavigation"
+          :model-value="workspaceMode"
+          no-caps
+          unelevated
+          toggle-color="primary"
+          :disable="loading"
+          :options="modeOptions"
+          @update:model-value="setMode"
+        />
+        <q-space />
+        <template v-if="workspaceMode === 'all'">
+          <q-btn
+            flat
+            round
+            dense
+            icon="unfold_more"
+            aria-label="展开全部文件"
+            :disable="loading || allFilePaths.length === 0 || !hasCollapsedFile"
+            @click="expandAllFiles"
+          >
+            <q-tooltip>展开全部文件</q-tooltip>
+          </q-btn>
+          <q-btn
+            flat
+            round
+            dense
+            icon="unfold_less"
+            aria-label="折叠全部文件"
+            :disable="loading || allFilePaths.length === 0 || allFilesCollapsed"
+            @click="collapseAllFiles"
+          >
+            <q-tooltip>折叠全部文件</q-tooltip>
+          </q-btn>
+        </template>
+        <q-btn
+          flat
+          round
+          dense
+          icon="refresh"
+          aria-label="刷新 Diff"
+          :loading="loading"
+          @click="loadDiff"
+        >
+          <q-tooltip>刷新 Diff</q-tooltip>
+        </q-btn>
+      </div>
+    </Teleport>
 
     <q-banner v-if="error" rounded class="diff-workspace__error app-feedback app-feedback--danger">
       <template #avatar>
@@ -191,6 +197,7 @@
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
 
 import DiffViewer from '@/components/DiffViewer.vue';
@@ -228,6 +235,8 @@ const props = withDefaults(
     showFileNavigation?: boolean;
     lazyFileDetails?: boolean;
     refreshKey?: string | number;
+    toolbarTarget?: string;
+    toolbarTitle?: string;
   }>(),
   { showFileNavigation: true, lazyFileDetails: false },
 );
@@ -236,6 +245,7 @@ const emit = defineEmits<{
   'update:modelValue': [state: DiffWorkspaceState];
 }>();
 
+const $q = useQuasar();
 const router = useRouter();
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
@@ -255,6 +265,20 @@ const collapseState = ref(initialDiffCollapseState(targetKey.value));
 const workspaceMode = computed<DiffMode>(() =>
   props.showFileNavigation ? props.modelValue.mode : 'all',
 );
+const modeOptions = computed(() => [
+  {
+    ...($q.screen.lt.sm ? {} : { label: '单个文件' }),
+    value: 'single',
+    icon: 'description',
+    'aria-label': '单个文件',
+  },
+  {
+    ...($q.screen.lt.sm ? {} : { label: '全部 Diff' }),
+    value: 'all',
+    icon: 'difference',
+    'aria-label': '全部 Diff',
+  },
+]);
 const metadataFirst = computed(
   () => props.lazyFileDetails && props.target.kind === 'session' && workspaceMode.value === 'all',
 );
@@ -592,6 +616,16 @@ onUnmounted(() => {
   gap: 8px;
 }
 
+.diff-workspace__toolbar--header {
+  width: 100%;
+  flex-wrap: nowrap;
+}
+
+.diff-workspace__toolbar--header .diff-workspace__title {
+  max-width: min(32vw, 320px);
+  flex: 0 1 auto;
+}
+
 .diff-workspace__error {
   flex: 0 0 auto;
 }
@@ -684,8 +718,18 @@ onUnmounted(() => {
 }
 
 @container (max-width: 599px) {
-  .diff-workspace__toolbar :deep(.q-btn-toggle) {
+  .diff-workspace__toolbar:not(.diff-workspace__toolbar--header) :deep(.q-btn-toggle) {
     width: 100%;
+  }
+}
+
+@media (max-width: 599.98px) {
+  .diff-workspace__toolbar--header {
+    gap: 4px;
+  }
+
+  .diff-workspace__toolbar--header .diff-workspace__title {
+    display: none;
   }
 }
 </style>

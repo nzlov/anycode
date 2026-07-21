@@ -172,7 +172,7 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
     /\.diff-file-header\s*{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*z-index:\s*1/s,
   );
   assert.match(diffViewerSource, /\.diff-file-card\s*{[^}]*overflow:\s*visible/s);
-  assert.match(diffPageSource, /height:\s*calc\(100dvh\s*-\s*150px\)/);
+  assert.match(diffPageSource, /height:\s*calc\(100dvh\s*-\s*98px\)/);
   assert.match(detailSource, /:show-file-navigation="false"/);
 });
 

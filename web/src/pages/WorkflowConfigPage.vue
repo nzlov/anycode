@@ -1,9 +1,10 @@
 <template>
   <q-page class="page-shell">
-    <div class="page-heading">
-      <div class="text-h5 text-weight-bold">流程配置</div>
-      <div class="row items-center q-gutter-sm">
-        <q-chip v-if="definitionId" dense outline color="primary">v{{ version }}</q-chip>
+    <PageToolbar title="流程配置" compact-title-on-mobile>
+      <div class="workflow-toolbar-actions">
+        <q-chip v-if="definitionId" dense outline color="primary" class="workflow-toolbar-version">
+          v{{ version }}
+        </q-chip>
         <q-btn flat round color="primary" icon="content_copy" aria-label="复制流程配置" @click="copyWorkflowConfig">
           <q-tooltip>复制流程配置</q-tooltip>
         </q-btn>
@@ -13,15 +14,16 @@
         <q-btn
           unelevated
           color="primary"
-          class="app-on-primary"
+          class="app-on-primary workflow-toolbar-save"
           icon="save"
-          label="保存"
+          :label="$q.screen.lt.sm ? undefined : '保存'"
+          aria-label="保存流程配置"
           no-caps
           :loading="saving"
           @click="saveDefinition"
         />
       </div>
-    </div>
+    </PageToolbar>
     <div class="workflow-layout">
       <q-card flat bordered class="workflow-list">
         <q-card-section class="row items-center">
@@ -248,6 +250,7 @@ import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import '@vue-flow/controls/dist/style.css';
 
+import PageToolbar from '@/components/PageToolbar.vue';
 import { useProjects } from '@/composables/useProjects';
 import {
   getWorkflowDefinition,
