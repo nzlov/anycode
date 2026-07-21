@@ -118,6 +118,11 @@ test('mobile command controls share a 44px touch contract', () => {
   );
 });
 
+test('shared pages use compact desktop spacing and no mobile horizontal boundary', () => {
+  assert.match(baseStyles, /\.page-shell\s*{[^}]*padding:\s*24px 12px/s);
+  assert.match(mobileStyles, /\.page-shell\s*{[^}]*padding:\s*16px 0/s);
+});
+
 test('mobile overview keeps the compact two-column metadata shape', () => {
   assert.match(
     stylesSource,
