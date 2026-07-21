@@ -33,6 +33,7 @@ func TestMapTranscriptCommandContentPreservesInvocations(t *testing.T) {
 
 func TestMapSessionDetailPreservesTodoList(t *testing.T) {
 	mapped := mapSessionDetail(sessionapp.DetailDTO{
+		ProjectName: "Project One",
 		TodoList: sessiondomain.TodoList{Items: []sessiondomain.TodoItem{
 			{Text: "inspect", Completed: true},
 			{Text: "verify"},
@@ -48,6 +49,9 @@ func TestMapSessionDetailPreservesTodoList(t *testing.T) {
 	}
 	if !reflect.DeepEqual(mapped.TodoList, want) {
 		t.Fatalf("mapped todo list = %#v, want %#v", mapped.TodoList, want)
+	}
+	if mapped.ProjectName != "Project One" {
+		t.Fatalf("mapped project name = %q", mapped.ProjectName)
 	}
 }
 

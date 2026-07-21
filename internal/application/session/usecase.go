@@ -217,6 +217,7 @@ type CardStatusDTO struct {
 
 type DetailDTO struct {
 	DTO
+	ProjectName      string
 	CloseReason      *domain.CloseReason
 	CurrentNodeTitle string
 	PendingApproval  *PendingApprovalDTO
@@ -8470,6 +8471,10 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 	if err != nil {
 		return DetailDTO{}, fmt.Errorf("find session: %w", err)
 	}
+	project, err := s.projects.Find(ctx, projectdomain.ID(session.ProjectID))
+	if err != nil {
+		return DetailDTO{}, fmt.Errorf("find session project: %w", err)
+	}
 	appends, err := s.repo.ListPromptAppends(ctx, id)
 	if err != nil {
 		return DetailDTO{}, fmt.Errorf("list prompt appends: %w", err)
@@ -8486,7 +8491,7 @@ func (s *Service) GetSession(ctx context.Context, id domain.ID) (DetailDTO, erro
 	if err != nil {
 		return DetailDTO{}, err
 	}
-	return toDetailDTO(session, attachments, appends, currentNodeTitle, pendingApproval), nil
+	return toDetailDTO(session, project.Name, attachments, appends, currentNodeTitle, pendingApproval), nil
 }
 
 func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error) {
@@ -8736,13 +8741,14 @@ func toCardDTO(session domain.Session, attachments []domain.SessionAttachment, c
 	}
 }
 
-func toDetailDTO(session domain.Session, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string, pendingApproval *PendingApprovalDTO) DetailDTO {
+func toDetailDTO(session domain.Session, projectName string, attachments []domain.SessionAttachment, appends []domain.PromptAppend, currentNodeTitle string, pendingApproval *PendingApprovalDTO) DetailDTO {
 	promptAppends := make([]PromptAppendDTO, 0, len(appends))
 	for _, promptAppend := range appends {
 		promptAppends = append(promptAppends, toPromptAppendDTO(promptAppend))
 	}
 	return DetailDTO{
 		DTO:              toDTO(session),
+		ProjectName:      projectName,
 		CloseReason:      session.CloseReason,
 		CurrentNodeTitle: currentNodeTitle,
 		PendingApproval:  pendingApproval,

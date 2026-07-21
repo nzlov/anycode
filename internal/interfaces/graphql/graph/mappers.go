@@ -228,6 +228,7 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 	return &model.SessionDetail{
 		ID:               string(dto.ID),
 		ProjectID:        string(dto.ProjectID),
+		ProjectName:      dto.ProjectName,
 		Requirement:      dto.Requirement,
 		Mode:             string(dto.Mode),
 		Status:           string(dto.Status),

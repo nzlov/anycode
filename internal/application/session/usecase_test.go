@@ -3650,11 +3650,16 @@ func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 		MimeType:  "text/plain",
 		Size:      5,
 	}
-	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files))
+	projects := newFakeProjectRepository("project-1")
+	projects.projects["project-1"] = projectdomain.Project{ID: "project-1", Name: "Project One"}
+	service := New(repo, projects, WithAttachments(repo, files))
 
 	got, err := service.GetSession(ctx, "session-1")
 	if err != nil {
 		t.Fatalf("GetSession() error = %v", err)
+	}
+	if got.ProjectName != "Project One" {
+		t.Fatalf("GetSession() ProjectName = %q", got.ProjectName)
 	}
 	if !got.CanResume {
 		t.Fatal("GetSession() CanResume = false")

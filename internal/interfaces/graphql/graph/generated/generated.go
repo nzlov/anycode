@@ -364,6 +364,7 @@ type ComplexityRoot struct {
 		PendingApproval  func(childComplexity int) int
 		Priority         func(childComplexity int) int
 		ProjectID        func(childComplexity int) int
+		ProjectName      func(childComplexity int) int
 		PromptAppends    func(childComplexity int) int
 		Requirement      func(childComplexity int) int
 		Status           func(childComplexity int) int
@@ -2246,6 +2247,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.ProjectID(childComplexity), true
+	case "SessionDetail.projectName":
+		if e.ComplexityRoot.SessionDetail.ProjectName == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.ProjectName(childComplexity), true
 	case "SessionDetail.promptAppends":
 		if e.ComplexityRoot.SessionDetail.PromptAppends == nil {
 			break
@@ -3619,6 +3626,7 @@ type TodoItem {
 type SessionDetail {
   id: ID!
   projectId: ID!
+  projectName: String!
   requirement: String!
   mode: String!
   status: String!
@@ -9233,6 +9241,8 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_id(ctx, field)
 			case "projectId":
 				return ec.fieldContext_SessionDetail_projectId(ctx, field)
+			case "projectName":
+				return ec.fieldContext_SessionDetail_projectName(ctx, field)
 			case "requirement":
 				return ec.fieldContext_SessionDetail_requirement(ctx, field)
 			case "mode":
@@ -12411,6 +12421,35 @@ func (ec *executionContext) fieldContext_SessionDetail_projectId(_ context.Conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_projectName(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_projectName,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectName, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_projectName(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -23775,6 +23814,11 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			}
 		case "projectId":
 			out.Values[i] = ec._SessionDetail_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectName":
+			out.Values[i] = ec._SessionDetail_projectName(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

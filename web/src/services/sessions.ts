@@ -281,6 +281,7 @@ interface GraphQLSessionTodoItem {
 interface GraphQLSessionDetail {
   id: string;
   projectId: string;
+  projectName: string;
   requirement: string;
   mode: string;
   status: string;
@@ -426,6 +427,7 @@ const sessionCardFields = `
 const sessionDetailFields = `
   id
   projectId
+  projectName
   requirement
   mode
   status
@@ -1088,7 +1090,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
   return {
     id: session.id,
     projectId: session.projectId,
-    projectName: session.projectId,
+    projectName: session.projectName,
     title: firstLine(session.requirement),
     summary: session.requirement,
     mode: normalizeMode(session.mode),

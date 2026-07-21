@@ -220,6 +220,7 @@ type TodoItem {
 type SessionDetail {
   id: ID!
   projectId: ID!
+  projectName: String!
   requirement: String!
   mode: String!
   status: String!
