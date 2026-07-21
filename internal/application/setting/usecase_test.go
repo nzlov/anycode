@@ -33,6 +33,26 @@ func TestCreateQuickCommandAllowsDuplicateContent(t *testing.T) {
 	}
 }
 
+func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
+	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
+	service := New(repo)
+
+	got, err := service.GetAppearanceSettings(context.Background())
+	if err != nil || got.WallpaperColorScheme != domain.WallpaperColorSchemeContent {
+		t.Fatalf("GetAppearanceSettings() = %#v, %v", got, err)
+	}
+	got, err = service.UpdateAppearanceSettings(context.Background(), UpdateAppearanceSettingsInput{
+		WallpaperColorScheme: domain.WallpaperColorSchemeRainbow,
+	})
+	if err != nil || got.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow || repo.configuration.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow {
+		t.Fatalf("UpdateAppearanceSettings() = %#v, %v; stored %#v", got, err, repo.configuration)
+	}
+	_, err = service.UpdateAppearanceSettings(context.Background(), UpdateAppearanceSettingsInput{
+		WallpaperColorScheme: "unknown",
+	})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+}
+
 func TestDeleteQuickCommandUsesID(t *testing.T) {
 	repo := &fakeRepository{commands: []domain.QuickCommand{
 		{ID: "command-1", Content: "检查测试"},
@@ -95,10 +115,20 @@ func assertAppError(t *testing.T, err error, code string) {
 }
 
 type fakeRepository struct {
-	commands  []domain.QuickCommand
-	page      domain.QuickCommandPage
-	listQuery domain.QuickCommandQuery
-	deleteErr error
+	commands      []domain.QuickCommand
+	page          domain.QuickCommandPage
+	listQuery     domain.QuickCommandQuery
+	deleteErr     error
+	configuration domain.SystemConfiguration
+}
+
+func (r *fakeRepository) GetSystemConfiguration(_ context.Context) (domain.SystemConfiguration, error) {
+	return r.configuration, nil
+}
+
+func (r *fakeRepository) SaveSystemConfiguration(_ context.Context, configuration domain.SystemConfiguration) error {
+	r.configuration = configuration
+	return nil
 }
 
 func (r *fakeRepository) Create(_ context.Context, command domain.QuickCommand) error {

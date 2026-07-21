@@ -6,6 +6,7 @@ scalar Int64
 
 type Query {
   codexModelOptions: [CodexModelOption!]!
+  appearanceSettings: AppearanceSettings!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
@@ -25,6 +26,7 @@ type Query {
 }
 
 type Mutation {
+  updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
@@ -62,6 +64,26 @@ type PageInfo {
   pageSize: Int!
   total: Int!
   nextCursor: String!
+}
+
+enum WallpaperColorScheme {
+  CONTENT
+  FIDELITY
+  TONAL_SPOT
+  VIBRANT
+  EXPRESSIVE
+  RAINBOW
+  FRUIT_SALAD
+  NEUTRAL
+  MONOCHROME
+}
+
+type AppearanceSettings {
+  wallpaperColorScheme: WallpaperColorScheme!
+}
+
+input UpdateAppearanceSettingsInput {
+  wallpaperColorScheme: WallpaperColorScheme!
 }
 
 type QuickCommand {

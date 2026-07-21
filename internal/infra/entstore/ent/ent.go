@@ -23,6 +23,7 @@ import (
 
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -84,17 +85,18 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			eventrecord.Table:        eventrecord.ValidColumn,
-			mergerecord.Table:        mergerecord.ValidColumn,
-			noderun.Table:            noderun.ValidColumn,
-			processrun.Table:         processrun.ValidColumn,
-			project.Table:            project.ValidColumn,
-			promptappend.Table:       promptappend.ValidColumn,
-			questionbatch.Table:      questionbatch.ValidColumn,
-			quickcommand.Table:       quickcommand.ValidColumn,
-			entsession.Table:         entsession.ValidColumn,
-			stagedattachment.Table:   stagedattachment.ValidColumn,
-			workflowdefinition.Table: workflowdefinition.ValidColumn,
+			eventrecord.Table:         eventrecord.ValidColumn,
+			mergerecord.Table:         mergerecord.ValidColumn,
+			noderun.Table:             noderun.ValidColumn,
+			processrun.Table:          processrun.ValidColumn,
+			project.Table:             project.ValidColumn,
+			promptappend.Table:        promptappend.ValidColumn,
+			questionbatch.Table:       questionbatch.ValidColumn,
+			quickcommand.Table:        quickcommand.ValidColumn,
+			entsession.Table:          entsession.ValidColumn,
+			stagedattachment.Table:    stagedattachment.ValidColumn,
+			systemconfiguration.Table: systemconfiguration.ValidColumn,
+			workflowdefinition.Table:  workflowdefinition.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

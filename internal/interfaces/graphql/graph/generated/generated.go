@@ -37,6 +37,10 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AppearanceSettings struct {
+		WallpaperColorScheme func(childComplexity int) int
+	}
+
 	ApprovalConfig struct {
 		AfterRun  func(childComplexity int) int
 		BeforeRun func(childComplexity int) int
@@ -163,6 +167,7 @@ type ComplexityRoot struct {
 		StopSession                 func(childComplexity int, id string) int
 		SubmitQuestionBatch         func(childComplexity int, input model.SubmitQuestionBatchInput) int
 		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
+		UpdateAppearanceSettings    func(childComplexity int, input model.UpdateAppearanceSettingsInput) int
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
@@ -206,6 +211,7 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		AppearanceSettings      func(childComplexity int) int
 		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions       func(childComplexity int) int
@@ -624,6 +630,7 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
+	UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error)
 	CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error)
 	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
@@ -652,6 +659,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
+	AppearanceSettings(ctx context.Context) (*model.AppearanceSettings, error)
 	QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error)
 	Projects(ctx context.Context) ([]*model.Project, error)
 	ProjectGitState(ctx context.Context, projectID string, refresh bool) (*model.GitState, error)
@@ -687,6 +695,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := newExecutionContext(nil, e, nil)
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AppearanceSettings.wallpaperColorScheme":
+		if e.ComplexityRoot.AppearanceSettings.WallpaperColorScheme == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AppearanceSettings.WallpaperColorScheme(childComplexity), true
 
 	case "ApprovalConfig.afterRun":
 		if e.ComplexityRoot.ApprovalConfig.AfterRun == nil {
@@ -1276,6 +1291,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.SubmitWorkflowApproval(childComplexity, args["input"].(model.SubmitWorkflowApprovalInput)), true
+	case "Mutation.updateAppearanceSettings":
+		if e.ComplexityRoot.Mutation.UpdateAppearanceSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateAppearanceSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateAppearanceSettings(childComplexity, args["input"].(model.UpdateAppearanceSettingsInput)), true
 	case "Mutation.updateProjectSettings":
 		if e.ComplexityRoot.Mutation.UpdateProjectSettings == nil {
 			break
@@ -1464,6 +1490,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PromptAppend.SessionID(childComplexity), true
 
+	case "Query.appearanceSettings":
+		if e.ComplexityRoot.Query.AppearanceSettings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.AppearanceSettings(childComplexity), true
 	case "Query.branchDiff":
 		if e.ComplexityRoot.Query.BranchDiff == nil {
 			break
@@ -3263,6 +3295,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputSubmitQuestionBatchInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
+		ec.unmarshalInputUpdateAppearanceSettingsInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
 		ec.unmarshalInputUpdatePromptAppendInput,
 		ec.unmarshalInputUpdateSessionConfigInput,
@@ -3372,6 +3405,7 @@ scalar Int64
 
 type Query {
   codexModelOptions: [CodexModelOption!]!
+  appearanceSettings: AppearanceSettings!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
   projects: [Project!]!
   projectGitState(projectId: ID!, refresh: Boolean! = false): GitState!
@@ -3391,6 +3425,7 @@ type Query {
 }
 
 type Mutation {
+  updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
@@ -3428,6 +3463,26 @@ type PageInfo {
   pageSize: Int!
   total: Int!
   nextCursor: String!
+}
+
+enum WallpaperColorScheme {
+  CONTENT
+  FIDELITY
+  TONAL_SPOT
+  VIBRANT
+  EXPRESSIVE
+  RAINBOW
+  FRUIT_SALAD
+  NEUTRAL
+  MONOCHROME
+}
+
+type AppearanceSettings {
+  wallpaperColorScheme: WallpaperColorScheme!
+}
+
+input UpdateAppearanceSettingsInput {
+  wallpaperColorScheme: WallpaperColorScheme!
 }
 
 type QuickCommand {
@@ -4454,6 +4509,17 @@ func (ec *executionContext) field_Mutation_submitWorkflowApproval_args(ctx conte
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_updateAppearanceSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_updateProjectSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -4730,6 +4796,35 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AppearanceSettings_wallpaperColorScheme(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppearanceSettings_wallpaperColorScheme,
+		func(ctx context.Context) (any, error) {
+			return obj.WallpaperColorScheme, nil
+		},
+		nil,
+		ec.marshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppearanceSettings_wallpaperColorScheme(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppearanceSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type WallpaperColorScheme does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _ApprovalConfig_beforeRun(ctx context.Context, field graphql.CollectedField, obj *model.ApprovalConfig) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -6404,6 +6499,51 @@ func (ec *executionContext) fieldContext_MergeConfig_strategy(_ context.Context,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateAppearanceSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateAppearanceSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateAppearanceSettings(ctx, fc.Args["input"].(model.UpdateAppearanceSettingsInput))
+		},
+		nil,
+		ec.marshalNAppearanceSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateAppearanceSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "wallpaperColorScheme":
+				return ec.fieldContext_AppearanceSettings_wallpaperColorScheme(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AppearanceSettings", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateAppearanceSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -8698,6 +8838,39 @@ func (ec *executionContext) fieldContext_Query_codexModelOptions(_ context.Conte
 				return ec.fieldContext_CodexModelOption_reasoningEfforts(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type CodexModelOption", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_appearanceSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_appearanceSettings,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().AppearanceSettings(ctx)
+		},
+		nil,
+		ec.marshalNAppearanceSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_appearanceSettings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "wallpaperColorScheme":
+				return ec.fieldContext_AppearanceSettings_wallpaperColorScheme(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AppearanceSettings", field.Name)
 		},
 	}
 	return fc, nil
@@ -20441,6 +20614,36 @@ func (ec *executionContext) unmarshalInputSubmitWorkflowApprovalInput(ctx contex
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateAppearanceSettingsInput(ctx context.Context, obj any) (model.UpdateAppearanceSettingsInput, error) {
+	var it model.UpdateAppearanceSettingsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"wallpaperColorScheme"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "wallpaperColorScheme":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("wallpaperColorScheme"))
+			data, err := ec.unmarshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.WallpaperColorScheme = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateProjectSettingsInput(ctx context.Context, obj any) (model.UpdateProjectSettingsInput, error) {
 	var it model.UpdateProjectSettingsInput
 	if obj == nil {
@@ -20962,6 +21165,45 @@ func (ec *executionContext) _TranscriptContent(ctx context.Context, sel ast.Sele
 // endregion ************************** interface.gotpl ***************************
 
 // region    **************************** object.gotpl ****************************
+
+var appearanceSettingsImplementors = []string{"AppearanceSettings"}
+
+func (ec *executionContext) _AppearanceSettings(ctx context.Context, sel ast.SelectionSet, obj *model.AppearanceSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, appearanceSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AppearanceSettings")
+		case "wallpaperColorScheme":
+			out.Values[i] = ec._AppearanceSettings_wallpaperColorScheme(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
 
 var approvalConfigImplementors = []string{"ApprovalConfig"}
 
@@ -21798,6 +22040,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
+		case "updateAppearanceSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateAppearanceSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "createQuickCommand":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createQuickCommand(ctx, field)
@@ -22277,6 +22526,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_codexModelOptions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "appearanceSettings":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_appearanceSettings(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -25749,6 +26020,20 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
+func (ec *executionContext) marshalNAppearanceSettings2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSettings(ctx context.Context, sel ast.SelectionSet, v model.AppearanceSettings) graphql.Marshaler {
+	return ec._AppearanceSettings(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAppearanceSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSettings(ctx context.Context, sel ast.SelectionSet, v *model.AppearanceSettings) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AppearanceSettings(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalNAppendPromptInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppendPromptInput(ctx context.Context, v any) (model.AppendPromptInput, error) {
 	res, err := ec.unmarshalInputAppendPromptInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -26951,6 +27236,11 @@ func (ec *executionContext) marshalNTranscriptUsageAttribution2ᚖgithubᚗcom�
 	return ec._TranscriptUsageAttribution(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput(ctx context.Context, v any) (model.UpdateAppearanceSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdateAppearanceSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateProjectSettingsInput(ctx context.Context, v any) (model.UpdateProjectSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateProjectSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -26980,6 +27270,16 @@ func (ec *executionContext) marshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋg
 		}
 	}
 	return res
+}
+
+func (ec *executionContext) unmarshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme(ctx context.Context, v any) (model.WallpaperColorScheme, error) {
+	var res model.WallpaperColorScheme
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme(ctx context.Context, sel ast.SelectionSet, v model.WallpaperColorScheme) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) marshalNWorkflowCondition2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWorkflowConditionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.WorkflowCondition) graphql.Marshaler {

@@ -14,9 +14,19 @@ import (
 )
 
 type UseCase interface {
+	GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error)
+	UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error)
 	ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error)
 	CreateQuickCommand(ctx context.Context, input CreateQuickCommandInput) (QuickCommandDTO, error)
 	DeleteQuickCommand(ctx context.Context, input DeleteQuickCommandInput) error
+}
+
+type UpdateAppearanceSettingsInput struct {
+	WallpaperColorScheme domain.WallpaperColorScheme
+}
+
+type AppearanceSettingsDTO struct {
+	WallpaperColorScheme domain.WallpaperColorScheme
 }
 
 type ListQuickCommandsInput struct {
@@ -55,6 +65,35 @@ func New(repo domain.Repository) *Service {
 		now:        time.Now,
 		generateID: generateID,
 	}
+}
+
+func (s *Service) GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error) {
+	if s == nil || s.repo == nil {
+		return AppearanceSettingsDTO{}, errors.New("setting usecase: nil service")
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get appearance settings failed").WithRetryable(true)
+	}
+	if !configuration.WallpaperColorScheme.Valid() {
+		configuration = domain.DefaultSystemConfiguration()
+	}
+	return AppearanceSettingsDTO{WallpaperColorScheme: configuration.WallpaperColorScheme}, nil
+}
+
+func (s *Service) UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error) {
+	if s == nil || s.repo == nil {
+		return AppearanceSettingsDTO{}, errors.New("setting usecase: nil service")
+	}
+	if !input.WallpaperColorScheme.Valid() {
+		return AppearanceSettingsDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "wallpaper color scheme is invalid").
+			WithDetails(map[string]any{"field": "wallpaperColorScheme"})
+	}
+	configuration := domain.SystemConfiguration{WallpaperColorScheme: input.WallpaperColorScheme}
+	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update appearance settings failed").WithRetryable(true)
+	}
+	return AppearanceSettingsDTO{WallpaperColorScheme: configuration.WallpaperColorScheme}, nil
 }
 
 func (s *Service) ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error) {

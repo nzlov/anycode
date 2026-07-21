@@ -16,6 +16,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/schema"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/workflowdefinition"
 )
 
@@ -443,6 +444,18 @@ func init() {
 	stagedattachmentDescCreatedAt := stagedattachmentFields[7].Descriptor()
 	// stagedattachment.DefaultCreatedAt holds the default value on creation for the created_at field.
 	stagedattachment.DefaultCreatedAt = stagedattachmentDescCreatedAt.Default.(func() time.Time)
+	systemconfigurationFields := schema.SystemConfiguration{}.Fields()
+	_ = systemconfigurationFields
+	// systemconfigurationDescWallpaperColorScheme is the schema descriptor for wallpaper_color_scheme field.
+	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[1].Descriptor()
+	// systemconfiguration.WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
+	systemconfiguration.WallpaperColorSchemeValidator = systemconfigurationDescWallpaperColorScheme.Validators[0].(func(string) error)
+	// systemconfigurationDescUpdatedAt is the schema descriptor for updated_at field.
+	systemconfigurationDescUpdatedAt := systemconfigurationFields[2].Descriptor()
+	// systemconfiguration.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	systemconfiguration.DefaultUpdatedAt = systemconfigurationDescUpdatedAt.Default.(func() time.Time)
+	// systemconfiguration.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	systemconfiguration.UpdateDefaultUpdatedAt = systemconfigurationDescUpdatedAt.UpdateDefault.(func() time.Time)
 	workflowdefinitionFields := schema.WorkflowDefinition{}.Fields()
 	_ = workflowdefinitionFields
 	// workflowdefinitionDescProjectID is the schema descriptor for project_id field.

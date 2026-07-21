@@ -25,6 +25,20 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
 
+// UpdateAppearanceSettings is the resolver for the updateAppearanceSettings field.
+func (r *mutationResolver) UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.UpdateAppearanceSettings(ctx, settingapp.UpdateAppearanceSettingsInput{
+		WallpaperColorScheme: wallpaperColorSchemeFromModel(input.WallpaperColorScheme),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapAppearanceSettings(dto), nil
+}
+
 // CreateQuickCommand is the resolver for the createQuickCommand field.
 func (r *mutationResolver) CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error) {
 	if r.UseCases.Settings == nil {
@@ -389,6 +403,18 @@ func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.
 // CodexModelOptions is the resolver for the codexModelOptions field.
 func (r *queryResolver) CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error) {
 	return mapCodexModelOptions(r.UseCases.CodexModels), nil
+}
+
+// AppearanceSettings is the resolver for the appearanceSettings field.
+func (r *queryResolver) AppearanceSettings(ctx context.Context) (*model.AppearanceSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.GetAppearanceSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapAppearanceSettings(dto), nil
 }
 
 // QuickCommands is the resolver for the quickCommands field.

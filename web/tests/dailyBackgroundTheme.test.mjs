@@ -3,12 +3,14 @@ import { test } from 'node:test';
 
 import {
   contrastRatio,
-  createDailyPalettes,
+  createMaterialPalettes,
   dailyImageRefreshReason,
-  dailyPaletteKeys,
-  extractSeedColors,
+  extractSourceColor,
+  materialPaletteKeys,
   parseDailyBackgroundRecord,
   parseDailyMetadata,
+  resolveMaterialPaletteCache,
+  wallpaperColorSchemes,
 } from '../src/theme/dailyBackgroundModel.js';
 
 const metadata = {
@@ -19,9 +21,9 @@ const metadata = {
 };
 
 function record(overrides = {}) {
-  const seed = { dominant: '#38506a', accent: '#2563eb' };
+  const sourceColor = '#2563eb';
   return {
-    version: 1,
+    version: 2,
     source: 'ee123',
     localDate: '2026-07-20',
     sourceDate: metadata.sourceDate,
@@ -34,8 +36,12 @@ function record(overrides = {}) {
       copyright: metadata.copyright,
       sourceUrl: 'https://bing.ee123.net/',
     },
-    seed,
-    palettes: createDailyPalettes(seed),
+    sourceColor,
+    colorCache: {
+      sha256: 'a'.repeat(64),
+      wallpaperColorScheme: 'content',
+      palettes: createMaterialPalettes(sourceColor, 'content'),
+    },
     ...overrides,
   };
 }
@@ -78,12 +84,13 @@ test('metadata accepts only the expected ee123 shape and Bing HTTPS image hosts'
   );
 });
 
-test('stored record parsing is all-or-nothing and strips unknown fields', () => {
+test('stored record parsing validates the source and algorithm-keyed palette cache', () => {
   const parsed = parseDailyBackgroundRecord(JSON.stringify({ ...record(), ignored: true }));
   assert.equal(parsed?.imageUrl, metadata.imageUrl);
+  assert.equal(parsed?.colorCache.wallpaperColorScheme, 'content');
   assert.equal('ignored' in parsed, false);
   assert.equal(parseDailyBackgroundRecord('{broken'), null);
-  assert.equal(parseDailyBackgroundRecord(record({ version: 2 })), null);
+  assert.equal(parseDailyBackgroundRecord(record({ version: 1 })), null);
   assert.equal(parseDailyBackgroundRecord(record({ sha256: 'short' })), null);
   assert.equal(parseDailyBackgroundRecord(record({ localDate: '2026-02-30' })), null);
   assert.equal(parseDailyBackgroundRecord(record({ checkedAt: '2026' })), null);
@@ -92,7 +99,27 @@ test('stored record parsing is all-or-nothing and strips unknown fields', () => 
     null,
   );
   assert.equal(
-    parseDailyBackgroundRecord(record({ palettes: { light: record().palettes.light, dark: {} } })),
+    parseDailyBackgroundRecord(
+      record({ colorCache: { wallpaperColorScheme: 'unknown', palettes: {} } }),
+    ),
+    null,
+  );
+  assert.equal(
+    parseDailyBackgroundRecord(
+      record({ colorCache: { ...record().colorCache, sha256: 'b'.repeat(64) } }),
+    ),
+    null,
+  );
+  assert.equal(
+    parseDailyBackgroundRecord(
+      record({
+        colorCache: {
+          sha256: 'a'.repeat(64),
+          wallpaperColorScheme: 'content',
+          palettes: { light: record().colorCache.palettes.light, dark: {} },
+        },
+      }),
+    ),
     null,
   );
 });
@@ -116,39 +143,82 @@ test('refresh decision checks local day and same-day source replacement', () => 
   );
 });
 
-test('quantization ignores transparent pixels and prefers a chromatic accent over black', () => {
+test('official image quantization ignores non-opaque pixels and scores a UI source color', () => {
   const pixels = new Uint8ClampedArray([
     ...Array(20).fill([3, 4, 5, 255]).flat(),
     ...Array(8).fill([25, 110, 210, 255]).flat(),
     ...Array(4).fill([255, 0, 0, 0]).flat(),
   ]);
-  assert.deepEqual(extractSeedColors(pixels), { dominant: '#030405', accent: '#196ed2' });
-  assert.deepEqual(extractSeedColors(new Uint8ClampedArray([0, 0, 0, 0])), {
-    dominant: '#2563eb',
-    accent: '#2563eb',
-  });
+  assert.equal(extractSourceColor(pixels), '#196ed2');
+  assert.equal(extractSourceColor(new Uint8ClampedArray([0, 0, 0, 0])), '#4285f4');
 });
 
-test('a large low-saturation region does not suppress a smaller chromatic accent', () => {
-  const pixels = new Uint8ClampedArray([
-    ...Array(100).fill([128, 128, 128, 255]).flat(),
-    ...Array(8).fill([25, 110, 210, 255]).flat(),
+test('all official dynamic schemes produce every M3 role including fixed colors', () => {
+  assert.deepEqual(wallpaperColorSchemes, [
+    'content',
+    'fidelity',
+    'tonal_spot',
+    'vibrant',
+    'expressive',
+    'rainbow',
+    'fruit_salad',
+    'neutral',
+    'monochrome',
   ]);
-  assert.deepEqual(extractSeedColors(pixels), { dominant: '#808080', accent: '#196ed2' });
-});
-
-test('derived light and dark palettes are symmetric and meet contrast contracts', () => {
-  for (const accent of ['#2563eb', '#facc15', '#e11d48', '#111111', '#ffffff']) {
-    const palettes = createDailyPalettes({ dominant: accent, accent });
-    assert.deepEqual(Object.keys(palettes.light), dailyPaletteKeys);
-    assert.deepEqual(Object.keys(palettes.dark), dailyPaletteKeys);
+  for (const scheme of wallpaperColorSchemes) {
+    const palettes = createMaterialPalettes('#2563eb', scheme);
+    assert.deepEqual(Object.keys(palettes.light), materialPaletteKeys, scheme);
+    assert.deepEqual(Object.keys(palettes.dark), materialPaletteKeys, scheme);
     for (const palette of [palettes.light, palettes.dark]) {
-      assert.ok(contrastRatio(palette.text, palette.surface) >= 4.5, accent);
-      assert.ok(contrastRatio(palette.textMuted, palette.surface) >= 4.5, accent);
-      assert.ok(contrastRatio(palette.link, palette.surface) >= 4.5, accent);
-      assert.ok(contrastRatio(palette.onPrimary, palette.primary) >= 4.5, accent);
-      assert.ok(contrastRatio(palette.focusRing, palette.surface) >= 3, accent);
-      assert.ok(contrastRatio(palette.borderStrong, palette.surface) >= 3, accent);
+      for (const [foreground, background] of [
+        ['onSurface', 'surface'],
+        ['onSurfaceVariant', 'surfaceVariant'],
+        ['onPrimary', 'primary'],
+        ['onPrimaryContainer', 'primaryContainer'],
+        ['onSecondary', 'secondary'],
+        ['onSecondaryContainer', 'secondaryContainer'],
+        ['onTertiary', 'tertiary'],
+        ['onTertiaryContainer', 'tertiaryContainer'],
+        ['onError', 'error'],
+        ['onErrorContainer', 'errorContainer'],
+        ['onPrimaryFixed', 'primaryFixed'],
+        ['onSecondaryFixed', 'secondaryFixed'],
+        ['onTertiaryFixed', 'tertiaryFixed'],
+      ]) {
+        assert.ok(
+          contrastRatio(palette[foreground], palette[background]) >= 4.5,
+          `${scheme} ${foreground}`,
+        );
+      }
     }
   }
+});
+
+test('palette cache is reused only when both wallpaper source and algorithm are unchanged', () => {
+  const current = {
+    sha256: 'a'.repeat(64),
+    wallpaperColorScheme: 'rainbow',
+    palettes: createMaterialPalettes('#2563eb', 'rainbow'),
+  };
+  assert.equal(resolveMaterialPaletteCache('a'.repeat(64), '#2563eb', current, 'rainbow'), current);
+
+  const changedAlgorithm = resolveMaterialPaletteCache(
+    'a'.repeat(64),
+    '#2563eb',
+    current,
+    'content',
+  );
+  assert.notEqual(changedAlgorithm, current);
+  assert.equal(changedAlgorithm.wallpaperColorScheme, 'content');
+  assert.notDeepEqual(changedAlgorithm.palettes, current.palettes);
+
+  const changedWallpaper = resolveMaterialPaletteCache(
+    'b'.repeat(64),
+    '#e11d48',
+    current,
+    'rainbow',
+  );
+  assert.notEqual(changedWallpaper, current);
+  assert.equal(changedWallpaper.sha256, 'b'.repeat(64));
+  assert.notDeepEqual(changedWallpaper.palettes, current.palettes);
 });

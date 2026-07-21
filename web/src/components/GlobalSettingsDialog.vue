@@ -17,6 +17,7 @@
 
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
         <q-tab name="projects" icon="folder" label="项目" />
+        <q-tab name="appearance" icon="palette" label="外观" />
         <q-tab name="quick_commands" icon="bolt" label="快捷指令" />
       </q-tabs>
 
@@ -33,6 +34,17 @@
                 <q-icon name="folder" />
               </q-item-section>
               <q-item-section>项目</q-item-section>
+            </q-item>
+            <q-item
+              clickable
+              :active="activeSection === 'appearance'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'appearance'"
+            >
+              <q-item-section avatar>
+                <q-icon name="palette" />
+              </q-item-section>
+              <q-item-section>外观</q-item-section>
             </q-item>
             <q-item
               clickable
@@ -131,6 +143,58 @@
           >
             <q-tooltip>新增项目</q-tooltip>
           </q-btn>
+        </section>
+
+        <section v-else-if="activeSection === 'appearance'" class="global-settings-panel">
+          <div class="global-settings-panel__header">
+            <div class="text-subtitle2 text-weight-bold">外观</div>
+          </div>
+
+          <q-banner v-if="appearanceError" dense class="quick-command-error">
+            <template #avatar>
+              <q-icon name="error_outline" color="negative" />
+            </template>
+            {{ appearanceError }}
+            <template #action>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="refresh"
+                aria-label="重试加载外观设置"
+                @click="refreshAppearance"
+              >
+                <q-tooltip>重试</q-tooltip>
+              </q-btn>
+            </template>
+          </q-banner>
+
+          <q-linear-progress v-if="appearanceLoading" indeterminate color="primary" />
+          <q-list bordered separator class="appearance-settings-list">
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="format_color_fill" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>壁纸选色算法</q-item-label>
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-select
+                  v-model="wallpaperColorScheme"
+                  outlined
+                  dense
+                  emit-value
+                  map-options
+                  options-dense
+                  :options="wallpaperColorSchemeOptions"
+                  :disable="appearanceLoading || appearanceSaving"
+                  aria-label="壁纸选色算法"
+                  @update:model-value="saveWallpaperColorScheme"
+                />
+              </q-item-section>
+            </q-item>
+          </q-list>
         </section>
 
         <section v-else class="global-settings-panel">
@@ -320,7 +384,14 @@ import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useQuickCommands } from '@/composables/useQuickCommands';
+import {
+  getAppearanceSettings,
+  updateAppearanceSettings,
+  wallpaperColorSchemeOptions,
+} from '@/services/appearanceSettings';
 import type { ProjectSummary } from '@/services/projects';
+import { setWallpaperColorScheme } from '@/theme/dailyBackground';
+import type { WallpaperColorScheme } from '@/theme/dailyBackgroundModel';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -332,7 +403,7 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
-const activeSection = ref<'projects' | 'quick_commands'>('projects');
+const activeSection = ref<'projects' | 'appearance' | 'quick_commands'>('projects');
 const directoryDialogOpen = ref(false);
 const projectSettingsOpen = ref(false);
 const settingsProject = ref<ProjectSummary | null>(null);
@@ -359,6 +430,43 @@ const commandInputRef = ref<{ focus: () => void } | null>(null);
 const quickCommandPageMax = computed(() =>
   Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
 );
+const appearanceLoading = ref(false);
+const appearanceSaving = ref(false);
+const appearanceError = ref('');
+const wallpaperColorScheme = ref<WallpaperColorScheme>('content');
+const persistedWallpaperColorScheme = ref<WallpaperColorScheme>('content');
+
+async function refreshAppearance() {
+  appearanceLoading.value = true;
+  appearanceError.value = '';
+  try {
+    const settings = await getAppearanceSettings({ notify: false });
+    wallpaperColorScheme.value = settings.wallpaperColorScheme;
+    persistedWallpaperColorScheme.value = settings.wallpaperColorScheme;
+    setWallpaperColorScheme(settings.wallpaperColorScheme);
+  } catch {
+    appearanceError.value = '无法加载外观设置';
+  } finally {
+    appearanceLoading.value = false;
+  }
+}
+
+async function saveWallpaperColorScheme(scheme: WallpaperColorScheme) {
+  if (scheme === persistedWallpaperColorScheme.value) return;
+  appearanceSaving.value = true;
+  appearanceError.value = '';
+  try {
+    const settings = await updateAppearanceSettings(scheme);
+    wallpaperColorScheme.value = settings.wallpaperColorScheme;
+    persistedWallpaperColorScheme.value = settings.wallpaperColorScheme;
+    setWallpaperColorScheme(settings.wallpaperColorScheme);
+  } catch {
+    wallpaperColorScheme.value = persistedWallpaperColorScheme.value;
+    appearanceError.value = '无法保存外观设置';
+  } finally {
+    appearanceSaving.value = false;
+  }
+}
 
 function openProjectOverview(projectId: string) {
   emit('update:modelValue', false);
@@ -444,6 +552,7 @@ onMounted(() => {
 });
 
 watch(activeSection, (section) => {
+  if (section === 'appearance' && props.modelValue) void refreshAppearance();
   if (section !== 'quick_commands' || !props.modelValue) return;
   refreshQuickCommands();
 });
@@ -453,6 +562,7 @@ watch(
   (open) => {
     if (!open) return;
     void loadProjects();
+    if (activeSection.value === 'appearance') void refreshAppearance();
     if (activeSection.value === 'quick_commands') refreshQuickCommands();
   },
 );

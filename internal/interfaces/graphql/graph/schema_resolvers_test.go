@@ -189,6 +189,33 @@ func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
 	}
 }
 
+func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
+	settings := &fakeSettingUseCase{
+		appearanceResult: settingapp.AppearanceSettingsDTO{
+			WallpaperColorScheme: settingdomain.WallpaperColorSchemeRainbow,
+		},
+	}
+	resolver := NewResolver(UseCases{Settings: settings})
+
+	got, err := resolver.Query().AppearanceSettings(context.Background())
+	if err != nil {
+		t.Fatalf("AppearanceSettings() error = %v", err)
+	}
+	if got.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
+		t.Fatalf("AppearanceSettings() = %#v", got)
+	}
+
+	updated, err := resolver.Mutation().UpdateAppearanceSettings(context.Background(), model.UpdateAppearanceSettingsInput{
+		WallpaperColorScheme: model.WallpaperColorSchemeFruitSalad,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAppearanceSettings() error = %v", err)
+	}
+	if settings.appearanceInput.WallpaperColorScheme != settingdomain.WallpaperColorSchemeFruitSalad || updated.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
+		t.Fatalf("update input=%#v result=%#v", settings.appearanceInput, updated)
+	}
+}
+
 func TestQueryProjectsForwardsUseCase(t *testing.T) {
 	now := time.Unix(10, 0).UTC()
 	projects := &fakeProjectUseCase{
@@ -1088,11 +1115,22 @@ func (f *fakeProjectUseCase) UpdateProjectSettings(_ context.Context, input proj
 
 type fakeSettingUseCase struct {
 	settingapp.UseCase
-	listInput    settingapp.ListQuickCommandsInput
-	listResult   port.Page[settingapp.QuickCommandDTO]
-	createInput  settingapp.CreateQuickCommandInput
-	createResult settingapp.QuickCommandDTO
-	deleteInput  settingapp.DeleteQuickCommandInput
+	appearanceInput  settingapp.UpdateAppearanceSettingsInput
+	appearanceResult settingapp.AppearanceSettingsDTO
+	listInput        settingapp.ListQuickCommandsInput
+	listResult       port.Page[settingapp.QuickCommandDTO]
+	createInput      settingapp.CreateQuickCommandInput
+	createResult     settingapp.QuickCommandDTO
+	deleteInput      settingapp.DeleteQuickCommandInput
+}
+
+func (f *fakeSettingUseCase) GetAppearanceSettings(context.Context) (settingapp.AppearanceSettingsDTO, error) {
+	return f.appearanceResult, nil
+}
+
+func (f *fakeSettingUseCase) UpdateAppearanceSettings(_ context.Context, input settingapp.UpdateAppearanceSettingsInput) (settingapp.AppearanceSettingsDTO, error) {
+	f.appearanceInput = input
+	return f.appearanceResult, nil
 }
 
 func (f *fakeSettingUseCase) ListQuickCommands(_ context.Context, input settingapp.ListQuickCommandsInput) (port.Page[settingapp.QuickCommandDTO], error) {

@@ -381,6 +381,18 @@ var (
 			},
 		},
 	}
+	// SystemConfigurationsColumns holds the columns for the "system_configurations" table.
+	SystemConfigurationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString},
+		{Name: "wallpaper_color_scheme", Type: field.TypeString},
+		{Name: "updated_at", Type: field.TypeTime},
+	}
+	// SystemConfigurationsTable holds the schema information for the "system_configurations" table.
+	SystemConfigurationsTable = &schema.Table{
+		Name:       "system_configurations",
+		Columns:    SystemConfigurationsColumns,
+		PrimaryKey: []*schema.Column{SystemConfigurationsColumns[0]},
+	}
 	// WorkflowDefinitionsColumns holds the columns for the "workflow_definitions" table.
 	WorkflowDefinitionsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
@@ -417,6 +429,7 @@ var (
 		QuickCommandsTable,
 		SessionsTable,
 		StagedAttachmentsTable,
+		SystemConfigurationsTable,
 		WorkflowDefinitionsTable,
 	}
 )
