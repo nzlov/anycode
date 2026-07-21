@@ -146,6 +146,7 @@ function lineClass(kind: DiffLineKind) {
 <style scoped>
 .diff-viewer {
   display: grid;
+  align-content: start;
   gap: 12px;
 }
 
