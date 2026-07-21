@@ -41,7 +41,11 @@ test('switching projects waits for refreshed branches before creating a session'
 
   assert.match(
     source,
-    /watch\(projectId,[\s\S]*branch\.value\s*=\s*'';[\s\S]*loadBranchesForProject\(value,\s*\{\s*refresh:\s*true\s*\}\)/,
+    /const projectModel = computed\(\{[\s\S]*branch\.value\s*=\s*'';[\s\S]*projectId\.value = value/,
+  );
+  assert.match(
+    source,
+    /watch\(projectId,[\s\S]*loadBranchesForProject\(value,\s*\{\s*refresh:\s*true\s*\}\)/,
   );
   assert.match(source, /:disable="creating \|\| !branchSelectionReady \|\| !codexConfigReady"/);
   assert.match(source, /:inert="branchesLoading"/);
@@ -56,7 +60,7 @@ test('switching projects waits for refreshed branches before creating a session'
   )?.groups?.body;
   assert.ok(createSessionSource);
   assert.ok(createSessionSource.indexOf('const input: CreateSessionInput') < createSessionSource.indexOf('await stageAttachment'));
-  assert.match(createSessionSource, /rememberProjectId\(input\.projectId\)/);
+  assert.doesNotMatch(createSessionSource, /rememberProjectId|storeNewSessionPreferences/);
 });
 
 test('concurrent branch loads reuse the active request', async () => {

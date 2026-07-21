@@ -13,7 +13,7 @@ const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const detailSource = readSource('../src/pages/SessionDetailPage.vue');
 const sessionsSource = readSource('../src/services/sessions.ts');
 const indexSource = readSource('../src/pages/IndexPage.vue');
-const sessionConfigCacheSource = readSource('../src/services/sessionConfigCache.ts');
+const preferencesSource = readSource('../src/services/newSessionPreferences.ts');
 
 test('Fast uses the shared runtime controls on desktop and mobile prompt surfaces', () => {
   assert.match(controlsSource, /<q-checkbox[\s\S]*v-model="fastModel"[\s\S]*label="Fast"/);
@@ -30,36 +30,43 @@ test('Fast uses the shared runtime controls on desktop and mobile prompt surface
   assert.match(detailSource, /v-model:fast="composerFast"/);
 });
 
-test('new sessions restore and persist one global frontend runtime config', () => {
+test('new sessions restore and immediately persist one frontend preference record', () => {
   assert.doesNotMatch(sessionsSource, /LastSessionConfig|lastSessionConfig/);
   assert.match(
-    sessionConfigCacheSource,
-    /SESSION_CONFIG_STORAGE_KEY = 'anycode\.lastSessionConfig'/,
+    preferencesSource,
+    /NEW_SESSION_PREFERENCES_STORAGE_KEY = 'anycode\.newSessionPreferences'/,
   );
   assert.match(
-    sessionConfigCacheSource,
-    /window\.localStorage\.getItem\(SESSION_CONFIG_STORAGE_KEY\)/,
+    preferencesSource,
+    /window\.localStorage\.getItem\(NEW_SESSION_PREFERENCES_STORAGE_KEY\)/,
   );
-  assert.match(newSessionSource, /const cachedRunConfig = loadStoredSessionConfig\(\)/);
+  assert.match(newSessionSource, /const cachedPreferences = loadNewSessionPreferences\(\)/);
+  assert.match(newSessionSource, /const projectId = ref\(cachedPreferences\?\.projectId \?\? ''\)/);
+  assert.match(newSessionSource, /const branch = ref\(cachedPreferences\?\.baseBranch \?\? ''\)/);
+  assert.match(
+    newSessionSource,
+    /const priority = ref<SessionPriority>\(cachedPreferences\?\.priority \?\? 'medium'\)/,
+  );
   assert.match(newSessionSource, /const model = ref\(storedRunConfig\.codexModel\)/);
   assert.match(newSessionSource, /const effort = ref\(storedRunConfig\.reasoningEffort\)/);
   assert.match(newSessionSource, /const permission = ref\(storedRunConfig\.permissionMode\)/);
   assert.match(newSessionSource, /const fast = ref\(storedRunConfig\.fastMode\)/);
   assert.match(
-    sessionConfigCacheSource,
-    /function storeSessionConfig\(config: SessionConfig\)[\s\S]*window\.localStorage\.setItem\(SESSION_CONFIG_STORAGE_KEY, JSON\.stringify\(config\)\)/,
+    preferencesSource,
+    /function storeNewSessionPreferences\(preferences: NewSessionPreferences\)[\s\S]*window\.localStorage\.setItem\([\s\S]*NEW_SESSION_PREFERENCES_STORAGE_KEY,[\s\S]*JSON\.stringify\(preferences\)/,
   );
   assert.match(
     newSessionSource,
-    /await createSessionRequest\(input\);[\s\S]*storeSessionConfig\(config\)/,
+    /watch\(\s*\[projectId, branch, model, effort, permission, fast, priority\],[\s\S]*storeNewSessionPreferences\(\{[\s\S]*projectId: selectedProjectId,[\s\S]*baseBranch,[\s\S]*codexModel,[\s\S]*reasoningEffort,[\s\S]*permissionMode,[\s\S]*fastMode,[\s\S]*priority: value/,
   );
+  assert.doesNotMatch(newSessionSource, /rememberProjectId|storeSessionConfig/);
   assert.doesNotMatch(
     newSessionSource,
     /getLastSessionConfig|loadLastConfigForProject|lastConfigRequestToken|runConfigLoading|runConfigError/,
   );
   assert.match(
-    sessionConfigCacheSource,
-    /fastMode: typeof config\.fastMode === 'boolean' \? config\.fastMode : false/,
+    preferencesSource,
+    /fastMode: typeof record\.fastMode === 'boolean' \? record\.fastMode : false/,
   );
 });
 
