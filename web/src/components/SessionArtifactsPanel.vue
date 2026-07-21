@@ -726,7 +726,7 @@ onBeforeUnmount(() => {
 }
 
 @container (min-width: 1024px) {
-  .artifact-layout {
+  .artifact-panel--inline-enabled .artifact-layout {
     display: grid;
     min-height: 0;
     grid-template-columns: minmax(320px, 36%) minmax(0, 1fr);
@@ -735,7 +735,7 @@ onBeforeUnmount(() => {
     overflow: hidden;
   }
 
-  .artifact-list {
+  .artifact-panel--inline-enabled .artifact-list {
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;

@@ -88,7 +88,10 @@ test('artifact panel enables one-item inline previews only for wide opted-in con
   assert.match(panel, /new ResizeObserver/);
   assert.match(panel, /width >= inlinePreviewMinWidth/);
   assert.match(panel, /v-if="inlinePreviewActive"/);
-  assert.match(panel, /grid-template-columns: minmax\(320px, 36%\) minmax\(0, 1fr\)/);
+  assert.match(
+    panel,
+    /\.artifact-panel--inline-enabled \.artifact-layout\s*\{[^}]*grid-template-columns:\s*minmax\(320px,\s*36%\)\s+minmax\(0,\s*1fr\)/s,
+  );
   assert.match(panel, /nextFiles\.find\(\(file\) => file\.id === selected\.value\?\.id\)/);
   assert.match(panel, /const first = nextFiles\[0\]/);
   assert.match(panel, /if \(first\) await selectPreview\(first\)/);
