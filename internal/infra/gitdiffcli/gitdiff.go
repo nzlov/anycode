@@ -84,6 +84,7 @@ func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.Res
 		{name: "project path", value: projectPath},
 		{name: "base branch", value: baseBranch},
 		{name: "worktree branch", value: worktreeBranch},
+		{name: "worktree base commit", value: baseCommit},
 	}
 	for _, field := range required {
 		if field.value == "" {
@@ -98,7 +99,7 @@ func (c *Client) ResolveSessionDiffSource(ctx context.Context, input gitdiff.Res
 					return gitdiff.DiffInput{}, false, err
 				}
 				if usable {
-					return gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: baseBranch + "..."}, true, nil
+					return gitdiff.DiffInput{WorktreePath: worktreePath, BaseRef: baseCommit}, true, nil
 				}
 			}
 		} else if !errors.Is(err, os.ErrNotExist) {
