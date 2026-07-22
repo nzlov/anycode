@@ -34,6 +34,13 @@ test('preserves custom fields while replacing active system fields', () => {
   ]);
 });
 
+test('adds merge result fields to rebase nodes', () => {
+  assert.deepEqual(
+    systemOutputFields('rebase', false).map((field) => field.key),
+    ['merge.status', 'merge.failureCode', 'merge.failureReason'],
+  );
+});
+
 test('reserves the complete workflow approval namespace', () => {
   const fields = completeOutputFields(
     [
@@ -55,4 +62,11 @@ test('workflow config persists after-run forward approval', () => {
   assert.match(source, /label="运行后前进审核"/);
   assert.match(source, /node\.approval\.afterRun = approvalAfterRun/);
   assert.doesNotMatch(source, /node\.approval\.afterRun = false/);
+});
+
+test('workflow config exposes a fixed-strategy rebase node', () => {
+  const source = readFileSync(new URL('../src/pages/WorkflowConfigPage.vue', import.meta.url), 'utf8');
+
+  assert.match(source, /value: 'rebase', label: 'Rebase'/);
+  assert.match(source, /nodeType\.value === 'rebase'[\s\S]*?\{ strategy: 'rebase' \}/);
 });

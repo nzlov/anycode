@@ -4,7 +4,7 @@ const systemOutputFieldKeys = new Set(['merge.status', 'merge.failureCode', 'mer
 
 export function systemOutputFields(type, hasMerge) {
   const fields = [];
-  if (type === 'merge' || hasMerge) {
+  if (type === 'merge' || type === 'rebase' || hasMerge) {
     fields.push(
       {
         key: 'merge.status',

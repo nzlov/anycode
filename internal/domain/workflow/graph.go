@@ -44,7 +44,8 @@ func IsApprovalOutputField(key string) bool {
 func canonicalOutputFields(node Node) []OutputField {
 	fields := make([]OutputField, 0, len(node.OutputFields)+len(mergeOutputFields))
 	fields = append(fields, node.OutputFields...)
-	if strings.EqualFold(strings.TrimSpace(node.Type), "merge") || node.Merge != nil {
+	nodeType := strings.TrimSpace(node.Type)
+	if strings.EqualFold(nodeType, "merge") || strings.EqualFold(nodeType, "rebase") || node.Merge != nil {
 		for _, field := range mergeOutputFields {
 			fields = ensureOutputField(fields, field)
 		}
