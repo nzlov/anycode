@@ -174,6 +174,16 @@ func WorktreeCleanupRetryable(v bool) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorktreeCleanupRetryable, v))
 }
 
+// InitializationErrorCode applies equality check predicate on the "initialization_error_code" field. It's identical to InitializationErrorCodeEQ.
+func InitializationErrorCode(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldInitializationErrorCode, v))
+}
+
+// InitializationError applies equality check predicate on the "initialization_error" field. It's identical to InitializationErrorEQ.
+func InitializationError(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldInitializationError, v))
+}
+
 // CodexSessionID applies equality check predicate on the "codex_session_id" field. It's identical to CodexSessionIDEQ.
 func CodexSessionID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldCodexSessionID, v))
@@ -1592,6 +1602,136 @@ func WorktreeCleanupRetryableEQ(v bool) predicate.Session {
 // WorktreeCleanupRetryableNEQ applies the NEQ predicate on the "worktree_cleanup_retryable" field.
 func WorktreeCleanupRetryableNEQ(v bool) predicate.Session {
 	return predicate.Session(sql.FieldNEQ(FieldWorktreeCleanupRetryable, v))
+}
+
+// InitializationErrorCodeEQ applies the EQ predicate on the "initialization_error_code" field.
+func InitializationErrorCodeEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeNEQ applies the NEQ predicate on the "initialization_error_code" field.
+func InitializationErrorCodeNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeIn applies the In predicate on the "initialization_error_code" field.
+func InitializationErrorCodeIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldInitializationErrorCode, vs...))
+}
+
+// InitializationErrorCodeNotIn applies the NotIn predicate on the "initialization_error_code" field.
+func InitializationErrorCodeNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldInitializationErrorCode, vs...))
+}
+
+// InitializationErrorCodeGT applies the GT predicate on the "initialization_error_code" field.
+func InitializationErrorCodeGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeGTE applies the GTE predicate on the "initialization_error_code" field.
+func InitializationErrorCodeGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeLT applies the LT predicate on the "initialization_error_code" field.
+func InitializationErrorCodeLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeLTE applies the LTE predicate on the "initialization_error_code" field.
+func InitializationErrorCodeLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeContains applies the Contains predicate on the "initialization_error_code" field.
+func InitializationErrorCodeContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeHasPrefix applies the HasPrefix predicate on the "initialization_error_code" field.
+func InitializationErrorCodeHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeHasSuffix applies the HasSuffix predicate on the "initialization_error_code" field.
+func InitializationErrorCodeHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeEqualFold applies the EqualFold predicate on the "initialization_error_code" field.
+func InitializationErrorCodeEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorCodeContainsFold applies the ContainsFold predicate on the "initialization_error_code" field.
+func InitializationErrorCodeContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldInitializationErrorCode, v))
+}
+
+// InitializationErrorEQ applies the EQ predicate on the "initialization_error" field.
+func InitializationErrorEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldEQ(FieldInitializationError, v))
+}
+
+// InitializationErrorNEQ applies the NEQ predicate on the "initialization_error" field.
+func InitializationErrorNEQ(v string) predicate.Session {
+	return predicate.Session(sql.FieldNEQ(FieldInitializationError, v))
+}
+
+// InitializationErrorIn applies the In predicate on the "initialization_error" field.
+func InitializationErrorIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldIn(FieldInitializationError, vs...))
+}
+
+// InitializationErrorNotIn applies the NotIn predicate on the "initialization_error" field.
+func InitializationErrorNotIn(vs ...string) predicate.Session {
+	return predicate.Session(sql.FieldNotIn(FieldInitializationError, vs...))
+}
+
+// InitializationErrorGT applies the GT predicate on the "initialization_error" field.
+func InitializationErrorGT(v string) predicate.Session {
+	return predicate.Session(sql.FieldGT(FieldInitializationError, v))
+}
+
+// InitializationErrorGTE applies the GTE predicate on the "initialization_error" field.
+func InitializationErrorGTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldGTE(FieldInitializationError, v))
+}
+
+// InitializationErrorLT applies the LT predicate on the "initialization_error" field.
+func InitializationErrorLT(v string) predicate.Session {
+	return predicate.Session(sql.FieldLT(FieldInitializationError, v))
+}
+
+// InitializationErrorLTE applies the LTE predicate on the "initialization_error" field.
+func InitializationErrorLTE(v string) predicate.Session {
+	return predicate.Session(sql.FieldLTE(FieldInitializationError, v))
+}
+
+// InitializationErrorContains applies the Contains predicate on the "initialization_error" field.
+func InitializationErrorContains(v string) predicate.Session {
+	return predicate.Session(sql.FieldContains(FieldInitializationError, v))
+}
+
+// InitializationErrorHasPrefix applies the HasPrefix predicate on the "initialization_error" field.
+func InitializationErrorHasPrefix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasPrefix(FieldInitializationError, v))
+}
+
+// InitializationErrorHasSuffix applies the HasSuffix predicate on the "initialization_error" field.
+func InitializationErrorHasSuffix(v string) predicate.Session {
+	return predicate.Session(sql.FieldHasSuffix(FieldInitializationError, v))
+}
+
+// InitializationErrorEqualFold applies the EqualFold predicate on the "initialization_error" field.
+func InitializationErrorEqualFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldEqualFold(FieldInitializationError, v))
+}
+
+// InitializationErrorContainsFold applies the ContainsFold predicate on the "initialization_error" field.
+func InitializationErrorContainsFold(v string) predicate.Session {
+	return predicate.Session(sql.FieldContainsFold(FieldInitializationError, v))
 }
 
 // CodexSessionIDEQ applies the EQ predicate on the "codex_session_id" field.

@@ -493,6 +493,7 @@ import {
   getPendingQuestionRequests,
   getSession,
   getSessionCard,
+  retrySessionInitialization,
   stopSession,
   submitQuestionRequest,
   submitWorkflowApproval,
@@ -944,6 +945,9 @@ function cardAction(card: SessionCard) {
   ) {
     return null;
   }
+  if (card.availableActions.includes('retry_initialization')) {
+    return { icon: 'refresh', color: 'primary', tooltip: '重试初始化', disabled: false };
+  }
   if (card.status === 'starting' || card.status === 'running') {
     return { icon: 'stop', color: 'negative', tooltip: '运行中，点击停止', disabled: false };
   }
@@ -965,7 +969,9 @@ async function runCardAction(card: SessionCard) {
   activeActionSessionId.value = card.id;
   cardActionLoading.value = true;
   try {
-    if (card.status === 'starting' || card.status === 'running') {
+    if (card.availableActions.includes('retry_initialization')) {
+      await retrySessionInitialization(card.id);
+    } else if (card.status === 'starting' || card.status === 'running') {
       await stopSession(card.id);
     } else if (card.availableActions.includes('execute')) {
       await executeSession(card.id, card.status === 'queued');

@@ -311,6 +311,34 @@ func (_c *SessionCreate) SetNillableWorktreeCleanupRetryable(v *bool) *SessionCr
 	return _c
 }
 
+// SetInitializationErrorCode sets the "initialization_error_code" field.
+func (_c *SessionCreate) SetInitializationErrorCode(v string) *SessionCreate {
+	_c.mutation.SetInitializationErrorCode(v)
+	return _c
+}
+
+// SetNillableInitializationErrorCode sets the "initialization_error_code" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableInitializationErrorCode(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetInitializationErrorCode(*v)
+	}
+	return _c
+}
+
+// SetInitializationError sets the "initialization_error" field.
+func (_c *SessionCreate) SetInitializationError(v string) *SessionCreate {
+	_c.mutation.SetInitializationError(v)
+	return _c
+}
+
+// SetNillableInitializationError sets the "initialization_error" field if the given value is not nil.
+func (_c *SessionCreate) SetNillableInitializationError(v *string) *SessionCreate {
+	if v != nil {
+		_c.SetInitializationError(*v)
+	}
+	return _c
+}
+
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_c *SessionCreate) SetCodexSessionID(v string) *SessionCreate {
 	_c.mutation.SetCodexSessionID(v)
@@ -800,6 +828,14 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultWorktreeCleanupRetryable
 		_c.mutation.SetWorktreeCleanupRetryable(v)
 	}
+	if _, ok := _c.mutation.InitializationErrorCode(); !ok {
+		v := entsession.DefaultInitializationErrorCode
+		_c.mutation.SetInitializationErrorCode(v)
+	}
+	if _, ok := _c.mutation.InitializationError(); !ok {
+		v := entsession.DefaultInitializationError
+		_c.mutation.SetInitializationError(v)
+	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
 		v := entsession.DefaultCodexSessionID
 		_c.mutation.SetCodexSessionID(v)
@@ -950,6 +986,12 @@ func (_c *SessionCreate) check() error {
 	}
 	if _, ok := _c.mutation.WorktreeCleanupRetryable(); !ok {
 		return &ValidationError{Name: "worktree_cleanup_retryable", err: errors.New(`ent: missing required field "Session.worktree_cleanup_retryable"`)}
+	}
+	if _, ok := _c.mutation.InitializationErrorCode(); !ok {
+		return &ValidationError{Name: "initialization_error_code", err: errors.New(`ent: missing required field "Session.initialization_error_code"`)}
+	}
+	if _, ok := _c.mutation.InitializationError(); !ok {
+		return &ValidationError{Name: "initialization_error", err: errors.New(`ent: missing required field "Session.initialization_error"`)}
 	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
 		return &ValidationError{Name: "codex_session_id", err: errors.New(`ent: missing required field "Session.codex_session_id"`)}
@@ -1150,6 +1192,14 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.WorktreeCleanupRetryable(); ok {
 		_spec.SetField(entsession.FieldWorktreeCleanupRetryable, field.TypeBool, value)
 		_node.WorktreeCleanupRetryable = value
+	}
+	if value, ok := _c.mutation.InitializationErrorCode(); ok {
+		_spec.SetField(entsession.FieldInitializationErrorCode, field.TypeString, value)
+		_node.InitializationErrorCode = value
+	}
+	if value, ok := _c.mutation.InitializationError(); ok {
+		_spec.SetField(entsession.FieldInitializationError, field.TypeString, value)
+		_node.InitializationError = value
 	}
 	if value, ok := _c.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)

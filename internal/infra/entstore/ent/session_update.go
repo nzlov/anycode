@@ -399,6 +399,34 @@ func (_u *SessionUpdate) SetNillableWorktreeCleanupRetryable(v *bool) *SessionUp
 	return _u
 }
 
+// SetInitializationErrorCode sets the "initialization_error_code" field.
+func (_u *SessionUpdate) SetInitializationErrorCode(v string) *SessionUpdate {
+	_u.mutation.SetInitializationErrorCode(v)
+	return _u
+}
+
+// SetNillableInitializationErrorCode sets the "initialization_error_code" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableInitializationErrorCode(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetInitializationErrorCode(*v)
+	}
+	return _u
+}
+
+// SetInitializationError sets the "initialization_error" field.
+func (_u *SessionUpdate) SetInitializationError(v string) *SessionUpdate {
+	_u.mutation.SetInitializationError(v)
+	return _u
+}
+
+// SetNillableInitializationError sets the "initialization_error" field if the given value is not nil.
+func (_u *SessionUpdate) SetNillableInitializationError(v *string) *SessionUpdate {
+	if v != nil {
+		_u.SetInitializationError(*v)
+	}
+	return _u
+}
+
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_u *SessionUpdate) SetCodexSessionID(v string) *SessionUpdate {
 	_u.mutation.SetCodexSessionID(v)
@@ -1022,6 +1050,12 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.WorktreeCleanupRetryable(); ok {
 		_spec.SetField(entsession.FieldWorktreeCleanupRetryable, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.InitializationErrorCode(); ok {
+		_spec.SetField(entsession.FieldInitializationErrorCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.InitializationError(); ok {
+		_spec.SetField(entsession.FieldInitializationError, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)
 	}
@@ -1527,6 +1561,34 @@ func (_u *SessionUpdateOne) SetWorktreeCleanupRetryable(v bool) *SessionUpdateOn
 func (_u *SessionUpdateOne) SetNillableWorktreeCleanupRetryable(v *bool) *SessionUpdateOne {
 	if v != nil {
 		_u.SetWorktreeCleanupRetryable(*v)
+	}
+	return _u
+}
+
+// SetInitializationErrorCode sets the "initialization_error_code" field.
+func (_u *SessionUpdateOne) SetInitializationErrorCode(v string) *SessionUpdateOne {
+	_u.mutation.SetInitializationErrorCode(v)
+	return _u
+}
+
+// SetNillableInitializationErrorCode sets the "initialization_error_code" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableInitializationErrorCode(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetInitializationErrorCode(*v)
+	}
+	return _u
+}
+
+// SetInitializationError sets the "initialization_error" field.
+func (_u *SessionUpdateOne) SetInitializationError(v string) *SessionUpdateOne {
+	_u.mutation.SetInitializationError(v)
+	return _u
+}
+
+// SetNillableInitializationError sets the "initialization_error" field if the given value is not nil.
+func (_u *SessionUpdateOne) SetNillableInitializationError(v *string) *SessionUpdateOne {
+	if v != nil {
+		_u.SetInitializationError(*v)
 	}
 	return _u
 }
@@ -2183,6 +2245,12 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.WorktreeCleanupRetryable(); ok {
 		_spec.SetField(entsession.FieldWorktreeCleanupRetryable, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.InitializationErrorCode(); ok {
+		_spec.SetField(entsession.FieldInitializationErrorCode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.InitializationError(); ok {
+		_spec.SetField(entsession.FieldInitializationError, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(entsession.FieldCodexSessionID, field.TypeString, value)

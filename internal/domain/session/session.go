@@ -78,6 +78,7 @@ type Status string
 
 const (
 	StatusCreated         Status = "created"
+	StatusInitializing    Status = "initializing"
 	StatusQueued          Status = "queued"
 	StatusStarting        Status = "starting"
 	StatusRunning         Status = "running"
@@ -137,33 +138,35 @@ const (
 )
 
 type Session struct {
-	ID                    ID
-	ProjectID             ProjectID
-	Requirement           string
-	Mentions              []PromptMention
-	Mode                  Mode
-	Status                Status
-	Priority              Priority
-	CloseReason           *CloseReason
-	BaseBranch            string
-	WorktreePath          string
-	WorktreeBranch        string
-	WorktreeBaseCommit    string
-	WorktreeHeadCommit    string
-	WorktreeCleanup       WorktreeCleanup
-	CodexSessionID        string
-	Config                Config
-	TodoList              TodoList
-	Usage                 TokenUsage
-	ArtifactCount         int
-	FilesChanged          int
-	QueuedAt              *time.Time
-	Queue                 QueueIntent
-	AppliedSystemCommands map[string]bool
-	LastRunAt             *time.Time
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
-	ClosedAt              *time.Time
+	ID                      ID
+	ProjectID               ProjectID
+	Requirement             string
+	Mentions                []PromptMention
+	Mode                    Mode
+	Status                  Status
+	Priority                Priority
+	CloseReason             *CloseReason
+	BaseBranch              string
+	WorktreePath            string
+	WorktreeBranch          string
+	WorktreeBaseCommit      string
+	WorktreeHeadCommit      string
+	WorktreeCleanup         WorktreeCleanup
+	InitializationErrorCode string
+	InitializationError     string
+	CodexSessionID          string
+	Config                  Config
+	TodoList                TodoList
+	Usage                   TokenUsage
+	ArtifactCount           int
+	FilesChanged            int
+	QueuedAt                *time.Time
+	Queue                   QueueIntent
+	AppliedSystemCommands   map[string]bool
+	LastRunAt               *time.Time
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+	ClosedAt                *time.Time
 }
 
 type TokenUsage struct {
@@ -403,6 +406,7 @@ func closeReasonsEqual(left *CloseReason, right *CloseReason) bool {
 
 var allowedStatusTransitions = map[Status][]Status{
 	StatusCreated:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusInitializing:    {StatusQueued, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusQueued:          {StatusStarting, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusClosed},
 	StatusStarting:        {StatusQueued, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
 	StatusRunning:         {StatusQueued, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
@@ -411,7 +415,7 @@ var allowedStatusTransitions = map[Status][]Status{
 	StatusStopping:        {StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
 	StatusStopped:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusResumeFailed:    {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
-	StatusFailed:          {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusFailed:          {StatusInitializing, StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusBlocked:         {StatusStopping, StatusClosed},
 	StatusCompleted:       {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusClosed},
 	StatusClosed:          {},
@@ -633,6 +637,10 @@ type Repository interface {
 	ReleasePromptAppends(ctx context.Context, processRunID string) error
 	AddMergeRecord(ctx context.Context, record MergeRecord) error
 	LatestSuccessfulMergeRecord(ctx context.Context, sessionID ID) (MergeRecord, bool, error)
+}
+
+type InitializationRepository interface {
+	ListInitializing(ctx context.Context) ([]Session, error)
 }
 
 type UsageRepository interface {

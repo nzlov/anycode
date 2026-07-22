@@ -308,6 +308,18 @@ func (r *mutationResolver) RetrySessionWorktreeCleanup(ctx context.Context, id s
 	return mapSession(dto), nil
 }
 
+// RetrySessionInitialization is the resolver for the retrySessionInitialization field.
+func (r *mutationResolver) RetrySessionInitialization(ctx context.Context, id string) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.RetrySessionInitialization(ctx, sessiondomain.ID(id))
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // AppendPrompt is the resolver for the appendPrompt field.
 func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendPromptInput) (*model.PromptAppend, error) {
 	if r.UseCases.Sessions == nil {

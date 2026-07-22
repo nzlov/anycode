@@ -515,7 +515,7 @@ func TestDeleteBranchDoesNotFetchRemotes(t *testing.T) {
 	}
 }
 
-func TestCreateWorktreeFetchesRemoteBranch(t *testing.T) {
+func TestCreateWorktreeUsesPreviouslyFetchedRemoteBranchWithoutFetchingAgain(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not available")
 	}
@@ -539,6 +539,10 @@ func TestCreateWorktreeFetchesRemoteBranch(t *testing.T) {
 	wantHead := gitOutput(t, other, "rev-parse", "HEAD")
 
 	client := NewWorktrees(dataDir)
+	if _, err := client.Branches(ctx, repo); err != nil {
+		t.Fatalf("Branches() error = %v", err)
+	}
+	runGit(t, repo, "remote", "set-url", "upstream", filepath.Join(base, "missing.git"))
 	got, err := client.Create(ctx, repo, session.ProjectID("project-1"), session.ID("session-1"), "session-1", "upstream/feature/remote-only", "owner-token")
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)

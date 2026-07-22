@@ -39,6 +39,8 @@ func (Session) Fields() []ent.Field {
 		field.String("worktree_cleanup_error_code").Default(""),
 		field.String("worktree_cleanup_error").Default(""),
 		field.Bool("worktree_cleanup_retryable").Default(false),
+		field.String("initialization_error_code").Default(""),
+		field.String("initialization_error").Default(""),
 		field.String("codex_session_id").Default(""),
 		field.String("codex_model").Default(""),
 		field.String("reasoning_effort").Default(""),

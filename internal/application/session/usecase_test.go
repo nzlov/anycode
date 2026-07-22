@@ -128,6 +128,202 @@ func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
 	}
 }
 
+func TestCreateSessionReturnsInitializingBeforeScheduledWorkBegins(t *testing.T) {
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base"}
+	service := New(repo, projects, WithWorktrees(worktrees))
+	service.generateID = func() (domain.ID, error) { return "session-1", nil }
+	var scheduledID domain.ID
+	var scheduledRecovery bool
+	service.initializationScheduler = func(_ *Service, id domain.ID, recovery bool) {
+		scheduledID = id
+		scheduledRecovery = recovery
+	}
+
+	got, err := service.CreateSession(context.Background(), CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "create card",
+		BaseBranch:  "main",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.Status != domain.StatusInitializing || repo.sessions["session-1"].Status != domain.StatusInitializing {
+		t.Fatalf("created session = DTO:%#v saved:%#v", got, repo.sessions["session-1"])
+	}
+	if scheduledID != "session-1" || scheduledRecovery || worktrees.createCalled {
+		t.Fatalf("scheduled initialization = id:%q recovery:%t createCalled:%t", scheduledID, scheduledRecovery, worktrees.createCalled)
+	}
+}
+
+func TestRecoverInitializingSessionReusesExistingWorktree(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = initializingGitSession()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                  "project-1",
+		Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit:               true,
+		WorktreeInitCommand: "./setup.sh",
+	}
+	ownership := domain.WorktreeOwnership{PathExists: true, BranchExists: true, Registered: true, MarkerExists: true, TokenMatches: true, Matches: true}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base", ownership: &ownership}
+	initializer := &fakeWorktreeInitializer{result: domain.WorktreeInitResult{Success: true}}
+	service := New(repo, projects, WithWorktrees(worktrees), WithWorktreeInitializer(initializer))
+
+	recovered, err := service.RecoverInitializingSessions(context.Background())
+	if err != nil {
+		t.Fatalf("RecoverInitializingSessions() error = %v", err)
+	}
+	if recovered != 1 || worktrees.createCalled || !initializer.called {
+		t.Fatalf("recovery = count:%d createCalled:%t initializerCalled:%t", recovered, worktrees.createCalled, initializer.called)
+	}
+	if got := repo.sessions["session-1"]; got.Status != domain.StatusQueued || got.WorktreeCleanup.Status != domain.WorktreeCleanupActive {
+		t.Fatalf("recovered session = %#v", got)
+	}
+}
+
+func TestRecoverInitializingSessionCreatesMissingWorktree(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = initializingGitSession()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	missing := domain.WorktreeOwnership{}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base", ownership: &missing}
+	service := New(repo, projects, WithWorktrees(worktrees))
+
+	recovered, err := service.RecoverInitializingSessions(context.Background())
+	if err != nil {
+		t.Fatalf("RecoverInitializingSessions() error = %v", err)
+	}
+	if recovered != 1 || !worktrees.createCalled {
+		t.Fatalf("recovery = count:%d createCalled:%t", recovered, worktrees.createCalled)
+	}
+	if got := repo.sessions["session-1"]; got.Status != domain.StatusQueued || got.WorktreeCleanup.Status != domain.WorktreeCleanupActive {
+		t.Fatalf("recovered session = %#v", got)
+	}
+}
+
+func TestRecoverInitializingSessionReclaimsIncompleteOwnershipMarker(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = initializingGitSession()
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	partial := domain.WorktreeOwnership{MarkerExists: true, TokenMatches: true}
+	worktrees := &fakeWorktreeManager{path: "/data/worktrees/project-1/session-1", headCommit: "base", ownership: &partial}
+	service := New(repo, projects, WithWorktrees(worktrees))
+
+	if _, err := service.RecoverInitializingSessions(context.Background()); err != nil {
+		t.Fatalf("RecoverInitializingSessions() error = %v", err)
+	}
+	if !worktrees.createCalled || !slices.Equal(worktrees.releasedOwnership, []string{"/data/worktrees/project-1/session-1:owner-token"}) {
+		t.Fatalf("reclaimed worktree = createCalled:%t released:%#v", worktrees.createCalled, worktrees.releasedOwnership)
+	}
+}
+
+func TestRetrySessionInitializationReusesWorktreeAndRerunsInitCommand(t *testing.T) {
+	repo := newFakeRepository()
+	failed := initializingGitSession()
+	failed.Status = domain.StatusFailed
+	failed.InitializationErrorCode = "worktree_init_command_failed"
+	failed.InitializationError = "setup failed"
+	repo.sessions[failed.ID] = failed
+	projects := newFakeProjectRepository()
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                  "project-1",
+		Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit:               true,
+		WorktreeInitCommand: "./setup.sh",
+	}
+	ownership := domain.WorktreeOwnership{PathExists: true, BranchExists: true, Registered: true, MarkerExists: true, TokenMatches: true, Matches: true}
+	worktrees := &fakeWorktreeManager{path: failed.WorktreePath, headCommit: "base", ownership: &ownership}
+	initializer := &fakeWorktreeInitializer{result: domain.WorktreeInitResult{Success: true}}
+	service := New(repo, projects, WithWorktrees(worktrees), WithWorktreeInitializer(initializer))
+
+	got, err := service.RetrySessionInitialization(context.Background(), failed.ID)
+	if err != nil {
+		t.Fatalf("RetrySessionInitialization() error = %v", err)
+	}
+	if got.Status != domain.StatusQueued || worktrees.createCalled || !initializer.called {
+		t.Fatalf("retry = status:%q createCalled:%t initializerCalled:%t", got.Status, worktrees.createCalled, initializer.called)
+	}
+	saved := repo.sessions[failed.ID]
+	if saved.InitializationErrorCode != "" || saved.InitializationError != "" || saved.WorktreeCleanup.Status != domain.WorktreeCleanupActive {
+		t.Fatalf("retried session = %#v", saved)
+	}
+}
+
+func TestRetrySessionInitializationSchedulesRecoveryAfterPersistingState(t *testing.T) {
+	repo := newFakeRepository()
+	failed := initializingGitSession()
+	failed.Status = domain.StatusFailed
+	failed.InitializationErrorCode = "worktree_initialization_failed"
+	failed.InitializationError = "clone failed"
+	repo.sessions[failed.ID] = failed
+	service := New(repo, newFakeProjectRepository("project-1"))
+	var scheduledID domain.ID
+	var scheduledRecovery bool
+	service.initializationScheduler = func(_ *Service, id domain.ID, recovery bool) {
+		scheduledID = id
+		scheduledRecovery = recovery
+	}
+
+	got, err := service.RetrySessionInitialization(context.Background(), failed.ID)
+	if err != nil {
+		t.Fatalf("RetrySessionInitialization() error = %v", err)
+	}
+	if got.Status != domain.StatusInitializing || repo.sessions[failed.ID].Status != domain.StatusInitializing {
+		t.Fatalf("retried session = DTO:%#v saved:%#v", got, repo.sessions[failed.ID])
+	}
+	if scheduledID != failed.ID || !scheduledRecovery {
+		t.Fatalf("scheduled retry = id:%q recovery:%t", scheduledID, scheduledRecovery)
+	}
+}
+
+func TestRetrySessionInitializationRejectsOrdinaryFailure(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{ID: "session-1", ProjectID: "project-1", Status: domain.StatusFailed}
+	service := New(repo, newFakeProjectRepository("project-1"))
+
+	if _, err := service.RetrySessionInitialization(context.Background(), "session-1"); err == nil {
+		t.Fatal("RetrySessionInitialization() expected validation error")
+	}
+	if repo.sessions["session-1"].Status != domain.StatusFailed {
+		t.Fatalf("ordinary failure status = %q", repo.sessions["session-1"].Status)
+	}
+}
+
+func initializingGitSession() domain.Session {
+	return domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "create card",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusInitializing,
+		BaseBranch:     "main",
+		WorktreePath:   "/data/worktrees/project-1/session-1",
+		WorktreeBranch: "session-1",
+		WorktreeCleanup: domain.WorktreeCleanup{
+			Status:         domain.WorktreeCleanupProvisioning,
+			OwnershipToken: "owner-token",
+		},
+	}
+}
+
 func TestCreateSessionDoesNotInheritMissingConfigFromProjectSessions(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -332,7 +528,7 @@ func TestCreateSessionCreatesWorktreeForGitProject(t *testing.T) {
 	}
 }
 
-func TestCreateSessionPersistsCleanupAfterRequestCancellation(t *testing.T) {
+func TestCreateSessionLeavesInitializationRecoverableAfterRequestCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	repo := newFakeRepository()
 	repo.rejectCanceledContext = true
@@ -356,18 +552,12 @@ func TestCreateSessionPersistsCleanupAfterRequestCancellation(t *testing.T) {
 		Requirement: "implement app session",
 		BaseBranch:  "main",
 	})
-	if err == nil || !strings.Contains(err.Error(), "worktree creation canceled") {
-		t.Fatalf("CreateSession() error = %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("CreateSession() error = %v, want context.Canceled", err)
 	}
 	saved := repo.sessions["session-1"]
-	if saved.Status != domain.StatusFailed || saved.WorktreeCleanup.Status != domain.WorktreeCleanupPending {
+	if saved.Status != domain.StatusInitializing || saved.WorktreeCleanup.Status != domain.WorktreeCleanupProvisioning {
 		t.Fatalf("saved canceled session = %#v", saved)
-	}
-	if _, err := service.DrainWorktreeCleanup(context.Background()); err != nil {
-		t.Fatalf("DrainWorktreeCleanup() error = %v", err)
-	}
-	if cleaned := repo.sessions["session-1"]; cleaned.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
-		t.Fatalf("cleaned canceled session = %#v", cleaned)
 	}
 	if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
 		t.Fatalf("unconfirmed resources were deleted: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
@@ -468,7 +658,7 @@ func TestCreateSessionStoresWorktreeBaseCommit(t *testing.T) {
 	}
 }
 
-func TestCreateSessionRunsWorktreeInitBeforeArchivingAttachments(t *testing.T) {
+func TestCreateSessionArchivesAttachmentsBeforeWorktreeInitialization(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.stagedAttachments["staged-1"] = domain.StagedAttachment{ID: "staged-1", Filename: "note.txt"}
@@ -484,11 +674,11 @@ func TestCreateSessionRunsWorktreeInitBeforeArchivingAttachments(t *testing.T) {
 	initializer := &fakeWorktreeInitializer{
 		result: domain.WorktreeInitResult{Success: true},
 		onRun: func() {
-			if _, ok := repo.stagedAttachments["staged-1"]; !ok {
-				t.Fatal("worktree init ran after staged attachment metadata was deleted")
+			if _, ok := repo.stagedAttachments["staged-1"]; ok {
+				t.Fatal("worktree init ran before staged attachment metadata was deleted")
 			}
-			if files.promoted["staged-1"] {
-				t.Fatal("worktree init ran after attachment promotion")
+			if !files.promoted["staged-1"] {
+				t.Fatal("worktree init ran before attachment promotion")
 			}
 		},
 	}
@@ -514,7 +704,7 @@ func TestCreateSessionRunsWorktreeInitBeforeArchivingAttachments(t *testing.T) {
 	}
 }
 
-func TestCreateSessionRecordsWorktreeInitFailureAndContinues(t *testing.T) {
+func TestCreateSessionRecordsWorktreeInitFailureAndMarksSessionFailed(t *testing.T) {
 	tests := []struct {
 		name   string
 		result domain.WorktreeInitResult
@@ -546,16 +736,16 @@ func TestCreateSessionRecordsWorktreeInitFailureAndContinues(t *testing.T) {
 				return id, nil
 			}
 
-			got, err := service.CreateSession(ctx, CreateSessionInput{
+			_, err := service.CreateSession(ctx, CreateSessionInput{
 				ProjectID:   "project-1",
 				Requirement: "create card",
 				BaseBranch:  "main",
 			})
-			if err != nil {
-				t.Fatalf("CreateSession() error = %v", err)
+			if err == nil {
+				t.Fatal("CreateSession() expected initialization error")
 			}
-			if got.Status != domain.StatusQueued {
-				t.Fatalf("session status = %q", got.Status)
+			if got := repo.sessions["session-1"]; got.Status != domain.StatusFailed || got.WorktreeCleanup.Status != domain.WorktreeCleanupProvisioning {
+				t.Fatalf("session after initialization failure = %#v", got)
 			}
 			if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
 				t.Fatalf("worktree was cleaned after init failure: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
@@ -574,7 +764,7 @@ func TestCreateSessionRecordsWorktreeInitFailureAndContinues(t *testing.T) {
 	}
 }
 
-func TestCreateSessionContinuesWhenWorktreeInitFailureEventCannotBeRecorded(t *testing.T) {
+func TestCreateSessionMarksFailedWhenWorktreeInitFailureEventCannotBeRecorded(t *testing.T) {
 	repo := newFakeRepository()
 	projects := newFakeProjectRepository()
 	projects.projects["project-1"] = projectdomain.Project{
@@ -597,11 +787,11 @@ func TestCreateSessionContinuesWhenWorktreeInitFailureEventCannotBeRecorded(t *t
 		return id, nil
 	}
 
-	got, err := service.CreateSession(context.Background(), CreateSessionInput{ProjectID: "project-1", Requirement: "create card", BaseBranch: "main"})
-	if err != nil {
-		t.Fatalf("CreateSession() error = %v", err)
+	_, err := service.CreateSession(context.Background(), CreateSessionInput{ProjectID: "project-1", Requirement: "create card", BaseBranch: "main"})
+	if err == nil {
+		t.Fatal("CreateSession() expected initialization error")
 	}
-	if got.Status != domain.StatusQueued || len(worktrees.removed) != 0 || repo.sessions["session-1"].Status != domain.StatusQueued {
+	if len(worktrees.removed) != 0 || repo.sessions["session-1"].Status != domain.StatusFailed {
 		t.Fatalf("worktree/session changed after event persistence failure: removed=%#v session=%#v", worktrees.removed, repo.sessions["session-1"])
 	}
 }
@@ -653,7 +843,7 @@ func TestCreateSessionStopsWhenRequestIsCancelledDuringWorktreeInit(t *testing.T
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("CreateSession() error = %v, want context.Canceled", err)
 	}
-	if saved := repo.sessions["session-1"]; saved.Status != domain.StatusFailed || saved.WorktreeCleanup.Status != domain.WorktreeCleanupPending {
+	if saved := repo.sessions["session-1"]; saved.Status != domain.StatusInitializing || saved.WorktreeCleanup.Status != domain.WorktreeCleanupProvisioning {
 		t.Fatalf("session after cancelled initialization = %#v", saved)
 	}
 }
@@ -3560,14 +3750,11 @@ func TestCreateSessionDoesNotDeleteUnconfirmedExistingBranch(t *testing.T) {
 	}); err == nil {
 		t.Fatal("CreateSession() expected branch collision error")
 	}
-	if _, err := service.DrainWorktreeCleanup(ctx); err != nil {
-		t.Fatalf("DrainWorktreeCleanup() error = %v", err)
-	}
 	if len(worktrees.removed) != 0 || len(worktrees.deletedBranches) != 0 {
 		t.Fatalf("unconfirmed existing branch was deleted: removed=%#v branches=%#v", worktrees.removed, worktrees.deletedBranches)
 	}
 	saved := repo.sessions["session-1"]
-	if saved.WorktreeCleanup.Status != domain.WorktreeCleanupFailed || saved.WorktreeCleanup.Retryable || saved.WorktreeCleanup.ErrorCode != "worktree_ownership_unconfirmed" {
+	if saved.Status != domain.StatusFailed || saved.WorktreeCleanup.Status != domain.WorktreeCleanupProvisioning {
 		t.Fatalf("cleanup ownership failure = %#v", saved)
 	}
 }
@@ -10273,6 +10460,14 @@ func TestAvailableActionsByStatus(t *testing.T) {
 			want:    []string{"execute", "stop", "close"},
 		},
 		{
+			name: "initialization failed",
+			session: domain.Session{
+				Status:                  domain.StatusFailed,
+				InitializationErrorCode: "worktree_init_command_failed",
+			},
+			want: []string{"retry_initialization", "close"},
+		},
+		{
 			name:    "closed",
 			session: domain.Session{Status: domain.StatusClosed},
 			want:    []string{},
@@ -11319,10 +11514,21 @@ func (r *fakeRepository) ListQueued(context.Context) ([]domain.Session, error) {
 	return queued, nil
 }
 
+func (r *fakeRepository) ListInitializing(context.Context) ([]domain.Session, error) {
+	initializing := make([]domain.Session, 0)
+	for _, session := range r.sessions {
+		if session.Status == domain.StatusInitializing {
+			initializing = append(initializing, normalizeFakeSessionWorktree(session))
+		}
+	}
+	slices.SortFunc(initializing, func(left, right domain.Session) int { return strings.Compare(string(left.ID), string(right.ID)) })
+	return initializing, nil
+}
+
 func (r *fakeRepository) ListProvisioningWorktrees(context.Context, int) ([]domain.Session, error) {
 	result := make([]domain.Session, 0)
 	for _, session := range r.sessions {
-		if session.WorktreeCleanup.Status == domain.WorktreeCleanupProvisioning {
+		if session.WorktreeCleanup.Status == domain.WorktreeCleanupProvisioning && session.Status != domain.StatusInitializing {
 			result = append(result, session)
 		}
 	}

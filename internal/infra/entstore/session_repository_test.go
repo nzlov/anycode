@@ -55,7 +55,9 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 			Error:                "branch is checked out",
 			Retryable:            true,
 		},
-		CodexSessionID: "codex-1",
+		InitializationErrorCode: "worktree_init_command_failed",
+		InitializationError:     "setup failed",
+		CodexSessionID:          "codex-1",
 		Config: session.Config{
 			CodexModel:      "gpt-5.4",
 			ReasoningEffort: "high",
@@ -814,6 +816,8 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.WorktreeCleanup.ErrorCode != want.WorktreeCleanup.ErrorCode ||
 		got.WorktreeCleanup.Error != want.WorktreeCleanup.Error ||
 		got.WorktreeCleanup.Retryable != want.WorktreeCleanup.Retryable ||
+		got.InitializationErrorCode != want.InitializationErrorCode ||
+		got.InitializationError != want.InitializationError ||
 		got.CodexSessionID != want.CodexSessionID ||
 		got.Config != want.Config ||
 		got.Usage != want.Usage ||

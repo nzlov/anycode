@@ -221,9 +221,6 @@ func (c *Client) Create(ctx context.Context, projectPath string, projectID sessi
 		return "", fmt.Errorf("claim worktree ownership marker: %w", err)
 	}
 	args := []string{"worktree", "add", "-b", branch, path, ref}
-	if err := c.fetchRemotes(ctx, projectPath); err != nil {
-		return "", err
-	}
 	hasCommits, err := c.hasCommits(ctx, projectPath)
 	if err != nil {
 		return "", err

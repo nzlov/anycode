@@ -46,3 +46,26 @@ test('session status presentation has one owner', () => {
   assert.doesNotMatch(detailSource, /created: '待运行'/);
   assert.doesNotMatch(tableSource, /created: '待运行'/);
 });
+
+test('initializing sessions have a shared visible status', () => {
+  const presentationSource = readSource('../src/services/sessionStatusPresentation.ts');
+  const serviceSource = readSource('../src/services/sessions.ts');
+  const tableSource = readSource('../src/pages/SessionsPage.vue');
+
+  assert.match(serviceSource, /\| 'initializing'/);
+  assert.match(presentationSource, /initializing: '初始化中'/);
+  assert.match(tableSource, /label: '初始化中', value: 'initializing'/);
+});
+
+test('initialization failures expose a dedicated retry action in overview and detail', () => {
+  const serviceSource = readSource('../src/services/sessions.ts');
+  const overviewSource = readSource('../src/pages/IndexPage.vue');
+  const detailSource = readSource('../src/components/SessionDetailView.vue');
+  const composableSource = readSource('../src/composables/useSessionDetail.ts');
+
+  assert.match(serviceSource, /mutation RetrySessionInitialization/);
+  assert.match(overviewSource, /availableActions\.includes\('retry_initialization'\)/);
+  assert.match(overviewSource, /await retrySessionInitialization\(card\.id\)/);
+  assert.match(detailSource, /tooltip: '重试初始化'/);
+  assert.match(composableSource, /retrySessionInitialization as retrySessionInitializationRequest/);
+});

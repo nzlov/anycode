@@ -68,6 +68,7 @@ type Mutation {
   closeSession(input: CloseSessionInput!): Session!
   cleanupSessions(input: CleanupSessionsInput!): Int!
   retrySessionWorktreeCleanup(id: ID!): Session!
+  retrySessionInitialization(id: ID!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
   stageAttachment(file: Upload!): Attachment!

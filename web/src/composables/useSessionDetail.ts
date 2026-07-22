@@ -16,6 +16,7 @@ import {
   getSession,
   subscribeSessionEvents,
   executeSession as executeSessionRequest,
+  retrySessionInitialization as retrySessionInitializationRequest,
   retrySessionWorktreeCleanup as retrySessionWorktreeCleanupRequest,
   submitQuestionRequest,
   submitWorkflowApproval as submitWorkflowApprovalRequest,
@@ -58,6 +59,7 @@ export function useSessionDetail(sessionId: string) {
   const executing = ref(false);
   const stopping = ref(false);
   const closing = ref(false);
+  const retryingInitialization = ref(false);
   const retryingWorktreeCleanup = ref(false);
   const updatingConfig = ref(false);
   const questionsLoading = ref(false);
@@ -199,6 +201,20 @@ export function useSessionDetail(sessionId: string) {
       throw err;
     } finally {
       retryingWorktreeCleanup.value = false;
+    }
+  }
+
+  async function retryInitialization() {
+    retryingInitialization.value = true;
+    error.value = '';
+    try {
+      await retrySessionInitializationRequest(sessionId);
+      await loadSessionState();
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '重试初始化失败';
+      throw err;
+    } finally {
+      retryingInitialization.value = false;
     }
   }
 
@@ -479,6 +495,7 @@ export function useSessionDetail(sessionId: string) {
     executing,
     stopping,
     closing,
+    retryingInitialization,
     retryingWorktreeCleanup,
     updatingConfig,
     questionsLoading,
@@ -492,6 +509,7 @@ export function useSessionDetail(sessionId: string) {
     executeSession,
     stopSession,
     closeSession,
+    retryInitialization,
     retryWorktreeCleanup,
     updateConfig,
     loadPendingQuestions,

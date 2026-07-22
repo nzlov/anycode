@@ -62,6 +62,8 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetWorktreeCleanupErrorCode(s.WorktreeCleanup.ErrorCode).
 			SetWorktreeCleanupError(s.WorktreeCleanup.Error).
 			SetWorktreeCleanupRetryable(s.WorktreeCleanup.Retryable).
+			SetInitializationErrorCode(s.InitializationErrorCode).
+			SetInitializationError(s.InitializationError).
 			SetCodexSessionID(s.CodexSessionID).
 			SetCodexModel(s.Config.CodexModel).
 			SetReasoningEffort(s.Config.ReasoningEffort).
@@ -185,6 +187,8 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetWorktreeCleanupErrorCode(s.WorktreeCleanup.ErrorCode).
 		SetWorktreeCleanupError(s.WorktreeCleanup.Error).
 		SetWorktreeCleanupRetryable(s.WorktreeCleanup.Retryable).
+		SetInitializationErrorCode(s.InitializationErrorCode).
+		SetInitializationError(s.InitializationError).
 		SetCodexSessionID(s.CodexSessionID).
 		SetCodexModel(s.Config.CodexModel).
 		SetReasoningEffort(s.Config.ReasoningEffort).
@@ -292,6 +296,21 @@ func (r *SessionRepository) ListQueued(ctx context.Context) ([]domainsession.Ses
 	return sessions, nil
 }
 
+func (r *SessionRepository) ListInitializing(ctx context.Context) ([]domainsession.Session, error) {
+	rows, err := r.client.Session.Query().
+		Where(entsession.StatusEQ(string(domainsession.StatusInitializing))).
+		Order(ent.Asc(entsession.FieldUpdatedAt), ent.Asc(entsession.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list initializing sessions: %w", err)
+	}
+	sessions := make([]domainsession.Session, 0, len(rows))
+	for _, row := range rows {
+		sessions = append(sessions, toDomainSession(row))
+	}
+	return sessions, nil
+}
+
 func (r *SessionRepository) ListWorktreeCleanupDue(ctx context.Context, now time.Time, limit int) ([]domainsession.Session, error) {
 	if limit < 1 {
 		limit = 100
@@ -324,7 +343,10 @@ func (r *SessionRepository) ListProvisioningWorktrees(ctx context.Context, limit
 		limit = 100
 	}
 	rows, err := r.client.Session.Query().
-		Where(entsession.WorktreeCleanupStatusEQ(string(domainsession.WorktreeCleanupProvisioning))).
+		Where(
+			entsession.WorktreeCleanupStatusEQ(string(domainsession.WorktreeCleanupProvisioning)),
+			entsession.StatusNEQ(string(domainsession.StatusInitializing)),
+		).
 		Order(ent.Asc(entsession.FieldUpdatedAt), ent.Asc(entsession.FieldID)).
 		Limit(limit).
 		All(ctx)
@@ -594,6 +616,7 @@ func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery)
 	}
 	switch strings.ToLower(strings.TrimSpace(query.Scope)) {
 	case string(domainsession.StatusCreated),
+		string(domainsession.StatusInitializing),
 		string(domainsession.StatusQueued),
 		string(domainsession.StatusStarting),
 		string(domainsession.StatusRunning),
@@ -735,7 +758,9 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			Error:                row.WorktreeCleanupError,
 			Retryable:            row.WorktreeCleanupRetryable,
 		},
-		CodexSessionID: row.CodexSessionID,
+		InitializationErrorCode: row.InitializationErrorCode,
+		InitializationError:     row.InitializationError,
+		CodexSessionID:          row.CodexSessionID,
 		Config: domainsession.Config{
 			CodexModel:      row.CodexModel,
 			ReasoningEffort: row.ReasoningEffort,

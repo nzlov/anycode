@@ -65,6 +65,10 @@ type Session struct {
 	WorktreeCleanupError string `json:"worktree_cleanup_error,omitempty"`
 	// WorktreeCleanupRetryable holds the value of the "worktree_cleanup_retryable" field.
 	WorktreeCleanupRetryable bool `json:"worktree_cleanup_retryable,omitempty"`
+	// InitializationErrorCode holds the value of the "initialization_error_code" field.
+	InitializationErrorCode string `json:"initialization_error_code,omitempty"`
+	// InitializationError holds the value of the "initialization_error" field.
+	InitializationError string `json:"initialization_error,omitempty"`
 	// CodexSessionID holds the value of the "codex_session_id" field.
 	CodexSessionID string `json:"codex_session_id,omitempty"`
 	// CodexModel holds the value of the "codex_model" field.
@@ -139,7 +143,7 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case entsession.FieldWorktreeCleanupAttempts, entsession.FieldArtifactCount, entsession.FieldFilesChanged:
 			values[i] = new(sql.NullInt64)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldInitializationErrorCode, entsession.FieldInitializationError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldWorkflowStartedAt, entsession.FieldWorkflowStoppedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -309,6 +313,18 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field worktree_cleanup_retryable", values[i])
 			} else if value.Valid {
 				_m.WorktreeCleanupRetryable = value.Bool
+			}
+		case entsession.FieldInitializationErrorCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field initialization_error_code", values[i])
+			} else if value.Valid {
+				_m.InitializationErrorCode = value.String
+			}
+		case entsession.FieldInitializationError:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field initialization_error", values[i])
+			} else if value.Valid {
+				_m.InitializationError = value.String
 			}
 		case entsession.FieldCodexSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -622,6 +638,12 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("worktree_cleanup_retryable=")
 	builder.WriteString(fmt.Sprintf("%v", _m.WorktreeCleanupRetryable))
+	builder.WriteString(", ")
+	builder.WriteString("initialization_error_code=")
+	builder.WriteString(_m.InitializationErrorCode)
+	builder.WriteString(", ")
+	builder.WriteString("initialization_error=")
+	builder.WriteString(_m.InitializationError)
 	builder.WriteString(", ")
 	builder.WriteString("codex_session_id=")
 	builder.WriteString(_m.CodexSessionID)

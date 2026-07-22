@@ -355,6 +355,8 @@ var (
 		{Name: "worktree_cleanup_error_code", Type: field.TypeString, Default: ""},
 		{Name: "worktree_cleanup_error", Type: field.TypeString, Default: ""},
 		{Name: "worktree_cleanup_retryable", Type: field.TypeBool, Default: false},
+		{Name: "initialization_error_code", Type: field.TypeString, Default: ""},
+		{Name: "initialization_error", Type: field.TypeString, Default: ""},
 		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
 		{Name: "codex_model", Type: field.TypeString, Default: ""},
 		{Name: "reasoning_effort", Type: field.TypeString, Default: ""},
@@ -400,12 +402,12 @@ var (
 			{
 				Name:    "session_project_id_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[52]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[54]},
 			},
 			{
 				Name:    "session_project_id_last_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[50]},
+				Columns: []*schema.Column{SessionsColumns[1], SessionsColumns[52]},
 			},
 			{
 				Name:    "session_status",
@@ -415,12 +417,12 @@ var (
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[5], SessionsColumns[35], SessionsColumns[6], SessionsColumns[33]},
+				Columns: []*schema.Column{SessionsColumns[5], SessionsColumns[37], SessionsColumns[6], SessionsColumns[35]},
 			},
 			{
 				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[13], SessionsColumns[19], SessionsColumns[52]},
+				Columns: []*schema.Column{SessionsColumns[13], SessionsColumns[19], SessionsColumns[54]},
 			},
 		},
 	}

@@ -84,6 +84,9 @@ func main() {
 	if err := reconcileWorktreeCleanup(ctx, useCases.Sessions); err != nil {
 		log.Fatalf("reconcile worktree cleanup: %s", err.Error())
 	}
+	if err := recoverInitializingSessions(ctx, useCases.Sessions); err != nil {
+		log.Fatalf("recover initializing sessions: %s", err.Error())
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -183,7 +186,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
 	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts))
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
@@ -229,9 +232,21 @@ func runNotificationDispatcher(ctx context.Context, service *notificationapp.Ser
 }
 
 type recoverySessionUseCase interface {
+	RecoverInitializingSessions(ctx context.Context) (int, error)
 	RecoverInterruptedSessions(ctx context.Context) (int, error)
 	DrainQueuedSessions(ctx context.Context) (int, error)
 	ReconcileWorktreeCleanup(ctx context.Context) (int, error)
+}
+
+func recoverInitializingSessions(ctx context.Context, sessions recoverySessionUseCase) error {
+	recoveredCount, err := sessions.RecoverInitializingSessions(ctx)
+	if err != nil {
+		return err
+	}
+	if recoveredCount > 0 {
+		log.Printf("scheduled initializing sessions: count=%d", recoveredCount)
+	}
+	return nil
 }
 
 func reconcileInterruptedSessions(ctx context.Context, sessions recoverySessionUseCase) error {

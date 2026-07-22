@@ -8657,6 +8657,8 @@ type SessionMutation struct {
 	worktree_cleanup_error_code      *string
 	worktree_cleanup_error           *string
 	worktree_cleanup_retryable       *bool
+	initialization_error_code        *string
+	initialization_error             *string
 	codex_session_id                 *string
 	codex_model                      *string
 	reasoning_effort                 *string
@@ -9752,6 +9754,78 @@ func (m *SessionMutation) OldWorktreeCleanupRetryable(ctx context.Context) (v bo
 // ResetWorktreeCleanupRetryable resets all changes to the "worktree_cleanup_retryable" field.
 func (m *SessionMutation) ResetWorktreeCleanupRetryable() {
 	m.worktree_cleanup_retryable = nil
+}
+
+// SetInitializationErrorCode sets the "initialization_error_code" field.
+func (m *SessionMutation) SetInitializationErrorCode(s string) {
+	m.initialization_error_code = &s
+}
+
+// InitializationErrorCode returns the value of the "initialization_error_code" field in the mutation.
+func (m *SessionMutation) InitializationErrorCode() (r string, exists bool) {
+	v := m.initialization_error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInitializationErrorCode returns the old "initialization_error_code" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldInitializationErrorCode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInitializationErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInitializationErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInitializationErrorCode: %w", err)
+	}
+	return oldValue.InitializationErrorCode, nil
+}
+
+// ResetInitializationErrorCode resets all changes to the "initialization_error_code" field.
+func (m *SessionMutation) ResetInitializationErrorCode() {
+	m.initialization_error_code = nil
+}
+
+// SetInitializationError sets the "initialization_error" field.
+func (m *SessionMutation) SetInitializationError(s string) {
+	m.initialization_error = &s
+}
+
+// InitializationError returns the value of the "initialization_error" field in the mutation.
+func (m *SessionMutation) InitializationError() (r string, exists bool) {
+	v := m.initialization_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldInitializationError returns the old "initialization_error" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldInitializationError(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldInitializationError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldInitializationError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldInitializationError: %w", err)
+	}
+	return oldValue.InitializationError, nil
+}
+
+// ResetInitializationError resets all changes to the "initialization_error" field.
+func (m *SessionMutation) ResetInitializationError() {
+	m.initialization_error = nil
 }
 
 // SetCodexSessionID sets the "codex_session_id" field.
@@ -11025,7 +11099,7 @@ func (m *SessionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SessionMutation) Fields() []string {
-	fields := make([]string, 0, 53)
+	fields := make([]string, 0, 55)
 	if m.project_id != nil {
 		fields = append(fields, entsession.FieldProjectID)
 	}
@@ -11094,6 +11168,12 @@ func (m *SessionMutation) Fields() []string {
 	}
 	if m.worktree_cleanup_retryable != nil {
 		fields = append(fields, entsession.FieldWorktreeCleanupRetryable)
+	}
+	if m.initialization_error_code != nil {
+		fields = append(fields, entsession.FieldInitializationErrorCode)
+	}
+	if m.initialization_error != nil {
+		fields = append(fields, entsession.FieldInitializationError)
 	}
 	if m.codex_session_id != nil {
 		fields = append(fields, entsession.FieldCodexSessionID)
@@ -11239,6 +11319,10 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.WorktreeCleanupError()
 	case entsession.FieldWorktreeCleanupRetryable:
 		return m.WorktreeCleanupRetryable()
+	case entsession.FieldInitializationErrorCode:
+		return m.InitializationErrorCode()
+	case entsession.FieldInitializationError:
+		return m.InitializationError()
 	case entsession.FieldCodexSessionID:
 		return m.CodexSessionID()
 	case entsession.FieldCodexModel:
@@ -11354,6 +11438,10 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldWorktreeCleanupError(ctx)
 	case entsession.FieldWorktreeCleanupRetryable:
 		return m.OldWorktreeCleanupRetryable(ctx)
+	case entsession.FieldInitializationErrorCode:
+		return m.OldInitializationErrorCode(ctx)
+	case entsession.FieldInitializationError:
+		return m.OldInitializationError(ctx)
 	case entsession.FieldCodexSessionID:
 		return m.OldCodexSessionID(ctx)
 	case entsession.FieldCodexModel:
@@ -11583,6 +11671,20 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetWorktreeCleanupRetryable(v)
+		return nil
+	case entsession.FieldInitializationErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInitializationErrorCode(v)
+		return nil
+	case entsession.FieldInitializationError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetInitializationError(v)
 		return nil
 	case entsession.FieldCodexSessionID:
 		v, ok := value.(string)
@@ -12049,6 +12151,12 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldWorktreeCleanupRetryable:
 		m.ResetWorktreeCleanupRetryable()
+		return nil
+	case entsession.FieldInitializationErrorCode:
+		m.ResetInitializationErrorCode()
+		return nil
+	case entsession.FieldInitializationError:
+		m.ResetInitializationError()
 		return nil
 	case entsession.FieldCodexSessionID:
 		m.ResetCodexSessionID()

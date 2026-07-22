@@ -18,6 +18,7 @@ import { normalizeWorkflowNodeResult } from '@/services/workflowApprovalReview';
 export type SessionMode = 'workflow' | 'chat';
 export type SessionStatus =
   | 'created'
+  | 'initializing'
   | 'queued'
   | 'starting'
   | 'running'
@@ -875,6 +876,20 @@ export async function retrySessionWorktreeCleanup(sessionId: string) {
     variables: { id: sessionId },
   });
   return normalizeSession(data.retrySessionWorktreeCleanup);
+}
+
+export async function retrySessionInitialization(sessionId: string) {
+  const data = await graphqlFetch<{ retrySessionInitialization: GraphQLSession }, { id: string }>({
+    query: `
+      mutation RetrySessionInitialization($id: ID!) {
+        retrySessionInitialization(id: $id) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { id: sessionId },
+  });
+  return normalizeSession(data.retrySessionInitialization);
 }
 
 export async function updateSessionPriority(sessionId: string, priority: SessionPriority) {

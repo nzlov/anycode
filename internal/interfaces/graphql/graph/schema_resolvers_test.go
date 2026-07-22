@@ -704,6 +704,28 @@ func TestMutationRetrySessionWorktreeCleanupForwardsUseCase(t *testing.T) {
 	}
 }
 
+func TestMutationRetrySessionInitializationForwardsUseCase(t *testing.T) {
+	now := time.Unix(30, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		retryInitializationResult: sessionapp.DTO{
+			ID:        "session-1",
+			ProjectID: "project-1",
+			Status:    sessiondomain.StatusInitializing,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.RetrySessionInitialization(context.Background(), "session-1")
+	if err != nil {
+		t.Fatalf("RetrySessionInitialization() error = %v", err)
+	}
+	if sessions.gotRetryInitializationID != "session-1" || got.Status != string(sessiondomain.StatusInitializing) {
+		t.Fatalf("RetrySessionInitialization() = %#v id=%q", got, sessions.gotRetryInitializationID)
+	}
+}
+
 func TestMutationStartSessionForwardsUnifiedExecutionUseCase(t *testing.T) {
 	now := time.Unix(30, 0).UTC()
 	sessions := &fakeSessionUseCase{
@@ -1309,35 +1331,37 @@ func (f *fakeQuestionUseCase) QuestionRequestUpdates(_ context.Context, sessionI
 
 type fakeSessionUseCase struct {
 	sessionapp.UseCase
-	gotAnswered            questionapp.RequestDTO
-	answeredCalls          int
-	gotSubmitQuestion      questionapp.SubmitRequestInput
-	submitQuestionResult   questionapp.RequestDTO
-	submitQuestionCalls    int
-	err                    error
-	gotGetCardID           sessiondomain.ID
-	getCardResult          sessionapp.CardDTO
-	gotGetID               sessiondomain.ID
-	getResult              sessionapp.DetailDTO
-	gotCreate              sessionapp.CreateSessionInput
-	createResult           sessionapp.DTO
-	gotResumeID            sessiondomain.ID
-	resumeResult           sessionapp.DTO
-	gotExecuteID           sessiondomain.ID
-	gotExecuteForce        bool
-	executeResult          sessionapp.DTO
-	stopProjectID          sessiondomain.ProjectID
-	gotUpdateConfig        sessionapp.UpdateSessionConfigInput
-	updateConfigResult     sessionapp.DTO
-	gotAppend              sessionapp.AppendPromptInput
-	appendResult           sessionapp.PromptAppendDTO
-	gotUpdateAppend        sessionapp.UpdatePromptAppendInput
-	updateAppendResult     sessionapp.PromptAppendDTO
-	gotRetryCleanupID      sessiondomain.ID
-	retryCleanupResult     sessionapp.DTO
-	gotDeleteSessionFileID sessiondomain.SessionFileID
-	gotCleanup             sessionapp.CleanupSessionsInput
-	cleanupResult          int
+	gotAnswered               questionapp.RequestDTO
+	answeredCalls             int
+	gotSubmitQuestion         questionapp.SubmitRequestInput
+	submitQuestionResult      questionapp.RequestDTO
+	submitQuestionCalls       int
+	err                       error
+	gotGetCardID              sessiondomain.ID
+	getCardResult             sessionapp.CardDTO
+	gotGetID                  sessiondomain.ID
+	getResult                 sessionapp.DetailDTO
+	gotCreate                 sessionapp.CreateSessionInput
+	createResult              sessionapp.DTO
+	gotResumeID               sessiondomain.ID
+	resumeResult              sessionapp.DTO
+	gotExecuteID              sessiondomain.ID
+	gotExecuteForce           bool
+	executeResult             sessionapp.DTO
+	stopProjectID             sessiondomain.ProjectID
+	gotUpdateConfig           sessionapp.UpdateSessionConfigInput
+	updateConfigResult        sessionapp.DTO
+	gotAppend                 sessionapp.AppendPromptInput
+	appendResult              sessionapp.PromptAppendDTO
+	gotUpdateAppend           sessionapp.UpdatePromptAppendInput
+	updateAppendResult        sessionapp.PromptAppendDTO
+	gotRetryCleanupID         sessiondomain.ID
+	retryCleanupResult        sessionapp.DTO
+	gotRetryInitializationID  sessiondomain.ID
+	retryInitializationResult sessionapp.DTO
+	gotDeleteSessionFileID    sessiondomain.SessionFileID
+	gotCleanup                sessionapp.CleanupSessionsInput
+	cleanupResult             int
 }
 
 func (f *fakeSessionUseCase) DeleteSessionFile(_ context.Context, id sessiondomain.SessionFileID) error {
@@ -1421,6 +1445,11 @@ func (f *fakeSessionUseCase) UpdateSessionConfig(_ context.Context, input sessio
 func (f *fakeSessionUseCase) RetryWorktreeCleanup(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
 	f.gotRetryCleanupID = id
 	return f.retryCleanupResult, f.err
+}
+
+func (f *fakeSessionUseCase) RetrySessionInitialization(_ context.Context, id sessiondomain.ID) (sessionapp.DTO, error) {
+	f.gotRetryInitializationID = id
+	return f.retryInitializationResult, f.err
 }
 
 func strPtr(value string) *string {

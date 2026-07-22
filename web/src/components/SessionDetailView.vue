@@ -727,6 +727,7 @@ const {
   executing,
   stopping,
   closing,
+  retryingInitialization,
   retryingWorktreeCleanup,
   updatingConfig,
   questionsLoading,
@@ -740,6 +741,7 @@ const {
   executeSession,
   stopSession,
   closeSession: closeSessionRequest,
+  retryInitialization,
   retryWorktreeCleanup,
   updateConfig,
   loadPendingQuestions,
@@ -882,6 +884,9 @@ const knownUserPrompts = computed(() => {
 });
 const canExecute = computed(() => session.value?.availableActions.includes('execute') ?? false);
 const canClose = computed(() => session.value?.availableActions.includes('close') ?? false);
+const canRetryInitialization = computed(
+  () => session.value?.availableActions.includes('retry_initialization') ?? false,
+);
 const worktreeCleanup = computed(() => session.value?.worktreeCleanup ?? null);
 const canRetryWorktreeCleanup = computed(
   () => session.value?.availableActions.includes('retry_worktree_cleanup') ?? false,
@@ -933,6 +938,16 @@ const composerAction = computed(() => {
   const current = session.value;
   if (!current) return null;
   if (current.status === 'closed') return null;
+  if (canRetryInitialization.value) {
+    return {
+      icon: 'refresh',
+      color: 'primary',
+      tooltip: '重试初始化',
+      loading: retryingInitialization.value,
+      disabled: retryingInitialization.value,
+      run: retryCurrentInitialization,
+    };
+  }
   if (
     appendText.value.trim().length > 0 ||
     appendFiles.value.length > 0 ||
@@ -1220,6 +1235,15 @@ async function closeCurrentSession() {
     await closeSessionRequest();
   } catch (err) {
     notifyError(err, '关闭卡片失败');
+  }
+}
+
+async function retryCurrentInitialization() {
+  if (!canRetryInitialization.value) return;
+  try {
+    await retryInitialization();
+  } catch (err) {
+    notifyError(err, '重试初始化失败');
   }
 }
 

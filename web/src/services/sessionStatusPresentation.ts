@@ -2,6 +2,7 @@ import type { SessionStatus } from './sessions';
 
 const labels: Record<SessionStatus, string> = {
   created: '待运行',
+  initializing: '初始化中',
   queued: '排队中',
   starting: '启动中',
   running: '运行中',
@@ -18,6 +19,7 @@ const labels: Record<SessionStatus, string> = {
 
 const colors: Record<SessionStatus, string> = {
   created: 'blue-grey',
+  initializing: 'primary',
   queued: 'warning',
   starting: 'primary',
   running: 'positive',

@@ -59,6 +59,10 @@ const (
 	FieldWorktreeCleanupError = "worktree_cleanup_error"
 	// FieldWorktreeCleanupRetryable holds the string denoting the worktree_cleanup_retryable field in the database.
 	FieldWorktreeCleanupRetryable = "worktree_cleanup_retryable"
+	// FieldInitializationErrorCode holds the string denoting the initialization_error_code field in the database.
+	FieldInitializationErrorCode = "initialization_error_code"
+	// FieldInitializationError holds the string denoting the initialization_error field in the database.
+	FieldInitializationError = "initialization_error"
 	// FieldCodexSessionID holds the string denoting the codex_session_id field in the database.
 	FieldCodexSessionID = "codex_session_id"
 	// FieldCodexModel holds the string denoting the codex_model field in the database.
@@ -149,6 +153,8 @@ var Columns = []string{
 	FieldWorktreeCleanupErrorCode,
 	FieldWorktreeCleanupError,
 	FieldWorktreeCleanupRetryable,
+	FieldInitializationErrorCode,
+	FieldInitializationError,
 	FieldCodexSessionID,
 	FieldCodexModel,
 	FieldReasoningEffort,
@@ -224,6 +230,10 @@ var (
 	DefaultWorktreeCleanupError string
 	// DefaultWorktreeCleanupRetryable holds the default value on creation for the "worktree_cleanup_retryable" field.
 	DefaultWorktreeCleanupRetryable bool
+	// DefaultInitializationErrorCode holds the default value on creation for the "initialization_error_code" field.
+	DefaultInitializationErrorCode string
+	// DefaultInitializationError holds the default value on creation for the "initialization_error" field.
+	DefaultInitializationError string
 	// DefaultCodexSessionID holds the default value on creation for the "codex_session_id" field.
 	DefaultCodexSessionID string
 	// DefaultCodexModel holds the default value on creation for the "codex_model" field.
@@ -390,6 +400,16 @@ func ByWorktreeCleanupError(opts ...sql.OrderTermOption) OrderOption {
 // ByWorktreeCleanupRetryable orders the results by the worktree_cleanup_retryable field.
 func ByWorktreeCleanupRetryable(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWorktreeCleanupRetryable, opts...).ToFunc()
+}
+
+// ByInitializationErrorCode orders the results by the initialization_error_code field.
+func ByInitializationErrorCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInitializationErrorCode, opts...).ToFunc()
+}
+
+// ByInitializationError orders the results by the initialization_error field.
+func ByInitializationError(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInitializationError, opts...).ToFunc()
 }
 
 // ByCodexSessionID orders the results by the codex_session_id field.

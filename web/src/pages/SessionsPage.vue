@@ -196,6 +196,7 @@ const {
 
 const statusOptions = [
   { label: '全部状态', value: 'all' },
+  { label: '初始化中', value: 'initializing' },
   { label: '运行中', value: 'running' },
   { label: '待回答', value: 'waiting_user' },
   { label: '待审批', value: 'waiting_approval' },
@@ -211,6 +212,7 @@ const ageOptions = [
   { label: '30 天前', value: 30 },
 ];
 const statusValues = new Set<SessionStatus>([
+  'initializing',
   'running',
   'waiting_user',
   'waiting_approval',
