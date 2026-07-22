@@ -10,7 +10,7 @@ test('project list no longer requests git state for sidebar summaries', () => {
   assert.doesNotMatch(listProjectsBody, /gitState/);
 });
 
-test('new session dialog refreshes cached branches explicitly', () => {
+test('new session dialog uses cached branches automatically and refreshes them explicitly', () => {
   const source = readFileSync(new URL('../src/components/NewSessionDialog.vue', import.meta.url), 'utf8');
 
   assert.equal((source.match(/hide-dropdown-icon/g) ?? []).length, 3);
@@ -25,6 +25,9 @@ test('new session dialog refreshes cached branches explicitly', () => {
   );
   assert.doesNotMatch(source, /<div v-if="selectedProject\?\.isGit" class="branch-picker">/);
   assert.match(source, /refreshProjectBranches[\s\S]*loadBranchesForProject\(value,\s*\{\s*refresh:\s*true\s*\}/);
+  assert.equal((source.match(/\{\s*refresh:\s*true\s*\}/g) ?? []).length, 1);
+  assert.match(source, /projectId\.value === nextProjectId[\s\S]*loadBranchesForProject\(nextProjectId\)/);
+  assert.match(source, /watch\(projectId,[\s\S]*loadBranchesForProject\(value\)/);
   assert.match(source, /loadBranchesForProject[\s\S]*loadProjectBranches\(value,\s*options\)/);
   assert.match(
     source,
@@ -33,7 +36,7 @@ test('new session dialog refreshes cached branches explicitly', () => {
   assert.match(source, /message:\s*`获取分支失败：\$\{errorMessage\(error\)\}`/);
 });
 
-test('switching projects waits for refreshed branches before creating a session', () => {
+test('switching projects waits for cached or loaded branches before creating a session', () => {
   const source = readFileSync(
     new URL('../src/components/NewSessionDialog.vue', import.meta.url),
     'utf8',
@@ -45,7 +48,7 @@ test('switching projects waits for refreshed branches before creating a session'
   );
   assert.match(
     source,
-    /watch\(projectId,[\s\S]*loadBranchesForProject\(value,\s*\{\s*refresh:\s*true\s*\}\)/,
+    /watch\(projectId,[\s\S]*loadBranchesForProject\(value\)/,
   );
   assert.match(source, /:disable="creating \|\| !branchSelectionReady \|\| !codexConfigReady"/);
   assert.match(source, /:inert="branchesLoading"/);

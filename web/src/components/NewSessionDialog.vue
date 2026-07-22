@@ -294,7 +294,7 @@ function selectInitialProject() {
     return true;
   }
   if (projectId.value === nextProjectId) {
-    void loadBranchesForProject(nextProjectId, { refresh: true });
+    void loadBranchesForProject(nextProjectId);
     return false;
   }
   branch.value = nextProjectId === cachedPreferences?.projectId ? cachedPreferences.baseBranch : '';
@@ -492,7 +492,7 @@ watch(dialogVisible, (open) => {
 watch(projectId, (value, previous) => {
 	if (!value || value === previous) return;
 	mentions.value = [];
-  void loadBranchesForProject(value, { refresh: true });
+  void loadBranchesForProject(value);
   void loadWorkflowAvailability();
 });
 
