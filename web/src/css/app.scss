@@ -157,6 +157,20 @@ a {
   flex: 0 1 140px;
 }
 
+.session-table__toolbar {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sessions-toolbar__age {
+  width: 132px;
+  min-width: 112px;
+}
+
 .workflow-toolbar-actions {
   display: flex;
   min-width: 0;

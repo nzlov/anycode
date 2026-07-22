@@ -61,6 +61,7 @@ type UseCase interface {
 	GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, error)
 	GetSessionCardStatus(ctx context.Context, id domain.ID) (CardStatusDTO, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (port.Page[CardDTO], error)
+	CleanupSessions(ctx context.Context, input CleanupSessionsInput) (int, error)
 }
 
 type ConfigInput struct {
@@ -91,6 +92,13 @@ type CloseSessionInput struct {
 	SessionID              domain.ID
 	Reason                 domain.CloseReason
 	appliedSystemCommandID string
+}
+
+type CleanupSessionsInput struct {
+	ProjectID     *domain.ProjectID
+	Scope         string
+	Filter        string
+	OlderThanDays int
 }
 
 type SetSessionPriorityInput struct {
@@ -152,13 +160,14 @@ const (
 )
 
 type ListSessionsInput struct {
-	ProjectID *domain.ProjectID
-	Scope     string
-	Range     string
-	Page      int
-	PageSize  int
-	Filter    string
-	Sort      string
+	ProjectID     *domain.ProjectID
+	Scope         string
+	Range         string
+	OlderThanDays int
+	Page          int
+	PageSize      int
+	Filter        string
+	Sort          string
 }
 
 type DTO struct {
@@ -311,6 +320,8 @@ type Service struct {
 	diffCounter         sessionDiffCounter
 	processes           processdomain.Repository
 	codex               processdomain.CodexProcess
+	codexSessionCleaner processdomain.CodexSessionCleaner
+	historyPurger       port.SessionHistoryPurger
 	processConsumers    sync.Map
 	workdirMu           sync.Mutex
 	activeWorkdirs      map[string]domain.ID
@@ -412,6 +423,15 @@ func WithProcesses(repo processdomain.Repository, codex processdomain.CodexProce
 	return func(s *Service) {
 		s.processes = repo
 		s.codex = codex
+		if cleaner, ok := codex.(processdomain.CodexSessionCleaner); ok {
+			s.codexSessionCleaner = cleaner
+		}
+	}
+}
+
+func WithSessionHistoryPurger(purger port.SessionHistoryPurger) Option {
+	return func(s *Service) {
+		s.historyPurger = purger
 	}
 }
 
@@ -8535,15 +8555,20 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 	if s == nil {
 		return port.Page[CardDTO]{}, errors.New("session usecase: nil service")
 	}
+	updatedBefore, err := s.olderThanCutoff(input.OlderThanDays)
+	if err != nil {
+		return port.Page[CardDTO]{}, err
+	}
 	page, pageSize := normalizePage(input.Page, input.PageSize)
 	query := domain.ListQuery{
-		ProjectID: input.ProjectID,
-		Scope:     input.Scope,
-		Range:     input.Range,
-		Page:      page,
-		PageSize:  pageSize,
-		Filter:    input.Filter,
-		Sort:      input.Sort,
+		ProjectID:     input.ProjectID,
+		Scope:         input.Scope,
+		Range:         input.Range,
+		UpdatedBefore: updatedBefore,
+		Page:          page,
+		PageSize:      pageSize,
+		Filter:        input.Filter,
+		Sort:          input.Sort,
 	}
 	sessions, total, err := s.repo.ListCards(ctx, query)
 	if err != nil {
@@ -8582,6 +8607,150 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		PageSize: query.PageSize,
 		Total:    total,
 	}, nil
+}
+
+func (s *Service) CleanupSessions(ctx context.Context, input CleanupSessionsInput) (int, error) {
+	if s == nil {
+		return 0, errors.New("session usecase: nil service")
+	}
+	scope := strings.ToLower(strings.TrimSpace(input.Scope))
+	if scope == "" {
+		scope = string(domain.StatusClosed)
+	}
+	if scope != string(domain.StatusClosed) {
+		return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "only closed sessions can be cleaned")
+	}
+	if input.OlderThanDays == 0 {
+		return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "olderThanDays is required")
+	}
+	updatedBefore, err := s.olderThanCutoff(input.OlderThanDays)
+	if err != nil {
+		return 0, err
+	}
+	if s.historyPurger == nil {
+		return 0, errors.New("session history purger is required")
+	}
+
+	candidates, err := s.listCleanupCandidates(ctx, domain.ListQuery{
+		ProjectID:     input.ProjectID,
+		Scope:         scope,
+		UpdatedBefore: updatedBefore,
+		Filter:        input.Filter,
+		Sort:          "updated_at asc",
+	})
+	if err != nil {
+		return 0, err
+	}
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+	for _, candidate := range candidates {
+		if candidate.Status != domain.StatusClosed {
+			return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "cleanup matched a session that is not closed").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
+		}
+		if strings.TrimSpace(candidate.BaseBranch) != "" && candidate.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
+			return 0, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session worktree cleanup must finish before history cleanup").WithDetails(map[string]any{"sessionId": string(candidate.ID)})
+		}
+	}
+
+	for _, candidate := range candidates {
+		if err := s.deleteSessionFiles(ctx, candidate.ID); err != nil {
+			return 0, err
+		}
+		if err := s.deleteCodexSessions(ctx, candidate); err != nil {
+			return 0, err
+		}
+	}
+	ids := make([]domain.ID, 0, len(candidates))
+	for _, candidate := range candidates {
+		ids = append(ids, candidate.ID)
+	}
+	if err := s.historyPurger.PurgeSessions(ctx, ids); err != nil {
+		return 0, fmt.Errorf("purge session history: %w", err)
+	}
+	return len(ids), nil
+}
+
+func (s *Service) olderThanCutoff(days int) (*time.Time, error) {
+	if days == 0 {
+		return nil, nil
+	}
+	if days != 3 && days != 7 && days != 30 {
+		return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "olderThanDays must be 3, 7, or 30")
+	}
+	cutoff := s.now().Add(-time.Duration(days) * 24 * time.Hour)
+	return &cutoff, nil
+}
+
+func (s *Service) listCleanupCandidates(ctx context.Context, query domain.ListQuery) ([]domain.Session, error) {
+	result := make([]domain.Session, 0)
+	query.PageSize = maxPageSize
+	for query.Page = 1; ; query.Page++ {
+		rows, total, err := s.repo.ListCards(ctx, query)
+		if err != nil {
+			return nil, fmt.Errorf("list sessions for cleanup: %w", err)
+		}
+		result = append(result, rows...)
+		if len(rows) == 0 || len(result) >= total {
+			return result, nil
+		}
+	}
+}
+
+func (s *Service) deleteSessionFiles(ctx context.Context, sessionID domain.ID) error {
+	if s.files != nil {
+		attachments, err := s.files.ListSessionAttachments(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("list session attachments for cleanup: %w", err)
+		}
+		for _, attachment := range attachments {
+			if err := s.files.DeleteSession(ctx, attachment.ID); err != nil {
+				return fmt.Errorf("delete session attachment %s: %w", attachment.ID, err)
+			}
+		}
+	}
+	if s.artifacts != nil {
+		if err := s.artifacts.DeleteArtifactOutputDirectory(ctx, sessionID); err != nil {
+			return fmt.Errorf("delete session artifact output: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) deleteCodexSessions(ctx context.Context, candidate domain.Session) error {
+	if s.processes == nil {
+		if strings.TrimSpace(candidate.CodexSessionID) == "" {
+			return nil
+		}
+		return errors.New("process repository is required to clean Codex session history")
+	}
+	sources, err := s.processes.TranscriptSources(ctx, processdomain.SessionID(candidate.ID))
+	if err != nil {
+		return fmt.Errorf("list Codex session transcripts: %w", err)
+	}
+	byID := make(map[string]processdomain.CodexTranscriptSource, len(sources)+1)
+	for _, source := range sources {
+		if strings.TrimSpace(source.CodexSessionID) != "" {
+			byID[source.CodexSessionID] = source
+		}
+	}
+	if id := strings.TrimSpace(candidate.CodexSessionID); id != "" {
+		if _, ok := byID[id]; !ok {
+			byID[id] = processdomain.CodexTranscriptSource{CodexSessionID: id}
+		}
+	}
+	if len(byID) == 0 {
+		return nil
+	}
+	if s.codexSessionCleaner == nil {
+		return errors.New("Codex session cleaner is required")
+	}
+	for _, source := range byID {
+		if err := s.codexSessionCleaner.DeleteSession(ctx, source); err != nil {
+			return fmt.Errorf("delete Codex session %s: %w", source.CodexSessionID, err)
+		}
+	}
+	return nil
 }
 
 func toDTO(session domain.Session) DTO {

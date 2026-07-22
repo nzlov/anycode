@@ -246,3 +246,7 @@ type CodexProcess interface {
 	Stop(ctx context.Context, processRunID RunID) error
 	Events(ctx context.Context, handle CodexHandle) (<-chan CodexEvent, error)
 }
+
+type CodexSessionCleaner interface {
+	DeleteSession(ctx context.Context, source CodexTranscriptSource) error
+}

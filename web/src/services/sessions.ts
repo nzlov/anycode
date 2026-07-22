@@ -189,10 +189,18 @@ export interface ListSessionsInput {
   projectId?: string;
   scope?: string;
   range?: string;
+  olderThanDays?: number;
   page?: number;
   pageSize?: number;
   filter?: string;
   sort?: string;
+}
+
+export interface CleanupSessionsInput {
+  projectId?: string;
+  scope?: string;
+  filter?: string;
+  olderThanDays: number;
 }
 
 export interface SessionPage {
@@ -834,6 +842,18 @@ export async function closeSession(sessionId: string) {
     `,
     variables: { input: { sessionId, reason: 'user_closed' } },
   });
+}
+
+export async function cleanupSessions(input: CleanupSessionsInput): Promise<number> {
+  const data = await graphqlFetch<{ cleanupSessions: number }, { input: CleanupSessionsInput }>({
+    query: `
+      mutation CleanupSessions($input: CleanupSessionsInput!) {
+        cleanupSessions(input: $input)
+      }
+    `,
+    variables: { input },
+  });
+  return data.cleanupSessions;
 }
 
 export async function retrySessionWorktreeCleanup(sessionId: string) {

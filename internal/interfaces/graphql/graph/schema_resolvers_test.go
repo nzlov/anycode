@@ -81,6 +81,22 @@ func TestDeleteSessionFileUsesSessionCommand(t *testing.T) {
 	}
 }
 
+func TestCleanupSessionsMapsFilterInput(t *testing.T) {
+	sessions := &fakeSessionUseCase{cleanupResult: 4}
+	projectID := "project-1"
+	scope := "closed"
+	filter := "archive"
+	count, err := NewResolver(UseCases{Sessions: sessions}).Mutation().CleanupSessions(context.Background(), model.CleanupSessionsInput{
+		ProjectID: &projectID, Scope: &scope, Filter: &filter, OlderThanDays: 7,
+	})
+	if err != nil || count != 4 {
+		t.Fatalf("CleanupSessions() = %d, %v", count, err)
+	}
+	if sessions.gotCleanup.ProjectID == nil || *sessions.gotCleanup.ProjectID != "project-1" || sessions.gotCleanup.Scope != "closed" || sessions.gotCleanup.Filter != "archive" || sessions.gotCleanup.OlderThanDays != 7 {
+		t.Fatalf("cleanup input = %#v", sessions.gotCleanup)
+	}
+}
+
 type fakeArtifactUseCase struct {
 	artifactapp.UseCase
 	query        sessiondomain.ArtifactQuery
@@ -1315,11 +1331,18 @@ type fakeSessionUseCase struct {
 	gotRetryCleanupID      sessiondomain.ID
 	retryCleanupResult     sessionapp.DTO
 	gotDeleteSessionFileID sessiondomain.SessionFileID
+	gotCleanup             sessionapp.CleanupSessionsInput
+	cleanupResult          int
 }
 
 func (f *fakeSessionUseCase) DeleteSessionFile(_ context.Context, id sessiondomain.SessionFileID) error {
 	f.gotDeleteSessionFileID = id
 	return f.err
+}
+
+func (f *fakeSessionUseCase) CleanupSessions(_ context.Context, input sessionapp.CleanupSessionsInput) (int, error) {
+	f.gotCleanup = input
+	return f.cleanupResult, f.err
 }
 
 func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.CreateSessionInput) (sessionapp.DTO, error) {

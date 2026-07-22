@@ -600,13 +600,14 @@ type MergeRecord struct {
 }
 
 type ListQuery struct {
-	ProjectID *ProjectID
-	Scope     string
-	Range     string
-	Page      int
-	PageSize  int
-	Filter    string
-	Sort      string
+	ProjectID     *ProjectID
+	Scope         string
+	Range         string
+	UpdatedBefore *time.Time
+	Page          int
+	PageSize      int
+	Filter        string
+	Sort          string
 }
 
 type Repository interface {

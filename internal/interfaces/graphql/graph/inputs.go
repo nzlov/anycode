@@ -25,13 +25,23 @@ func buildListSessionsInput(input *model.ListSessionsInput) sessionapp.ListSessi
 		return sessionapp.ListSessionsInput{}
 	}
 	return sessionapp.ListSessionsInput{
-		ProjectID: sessionProjectIDPtr(input.ProjectID),
-		Scope:     stringValue(input.Scope, ""),
-		Range:     stringValue(input.Range, ""),
-		Page:      intValue(input.Page, 0),
-		PageSize:  intValue(input.PageSize, 0),
-		Filter:    stringValue(input.Filter, ""),
-		Sort:      stringValue(input.Sort, ""),
+		ProjectID:     sessionProjectIDPtr(input.ProjectID),
+		Scope:         stringValue(input.Scope, ""),
+		Range:         stringValue(input.Range, ""),
+		OlderThanDays: intValue(input.OlderThanDays, 0),
+		Page:          intValue(input.Page, 0),
+		PageSize:      intValue(input.PageSize, 0),
+		Filter:        stringValue(input.Filter, ""),
+		Sort:          stringValue(input.Sort, ""),
+	}
+}
+
+func buildCleanupSessionsInput(input model.CleanupSessionsInput) sessionapp.CleanupSessionsInput {
+	return sessionapp.CleanupSessionsInput{
+		ProjectID:     sessionProjectIDPtr(input.ProjectID),
+		Scope:         stringValue(input.Scope, ""),
+		Filter:        stringValue(input.Filter, ""),
+		OlderThanDays: input.OlderThanDays,
 	}
 }
 

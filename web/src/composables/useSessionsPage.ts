@@ -26,6 +26,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
   const filter = ref(defaultInput.filter ?? '');
   const scope = ref(defaultInput.scope ?? '');
   const range = ref(defaultInput.range ?? '');
+  const olderThanDays = ref(defaultInput.olderThanDays ?? 0);
   const projectId = ref(defaultInput.projectId ?? '');
   const page = ref(defaultInput.page ?? 1);
   const pageSize = ref(defaultInput.pageSize ?? 8);
@@ -40,6 +41,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     if (projectId.value) value.projectId = projectId.value;
     if (scope.value) value.scope = scope.value;
     if (range.value) value.range = range.value;
+    if (olderThanDays.value) value.olderThanDays = olderThanDays.value;
     if (filter.value.trim()) value.filter = filter.value.trim();
     if (sort.value) value.sort = sort.value;
     return value;
@@ -91,6 +93,7 @@ export function useSessionsPage(defaultInput: UseSessionsPageInput = {}) {
     filter,
     scope,
     range,
+    olderThanDays,
     projectId,
     page,
     pageSize,

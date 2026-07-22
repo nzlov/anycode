@@ -154,6 +154,7 @@ type ComplexityRoot struct {
 	Mutation struct {
 		ActivateWorkflowDefinition  func(childComplexity int, id string) int
 		AppendPrompt                func(childComplexity int, input model.AppendPromptInput) int
+		CleanupSessions             func(childComplexity int, input model.CleanupSessionsInput) int
 		CloseSession                func(childComplexity int, input model.CloseSessionInput) int
 		CreateProject               func(childComplexity int, input model.CreateProjectInput) int
 		CreateQuickCommand          func(childComplexity int, input model.CreateQuickCommandInput) int
@@ -678,6 +679,7 @@ type MutationResolver interface {
 	StopSession(ctx context.Context, id string) (*model.Session, error)
 	ResumeSession(ctx context.Context, id string, force *bool) (*model.Session, error)
 	CloseSession(ctx context.Context, input model.CloseSessionInput) (*model.Session, error)
+	CleanupSessions(ctx context.Context, input model.CleanupSessionsInput) (int, error)
 	RetrySessionWorktreeCleanup(ctx context.Context, id string) (*model.Session, error)
 	AppendPrompt(ctx context.Context, input model.AppendPromptInput) (*model.PromptAppend, error)
 	UpdatePromptAppend(ctx context.Context, input model.UpdatePromptAppendInput) (*model.PromptAppend, error)
@@ -1132,6 +1134,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.AppendPrompt(childComplexity, args["input"].(model.AppendPromptInput)), true
+	case "Mutation.cleanupSessions":
+		if e.ComplexityRoot.Mutation.CleanupSessions == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_cleanupSessions_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CleanupSessions(childComplexity, args["input"].(model.CleanupSessionsInput)), true
 	case "Mutation.closeSession":
 		if e.ComplexityRoot.Mutation.CloseSession == nil {
 			break
@@ -3443,6 +3456,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputApprovalConfigInput,
 		ec.unmarshalInputBranchDiffInput,
 		ec.unmarshalInputBrowseDirectoryInput,
+		ec.unmarshalInputCleanupSessionsInput,
 		ec.unmarshalInputCloseSessionInput,
 		ec.unmarshalInputCreateProjectInput,
 		ec.unmarshalInputCreateQuickCommandInput,
@@ -3635,6 +3649,7 @@ type Mutation {
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
+  cleanupSessions(input: CleanupSessionsInput!): Int!
   retrySessionWorktreeCleanup(id: ID!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
@@ -4292,10 +4307,18 @@ input ListSessionsInput {
   projectId: ID
   scope: String
   range: String
+  olderThanDays: Int
   page: Int
   pageSize: Int
   filter: String
   sort: String
+}
+
+input CleanupSessionsInput {
+  projectId: ID
+  scope: String
+  filter: String
+  olderThanDays: Int!
 }
 
 input CreateSessionInput {
@@ -4479,6 +4502,17 @@ func (ec *executionContext) field_Mutation_appendPrompt_args(ctx context.Context
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNAppendPromptInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppendPromptInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_cleanupSessions_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCleanupSessionsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCleanupSessionsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -7963,6 +7997,47 @@ func (ec *executionContext) fieldContext_Mutation_closeSession(ctx context.Conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_closeSession_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_cleanupSessions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_cleanupSessions,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CleanupSessions(ctx, fc.Args["input"].(model.CleanupSessionsInput))
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_cleanupSessions(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_cleanupSessions_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -20579,6 +20654,57 @@ func (ec *executionContext) unmarshalInputBrowseDirectoryInput(ctx context.Conte
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCleanupSessionsInput(ctx context.Context, obj any) (model.CleanupSessionsInput, error) {
+	var it model.CleanupSessionsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "scope", "filter", "olderThanDays"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "scope":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("scope"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Scope = data
+		case "filter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("filter"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Filter = data
+		case "olderThanDays":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("olderThanDays"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OlderThanDays = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCloseSessionInput(ctx context.Context, obj any) (model.CloseSessionInput, error) {
 	var it model.CloseSessionInput
 	if obj == nil {
@@ -20861,7 +20987,7 @@ func (ec *executionContext) unmarshalInputListSessionsInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "scope", "range", "page", "pageSize", "filter", "sort"}
+	fieldsInOrder := [...]string{"projectId", "scope", "range", "olderThanDays", "page", "pageSize", "filter", "sort"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -20889,6 +21015,13 @@ func (ec *executionContext) unmarshalInputListSessionsInput(ctx context.Context,
 				return it, err
 			}
 			it.Range = data
+		case "olderThanDays":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("olderThanDays"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OlderThanDays = data
 		case "page":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("page"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
@@ -23170,6 +23303,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "closeSession":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_closeSession(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cleanupSessions":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_cleanupSessions(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -27323,6 +27463,11 @@ func (ec *executionContext) unmarshalNBranchDiffInput2githubᚗcomᚋnzlovᚋany
 
 func (ec *executionContext) unmarshalNBrowseDirectoryInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐBrowseDirectoryInput(ctx context.Context, v any) (model.BrowseDirectoryInput, error) {
 	res, err := ec.unmarshalInputBrowseDirectoryInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCleanupSessionsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCleanupSessionsInput(ctx context.Context, v any) (model.CleanupSessionsInput, error) {
+	res, err := ec.unmarshalInputCleanupSessionsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

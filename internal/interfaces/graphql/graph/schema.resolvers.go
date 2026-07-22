@@ -287,6 +287,14 @@ func (r *mutationResolver) CloseSession(ctx context.Context, input model.CloseSe
 	return mapSession(dto), nil
 }
 
+// CleanupSessions is the resolver for the cleanupSessions field.
+func (r *mutationResolver) CleanupSessions(ctx context.Context, input model.CleanupSessionsInput) (int, error) {
+	if r.UseCases.Sessions == nil {
+		return 0, missingUseCase("sessions")
+	}
+	return r.UseCases.Sessions.CleanupSessions(ctx, buildCleanupSessionsInput(input))
+}
+
 // RetrySessionWorktreeCleanup is the resolver for the retrySessionWorktreeCleanup field.
 func (r *mutationResolver) RetrySessionWorktreeCleanup(ctx context.Context, id string) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {

@@ -41,6 +41,34 @@
         class="session-table"
         @request="onTableRequest"
       >
+        <template #top>
+          <div class="session-table__toolbar">
+            <q-select
+              v-model="olderThanDays"
+              dense
+              outlined
+              emit-value
+              map-options
+              class="sessions-toolbar__age"
+              :options="ageOptions"
+              aria-label="按更新时间筛选会话"
+            />
+            <q-btn
+              outline
+              no-caps
+              icon="delete_sweep"
+              color="negative"
+              label="清理"
+              aria-label="清理筛选出的会话"
+              :disable="!canCleanup"
+              :loading="cleaning"
+              @click="confirmCleanup"
+            >
+              <q-tooltip>{{ cleanupTooltip }}</q-tooltip>
+            </q-btn>
+          </div>
+        </template>
+
         <template #body-cell-title="props">
           <q-td :props="props">
             <router-link class="table-link" :to="`/sessions/${props.row.id}`">
@@ -134,7 +162,13 @@ import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
-import { stopSession, type SessionCard, type SessionStatus } from '@/services/sessions';
+import {
+  cleanupSessions,
+  stopSession,
+  type CleanupSessionsInput,
+  type SessionCard,
+  type SessionStatus,
+} from '@/services/sessions';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -148,6 +182,7 @@ const {
   loading,
   filter,
   scope,
+  olderThanDays,
   projectId,
   page,
   pageSize,
@@ -169,6 +204,12 @@ const statusOptions = [
   { label: '已完成', value: 'completed' },
   { label: '已关闭', value: 'closed' },
 ];
+const ageOptions = [
+  { label: '全部时间', value: 0 },
+  { label: '3 天前', value: 3 },
+  { label: '7 天前', value: 7 },
+  { label: '30 天前', value: 30 },
+];
 const statusValues = new Set<SessionStatus>([
   'running',
   'waiting_user',
@@ -186,7 +227,22 @@ const routeStatus = computed<SessionStatus | 'all'>(() => {
 });
 const status = ref<SessionStatus | 'all'>(routeStatus.value);
 const cancellingSessionId = ref('');
+const cleaning = ref(false);
 scope.value = status.value === 'all' ? '' : status.value;
+const canCleanup = computed(
+  () =>
+    status.value === 'closed' &&
+    olderThanDays.value > 0 &&
+    pageInfo.value.total > 0 &&
+    !loading.value &&
+    !cleaning.value,
+);
+const cleanupTooltip = computed(() => {
+  if (status.value !== 'closed') return '仅可清理已关闭会话';
+  if (olderThanDays.value === 0) return '请先选择时间范围';
+  if (pageInfo.value.total === 0) return '当前筛选没有可清理会话';
+  return `清理 ${pageInfo.value.total} 个筛选结果`;
+});
 
 const columns = [
   { name: 'title', label: '需求', field: 'title', align: 'left' as const, sortable: true },
@@ -260,7 +316,7 @@ watch(routeStatus, (value) => {
   status.value = value;
 });
 
-watch([filter, scope], () => {
+watch([filter, scope, olderThanDays], () => {
   page.value = 1;
   void loadSessions();
 });
@@ -298,6 +354,39 @@ async function cancelQueuedSession(session: SessionCard) {
     await loadSessions().catch(() => undefined);
   } finally {
     cancellingSessionId.value = '';
+  }
+}
+
+function confirmCleanup() {
+  if (!canCleanup.value) return;
+  const count = pageInfo.value.total;
+  const days = olderThanDays.value;
+  const input: CleanupSessionsInput = {
+    scope: 'closed',
+    olderThanDays: days,
+  };
+  if (projectId.value) input.projectId = projectId.value;
+  if (filter.value.trim()) input.filter = filter.value.trim();
+  $q.dialog({
+    title: '清理会话历史',
+    message: `将永久清理当前筛选出的 ${count} 个已关闭会话及关联的 Codex 会话信息。此操作无法撤销。`,
+    cancel: { label: '取消', flat: true },
+    ok: { label: '清理', color: 'negative', unelevated: true },
+    persistent: true,
+  }).onOk(() => void runCleanup(input));
+}
+
+async function runCleanup(input: CleanupSessionsInput) {
+  cleaning.value = true;
+  try {
+    const count = await cleanupSessions(input);
+    page.value = 1;
+    await loadSessions();
+    $q.notify({ type: 'positive', message: `已清理 ${count} 个会话` });
+  } catch {
+    await loadSessions().catch(() => undefined);
+  } finally {
+    cleaning.value = false;
   }
 }
 
