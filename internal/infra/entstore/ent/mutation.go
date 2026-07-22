@@ -23,7 +23,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/pushsubscription"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
@@ -50,7 +50,7 @@ const (
 	TypeProject                   = "Project"
 	TypePromptAppend              = "PromptAppend"
 	TypePushSubscription          = "PushSubscription"
-	TypeQuestionBatch             = "QuestionBatch"
+	TypeQuestionRequest           = "QuestionRequest"
 	TypeQuickCommand              = "QuickCommand"
 	TypeSession                   = "Session"
 	TypeStagedAttachment          = "StagedAttachment"
@@ -4408,27 +4408,23 @@ func (m *NotificationDeliveryMutation) ResetEdge(name string) error {
 // ProcessRunMutation represents an operation that mutates the ProcessRun nodes in the graph.
 type ProcessRunMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *string
-	session_id               *string
-	node_run_id              *string
-	status                   *string
-	pid                      *int
-	addpid                   *int
-	codex_session_id         *string
-	transcript_relative_path *string
-	transcript_bound_at      *time.Time
-	resume_of                *string
-	exit_code                *int
-	addexit_code             *int
-	failure_reason           *string
-	started_at               *time.Time
-	finished_at              *time.Time
-	clearedFields            map[string]struct{}
-	done                     bool
-	oldValue                 func(context.Context) (*ProcessRun, error)
-	predicates               []predicate.ProcessRun
+	op               Op
+	typ              string
+	id               *string
+	session_id       *string
+	node_run_id      *string
+	status           *string
+	codex_session_id *string
+	resume_of        *string
+	exit_code        *int
+	addexit_code     *int
+	failure_reason   *string
+	started_at       *time.Time
+	finished_at      *time.Time
+	clearedFields    map[string]struct{}
+	done             bool
+	oldValue         func(context.Context) (*ProcessRun, error)
+	predicates       []predicate.ProcessRun
 }
 
 var _ ent.Mutation = (*ProcessRunMutation)(nil)
@@ -4656,76 +4652,6 @@ func (m *ProcessRunMutation) ResetStatus() {
 	m.status = nil
 }
 
-// SetPid sets the "pid" field.
-func (m *ProcessRunMutation) SetPid(i int) {
-	m.pid = &i
-	m.addpid = nil
-}
-
-// Pid returns the value of the "pid" field in the mutation.
-func (m *ProcessRunMutation) Pid() (r int, exists bool) {
-	v := m.pid
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPid returns the old "pid" field's value of the ProcessRun entity.
-// If the ProcessRun object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProcessRunMutation) OldPid(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPid is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPid requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPid: %w", err)
-	}
-	return oldValue.Pid, nil
-}
-
-// AddPid adds i to the "pid" field.
-func (m *ProcessRunMutation) AddPid(i int) {
-	if m.addpid != nil {
-		*m.addpid += i
-	} else {
-		m.addpid = &i
-	}
-}
-
-// AddedPid returns the value that was added to the "pid" field in this mutation.
-func (m *ProcessRunMutation) AddedPid() (r int, exists bool) {
-	v := m.addpid
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ClearPid clears the value of the "pid" field.
-func (m *ProcessRunMutation) ClearPid() {
-	m.pid = nil
-	m.addpid = nil
-	m.clearedFields[processrun.FieldPid] = struct{}{}
-}
-
-// PidCleared returns if the "pid" field was cleared in this mutation.
-func (m *ProcessRunMutation) PidCleared() bool {
-	_, ok := m.clearedFields[processrun.FieldPid]
-	return ok
-}
-
-// ResetPid resets all changes to the "pid" field.
-func (m *ProcessRunMutation) ResetPid() {
-	m.pid = nil
-	m.addpid = nil
-	delete(m.clearedFields, processrun.FieldPid)
-}
-
 // SetCodexSessionID sets the "codex_session_id" field.
 func (m *ProcessRunMutation) SetCodexSessionID(s string) {
 	m.codex_session_id = &s
@@ -4760,91 +4686,6 @@ func (m *ProcessRunMutation) OldCodexSessionID(ctx context.Context) (v string, e
 // ResetCodexSessionID resets all changes to the "codex_session_id" field.
 func (m *ProcessRunMutation) ResetCodexSessionID() {
 	m.codex_session_id = nil
-}
-
-// SetTranscriptRelativePath sets the "transcript_relative_path" field.
-func (m *ProcessRunMutation) SetTranscriptRelativePath(s string) {
-	m.transcript_relative_path = &s
-}
-
-// TranscriptRelativePath returns the value of the "transcript_relative_path" field in the mutation.
-func (m *ProcessRunMutation) TranscriptRelativePath() (r string, exists bool) {
-	v := m.transcript_relative_path
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTranscriptRelativePath returns the old "transcript_relative_path" field's value of the ProcessRun entity.
-// If the ProcessRun object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProcessRunMutation) OldTranscriptRelativePath(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTranscriptRelativePath is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTranscriptRelativePath requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTranscriptRelativePath: %w", err)
-	}
-	return oldValue.TranscriptRelativePath, nil
-}
-
-// ResetTranscriptRelativePath resets all changes to the "transcript_relative_path" field.
-func (m *ProcessRunMutation) ResetTranscriptRelativePath() {
-	m.transcript_relative_path = nil
-}
-
-// SetTranscriptBoundAt sets the "transcript_bound_at" field.
-func (m *ProcessRunMutation) SetTranscriptBoundAt(t time.Time) {
-	m.transcript_bound_at = &t
-}
-
-// TranscriptBoundAt returns the value of the "transcript_bound_at" field in the mutation.
-func (m *ProcessRunMutation) TranscriptBoundAt() (r time.Time, exists bool) {
-	v := m.transcript_bound_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTranscriptBoundAt returns the old "transcript_bound_at" field's value of the ProcessRun entity.
-// If the ProcessRun object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProcessRunMutation) OldTranscriptBoundAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTranscriptBoundAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTranscriptBoundAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTranscriptBoundAt: %w", err)
-	}
-	return oldValue.TranscriptBoundAt, nil
-}
-
-// ClearTranscriptBoundAt clears the value of the "transcript_bound_at" field.
-func (m *ProcessRunMutation) ClearTranscriptBoundAt() {
-	m.transcript_bound_at = nil
-	m.clearedFields[processrun.FieldTranscriptBoundAt] = struct{}{}
-}
-
-// TranscriptBoundAtCleared returns if the "transcript_bound_at" field was cleared in this mutation.
-func (m *ProcessRunMutation) TranscriptBoundAtCleared() bool {
-	_, ok := m.clearedFields[processrun.FieldTranscriptBoundAt]
-	return ok
-}
-
-// ResetTranscriptBoundAt resets all changes to the "transcript_bound_at" field.
-func (m *ProcessRunMutation) ResetTranscriptBoundAt() {
-	m.transcript_bound_at = nil
-	delete(m.clearedFields, processrun.FieldTranscriptBoundAt)
 }
 
 // SetResumeOf sets the "resume_of" field.
@@ -5121,7 +4962,7 @@ func (m *ProcessRunMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProcessRunMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 9)
 	if m.session_id != nil {
 		fields = append(fields, processrun.FieldSessionID)
 	}
@@ -5131,17 +4972,8 @@ func (m *ProcessRunMutation) Fields() []string {
 	if m.status != nil {
 		fields = append(fields, processrun.FieldStatus)
 	}
-	if m.pid != nil {
-		fields = append(fields, processrun.FieldPid)
-	}
 	if m.codex_session_id != nil {
 		fields = append(fields, processrun.FieldCodexSessionID)
-	}
-	if m.transcript_relative_path != nil {
-		fields = append(fields, processrun.FieldTranscriptRelativePath)
-	}
-	if m.transcript_bound_at != nil {
-		fields = append(fields, processrun.FieldTranscriptBoundAt)
 	}
 	if m.resume_of != nil {
 		fields = append(fields, processrun.FieldResumeOf)
@@ -5172,14 +5004,8 @@ func (m *ProcessRunMutation) Field(name string) (ent.Value, bool) {
 		return m.NodeRunID()
 	case processrun.FieldStatus:
 		return m.Status()
-	case processrun.FieldPid:
-		return m.Pid()
 	case processrun.FieldCodexSessionID:
 		return m.CodexSessionID()
-	case processrun.FieldTranscriptRelativePath:
-		return m.TranscriptRelativePath()
-	case processrun.FieldTranscriptBoundAt:
-		return m.TranscriptBoundAt()
 	case processrun.FieldResumeOf:
 		return m.ResumeOf()
 	case processrun.FieldExitCode:
@@ -5205,14 +5031,8 @@ func (m *ProcessRunMutation) OldField(ctx context.Context, name string) (ent.Val
 		return m.OldNodeRunID(ctx)
 	case processrun.FieldStatus:
 		return m.OldStatus(ctx)
-	case processrun.FieldPid:
-		return m.OldPid(ctx)
 	case processrun.FieldCodexSessionID:
 		return m.OldCodexSessionID(ctx)
-	case processrun.FieldTranscriptRelativePath:
-		return m.OldTranscriptRelativePath(ctx)
-	case processrun.FieldTranscriptBoundAt:
-		return m.OldTranscriptBoundAt(ctx)
 	case processrun.FieldResumeOf:
 		return m.OldResumeOf(ctx)
 	case processrun.FieldExitCode:
@@ -5253,33 +5073,12 @@ func (m *ProcessRunMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetStatus(v)
 		return nil
-	case processrun.FieldPid:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPid(v)
-		return nil
 	case processrun.FieldCodexSessionID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCodexSessionID(v)
-		return nil
-	case processrun.FieldTranscriptRelativePath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTranscriptRelativePath(v)
-		return nil
-	case processrun.FieldTranscriptBoundAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTranscriptBoundAt(v)
 		return nil
 	case processrun.FieldResumeOf:
 		v, ok := value.(string)
@@ -5324,9 +5123,6 @@ func (m *ProcessRunMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *ProcessRunMutation) AddedFields() []string {
 	var fields []string
-	if m.addpid != nil {
-		fields = append(fields, processrun.FieldPid)
-	}
 	if m.addexit_code != nil {
 		fields = append(fields, processrun.FieldExitCode)
 	}
@@ -5338,8 +5134,6 @@ func (m *ProcessRunMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *ProcessRunMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case processrun.FieldPid:
-		return m.AddedPid()
 	case processrun.FieldExitCode:
 		return m.AddedExitCode()
 	}
@@ -5351,13 +5145,6 @@ func (m *ProcessRunMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *ProcessRunMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case processrun.FieldPid:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddPid(v)
-		return nil
 	case processrun.FieldExitCode:
 		v, ok := value.(int)
 		if !ok {
@@ -5375,12 +5162,6 @@ func (m *ProcessRunMutation) ClearedFields() []string {
 	var fields []string
 	if m.FieldCleared(processrun.FieldNodeRunID) {
 		fields = append(fields, processrun.FieldNodeRunID)
-	}
-	if m.FieldCleared(processrun.FieldPid) {
-		fields = append(fields, processrun.FieldPid)
-	}
-	if m.FieldCleared(processrun.FieldTranscriptBoundAt) {
-		fields = append(fields, processrun.FieldTranscriptBoundAt)
 	}
 	if m.FieldCleared(processrun.FieldResumeOf) {
 		fields = append(fields, processrun.FieldResumeOf)
@@ -5408,12 +5189,6 @@ func (m *ProcessRunMutation) ClearField(name string) error {
 	case processrun.FieldNodeRunID:
 		m.ClearNodeRunID()
 		return nil
-	case processrun.FieldPid:
-		m.ClearPid()
-		return nil
-	case processrun.FieldTranscriptBoundAt:
-		m.ClearTranscriptBoundAt()
-		return nil
 	case processrun.FieldResumeOf:
 		m.ClearResumeOf()
 		return nil
@@ -5440,17 +5215,8 @@ func (m *ProcessRunMutation) ResetField(name string) error {
 	case processrun.FieldStatus:
 		m.ResetStatus()
 		return nil
-	case processrun.FieldPid:
-		m.ResetPid()
-		return nil
 	case processrun.FieldCodexSessionID:
 		m.ResetCodexSessionID()
-		return nil
-	case processrun.FieldTranscriptRelativePath:
-		m.ResetTranscriptRelativePath()
-		return nil
-	case processrun.FieldTranscriptBoundAt:
-		m.ResetTranscriptBoundAt()
 		return nil
 	case processrun.FieldResumeOf:
 		m.ResetResumeOf()
@@ -6278,6 +6044,8 @@ type PromptAppendMutation struct {
 	id                        *string
 	session_id                *string
 	body                      *string
+	mentions                  *[]session.PromptMention
+	appendmentions            []session.PromptMention
 	artifact_ids              *[]string
 	appendartifact_ids        []string
 	status                    *string
@@ -6464,6 +6232,71 @@ func (m *PromptAppendMutation) OldBody(ctx context.Context) (v string, err error
 // ResetBody resets all changes to the "body" field.
 func (m *PromptAppendMutation) ResetBody() {
 	m.body = nil
+}
+
+// SetMentions sets the "mentions" field.
+func (m *PromptAppendMutation) SetMentions(sm []session.PromptMention) {
+	m.mentions = &sm
+	m.appendmentions = nil
+}
+
+// Mentions returns the value of the "mentions" field in the mutation.
+func (m *PromptAppendMutation) Mentions() (r []session.PromptMention, exists bool) {
+	v := m.mentions
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMentions returns the old "mentions" field's value of the PromptAppend entity.
+// If the PromptAppend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptAppendMutation) OldMentions(ctx context.Context) (v []session.PromptMention, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMentions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMentions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMentions: %w", err)
+	}
+	return oldValue.Mentions, nil
+}
+
+// AppendMentions adds sm to the "mentions" field.
+func (m *PromptAppendMutation) AppendMentions(sm []session.PromptMention) {
+	m.appendmentions = append(m.appendmentions, sm...)
+}
+
+// AppendedMentions returns the list of values that were appended to the "mentions" field in this mutation.
+func (m *PromptAppendMutation) AppendedMentions() ([]session.PromptMention, bool) {
+	if len(m.appendmentions) == 0 {
+		return nil, false
+	}
+	return m.appendmentions, true
+}
+
+// ClearMentions clears the value of the "mentions" field.
+func (m *PromptAppendMutation) ClearMentions() {
+	m.mentions = nil
+	m.appendmentions = nil
+	m.clearedFields[promptappend.FieldMentions] = struct{}{}
+}
+
+// MentionsCleared returns if the "mentions" field was cleared in this mutation.
+func (m *PromptAppendMutation) MentionsCleared() bool {
+	_, ok := m.clearedFields[promptappend.FieldMentions]
+	return ok
+}
+
+// ResetMentions resets all changes to the "mentions" field.
+func (m *PromptAppendMutation) ResetMentions() {
+	m.mentions = nil
+	m.appendmentions = nil
+	delete(m.clearedFields, promptappend.FieldMentions)
 }
 
 // SetArtifactIds sets the "artifact_ids" field.
@@ -6708,12 +6541,15 @@ func (m *PromptAppendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptAppendMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.session_id != nil {
 		fields = append(fields, promptappend.FieldSessionID)
 	}
 	if m.body != nil {
 		fields = append(fields, promptappend.FieldBody)
+	}
+	if m.mentions != nil {
+		fields = append(fields, promptappend.FieldMentions)
 	}
 	if m.artifact_ids != nil {
 		fields = append(fields, promptappend.FieldArtifactIds)
@@ -6742,6 +6578,8 @@ func (m *PromptAppendMutation) Field(name string) (ent.Value, bool) {
 		return m.SessionID()
 	case promptappend.FieldBody:
 		return m.Body()
+	case promptappend.FieldMentions:
+		return m.Mentions()
 	case promptappend.FieldArtifactIds:
 		return m.ArtifactIds()
 	case promptappend.FieldStatus:
@@ -6765,6 +6603,8 @@ func (m *PromptAppendMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldSessionID(ctx)
 	case promptappend.FieldBody:
 		return m.OldBody(ctx)
+	case promptappend.FieldMentions:
+		return m.OldMentions(ctx)
 	case promptappend.FieldArtifactIds:
 		return m.OldArtifactIds(ctx)
 	case promptappend.FieldStatus:
@@ -6797,6 +6637,13 @@ func (m *PromptAppendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBody(v)
+		return nil
+	case promptappend.FieldMentions:
+		v, ok := value.([]session.PromptMention)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMentions(v)
 		return nil
 	case promptappend.FieldArtifactIds:
 		v, ok := value.([]string)
@@ -6863,6 +6710,9 @@ func (m *PromptAppendMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *PromptAppendMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(promptappend.FieldMentions) {
+		fields = append(fields, promptappend.FieldMentions)
+	}
 	if m.FieldCleared(promptappend.FieldDispatchedAt) {
 		fields = append(fields, promptappend.FieldDispatchedAt)
 	}
@@ -6880,6 +6730,9 @@ func (m *PromptAppendMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *PromptAppendMutation) ClearField(name string) error {
 	switch name {
+	case promptappend.FieldMentions:
+		m.ClearMentions()
+		return nil
 	case promptappend.FieldDispatchedAt:
 		m.ClearDispatchedAt()
 		return nil
@@ -6896,6 +6749,9 @@ func (m *PromptAppendMutation) ResetField(name string) error {
 		return nil
 	case promptappend.FieldBody:
 		m.ResetBody()
+		return nil
+	case promptappend.FieldMentions:
+		m.ResetMentions()
 		return nil
 	case promptappend.FieldArtifactIds:
 		m.ResetArtifactIds()
@@ -7620,42 +7476,39 @@ func (m *PushSubscriptionMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown PushSubscription edge %s", name)
 }
 
-// QuestionBatchMutation represents an operation that mutates the QuestionBatch nodes in the graph.
-type QuestionBatchMutation struct {
+// QuestionRequestMutation represents an operation that mutates the QuestionRequest nodes in the graph.
+type QuestionRequestMutation struct {
 	config
-	op                      Op
-	typ                     string
-	id                      *string
-	session_id              *string
-	origin_process_run_id   *string
-	status                  *string
-	delivery_status         *string
-	delivery_process_run_id *string
-	questions               *[]map[string]interface{}
-	appendquestions         []map[string]interface{}
-	answers                 *[]map[string]interface{}
-	appendanswers           []map[string]interface{}
-	cancel_reason           *string
-	created_at              *time.Time
-	answered_at             *time.Time
-	delivered_at            *time.Time
-	clearedFields           map[string]struct{}
-	done                    bool
-	oldValue                func(context.Context) (*QuestionBatch, error)
-	predicates              []predicate.QuestionBatch
+	op                    Op
+	typ                   string
+	id                    *string
+	session_id            *string
+	origin_process_run_id *string
+	status                *string
+	questions             *[]map[string]interface{}
+	appendquestions       []map[string]interface{}
+	answers               *[]map[string]interface{}
+	appendanswers         []map[string]interface{}
+	cancel_reason         *string
+	created_at            *time.Time
+	answered_at           *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*QuestionRequest, error)
+	predicates            []predicate.QuestionRequest
 }
 
-var _ ent.Mutation = (*QuestionBatchMutation)(nil)
+var _ ent.Mutation = (*QuestionRequestMutation)(nil)
 
-// questionbatchOption allows management of the mutation configuration using functional options.
-type questionbatchOption func(*QuestionBatchMutation)
+// questionrequestOption allows management of the mutation configuration using functional options.
+type questionrequestOption func(*QuestionRequestMutation)
 
-// newQuestionBatchMutation creates new mutation for the QuestionBatch entity.
-func newQuestionBatchMutation(c config, op Op, opts ...questionbatchOption) *QuestionBatchMutation {
-	m := &QuestionBatchMutation{
+// newQuestionRequestMutation creates new mutation for the QuestionRequest entity.
+func newQuestionRequestMutation(c config, op Op, opts ...questionrequestOption) *QuestionRequestMutation {
+	m := &QuestionRequestMutation{
 		config:        c,
 		op:            op,
-		typ:           TypeQuestionBatch,
+		typ:           TypeQuestionRequest,
 		clearedFields: make(map[string]struct{}),
 	}
 	for _, opt := range opts {
@@ -7664,20 +7517,20 @@ func newQuestionBatchMutation(c config, op Op, opts ...questionbatchOption) *Que
 	return m
 }
 
-// withQuestionBatchID sets the ID field of the mutation.
-func withQuestionBatchID(id string) questionbatchOption {
-	return func(m *QuestionBatchMutation) {
+// withQuestionRequestID sets the ID field of the mutation.
+func withQuestionRequestID(id string) questionrequestOption {
+	return func(m *QuestionRequestMutation) {
 		var (
 			err   error
 			once  sync.Once
-			value *QuestionBatch
+			value *QuestionRequest
 		)
-		m.oldValue = func(ctx context.Context) (*QuestionBatch, error) {
+		m.oldValue = func(ctx context.Context) (*QuestionRequest, error) {
 			once.Do(func() {
 				if m.done {
 					err = errors.New("querying old values post mutation is not allowed")
 				} else {
-					value, err = m.Client().QuestionBatch.Get(ctx, id)
+					value, err = m.Client().QuestionRequest.Get(ctx, id)
 				}
 			})
 			return value, err
@@ -7686,10 +7539,10 @@ func withQuestionBatchID(id string) questionbatchOption {
 	}
 }
 
-// withQuestionBatch sets the old QuestionBatch of the mutation.
-func withQuestionBatch(node *QuestionBatch) questionbatchOption {
-	return func(m *QuestionBatchMutation) {
-		m.oldValue = func(context.Context) (*QuestionBatch, error) {
+// withQuestionRequest sets the old QuestionRequest of the mutation.
+func withQuestionRequest(node *QuestionRequest) questionrequestOption {
+	return func(m *QuestionRequestMutation) {
+		m.oldValue = func(context.Context) (*QuestionRequest, error) {
 			return node, nil
 		}
 		m.id = &node.ID
@@ -7698,7 +7551,7 @@ func withQuestionBatch(node *QuestionBatch) questionbatchOption {
 
 // Client returns a new `ent.Client` from the mutation. If the mutation was
 // executed in a transaction (ent.Tx), a transactional client is returned.
-func (m QuestionBatchMutation) Client() *Client {
+func (m QuestionRequestMutation) Client() *Client {
 	client := &Client{config: m.config}
 	client.init()
 	return client
@@ -7706,7 +7559,7 @@ func (m QuestionBatchMutation) Client() *Client {
 
 // Tx returns an `ent.Tx` for mutations that were executed in transactions;
 // it returns an error otherwise.
-func (m QuestionBatchMutation) Tx() (*Tx, error) {
+func (m QuestionRequestMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
 		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
@@ -7716,14 +7569,14 @@ func (m QuestionBatchMutation) Tx() (*Tx, error) {
 }
 
 // SetID sets the value of the id field. Note that this
-// operation is only accepted on creation of QuestionBatch entities.
-func (m *QuestionBatchMutation) SetID(id string) {
+// operation is only accepted on creation of QuestionRequest entities.
+func (m *QuestionRequestMutation) SetID(id string) {
 	m.id = &id
 }
 
 // ID returns the ID value in the mutation. Note that the ID is only available
 // if it was provided to the builder or after it was returned from the database.
-func (m *QuestionBatchMutation) ID() (id string, exists bool) {
+func (m *QuestionRequestMutation) ID() (id string, exists bool) {
 	if m.id == nil {
 		return
 	}
@@ -7734,7 +7587,7 @@ func (m *QuestionBatchMutation) ID() (id string, exists bool) {
 // That means, if the mutation is applied within a transaction with an isolation level such
 // as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
 // or updated by the mutation.
-func (m *QuestionBatchMutation) IDs(ctx context.Context) ([]string, error) {
+func (m *QuestionRequestMutation) IDs(ctx context.Context) ([]string, error) {
 	switch {
 	case m.op.Is(OpUpdateOne | OpDeleteOne):
 		id, exists := m.ID()
@@ -7743,19 +7596,19 @@ func (m *QuestionBatchMutation) IDs(ctx context.Context) ([]string, error) {
 		}
 		fallthrough
 	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().QuestionBatch.Query().Where(m.predicates...).IDs(ctx)
+		return m.Client().QuestionRequest.Query().Where(m.predicates...).IDs(ctx)
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
 }
 
 // SetSessionID sets the "session_id" field.
-func (m *QuestionBatchMutation) SetSessionID(s string) {
+func (m *QuestionRequestMutation) SetSessionID(s string) {
 	m.session_id = &s
 }
 
 // SessionID returns the value of the "session_id" field in the mutation.
-func (m *QuestionBatchMutation) SessionID() (r string, exists bool) {
+func (m *QuestionRequestMutation) SessionID() (r string, exists bool) {
 	v := m.session_id
 	if v == nil {
 		return
@@ -7763,10 +7616,10 @@ func (m *QuestionBatchMutation) SessionID() (r string, exists bool) {
 	return *v, true
 }
 
-// OldSessionID returns the old "session_id" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldSessionID returns the old "session_id" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldSessionID(ctx context.Context) (v string, err error) {
+func (m *QuestionRequestMutation) OldSessionID(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldSessionID is only allowed on UpdateOne operations")
 	}
@@ -7781,17 +7634,17 @@ func (m *QuestionBatchMutation) OldSessionID(ctx context.Context) (v string, err
 }
 
 // ResetSessionID resets all changes to the "session_id" field.
-func (m *QuestionBatchMutation) ResetSessionID() {
+func (m *QuestionRequestMutation) ResetSessionID() {
 	m.session_id = nil
 }
 
 // SetOriginProcessRunID sets the "origin_process_run_id" field.
-func (m *QuestionBatchMutation) SetOriginProcessRunID(s string) {
+func (m *QuestionRequestMutation) SetOriginProcessRunID(s string) {
 	m.origin_process_run_id = &s
 }
 
 // OriginProcessRunID returns the value of the "origin_process_run_id" field in the mutation.
-func (m *QuestionBatchMutation) OriginProcessRunID() (r string, exists bool) {
+func (m *QuestionRequestMutation) OriginProcessRunID() (r string, exists bool) {
 	v := m.origin_process_run_id
 	if v == nil {
 		return
@@ -7799,10 +7652,10 @@ func (m *QuestionBatchMutation) OriginProcessRunID() (r string, exists bool) {
 	return *v, true
 }
 
-// OldOriginProcessRunID returns the old "origin_process_run_id" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldOriginProcessRunID returns the old "origin_process_run_id" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldOriginProcessRunID(ctx context.Context) (v string, err error) {
+func (m *QuestionRequestMutation) OldOriginProcessRunID(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldOriginProcessRunID is only allowed on UpdateOne operations")
 	}
@@ -7817,17 +7670,17 @@ func (m *QuestionBatchMutation) OldOriginProcessRunID(ctx context.Context) (v st
 }
 
 // ResetOriginProcessRunID resets all changes to the "origin_process_run_id" field.
-func (m *QuestionBatchMutation) ResetOriginProcessRunID() {
+func (m *QuestionRequestMutation) ResetOriginProcessRunID() {
 	m.origin_process_run_id = nil
 }
 
 // SetStatus sets the "status" field.
-func (m *QuestionBatchMutation) SetStatus(s string) {
+func (m *QuestionRequestMutation) SetStatus(s string) {
 	m.status = &s
 }
 
 // Status returns the value of the "status" field in the mutation.
-func (m *QuestionBatchMutation) Status() (r string, exists bool) {
+func (m *QuestionRequestMutation) Status() (r string, exists bool) {
 	v := m.status
 	if v == nil {
 		return
@@ -7835,10 +7688,10 @@ func (m *QuestionBatchMutation) Status() (r string, exists bool) {
 	return *v, true
 }
 
-// OldStatus returns the old "status" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldStatus returns the old "status" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldStatus(ctx context.Context) (v string, err error) {
+func (m *QuestionRequestMutation) OldStatus(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
 	}
@@ -7853,90 +7706,18 @@ func (m *QuestionBatchMutation) OldStatus(ctx context.Context) (v string, err er
 }
 
 // ResetStatus resets all changes to the "status" field.
-func (m *QuestionBatchMutation) ResetStatus() {
+func (m *QuestionRequestMutation) ResetStatus() {
 	m.status = nil
 }
 
-// SetDeliveryStatus sets the "delivery_status" field.
-func (m *QuestionBatchMutation) SetDeliveryStatus(s string) {
-	m.delivery_status = &s
-}
-
-// DeliveryStatus returns the value of the "delivery_status" field in the mutation.
-func (m *QuestionBatchMutation) DeliveryStatus() (r string, exists bool) {
-	v := m.delivery_status
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDeliveryStatus returns the old "delivery_status" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldDeliveryStatus(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDeliveryStatus is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDeliveryStatus requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDeliveryStatus: %w", err)
-	}
-	return oldValue.DeliveryStatus, nil
-}
-
-// ResetDeliveryStatus resets all changes to the "delivery_status" field.
-func (m *QuestionBatchMutation) ResetDeliveryStatus() {
-	m.delivery_status = nil
-}
-
-// SetDeliveryProcessRunID sets the "delivery_process_run_id" field.
-func (m *QuestionBatchMutation) SetDeliveryProcessRunID(s string) {
-	m.delivery_process_run_id = &s
-}
-
-// DeliveryProcessRunID returns the value of the "delivery_process_run_id" field in the mutation.
-func (m *QuestionBatchMutation) DeliveryProcessRunID() (r string, exists bool) {
-	v := m.delivery_process_run_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDeliveryProcessRunID returns the old "delivery_process_run_id" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldDeliveryProcessRunID(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDeliveryProcessRunID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDeliveryProcessRunID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDeliveryProcessRunID: %w", err)
-	}
-	return oldValue.DeliveryProcessRunID, nil
-}
-
-// ResetDeliveryProcessRunID resets all changes to the "delivery_process_run_id" field.
-func (m *QuestionBatchMutation) ResetDeliveryProcessRunID() {
-	m.delivery_process_run_id = nil
-}
-
 // SetQuestions sets the "questions" field.
-func (m *QuestionBatchMutation) SetQuestions(value []map[string]interface{}) {
+func (m *QuestionRequestMutation) SetQuestions(value []map[string]interface{}) {
 	m.questions = &value
 	m.appendquestions = nil
 }
 
 // Questions returns the value of the "questions" field in the mutation.
-func (m *QuestionBatchMutation) Questions() (r []map[string]interface{}, exists bool) {
+func (m *QuestionRequestMutation) Questions() (r []map[string]interface{}, exists bool) {
 	v := m.questions
 	if v == nil {
 		return
@@ -7944,10 +7725,10 @@ func (m *QuestionBatchMutation) Questions() (r []map[string]interface{}, exists 
 	return *v, true
 }
 
-// OldQuestions returns the old "questions" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldQuestions returns the old "questions" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldQuestions(ctx context.Context) (v []map[string]interface{}, err error) {
+func (m *QuestionRequestMutation) OldQuestions(ctx context.Context) (v []map[string]interface{}, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldQuestions is only allowed on UpdateOne operations")
 	}
@@ -7962,12 +7743,12 @@ func (m *QuestionBatchMutation) OldQuestions(ctx context.Context) (v []map[strin
 }
 
 // AppendQuestions adds value to the "questions" field.
-func (m *QuestionBatchMutation) AppendQuestions(value []map[string]interface{}) {
+func (m *QuestionRequestMutation) AppendQuestions(value []map[string]interface{}) {
 	m.appendquestions = append(m.appendquestions, value...)
 }
 
 // AppendedQuestions returns the list of values that were appended to the "questions" field in this mutation.
-func (m *QuestionBatchMutation) AppendedQuestions() ([]map[string]interface{}, bool) {
+func (m *QuestionRequestMutation) AppendedQuestions() ([]map[string]interface{}, bool) {
 	if len(m.appendquestions) == 0 {
 		return nil, false
 	}
@@ -7975,19 +7756,19 @@ func (m *QuestionBatchMutation) AppendedQuestions() ([]map[string]interface{}, b
 }
 
 // ResetQuestions resets all changes to the "questions" field.
-func (m *QuestionBatchMutation) ResetQuestions() {
+func (m *QuestionRequestMutation) ResetQuestions() {
 	m.questions = nil
 	m.appendquestions = nil
 }
 
 // SetAnswers sets the "answers" field.
-func (m *QuestionBatchMutation) SetAnswers(value []map[string]interface{}) {
+func (m *QuestionRequestMutation) SetAnswers(value []map[string]interface{}) {
 	m.answers = &value
 	m.appendanswers = nil
 }
 
 // Answers returns the value of the "answers" field in the mutation.
-func (m *QuestionBatchMutation) Answers() (r []map[string]interface{}, exists bool) {
+func (m *QuestionRequestMutation) Answers() (r []map[string]interface{}, exists bool) {
 	v := m.answers
 	if v == nil {
 		return
@@ -7995,10 +7776,10 @@ func (m *QuestionBatchMutation) Answers() (r []map[string]interface{}, exists bo
 	return *v, true
 }
 
-// OldAnswers returns the old "answers" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldAnswers returns the old "answers" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldAnswers(ctx context.Context) (v []map[string]interface{}, err error) {
+func (m *QuestionRequestMutation) OldAnswers(ctx context.Context) (v []map[string]interface{}, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldAnswers is only allowed on UpdateOne operations")
 	}
@@ -8013,12 +7794,12 @@ func (m *QuestionBatchMutation) OldAnswers(ctx context.Context) (v []map[string]
 }
 
 // AppendAnswers adds value to the "answers" field.
-func (m *QuestionBatchMutation) AppendAnswers(value []map[string]interface{}) {
+func (m *QuestionRequestMutation) AppendAnswers(value []map[string]interface{}) {
 	m.appendanswers = append(m.appendanswers, value...)
 }
 
 // AppendedAnswers returns the list of values that were appended to the "answers" field in this mutation.
-func (m *QuestionBatchMutation) AppendedAnswers() ([]map[string]interface{}, bool) {
+func (m *QuestionRequestMutation) AppendedAnswers() ([]map[string]interface{}, bool) {
 	if len(m.appendanswers) == 0 {
 		return nil, false
 	}
@@ -8026,18 +7807,18 @@ func (m *QuestionBatchMutation) AppendedAnswers() ([]map[string]interface{}, boo
 }
 
 // ResetAnswers resets all changes to the "answers" field.
-func (m *QuestionBatchMutation) ResetAnswers() {
+func (m *QuestionRequestMutation) ResetAnswers() {
 	m.answers = nil
 	m.appendanswers = nil
 }
 
 // SetCancelReason sets the "cancel_reason" field.
-func (m *QuestionBatchMutation) SetCancelReason(s string) {
+func (m *QuestionRequestMutation) SetCancelReason(s string) {
 	m.cancel_reason = &s
 }
 
 // CancelReason returns the value of the "cancel_reason" field in the mutation.
-func (m *QuestionBatchMutation) CancelReason() (r string, exists bool) {
+func (m *QuestionRequestMutation) CancelReason() (r string, exists bool) {
 	v := m.cancel_reason
 	if v == nil {
 		return
@@ -8045,10 +7826,10 @@ func (m *QuestionBatchMutation) CancelReason() (r string, exists bool) {
 	return *v, true
 }
 
-// OldCancelReason returns the old "cancel_reason" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldCancelReason returns the old "cancel_reason" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldCancelReason(ctx context.Context) (v string, err error) {
+func (m *QuestionRequestMutation) OldCancelReason(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldCancelReason is only allowed on UpdateOne operations")
 	}
@@ -8063,17 +7844,17 @@ func (m *QuestionBatchMutation) OldCancelReason(ctx context.Context) (v string, 
 }
 
 // ResetCancelReason resets all changes to the "cancel_reason" field.
-func (m *QuestionBatchMutation) ResetCancelReason() {
+func (m *QuestionRequestMutation) ResetCancelReason() {
 	m.cancel_reason = nil
 }
 
 // SetCreatedAt sets the "created_at" field.
-func (m *QuestionBatchMutation) SetCreatedAt(t time.Time) {
+func (m *QuestionRequestMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
 }
 
 // CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *QuestionBatchMutation) CreatedAt() (r time.Time, exists bool) {
+func (m *QuestionRequestMutation) CreatedAt() (r time.Time, exists bool) {
 	v := m.created_at
 	if v == nil {
 		return
@@ -8081,10 +7862,10 @@ func (m *QuestionBatchMutation) CreatedAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldCreatedAt returns the old "created_at" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldCreatedAt returns the old "created_at" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+func (m *QuestionRequestMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
 	}
@@ -8099,17 +7880,17 @@ func (m *QuestionBatchMutation) OldCreatedAt(ctx context.Context) (v time.Time, 
 }
 
 // ResetCreatedAt resets all changes to the "created_at" field.
-func (m *QuestionBatchMutation) ResetCreatedAt() {
+func (m *QuestionRequestMutation) ResetCreatedAt() {
 	m.created_at = nil
 }
 
 // SetAnsweredAt sets the "answered_at" field.
-func (m *QuestionBatchMutation) SetAnsweredAt(t time.Time) {
+func (m *QuestionRequestMutation) SetAnsweredAt(t time.Time) {
 	m.answered_at = &t
 }
 
 // AnsweredAt returns the value of the "answered_at" field in the mutation.
-func (m *QuestionBatchMutation) AnsweredAt() (r time.Time, exists bool) {
+func (m *QuestionRequestMutation) AnsweredAt() (r time.Time, exists bool) {
 	v := m.answered_at
 	if v == nil {
 		return
@@ -8117,10 +7898,10 @@ func (m *QuestionBatchMutation) AnsweredAt() (r time.Time, exists bool) {
 	return *v, true
 }
 
-// OldAnsweredAt returns the old "answered_at" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
+// OldAnsweredAt returns the old "answered_at" field's value of the QuestionRequest entity.
+// If the QuestionRequest object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldAnsweredAt(ctx context.Context) (v *time.Time, err error) {
+func (m *QuestionRequestMutation) OldAnsweredAt(ctx context.Context) (v *time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldAnsweredAt is only allowed on UpdateOne operations")
 	}
@@ -8135,81 +7916,32 @@ func (m *QuestionBatchMutation) OldAnsweredAt(ctx context.Context) (v *time.Time
 }
 
 // ClearAnsweredAt clears the value of the "answered_at" field.
-func (m *QuestionBatchMutation) ClearAnsweredAt() {
+func (m *QuestionRequestMutation) ClearAnsweredAt() {
 	m.answered_at = nil
-	m.clearedFields[questionbatch.FieldAnsweredAt] = struct{}{}
+	m.clearedFields[questionrequest.FieldAnsweredAt] = struct{}{}
 }
 
 // AnsweredAtCleared returns if the "answered_at" field was cleared in this mutation.
-func (m *QuestionBatchMutation) AnsweredAtCleared() bool {
-	_, ok := m.clearedFields[questionbatch.FieldAnsweredAt]
+func (m *QuestionRequestMutation) AnsweredAtCleared() bool {
+	_, ok := m.clearedFields[questionrequest.FieldAnsweredAt]
 	return ok
 }
 
 // ResetAnsweredAt resets all changes to the "answered_at" field.
-func (m *QuestionBatchMutation) ResetAnsweredAt() {
+func (m *QuestionRequestMutation) ResetAnsweredAt() {
 	m.answered_at = nil
-	delete(m.clearedFields, questionbatch.FieldAnsweredAt)
+	delete(m.clearedFields, questionrequest.FieldAnsweredAt)
 }
 
-// SetDeliveredAt sets the "delivered_at" field.
-func (m *QuestionBatchMutation) SetDeliveredAt(t time.Time) {
-	m.delivered_at = &t
-}
-
-// DeliveredAt returns the value of the "delivered_at" field in the mutation.
-func (m *QuestionBatchMutation) DeliveredAt() (r time.Time, exists bool) {
-	v := m.delivered_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDeliveredAt returns the old "delivered_at" field's value of the QuestionBatch entity.
-// If the QuestionBatch object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *QuestionBatchMutation) OldDeliveredAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDeliveredAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDeliveredAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDeliveredAt: %w", err)
-	}
-	return oldValue.DeliveredAt, nil
-}
-
-// ClearDeliveredAt clears the value of the "delivered_at" field.
-func (m *QuestionBatchMutation) ClearDeliveredAt() {
-	m.delivered_at = nil
-	m.clearedFields[questionbatch.FieldDeliveredAt] = struct{}{}
-}
-
-// DeliveredAtCleared returns if the "delivered_at" field was cleared in this mutation.
-func (m *QuestionBatchMutation) DeliveredAtCleared() bool {
-	_, ok := m.clearedFields[questionbatch.FieldDeliveredAt]
-	return ok
-}
-
-// ResetDeliveredAt resets all changes to the "delivered_at" field.
-func (m *QuestionBatchMutation) ResetDeliveredAt() {
-	m.delivered_at = nil
-	delete(m.clearedFields, questionbatch.FieldDeliveredAt)
-}
-
-// Where appends a list predicates to the QuestionBatchMutation builder.
-func (m *QuestionBatchMutation) Where(ps ...predicate.QuestionBatch) {
+// Where appends a list predicates to the QuestionRequestMutation builder.
+func (m *QuestionRequestMutation) Where(ps ...predicate.QuestionRequest) {
 	m.predicates = append(m.predicates, ps...)
 }
 
-// WhereP appends storage-level predicates to the QuestionBatchMutation builder. Using this method,
+// WhereP appends storage-level predicates to the QuestionRequestMutation builder. Using this method,
 // users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *QuestionBatchMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.QuestionBatch, len(ps))
+func (m *QuestionRequestMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.QuestionRequest, len(ps))
 	for i := range ps {
 		p[i] = ps[i]
 	}
@@ -8217,57 +7949,48 @@ func (m *QuestionBatchMutation) WhereP(ps ...func(*sql.Selector)) {
 }
 
 // Op returns the operation name.
-func (m *QuestionBatchMutation) Op() Op {
+func (m *QuestionRequestMutation) Op() Op {
 	return m.op
 }
 
 // SetOp allows setting the mutation operation.
-func (m *QuestionBatchMutation) SetOp(op Op) {
+func (m *QuestionRequestMutation) SetOp(op Op) {
 	m.op = op
 }
 
-// Type returns the node type of this mutation (QuestionBatch).
-func (m *QuestionBatchMutation) Type() string {
+// Type returns the node type of this mutation (QuestionRequest).
+func (m *QuestionRequestMutation) Type() string {
 	return m.typ
 }
 
 // Fields returns all fields that were changed during this mutation. Note that in
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
-func (m *QuestionBatchMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+func (m *QuestionRequestMutation) Fields() []string {
+	fields := make([]string, 0, 8)
 	if m.session_id != nil {
-		fields = append(fields, questionbatch.FieldSessionID)
+		fields = append(fields, questionrequest.FieldSessionID)
 	}
 	if m.origin_process_run_id != nil {
-		fields = append(fields, questionbatch.FieldOriginProcessRunID)
+		fields = append(fields, questionrequest.FieldOriginProcessRunID)
 	}
 	if m.status != nil {
-		fields = append(fields, questionbatch.FieldStatus)
-	}
-	if m.delivery_status != nil {
-		fields = append(fields, questionbatch.FieldDeliveryStatus)
-	}
-	if m.delivery_process_run_id != nil {
-		fields = append(fields, questionbatch.FieldDeliveryProcessRunID)
+		fields = append(fields, questionrequest.FieldStatus)
 	}
 	if m.questions != nil {
-		fields = append(fields, questionbatch.FieldQuestions)
+		fields = append(fields, questionrequest.FieldQuestions)
 	}
 	if m.answers != nil {
-		fields = append(fields, questionbatch.FieldAnswers)
+		fields = append(fields, questionrequest.FieldAnswers)
 	}
 	if m.cancel_reason != nil {
-		fields = append(fields, questionbatch.FieldCancelReason)
+		fields = append(fields, questionrequest.FieldCancelReason)
 	}
 	if m.created_at != nil {
-		fields = append(fields, questionbatch.FieldCreatedAt)
+		fields = append(fields, questionrequest.FieldCreatedAt)
 	}
 	if m.answered_at != nil {
-		fields = append(fields, questionbatch.FieldAnsweredAt)
-	}
-	if m.delivered_at != nil {
-		fields = append(fields, questionbatch.FieldDeliveredAt)
+		fields = append(fields, questionrequest.FieldAnsweredAt)
 	}
 	return fields
 }
@@ -8275,30 +7998,24 @@ func (m *QuestionBatchMutation) Fields() []string {
 // Field returns the value of a field with the given name. The second boolean
 // return value indicates that this field was not set, or was not defined in the
 // schema.
-func (m *QuestionBatchMutation) Field(name string) (ent.Value, bool) {
+func (m *QuestionRequestMutation) Field(name string) (ent.Value, bool) {
 	switch name {
-	case questionbatch.FieldSessionID:
+	case questionrequest.FieldSessionID:
 		return m.SessionID()
-	case questionbatch.FieldOriginProcessRunID:
+	case questionrequest.FieldOriginProcessRunID:
 		return m.OriginProcessRunID()
-	case questionbatch.FieldStatus:
+	case questionrequest.FieldStatus:
 		return m.Status()
-	case questionbatch.FieldDeliveryStatus:
-		return m.DeliveryStatus()
-	case questionbatch.FieldDeliveryProcessRunID:
-		return m.DeliveryProcessRunID()
-	case questionbatch.FieldQuestions:
+	case questionrequest.FieldQuestions:
 		return m.Questions()
-	case questionbatch.FieldAnswers:
+	case questionrequest.FieldAnswers:
 		return m.Answers()
-	case questionbatch.FieldCancelReason:
+	case questionrequest.FieldCancelReason:
 		return m.CancelReason()
-	case questionbatch.FieldCreatedAt:
+	case questionrequest.FieldCreatedAt:
 		return m.CreatedAt()
-	case questionbatch.FieldAnsweredAt:
+	case questionrequest.FieldAnsweredAt:
 		return m.AnsweredAt()
-	case questionbatch.FieldDeliveredAt:
-		return m.DeliveredAt()
 	}
 	return nil, false
 }
@@ -8306,263 +8023,221 @@ func (m *QuestionBatchMutation) Field(name string) (ent.Value, bool) {
 // OldField returns the old value of the field from the database. An error is
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
-func (m *QuestionBatchMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+func (m *QuestionRequestMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
-	case questionbatch.FieldSessionID:
+	case questionrequest.FieldSessionID:
 		return m.OldSessionID(ctx)
-	case questionbatch.FieldOriginProcessRunID:
+	case questionrequest.FieldOriginProcessRunID:
 		return m.OldOriginProcessRunID(ctx)
-	case questionbatch.FieldStatus:
+	case questionrequest.FieldStatus:
 		return m.OldStatus(ctx)
-	case questionbatch.FieldDeliveryStatus:
-		return m.OldDeliveryStatus(ctx)
-	case questionbatch.FieldDeliveryProcessRunID:
-		return m.OldDeliveryProcessRunID(ctx)
-	case questionbatch.FieldQuestions:
+	case questionrequest.FieldQuestions:
 		return m.OldQuestions(ctx)
-	case questionbatch.FieldAnswers:
+	case questionrequest.FieldAnswers:
 		return m.OldAnswers(ctx)
-	case questionbatch.FieldCancelReason:
+	case questionrequest.FieldCancelReason:
 		return m.OldCancelReason(ctx)
-	case questionbatch.FieldCreatedAt:
+	case questionrequest.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
-	case questionbatch.FieldAnsweredAt:
+	case questionrequest.FieldAnsweredAt:
 		return m.OldAnsweredAt(ctx)
-	case questionbatch.FieldDeliveredAt:
-		return m.OldDeliveredAt(ctx)
 	}
-	return nil, fmt.Errorf("unknown QuestionBatch field %s", name)
+	return nil, fmt.Errorf("unknown QuestionRequest field %s", name)
 }
 
 // SetField sets the value of a field with the given name. It returns an error if
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
-func (m *QuestionBatchMutation) SetField(name string, value ent.Value) error {
+func (m *QuestionRequestMutation) SetField(name string, value ent.Value) error {
 	switch name {
-	case questionbatch.FieldSessionID:
+	case questionrequest.FieldSessionID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSessionID(v)
 		return nil
-	case questionbatch.FieldOriginProcessRunID:
+	case questionrequest.FieldOriginProcessRunID:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOriginProcessRunID(v)
 		return nil
-	case questionbatch.FieldStatus:
+	case questionrequest.FieldStatus:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
 		return nil
-	case questionbatch.FieldDeliveryStatus:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDeliveryStatus(v)
-		return nil
-	case questionbatch.FieldDeliveryProcessRunID:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDeliveryProcessRunID(v)
-		return nil
-	case questionbatch.FieldQuestions:
+	case questionrequest.FieldQuestions:
 		v, ok := value.([]map[string]interface{})
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetQuestions(v)
 		return nil
-	case questionbatch.FieldAnswers:
+	case questionrequest.FieldAnswers:
 		v, ok := value.([]map[string]interface{})
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAnswers(v)
 		return nil
-	case questionbatch.FieldCancelReason:
+	case questionrequest.FieldCancelReason:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCancelReason(v)
 		return nil
-	case questionbatch.FieldCreatedAt:
+	case questionrequest.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCreatedAt(v)
 		return nil
-	case questionbatch.FieldAnsweredAt:
+	case questionrequest.FieldAnsweredAt:
 		v, ok := value.(time.Time)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAnsweredAt(v)
 		return nil
-	case questionbatch.FieldDeliveredAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDeliveredAt(v)
-		return nil
 	}
-	return fmt.Errorf("unknown QuestionBatch field %s", name)
+	return fmt.Errorf("unknown QuestionRequest field %s", name)
 }
 
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
-func (m *QuestionBatchMutation) AddedFields() []string {
+func (m *QuestionRequestMutation) AddedFields() []string {
 	return nil
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
-func (m *QuestionBatchMutation) AddedField(name string) (ent.Value, bool) {
+func (m *QuestionRequestMutation) AddedField(name string) (ent.Value, bool) {
 	return nil, false
 }
 
 // AddField adds the value to the field with the given name. It returns an error if
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
-func (m *QuestionBatchMutation) AddField(name string, value ent.Value) error {
+func (m *QuestionRequestMutation) AddField(name string, value ent.Value) error {
 	switch name {
 	}
-	return fmt.Errorf("unknown QuestionBatch numeric field %s", name)
+	return fmt.Errorf("unknown QuestionRequest numeric field %s", name)
 }
 
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
-func (m *QuestionBatchMutation) ClearedFields() []string {
+func (m *QuestionRequestMutation) ClearedFields() []string {
 	var fields []string
-	if m.FieldCleared(questionbatch.FieldAnsweredAt) {
-		fields = append(fields, questionbatch.FieldAnsweredAt)
-	}
-	if m.FieldCleared(questionbatch.FieldDeliveredAt) {
-		fields = append(fields, questionbatch.FieldDeliveredAt)
+	if m.FieldCleared(questionrequest.FieldAnsweredAt) {
+		fields = append(fields, questionrequest.FieldAnsweredAt)
 	}
 	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
 // cleared in this mutation.
-func (m *QuestionBatchMutation) FieldCleared(name string) bool {
+func (m *QuestionRequestMutation) FieldCleared(name string) bool {
 	_, ok := m.clearedFields[name]
 	return ok
 }
 
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
-func (m *QuestionBatchMutation) ClearField(name string) error {
+func (m *QuestionRequestMutation) ClearField(name string) error {
 	switch name {
-	case questionbatch.FieldAnsweredAt:
+	case questionrequest.FieldAnsweredAt:
 		m.ClearAnsweredAt()
 		return nil
-	case questionbatch.FieldDeliveredAt:
-		m.ClearDeliveredAt()
-		return nil
 	}
-	return fmt.Errorf("unknown QuestionBatch nullable field %s", name)
+	return fmt.Errorf("unknown QuestionRequest nullable field %s", name)
 }
 
 // ResetField resets all changes in the mutation for the field with the given name.
 // It returns an error if the field is not defined in the schema.
-func (m *QuestionBatchMutation) ResetField(name string) error {
+func (m *QuestionRequestMutation) ResetField(name string) error {
 	switch name {
-	case questionbatch.FieldSessionID:
+	case questionrequest.FieldSessionID:
 		m.ResetSessionID()
 		return nil
-	case questionbatch.FieldOriginProcessRunID:
+	case questionrequest.FieldOriginProcessRunID:
 		m.ResetOriginProcessRunID()
 		return nil
-	case questionbatch.FieldStatus:
+	case questionrequest.FieldStatus:
 		m.ResetStatus()
 		return nil
-	case questionbatch.FieldDeliveryStatus:
-		m.ResetDeliveryStatus()
-		return nil
-	case questionbatch.FieldDeliveryProcessRunID:
-		m.ResetDeliveryProcessRunID()
-		return nil
-	case questionbatch.FieldQuestions:
+	case questionrequest.FieldQuestions:
 		m.ResetQuestions()
 		return nil
-	case questionbatch.FieldAnswers:
+	case questionrequest.FieldAnswers:
 		m.ResetAnswers()
 		return nil
-	case questionbatch.FieldCancelReason:
+	case questionrequest.FieldCancelReason:
 		m.ResetCancelReason()
 		return nil
-	case questionbatch.FieldCreatedAt:
+	case questionrequest.FieldCreatedAt:
 		m.ResetCreatedAt()
 		return nil
-	case questionbatch.FieldAnsweredAt:
+	case questionrequest.FieldAnsweredAt:
 		m.ResetAnsweredAt()
 		return nil
-	case questionbatch.FieldDeliveredAt:
-		m.ResetDeliveredAt()
-		return nil
 	}
-	return fmt.Errorf("unknown QuestionBatch field %s", name)
+	return fmt.Errorf("unknown QuestionRequest field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
-func (m *QuestionBatchMutation) AddedEdges() []string {
+func (m *QuestionRequestMutation) AddedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
-func (m *QuestionBatchMutation) AddedIDs(name string) []ent.Value {
+func (m *QuestionRequestMutation) AddedIDs(name string) []ent.Value {
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
-func (m *QuestionBatchMutation) RemovedEdges() []string {
+func (m *QuestionRequestMutation) RemovedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
-func (m *QuestionBatchMutation) RemovedIDs(name string) []ent.Value {
+func (m *QuestionRequestMutation) RemovedIDs(name string) []ent.Value {
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *QuestionBatchMutation) ClearedEdges() []string {
+func (m *QuestionRequestMutation) ClearedEdges() []string {
 	edges := make([]string, 0, 0)
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
-func (m *QuestionBatchMutation) EdgeCleared(name string) bool {
+func (m *QuestionRequestMutation) EdgeCleared(name string) bool {
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
-func (m *QuestionBatchMutation) ClearEdge(name string) error {
-	return fmt.Errorf("unknown QuestionBatch unique edge %s", name)
+func (m *QuestionRequestMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown QuestionRequest unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
-func (m *QuestionBatchMutation) ResetEdge(name string) error {
-	return fmt.Errorf("unknown QuestionBatch edge %s", name)
+func (m *QuestionRequestMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown QuestionRequest edge %s", name)
 }
 
 // QuickCommandMutation represents an operation that mutates the QuickCommand nodes in the graph.
@@ -8959,6 +8634,8 @@ type SessionMutation struct {
 	id                               *string
 	project_id                       *string
 	requirement                      *string
+	mentions                         *[]session.PromptMention
+	appendmentions                   []session.PromptMention
 	mode                             *string
 	status                           *string
 	priority                         *string
@@ -9000,7 +8677,6 @@ type SessionMutation struct {
 	queue_prompt                     *string
 	queue_resume_codex_session_id    *string
 	queue_resume_of_process_run_id   *string
-	queue_answer_batch_id            *string
 	workflow_definition_id           *string
 	workflow_status                  *string
 	workflow_current_node_id         *string
@@ -9193,6 +8869,71 @@ func (m *SessionMutation) OldRequirement(ctx context.Context) (v string, err err
 // ResetRequirement resets all changes to the "requirement" field.
 func (m *SessionMutation) ResetRequirement() {
 	m.requirement = nil
+}
+
+// SetMentions sets the "mentions" field.
+func (m *SessionMutation) SetMentions(sm []session.PromptMention) {
+	m.mentions = &sm
+	m.appendmentions = nil
+}
+
+// Mentions returns the value of the "mentions" field in the mutation.
+func (m *SessionMutation) Mentions() (r []session.PromptMention, exists bool) {
+	v := m.mentions
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMentions returns the old "mentions" field's value of the Session entity.
+// If the Session object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SessionMutation) OldMentions(ctx context.Context) (v []session.PromptMention, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMentions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMentions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMentions: %w", err)
+	}
+	return oldValue.Mentions, nil
+}
+
+// AppendMentions adds sm to the "mentions" field.
+func (m *SessionMutation) AppendMentions(sm []session.PromptMention) {
+	m.appendmentions = append(m.appendmentions, sm...)
+}
+
+// AppendedMentions returns the list of values that were appended to the "mentions" field in this mutation.
+func (m *SessionMutation) AppendedMentions() ([]session.PromptMention, bool) {
+	if len(m.appendmentions) == 0 {
+		return nil, false
+	}
+	return m.appendmentions, true
+}
+
+// ClearMentions clears the value of the "mentions" field.
+func (m *SessionMutation) ClearMentions() {
+	m.mentions = nil
+	m.appendmentions = nil
+	m.clearedFields[entsession.FieldMentions] = struct{}{}
+}
+
+// MentionsCleared returns if the "mentions" field was cleared in this mutation.
+func (m *SessionMutation) MentionsCleared() bool {
+	_, ok := m.clearedFields[entsession.FieldMentions]
+	return ok
+}
+
+// ResetMentions resets all changes to the "mentions" field.
+func (m *SessionMutation) ResetMentions() {
+	m.mentions = nil
+	m.appendmentions = nil
+	delete(m.clearedFields, entsession.FieldMentions)
 }
 
 // SetMode sets the "mode" field.
@@ -10753,42 +10494,6 @@ func (m *SessionMutation) ResetQueueResumeOfProcessRunID() {
 	m.queue_resume_of_process_run_id = nil
 }
 
-// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
-func (m *SessionMutation) SetQueueAnswerBatchID(s string) {
-	m.queue_answer_batch_id = &s
-}
-
-// QueueAnswerBatchID returns the value of the "queue_answer_batch_id" field in the mutation.
-func (m *SessionMutation) QueueAnswerBatchID() (r string, exists bool) {
-	v := m.queue_answer_batch_id
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldQueueAnswerBatchID returns the old "queue_answer_batch_id" field's value of the Session entity.
-// If the Session object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SessionMutation) OldQueueAnswerBatchID(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldQueueAnswerBatchID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldQueueAnswerBatchID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldQueueAnswerBatchID: %w", err)
-	}
-	return oldValue.QueueAnswerBatchID, nil
-}
-
-// ResetQueueAnswerBatchID resets all changes to the "queue_answer_batch_id" field.
-func (m *SessionMutation) ResetQueueAnswerBatchID() {
-	m.queue_answer_batch_id = nil
-}
-
 // SetWorkflowDefinitionID sets the "workflow_definition_id" field.
 func (m *SessionMutation) SetWorkflowDefinitionID(s string) {
 	m.workflow_definition_id = &s
@@ -11327,6 +11032,9 @@ func (m *SessionMutation) Fields() []string {
 	if m.requirement != nil {
 		fields = append(fields, entsession.FieldRequirement)
 	}
+	if m.mentions != nil {
+		fields = append(fields, entsession.FieldMentions)
+	}
 	if m.mode != nil {
 		fields = append(fields, entsession.FieldMode)
 	}
@@ -11441,9 +11149,6 @@ func (m *SessionMutation) Fields() []string {
 	if m.queue_resume_of_process_run_id != nil {
 		fields = append(fields, entsession.FieldQueueResumeOfProcessRunID)
 	}
-	if m.queue_answer_batch_id != nil {
-		fields = append(fields, entsession.FieldQueueAnswerBatchID)
-	}
 	if m.workflow_definition_id != nil {
 		fields = append(fields, entsession.FieldWorkflowDefinitionID)
 	}
@@ -11492,6 +11197,8 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.ProjectID()
 	case entsession.FieldRequirement:
 		return m.Requirement()
+	case entsession.FieldMentions:
+		return m.Mentions()
 	case entsession.FieldMode:
 		return m.Mode()
 	case entsession.FieldStatus:
@@ -11568,8 +11275,6 @@ func (m *SessionMutation) Field(name string) (ent.Value, bool) {
 		return m.QueueResumeCodexSessionID()
 	case entsession.FieldQueueResumeOfProcessRunID:
 		return m.QueueResumeOfProcessRunID()
-	case entsession.FieldQueueAnswerBatchID:
-		return m.QueueAnswerBatchID()
 	case entsession.FieldWorkflowDefinitionID:
 		return m.WorkflowDefinitionID()
 	case entsession.FieldWorkflowStatus:
@@ -11607,6 +11312,8 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldProjectID(ctx)
 	case entsession.FieldRequirement:
 		return m.OldRequirement(ctx)
+	case entsession.FieldMentions:
+		return m.OldMentions(ctx)
 	case entsession.FieldMode:
 		return m.OldMode(ctx)
 	case entsession.FieldStatus:
@@ -11683,8 +11390,6 @@ func (m *SessionMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldQueueResumeCodexSessionID(ctx)
 	case entsession.FieldQueueResumeOfProcessRunID:
 		return m.OldQueueResumeOfProcessRunID(ctx)
-	case entsession.FieldQueueAnswerBatchID:
-		return m.OldQueueAnswerBatchID(ctx)
 	case entsession.FieldWorkflowDefinitionID:
 		return m.OldWorkflowDefinitionID(ctx)
 	case entsession.FieldWorkflowStatus:
@@ -11731,6 +11436,13 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRequirement(v)
+		return nil
+	case entsession.FieldMentions:
+		v, ok := value.([]session.PromptMention)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMentions(v)
 		return nil
 	case entsession.FieldMode:
 		v, ok := value.(string)
@@ -11998,13 +11710,6 @@ func (m *SessionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetQueueResumeOfProcessRunID(v)
 		return nil
-	case entsession.FieldQueueAnswerBatchID:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetQueueAnswerBatchID(v)
-		return nil
 	case entsession.FieldWorkflowDefinitionID:
 		v, ok := value.(string)
 		if !ok {
@@ -12158,6 +11863,9 @@ func (m *SessionMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *SessionMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(entsession.FieldMentions) {
+		fields = append(fields, entsession.FieldMentions)
+	}
 	if m.FieldCleared(entsession.FieldCloseReason) {
 		fields = append(fields, entsession.FieldCloseReason)
 	}
@@ -12217,6 +11925,9 @@ func (m *SessionMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *SessionMutation) ClearField(name string) error {
 	switch name {
+	case entsession.FieldMentions:
+		m.ClearMentions()
+		return nil
 	case entsession.FieldCloseReason:
 		m.ClearCloseReason()
 		return nil
@@ -12275,6 +11986,9 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldRequirement:
 		m.ResetRequirement()
+		return nil
+	case entsession.FieldMentions:
+		m.ResetMentions()
 		return nil
 	case entsession.FieldMode:
 		m.ResetMode()
@@ -12389,9 +12103,6 @@ func (m *SessionMutation) ResetField(name string) error {
 		return nil
 	case entsession.FieldQueueResumeOfProcessRunID:
 		m.ResetQueueResumeOfProcessRunID()
-		return nil
-	case entsession.FieldQueueAnswerBatchID:
-		m.ResetQueueAnswerBatchID()
 		return nil
 	case entsession.FieldWorkflowDefinitionID:
 		m.ResetWorkflowDefinitionID()

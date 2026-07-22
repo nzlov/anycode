@@ -204,25 +204,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		WHERE status IN ('starting', 'running', 'waiting_user', 'stopping')`); err != nil {
 		return fmt.Errorf("create active process run uniqueness index: %w", err)
 	}
-	// GLUE: Legacy pending answer_user rows lacked an origin; remove after all supported databases have this column populated.
-	if _, err := s.db.ExecContext(ctx, `UPDATE question_batches
-		SET origin_process_run_id = (
-			SELECT process_runs.id
-			FROM process_runs
-			WHERE process_runs.session_id = question_batches.session_id
-			AND process_runs.status IN ('starting', 'running', 'waiting_user', 'stopping')
-			LIMIT 1
-		)
-		WHERE status = ?
-		AND origin_process_run_id = ''
-		AND 1 = (
-			SELECT COUNT(*)
-			FROM process_runs
-			WHERE process_runs.session_id = question_batches.session_id
-			AND process_runs.status IN ('starting', 'running', 'waiting_user', 'stopping')
-		)`, string(question.BatchPending)); err != nil {
-		return fmt.Errorf("backfill question origin process run: %w", err)
-	}
 	return nil
 }
 
@@ -254,7 +235,6 @@ func (s *Store) dropRemovedStorage(ctx context.Context) error {
 		column string
 	}{
 		{table: "sessions", column: "queue_workflow_run_id"},
-		{table: "question_batches", column: "workflow_run_id"},
 		{table: "event_records", column: "workflow_run_id"},
 	} {
 		hasColumn, err := s.columnExists(ctx, item.table, item.column)

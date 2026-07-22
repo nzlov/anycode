@@ -1,5 +1,5 @@
 <template>
-  <div class="answer-panel">
+  <div class="questions-panel">
     <q-inner-loading :showing="loading">
       <q-spinner color="primary" size="32px" />
     </q-inner-loading>
@@ -85,7 +85,7 @@
     </template>
 
     <q-separator />
-    <q-card-actions class="answer-panel__actions">
+    <q-card-actions class="questions-panel__actions">
       <q-btn
         v-if="showClose"
         flat
@@ -116,10 +116,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { AgentQuestion, QuestionAnswerInput, QuestionBatch } from '@/services/sessions';
+import type { AgentQuestion, QuestionAnswerInput, QuestionRequest } from '@/services/sessions';
 
 const props = defineProps<{
-  batches: QuestionBatch[];
+  requests: QuestionRequest[];
   loading?: boolean;
   submitting?: boolean;
   showClose?: boolean;
@@ -127,7 +127,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  submit: [batchId: string, answers: QuestionAnswerInput[]];
+  submit: [requestId: string, answers: QuestionAnswerInput[]];
 }>();
 
 interface DraftAnswer {
@@ -137,14 +137,14 @@ interface DraftAnswer {
 
 const activeQuestionId = ref('');
 const drafts = ref<Record<string, DraftAnswer>>({});
-const currentBatch = computed(
-  () => props.batches.find((batch) => batch.status === 'pending') ?? null,
+const currentRequest = computed(
+  () => props.requests.find((request) => request.status === 'pending') ?? null,
 );
-const questions = computed<AgentQuestion[]>(() => currentBatch.value?.questions ?? []);
+const questions = computed<AgentQuestion[]>(() => currentRequest.value?.questions ?? []);
 const canSubmit = computed(() => questions.value.every(hasValidDraft));
 
 watch(
-  () => props.batches,
+  () => props.requests,
   () => {
     const nextDrafts: Record<string, DraftAnswer> = {};
     for (const question of questions.value) {
@@ -191,8 +191,8 @@ function hasValidDraft(question: AgentQuestion): boolean {
 }
 
 function submit() {
-  const batch = currentBatch.value;
-  if (!batch || !canSubmit.value) return;
+  const request = currentRequest.value;
+  if (!request || !canSubmit.value) return;
   const answers = questions.value.map((question) => {
     const draft = draftFor(question.id);
     if (draft.choice === '__custom__') {
@@ -209,12 +209,12 @@ function submit() {
       payload: option?.payload ?? {},
     };
   });
-  emit('submit', batch.id, answers);
+  emit('submit', request.id, answers);
 }
 </script>
 
 <style scoped>
-.answer-panel {
+.questions-panel {
   position: relative;
   display: flex;
   min-height: 0;
@@ -222,7 +222,7 @@ function submit() {
   overflow: hidden;
 }
 
-.answer-panel > .q-tab-panels {
+.questions-panel > .q-tab-panels {
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
@@ -308,7 +308,7 @@ function submit() {
   margin: 8px 0 0 40px;
 }
 
-.answer-panel__actions {
+.questions-panel__actions {
   justify-content: space-between;
   padding: 12px 36px 22px;
 }
@@ -322,7 +322,7 @@ function submit() {
     padding: 20px 16px;
   }
 
-  .answer-panel__actions {
+  .questions-panel__actions {
     padding: 12px 16px 18px;
   }
 }

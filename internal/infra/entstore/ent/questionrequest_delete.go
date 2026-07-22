@@ -9,29 +9,29 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 )
 
-// QuestionBatchDelete is the builder for deleting a QuestionBatch entity.
-type QuestionBatchDelete struct {
+// QuestionRequestDelete is the builder for deleting a QuestionRequest entity.
+type QuestionRequestDelete struct {
 	config
 	hooks    []Hook
-	mutation *QuestionBatchMutation
+	mutation *QuestionRequestMutation
 }
 
-// Where appends a list predicates to the QuestionBatchDelete builder.
-func (_d *QuestionBatchDelete) Where(ps ...predicate.QuestionBatch) *QuestionBatchDelete {
+// Where appends a list predicates to the QuestionRequestDelete builder.
+func (_d *QuestionRequestDelete) Where(ps ...predicate.QuestionRequest) *QuestionRequestDelete {
 	_d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query and returns how many vertices were deleted.
-func (_d *QuestionBatchDelete) Exec(ctx context.Context) (int, error) {
+func (_d *QuestionRequestDelete) Exec(ctx context.Context) (int, error) {
 	return withHooks(ctx, _d.sqlExec, _d.mutation, _d.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *QuestionBatchDelete) ExecX(ctx context.Context) int {
+func (_d *QuestionRequestDelete) ExecX(ctx context.Context) int {
 	n, err := _d.Exec(ctx)
 	if err != nil {
 		panic(err)
@@ -39,8 +39,8 @@ func (_d *QuestionBatchDelete) ExecX(ctx context.Context) int {
 	return n
 }
 
-func (_d *QuestionBatchDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(questionbatch.Table, sqlgraph.NewFieldSpec(questionbatch.FieldID, field.TypeString))
+func (_d *QuestionRequestDelete) sqlExec(ctx context.Context) (int, error) {
+	_spec := sqlgraph.NewDeleteSpec(questionrequest.Table, sqlgraph.NewFieldSpec(questionrequest.FieldID, field.TypeString))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -56,32 +56,32 @@ func (_d *QuestionBatchDelete) sqlExec(ctx context.Context) (int, error) {
 	return affected, err
 }
 
-// QuestionBatchDeleteOne is the builder for deleting a single QuestionBatch entity.
-type QuestionBatchDeleteOne struct {
-	_d *QuestionBatchDelete
+// QuestionRequestDeleteOne is the builder for deleting a single QuestionRequest entity.
+type QuestionRequestDeleteOne struct {
+	_d *QuestionRequestDelete
 }
 
-// Where appends a list predicates to the QuestionBatchDelete builder.
-func (_d *QuestionBatchDeleteOne) Where(ps ...predicate.QuestionBatch) *QuestionBatchDeleteOne {
+// Where appends a list predicates to the QuestionRequestDelete builder.
+func (_d *QuestionRequestDeleteOne) Where(ps ...predicate.QuestionRequest) *QuestionRequestDeleteOne {
 	_d._d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query.
-func (_d *QuestionBatchDeleteOne) Exec(ctx context.Context) error {
+func (_d *QuestionRequestDeleteOne) Exec(ctx context.Context) error {
 	n, err := _d._d.Exec(ctx)
 	switch {
 	case err != nil:
 		return err
 	case n == 0:
-		return &NotFoundError{questionbatch.Label}
+		return &NotFoundError{questionrequest.Label}
 	default:
 		return nil
 	}
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *QuestionBatchDeleteOne) ExecX(ctx context.Context) {
+func (_d *QuestionRequestDeleteOne) ExecX(ctx context.Context) {
 	if err := _d.Exec(ctx); err != nil {
 		panic(err)
 	}

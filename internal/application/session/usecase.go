@@ -9,8 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	pathpkg "path"
+	"path/filepath"
 	"reflect"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -49,10 +50,8 @@ type UseCase interface {
 	StartWorktreeCleanupCoordinator()
 	CloseSession(ctx context.Context, input CloseSessionInput) (DTO, error)
 	UpdateSessionConfig(ctx context.Context, input UpdateSessionConfigInput) (DTO, error)
-	RequestUserAnswer(ctx context.Context, input RequestUserAnswerInput) (questionapp.BatchDTO, error)
-	AcknowledgeUserAnswerDelivery(ctx context.Context, input AcknowledgeUserAnswerDeliveryInput) error
-	FailUserAnswerDelivery(ctx context.Context, input FailUserAnswerDeliveryInput) error
-	SubmitQuestionBatch(ctx context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error)
+	RequestQuestions(ctx context.Context, input RequestQuestionsInput) (questionapp.RequestDTO, error)
+	SubmitQuestionRequest(ctx context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error)
 	AppendPrompt(ctx context.Context, input AppendPromptInput) (PromptAppendDTO, error)
 	UpdatePromptAppend(ctx context.Context, input UpdatePromptAppendInput) (PromptAppendDTO, error)
 	DeleteSessionFile(ctx context.Context, id domain.SessionFileID) error
@@ -79,6 +78,7 @@ type CreateSessionInput struct {
 	Config              ConfigInput
 	Priority            domain.Priority
 	StagedAttachmentIDs []domain.StagedAttachmentID
+	Mentions            []domain.PromptMention
 }
 
 type StartSessionOptions struct {
@@ -116,6 +116,7 @@ type AppendPromptInput struct {
 	Body                string
 	StagedAttachmentIDs []domain.StagedAttachmentID
 	ArtifactIDs         []domain.SessionFileID
+	Mentions            []domain.PromptMention
 }
 
 type UpdatePromptAppendInput struct {
@@ -131,33 +132,11 @@ type SubmitWorkflowApprovalInput struct {
 	Comment   string
 }
 
-type RequestUserAnswerInput struct {
+type RequestQuestionsInput struct {
+	RequestID questiondomain.RequestID
 	SessionID domain.ID
 	Questions []questiondomain.Question
 }
-
-type AcknowledgeUserAnswerDeliveryInput struct {
-	SessionID domain.ID
-	BatchID   questiondomain.BatchID
-}
-
-type UserAnswerDeliveryFailureKind string
-
-const UserAnswerDeliveryTransportClosed UserAnswerDeliveryFailureKind = "transport_closed"
-
-type FailUserAnswerDeliveryInput struct {
-	SessionID domain.ID
-	BatchID   questiondomain.BatchID
-	Kind      UserAnswerDeliveryFailureKind
-}
-
-type answerUserFallbackReason string
-
-const (
-	answerUserFallbackTimeout   answerUserFallbackReason = "answer_wait_timeout"
-	answerUserFallbackTransport answerUserFallbackReason = "transport_closed"
-	answerUserFallbackAckFailed answerUserFallbackReason = "delivery_ack_failed"
-)
 
 type ListSessionsInput struct {
 	ProjectID     *domain.ProjectID
@@ -295,7 +274,6 @@ const (
 	workflowSystemAdvancePendingEvent   = "workflow.system_advance_pending"
 	workflowSystemAdvanceCompletedEvent = "workflow.system_advance_completed"
 	sessionStatusUpdatedEvent           = "session.status_updated"
-	answerUserWarmWaitTimeout           = 5 * time.Minute
 )
 
 var (
@@ -334,7 +312,6 @@ type Service struct {
 	maxConcurrentAgents int
 	queueDrainScheduler func(*Service)
 	processExitDelay    func(int) time.Duration
-	answerUserTimer     func(time.Duration) (<-chan time.Time, func())
 	lifecycleCtx        context.Context
 	lifecycleCancel     context.CancelFunc
 	cleanupWake         chan struct{}
@@ -343,8 +320,8 @@ type Service struct {
 }
 
 type questionCoordinator interface {
-	CreateBatch(ctx context.Context, input questionapp.CreateBatchInput) (questionapp.BatchDTO, error)
-	CancelPendingBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
+	CreateRequest(ctx context.Context, input questionapp.CreateRequestInput) (questionapp.RequestDTO, error)
+	CancelPendingRequestsBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
 }
 
 type codexEventPublisher interface {
@@ -355,12 +332,12 @@ type sessionDiffCounter interface {
 	CountSessionChangedFiles(ctx context.Context, sessionID domain.ID) (int, error)
 }
 
-type answerQuestionCoordinator interface {
+type questionRequestCoordinator interface {
 	questionCoordinator
-	SubmitBatch(ctx context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error)
-	GetBatch(ctx context.Context, id questiondomain.BatchID) (questionapp.BatchDTO, error)
-	QuestionBatchUpdates(ctx context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.BatchDTO, error)
-	PublishBatch(batch questionapp.BatchDTO)
+	SubmitRequest(ctx context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error)
+	GetRequest(ctx context.Context, id questiondomain.RequestID) (questionapp.RequestDTO, error)
+	QuestionRequestUpdates(ctx context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.RequestDTO, error)
+	PublishRequest(request questionapp.RequestDTO)
 }
 
 type workflowApprovalRepositoryRunner interface {
@@ -492,13 +469,9 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 		maxConcurrentAgents: 1,
 		queueDrainScheduler: func(*Service) {},
 		processExitDelay:    processExitRetryDelay,
-		answerUserTimer: func(duration time.Duration) (<-chan time.Time, func()) {
-			timer := time.NewTimer(duration)
-			return timer.C, func() { timer.Stop() }
-		},
-		lifecycleCtx:    lifecycleCtx,
-		lifecycleCancel: lifecycleCancel,
-		cleanupWake:     make(chan struct{}, 1),
+		lifecycleCtx:        lifecycleCtx,
+		lifecycleCancel:     lifecycleCancel,
+		cleanupWake:         make(chan struct{}, 1),
 	}
 	for _, option := range options {
 		option(service)
@@ -831,10 +804,6 @@ func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	answerSessions, err := s.recoverAnswerUserSessions(ctx)
-	if err != nil {
-		return 0, err
-	}
 	withCodexSession, err := s.repo.ListInterruptedWithCodexSession(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list interrupted sessions: %w", err)
@@ -845,12 +814,9 @@ func (s *Service) RecoverInterruptedSessions(ctx context.Context) (int, error) {
 	}
 	sessions := append(withCodexSession, withoutCodexSession...)
 	seen := make(map[domain.ID]struct{}, len(sessions))
-	recovered := len(answerSessions) + len(systemAdvanceSessions)
+	recovered := len(systemAdvanceSessions)
 	for _, interrupted := range sessions {
 		if systemAdvanceSessions[interrupted.ID] {
-			continue
-		}
-		if answerSessions[interrupted.ID] {
 			continue
 		}
 		if _, ok := seen[interrupted.ID]; ok {
@@ -947,11 +913,6 @@ func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domai
 	if activeSnapshot != nil && hasCurrentActive && currentActive.ID != activeSnapshot.ID {
 		return nil
 	}
-	if activeSnapshot != nil && hasCurrentActive {
-		if err := s.stopDetachedProcess(ctx, *activeSnapshot); err != nil {
-			return s.persistInterruptedRecoveryFailure(ctx, session, "detached_process_ownership_unverified", err.Error())
-		}
-	}
 	interruptedRun := activeSnapshot
 	if session.Status == domain.StatusStopping && session.CloseReason != nil {
 		if interruptedRun != nil {
@@ -1001,10 +962,6 @@ func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domai
 		return s.queueInterruptedSessionResume(ctx, session, interruptedRun)
 	case domain.StatusWaitingUser:
 		return s.recoverInternalWaitingUserSession(ctx, session, interruptedRun)
-	case domain.StatusQueued:
-		if session.Queue.Kind == domain.QueueKindAnswerUser {
-			return s.recoverInternalWaitingUserSession(ctx, session, interruptedRun)
-		}
 	}
 	return nil
 }
@@ -1021,403 +978,9 @@ func isInterruptedRecoveryStatus(session domain.Session) bool {
 	switch session.Status {
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
 		return true
-	case domain.StatusQueued:
-		return session.Queue.Kind == domain.QueueKindAnswerUser
 	default:
 		return false
 	}
-}
-
-func (s *Service) recoverAnswerUserSessions(ctx context.Context) (map[domain.ID]bool, error) {
-	handled := map[domain.ID]bool{}
-	if s.uow == nil {
-		return handled, nil
-	}
-	var batches []questiondomain.Batch
-	if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return nil
-		}
-		var err error
-		batches, err = repo.ListAgentBatchesForRecovery(ctx)
-		return err
-	}); err != nil {
-		return nil, fmt.Errorf("list answer_user recovery batches: %w", err)
-	}
-	for _, batch := range batches {
-		if isInternalQuestionBatch(batch) {
-			continue
-		}
-		sessionID := domain.ID(batch.SessionID)
-		var recovered bool
-		err := s.withSessionLock(ctx, sessionID, func(ctx context.Context) error {
-			var err error
-			recovered, err = s.recoverAnswerUserBatch(ctx, batch.ID)
-			return err
-		})
-		if err != nil {
-			return nil, fmt.Errorf("recover answer_user batch %s: %w", batch.ID, err)
-		}
-		if recovered {
-			handled[sessionID] = true
-		}
-	}
-	return handled, nil
-}
-
-func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondomain.BatchID) (bool, error) {
-	var result questiondomain.Batch
-	var events []eventdomain.DomainEvent
-	preparedCloseRecovery := false
-	manualWorkflowRecovery := false
-	workflowRecoveryCode := ""
-	workflowRecoveryMessage := ""
-	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return nil
-		}
-		batch, err := repo.FindBatch(ctx, batchID)
-		if err != nil {
-			return err
-		}
-		session, err := tx.Sessions().Find(ctx, domain.ID(batch.SessionID))
-		if err != nil {
-			return err
-		}
-		if session.Status == domain.StatusClosed || session.Status == domain.StatusStopping || (session.Status == domain.StatusStopped && batch.OriginProcessRunID != nil) {
-			active, found, err := tx.Processes().FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-			if err != nil {
-				return err
-			}
-			if found {
-				exitResult := processdomain.ExitResult{FailureReason: "service restarted after session stop", FinishedAt: s.now()}
-				if err := tx.Processes().MarkExited(ctx, active.ID, exitResult); err != nil {
-					return err
-				}
-				if err := tx.Sessions().ReleasePromptAppends(ctx, string(active.ID)); err != nil {
-					return err
-				}
-				event, ok, err := s.newSessionEvent(session, "process.exited", processExitPayload(active.ID, exitResult))
-				if err != nil {
-					return err
-				}
-				if ok {
-					if err := tx.Events().Append(ctx, event); err != nil {
-						return err
-					}
-					events = append(events, event)
-				}
-			}
-			if session.Status == domain.StatusStopping && session.CloseReason != nil {
-				preparedCloseRecovery = true
-			} else if session.Status == domain.StatusStopping {
-				if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
-					return err
-				}
-				if err := tx.Sessions().Save(ctx, session); err != nil {
-					return err
-				}
-				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
-					eventType: "session.stopped", payload: map[string]any{"reason": "service_restarted", "cause": "stop_requested"},
-				}))
-				if err != nil {
-					return err
-				}
-				for _, event := range created {
-					if err := tx.Events().Append(ctx, event); err != nil {
-						return err
-					}
-					events = append(events, event)
-				}
-			}
-			switch batch.Status {
-			case questiondomain.BatchPending:
-				cancelled, err := repo.CancelPendingBySession(ctx, batch.SessionID, "session stopped before answer_user recovery")
-				if err != nil {
-					return err
-				}
-				for _, item := range cancelled {
-					if item.ID == batch.ID {
-						result = item
-						break
-					}
-				}
-			case questiondomain.BatchAnswered:
-				cancelled, err := repo.CancelUndeliveredBySession(ctx, batch.SessionID)
-				if err != nil {
-					return err
-				}
-				for _, item := range cancelled {
-					if item.ID == batch.ID {
-						result = item
-						break
-					}
-				}
-			}
-			return nil
-		}
-		if batch.OriginProcessRunID == nil {
-			active, found, err := tx.Processes().FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-			if err != nil {
-				return err
-			}
-			origin := active
-			originFound := found && strings.TrimSpace(active.CodexSessionID) != ""
-			if !originFound {
-				finder, ok := tx.Processes().(processdomain.HistoricalRunFinder)
-				if !ok {
-					return errors.New("historical process run finder is required for legacy answer_user recovery")
-				}
-				origin, originFound, err = finder.FindLatestRunBySessionBefore(ctx, processdomain.SessionID(session.ID), batch.CreatedAt)
-				if err != nil {
-					return err
-				}
-				originFound = originFound && strings.TrimSpace(origin.CodexSessionID) != ""
-			}
-			if originFound {
-				originID := questiondomain.ProcessRunID(origin.ID)
-				if err := repo.SetOriginProcessRun(ctx, batch.ID, originID); err != nil {
-					return err
-				}
-				batch.OriginProcessRunID = &originID
-			} else {
-				switch batch.Status {
-				case questiondomain.BatchPending:
-					cancelled, _, err := repo.CancelPendingBatch(ctx, batch.ID, "legacy answer_user origin could not be recovered")
-					if err != nil {
-						return err
-					}
-					result = cancelled
-				case questiondomain.BatchAnswered:
-					cancelled, err := repo.CancelUndeliveredBySession(ctx, batch.SessionID)
-					if err != nil {
-						return err
-					}
-					for _, item := range cancelled {
-						if item.ID == batch.ID {
-							result = item
-							break
-						}
-					}
-				}
-				if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
-					return err
-				}
-				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
-					eventType: "session.resume_failed",
-					payload:   map[string]any{"reason": "legacy_answer_user_origin_ambiguous", "batchId": string(batch.ID)},
-				}))
-				if err != nil {
-					return err
-				}
-				if err := tx.Sessions().Save(ctx, session); err != nil {
-					return err
-				}
-				for _, event := range created {
-					if err := tx.Events().Append(ctx, event); err != nil {
-						return err
-					}
-					events = append(events, event)
-				}
-				manualWorkflowRecovery = session.Mode == domain.ModeWorkflow
-				workflowRecoveryCode = "legacy_answer_user_origin_ambiguous"
-				workflowRecoveryMessage = "answer_user origin process could not be recovered"
-				if result.ID == "" {
-					result = batch
-				}
-				return nil
-			}
-		}
-		finder, ok := tx.Processes().(processdomain.RunFinder)
-		if !ok {
-			return errors.New("process run finder is required for answer_user recovery")
-		}
-		origin, err := finder.FindRun(ctx, processdomain.RunID(*batch.OriginProcessRunID))
-		if err != nil {
-			return err
-		}
-		if session.CodexSessionID == "" {
-			session.CodexSessionID = origin.CodexSessionID
-		}
-		switch batch.Status {
-		case questiondomain.BatchPending:
-			if processRunIsActive(origin.Status) {
-				if err := tx.Processes().MarkExited(ctx, origin.ID, processdomain.ExitResult{FailureReason: "service restarted while suspended for user", FinishedAt: s.now()}); err != nil {
-					return err
-				}
-				if err := tx.Sessions().CompletePromptAppends(ctx, string(origin.ID), s.now()); err != nil {
-					return err
-				}
-			}
-			if err := transitionSession(&session, domain.StatusWaitingUser, s.now()); err != nil {
-				return err
-			}
-			if err := markWorkflowNodeWaiting(ctx, tx.Workflows(), batch, origin); err != nil {
-				return err
-			}
-			created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
-				eventType: "process.suspended_for_user",
-				payload: map[string]any{
-					"processRunId": string(origin.ID), "batchId": string(batch.ID), "reason": "service_restarted",
-				},
-			}))
-			if err != nil {
-				return err
-			}
-			if err := tx.Sessions().Save(ctx, session); err != nil {
-				return err
-			}
-			for _, event := range created {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-				events = append(events, event)
-			}
-		case questiondomain.BatchAnswered:
-			if batch.DeliveryStatus == questiondomain.DeliveryInflight {
-				deliveryRun, found, err := tx.Processes().FindActiveBySession(ctx, processdomain.SessionID(session.ID))
-				if err != nil {
-					return err
-				}
-				if found {
-					exitResult := processdomain.ExitResult{FailureReason: "service restarted before answer delivery", FinishedAt: s.now()}
-					if err := tx.Processes().MarkExited(ctx, deliveryRun.ID, exitResult); err != nil {
-						return err
-					}
-					if err := tx.Sessions().ReleasePromptAppends(ctx, string(deliveryRun.ID)); err != nil {
-						return err
-					}
-					event, ok, err := s.newSessionEvent(session, "process.exited", processExitPayload(deliveryRun.ID, exitResult))
-					if err != nil {
-						return err
-					}
-					if ok {
-						if err := tx.Events().Append(ctx, event); err != nil {
-							return err
-						}
-						events = append(events, event)
-					}
-				}
-				if err := repo.ResetDeliveryAwaitingResume(ctx, batch.ID); err != nil {
-					return err
-				}
-				batch.DeliveryStatus = questiondomain.DeliveryAwaitingResume
-				batch.DeliveryProcessRunID = nil
-			}
-			if session.Status == domain.StatusResumeFailed {
-				manualWorkflowRecovery = session.Mode == domain.ModeWorkflow
-				workflowRecoveryCode = "answer_delivery_resume_failed"
-				workflowRecoveryMessage = "answer_user delivery requires a resume action"
-				result = batch
-				return nil
-			}
-			if strings.TrimSpace(origin.CodexSessionID) == "" {
-				if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
-					return err
-				}
-				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
-					eventType: "session.resume_failed",
-					payload:   map[string]any{"reason": "answer_user_origin_missing_codex_session", "batchId": string(batch.ID)},
-				}))
-				if err != nil {
-					return err
-				}
-				if err := tx.Sessions().Save(ctx, session); err != nil {
-					return err
-				}
-				for _, event := range created {
-					if err := tx.Events().Append(ctx, event); err != nil {
-						return err
-					}
-					events = append(events, event)
-				}
-				manualWorkflowRecovery = session.Mode == domain.ModeWorkflow
-				workflowRecoveryCode = "answer_user_origin_missing_codex_session"
-				workflowRecoveryMessage = "answer_user origin process has no Codex session id"
-				break
-			}
-			options := answerResumeOptions(batch, origin)
-			queued, queuedEvent, hasQueuedEvent, err := s.prepareQueuedSession(session, options, domain.QueuePriorityHigh, domain.QueueKindAnswerUser)
-			if err != nil {
-				return err
-			}
-			if err := markWorkflowNodeWaiting(ctx, tx.Workflows(), batch, origin); err != nil {
-				return err
-			}
-			if err := tx.Sessions().Save(ctx, queued); err != nil {
-				return err
-			}
-			queuedEvents := []eventdomain.DomainEvent{}
-			if hasQueuedEvent {
-				queuedEvents = append(queuedEvents, queuedEvent)
-			}
-			queuedEvents, err = s.addStatusUpdateEvent(queued, queuedEvents)
-			if err != nil {
-				return err
-			}
-			for _, event := range queuedEvents {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-				events = append(events, event)
-			}
-		}
-		result = batch
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-	for _, event := range events {
-		s.publishSessionEvent(ctx, event)
-	}
-	if result.ID != "" {
-		s.publishQuestionBatch(questionBatchDTO(result))
-	}
-	if manualWorkflowRecovery && s.workflows != nil {
-		_, err := s.workflows.MarkResumeFailedForSession(ctx, domain.WorkflowResumeFailureInput{
-			SessionID: domain.ID(result.SessionID), Code: workflowRecoveryCode, Message: workflowRecoveryMessage,
-		})
-		if err != nil {
-			return false, err
-		}
-	}
-	return result.ID != "" && !preparedCloseRecovery, nil
-}
-
-func markWorkflowNodeWaiting(ctx context.Context, repo workflowdomain.Repository, batch questiondomain.Batch, origin processdomain.Run) error {
-	if origin.NodeRunID == nil {
-		return nil
-	}
-	nodes, ok := repo.(workflowdomain.NodeExecutionRepository)
-	if !ok {
-		return errors.New("workflow node execution repository is required")
-	}
-	return nodes.MarkNodeWaitingUser(ctx, workflowdomain.SessionID(batch.SessionID), workflowdomain.NodeRunID(*origin.NodeRunID))
-}
-
-func processRunIsActive(status processdomain.Status) bool {
-	switch status {
-	case processdomain.StatusStarting, processdomain.StatusRunning, processdomain.StatusWaitingUser, processdomain.StatusStopping:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s *Service) stopDetachedProcess(ctx context.Context, run processdomain.Run) error {
-	if run.PID == nil || *run.PID <= 0 {
-		return fmt.Errorf("%w: process run %s has no persisted pid", processdomain.ErrProcessOwnershipUnverified, run.ID)
-	}
-	controller, ok := s.codex.(processdomain.DetachedProcessController)
-	if !ok {
-		return fmt.Errorf("%w: detached process controller is unavailable", processdomain.ErrProcessOwnershipUnverified)
-	}
-	cleanupCtx, cancel := detachedCleanupContext(ctx)
-	defer cancel()
-	return controller.StopDetached(cleanupCtx, processdomain.DetachedProcess{ProcessRunID: run.ID, PID: *run.PID})
 }
 
 func (s *Service) persistStoppedAfterRestart(ctx context.Context, session domain.Session, run *processdomain.Run) error {
@@ -1504,14 +1067,22 @@ func (s *Service) recoveryCodexOptions(ctx context.Context, session domain.Sessi
 }
 
 func (s *Service) recoverInternalWaitingUserSession(ctx context.Context, session domain.Session, run *processdomain.Run) error {
-	batch, ok, err := s.latestQuestionBatch(ctx, session.ID)
+	request, ok, err := s.latestQuestionRequest(ctx, session.ID)
 	if err != nil {
 		return err
 	}
-	if !ok || !isInternalQuestionBatch(batch) {
-		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "answer_user_recovery_missing", "interrupted waiting-user session has no recoverable question batch")
+	if !ok {
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "questions_recovery_missing", "interrupted waiting-user session has no recoverable question request")
 	}
-	if batch.Status == questiondomain.BatchPending {
+	if !isInternalQuestionRequest(request) {
+		if s.questions != nil {
+			if err := s.questions.CancelPendingRequestsBySession(ctx, questiondomain.SessionID(session.ID), "codex app-server restarted"); err != nil {
+				return err
+			}
+		}
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "app_server_restarted_during_questions", "the active questions call ended when Codex app-server restarted")
+	}
+	if request.Status == questiondomain.RequestPending {
 		if run == nil && session.Status == domain.StatusWaitingUser {
 			return nil
 		}
@@ -1520,44 +1091,41 @@ func (s *Service) recoverInternalWaitingUserSession(ctx context.Context, session
 			return err
 		}
 		return s.saveInterruptedRecoveryState(ctx, expected, session, run, true, "session.recovery_waiting_user", map[string]any{
-			"batchId": string(batch.ID),
-			"reason":  "service_restarted",
+			"requestId": string(request.ID),
+			"reason":    "service_restarted",
 		})
 	}
-	if batch.Status != questiondomain.BatchAnswered {
-		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "answer_user_recovery_missing", "interrupted question batch is no longer recoverable")
+	if request.Status != questiondomain.RequestAnswered {
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "questions_recovery_missing", "interrupted question request is no longer recoverable")
 	}
 	if run != nil {
 		if err := s.settleInterruptedRun(ctx, session, *run); err != nil {
 			return err
 		}
 	}
-	action, metadata, _, err := mergeFailureDecision(questionBatchDTO(batch))
+	action, metadata, _, err := mergeFailureDecision(questionRequestDTO(request))
 	if err != nil {
 		return err
 	}
-	return s.applyMergeFailureDecision(ctx, session, batch.ID, action, metadata)
+	return s.applyMergeFailureDecision(ctx, session, request.ID, action, metadata)
 }
 
-func (s *Service) latestQuestionBatch(ctx context.Context, sessionID domain.ID) (questiondomain.Batch, bool, error) {
+func (s *Service) latestQuestionRequest(ctx context.Context, sessionID domain.ID) (questiondomain.Request, bool, error) {
 	if s.uow == nil {
-		return questiondomain.Batch{}, false, errors.New("unit of work is required for interrupted question recovery")
+		return questiondomain.Request{}, false, errors.New("unit of work is required for interrupted question recovery")
 	}
-	var batch questiondomain.Batch
+	var request questiondomain.Request
 	var found bool
 	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return errors.New("question recovery repository is required")
-		}
+		repo := tx.Questions()
 		var err error
-		batch, found, err = repo.FindLatestBySession(ctx, questiondomain.SessionID(sessionID))
+		request, found, err = repo.FindLatestRequestBySession(ctx, questiondomain.SessionID(sessionID))
 		return err
 	})
 	if err != nil {
-		return questiondomain.Batch{}, false, fmt.Errorf("find latest question batch: %w", err)
+		return questiondomain.Request{}, false, fmt.Errorf("find latest question request: %w", err)
 	}
-	return batch, found, nil
+	return request, found, nil
 }
 
 func (s *Service) saveInterruptedRecoveryState(ctx context.Context, expected domain.Session, session domain.Session, run *processdomain.Run, guardReplacement bool, eventType string, payload map[string]any) error {
@@ -1673,8 +1241,8 @@ func (s *Service) saveInterruptedRecoveryStateAndEvent(ctx context.Context, expe
 	return nil
 }
 
-func isInternalQuestionBatch(batch questiondomain.Batch) bool {
-	for _, question := range batch.Questions {
+func isInternalQuestionRequest(request questiondomain.Request) bool {
+	for _, question := range request.Questions {
 		if question.Type == "merge_failure_action" {
 			return true
 		}
@@ -1868,7 +1436,6 @@ func mapFromValue(value any) map[string]any {
 
 func (s *Service) listInterruptedWithoutCodexSession(ctx context.Context) ([]domain.Session, error) {
 	statuses := []domain.Status{
-		domain.StatusQueued,
 		domain.StatusStarting,
 		domain.StatusRunning,
 		domain.StatusWaitingUser,
@@ -1892,9 +1459,6 @@ func (s *Service) listInterruptedWithoutCodexSession(ctx context.Context) ([]dom
 					continue
 				}
 				if row.Status != status {
-					continue
-				}
-				if row.Status == domain.StatusQueued && row.Queue.Kind != domain.QueueKindAnswerUser {
 					continue
 				}
 				seen[row.ID] = true
@@ -1935,6 +1499,10 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	}
 	fastMode := input.Config.FastMode != nil && *input.Config.FastMode
 	config := configFromInput(input.Config, fastMode)
+	mentions, err := normalizePromptMentions(input.Mentions)
+	if err != nil {
+		return DTO{}, err
+	}
 	if mode == domain.ModeWorkflow {
 		if s.workflows == nil {
 			return DTO{}, errors.New("session workflow starter is required for workflow mode")
@@ -1979,6 +1547,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			ID:           id,
 			ProjectID:    input.ProjectID,
 			Requirement:  requirement,
+			Mentions:     mentions,
 			Mode:         mode,
 			Status:       domain.StatusCreated,
 			Priority:     normalizePriority(input.Priority),
@@ -2219,15 +1788,8 @@ func (s *Service) startLoadedSession(ctx context.Context, session domain.Session
 		return DTO{}, err
 	}
 	if session.Status == domain.StatusResumeFailed {
-		if err := s.settleDetachedProcessBeforeRecoveryAction(ctx, session); err != nil {
+		if err := s.settleInterruptedRunBeforeRecoveryAction(ctx, session); err != nil {
 			return DTO{}, err
-		}
-		if _, _, awaiting, err := s.awaitingAnswerDelivery(ctx, session.ID); err != nil {
-			return DTO{}, err
-		} else if awaiting {
-			if err := s.cancelPendingQuestions(ctx, session.ID, "answer delivery abandoned by rerun"); err != nil {
-				return DTO{}, err
-			}
 		}
 	}
 	if session.Mode == domain.ModeWorkflow {
@@ -2521,7 +2083,7 @@ func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return err
 	})
 	if err == nil && dto.Status == domain.StatusStopping {
-		cleanupCtx, cancel := detachedCleanupContext(ctx)
+		cleanupCtx, cancel := processCleanupContext(ctx)
 		defer cancel()
 		dto, err = s.waitForStopCompletion(cleanupCtx, id)
 	}
@@ -2576,14 +2138,14 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	}
 	if s.processes == nil || s.codex == nil {
 		if session.Status == domain.StatusStopped {
-			cleanupCtx, cancel := detachedCleanupContext(ctx)
+			cleanupCtx, cancel := processCleanupContext(ctx)
 			defer cancel()
 			if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
 				return DTO{}, err
 			}
 			return toDTO(session), nil
 		}
-		if session.Status == domain.StatusQueued && session.Queue.Kind != domain.QueueKindAnswerUser {
+		if session.Status == domain.StatusQueued {
 			return s.stopSessionWithoutActiveProcess(ctx, session, "queue_cancelled", false)
 		}
 		return DTO{}, apperror.Wrap(ErrProcessLifecycleNotWired, apperror.CodeCodexStartFailed, apperror.CategoryInfraError, "session process lifecycle is not wired")
@@ -2593,14 +2155,14 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return DTO{}, fmt.Errorf("find active process run: %w", err)
 	}
 	if session.Status == domain.StatusStopped && !ok {
-		cleanupCtx, cancel := detachedCleanupContext(ctx)
+		cleanupCtx, cancel := processCleanupContext(ctx)
 		defer cancel()
 		if err := s.cancelPendingQuestions(cleanupCtx, session.ID, "session stopped"); err != nil {
 			return DTO{}, err
 		}
 		return toDTO(session), nil
 	}
-	if session.Status == domain.StatusQueued && session.Queue.Kind != domain.QueueKindAnswerUser && !ok {
+	if session.Status == domain.StatusQueued && !ok {
 		return s.stopSessionWithoutActiveProcess(ctx, session, "queue_cancelled", false)
 	}
 	if !ok {
@@ -2609,7 +2171,7 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		default:
 			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
 		}
-		cleanupCtx, cancel := detachedCleanupContext(ctx)
+		cleanupCtx, cancel := processCleanupContext(ctx)
 		defer cancel()
 		stopReason := "no_active_process"
 		if session.Status == domain.StatusQueued {
@@ -2624,14 +2186,10 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if err := s.markProcessStoppingWithSessionEvent(ctx, active.ID, session, "session.stopping", map[string]any{"processRunId": string(active.ID)}); err != nil {
 		return DTO{}, err
 	}
-	cleanupCtx, cancel := detachedCleanupContext(ctx)
+	cleanupCtx, cancel := processCleanupContext(ctx)
 	defer cancel()
 	stopErr := s.codex.Stop(cleanupCtx, active.ID)
 	processMissing := errors.Is(stopErr, processdomain.ErrProcessNotFound)
-	if processMissing {
-		stopErr = s.stopDetachedProcess(cleanupCtx, active)
-		processMissing = false
-	}
 	if stopErr != nil && !processMissing {
 		return DTO{}, fmt.Errorf("stop codex process: %w", stopErr)
 	}
@@ -2681,7 +2239,7 @@ func (s *Service) stopSessionWithoutActiveProcess(ctx context.Context, session d
 	return toDTO(session), nil
 }
 
-func detachedCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+func processCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), processCleanupTimeout)
 }
 
@@ -2777,36 +2335,9 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot resume from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
 	if session.Status == domain.StatusResumeFailed {
-		if err := s.settleDetachedProcessBeforeRecoveryAction(ctx, session); err != nil {
+		if err := s.settleInterruptedRunBeforeRecoveryAction(ctx, session); err != nil {
 			return DTO{}, err
 		}
-	}
-	if batch, origin, ok, err := s.awaitingAnswerDelivery(ctx, session.ID); err != nil {
-		return DTO{}, err
-	} else if ok {
-		options := answerResumeOptions(batch, origin)
-		if session.Mode == domain.ModeWorkflow {
-			if s.workflows == nil {
-				return DTO{}, errors.New("session workflow starter is required for workflow mode")
-			}
-			advance, err := s.workflows.ResumeCurrentNodeForSession(ctx, domain.WorkflowResumeCurrentNodeInput{
-				SessionID: session.ID,
-				Reason:    "user retried answer delivery",
-			})
-			if err != nil {
-				return DTO{}, err
-			}
-			options.sessionID = advance.SessionID
-			options.nodeRunID = workflowNodeRunID(advance.NodeRunID)
-		}
-		if startOptions.Force {
-			return s.startCodex(ctx, session, options, true)
-		}
-		dto, err := s.queueCodex(ctx, session, options, domain.QueuePriorityHigh, domain.QueueKindAnswerUser)
-		if err == nil {
-			s.scheduleQueueDrain()
-		}
-		return dto, err
 	}
 	resumeCodexSessionID := strings.TrimSpace(startOptions.resumeCodexSessionID)
 	if resumeCodexSessionID == "" {
@@ -2853,438 +2384,120 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 	return s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
 }
 
-func (s *Service) settleDetachedProcessBeforeRecoveryAction(ctx context.Context, session domain.Session) error {
+func (s *Service) settleInterruptedRunBeforeRecoveryAction(ctx context.Context, session domain.Session) error {
 	if s.processes == nil {
 		return nil
 	}
 	active, ok, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
 	if err != nil {
-		return fmt.Errorf("find detached process before recovery action: %w", err)
+		return fmt.Errorf("find interrupted process before recovery action: %w", err)
 	}
 	if !ok {
 		return nil
 	}
-	if err := s.stopDetachedProcess(ctx, active); err != nil {
-		return apperror.Wrap(err, apperror.CodeResumeFailed, apperror.CategoryCodexError, "cannot verify the interrupted Codex process is stopped").
-			WithDetails(map[string]any{"sessionId": string(session.ID), "processRunId": string(active.ID)}).
-			WithRetryable(true).
-			WithUserAction("stop_session")
-	}
 	return s.settleInterruptedRun(ctx, session, active)
 }
 
-func (s *Service) RequestUserAnswer(ctx context.Context, input RequestUserAnswerInput) (questionapp.BatchDTO, error) {
+func (s *Service) RequestQuestions(ctx context.Context, input RequestQuestionsInput) (questionapp.RequestDTO, error) {
 	if s == nil {
-		return questionapp.BatchDTO{}, errors.New("session usecase: nil service")
+		return questionapp.RequestDTO{}, errors.New("session usecase: nil service")
 	}
-	if input.SessionID == "" || len(input.Questions) == 0 {
-		return questionapp.BatchDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session id and questions are required")
+	if input.RequestID == "" || input.SessionID == "" || len(input.Questions) == 0 {
+		return questionapp.RequestDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "request id, session id, and questions are required")
 	}
-	var batch questionapp.BatchDTO
+	var request questionapp.RequestDTO
 	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
 		var err error
-		batch, _, err = s.requestUserAnswer(ctx, input)
+		request, _, err = s.requestQuestions(ctx, input)
 		return err
 	})
 	if err != nil {
-		return questionapp.BatchDTO{}, err
+		return questionapp.RequestDTO{}, err
 	}
-	return s.waitForUserAnswer(ctx, batch)
+	return s.waitForUserAnswer(ctx, request)
 }
 
-func (s *Service) waitForUserAnswer(ctx context.Context, batch questionapp.BatchDTO) (questionapp.BatchDTO, error) {
-	questions, ok := s.questions.(answerQuestionCoordinator)
+func (s *Service) waitForUserAnswer(ctx context.Context, request questionapp.RequestDTO) (questionapp.RequestDTO, error) {
+	questions, ok := s.questions.(questionRequestCoordinator)
 	if !ok {
-		return questionapp.BatchDTO{}, errors.New("answer question coordinator is required")
+		return questionapp.RequestDTO{}, errors.New("question request coordinator is required")
 	}
-	waitCtx, cancelWait := context.WithCancel(context.WithoutCancel(ctx))
-	defer cancelWait()
-	updates, err := questions.QuestionBatchUpdates(waitCtx, batch.SessionID)
+	updates, err := questions.QuestionRequestUpdates(ctx, request.SessionID)
 	if err != nil {
-		return questionapp.BatchDTO{}, err
+		return questionapp.RequestDTO{}, err
 	}
-	current, err := questions.GetBatch(waitCtx, batch.ID)
+	current, err := questions.GetRequest(ctx, request.ID)
 	if err != nil {
-		return questionapp.BatchDTO{}, err
+		return questionapp.RequestDTO{}, err
 	}
-	if current.Status != questiondomain.BatchPending {
+	if current.Status != questiondomain.RequestPending {
 		return current, nil
-	}
-	timer := s.answerUserTimer
-	if timer == nil {
-		timer = func(duration time.Duration) (<-chan time.Time, func()) {
-			timer := time.NewTimer(duration)
-			return timer.C, func() { timer.Stop() }
-		}
-	}
-	timeout, stopTimer := timer(answerUserWarmWaitTimeout)
-	defer stopTimer()
-	var processDone <-chan struct{}
-	if current.OriginProcessRunID != nil {
-		originID := processdomain.RunID(*current.OriginProcessRunID)
-		processDone, _ = s.processConsumerDone(originID)
-		if processDone == nil {
-			finder, ok := s.processes.(processdomain.RunFinder)
-			if !ok {
-				return questionapp.BatchDTO{}, errors.New("process run finder is required")
-			}
-			origin, err := finder.FindRun(waitCtx, originID)
-			if err != nil {
-				return questionapp.BatchDTO{}, err
-			}
-			if origin.Status != processdomain.StatusWaitingUser {
-				return current, nil
-			}
-		}
 	}
 	for {
 		select {
 		case update, open := <-updates:
 			if !open {
-				return questionapp.BatchDTO{}, ctx.Err()
+				if err := ctx.Err(); err != nil {
+					return questionapp.RequestDTO{}, err
+				}
+				return questionapp.RequestDTO{}, errors.New("question updates closed")
 			}
-			if update.ID == batch.ID && update.Status != questiondomain.BatchPending {
+			if update.ID == request.ID && update.Status != questiondomain.RequestPending {
 				return update, nil
 			}
-		case <-timeout:
-			if err := s.fallbackUserAnswer(context.WithoutCancel(ctx), domain.ID(batch.SessionID), batch.ID, answerUserFallbackTimeout); err != nil {
-				return questionapp.BatchDTO{}, err
-			}
-			current, err := questions.GetBatch(context.WithoutCancel(ctx), batch.ID)
-			if err != nil {
-				return questionapp.BatchDTO{}, err
-			}
-			return current, nil
-		case <-processDone:
-			return batch, nil
 		case <-ctx.Done():
-			if err := s.fallbackUserAnswer(context.WithoutCancel(ctx), domain.ID(batch.SessionID), batch.ID, answerUserFallbackTransport); err != nil {
-				return questionapp.BatchDTO{}, err
-			}
-			return questionapp.BatchDTO{}, ctx.Err()
+			return questionapp.RequestDTO{}, ctx.Err()
 		}
 	}
 }
 
-func (s *Service) fallbackUserAnswer(ctx context.Context, sessionID domain.ID, batchID questiondomain.BatchID, reason answerUserFallbackReason) error {
-	if s.processes == nil || s.codex == nil || s.uow == nil {
-		return errors.New("answer_user durable lifecycle is not wired")
-	}
-	var origin processdomain.Run
-	claimed := false
-	var fallbackEvent eventdomain.DomainEvent
-	err := s.withSessionLock(ctx, sessionID, func(ctx context.Context) error {
-		return s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			repo, ok := tx.Questions().(questiondomain.AgentRepository)
-			if !ok {
-				return errors.New("agent question repository is required")
-			}
-			batch, err := repo.FindBatch(ctx, batchID)
-			if err != nil {
-				return err
-			}
-			if batch.SessionID != questiondomain.SessionID(sessionID) {
-				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question batch does not belong to the session")
-			}
-			var originID *questiondomain.ProcessRunID
-			switch {
-			case batch.Status == questiondomain.BatchPending:
-				originID = batch.OriginProcessRunID
-			case reason != answerUserFallbackTimeout && batch.Status == questiondomain.BatchAnswered && batch.DeliveryStatus == questiondomain.DeliveryInflight:
-				originID = batch.DeliveryProcessRunID
-			default:
-				return nil
-			}
-			if originID == nil {
-				return nil
-			}
-			finder, ok := tx.Processes().(processdomain.RunFinder)
-			if !ok {
-				return errors.New("process run finder is required")
-			}
-			origin, err = finder.FindRun(ctx, processdomain.RunID(*originID))
-			if err != nil {
-				return err
-			}
-			if origin.Status != processdomain.StatusWaitingUser {
-				return nil
-			}
-			if err := tx.Processes().MarkStopping(ctx, origin.ID); err != nil {
-				return err
-			}
-			session, err := tx.Sessions().Find(ctx, sessionID)
-			if err != nil {
-				return err
-			}
-			var hasEvent bool
-			fallbackEvent, hasEvent, err = s.newSessionEvent(session, "process.answer_wait_fallback", map[string]any{
-				"batchId": string(batchID), "processRunId": string(origin.ID), "reason": string(reason),
-			})
-			if err != nil {
-				return err
-			}
-			claimed = true
-			if hasEvent {
-				return tx.Events().Append(ctx, fallbackEvent)
-			}
-			return nil
-		})
-	})
-	if err != nil || !claimed {
-		return err
-	}
-	if fallbackEvent.ID != "" {
-		s.publishSessionEvent(ctx, fallbackEvent)
-	}
-	stopCtx, stopCancel := detachedCleanupContext(ctx)
-	stopErr := s.codex.Stop(stopCtx, origin.ID)
-	stopCancel()
-	if stopErr != nil && !errors.Is(stopErr, processdomain.ErrProcessNotFound) {
-		persistErr := s.persistAnswerFallbackStopFailure(context.WithoutCancel(ctx), sessionID, batchID, origin.ID, stopErr)
-		return errors.Join(fmt.Errorf("suspend codex for answer_user: %w", stopErr), persistErr)
-	}
-	cleanupCtx, cancel := detachedCleanupContext(ctx)
-	defer cancel()
-	if done, ok := s.processConsumerDone(origin.ID); ok {
-		select {
-		case <-cleanupCtx.Done():
-			return fmt.Errorf("wait for answer_user suspension: %w", cleanupCtx.Err())
-		case <-done:
-		}
-		return nil
-	}
-	return s.withSessionLock(cleanupCtx, sessionID, func(ctx context.Context) error {
-		_, _, err := s.persistCodexProcessExit(ctx, domain.Session{ID: sessionID}, processdomain.CodexHandle{
-			ProcessRunID: origin.ID,
-			PID:          intValue(origin.PID),
-		}, codexStartOptions{}, processdomain.ExitResult{
-			FailureReason: "suspended for user answer",
-			FinishedAt:    s.now(),
-		}, nil)
-		return err
-	})
-}
-
-func (s *Service) persistAnswerFallbackStopFailure(ctx context.Context, sessionID domain.ID, batchID questiondomain.BatchID, processRunID processdomain.RunID, stopErr error) error {
-	var events []eventdomain.DomainEvent
-	var workflowEvents []eventdomain.DomainEvent
-	var session domain.Session
-	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		var err error
-		session, err = tx.Sessions().Find(ctx, sessionID)
-		if err != nil {
-			return err
-		}
-		if err := transitionSession(&session, domain.StatusResumeFailed, s.now()); err != nil {
-			return err
-		}
-		if err := tx.Sessions().Save(ctx, session); err != nil {
-			return err
-		}
-		events, err = s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
-			eventType: "session.resume_failed",
-			payload: map[string]any{
-				"batchId": string(batchID), "processRunId": string(processRunID), "reason": "answer_user_stop_failed", "error": stopErr.Error(),
-			},
-		}))
-		if err != nil {
-			return err
-		}
-		for _, event := range events {
-			if err := tx.Events().Append(ctx, event); err != nil {
-				return err
-			}
-		}
-		if session.Mode == domain.ModeWorkflow {
-			runner, ok := s.workflows.(workflowResumeFailureRepositoryRunner)
-			if !ok {
-				return errors.New("workflow resume failure requires transactional workflow repository runner")
-			}
-			_, recorded, err := runner.MarkResumeFailedForSessionWithRepositories(ctx, domain.WorkflowResumeFailureInput{
-				SessionID: session.ID, Code: "answer_user_stop_failed", Message: stopErr.Error(),
-			}, tx.Workflows(), tx.Events())
-			if err != nil {
-				return fmt.Errorf("mark workflow resume failed: %w", err)
-			}
-			workflowEvents = recorded
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	for _, event := range events {
-		s.publishSessionEvent(ctx, event)
-	}
-	for _, event := range workflowEvents {
-		s.publishSessionEvent(ctx, event)
-	}
-	return nil
-}
-
-func (s *Service) FailUserAnswerDelivery(ctx context.Context, input FailUserAnswerDeliveryInput) error {
-	if s == nil {
-		return errors.New("session usecase: nil service")
-	}
-	if input.SessionID == "" || input.BatchID == "" || input.Kind != UserAnswerDeliveryTransportClosed {
-		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "valid session id, question batch id, and delivery failure kind are required")
-	}
-	return s.fallbackUserAnswer(context.WithoutCancel(ctx), input.SessionID, input.BatchID, answerUserFallbackTransport)
-}
-
-func (s *Service) AcknowledgeUserAnswerDelivery(ctx context.Context, input AcknowledgeUserAnswerDeliveryInput) error {
-	if s == nil {
-		return errors.New("session usecase: nil service")
-	}
-	if input.SessionID == "" || input.BatchID == "" {
-		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session id and question batch id are required")
-	}
-	if s.processes == nil || s.uow == nil {
-		return errors.New("answer_user durable lifecycle is not wired")
-	}
-	var delivered questiondomain.Batch
-	var events []eventdomain.DomainEvent
-	fallbackEligible := false
-	err := s.withSessionLock(ctx, input.SessionID, func(ctx context.Context) error {
-		return s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			repo, ok := tx.Questions().(questiondomain.AgentRepository)
-			if !ok {
-				return errors.New("agent question repository is required")
-			}
-			batch, err := repo.FindBatch(ctx, input.BatchID)
-			if err != nil {
-				return err
-			}
-			if batch.SessionID != questiondomain.SessionID(input.SessionID) || batch.DeliveryProcessRunID == nil {
-				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question delivery does not belong to the session")
-			}
-			if batch.DeliveryStatus == questiondomain.DeliveryDelivered {
-				return nil
-			}
-			fallbackEligible = batch.DeliveryStatus == questiondomain.DeliveryInflight
-			finder, ok := tx.Processes().(processdomain.RunFinder)
-			if !ok {
-				return errors.New("process run finder is required")
-			}
-			origin, err := finder.FindRun(ctx, processdomain.RunID(*batch.DeliveryProcessRunID))
-			if err != nil {
-				return err
-			}
-			if origin.Status != processdomain.StatusWaitingUser {
-				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "answer delivery origin is no longer waiting for user")
-			}
-			delivered, _, err = repo.MarkDeliveryDelivered(ctx, batch.ID, questiondomain.ProcessRunID(origin.ID), s.now())
-			if err != nil {
-				return err
-			}
-			if err := tx.Processes().MarkRunning(ctx, origin.ID, intValue(origin.PID), origin.CodexSessionID); err != nil {
-				return err
-			}
-			session, err := tx.Sessions().Find(ctx, input.SessionID)
-			if err != nil {
-				return err
-			}
-			if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
-				return err
-			}
-			if origin.NodeRunID != nil {
-				nodes, ok := tx.Workflows().(workflowdomain.NodeExecutionRepository)
-				if !ok {
-					return errors.New("workflow node execution repository is required")
-				}
-				if err := nodes.MarkNodeRunning(ctx, workflowdomain.SessionID(batch.SessionID), workflowdomain.NodeRunID(*origin.NodeRunID), workflowdomain.ProcessRunID(origin.ID)); err != nil {
-					return err
-				}
-			}
-			if err := tx.Sessions().Save(ctx, session); err != nil {
-				return err
-			}
-			events, err = s.newSessionEvents(session, statusUpdateInputs(
-				sessionEventInput{eventType: "question.answer_delivered", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(origin.ID)}},
-				sessionEventInput{eventType: "session.running", payload: map[string]any{"processRunId": string(origin.ID), "reason": "answer_user_delivered"}},
-			))
-			if err != nil {
-				return err
-			}
-			for _, event := range events {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
-	})
-	if err != nil && fallbackEligible {
-		fallbackErr := s.fallbackUserAnswer(context.WithoutCancel(ctx), input.SessionID, input.BatchID, answerUserFallbackAckFailed)
-		return errors.Join(err, fallbackErr)
-	}
-	if err != nil {
-		return err
-	}
-	if delivered.ID != "" {
-		s.publishQuestionBatch(questionBatchDTO(delivered))
-	}
-	for _, event := range events {
-		s.publishSessionEvent(ctx, event)
-	}
-	return nil
-}
-
-func (s *Service) requestUserAnswer(ctx context.Context, input RequestUserAnswerInput) (questionapp.BatchDTO, processdomain.Run, error) {
+func (s *Service) requestQuestions(ctx context.Context, input RequestQuestionsInput) (questionapp.RequestDTO, processdomain.Run, error) {
 	if s.uow == nil || s.processes == nil || s.codex == nil || s.questions == nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, errors.New("answer_user durable lifecycle is not wired")
+		return questionapp.RequestDTO{}, processdomain.Run{}, errors.New("questions lifecycle is not wired")
 	}
 	session, err := s.repo.Find(ctx, input.SessionID)
 	if err != nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, fmt.Errorf("find session: %w", err)
+		return questionapp.RequestDTO{}, processdomain.Run{}, fmt.Errorf("find session: %w", err)
 	}
 	if session.Status != domain.StatusStarting && session.Status != domain.StatusRunning {
-		return questionapp.BatchDTO{}, processdomain.Run{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot request user input from current status").WithDetails(map[string]any{"status": string(session.Status)})
+		return questionapp.RequestDTO{}, processdomain.Run{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot request user input from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
 	active, err := s.activeProcessWithCodexSession(ctx, session.ID)
 	if err != nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, err
+		return questionapp.RequestDTO{}, processdomain.Run{}, err
+	}
+	requestID := input.RequestID
+	if requestID == "" {
+		return questionapp.RequestDTO{}, processdomain.Run{}, errors.New("question request id is required")
 	}
 	questions := make([]questiondomain.Question, len(input.Questions))
-	batchIDValue, err := s.generateID()
-	if err != nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, fmt.Errorf("generate question batch id: %w", err)
-	}
-	batchID := questiondomain.BatchID(batchIDValue)
 	for i, item := range input.Questions {
 		questions[i] = item
-		if questions[i].ID == "" {
-			id, err := s.generateID()
-			if err != nil {
-				return questionapp.BatchDTO{}, processdomain.Run{}, fmt.Errorf("generate question id: %w", err)
-			}
-			questions[i].ID = questiondomain.QuestionID(id)
-		}
-		questions[i].BatchID = batchID
+		questions[i].ID = questiondomain.QuestionID(fmt.Sprintf("%s:%d", requestID, i))
+		questions[i].RequestID = requestID
 	}
 	now := s.now()
 	originID := questiondomain.ProcessRunID(active.ID)
-	batch := questiondomain.Batch{
-		ID:                 batchID,
+	request := questiondomain.Request{
+		ID:                 requestID,
 		SessionID:          questiondomain.SessionID(session.ID),
 		OriginProcessRunID: &originID,
-		Status:             questiondomain.BatchPending,
-		DeliveryStatus:     questiondomain.DeliveryNone,
+		Status:             questiondomain.RequestPending,
 		Questions:          questions,
 		CreatedAt:          now,
 	}
 	if session.Mode == domain.ModeWorkflow && active.NodeRunID == nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, errors.New("workflow answer_user origin is missing node run id")
+		return questionapp.RequestDTO{}, processdomain.Run{}, errors.New("workflow questions origin is missing node run id")
 	}
 	if err := transitionSession(&session, domain.StatusWaitingUser, now); err != nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, err
+		return questionapp.RequestDTO{}, processdomain.Run{}, err
 	}
 	events, err := s.newSessionEvents(session, statusUpdateInputs(
-		sessionEventInput{eventType: "question.pending", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(active.ID)}},
-		sessionEventInput{eventType: "session.waiting_user", payload: map[string]any{"batchId": string(batch.ID), "processRunId": string(active.ID)}},
+		sessionEventInput{eventType: "question.pending", payload: map[string]any{"requestId": string(request.ID), "processRunId": string(active.ID)}},
+		sessionEventInput{eventType: "session.waiting_user", payload: map[string]any{"requestId": string(request.ID), "processRunId": string(active.ID)}},
 	))
 	if err != nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, err
+		return questionapp.RequestDTO{}, processdomain.Run{}, err
 	}
 	if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 		if session.Mode == domain.ModeWorkflow {
@@ -3292,16 +2505,16 @@ func (s *Service) requestUserAnswer(ctx context.Context, input RequestUserAnswer
 				return err
 			}
 		}
-		pending, err := tx.Questions().ListPendingBySession(ctx, questiondomain.SessionID(session.ID))
+		pending, err := tx.Questions().ListPendingRequestsBySession(ctx, questiondomain.SessionID(session.ID))
 		if err != nil {
 			return err
 		}
 		for _, existing := range pending {
-			if !isInternalQuestionBatch(existing) {
+			if !isInternalQuestionRequest(existing) {
 				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session already has a pending agent question")
 			}
 		}
-		if err := tx.Questions().CreateBatch(ctx, batch); err != nil {
+		if err := tx.Questions().CreateRequest(ctx, request); err != nil {
 			return err
 		}
 		if err := tx.Processes().MarkWaitingUser(ctx, active.ID); err != nil {
@@ -3326,89 +2539,86 @@ func (s *Service) requestUserAnswer(ctx context.Context, input RequestUserAnswer
 		}
 		return nil
 	}); err != nil {
-		return questionapp.BatchDTO{}, processdomain.Run{}, err
+		return questionapp.RequestDTO{}, processdomain.Run{}, err
 	}
-	dto := questionBatchDTO(batch)
-	s.publishQuestionBatch(dto)
+	dto := questionRequestDTO(request)
+	s.publishQuestionRequest(dto)
 	for _, event := range events {
 		s.publishSessionEvent(ctx, event)
 	}
 	return dto, active, nil
 }
 
-func (s *Service) SubmitQuestionBatch(ctx context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {
+func (s *Service) SubmitQuestionRequest(ctx context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error) {
 	if s == nil || s.questions == nil {
-		return questionapp.BatchDTO{}, errors.New("question lifecycle is not wired")
+		return questionapp.RequestDTO{}, errors.New("question lifecycle is not wired")
 	}
-	questions, ok := s.questions.(answerQuestionCoordinator)
+	questions, ok := s.questions.(questionRequestCoordinator)
 	if !ok {
-		return questionapp.BatchDTO{}, errors.New("answer question coordinator is required")
+		return questionapp.RequestDTO{}, errors.New("question request coordinator is required")
 	}
-	existing, err := questions.GetBatch(ctx, input.BatchID)
+	existing, err := questions.GetRequest(ctx, input.RequestID)
 	if err != nil {
-		return questionapp.BatchDTO{}, err
+		return questionapp.RequestDTO{}, err
 	}
 	if existing.OriginProcessRunID == nil {
-		batch, err := questions.SubmitBatch(ctx, input)
+		request, err := questions.SubmitRequest(ctx, input)
 		if err != nil {
-			return questionapp.BatchDTO{}, err
+			return questionapp.RequestDTO{}, err
 		}
-		if err := s.HandleQuestionBatchAnswered(ctx, batch); err != nil {
-			return questionapp.BatchDTO{}, err
+		if err := s.HandleQuestionRequestAnswered(ctx, request); err != nil {
+			return questionapp.RequestDTO{}, err
 		}
-		return batch, nil
+		return request, nil
 	}
-	var batch questionapp.BatchDTO
+	var request questionapp.RequestDTO
 	err = s.withSessionLock(ctx, domain.ID(existing.SessionID), func(ctx context.Context) error {
 		var err error
-		batch, err = s.submitAgentQuestionBatch(ctx, input)
+		request, err = s.submitAgentQuestionRequest(ctx, input)
 		if err == nil {
-			s.publishQuestionBatch(batch)
+			s.publishQuestionRequest(request)
 		}
 		return err
 	})
 	if err != nil {
-		return questionapp.BatchDTO{}, err
+		return questionapp.RequestDTO{}, err
 	}
 	s.scheduleQueueDrain()
-	return batch, nil
+	return request, nil
 }
 
-func (s *Service) submitAgentQuestionBatch(ctx context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {
+func (s *Service) submitAgentQuestionRequest(ctx context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error) {
 	if s.uow == nil {
-		return questionapp.BatchDTO{}, errors.New("answer_user durable lifecycle requires a unit of work")
+		return questionapp.RequestDTO{}, errors.New("questions lifecycle requires a unit of work")
 	}
-	var result questiondomain.Batch
+	var result questiondomain.Request
 	var publishedEvents []eventdomain.DomainEvent
 	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return errors.New("agent question repository is required")
-		}
-		batch, err := repo.FindBatch(ctx, input.BatchID)
+		repo := tx.Questions()
+		request, err := repo.FindRequest(ctx, input.RequestID)
 		if err != nil {
 			return err
 		}
-		if batch.OriginProcessRunID == nil {
-			return errors.New("question batch has no origin process run")
+		if request.OriginProcessRunID == nil {
+			return errors.New("question request has no origin process run")
 		}
-		if batch.Status == questiondomain.BatchAnswered {
-			if !questionAnswersMatch(batch, input.Answers) {
+		if request.Status == questiondomain.RequestAnswered {
+			if !questionAnswersMatch(request, input.Answers) {
 				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
 			}
-			result = batch
+			result = request
 			return nil
 		}
-		if err := (questiondomain.DefaultPolicy{}).CanSubmit(batch, input.Answers); err != nil {
+		if err := (questiondomain.DefaultPolicy{}).CanSubmit(request, input.Answers); err != nil {
 			return apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers are invalid")
 		}
-		persisted, transitioned, err := repo.SubmitAnswers(ctx, input.BatchID, input.Answers)
+		persisted, transitioned, err := repo.SubmitAnswers(ctx, input.RequestID, input.Answers)
 		if err != nil {
 			return err
 		}
 		if !transitioned {
-			if persisted.Status != questiondomain.BatchAnswered || !questionAnswersMatch(persisted, input.Answers) {
-				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question batch is no longer pending")
+			if persisted.Status != questiondomain.RequestAnswered || !questionAnswersMatch(persisted, input.Answers) {
+				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question request is no longer pending")
 			}
 			result = persisted
 			return nil
@@ -3421,122 +2631,65 @@ func (s *Service) submitAgentQuestionBatch(ctx context.Context, input questionap
 		if err != nil {
 			return err
 		}
-		if origin.Status == processdomain.StatusWaitingUser {
-			if err := repo.MarkDeliveryInflight(ctx, persisted.ID, questiondomain.ProcessRunID(origin.ID)); err != nil {
-				return err
-			}
-			deliveryID := questiondomain.ProcessRunID(origin.ID)
-			persisted.DeliveryStatus = questiondomain.DeliveryInflight
-			persisted.DeliveryProcessRunID = &deliveryID
-			session, err := tx.Sessions().Find(ctx, domain.ID(persisted.SessionID))
-			if err != nil {
-				return err
-			}
-			event, ok, err := s.newSessionEvent(session, "question.answer_delivery_inflight", map[string]any{
-				"batchId": string(persisted.ID), "processRunId": string(origin.ID),
-			})
-			if err != nil {
-				return err
-			}
-			if ok {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-				publishedEvents = append(publishedEvents, event)
-			}
-			result = persisted
-			return nil
+		if origin.Status != processdomain.StatusWaitingUser {
+			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "questions turn is no longer waiting")
 		}
-		resumeEvents, err := s.queueAnswerResumeInTx(ctx, tx, persisted, origin)
+		if err := tx.Processes().MarkRunning(ctx, origin.ID, origin.CodexSessionID); err != nil {
+			return err
+		}
+		session, err := tx.Sessions().Find(ctx, domain.ID(persisted.SessionID))
 		if err != nil {
 			return err
 		}
-		persisted.DeliveryStatus = questiondomain.DeliveryAwaitingResume
-		persisted.DeliveryProcessRunID = nil
-		publishedEvents = append(publishedEvents, resumeEvents...)
+		if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
+			return err
+		}
+		if err := tx.Sessions().Save(ctx, session); err != nil {
+			return err
+		}
+		if session.Mode == domain.ModeWorkflow && origin.NodeRunID != nil {
+			nodes, ok := tx.Workflows().(workflowdomain.NodeExecutionRepository)
+			if !ok {
+				return errors.New("workflow node execution repository is required")
+			}
+			if err := nodes.MarkNodeRunning(ctx, workflowdomain.SessionID(session.ID), workflowdomain.NodeRunID(*origin.NodeRunID), workflowdomain.ProcessRunID(origin.ID)); err != nil {
+				return err
+			}
+		}
+		publishedEvents, err = s.newSessionEvents(session, statusUpdateInputs(
+			sessionEventInput{eventType: "question.answered", payload: map[string]any{"requestId": string(persisted.ID), "processRunId": string(origin.ID)}},
+			sessionEventInput{eventType: "session.running", payload: map[string]any{"processRunId": string(origin.ID), "reason": "questions_answered"}},
+		))
+		if err != nil {
+			return err
+		}
+		for _, event := range publishedEvents {
+			if err := tx.Events().Append(ctx, event); err != nil {
+				return err
+			}
+		}
 		result = persisted
 		return nil
 	})
 	if err != nil {
-		return questionapp.BatchDTO{}, err
+		return questionapp.RequestDTO{}, err
 	}
 	for _, event := range publishedEvents {
 		s.publishSessionEvent(ctx, event)
 	}
-	return questionBatchDTO(result), nil
-}
-
-func (s *Service) queueAnswerResumeInTx(ctx context.Context, tx port.Tx, batch questiondomain.Batch, origin processdomain.Run) ([]eventdomain.DomainEvent, error) {
-	repo, ok := tx.Questions().(questiondomain.AgentRepository)
-	if !ok {
-		return nil, errors.New("agent question repository is required")
-	}
-	if strings.TrimSpace(origin.CodexSessionID) == "" {
-		return nil, apperror.New(apperror.CodeResumeFailed, apperror.CategoryCodexError, "origin process has no Codex session id").WithRetryable(true)
-	}
-	if err := repo.MarkDeliveryAwaitingResume(ctx, batch.ID); err != nil {
-		return nil, err
-	}
-	session, err := tx.Sessions().Find(ctx, domain.ID(batch.SessionID))
-	if err != nil {
-		return nil, err
-	}
-	options := codexStartOptions{
-		resumeCodexSessionID: origin.CodexSessionID,
-		resumeOfProcessRunID: origin.ID,
-		answerBatchID:        batch.ID,
-		prompt:               answerResumePrompt(batch),
-	}
-	options.sessionID = domain.ID(batch.SessionID)
-	if origin.NodeRunID != nil {
-		options.nodeRunID = origin.NodeRunID
-	}
-	queued, queuedEvent, hasQueuedEvent, err := s.prepareQueuedSession(session, options, domain.QueuePriorityHigh, domain.QueueKindAnswerUser)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Sessions().Save(ctx, queued); err != nil {
-		return nil, err
-	}
-	answerEvent, hasAnswerEvent, err := s.newSessionEvent(queued, "session.answer_resume_queued", map[string]any{
-		"batchId": string(batch.ID), "originProcessRunId": string(origin.ID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	events := make([]eventdomain.DomainEvent, 0, 3)
-	for _, item := range []struct {
-		event eventdomain.DomainEvent
-		ok    bool
-	}{{queuedEvent, hasQueuedEvent}, {answerEvent, hasAnswerEvent}} {
-		if !item.ok {
-			continue
-		}
-		events = append(events, item.event)
-	}
-	events, err = s.addStatusUpdateEvent(queued, events)
-	if err != nil {
-		return nil, err
-	}
-	for _, event := range events {
-		if err := tx.Events().Append(ctx, event); err != nil {
-			return nil, err
-		}
-	}
-	return events, nil
+	return questionRequestDTO(result), nil
 }
 
 type codexStartOptions struct {
 	resumeCodexSessionID    string
 	resumeOfProcessRunID    processdomain.RunID
-	answerBatchID           questiondomain.BatchID
 	sessionID               domain.ID
 	nodeRunID               *processdomain.NodeRunID
 	prompt                  string
 	fallbackPrompt          string
 	promptAppendIDs         []string
-	promptAttachmentPaths   []string
-	promptImagePaths        []string
+	promptFiles             []domain.SessionFile
+	promptMentions          []domain.PromptMention
 	queueKind               domain.QueueKind
 	workflowResultRetry     bool
 	resumeAcknowledged      bool
@@ -3559,7 +2712,7 @@ func (s *Service) activeProcessWithCodexSession(ctx context.Context, sessionID d
 			return processdomain.Run{}, fmt.Errorf("find active process run: %w", err)
 		}
 		if !ok {
-			return processdomain.Run{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "answer_user requires an active Codex process")
+			return processdomain.Run{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "questions requires an active Codex process")
 		}
 		if strings.TrimSpace(active.CodexSessionID) != "" {
 			return active, nil
@@ -3575,136 +2728,24 @@ func (s *Service) activeProcessWithCodexSession(ctx context.Context, sessionID d
 	return processdomain.Run{}, apperror.New(apperror.CodeResumeFailed, apperror.CategoryCodexError, "active process has no Codex session id").WithRetryable(true)
 }
 
-func (s *Service) answerOriginStillActive(ctx context.Context, session domain.Session) (bool, error) {
-	originID := processdomain.RunID(session.Queue.ResumeOfProcessRunID)
-	if originID == "" {
-		return false, nil
-	}
-	finder, ok := s.processes.(processdomain.RunFinder)
-	if !ok {
-		return false, errors.New("process run finder is required for answer_user queue")
-	}
-	run, err := finder.FindRun(ctx, originID)
-	if err != nil {
-		return false, err
-	}
-	switch run.Status {
-	case processdomain.StatusStarting, processdomain.StatusRunning, processdomain.StatusWaitingUser, processdomain.StatusStopping:
-		return true, nil
-	default:
-		return false, nil
+func questionRequestDTO(request questiondomain.Request) questionapp.RequestDTO {
+	return questionapp.RequestDTO{
+		ID:                 request.ID,
+		SessionID:          request.SessionID,
+		OriginProcessRunID: request.OriginProcessRunID,
+		Status:             request.Status,
+		Questions:          append([]questiondomain.Question(nil), request.Questions...),
 	}
 }
 
-func (s *Service) pendingAgentBatchForProcess(ctx context.Context, runID processdomain.RunID) (questiondomain.Batch, bool, error) {
-	if s.uow == nil {
-		return questiondomain.Batch{}, false, nil
-	}
-	var batch questiondomain.Batch
-	var found bool
-	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return nil
-		}
-		var err error
-		batch, found, err = repo.FindPendingByOriginProcessRun(ctx, questiondomain.ProcessRunID(runID))
-		return err
-	})
-	return batch, found, err
-}
-
-func (s *Service) inflightAgentBatchForProcess(ctx context.Context, runID processdomain.RunID) (questiondomain.Batch, bool, error) {
-	if s.uow == nil {
-		return questiondomain.Batch{}, false, nil
-	}
-	var batch questiondomain.Batch
-	var found bool
-	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return nil
-		}
-		var err error
-		batch, found, err = repo.FindInflightByDeliveryProcessRun(ctx, questiondomain.ProcessRunID(runID))
-		return err
-	})
-	return batch, found, err
-}
-
-func (s *Service) awaitingAnswerDelivery(ctx context.Context, sessionID domain.ID) (questiondomain.Batch, processdomain.Run, bool, error) {
-	if s.uow == nil {
-		return questiondomain.Batch{}, processdomain.Run{}, false, nil
-	}
-	var batch questiondomain.Batch
-	var origin processdomain.Run
-	var found bool
-	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		repo, ok := tx.Questions().(questiondomain.AgentRepository)
-		if !ok {
-			return nil
-		}
-		var err error
-		batch, found, err = repo.FindAwaitingDeliveryBySession(ctx, questiondomain.SessionID(sessionID))
-		if err != nil || !found {
-			return err
-		}
-		if batch.OriginProcessRunID == nil {
-			return errors.New("awaiting answer delivery has no origin process run")
-		}
-		finder, ok := tx.Processes().(processdomain.RunFinder)
-		if !ok {
-			return errors.New("process run finder is required")
-		}
-		origin, err = finder.FindRun(ctx, processdomain.RunID(*batch.OriginProcessRunID))
-		return err
-	})
-	return batch, origin, found, err
-}
-
-func (s *Service) answerBatch(ctx context.Context, batchID questiondomain.BatchID) (questiondomain.Batch, bool, error) {
-	if s.uow == nil || batchID == "" {
-		return questiondomain.Batch{}, false, nil
-	}
-	var batch questiondomain.Batch
-	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		var err error
-		batch, err = tx.Questions().FindBatch(ctx, batchID)
-		return err
-	})
-	if err != nil {
-		return questiondomain.Batch{}, false, err
-	}
-	return batch, true, nil
-}
-
-func intValue(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func questionBatchDTO(batch questiondomain.Batch) questionapp.BatchDTO {
-	return questionapp.BatchDTO{
-		ID:                   batch.ID,
-		SessionID:            batch.SessionID,
-		OriginProcessRunID:   batch.OriginProcessRunID,
-		Status:               batch.Status,
-		DeliveryStatus:       batch.DeliveryStatus,
-		DeliveryProcessRunID: batch.DeliveryProcessRunID,
-		Questions:            append([]questiondomain.Question(nil), batch.Questions...),
+func (s *Service) publishQuestionRequest(request questionapp.RequestDTO) {
+	if questions, ok := s.questions.(questionRequestCoordinator); ok {
+		questions.PublishRequest(request)
 	}
 }
 
-func (s *Service) publishQuestionBatch(batch questionapp.BatchDTO) {
-	if questions, ok := s.questions.(answerQuestionCoordinator); ok {
-		questions.PublishBatch(batch)
-	}
-}
-
-func questionAnswersMatch(batch questiondomain.Batch, answers []questiondomain.Answer) bool {
-	if len(batch.Questions) != len(answers) {
+func questionAnswersMatch(request questiondomain.Request, answers []questiondomain.Answer) bool {
+	if len(request.Questions) != len(answers) {
 		return false
 	}
 	byQuestion := make(map[questiondomain.QuestionID]questiondomain.Answer, len(answers))
@@ -3714,7 +2755,7 @@ func questionAnswersMatch(batch questiondomain.Batch, answers []questiondomain.A
 		}
 		byQuestion[answer.QuestionID] = answer
 	}
-	for _, question := range batch.Questions {
+	for _, question := range request.Questions {
 		answer, ok := byQuestion[question.ID]
 		if !ok || !sameQuestionOption(question.SelectedOptionID, answer.SelectedOptionID) {
 			return false
@@ -3734,55 +2775,6 @@ func sameQuestionOption(left, right *questiondomain.OptionID) bool {
 		return left == nil && right == nil
 	}
 	return *left == *right
-}
-
-func answerResumePrompt(batch questiondomain.Batch) string {
-	type answerItem struct {
-		QuestionID       string         `json:"questionId"`
-		Title            string         `json:"title,omitempty"`
-		Body             string         `json:"body,omitempty"`
-		SelectedOptionID string         `json:"selectedOptionId,omitempty"`
-		SelectedLabel    string         `json:"selectedLabel,omitempty"`
-		CustomAnswer     string         `json:"customAnswer,omitempty"`
-		Payload          map[string]any `json:"payload,omitempty"`
-	}
-	payload := struct {
-		BatchID string       `json:"batchId"`
-		Answers []answerItem `json:"answers"`
-	}{BatchID: string(batch.ID), Answers: make([]answerItem, 0, len(batch.Questions))}
-	for _, question := range batch.Questions {
-		item := answerItem{
-			QuestionID:   string(question.ID),
-			Title:        question.Title,
-			Body:         question.Body,
-			CustomAnswer: question.CustomAnswer,
-			Payload:      question.Answer,
-		}
-		if question.SelectedOptionID != nil {
-			item.SelectedOptionID = string(*question.SelectedOptionID)
-			for _, option := range question.Options {
-				if option.ID == *question.SelectedOptionID {
-					item.SelectedLabel = option.Label
-					break
-				}
-			}
-		}
-		payload.Answers = append(payload.Answers, item)
-	}
-	encoded, _ := json.Marshal(payload)
-	return "Continue the suspended answer_user call using the user's persisted answers below. Do not ask this question batch again.\n\n" + string(encoded)
-}
-
-func answerResumeOptions(batch questiondomain.Batch, origin processdomain.Run) codexStartOptions {
-	options := codexStartOptions{
-		resumeCodexSessionID: origin.CodexSessionID,
-		resumeOfProcessRunID: origin.ID,
-		answerBatchID:        batch.ID,
-		prompt:               answerResumePrompt(batch),
-		nodeRunID:            origin.NodeRunID,
-	}
-	options.sessionID = domain.ID(batch.SessionID)
-	return options
 }
 
 func (s *Service) startCodex(ctx context.Context, session domain.Session, options codexStartOptions, force bool) (DTO, error) {
@@ -3919,7 +2911,14 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 		}
 		return DTO{}, startErr
 	}
-	if err := s.processes.MarkStarted(ctx, runID, handle.PID); err != nil {
+	if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
+		return DTO{}, err
+	}
+	session.CodexSessionID = handle.CodexSessionID
+	session.UpdatedAt = s.now()
+	if err := s.markProcessRunningWithSessionEvent(ctx, runID, handle.CodexSessionID, session, "session.running", map[string]any{
+		"processRunId": string(runID), "codexSessionId": handle.CodexSessionID, "turnId": handle.TurnID,
+	}); err != nil {
 		cleanupErr := s.cleanupStartedCodexAfterPersistenceFailure(ctx, session.ID, handle, options, err)
 		return DTO{}, errors.Join(err, cleanupErr)
 	}
@@ -3928,7 +2927,7 @@ func (s *Service) startCodexNow(ctx context.Context, session domain.Session, opt
 }
 
 func (s *Service) cleanupStartedCodexAfterPersistenceFailure(ctx context.Context, sessionID domain.ID, handle processdomain.CodexHandle, options codexStartOptions, persistenceErr error) error {
-	cleanupCtx, cancel := detachedCleanupContext(ctx)
+	cleanupCtx, cancel := processCleanupContext(ctx)
 	defer cancel()
 	stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
 	if errors.Is(stopErr, processdomain.ErrProcessNotFound) {
@@ -4091,7 +3090,6 @@ func (s *Service) prepareQueuedSession(session domain.Session, options codexStar
 		Prompt:                  strings.TrimSpace(options.prompt),
 		ResumeCodexSessionID:    options.resumeCodexSessionID,
 		ResumeOfProcessRunID:    string(options.resumeOfProcessRunID),
-		AnswerBatchID:           string(options.answerBatchID),
 	}, now); err != nil {
 		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("queue session %s: %w", session.ID, err)
 	}
@@ -4115,15 +3113,6 @@ func (s *Service) startQueuedSession(ctx context.Context, session domain.Session
 	}
 	if !force {
 		return toDTO(session), nil
-	}
-	if session.Queue.Kind == domain.QueueKindAnswerUser {
-		active, err := s.answerOriginStillActive(ctx, session)
-		if err != nil {
-			return DTO{}, err
-		}
-		if active {
-			return toDTO(session), nil
-		}
 	}
 	return s.startCodex(ctx, session, codexStartOptionsFromQueue(session), true)
 }
@@ -4157,16 +3146,6 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 			}
 			if current.Status != domain.StatusQueued {
 				return nil
-			}
-			if current.Queue.Kind == domain.QueueKindAnswerUser {
-				active, err := s.answerOriginStillActive(ctx, current)
-				if err != nil {
-					return err
-				}
-				if active {
-					atCapacity = true
-					return nil
-				}
 			}
 			if s.codex == nil {
 				return ErrProcessLifecycleNotWired
@@ -4304,9 +3283,6 @@ func normalizeQueuePriority(priority domain.QueuePriority) domain.QueuePriority 
 }
 
 func queueKindForStartOptions(options codexStartOptions) domain.QueueKind {
-	if options.answerBatchID != "" {
-		return domain.QueueKindAnswerUser
-	}
 	if options.queueKind != "" {
 		return options.queueKind
 	}
@@ -4317,9 +3293,6 @@ func queueKindForStartOptions(options codexStartOptions) domain.QueueKind {
 }
 
 func queuePriorityForStartOptions(session domain.Session, options codexStartOptions) domain.QueuePriority {
-	if options.answerBatchID != "" {
-		return domain.QueuePriorityHigh
-	}
 	return queuePriorityForSession(session)
 }
 
@@ -4328,7 +3301,6 @@ func codexStartOptionsFromQueue(session domain.Session) codexStartOptions {
 	return codexStartOptions{
 		resumeCodexSessionID:    session.Queue.ResumeCodexSessionID,
 		resumeOfProcessRunID:    processdomain.RunID(session.Queue.ResumeOfProcessRunID),
-		answerBatchID:           questiondomain.BatchID(session.Queue.AnswerBatchID),
 		sessionID:               session.ID,
 		nodeRunID:               nodeRunID,
 		prompt:                  session.Queue.Prompt,
@@ -4372,11 +3344,8 @@ func transitionSessionToWaitingApproval(session *domain.Session, initialStart bo
 }
 
 func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string) (processdomain.CodexHandle, error) {
-	attachmentPaths, imagePaths, err := s.codexAttachmentPaths(ctx, session.ID)
-	if err != nil {
-		return processdomain.CodexHandle{}, err
-	}
 	prompt := strings.TrimSpace(options.prompt)
+	prompt, action, actionArgument := codexAction(prompt)
 	artifactDir := ""
 	if s.artifacts != nil {
 		var err error
@@ -4386,62 +3355,179 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 		}
 	}
 	if options.resumeCodexSessionID != "" {
-		transcript, found, err := s.processes.FindTranscriptSource(ctx, processdomain.SessionID(session.ID), options.resumeCodexSessionID)
-		if err != nil {
-			if errors.Is(err, processdomain.ErrTranscriptUnavailable) {
-				return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
-			}
-			return processdomain.CodexHandle{}, err
-		}
-		if !found {
-			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
-		}
-		handle, err := s.codex.Resume(ctx, processdomain.CodexResumeInput{
-			ProcessRunID:    runID,
-			SessionID:       processdomain.SessionID(session.ID),
-			CodexSessionID:  options.resumeCodexSessionID,
-			Transcript:      transcript,
-			Workdir:         workdir,
-			ArtifactDir:     artifactDir,
-			Prompt:          prompt,
-			Model:           strings.TrimSpace(session.Config.CodexModel),
-			ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
-			PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
-			FastMode:        session.Config.FastMode,
-			ImagePaths:      append([]string(nil), options.promptImagePaths...),
+		return s.codex.Resume(ctx, processdomain.CodexResumeInput{
+			ProcessRunID:          runID,
+			SessionID:             processdomain.SessionID(session.ID),
+			CodexSessionID:        options.resumeCodexSessionID,
+			Workdir:               workdir,
+			ArtifactDir:           artifactDir,
+			Input:                 codexInput(prompt, options.promptFiles, options.promptMentions),
+			Action:                action,
+			ActionArgument:        actionArgument,
+			DeveloperInstructions: anyCodeDeveloperInstructions(session, artifactDir),
+			Model:                 strings.TrimSpace(session.Config.CodexModel),
+			ReasoningEffort:       strings.TrimSpace(session.Config.ReasoningEffort),
+			PermissionMode:        strings.TrimSpace(session.Config.PermissionMode),
+			FastMode:              session.Config.FastMode,
 		})
-		if errors.Is(err, processdomain.ErrTranscriptUnavailable) {
-			return s.startCodexFallback(ctx, session, runID, options, workdir, artifactDir, attachmentPaths, imagePaths)
-		}
-		return handle, err
 	}
-	prompt = promptWithArtifactGuidance(prompt, artifactDir)
-	attachmentPaths = appendUniqueStrings(attachmentPaths, options.promptAttachmentPaths...)
-	imagePaths = appendUniqueStrings(imagePaths, options.promptImagePaths...)
-	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, attachmentPaths, imagePaths))
+	files, err := s.listSessionAttachments(ctx, session.ID)
+	if err != nil {
+		return processdomain.CodexHandle{}, err
+	}
+	files = appendUniqueSessionFiles(files, options.promptFiles...)
+	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), options.promptMentions...)
+	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument))
 }
 
-func (s *Service) startCodexFallback(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string, artifactDir string, attachmentPaths []string, imagePaths []string) (processdomain.CodexHandle, error) {
-	prompt := promptWithArtifactGuidance(options.fallbackPrompt, artifactDir)
-	attachmentPaths = appendUniqueStrings(attachmentPaths, options.promptAttachmentPaths...)
-	imagePaths = appendUniqueStrings(imagePaths, options.promptImagePaths...)
-	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, attachmentPaths, imagePaths))
-}
-
-func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, attachmentPaths []string, imagePaths []string) processdomain.CodexStartInput {
+func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, files []domain.SessionFile, mentions []domain.PromptMention, action processdomain.CodexAction, actionArgument string) processdomain.CodexStartInput {
+	if action != processdomain.CodexActionTurn && action != processdomain.CodexActionPlan {
+		prompt = ""
+	}
 	return processdomain.CodexStartInput{
-		ProcessRunID:    runID,
-		SessionID:       processdomain.SessionID(session.ID),
-		Workdir:         workdir,
-		ArtifactDir:     artifactDir,
-		Prompt:          promptWithAttachments(promptWithAnyCodeGuidance(prompt, session), attachmentPaths),
-		Model:           strings.TrimSpace(session.Config.CodexModel),
-		ReasoningEffort: strings.TrimSpace(session.Config.ReasoningEffort),
-		PermissionMode:  strings.TrimSpace(session.Config.PermissionMode),
-		FastMode:        session.Config.FastMode,
-		AttachmentPaths: attachmentPaths,
-		ImagePaths:      imagePaths,
+		ProcessRunID:          runID,
+		SessionID:             processdomain.SessionID(session.ID),
+		Workdir:               workdir,
+		ArtifactDir:           artifactDir,
+		Input:                 codexInput(prompt, files, mentions),
+		Action:                action,
+		ActionArgument:        actionArgument,
+		DeveloperInstructions: anyCodeDeveloperInstructions(session, artifactDir),
+		Model:                 strings.TrimSpace(session.Config.CodexModel),
+		ReasoningEffort:       strings.TrimSpace(session.Config.ReasoningEffort),
+		PermissionMode:        strings.TrimSpace(session.Config.PermissionMode),
+		FastMode:              session.Config.FastMode,
 	}
+}
+
+func codexInput(prompt string, files []domain.SessionFile, mentions []domain.PromptMention) []processdomain.CodexInputItem {
+	input := make([]processdomain.CodexInputItem, 0, 1+len(files)+len(mentions))
+	if prompt != "" {
+		input = append(input, processdomain.CodexInputItem{Type: "text", Text: prompt})
+	}
+	seen := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		path := strings.TrimSpace(file.Path)
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		switch {
+		case strings.HasPrefix(strings.ToLower(file.MimeType), "image/"):
+			input = append(input, processdomain.CodexInputItem{Type: "localImage", Path: path})
+		case strings.HasPrefix(strings.ToLower(file.MimeType), "audio/"):
+			input = append(input, processdomain.CodexInputItem{Type: "localAudio", Path: path})
+		default:
+			name := strings.TrimSpace(file.LogicalPath)
+			if name == "" {
+				name = strings.TrimSpace(file.Filename)
+			}
+			if name == "" {
+				name = filepath.Base(path)
+			}
+			input = append(input, processdomain.CodexInputItem{Type: "mention", Path: path, Name: name})
+		}
+	}
+	for _, mention := range mentions {
+		path := strings.TrimSpace(mention.Path)
+		if path == "" {
+			continue
+		}
+		input = append(input, processdomain.CodexInputItem{Type: "mention", Path: path, Name: path})
+	}
+	return input
+}
+
+func codexAction(prompt string) (string, processdomain.CodexAction, string) {
+	trimmed := strings.TrimSpace(prompt)
+	if trimmed == "/compact" {
+		return "", processdomain.CodexActionCompact, ""
+	}
+	for _, command := range []struct {
+		name   string
+		action processdomain.CodexAction
+	}{
+		{name: "/review", action: processdomain.CodexActionReview},
+		{name: "/goal", action: processdomain.CodexActionGoal},
+		{name: "/plan", action: processdomain.CodexActionPlan},
+	} {
+		if trimmed == command.name {
+			return "", command.action, ""
+		}
+		if strings.HasPrefix(trimmed, command.name) && len(trimmed) > len(command.name) {
+			rest := trimmed[len(command.name):]
+			if len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' || rest[0] == '\r') {
+				argument := strings.TrimSpace(rest)
+				if command.action == processdomain.CodexActionPlan {
+					return argument, command.action, ""
+				}
+				return "", command.action, argument
+			}
+		}
+	}
+	return trimmed, processdomain.CodexActionTurn, ""
+}
+
+func appendUniqueSessionFiles(files []domain.SessionFile, additions ...domain.SessionFile) []domain.SessionFile {
+	seen := make(map[string]struct{}, len(files)+len(additions))
+	for _, file := range files {
+		if file.Path != "" {
+			seen[file.Path] = struct{}{}
+		}
+	}
+	for _, file := range additions {
+		if file.Path == "" {
+			continue
+		}
+		if _, ok := seen[file.Path]; ok {
+			continue
+		}
+		seen[file.Path] = struct{}{}
+		files = append(files, file)
+	}
+	return files
+}
+
+func appendUniquePromptMentions(mentions []domain.PromptMention, additions ...domain.PromptMention) []domain.PromptMention {
+	seen := make(map[string]struct{}, len(mentions)+len(additions))
+	for _, mention := range mentions {
+		seen[mention.Path] = struct{}{}
+	}
+	for _, mention := range additions {
+		if mention.Path == "" {
+			continue
+		}
+		if _, ok := seen[mention.Path]; ok {
+			continue
+		}
+		seen[mention.Path] = struct{}{}
+		mentions = append(mentions, mention)
+	}
+	return mentions
+}
+
+func normalizePromptMentions(mentions []domain.PromptMention) ([]domain.PromptMention, error) {
+	normalized := make([]domain.PromptMention, 0, len(mentions))
+	seen := make(map[string]struct{}, len(mentions))
+	for _, mention := range mentions {
+		candidate := strings.ReplaceAll(strings.TrimSpace(mention.Path), "\\", "/")
+		if candidate == "" || strings.ContainsRune(candidate, '\x00') || strings.HasPrefix(candidate, "/") || filepath.IsAbs(candidate) {
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "mention path must be project-relative")
+		}
+		candidate = pathpkg.Clean(candidate)
+		if candidate == "." || candidate == ".." || strings.HasPrefix(candidate, "../") {
+			return nil, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "mention path escapes project")
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		normalized = append(normalized, domain.PromptMention{Path: candidate})
+	}
+	return normalized, nil
 }
 
 var errNoEffectivePromptAppend = errors.New("no effective prompt append")
@@ -4465,7 +3551,7 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	if err != nil {
 		return codexStartOptions{}, fmt.Errorf("list prompt appends: %w", err)
 	}
-	pendingPrompt, pendingIDs, attachmentPaths, imagePaths, cancelledIDs, err := s.pendingPromptInput(ctx, session.ID, appends)
+	pendingPrompt, pendingIDs, promptFiles, promptMentions, cancelledIDs, err := s.pendingPromptInput(ctx, session.ID, appends)
 	if err != nil {
 		return codexStartOptions{}, err
 	}
@@ -4491,7 +3577,7 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	} else if options.reviewAfterReuseFailure {
 		prompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
 	} else if options.resumeCodexSessionID != "" {
-		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && basePrompt == "" && len(pendingIDs) == 0 {
+		if session.Mode != domain.ModeWorkflow && basePrompt == "" && len(pendingIDs) == 0 {
 			basePrompt = strings.TrimSpace(session.Requirement)
 		}
 		prompt = joinPromptParts(basePrompt, pendingPrompt)
@@ -4505,16 +3591,16 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	}
 	options.prompt = prompt
 	options.promptAppendIDs = pendingIDs
-	options.promptAttachmentPaths = attachmentPaths
-	options.promptImagePaths = imagePaths
+	options.promptFiles = promptFiles
+	options.promptMentions = promptMentions
 	return options, nil
 }
 
-func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) (string, []string, []string, []string, []string, error) {
+func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, appends []domain.PromptAppend) (string, []string, []domain.SessionFile, []domain.PromptMention, []string, error) {
 	parts := make([]string, 0, len(appends))
 	ids := make([]string, 0, len(appends))
-	attachmentPaths := make([]string, 0)
-	imagePaths := make([]string, 0)
+	inputFiles := make([]domain.SessionFile, 0)
+	mentions := make([]domain.PromptMention, 0)
 	cancelledIDs := make([]string, 0)
 	for _, promptAppend := range appends {
 		if promptAppend.Status != domain.PromptAppendPending {
@@ -4528,37 +3614,18 @@ func (s *Service) pendingPromptInput(ctx context.Context, sessionID domain.ID, a
 		if err != nil {
 			return "", nil, nil, nil, nil, err
 		}
-		files := append(append([]domain.SessionFile(nil), attachments...), artifacts...)
+		currentFiles := append(append([]domain.SessionFile(nil), attachments...), artifacts...)
 		body := strings.TrimSpace(promptAppend.Body)
-		if body == "" && len(files) == 0 {
+		if body == "" && len(currentFiles) == 0 && len(promptAppend.Mentions) == 0 {
 			cancelledIDs = append(cancelledIDs, promptAppend.ID)
 			continue
 		}
-		paths, currentImagePaths := attachmentPathsFromAttachments(files)
-		parts = append(parts, promptWithAttachments(body, paths))
-		attachmentPaths = appendUniqueStrings(attachmentPaths, paths...)
-		imagePaths = appendUniqueStrings(imagePaths, currentImagePaths...)
+		parts = append(parts, body)
+		inputFiles = appendUniqueSessionFiles(inputFiles, currentFiles...)
+		mentions = appendUniquePromptMentions(mentions, promptAppend.Mentions...)
 		ids = append(ids, promptAppend.ID)
 	}
-	return strings.Join(parts, "\n\n"), ids, attachmentPaths, imagePaths, cancelledIDs, nil
-}
-
-func appendUniqueStrings(values []string, additions ...string) []string {
-	seen := make(map[string]struct{}, len(values)+len(additions))
-	for _, value := range values {
-		seen[value] = struct{}{}
-	}
-	for _, value := range additions {
-		if value == "" {
-			continue
-		}
-		if _, exists := seen[value]; exists {
-			continue
-		}
-		seen[value] = struct{}{}
-		values = append(values, value)
-	}
-	return values
+	return strings.Join(parts, "\n\n"), ids, inputFiles, mentions, cancelledIDs, nil
 }
 
 func joinPromptParts(parts ...string) string {
@@ -4572,23 +3639,19 @@ func joinPromptParts(parts ...string) string {
 }
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
-const anyCodePromptGuidance = "AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。\n\nAnyCode 卡片的 TODO List 仅来自 Codex 的结构化计划事件。处理包含多个可执行步骤的任务时，必须调用 `update_plan` 创建计划，并在步骤状态变化后持续调用 `update_plan` 更新状态；不要只在回复中输出 Markdown checklist。单步骤任务或纯问答无需创建计划。"
+const anyCodePromptGuidance = "AnyCode 提供 `questions` App Server 动态工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `questions` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `questions`。\n\nAnyCode 卡片的 TODO List 仅来自 Codex 的结构化计划事件。处理包含多个可执行步骤的任务时，必须调用 `update_plan` 创建计划，并在步骤状态变化后持续调用 `update_plan` 更新状态；不要只在回复中输出 Markdown checklist。单步骤任务或纯问答无需创建计划。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 const artifactPromptGuidance = "本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。"
 
-func promptWithArtifactGuidance(prompt string, artifactDir string) string {
-	if strings.TrimSpace(artifactDir) == "" {
-		return prompt
-	}
-	return joinPromptParts(prompt, artifactPromptGuidance)
-}
-
-func promptWithAnyCodeGuidance(prompt string, session domain.Session) string {
-	guidance := anyCodePromptGuidance
+func anyCodeDeveloperInstructions(session domain.Session, artifactDir string) string {
+	parts := []string{anyCodePromptGuidance}
 	if strings.TrimSpace(session.BaseBranch) != "" {
-		guidance += "\n\n" + managedWorktreePromptGuidance
+		parts = append(parts, managedWorktreePromptGuidance)
 	}
-	return joinPromptParts(prompt, guidance)
+	if strings.TrimSpace(artifactDir) != "" {
+		parts = append(parts, artifactPromptGuidance)
+	}
+	return joinPromptParts(parts...)
 }
 
 func rebuiltSessionPrompt(session domain.Session, nodePrompt string, reviewAfterReuseFailure bool, appends []domain.PromptAppend) string {
@@ -4621,49 +3684,6 @@ func rebuiltSessionPrompt(session domain.Session, nodePrompt string, reviewAfter
 	return strings.Join(parts, "\n\n")
 }
 
-func (s *Service) codexAttachmentPaths(ctx context.Context, sessionID domain.ID) ([]string, []string, error) {
-	attachments, err := s.listSessionAttachments(ctx, sessionID)
-	if err != nil {
-		return nil, nil, err
-	}
-	paths, imagePaths := attachmentPathsFromAttachments(attachments)
-	return paths, imagePaths, nil
-}
-
-func attachmentPathsFromAttachments(attachments []domain.SessionAttachment) ([]string, []string) {
-	paths := make([]string, 0, len(attachments))
-	imagePaths := make([]string, 0, len(attachments))
-	for _, attachment := range attachments {
-		path := strings.TrimSpace(attachment.Path)
-		if path == "" {
-			continue
-		}
-		paths = append(paths, path)
-		if strings.HasPrefix(strings.ToLower(attachment.MimeType), "image/") {
-			imagePaths = append(imagePaths, path)
-		}
-	}
-	return paths, imagePaths
-}
-
-func promptWithAttachments(prompt string, paths []string) string {
-	if len(paths) == 0 {
-		return prompt
-	}
-	var builder strings.Builder
-	if prompt = strings.TrimSpace(prompt); prompt != "" {
-		builder.WriteString(prompt)
-		builder.WriteString("\n\n")
-	}
-	builder.WriteString("Attached files available on disk:\n")
-	for _, path := range paths {
-		builder.WriteString("- ")
-		builder.WriteString(path)
-		builder.WriteByte('\n')
-	}
-	return strings.TrimRight(builder.String(), "\n")
-}
-
 func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session domain.Session, options codexStartOptions, workdir string) {
 	done := make(chan struct{})
 	s.processConsumers.Store(handle.ProcessRunID, (<-chan struct{})(done))
@@ -4676,7 +3696,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 		}()
 		events, err := s.codex.Events(context.Background(), handle)
 		if err != nil {
-			cleanupCtx, cancel := detachedCleanupContext(context.Background())
+			cleanupCtx, cancel := processCleanupContext(context.Background())
 			stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
 			cancel()
 			if errors.Is(stopErr, processdomain.ErrProcessNotFound) {
@@ -4719,19 +3739,19 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				continue
 			}
 			if err := s.handleCodexEventWithRetry(session.ID, handle, event, extraEvents...); err != nil {
-				cleanupCtx, cancel := detachedCleanupContext(context.Background())
+				cleanupCtx, cancel := processCleanupContext(context.Background())
 				stopErr := s.codex.Stop(cleanupCtx, handle.ProcessRunID)
 				cancel()
 				if errors.Is(stopErr, processdomain.ErrProcessNotFound) {
 					stopErr = nil
 				}
-				reason := fmt.Sprintf("bind codex transcript: %v", err)
+				reason := fmt.Sprintf("persist codex event: %v", err)
 				if stopErr != nil {
-					log.Printf("stop codex after transcript bind failure: session=%s process_run=%s error=%v", session.ID, handle.ProcessRunID, stopErr)
+					log.Printf("stop codex after event persistence failure: session=%s process_run=%s error=%v", session.ID, handle.ProcessRunID, stopErr)
 					reason += fmt.Sprintf("; stop codex: %v", stopErr)
 				}
 				failure := processdomain.ExitResult{
-					FailureCode:   "codex_transcript_unavailable",
+					FailureCode:   "codex_event_persistence_failed",
 					FailureReason: reason,
 					FinishedAt:    s.now(),
 				}
@@ -4845,7 +3865,7 @@ func (s *Service) processConsumerDone(runID processdomain.RunID) (<-chan struct{
 }
 
 func (s *Service) handleCodexEventWithRetry(sessionID domain.ID, handle processdomain.CodexHandle, event processdomain.CodexEvent, extraEvents ...sessionEventInput) error {
-	retryPersistence := event.Type == processdomain.CodexEventTranscriptBound || event.Type == processdomain.CodexEventPlan || codexEventAcknowledgesPrompt(event)
+	retryPersistence := event.Type == processdomain.CodexEventPlan || codexEventAcknowledgesPrompt(event)
 	retryDelay := s.processExitDelay
 	if retryDelay == nil {
 		retryDelay = processExitRetryDelay
@@ -4863,9 +3883,6 @@ func (s *Service) handleCodexEventWithRetry(sessionID domain.ID, handle processd
 		})
 		if err == nil {
 			return nil
-		}
-		if event.Type == processdomain.CodexEventTranscriptBound {
-			return err
 		}
 		if !retryPersistence {
 			log.Printf("handle codex event: session=%s process_run=%s type=%s error=%v", sessionID, handle.ProcessRunID, event.Type, err)
@@ -4896,11 +3913,6 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 		active = found
 		activeRun = ok && active.ID == handle.ProcessRunID
 	}
-	if source, ok := event.Content.(processdomain.CodexTranscriptSource); activeRun && active.Status == processdomain.StatusStarting && ok {
-		if err := s.bindProcessTranscript(ctx, &current, handle, source); err != nil {
-			return err
-		}
-	}
 	saveSession := false
 	saveUsage := false
 	saveFilesChanged := false
@@ -4916,7 +3928,7 @@ func (s *Service) handleCodexEvent(ctx context.Context, sessionID domain.ID, han
 		})
 	}
 	if activeRun && codexEventCanUpdateSession(current.Status) {
-		if todoList, ok := todoListFromCodexEvent(event); ok && !slices.Equal(current.TodoList.Items, todoList.Items) {
+		if todoList, ok := todoListFromCodexEvent(event); ok {
 			current.TodoList = todoList
 			current.UpdatedAt = s.now()
 			saveSession = true
@@ -5010,68 +4022,6 @@ func shouldReconcileSessionDiff(event processdomain.CodexEvent) bool {
 	return status.Code == "task.completed" || status.Code == "turn.completed"
 }
 
-func (s *Service) bindProcessTranscript(ctx context.Context, current *domain.Session, handle processdomain.CodexHandle, source processdomain.CodexTranscriptSource) error {
-	if current == nil {
-		return errors.New("bind process transcript: nil session")
-	}
-	if source.CodexSessionID == "" || source.RelativePath == "" {
-		return processdomain.ErrTranscriptUnavailable
-	}
-	if err := transitionSession(current, domain.StatusRunning, s.now()); err != nil {
-		return err
-	}
-	current.CodexSessionID = source.CodexSessionID
-	current.UpdatedAt = s.now()
-	events, err := s.newSessionEvents(*current, statusUpdateInputs(
-		sessionEventInput{eventType: "process.transcript_bound", payload: map[string]any{
-			"processRunId": string(handle.ProcessRunID), "codexSessionId": source.CodexSessionID,
-		}},
-		sessionEventInput{eventType: "session.running", payload: map[string]any{
-			"processRunId": string(handle.ProcessRunID), "pid": handle.PID, "codexSessionId": source.CodexSessionID,
-		}},
-	))
-	if err != nil {
-		return err
-	}
-	if s.uow != nil {
-		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := tx.Processes().BindTranscript(ctx, handle.ProcessRunID, handle.PID, source); err != nil {
-				return err
-			}
-			if err := tx.Sessions().Save(ctx, *current); err != nil {
-				return err
-			}
-			for _, event := range events {
-				if err := tx.Events().Append(ctx, event); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	} else {
-		// GLUE: isolated application tests may omit transactions; production always injects a unit of work.
-		if err := s.processes.BindTranscript(ctx, handle.ProcessRunID, handle.PID, source); err != nil {
-			return err
-		}
-		if err := s.repo.Save(ctx, *current); err != nil {
-			return err
-		}
-		for _, event := range events {
-			if s.events != nil {
-				if err := s.events.Append(ctx, event); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	for _, event := range events {
-		s.publishSessionEvent(ctx, event)
-	}
-	return nil
-}
-
 func (s *Service) archiveCodexEventImages(ctx context.Context, current domain.Session, handle processdomain.CodexHandle, event *processdomain.CodexEvent) []sessionEventInput {
 	if event == nil || event.Content == nil {
 		return nil
@@ -5125,7 +4075,7 @@ func (s *Service) archiveCodexEventImages(ctx context.Context, current domain.Se
 	case processdomain.CodexToolContent:
 		content.Output = sanitizeCodexArtifactOutput(content.Output, content.Images)
 		qualifiedName := strings.ToLower(strings.TrimSpace(content.QualifiedName))
-		if strings.Contains(qualifiedName, "anycode") && strings.HasSuffix(qualifiedName, "publish_artifact") {
+		if qualifiedName == "publish_artifact" {
 			content.Images = nil
 			event.Content = content
 			break
@@ -5405,135 +4355,8 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 		return domain.Session{}, false, fmt.Errorf("find active process after exit: %w", err)
 	}
 	processEvent := sessionEventInput{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, exitResult)}
-	if batch, pending, err := s.pendingAgentBatchForProcess(ctx, handle.ProcessRunID); err != nil {
-		return domain.Session{}, false, err
-	} else if pending {
-		inputs := []sessionEventInput{
-			processEvent,
-			{eventType: "process.suspended_for_user", payload: map[string]any{
-				"processRunId": string(handle.ProcessRunID),
-				"batchId":      string(batch.ID),
-			}},
-		}
-		if err := s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, false, inputs, promptAppendSettlementComplete); err != nil {
-			return domain.Session{}, false, err
-		}
-		return current, false, nil
-	}
-	if batch, inflight, err := s.inflightAgentBatchForProcess(ctx, handle.ProcessRunID); err != nil {
-		return domain.Session{}, false, err
-	} else if inflight {
-		inputs := []sessionEventInput{
-			processEvent,
-			{eventType: "process.answer_delivery_interrupted", payload: map[string]any{
-				"processRunId": string(handle.ProcessRunID), "batchId": string(batch.ID),
-			}},
-		}
-		var resumeEvents []eventdomain.DomainEvent
-		var processEvents []eventdomain.DomainEvent
-		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			var err error
-			processEvents, err = s.newSessionEvents(current, inputs)
-			if err != nil {
-				return err
-			}
-			if _, err := persistProcessExitInTx(ctx, tx, handle.ProcessRunID, exitResult, current, false, processEvents, promptAppendSettlementComplete); err != nil {
-				return err
-			}
-			finder, ok := tx.Processes().(processdomain.RunFinder)
-			if !ok {
-				return errors.New("process run finder is required")
-			}
-			origin, err := finder.FindRun(ctx, handle.ProcessRunID)
-			if err != nil {
-				return err
-			}
-			resumeEvents, err = s.queueAnswerResumeInTx(ctx, tx, batch, origin)
-			return err
-		}); err != nil {
-			if persistErr := s.persistAnswerDeliveryResumeFailure(ctx, current, handle.ProcessRunID, exitResult, batch, err, inputs); persistErr != nil {
-				return domain.Session{}, false, errors.Join(err, persistErr)
-			}
-			return current, false, nil
-		}
-		for _, event := range processEvents {
-			s.publishSessionEvent(ctx, event)
-		}
-		batch.DeliveryStatus = questiondomain.DeliveryAwaitingResume
-		batch.DeliveryProcessRunID = nil
-		s.publishQuestionBatch(questionBatchDTO(batch))
-		for _, event := range resumeEvents {
-			s.publishSessionEvent(ctx, event)
-		}
-		s.scheduleQueueDrain()
-		return current, false, nil
-	}
-	if batch, origin, awaiting, err := s.awaitingAnswerDelivery(ctx, current.ID); err != nil {
-		return domain.Session{}, false, err
-	} else if awaiting && origin.ID == handle.ProcessRunID {
-		inputs := []sessionEventInput{
-			processEvent,
-			{eventType: "process.suspended_for_user", payload: map[string]any{
-				"processRunId": string(handle.ProcessRunID), "batchId": string(batch.ID),
-			}},
-		}
-		var processEvents []eventdomain.DomainEvent
-		var resumeEvents []eventdomain.DomainEvent
-		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			var err error
-			processEvents, err = s.newSessionEvents(current, inputs)
-			if err != nil {
-				return err
-			}
-			if _, err := persistProcessExitInTx(ctx, tx, handle.ProcessRunID, exitResult, current, false, processEvents, promptAppendSettlementComplete); err != nil {
-				return err
-			}
-			if current.Status == domain.StatusQueued && current.Queue.Kind == domain.QueueKindAnswerUser && current.Queue.AnswerBatchID == string(batch.ID) {
-				return nil
-			}
-			resumeEvents, err = s.queueAnswerResumeInTx(ctx, tx, batch, origin)
-			return err
-		}); err != nil {
-			return domain.Session{}, false, err
-		}
-		for _, event := range processEvents {
-			s.publishSessionEvent(ctx, event)
-		}
-		for _, event := range resumeEvents {
-			s.publishSessionEvent(ctx, event)
-		}
-		if len(resumeEvents) > 0 {
-			s.publishQuestionBatch(questionBatchDTO(batch))
-			s.scheduleQueueDrain()
-		}
-		return current, false, nil
-	}
 	if ok && active.ID != handle.ProcessRunID {
 		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{processEvent})
-	}
-	if options.answerBatchID != "" && current.Status != domain.StatusStopping && current.Status != domain.StatusStopped && current.Status != domain.StatusClosed {
-		batch, found, err := s.answerBatch(ctx, options.answerBatchID)
-		if err != nil {
-			return domain.Session{}, false, err
-		}
-		if found && batch.DeliveryStatus != questiondomain.DeliveryDelivered {
-			if err := transitionSession(&current, domain.StatusResumeFailed, exitResult.FinishedAt); err != nil {
-				return domain.Session{}, false, err
-			}
-			inputs := []sessionEventInput{
-				processEvent,
-				{eventType: "session.resume_failed", payload: map[string]any{
-					"processRunId": string(handle.ProcessRunID), "batchId": string(batch.ID), "reason": "answer_delivery_unconfirmed",
-				}},
-			}
-			if err := s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, true, inputs, promptAppendSettlementRelease); err != nil {
-				return domain.Session{}, false, err
-			}
-			if err := s.markWorkflowResumeFailed(ctx, current, options, "answer_delivery_unconfirmed", "Codex exited before confirming answer delivery"); err != nil {
-				return domain.Session{}, false, err
-			}
-			return current, false, nil
-		}
 	}
 	if current.Mode == domain.ModeWorkflow && options.sessionID != "" && options.nodeRunID != nil &&
 		options.resumeCodexSessionID != "" && !options.resumeAcknowledged &&
@@ -5630,19 +4453,6 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	default:
 		return domain.Session{}, false, s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, false, inputs, promptAppendSettlementForExitedSession(current.Status))
 	}
-}
-
-func (s *Service) persistAnswerDeliveryResumeFailure(ctx context.Context, session domain.Session, runID processdomain.RunID, result processdomain.ExitResult, batch questiondomain.Batch, cause error, inputs []sessionEventInput) error {
-	if err := transitionSession(&session, domain.StatusResumeFailed, result.FinishedAt); err != nil {
-		return err
-	}
-	inputs = append(inputs, sessionEventInput{eventType: "session.resume_failed", payload: map[string]any{
-		"batchId": string(batch.ID), "processRunId": string(runID), "reason": "answer_delivery_resume_failed", "error": cause.Error(),
-	}})
-	if session.Mode == domain.ModeWorkflow {
-		return s.persistWorkflowResumeFailure(ctx, session, runID, result, cause.Error(), inputs)
-	}
-	return s.markProcessExitedWithSessionEventsAndSettlement(ctx, runID, result, session, true, inputs, promptAppendSettlementComplete)
 }
 
 func promptAppendSettlementForExitedSession(status domain.Status) promptAppendSettlement {
@@ -6135,12 +4945,12 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 		return s.handleWorkflowNodeFailure(ctx, session, advance.SessionID, nil, code, result.FailureReason)
 	}
 	metadata := mergeFailureQuestionMetadata(advance, result, code)
-	batchID := questiondomain.BatchID("")
+	requestID := questiondomain.RequestID("")
 	if advance.CommandID != "" {
-		batchID = questiondomain.BatchID("merge-failure-" + advance.CommandID)
+		requestID = questiondomain.RequestID("merge-failure-" + advance.CommandID)
 	}
-	batch, err := s.questions.CreateBatch(ctx, questionapp.CreateBatchInput{
-		BatchID:   batchID,
+	request, err := s.questions.CreateRequest(ctx, questionapp.CreateRequestInput{
+		RequestID: requestID,
 		SessionID: questiondomain.SessionID(session.ID),
 		Questions: []questiondomain.Question{
 			{
@@ -6148,7 +4958,7 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 				Body:     mergeFailureQuestionBody(result),
 				Type:     "merge_failure_action",
 				Metadata: metadata,
-				Status:   string(questiondomain.BatchPending),
+				Status:   string(questiondomain.RequestPending),
 				Options: []questiondomain.Option{
 					{
 						ID:          "retry_merge",
@@ -6181,12 +4991,12 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 	if err := s.saveSessionWithStatusUpdate(ctx, session, "workflow.merge_waiting_user", map[string]any{
 		"sessionId":     string(advance.SessionID),
 		"nodeRunId":     stringValuePtr(advance.NodeRunID),
-		"batchId":       string(batch.ID),
+		"requestId":     string(request.ID),
 		"failureCode":   code,
 		"failureReason": result.FailureReason,
 	}); err != nil {
-		if advance.CommandID == "" && batch.Created {
-			if cancelErr := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(session.ID), "merge failure question abandoned"); cancelErr != nil {
+		if advance.CommandID == "" && request.Created {
+			if cancelErr := s.questions.CancelPendingRequestsBySession(ctx, questiondomain.SessionID(session.ID), "merge failure question abandoned"); cancelErr != nil {
 				return DTO{}, fmt.Errorf("save session: %w; cancel merge failure question: %v", err, cancelErr)
 			}
 		}
@@ -6195,34 +5005,34 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 	return toDTO(session), nil
 }
 
-func (s *Service) HandleQuestionBatchAnswered(ctx context.Context, batch questionapp.BatchDTO) error {
+func (s *Service) HandleQuestionRequestAnswered(ctx context.Context, request questionapp.RequestDTO) error {
 	if s == nil {
 		return errors.New("session usecase: nil service")
 	}
-	if batch.Status != questiondomain.BatchAnswered {
+	if request.Status != questiondomain.RequestAnswered {
 		return nil
 	}
-	action, metadata, ok, err := mergeFailureDecision(batch)
+	action, metadata, ok, err := mergeFailureDecision(request)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return nil
 	}
-	return s.withSessionLock(ctx, domain.ID(batch.SessionID), func(ctx context.Context) error {
-		session, err := s.repo.Find(ctx, domain.ID(batch.SessionID))
+	return s.withSessionLock(ctx, domain.ID(request.SessionID), func(ctx context.Context) error {
+		session, err := s.repo.Find(ctx, domain.ID(request.SessionID))
 		if err != nil {
 			return fmt.Errorf("find session: %w", err)
 		}
-		return s.applyMergeFailureDecision(ctx, session, batch.ID, action, metadata)
+		return s.applyMergeFailureDecision(ctx, session, request.ID, action, metadata)
 	})
 }
 
-func (s *Service) applyMergeFailureDecision(ctx context.Context, session domain.Session, batchID questiondomain.BatchID, action string, metadata map[string]any) error {
+func (s *Service) applyMergeFailureDecision(ctx context.Context, session domain.Session, requestID questiondomain.RequestID, action string, metadata map[string]any) error {
 	nodeRunIDValue := domain.NodeRunID(stringFromMap(metadata, "nodeRunId"))
 	if nodeRunIDValue == "" {
 		return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "merge failure question metadata is incomplete").
-			WithDetails(map[string]any{"sessionId": string(session.ID), "batchId": string(batchID)})
+			WithDetails(map[string]any{"sessionId": string(session.ID), "requestId": string(requestID)})
 	}
 	nodeRunID := nodeRunIDValue
 	code := stringFromMap(metadata, "failureCode")
@@ -6306,8 +5116,8 @@ func mergeFailureQuestionBody(result gitdiffdomain.MergeResult) string {
 	return fmt.Sprintf("策略：%s\n状态：%s\n原因：%s", result.Strategy, result.Status, reason)
 }
 
-func mergeFailureDecision(batch questionapp.BatchDTO) (string, map[string]any, bool, error) {
-	for _, question := range batch.Questions {
+func mergeFailureDecision(request questionapp.RequestDTO) (string, map[string]any, bool, error) {
+	for _, question := range request.Questions {
 		if question.Type != "merge_failure_action" && stringFromMap(question.Metadata, "kind") != "merge_failure_action" {
 			continue
 		}
@@ -6330,7 +5140,7 @@ func mergeFailureDecision(batch questionapp.BatchDTO) (string, map[string]any, b
 	return "", nil, false, nil
 }
 
-func isMergeFailureQuestionBatch(questions []questiondomain.Question) bool {
+func isMergeFailureQuestionRequest(questions []questiondomain.Question) bool {
 	for _, question := range questions {
 		if question.Type == "merge_failure_action" || stringFromMap(question.Metadata, "kind") == "merge_failure_action" {
 			return true
@@ -6518,19 +5328,11 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 	if err != nil {
 		return err
 	}
-	var deliveredBatches []questiondomain.Batch
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 			if promptDelivered {
 				if err := tx.Sessions().CompletePromptAppends(ctx, string(processRunID), promptDeliveryTime(event, s.now())); err != nil {
 					return err
-				}
-				if repo, ok := tx.Questions().(questiondomain.AgentRepository); ok {
-					batches, err := repo.MarkDeliveryDeliveredByProcessRun(ctx, questiondomain.ProcessRunID(processRunID), promptDeliveryTime(event, s.now()))
-					if err != nil {
-						return err
-					}
-					deliveredBatches = batches
 				}
 			}
 			if saveSession {
@@ -6559,11 +5361,6 @@ func (s *Service) publishCodexEventWithSessionUpdates(ctx context.Context, sessi
 		}
 		for _, event := range extraEvents {
 			s.publishSessionEvent(ctx, event)
-		}
-		if s.questions != nil {
-			for _, batch := range deliveredBatches {
-				s.publishQuestionBatch(questionBatchDTO(batch))
-			}
 		}
 		return nil
 	}
@@ -6614,7 +5411,7 @@ func (s *Service) publishCodexRuntimeEvent(event processdomain.CodexEvent) {
 		return
 	}
 	switch event.Type {
-	case processdomain.CodexEventPlan, processdomain.CodexEventTranscriptBound, processdomain.CodexEventProcessExit:
+	case processdomain.CodexEventPlan, processdomain.CodexEventProcessExit:
 		return
 	}
 	_ = s.codexPublisher.PublishCodexEvent(context.Background(), event)
@@ -6679,24 +5476,6 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expected
 			default:
 				return fmt.Errorf("unsupported execution claim status %q", claim.Status)
 			}
-			if options.answerBatchID != "" {
-				repo, ok := tx.Questions().(questiondomain.AgentRepository)
-				if !ok {
-					return errors.New("agent question repository is required")
-				}
-				if err := repo.MarkDeliveryInflight(ctx, options.answerBatchID, questiondomain.ProcessRunID(run.ID)); err != nil {
-					return err
-				}
-			}
-			if options.answerBatchID != "" && options.sessionID != "" && options.nodeRunID != nil {
-				repo, ok := tx.Workflows().(workflowdomain.NodeExecutionRepository)
-				if !ok {
-					return errors.New("workflow node execution repository is required")
-				}
-				if err := repo.MarkNodeRunning(ctx, workflowdomain.SessionID(options.sessionID), workflowdomain.NodeRunID(*options.nodeRunID), workflowdomain.ProcessRunID(run.ID)); err != nil {
-					return err
-				}
-			}
 			if err := tx.Sessions().MarkPromptAppendsInflight(ctx, options.promptAppendIDs, string(run.ID)); err != nil {
 				return err
 			}
@@ -6714,9 +5493,6 @@ func (s *Service) createProcessRunWithSessionEvent(ctx context.Context, expected
 			s.publishSessionEvent(ctx, event)
 		}
 		return result, nil
-	}
-	if options.answerBatchID != "" {
-		return port.ExecutionClaimResult{}, errors.New("answer_user process creation requires a unit of work")
 	}
 	// GLUE: Legacy in-memory wiring has no transaction boundary; production entstore execution uses the atomic claim above.
 	active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(expectedSession.ID))
@@ -6781,14 +5557,14 @@ func reconcileSessionWithActiveRun(session domain.Session, run processdomain.Run
 	return session, nil
 }
 
-func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session, eventType string, payload map[string]any) error {
+func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID processdomain.RunID, codexSessionID string, session domain.Session, eventType string, payload map[string]any) error {
 	if s.uow != nil {
 		events, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{eventType: eventType, payload: payload}))
 		if err != nil {
 			return err
 		}
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := tx.Processes().MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
+			if err := tx.Processes().MarkRunning(ctx, runID, codexSessionID); err != nil {
 				return fmt.Errorf("mark process running: %w", err)
 			}
 			if err := tx.Sessions().Save(ctx, session); err != nil {
@@ -6808,7 +5584,7 @@ func (s *Service) markProcessRunningWithSessionEvent(ctx context.Context, runID 
 		}
 		return nil
 	}
-	if err := s.processes.MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
+	if err := s.processes.MarkRunning(ctx, runID, codexSessionID); err != nil {
 		return fmt.Errorf("mark process running: %w", err)
 	}
 	return s.saveSessionWithStatusUpdate(ctx, session, eventType, payload)
@@ -6880,27 +5656,6 @@ func (s *Service) markProcessStoppingWithSessionEvent(ctx context.Context, runID
 	return s.saveSessionWithStatusUpdate(ctx, session, eventType, payload)
 }
 
-func (s *Service) saveProcessRunningSession(ctx context.Context, runID processdomain.RunID, pid int, codexSessionID string, session domain.Session) error {
-	if s.uow != nil {
-		return s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			if err := tx.Processes().MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
-				return fmt.Errorf("mark process running: %w", err)
-			}
-			if err := tx.Sessions().Save(ctx, session); err != nil {
-				return fmt.Errorf("save session: %w", err)
-			}
-			return nil
-		})
-	}
-	if err := s.processes.MarkRunning(ctx, runID, pid, codexSessionID); err != nil {
-		return fmt.Errorf("mark process running: %w", err)
-	}
-	if err := s.repo.Save(ctx, session); err != nil {
-		return fmt.Errorf("save session: %w", err)
-	}
-	return nil
-}
-
 func (s *Service) markProcessExitedWithSessionEvents(ctx context.Context, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, inputs []sessionEventInput) error {
 	return s.markProcessExitedWithSessionEventsAndSettlement(ctx, runID, result, session, saveSession, inputs, promptAppendSettlementAutomatic)
 }
@@ -6921,22 +5676,14 @@ func (s *Service) markProcessExitedWithSessionEventsAndSettlement(ctx context.Co
 	if err != nil {
 		return err
 	}
-	var resetBatches []questiondomain.Batch
 	if s.uow != nil {
 		if err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-			var err error
-			resetBatches, err = persistProcessExitInTx(ctx, tx, runID, result, session, saveSession, events, settlement)
-			return err
+			return persistProcessExitInTx(ctx, tx, runID, result, session, saveSession, events, settlement)
 		}); err != nil {
 			return err
 		}
 		for _, event := range events {
 			s.publishSessionEvent(ctx, event)
-		}
-		if s.questions != nil {
-			for _, batch := range resetBatches {
-				s.publishQuestionBatch(questionBatchDTO(batch))
-			}
 		}
 		return nil
 	}
@@ -6973,11 +5720,8 @@ func (s *Service) persistWorkflowResumeFailure(ctx context.Context, session doma
 		return err
 	}
 	var workflowEvents []eventdomain.DomainEvent
-	var resetBatches []questiondomain.Batch
 	err = s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		var err error
-		resetBatches, err = persistProcessExitInTx(ctx, tx, runID, result, session, true, events, promptAppendSettlementRelease)
-		if err != nil {
+		if err := persistProcessExitInTx(ctx, tx, runID, result, session, true, events, promptAppendSettlementRelease); err != nil {
 			return err
 		}
 		_, recorded, err := runner.MarkResumeFailedForSessionWithRepositories(ctx, domain.WorkflowResumeFailureInput{
@@ -7000,40 +5744,27 @@ func (s *Service) persistWorkflowResumeFailure(ctx context.Context, session doma
 	for _, event := range workflowEvents {
 		s.publishSessionEvent(ctx, event)
 	}
-	if s.questions != nil {
-		for _, batch := range resetBatches {
-			s.publishQuestionBatch(questionBatchDTO(batch))
-		}
-	}
 	return nil
 }
 
-func persistProcessExitInTx(ctx context.Context, tx port.Tx, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, events []eventdomain.DomainEvent, settlement promptAppendSettlement) ([]questiondomain.Batch, error) {
+func persistProcessExitInTx(ctx context.Context, tx port.Tx, runID processdomain.RunID, result processdomain.ExitResult, session domain.Session, saveSession bool, events []eventdomain.DomainEvent, settlement promptAppendSettlement) error {
 	if err := tx.Processes().MarkExited(ctx, runID, result); err != nil {
-		return nil, fmt.Errorf("mark process exited: %w", err)
-	}
-	var resetBatches []questiondomain.Batch
-	if repo, ok := tx.Questions().(questiondomain.AgentRepository); ok {
-		batches, err := repo.ResetDeliveryAwaitingResumeByProcessRun(ctx, questiondomain.ProcessRunID(runID))
-		if err != nil {
-			return nil, err
-		}
-		resetBatches = batches
+		return fmt.Errorf("mark process exited: %w", err)
 	}
 	if err := settlePromptAppends(ctx, tx.Sessions(), runID, result, settlement); err != nil {
-		return nil, err
+		return err
 	}
 	if saveSession {
 		if err := tx.Sessions().Save(ctx, session); err != nil {
-			return nil, fmt.Errorf("save session: %w", err)
+			return fmt.Errorf("save session: %w", err)
 		}
 	}
 	for _, event := range events {
 		if err := tx.Events().Append(ctx, event); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return resetBatches, nil
+	return nil
 }
 
 func settlePromptAppends(ctx context.Context, repo domain.Repository, runID processdomain.RunID, result processdomain.ExitResult, settlement promptAppendSettlement) error {
@@ -7765,8 +6496,8 @@ func (s *Service) cancelPendingQuestions(ctx context.Context, sessionID domain.I
 	if s.questions == nil {
 		return nil
 	}
-	if err := s.questions.CancelPendingBySession(ctx, questiondomain.SessionID(sessionID), reason); err != nil {
-		return apperror.Wrap(err, apperror.CodeAnswerUserCancelled, apperror.CategoryInfraError, "cancel pending questions failed").WithRetryable(true)
+	if err := s.questions.CancelPendingRequestsBySession(ctx, questiondomain.SessionID(sessionID), reason); err != nil {
+		return apperror.Wrap(err, apperror.CodeQuestionsCancelled, apperror.CategoryInfraError, "cancel pending questions failed").WithRetryable(true)
 	}
 	return nil
 }
@@ -7783,12 +6514,16 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
+	mentions, err := normalizePromptMentions(input.Mentions)
+	if err != nil {
+		return PromptAppendDTO{}, err
+	}
 	stagedAttachments, err := s.findStagedAttachments(ctx, input.StagedAttachmentIDs)
 	if err != nil {
 		return PromptAppendDTO{}, err
 	}
 	if body == "" {
-		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 {
+		if len(stagedAttachments) == 0 && len(artifactIDs) == 0 && len(mentions) == 0 {
 			return PromptAppendDTO{}, errors.New("prompt append body is required")
 		}
 	}
@@ -7832,6 +6567,7 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			ID:          string(id),
 			SessionID:   input.SessionID,
 			Body:        body,
+			Mentions:    mentions,
 			Status:      domain.PromptAppendPending,
 			CreatedAt:   s.now(),
 			Attachments: archivedAttachments,
@@ -7855,6 +6591,32 @@ func (s *Service) AppendPrompt(ctx context.Context, input AppendPromptInput) (Pr
 			return fmt.Errorf("append prompt: %w", err)
 		}
 		appendSaved = true
+		if canSteerAfterAppend(session) && s.processes != nil && s.codex != nil {
+			active, found, err := s.processes.FindActiveBySession(ctx, processdomain.SessionID(session.ID))
+			if err != nil {
+				return fmt.Errorf("find active process for prompt append: %w", err)
+			}
+			if found {
+				if err := s.repo.MarkPromptAppendsInflight(ctx, []string{append.ID}, string(active.ID)); err != nil {
+					return fmt.Errorf("mark prompt append inflight: %w", err)
+				}
+				append.Status = domain.PromptAppendInflight
+				append.DispatchedProcessRunID = string(active.ID)
+				files := make([]domain.SessionFile, len(archivedAttachments))
+				copy(files, archivedAttachments)
+				files = appendUniqueSessionFiles(files, artifacts...)
+				if err := s.codex.Steer(ctx, processdomain.CodexSteerInput{
+					ProcessRunID: active.ID,
+					Input:        codexInput(body, files, mentions),
+				}); err != nil {
+					releaseErr := s.repo.ReleasePromptAppends(ctx, string(active.ID))
+					append.Status = domain.PromptAppendPending
+					append.DispatchedProcessRunID = ""
+					return errors.Join(fmt.Errorf("steer active codex turn: %w", err), releaseErr)
+				}
+				return nil
+			}
+		}
 		if !canAutoStartAfterAppend(session) {
 			return nil
 		}
@@ -8062,6 +6824,10 @@ func canAutoStartAfterAppend(session domain.Session) bool {
 	default:
 		return false
 	}
+}
+
+func canSteerAfterAppend(session domain.Session) bool {
+	return session.Status == domain.StatusRunning || session.Status == domain.StatusWaitingUser
 }
 
 func canReuseCodexSessionAfterAppend(session domain.Session) bool {
@@ -8718,37 +7484,15 @@ func (s *Service) deleteSessionFiles(ctx context.Context, sessionID domain.ID) e
 }
 
 func (s *Service) deleteCodexSessions(ctx context.Context, candidate domain.Session) error {
-	if s.processes == nil {
-		if strings.TrimSpace(candidate.CodexSessionID) == "" {
-			return nil
-		}
-		return errors.New("process repository is required to clean Codex session history")
-	}
-	sources, err := s.processes.TranscriptSources(ctx, processdomain.SessionID(candidate.ID))
-	if err != nil {
-		return fmt.Errorf("list Codex session transcripts: %w", err)
-	}
-	byID := make(map[string]processdomain.CodexTranscriptSource, len(sources)+1)
-	for _, source := range sources {
-		if strings.TrimSpace(source.CodexSessionID) != "" {
-			byID[source.CodexSessionID] = source
-		}
-	}
-	if id := strings.TrimSpace(candidate.CodexSessionID); id != "" {
-		if _, ok := byID[id]; !ok {
-			byID[id] = processdomain.CodexTranscriptSource{CodexSessionID: id}
-		}
-	}
-	if len(byID) == 0 {
+	threadID := strings.TrimSpace(candidate.CodexSessionID)
+	if threadID == "" {
 		return nil
 	}
 	if s.codexSessionCleaner == nil {
 		return errors.New("Codex session cleaner is required")
 	}
-	for _, source := range byID {
-		if err := s.codexSessionCleaner.DeleteSession(ctx, source); err != nil {
-			return fmt.Errorf("delete Codex session %s: %w", source.CodexSessionID, err)
-		}
+	if err := s.codexSessionCleaner.DeleteThread(ctx, threadID); err != nil {
+		return fmt.Errorf("delete Codex thread %s: %w", threadID, err)
 	}
 	return nil
 }

@@ -1,5 +1,6 @@
 FROM archlinux:latest AS base
 ARG PACMAN_MIRROR=
+ARG NPM_MIRROR=
 ARG GOPROXY=
 ENV GOPROXY=$GOPROXY
 RUN if [ -n "$PACMAN_MIRROR" ]; then \
@@ -11,7 +12,10 @@ RUN pacman -Syu --noconfirm --needed nodejs npm \
   && pacman -Scc --noconfirm
 WORKDIR /src/web
 COPY web/package*.json ./
-RUN npm ci --ignore-scripts
+COPY web/src-pwa/package*.json ./src-pwa/
+RUN if [ -n "$NPM_MIRROR" ]; then npm config set registry "$NPM_MIRROR"; fi \
+  && npm ci --ignore-scripts \
+  && npm --prefix src-pwa ci --ignore-scripts
 COPY web/ ./
 COPY internal/interfaces/http/static/ /src/internal/interfaces/http/static/
 RUN npm run build
@@ -59,6 +63,6 @@ ENV HOME=/home/anycode
 ENV PLAYWRIGHT_MCP_BIN=playwright-mcp
 ENV CHROMIUM_BIN=/usr/bin/chromium
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD addr="${ANYCODE_HTTP_ADDR:-:8080}"; wget -qO- "http://127.0.0.1${addr}/healthz" >/dev/null || exit 1
 ENTRYPOINT ["/usr/bin/catatonit", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["anycode"]

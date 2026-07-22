@@ -16,7 +16,6 @@
         :key="member.id"
         :event="member"
         :known-user-prompts="knownUserPrompts"
-        :workflow-prompt="workflowPrompt"
       />
     </div>
   </section>
@@ -24,7 +23,6 @@
     v-else-if="event.content.__typename === 'TranscriptMessageContent'"
     :event="textEvent"
     :known-user-prompts="knownUserPrompts"
-    :workflow-prompt="workflowPrompt"
   />
   <SessionReasoningEvent
     v-else-if="event.content.__typename === 'TranscriptReasoningContent'"
@@ -82,9 +80,8 @@ const props = withDefaults(
   defineProps<{
     event: TranscriptItem;
     knownUserPrompts?: readonly string[];
-    workflowPrompt?: boolean;
   }>(),
-  { knownUserPrompts: () => [], workflowPrompt: false },
+  { knownUserPrompts: () => [] },
 );
 
 const groupExpanded = ref(false);

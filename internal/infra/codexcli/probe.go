@@ -1,282 +1,89 @@
 package codexcli
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 )
 
-const defaultBin = "codex"
-
-type Client struct {
-	bin             string
-	codexHome       string
-	mcpBaseURL      string
-	mcpStdioCommand string
-	mcpStdioSocket  string
-	mcpAuthToken    string
-	detached        detachedProcessOps
-	mcpToolTimeout  bool
-	playwrightBin   string
-	chromiumBin     string
-	observer        Observer
-}
-
-type Observation struct {
-	Name     string
-	Outcome  string
-	Reason   string
-	Duration time.Duration
-	Bytes    int64
-}
-
-type Observer interface {
-	Observe(Observation)
-}
-
-type Option func(*Client)
-
-type ProbeError struct {
-	Code string
-	Bin  string
-	Args []string
-	Err  error
-}
-
-func (e *ProbeError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if len(e.Args) == 0 {
-		return fmt.Sprintf("codex probe %s for %q: %v", e.Code, e.Bin, e.Err)
-	}
-	return fmt.Sprintf("codex probe %s for %q %s: %v", e.Code, e.Bin, strings.Join(e.Args, " "), e.Err)
-}
-
-func (e *ProbeError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Err
-}
-
-func WithMCP(baseURL string, authToken string) Option {
-	return func(c *Client) {
-		c.mcpBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-		c.mcpAuthToken = authToken
-	}
-}
-
-func WithMCPStdio(command string, socket string, authToken string) Option {
-	return func(c *Client) {
-		c.mcpStdioCommand = strings.TrimSpace(command)
-		c.mcpStdioSocket = strings.TrimSpace(socket)
-		c.mcpAuthToken = authToken
-	}
-}
-
-func WithCodexHome(path string) Option {
-	return func(c *Client) {
-		c.codexHome = strings.TrimSpace(path)
-	}
-}
-
-func WithObserver(observer Observer) Option {
-	return func(c *Client) {
-		c.observer = observer
-	}
-}
-
-func WithPlaywrightMCP(command string, chromium string) Option {
-	return func(c *Client) {
-		c.playwrightBin = strings.TrimSpace(command)
-		c.chromiumBin = strings.TrimSpace(chromium)
-	}
-}
-
-func New(bin string, options ...Option) *Client {
-	if bin == "" {
-		bin = os.Getenv("CODEX_BIN")
-	}
-	if bin == "" {
-		bin = defaultBin
-	}
-	client := &Client{bin: bin, detached: defaultDetachedProcessOps(), mcpToolTimeout: true}
-	for _, option := range options {
-		option(client)
-	}
-	return client
-}
-
-func (c *Client) CodexHome() string {
-	if c != nil && c.codexHome != "" {
-		return c.codexHome
-	}
-	if value := strings.TrimSpace(os.Getenv("CODEX_HOME")); value != "" {
-		return value
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		return home + string(os.PathSeparator) + ".codex"
-	}
-	return ".codex"
-}
-
-func (c *Client) Bin() string {
-	if c == nil || c.bin == "" {
-		return defaultBin
-	}
-	return c.bin
-}
-
 func (c *Client) Probe(ctx context.Context) (process.CodexCapabilities, error) {
-	bin := c.Bin()
-	version, err := runText(ctx, bin, "--version")
+	runtime, err := c.appServer(ctx)
 	if err != nil {
-		return process.CodexCapabilities{}, &ProbeError{
-			Code: "version_failed",
-			Bin:  bin,
-			Args: []string{"--version"},
-			Err:  err,
-		}
+		return process.CodexCapabilities{}, &ProbeError{Code: "app_server_failed", Bin: c.Bin(), Args: []string{"app-server", "--stdio"}, Err: err}
 	}
-	models, err := probeModels(ctx, bin)
+	models, err := runtime.models(ctx)
 	if err != nil {
-		return process.CodexCapabilities{}, &ProbeError{
-			Code: "models_failed",
-			Bin:  bin,
-			Args: []string{"debug", "models"},
-			Err:  err,
-		}
+		return process.CodexCapabilities{}, &ProbeError{Code: "models_failed", Bin: c.Bin(), Err: err}
 	}
-
-	supportsMCPToolTimeout := commandWorks(ctx, bin, "exec", "--help", "--strict-config", "-c", fmt.Sprintf("mcp_servers.anycode.tool_timeout_sec=%d", mcpToolTimeoutSeconds))
-	imageGenerationStatus, supportsImageGeneration := probeFeature(ctx, bin, "image_generation")
-	c.mcpToolTimeout = supportsMCPToolTimeout
+	status, imageGeneration, err := runtime.feature(ctx, "image_generation")
+	if err != nil {
+		return process.CodexCapabilities{}, &ProbeError{Code: "features_failed", Bin: c.Bin(), Err: err}
+	}
 	return process.CodexCapabilities{
-		Version:                 firstLine(version),
-		SupportsAppServer:       commandWorks(ctx, bin, "app-server", "--help"),
-		SupportsMCPToolTimeout:  supportsMCPToolTimeout,
-		SupportsImageGeneration: supportsImageGeneration,
-		ImageGenerationStatus:   imageGenerationStatus,
-		Models:                  models,
+		Version: runtime.userAgent, SupportsAppServer: true,
+		SupportsImageGeneration: imageGeneration, ImageGenerationStatus: status, Models: models,
 	}, nil
 }
 
-func probeFeature(ctx context.Context, bin string, name string) (string, bool) {
-	output, err := runText(ctx, bin, "features", "list")
-	if err != nil {
-		return "unsupported", false
+func (r *appServerRuntime) models(ctx context.Context) ([]process.CodexModel, error) {
+	var response struct {
+		Data []struct {
+			ID                     string `json:"id"`
+			Model                  string `json:"model"`
+			DisplayName            string `json:"displayName"`
+			DefaultReasoningEffort string `json:"defaultReasoningEffort"`
+			Hidden                 bool   `json:"hidden"`
+			Supported              []struct {
+				Effort      string `json:"reasoningEffort"`
+				Description string `json:"description"`
+			} `json:"supportedReasoningEfforts"`
+		} `json:"data"`
 	}
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 3 || fields[0] != name {
+	if err := r.request(ctx, "model/list", map[string]any{"includeHidden": false, "limit": 100}, &response); err != nil {
+		return nil, fmt.Errorf("list codex models: %w", err)
+	}
+	models := make([]process.CodexModel, 0, len(response.Data))
+	for _, item := range response.Data {
+		if item.Hidden {
 			continue
 		}
-		status := fields[1]
-		enabled, err := strconv.ParseBool(fields[len(fields)-1])
-		if err != nil {
-			return status, false
+		slug := strings.TrimSpace(item.Model)
+		if slug == "" {
+			slug = strings.TrimSpace(item.ID)
 		}
-		return status, enabled
-	}
-	return "unavailable", false
-}
-
-type modelCatalog struct {
-	Models []modelCatalogEntry `json:"models"`
-}
-
-type modelCatalogEntry struct {
-	Slug                     string                  `json:"slug"`
-	DisplayName              string                  `json:"display_name"`
-	DefaultReasoningLevel    string                  `json:"default_reasoning_level"`
-	SupportedReasoningLevels []modelCatalogReasoning `json:"supported_reasoning_levels"`
-	Visibility               string                  `json:"visibility"`
-}
-
-type modelCatalogReasoning struct {
-	Effort      string `json:"effort"`
-	Description string `json:"description"`
-}
-
-func probeModels(ctx context.Context, bin string) ([]process.CodexModel, error) {
-	raw, err := runText(ctx, bin, "debug", "models")
-	if err != nil {
-		return nil, err
-	}
-	var catalog modelCatalog
-	if err := json.Unmarshal([]byte(raw), &catalog); err != nil {
-		return nil, fmt.Errorf("parse model catalog: %w", err)
-	}
-	models := make([]process.CodexModel, 0, len(catalog.Models))
-	for _, entry := range catalog.Models {
-		if entry.Visibility != "list" || strings.TrimSpace(entry.Slug) == "" {
+		if slug == "" {
 			continue
 		}
-		levels := make([]process.CodexReasoningLevel, 0, len(entry.SupportedReasoningLevels))
-		for _, level := range entry.SupportedReasoningLevels {
-			if strings.TrimSpace(level.Effort) == "" {
-				continue
+		levels := make([]process.CodexReasoningLevel, 0, len(item.Supported))
+		for _, level := range item.Supported {
+			if level.Effort != "" {
+				levels = append(levels, process.CodexReasoningLevel{Effort: level.Effort, Description: level.Description})
 			}
-			levels = append(levels, process.CodexReasoningLevel{
-				Effort:      level.Effort,
-				Description: level.Description,
-			})
 		}
 		models = append(models, process.CodexModel{
-			Slug:                     entry.Slug,
-			DisplayName:              entry.DisplayName,
-			DefaultReasoningLevel:    entry.DefaultReasoningLevel,
-			SupportedReasoningLevels: levels,
+			Slug: slug, DisplayName: item.DisplayName, DefaultReasoningLevel: item.DefaultReasoningEffort, SupportedReasoningLevels: levels,
 		})
 	}
 	return models, nil
 }
 
-func runText(ctx context.Context, bin string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, bin, args...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", commandError(err, stderr.String())
+func (r *appServerRuntime) feature(ctx context.Context, name string) (string, bool, error) {
+	var response struct {
+		Data []struct {
+			Name    string `json:"name"`
+			Stage   string `json:"stage"`
+			Enabled bool   `json:"enabled"`
+		} `json:"data"`
 	}
-	return strings.TrimSpace(stdout.String()), nil
-}
-
-func commandWorks(ctx context.Context, bin string, args ...string) bool {
-	_, err := runText(ctx, bin, args...)
-	return err == nil
-}
-
-func commandError(err error, stderr string) error {
-	stderr = strings.TrimSpace(stderr)
-	if stderr == "" {
-		return err
+	if err := r.request(ctx, "experimentalFeature/list", map[string]any{"limit": 100}, &response); err != nil {
+		return "", false, fmt.Errorf("list codex features: %w", err)
 	}
-	return fmt.Errorf("%w: %s", err, stderr)
-}
-
-func firstLine(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
+	for _, feature := range response.Data {
+		if feature.Name == name {
+			return feature.Stage, feature.Enabled, nil
+		}
 	}
-	line, _, _ := strings.Cut(value, "\n")
-	return strings.TrimSpace(line)
-}
-
-func IsProbeError(err error) bool {
-	var probeErr *ProbeError
-	return errors.As(err, &probeErr)
+	return "unavailable", false, nil
 }

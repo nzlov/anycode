@@ -616,13 +616,13 @@ func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	}
 }
 
-func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
+func TestQueryPendingQuestionRequestsForwardsUseCase(t *testing.T) {
 	questions := &fakeQuestionUseCase{
-		pending: []questionapp.BatchDTO{
+		pending: []questionapp.RequestDTO{
 			{
-				ID:        "batch-1",
+				ID:        "request-1",
 				SessionID: "session-1",
-				Status:    questiondomain.BatchPending,
+				Status:    questiondomain.RequestPending,
 				Questions: []questiondomain.Question{
 					{
 						ID:      "question-1",
@@ -635,15 +635,15 @@ func TestQueryPendingQuestionBatchesForwardsUseCase(t *testing.T) {
 	}
 	resolver := NewResolver(UseCases{Questions: questions}).Query()
 
-	got, err := resolver.PendingQuestionBatches(context.Background(), "session-1")
+	got, err := resolver.PendingQuestionRequests(context.Background(), "session-1")
 	if err != nil {
-		t.Fatalf("PendingQuestionBatches() error = %v", err)
+		t.Fatalf("PendingQuestionRequests() error = %v", err)
 	}
 	if questions.gotPendingSessionID != "session-1" {
 		t.Fatalf("pending session id = %q", questions.gotPendingSessionID)
 	}
-	if len(got) != 1 || got[0].ID != "batch-1" || len(got[0].Questions) != 1 {
-		t.Fatalf("pending batches = %#v", got)
+	if len(got) != 1 || got[0].ID != "request-1" || len(got[0].Questions) != 1 {
+		t.Fatalf("pending requests = %#v", got)
 	}
 	if got[0].Questions[0].Answer == nil || got[0].Questions[0].Options[0].Payload == nil {
 		t.Fatalf("pending question JSON maps should be non-nil: %#v", got[0].Questions[0])
@@ -844,9 +844,10 @@ func TestMutationCreateSessionPreservesNullableFastMode(t *testing.T) {
 			PermissionMode:  strPtr("workspace-write"),
 			FastMode:        &fastMode,
 		},
+		Mentions: []*model.PromptMentionInput{{Path: "src/main.go"}},
 	})
-	if err != nil || sessions.gotCreate.Config.FastMode == nil || *sessions.gotCreate.Config.FastMode {
-		t.Fatalf("CreateSession() explicit false = %#v, %v", sessions.gotCreate.Config.FastMode, err)
+	if err != nil || sessions.gotCreate.Config.FastMode == nil || *sessions.gotCreate.Config.FastMode || !reflect.DeepEqual(sessions.gotCreate.Mentions, []sessiondomain.PromptMention{{Path: "src/main.go"}}) {
+		t.Fatalf("CreateSession() input = %#v, %v", sessions.gotCreate, err)
 	}
 
 	_, err = resolver.CreateSession(context.Background(), model.CreateSessionInput{
@@ -880,6 +881,7 @@ func TestMutationAppendPromptForwardsFileIDs(t *testing.T) {
 		Body:                "continue",
 		StagedAttachmentIds: []string{"staged-1", "staged-2"},
 		ArtifactIds:         []string{"artifact-1", "artifact-2"},
+		Mentions:            []*model.PromptMentionInput{{Path: "src/main.go"}},
 	})
 	if err != nil {
 		t.Fatalf("AppendPrompt() error = %v", err)
@@ -892,6 +894,9 @@ func TestMutationAppendPromptForwardsFileIDs(t *testing.T) {
 	}
 	if len(sessions.gotAppend.ArtifactIDs) != 2 || sessions.gotAppend.ArtifactIDs[0] != "artifact-1" || sessions.gotAppend.ArtifactIDs[1] != "artifact-2" {
 		t.Fatalf("AppendPrompt() artifact ids = %#v", sessions.gotAppend.ArtifactIDs)
+	}
+	if !reflect.DeepEqual(sessions.gotAppend.Mentions, []sessiondomain.PromptMention{{Path: "src/main.go"}}) {
+		t.Fatalf("AppendPrompt() mentions = %#v", sessions.gotAppend.Mentions)
 	}
 }
 
@@ -953,13 +958,13 @@ func TestMutationUpdatePromptAppendPresentsStartedErrorExtensions(t *testing.T) 
 	}
 }
 
-func TestSubmitQuestionBatchNotifiesSessionUseCase(t *testing.T) {
+func TestSubmitQuestionRequestNotifiesSessionUseCase(t *testing.T) {
 	optionID := "retry_merge"
 	sessions := &fakeSessionUseCase{
-		submitQuestionResult: questionapp.BatchDTO{
-			ID:        "batch-1",
+		submitQuestionResult: questionapp.RequestDTO{
+			ID:        "request-1",
 			SessionID: "session-1",
-			Status:    questiondomain.BatchAnswered,
+			Status:    questiondomain.RequestAnswered,
 			Questions: []questiondomain.Question{
 				{
 					ID:   "question-1",
@@ -975,8 +980,8 @@ func TestSubmitQuestionBatchNotifiesSessionUseCase(t *testing.T) {
 	}
 	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
 
-	got, err := resolver.SubmitQuestionBatch(context.Background(), model.SubmitQuestionBatchInput{
-		BatchID: "batch-1",
+	got, err := resolver.SubmitQuestionRequest(context.Background(), model.SubmitQuestionRequestInput{
+		RequestID: "request-1",
 		Answers: []*model.QuestionAnswerInput{
 			{
 				QuestionID:       "question-1",
@@ -986,23 +991,23 @@ func TestSubmitQuestionBatchNotifiesSessionUseCase(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("SubmitQuestionBatch() error = %v", err)
+		t.Fatalf("SubmitQuestionRequest() error = %v", err)
 	}
-	if got.ID != "batch-1" || got.Status != string(questiondomain.BatchAnswered) {
-		t.Fatalf("SubmitQuestionBatch() = %#v", got)
+	if got.ID != "request-1" || got.Status != string(questiondomain.RequestAnswered) {
+		t.Fatalf("SubmitQuestionRequest() = %#v", got)
 	}
-	if sessions.gotSubmitQuestion.BatchID != "batch-1" || len(sessions.gotSubmitQuestion.Answers) != 1 {
+	if sessions.gotSubmitQuestion.RequestID != "request-1" || len(sessions.gotSubmitQuestion.Answers) != 1 {
 		t.Fatalf("question submit input = %#v", sessions.gotSubmitQuestion)
 	}
 }
 
-func TestSubmitQuestionBatchCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
+func TestSubmitQuestionRequestCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
 	optionID := "retry_merge"
 	sessions := &fakeSessionUseCase{
-		submitQuestionResult: questionapp.BatchDTO{
-			ID:        "batch-1",
+		submitQuestionResult: questionapp.RequestDTO{
+			ID:        "request-1",
 			SessionID: "session-1",
-			Status:    questiondomain.BatchAnswered,
+			Status:    questiondomain.RequestAnswered,
 			Questions: []questiondomain.Question{
 				{
 					ID:   "question-1",
@@ -1018,8 +1023,8 @@ func TestSubmitQuestionBatchCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
 	}
 	sessions.err = errors.New("merge retry failed")
 	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
-	input := model.SubmitQuestionBatchInput{
-		BatchID: "batch-1",
+	input := model.SubmitQuestionRequestInput{
+		RequestID: "request-1",
 		Answers: []*model.QuestionAnswerInput{
 			{
 				QuestionID:       "question-1",
@@ -1029,15 +1034,15 @@ func TestSubmitQuestionBatchCanBeRetriedWhenSessionHandlingFails(t *testing.T) {
 		},
 	}
 
-	if _, err := resolver.SubmitQuestionBatch(context.Background(), input); err == nil {
-		t.Fatal("first SubmitQuestionBatch() expected session handling error")
+	if _, err := resolver.SubmitQuestionRequest(context.Background(), input); err == nil {
+		t.Fatal("first SubmitQuestionRequest() expected session handling error")
 	}
 	sessions.err = nil
-	got, err := resolver.SubmitQuestionBatch(context.Background(), input)
+	got, err := resolver.SubmitQuestionRequest(context.Background(), input)
 	if err != nil {
-		t.Fatalf("second SubmitQuestionBatch() error = %v", err)
+		t.Fatalf("second SubmitQuestionRequest() error = %v", err)
 	}
-	if got.ID != "batch-1" || sessions.submitQuestionCalls != 2 {
+	if got.ID != "request-1" || sessions.submitQuestionCalls != 2 {
 		t.Fatalf("retry result=%#v sessionCalls=%d", got, sessions.submitQuestionCalls)
 	}
 }
@@ -1277,37 +1282,37 @@ func (f *fakeWorkflowUseCase) GetDefinition(_ context.Context, id workflowdomain
 
 type fakeQuestionUseCase struct {
 	questionapp.UseCase
-	pending             []questionapp.BatchDTO
-	updateSource        <-chan questionapp.BatchDTO
-	submitResult        questionapp.BatchDTO
-	gotSubmit           questionapp.SubmitBatchInput
+	pending             []questionapp.RequestDTO
+	updateSource        <-chan questionapp.RequestDTO
+	submitResult        questionapp.RequestDTO
+	gotSubmit           questionapp.SubmitRequestInput
 	submitCalls         int
 	gotPendingSessionID questiondomain.SessionID
 	gotUpdateSessionID  questiondomain.SessionID
 }
 
-func (f *fakeQuestionUseCase) SubmitBatch(_ context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {
+func (f *fakeQuestionUseCase) SubmitBatch(_ context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error) {
 	f.gotSubmit = input
 	f.submitCalls++
 	return f.submitResult, nil
 }
 
-func (f *fakeQuestionUseCase) ListPendingBySession(_ context.Context, sessionID questiondomain.SessionID) ([]questionapp.BatchDTO, error) {
+func (f *fakeQuestionUseCase) ListPendingRequestsBySession(_ context.Context, sessionID questiondomain.SessionID) ([]questionapp.RequestDTO, error) {
 	f.gotPendingSessionID = sessionID
 	return f.pending, nil
 }
 
-func (f *fakeQuestionUseCase) QuestionBatchUpdates(_ context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.BatchDTO, error) {
+func (f *fakeQuestionUseCase) QuestionRequestUpdates(_ context.Context, sessionID questiondomain.SessionID) (<-chan questionapp.RequestDTO, error) {
 	f.gotUpdateSessionID = sessionID
 	return f.updateSource, nil
 }
 
 type fakeSessionUseCase struct {
 	sessionapp.UseCase
-	gotAnswered            questionapp.BatchDTO
+	gotAnswered            questionapp.RequestDTO
 	answeredCalls          int
-	gotSubmitQuestion      questionapp.SubmitBatchInput
-	submitQuestionResult   questionapp.BatchDTO
+	gotSubmitQuestion      questionapp.SubmitRequestInput
+	submitQuestionResult   questionapp.RequestDTO
 	submitQuestionCalls    int
 	err                    error
 	gotGetCardID           sessiondomain.ID
@@ -1350,7 +1355,7 @@ func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.C
 	return f.createResult, f.err
 }
 
-func (f *fakeSessionUseCase) SubmitQuestionBatch(_ context.Context, input questionapp.SubmitBatchInput) (questionapp.BatchDTO, error) {
+func (f *fakeSessionUseCase) SubmitQuestionRequest(_ context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error) {
 	f.gotSubmitQuestion = input
 	f.submitQuestionCalls++
 	return f.submitQuestionResult, f.err
@@ -1372,8 +1377,8 @@ func (f *fakeSessionUseCase) GetSession(_ context.Context, id sessiondomain.ID) 
 	return f.getResult, f.err
 }
 
-func (f *fakeSessionUseCase) HandleQuestionBatchAnswered(_ context.Context, batch questionapp.BatchDTO) error {
-	f.gotAnswered = batch
+func (f *fakeSessionUseCase) HandleQuestionRequestAnswered(_ context.Context, request questionapp.RequestDTO) error {
+	f.gotAnswered = request
 	f.answeredCalls++
 	return f.err
 }

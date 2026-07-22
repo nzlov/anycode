@@ -1,66 +1,17 @@
 package codexcli
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
-	"unicode"
-	"unicode/utf8"
+	"time"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 )
 
-type appServerRunInput struct {
-	processRunID    process.RunID
-	sessionID       process.SessionID
-	codexSessionID  string
-	transcript      process.CodexTranscriptSource
-	workdir         string
-	artifactDir     string
-	prompt          string
-	model           string
-	reasoningEffort string
-	permissionMode  string
-	fastMode        bool
-	imagePaths      []string
-}
-
-type appServerConnection struct {
-	reader  *bufio.Reader
-	writer  io.Writer
-	nextID  int
-	pending [][]byte
-}
-
-type appServerEnvelope struct {
-	ID     json.RawMessage `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-	Result json.RawMessage `json:"result"`
-	Error  *struct {
-		Code    int             `json:"code"`
-		Message string          `json:"message"`
-		Data    json.RawMessage `json:"data"`
-	} `json:"error"`
-}
-
-type appServerTerminal string
-
-const (
-	appServerTurnTerminal    appServerTerminal = "turn/completed"
-	appServerCompactTerminal appServerTerminal = "thread/compacted"
-	maxFileMatches                             = 100
-)
+const maxFileMatches = 100
 
 func (c *Client) SlashCommands() []process.CodexSlashCommand {
 	return []process.CodexSlashCommand{
@@ -71,52 +22,374 @@ func (c *Client) SlashCommands() []process.CodexSlashCommand {
 	}
 }
 
+func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode)
+}
+
+func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
+	if strings.TrimSpace(input.CodexSessionID) == "" {
+		return process.CodexHandle{}, process.ErrThreadUnavailable
+	}
+	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode)
+}
+
+func (c *Client) start(
+	ctx context.Context,
+	runID process.RunID,
+	sessionID process.SessionID,
+	threadID string,
+	workdir string,
+	artifactDir string,
+	input []process.CodexInputItem,
+	action process.CodexAction,
+	actionArgument string,
+	developerInstructions string,
+	model string,
+	reasoningEffort string,
+	permissionMode string,
+	fastMode bool,
+) (process.CodexHandle, error) {
+	if runID == "" || sessionID == "" {
+		return process.CodexHandle{}, errors.New("process run id and session id are required")
+	}
+	runtime, err := c.appServer(ctx)
+	if err != nil {
+		return process.CodexHandle{}, err
+	}
+	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode)
+	params["dynamicTools"] = anyCodeDynamicTools()
+	if threadID == "" {
+		params["ephemeral"] = false
+		var response struct {
+			Thread struct {
+				ID string `json:"id"`
+			} `json:"thread"`
+		}
+		if err := runtime.request(ctx, "thread/start", params, &response); err != nil {
+			return process.CodexHandle{}, fmt.Errorf("start codex thread: %w", err)
+		}
+		threadID = strings.TrimSpace(response.Thread.ID)
+	} else {
+		params["threadId"] = threadID
+		var response struct {
+			Thread struct {
+				ID string `json:"id"`
+			} `json:"thread"`
+		}
+		if err := runtime.request(ctx, "thread/resume", params, &response); err != nil {
+			return process.CodexHandle{}, fmt.Errorf("resume codex thread: %w", err)
+		}
+		if resumed := strings.TrimSpace(response.Thread.ID); resumed != "" {
+			threadID = resumed
+		}
+	}
+	if threadID == "" {
+		return process.CodexHandle{}, errors.New("codex app-server returned an empty thread id")
+	}
+	handle := process.CodexHandle{ProcessRunID: runID, CodexSessionID: threadID}
+	routeCtx, routeCancel := context.WithCancel(context.Background())
+	route := &appServerRun{handle: handle, sessionID: sessionID, workdir: workdir, ctx: routeCtx, cancel: routeCancel, events: make(chan process.CodexEvent, 1024), closed: make(chan struct{})}
+	runtime.register(route)
+	turnID, active, err := runtime.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort)
+	if err != nil {
+		runtime.removeRoute(route)
+		return process.CodexHandle{}, err
+	}
+	route.setTurnID(turnID)
+	handle.TurnID = turnID
+	if !active {
+		finished := process.ExitResult{FinishedAt: nowUTC()}
+		route.emit(process.CodexEvent{Type: process.CodexEventProcessExit, Content: finished, CreatedAt: finished.FinishedAt})
+		runtime.completeRoute(route)
+	}
+	return handle, nil
+}
+
+func appServerThreadParams(workdir string, artifactDir string, developerInstructions string, model string, permissionMode string, fastMode bool) map[string]any {
+	params := map[string]any{"approvalPolicy": "never"}
+	if workdir != "" {
+		params["cwd"] = workdir
+	}
+	if model != "" {
+		params["model"] = model
+	}
+	if developerInstructions != "" {
+		params["developerInstructions"] = developerInstructions
+	}
+	if fastMode {
+		params["serviceTier"] = "priority"
+	}
+	if permissionMode != "" {
+		params["sandbox"] = permissionMode
+	}
+	if artifactDir != "" {
+		config := map[string]any{
+			"shell_environment_policy": map[string]any{"set": map[string]string{"ANYCODE_ARTIFACT_DIR": artifactDir}},
+		}
+		if permissionMode == "workspace-write" {
+			config["sandbox_workspace_write"] = map[string]any{"writable_roots": []string{artifactDir}}
+		}
+		params["config"] = config
+	}
+	return params
+}
+
+func anyCodeDynamicTools() []map[string]any {
+	optionSchema := map[string]any{
+		"type": "object", "additionalProperties": false, "required": []string{"label"},
+		"properties": map[string]any{
+			"id": map[string]any{"type": "string"}, "label": map[string]any{"type": "string"},
+			"description": map[string]any{"type": "string"}, "payload": map[string]any{"type": "object"},
+		},
+	}
+	questionSchema := map[string]any{
+		"type": "object", "additionalProperties": false,
+		"anyOf": []map[string]any{{"required": []string{"title"}}, {"required": []string{"body"}}},
+		"properties": map[string]any{
+			"title": map[string]any{"type": "string"}, "body": map[string]any{"type": "string"}, "type": map[string]any{"type": "string"},
+			"options": map[string]any{"type": "array", "items": optionSchema},
+		},
+	}
+	return []map[string]any{
+		{
+			"type": "function", "name": "questions",
+			"description": "Ask the user one or more option questions and wait for their answers.",
+			"inputSchema": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"questions"},
+				"properties": map[string]any{"questions": map[string]any{
+					"type": "array", "minItems": 1, "items": questionSchema,
+				}},
+			},
+		},
+		{
+			"type": "function", "name": "publish_artifact",
+			"description": "Inspect a file in this card's ANYCODE_ARTIFACT_DIR and return its stable metadata and preview content.",
+			"inputSchema": map[string]any{
+				"type": "object", "required": []string{"path"},
+				"properties": map[string]any{"path": map[string]any{"type": "string", "description": "Path relative to ANYCODE_ARTIFACT_DIR."}},
+			},
+		},
+	}
+}
+
+func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string) (string, bool, error) {
+	switch action {
+	case process.CodexActionCompact:
+		if err := r.request(ctx, "thread/compact/start", map[string]any{"threadId": threadID}, nil); err != nil {
+			return "", false, fmt.Errorf("compact codex thread: %w", err)
+		}
+		return "", false, nil
+	case process.CodexActionReview:
+		target := map[string]any{"type": "uncommittedChanges"}
+		if actionArgument != "" {
+			target = map[string]any{"type": "custom", "instructions": actionArgument}
+		}
+		var response struct {
+			Turn struct {
+				ID string `json:"id"`
+			} `json:"turn"`
+		}
+		if err := r.request(ctx, "review/start", map[string]any{"threadId": threadID, "delivery": "inline", "target": target}, &response); err != nil {
+			return "", false, fmt.Errorf("start codex review: %w", err)
+		}
+		return response.Turn.ID, true, nil
+	case process.CodexActionGoal:
+		if actionArgument == "" {
+			return "", false, errors.New("codex goal objective is required")
+		}
+		if err := r.request(ctx, "thread/goal/set", map[string]any{"threadId": threadID, "objective": actionArgument, "status": "active"}, nil); err != nil {
+			return "", false, fmt.Errorf("set codex thread goal: %w", err)
+		}
+		return "", false, nil
+	}
+	var collaborationMode map[string]any
+	if action == process.CodexActionPlan {
+		task := firstTextInput(input)
+		if task == "" {
+			return "", false, errors.New("codex plan task is required")
+		}
+		if model == "" {
+			return "", false, errors.New("codex plan model is required")
+		}
+		settings := map[string]any{"model": model, "developer_instructions": developerInstructions}
+		if reasoningEffort != "" {
+			settings["reasoning_effort"] = reasoningEffort
+		}
+		collaborationMode = map[string]any{"mode": "plan", "settings": settings}
+	}
+	items, err := appServerInput(input, workdir)
+	if err != nil {
+		return "", false, err
+	}
+	if len(items) == 0 {
+		return "", false, nil
+	}
+	params := map[string]any{"threadId": threadID, "input": items}
+	if collaborationMode != nil {
+		params["collaborationMode"] = collaborationMode
+	}
+	var response struct {
+		Turn struct {
+			ID string `json:"id"`
+		} `json:"turn"`
+	}
+	if err := r.request(ctx, "turn/start", params, &response); err != nil {
+		return "", false, fmt.Errorf("start codex turn: %w", err)
+	}
+	return response.Turn.ID, true, nil
+}
+
+func appServerInput(input []process.CodexInputItem, workdir string) ([]map[string]any, error) {
+	result := make([]map[string]any, 0, len(input))
+	for _, item := range input {
+		switch item.Type {
+		case "text":
+			if item.Text == "" {
+				continue
+			}
+			result = append(result, map[string]any{"type": "text", "text": item.Text})
+		case "localImage", "localAudio":
+			if item.Path != "" {
+				result = append(result, map[string]any{"type": item.Type, "path": item.Path})
+			}
+		case "mention":
+			if item.Path != "" && item.Name != "" {
+				path, err := appServerMentionPath(item.Path, workdir)
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, map[string]any{"type": "mention", "path": path, "name": item.Name})
+			}
+		}
+	}
+	return result, nil
+}
+
+func appServerMentionPath(path string, workdir string) (string, error) {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	if strings.TrimSpace(workdir) == "" {
+		return "", errors.New("codex mention workdir is required")
+	}
+	root, err := filepath.EvalSymlinks(workdir)
+	if err != nil {
+		return "", fmt.Errorf("resolve codex mention workdir: %w", err)
+	}
+	target, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(path)))
+	if err != nil {
+		return "", fmt.Errorf("resolve codex mention %q: %w", path, err)
+	}
+	relative, err := filepath.Rel(root, target)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("codex mention %q escapes workdir", path)
+	}
+	return target, nil
+}
+
+func (c *Client) Steer(ctx context.Context, input process.CodexSteerInput) error {
+	c.mu.Lock()
+	runtime := c.runtime
+	c.mu.Unlock()
+	if runtime == nil || !runtime.alive() {
+		return process.ErrProcessNotFound
+	}
+	route := runtime.routeForRun(input.ProcessRunID)
+	if route == nil {
+		return process.ErrProcessNotFound
+	}
+	turnID := route.activeTurnID()
+	if turnID == "" {
+		return process.ErrProcessNotFound
+	}
+	items, err := appServerInput(input.Input, route.workdir)
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		return errors.New("codex steer input is required")
+	}
+	var response struct {
+		TurnID string `json:"turnId"`
+	}
+	if err := runtime.request(ctx, "turn/steer", map[string]any{
+		"threadId": route.handle.CodexSessionID, "expectedTurnId": turnID, "input": items,
+	}, &response); err != nil {
+		return fmt.Errorf("steer codex turn: %w", err)
+	}
+	if response.TurnID != "" && response.TurnID != turnID {
+		return fmt.Errorf("steer codex turn returned unexpected turn id %q", response.TurnID)
+	}
+	return nil
+}
+
+func firstTextInput(input []process.CodexInputItem) string {
+	for _, item := range input {
+		if item.Type == "text" {
+			return item.Text
+		}
+	}
+	return ""
+}
+
+func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan process.CodexEvent, error) {
+	c.mu.Lock()
+	runtime := c.runtime
+	c.mu.Unlock()
+	if runtime == nil {
+		return nil, process.ErrProcessNotFound
+	}
+	events, ok := runtime.claimEvents(handle.ProcessRunID)
+	if !ok {
+		return nil, process.ErrProcessNotFound
+	}
+	return events, nil
+}
+
+func (c *Client) Stop(ctx context.Context, runID process.RunID) error {
+	c.mu.Lock()
+	runtime := c.runtime
+	c.mu.Unlock()
+	if runtime == nil || !runtime.alive() {
+		return process.ErrProcessNotFound
+	}
+	route := runtime.routeForRun(runID)
+	if route == nil {
+		return process.ErrProcessNotFound
+	}
+	turnID := route.activeTurnID()
+	if turnID == "" {
+		return process.ErrProcessNotFound
+	}
+	if err := runtime.request(ctx, "turn/interrupt", map[string]any{"threadId": route.handle.CodexSessionID, "turnId": turnID}, nil); err != nil {
+		return fmt.Errorf("interrupt codex turn: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) DeleteThread(ctx context.Context, threadID string) error {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	runtime, err := c.appServer(ctx)
+	if err != nil {
+		return err
+	}
+	if err := runtime.request(ctx, "thread/delete", map[string]any{"threadId": threadID}, nil); err != nil {
+		return fmt.Errorf("delete codex thread: %w", err)
+	}
+	return nil
+}
+
 func (c *Client) SearchFiles(ctx context.Context, root string, query string) ([]process.CodexFileMatch, error) {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return nil, errors.New("file search root is required")
 	}
-	cmd := exec.CommandContext(ctx, c.Bin(), "app-server", "--stdio")
-	cmd.Dir = root
-	env := os.Environ()
-	if codexHome := c.CodexHome(); codexHome != "" {
-		env = upsertEnv(env, "CODEX_HOME", codexHome)
-	}
-	cmd.Env = env
-	stdin, err := cmd.StdinPipe()
+	runtime, err := c.appServer(ctx)
 	if err != nil {
 		return nil, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	connection := &appServerConnection{reader: bufio.NewReader(stdout), writer: stdin}
-	finish := func(requestErr error) error {
-		_ = stdin.Close()
-		_, _ = io.Copy(io.Discard, connection.reader)
-		waitErr := cmd.Wait()
-		if requestErr != nil {
-			return requestErr
-		}
-		if waitErr != nil {
-			return commandError(waitErr, stderr.String())
-		}
-		return nil
-	}
-	if err := connection.request("initialize", map[string]any{
-		"clientInfo":   map[string]any{"name": "anycode", "title": "AnyCode", "version": "1"},
-		"capabilities": map[string]any{"experimentalApi": true},
-	}, nil); err != nil {
-		return nil, finish(fmt.Errorf("initialize codex file search: %w", err))
-	}
-	if err := connection.notify("initialized", nil); err != nil {
-		return nil, finish(err)
 	}
 	var response struct {
 		Files []struct {
@@ -126,13 +399,8 @@ func (c *Client) SearchFiles(ctx context.Context, root string, query string) ([]
 			Indices   []uint32 `json:"indices"`
 		} `json:"files"`
 	}
-	if err := connection.request("fuzzyFileSearch", map[string]any{
-		"query": query, "roots": []string{root},
-	}, &response); err != nil {
-		return nil, finish(fmt.Errorf("search codex project files: %w", err))
-	}
-	if err := finish(nil); err != nil {
-		return nil, err
+	if err := runtime.request(ctx, "fuzzyFileSearch", map[string]any{"query": query, "roots": []string{root}}, &response); err != nil {
+		return nil, fmt.Errorf("search codex project files: %w", err)
 	}
 	matches := make([]process.CodexFileMatch, 0, min(len(response.Files), maxFileMatches))
 	for _, match := range response.Files {
@@ -143,9 +411,7 @@ func (c *Client) SearchFiles(ctx context.Context, root string, query string) ([]
 		if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			continue
 		}
-		matches = append(matches, process.CodexFileMatch{
-			Path: filepath.ToSlash(clean), Score: match.Score, Indices: append([]uint32(nil), match.Indices...),
-		})
+		matches = append(matches, process.CodexFileMatch{Path: filepath.ToSlash(clean), Score: match.Score, Indices: append([]uint32(nil), match.Indices...)})
 		if len(matches) == maxFileMatches {
 			break
 		}
@@ -153,472 +419,45 @@ func (c *Client) SearchFiles(ctx context.Context, root string, query string) ([]
 	return matches, nil
 }
 
-func (c *Client) startAppServer(ctx context.Context, input appServerRunInput) (process.CodexHandle, error) {
-	if input.processRunID == "" {
-		return process.CodexHandle{}, errors.New("process run id is required")
+func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPageInput) (process.CodexHistoryPage, error) {
+	if strings.TrimSpace(input.ThreadID) == "" {
+		return process.CodexHistoryPage{}, process.ErrThreadUnavailable
 	}
-	if err := ctx.Err(); err != nil {
-		return process.CodexHandle{}, err
-	}
-
-	codexHome := c.CodexHome()
-	transcriptPath := ""
-	transcriptRelativePath := ""
-	baselineOffset := int64(0)
-	if input.codexSessionID != "" {
-		if input.transcript.CodexSessionID != input.codexSessionID {
-			return process.CodexHandle{}, fmt.Errorf("%w: transcript source does not match resume session", process.ErrTranscriptUnavailable)
-		}
-		var err error
-		transcriptPath, transcriptRelativePath, err = resolveTranscriptPath(codexHome, input.transcript)
-		if err != nil {
-			return process.CodexHandle{}, err
-		}
-		info, err := os.Stat(transcriptPath)
-		if err != nil {
-			return process.CodexHandle{}, fmt.Errorf("%w: open resume transcript", process.ErrTranscriptUnavailable)
-		}
-		baselineOffset = info.Size()
-	}
-
-	cmd := exec.CommandContext(context.Background(), c.Bin(), c.buildAppServerArgs(input)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	env := os.Environ()
-	if codexHome != "" {
-		env = upsertEnv(env, "CODEX_HOME", codexHome)
-	}
-	if c.mcpAuthToken != "" {
-		env = upsertEnv(env, "ANYCODE_MCP_TOKEN", c.mcpAuthToken)
-	}
-	env = upsertEnv(env, processRunOwnerEnv, string(input.processRunID))
-	if input.artifactDir != "" {
-		env = upsertEnv(env, artifactDirEnv, input.artifactDir)
-	}
-	cmd.Env = env
-	if input.workdir != "" {
-		cmd.Dir = input.workdir
-	}
-	stdin, err := cmd.StdinPipe()
+	runtime, err := c.appServer(ctx)
 	if err != nil {
-		return process.CodexHandle{}, err
+		return process.CodexHistoryPage{}, err
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return process.CodexHandle{}, err
+	limit := input.Limit
+	if limit < 1 {
+		limit = 50
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Start(); err != nil {
-		return process.CodexHandle{}, err
+	params := map[string]any{"threadId": input.ThreadID, "limit": limit, "sortDirection": "desc", "itemsView": "full"}
+	if input.Cursor != "" {
+		params["cursor"] = input.Cursor
 	}
-
-	connection := &appServerConnection{reader: bufio.NewReader(stdout), writer: stdin}
-	failStart := func(err error) (process.CodexHandle, error) {
-		_ = stdin.Close()
-		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		}
-		_ = cmd.Wait()
-		if message := strings.TrimSpace(stderr.String()); message != "" {
-			err = fmt.Errorf("%w: %s", err, message)
-		}
-		return process.CodexHandle{}, err
+	var response struct {
+		Data       []appServerTurn `json:"data"`
+		NextCursor *string         `json:"nextCursor"`
 	}
-	if err := connection.request("initialize", map[string]any{
-		"clientInfo":   map[string]any{"name": "anycode", "title": "AnyCode", "version": "1"},
-		"capabilities": map[string]any{"experimentalApi": true},
-	}, nil); err != nil {
-		return failStart(fmt.Errorf("initialize codex app-server: %w", err))
+	if err := runtime.request(ctx, "thread/turns/list", params, &response); err != nil {
+		return process.CodexHistoryPage{}, fmt.Errorf("list codex thread turns: %w", err)
 	}
-	if err := connection.notify("initialized", nil); err != nil {
-		return failStart(fmt.Errorf("acknowledge codex app-server initialization: %w", err))
+	events := eventsFromTurns(input.ThreadID, response.Data)
+	next := ""
+	if response.NextCursor != nil {
+		next = *response.NextCursor
 	}
-
-	threadID := input.codexSessionID
-	if threadID == "" {
-		var response struct {
-			Thread struct {
-				ID string `json:"id"`
-			} `json:"thread"`
-		}
-		if err := connection.request("thread/start", c.appServerThreadParams(input, false), &response); err != nil {
-			return failStart(fmt.Errorf("start codex app-server thread: %w", err))
-		}
-		threadID = strings.TrimSpace(response.Thread.ID)
-	} else {
-		var response struct {
-			Thread struct {
-				ID string `json:"id"`
-			} `json:"thread"`
-		}
-		params := c.appServerThreadParams(input, true)
-		params["threadId"] = threadID
-		if err := connection.request("thread/resume", params, &response); err != nil {
-			return failStart(fmt.Errorf("resume codex app-server thread: %w", err))
-		}
-		if resumed := strings.TrimSpace(response.Thread.ID); resumed != "" {
-			threadID = resumed
-		}
-	}
-	if threadID == "" {
-		return failStart(errors.New("codex app-server returned an empty thread id"))
-	}
-
-	terminal, err := connection.startInput(threadID, input)
-	if err != nil {
-		return failStart(err)
-	}
-	sessionIDs := make(chan string, 1)
-	sessionIDs <- threadID
-	close(sessionIDs)
-	planUpdates := make(chan process.CodexEvent, 64)
-	active := &activeProcess{
-		cmd: cmd, stdin: stdin, stderr: &stderr, home: codexHome, workdir: input.workdir,
-		processRunID: input.processRunID, sessionID: input.sessionID, codexSessionID: threadID,
-		transcriptPath: transcriptPath, transcriptRelativePath: transcriptRelativePath,
-		baselineOffset: baselineOffset, stdoutSessionIDs: sessionIDs,
-		stdoutPlanUpdates: planUpdates, observer: c.observer, done: make(chan struct{}),
-	}
-	processRegistry.Store(input.processRunID, active)
-	if terminal == "" {
-		_ = stdin.Close()
-		close(planUpdates)
-	} else {
-		go monitorAppServer(connection, active, terminal, threadID, planUpdates)
-	}
-	go active.wait()
-	return process.CodexHandle{ProcessRunID: input.processRunID, PID: cmd.Process.Pid, CodexSessionID: threadID}, nil
+	return process.CodexHistoryPage{Events: events, NextCursor: next}, nil
 }
 
-func (c *Client) buildAppServerArgs(input appServerRunInput) []string {
-	args := []string{"app-server", "--stdio"}
-	args = c.appendMCPArgs(args, input.sessionID)
-	args = c.appendPlaywrightMCPArgs(args, input.processRunID, input.artifactDir)
-	args = c.appendRuntimeConfigArgs(args, "", input.reasoningEffort, input.permissionMode, input.fastMode, false)
-	if input.artifactDir != "" && input.permissionMode == "workspace-write" {
-		args = append(args, "-c", fmt.Sprintf("sandbox_workspace_write.writable_roots=[%q]", input.artifactDir))
+func (r *appServerRuntime) removeRoute(route *appServerRun) {
+	r.routesMu.Lock()
+	delete(r.routes, route.handle.ProcessRunID)
+	if r.threads[route.handle.CodexSessionID] == route {
+		delete(r.threads, route.handle.CodexSessionID)
 	}
-	return args
+	r.routesMu.Unlock()
+	route.close()
 }
 
-func (c *Client) appServerThreadParams(input appServerRunInput, resume bool) map[string]any {
-	params := map[string]any{"approvalPolicy": "never"}
-	if input.workdir != "" {
-		params["cwd"] = input.workdir
-	}
-	if input.model != "" {
-		params["model"] = input.model
-	}
-	if input.fastMode {
-		params["serviceTier"] = "priority"
-	}
-	if _, profile := mcpPermissionProfile(input.permissionMode); c.mcpStdioSocket != "" && profile {
-		params["permissions"] = "anycode-mcp"
-	} else if input.permissionMode != "" {
-		params["sandbox"] = input.permissionMode
-	}
-	if !resume {
-		params["ephemeral"] = false
-	}
-	return params
-}
-
-func (c *appServerConnection) startInput(threadID string, input appServerRunInput) (appServerTerminal, error) {
-	prompt := strings.TrimSpace(input.prompt)
-	if prompt == "/compact" {
-		if err := c.request("thread/compact/start", map[string]any{"threadId": threadID}, nil); err != nil {
-			return "", fmt.Errorf("compact codex thread: %w", err)
-		}
-		return appServerCompactTerminal, nil
-	}
-	if instructions, ok := slashCommandArgs(prompt, "/review"); ok {
-		target := map[string]any{"type": "uncommittedChanges"}
-		if instructions != "" {
-			target = map[string]any{"type": "custom", "instructions": instructions}
-		}
-		if err := c.request("review/start", map[string]any{
-			"threadId": threadID, "delivery": "inline", "target": target,
-		}, nil); err != nil {
-			return "", fmt.Errorf("start codex review: %w", err)
-		}
-		return appServerTurnTerminal, nil
-	}
-	if objective, ok := slashCommandArgs(prompt, "/goal"); ok {
-		if objective == "" {
-			return "", errors.New("codex goal objective is required")
-		}
-		if err := c.request("thread/goal/set", map[string]any{
-			"threadId": threadID, "objective": objective, "status": "active",
-		}, nil); err != nil {
-			return "", fmt.Errorf("set codex thread goal: %w", err)
-		}
-		return "", nil
-	}
-	turnPrompt := input.prompt
-	var collaborationMode map[string]any
-	if task, ok := slashCommandArgs(prompt, "/plan"); ok {
-		if task == "" {
-			return "", errors.New("codex plan task is required")
-		}
-		if strings.TrimSpace(input.model) == "" {
-			return "", errors.New("codex plan model is required")
-		}
-		turnPrompt = task
-		settings := map[string]any{"model": input.model, "developer_instructions": nil}
-		if input.reasoningEffort != "" {
-			settings["reasoning_effort"] = input.reasoningEffort
-		}
-		collaborationMode = map[string]any{"mode": "plan", "settings": settings}
-	}
-	inputs := make([]map[string]any, 0, 1+len(input.imagePaths))
-	if turnPrompt != "" {
-		inputs = append(inputs, map[string]any{"type": "text", "text": turnPrompt})
-		inputs = append(inputs, appServerFileMentions(turnPrompt, input.workdir)...)
-	}
-	for _, path := range input.imagePaths {
-		if strings.TrimSpace(path) != "" {
-			inputs = append(inputs, map[string]any{"type": "localImage", "path": path})
-		}
-	}
-	if len(inputs) == 0 {
-		return "", nil
-	}
-	params := map[string]any{"threadId": threadID, "input": inputs}
-	if collaborationMode != nil {
-		params["collaborationMode"] = collaborationMode
-	} else if input.reasoningEffort != "" {
-		params["effort"] = input.reasoningEffort
-	}
-	if err := c.request("turn/start", params, nil); err != nil {
-		return "", fmt.Errorf("start codex turn: %w", err)
-	}
-	return appServerTurnTerminal, nil
-}
-
-func slashCommandArgs(prompt string, command string) (string, bool) {
-	if prompt == command {
-		return "", true
-	}
-	if !strings.HasPrefix(prompt, command) || len(prompt) == len(command) {
-		return "", false
-	}
-	next, _ := utf8.DecodeRuneInString(prompt[len(command):])
-	if !unicode.IsSpace(next) {
-		return "", false
-	}
-	return strings.TrimSpace(prompt[len(command):]), true
-}
-
-func appServerFileMentions(prompt string, workdir string) []map[string]any {
-	workdir = strings.TrimSpace(workdir)
-	if workdir == "" {
-		return nil
-	}
-	root, err := filepath.Abs(workdir)
-	if err != nil || root == "" {
-		return nil
-	}
-	resolvedRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return nil
-	}
-	mentions := make([]map[string]any, 0)
-	seen := make(map[string]struct{})
-	for index := 0; index < len(prompt); {
-		if prompt[index] != '@' || !isMentionBoundary(prompt, index) {
-			_, size := utf8.DecodeRuneInString(prompt[index:])
-			index += size
-			continue
-		}
-		name, end := mentionName(prompt, index+1)
-		index = max(end, index+1)
-		clean := filepath.Clean(filepath.FromSlash(name))
-		if clean == "." || filepath.IsAbs(clean) {
-			continue
-		}
-		path := filepath.Join(root, clean)
-		relative, err := filepath.Rel(root, path)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			continue
-		}
-		resolvedPath, err := filepath.EvalSymlinks(path)
-		if err != nil {
-			continue
-		}
-		resolvedRelative, err := filepath.Rel(resolvedRoot, resolvedPath)
-		if err != nil || resolvedRelative == ".." || strings.HasPrefix(resolvedRelative, ".."+string(filepath.Separator)) {
-			continue
-		}
-		info, err := os.Stat(resolvedPath)
-		if err != nil || !info.Mode().IsRegular() {
-			continue
-		}
-		name = filepath.ToSlash(relative)
-		if _, exists := seen[name]; exists {
-			continue
-		}
-		seen[name] = struct{}{}
-		mentions = append(mentions, map[string]any{"type": "mention", "name": name, "path": path})
-	}
-	return mentions
-}
-
-func isMentionBoundary(prompt string, index int) bool {
-	if index == 0 {
-		return true
-	}
-	previous, _ := utf8.DecodeLastRuneInString(prompt[:index])
-	return unicode.IsSpace(previous)
-}
-
-func mentionName(prompt string, start int) (string, int) {
-	if start >= len(prompt) {
-		return "", start
-	}
-	if prompt[start] == '"' {
-		for end := start + 1; end < len(prompt); end++ {
-			if prompt[end] != '"' || prompt[end-1] == '\\' {
-				continue
-			}
-			quoted := prompt[start : end+1]
-			name, err := strconv.Unquote(quoted)
-			if err != nil {
-				return "", end + 1
-			}
-			return name, end + 1
-		}
-		return "", len(prompt)
-	}
-	end := start
-	for end < len(prompt) {
-		r, size := utf8.DecodeRuneInString(prompt[end:])
-		if unicode.IsSpace(r) {
-			break
-		}
-		end += size
-	}
-	return prompt[start:end], end
-}
-
-func (c *appServerConnection) request(method string, params any, result any) error {
-	c.nextID++
-	id := c.nextID
-	request := map[string]any{"id": id, "method": method, "params": params}
-	if err := json.NewEncoder(c.writer).Encode(request); err != nil {
-		return err
-	}
-	for {
-		line, err := c.reader.ReadBytes('\n')
-		if len(bytes.TrimSpace(line)) > 0 {
-			raw := bytes.TrimSpace(line)
-			var envelope appServerEnvelope
-			if json.Unmarshal(raw, &envelope) != nil {
-				return fmt.Errorf("invalid app-server response: %s", raw)
-			}
-			var responseID int
-			if len(envelope.ID) > 0 && json.Unmarshal(envelope.ID, &responseID) == nil && responseID == id {
-				if envelope.Error != nil {
-					return fmt.Errorf("app-server error %d: %s", envelope.Error.Code, envelope.Error.Message)
-				}
-				if result != nil && len(envelope.Result) > 0 {
-					if err := json.Unmarshal(envelope.Result, result); err != nil {
-						return fmt.Errorf("decode app-server %s response: %w", method, err)
-					}
-				}
-				return nil
-			}
-			c.pending = append(c.pending, append([]byte(nil), raw...))
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return errors.New("app-server closed before responding")
-			}
-			return err
-		}
-	}
-}
-
-func (c *appServerConnection) notify(method string, params any) error {
-	notification := map[string]any{"method": method}
-	if params != nil {
-		notification["params"] = params
-	}
-	return json.NewEncoder(c.writer).Encode(notification)
-}
-
-func monitorAppServer(connection *appServerConnection, active *activeProcess, terminal appServerTerminal, threadID string, planUpdates chan process.CodexEvent) {
-	defer close(planUpdates)
-	completed := false
-	handle := func(raw []byte) {
-		if event, ok := appServerPlanUpdate(raw); ok {
-			sendLatestPlanUpdate(planUpdates, event)
-		}
-		terminalMatch, failure := appServerTerminalState(raw, terminal, threadID)
-		if terminalMatch {
-			completed = true
-			active.failProtocol(failure)
-		}
-	}
-	for _, raw := range connection.pending {
-		handle(raw)
-	}
-	connection.pending = nil
-	for !completed {
-		line, err := connection.reader.ReadBytes('\n')
-		if raw := bytes.TrimSpace(line); len(raw) > 0 {
-			handle(raw)
-		}
-		if err != nil {
-			if !completed {
-				active.failProtocol("codex app-server exited before the active operation completed")
-			}
-			return
-		}
-	}
-	_ = active.stdin.Close()
-	_, _ = io.Copy(io.Discard, connection.reader)
-}
-
-func appServerTerminalState(raw []byte, terminal appServerTerminal, threadID string) (bool, string) {
-	var envelope appServerEnvelope
-	if json.Unmarshal(raw, &envelope) != nil || envelope.Method != string(terminal) {
-		return false, ""
-	}
-	var params map[string]any
-	if json.Unmarshal(envelope.Params, &params) != nil || stringValue(params, "threadId", "thread_id") != threadID {
-		return false, ""
-	}
-	if terminal != appServerTurnTerminal {
-		return true, ""
-	}
-	turn := mapValue(params["turn"])
-	status := strings.TrimSpace(stringValue(turn, "status"))
-	if status == "completed" {
-		return true, ""
-	}
-	message := strings.TrimSpace(stringValue(mapValue(turn["error"]), "message"))
-	if message == "" {
-		message = "codex turn " + status
-	}
-	return true, message
-}
-
-func appServerPlanUpdate(raw []byte) (process.CodexEvent, bool) {
-	var envelope appServerEnvelope
-	if json.Unmarshal(raw, &envelope) != nil || envelope.Method == "" {
-		return process.CodexEvent{}, false
-	}
-	var params map[string]any
-	if json.Unmarshal(envelope.Params, &params) != nil {
-		return process.CodexEvent{}, false
-	}
-	update, correlationID, ok := planUpdateFromEvent(strings.ReplaceAll(envelope.Method, "/", "."), params)
-	if !ok {
-		return process.CodexEvent{}, false
-	}
-	update.EventID = stablePlanUpdateEventID(update)
-	return process.CodexEvent{
-		Type: process.CodexEventPlan, Phase: process.CodexPhaseStandalone,
-		Content: update, CorrelationID: correlationID, EventID: update.EventID,
-	}, true
-}
+func nowUTC() time.Time { return time.Now().UTC() }

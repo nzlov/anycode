@@ -36,8 +36,8 @@ type PromptAppend func(*sql.Selector)
 // PushSubscription is the predicate function for pushsubscription builders.
 type PushSubscription func(*sql.Selector)
 
-// QuestionBatch is the predicate function for questionbatch builders.
-type QuestionBatch func(*sql.Selector)
+// QuestionRequest is the predicate function for questionrequest builders.
+type QuestionRequest func(*sql.Selector)
 
 // QuickCommand is the predicate function for quickcommand builders.
 type QuickCommand func(*sql.Selector)

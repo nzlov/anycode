@@ -22,8 +22,8 @@ type Query {
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
-  questionBatch(id: ID!): QuestionBatch!
-  pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
+  questionRequest(id: ID!): QuestionRequest!
+  pendingQuestionRequests(sessionId: ID!): [QuestionRequest!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
 }
@@ -77,7 +77,7 @@ type Mutation {
   saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): WorkflowDefinition!
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
-  submitQuestionBatch(input: SubmitQuestionBatchInput!): QuestionBatch!
+  submitQuestionRequest(input: SubmitQuestionRequestInput!): QuestionRequest!
 }
 
 type Subscription {
@@ -674,7 +674,7 @@ type WorkflowRun {
   context: JSON!
 }
 
-type QuestionBatch {
+type QuestionRequest {
   id: ID!
   sessionId: ID!
   status: String!
@@ -683,7 +683,7 @@ type QuestionBatch {
 
 type Question {
   id: ID!
-  batchId: ID!
+  requestId: ID!
   title: String!
   body: String!
   type: String!
@@ -746,6 +746,11 @@ input CreateSessionInput {
   baseBranch: String
   config: SessionConfigInput
   stagedAttachmentIds: [ID!]
+  mentions: [PromptMentionInput!]
+}
+
+input PromptMentionInput {
+  path: String!
 }
 
 input SessionConfigInput {
@@ -775,6 +780,7 @@ input AppendPromptInput {
   body: String!
   stagedAttachmentIds: [ID!]
   artifactIds: [ID!]
+  mentions: [PromptMentionInput!]
 }
 
 input UpdatePromptAppendInput {
@@ -885,8 +891,8 @@ input SubmitWorkflowApprovalInput {
   comment: String
 }
 
-input SubmitQuestionBatchInput {
-  batchId: ID!
+input SubmitQuestionRequestInput {
+  requestId: ID!
   answers: [QuestionAnswerInput!]!
 }
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -34,12 +33,8 @@ type SessionRepository interface {
 	Find(ctx context.Context, id sessiondomain.ID) (sessiondomain.Session, error)
 }
 
-type CodexTranscriptSource interface {
-	SessionEventPage(ctx context.Context, input processdomain.CodexTranscriptPageInput) (processdomain.CodexTranscriptPage, error)
-}
-
-type CodexTranscriptIndex interface {
-	TranscriptSources(ctx context.Context, sessionID processdomain.SessionID) ([]processdomain.CodexTranscriptSource, error)
+type CodexHistory interface {
+	HistoryPage(ctx context.Context, input processdomain.CodexHistoryPageInput) (processdomain.CodexHistoryPage, error)
 }
 
 type LiveEventSource interface {
@@ -52,11 +47,10 @@ const (
 )
 
 type Service struct {
-	live       LiveEventSource
-	sessions   SessionRepository
-	transcript CodexTranscriptSource
-	index      CodexTranscriptIndex
-	history    eventdomain.Store
+	live     LiveEventSource
+	sessions SessionRepository
+	codex    CodexHistory
+	history  eventdomain.Store
 }
 
 type Option func(*Service)
@@ -67,8 +61,8 @@ func WithHistory(history eventdomain.Store) Option {
 	}
 }
 
-func New(live LiveEventSource, sessions SessionRepository, transcript CodexTranscriptSource, index CodexTranscriptIndex, options ...Option) *Service {
-	service := &Service{live: live, sessions: sessions, transcript: transcript, index: index}
+func New(live LiveEventSource, sessions SessionRepository, codex CodexHistory, options ...Option) *Service {
+	service := &Service{live: live, sessions: sessions, codex: codex}
 	for _, option := range options {
 		option(service)
 	}
@@ -87,17 +81,16 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 	if err != nil {
 		return Page{}, fmt.Errorf("find session for timeline: %w", err)
 	}
-	sources, err := s.codexTranscriptSources(ctx, current)
-	if err != nil {
-		return Page{}, fmt.Errorf("list session transcript sources: %w", err)
-	}
-	if len(sources) == 0 || s.transcript == nil {
+	if strings.TrimSpace(current.CodexSessionID) == "" || s.codex == nil {
 		return s.listStoredSessionEvents(ctx, current, input, limit)
 	}
-	events, nextCursor, err := s.listTranscriptPage(ctx, sources, input.BeforeCursor, input.MessageRole, limit)
+	page, err := s.codex.HistoryPage(ctx, processdomain.CodexHistoryPageInput{
+		ThreadID: current.CodexSessionID, Cursor: input.BeforeCursor, Limit: limit,
+	})
 	if err != nil {
-		return Page{}, err
+		return Page{}, fmt.Errorf("list codex thread history: %w", err)
 	}
+	events := historyPageEvents(page.Events, input.MessageRole)
 	if input.BeforeCursor == "" {
 		statuses, statusErr := s.statusHistoryEvents(ctx, current)
 		if statusErr != nil {
@@ -112,7 +105,7 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 		Page:       1,
 		PageSize:   limit,
 		Total:      len(events),
-		NextCursor: nextCursor,
+		NextCursor: page.NextCursor,
 		Usage:      tokenUsageFromSession(current.Usage),
 	}, nil
 }
@@ -134,48 +127,13 @@ func (s *Service) listStoredSessionEvents(ctx context.Context, current sessiondo
 	}, nil
 }
 
-func (s *Service) listTranscriptPage(ctx context.Context, sources []processdomain.CodexTranscriptSource, cursor string, messageRole string, limit int) ([]DTO, string, error) {
-	sourceIndex, beforeOffset, err := decodeTranscriptCursor(cursor, len(sources))
-	if err != nil {
-		return nil, "", err
-	}
-	collected := []DTO(nil)
-	nextCursor := ""
-	for sourceIndex >= 0 && len(collected) < limit {
-		page, err := s.transcript.SessionEventPage(ctx, processdomain.CodexTranscriptPageInput{
-			Source: sources[sourceIndex], BeforeOffset: beforeOffset, Limit: limit,
-		})
-		if err != nil {
-			return nil, "", fmt.Errorf("read session transcript page: %w", err)
-		}
-		pageEvents := transcriptPageEvents(page.Events, sourceIndex+1, messageRole)
-		collected = append(pageEvents, collected...)
-		if page.HasMore {
-			if page.StartOffset <= 0 || (beforeOffset > 0 && page.StartOffset >= beforeOffset) {
-				return nil, "", errors.New("read session transcript page: cursor did not advance")
-			}
-			beforeOffset = page.StartOffset
-			nextCursor = encodeTranscriptCursor(sourceIndex, beforeOffset)
-			continue
-		}
-		sourceIndex--
-		beforeOffset = 0
-		if sourceIndex >= 0 {
-			nextCursor = encodeTranscriptCursor(sourceIndex, 0)
-		} else {
-			nextCursor = ""
-		}
-	}
-	return collected, nextCursor, nil
-}
-
-func transcriptPageEvents(events []processdomain.CodexEvent, sourceGroup int, messageRole string) []DTO {
+func historyPageEvents(events []processdomain.CodexEvent, messageRole string) []DTO {
 	result := make([]DTO, 0, len(events))
 	for _, event := range events {
 		if _, ok := event.Content.(processdomain.CodexUsageContent); ok {
 			continue
 		}
-		item, ok := fromCodexEvent(event, sourceGroup)
+		item, ok := fromCodexEvent(event)
 		if !ok {
 			continue
 		}
@@ -188,32 +146,6 @@ func transcriptPageEvents(events []processdomain.CodexEvent, sourceGroup int, me
 		result = append(result, item)
 	}
 	return result
-}
-
-func encodeTranscriptCursor(sourceIndex int, offset int64) string {
-	return fmt.Sprintf("%d:%d", sourceIndex, offset)
-}
-
-func decodeTranscriptCursor(cursor string, sourceCount int) (int, int64, error) {
-	if sourceCount < 1 {
-		return -1, 0, nil
-	}
-	if strings.TrimSpace(cursor) == "" {
-		return sourceCount - 1, 0, nil
-	}
-	parts := strings.Split(cursor, ":")
-	if len(parts) != 2 {
-		return 0, 0, errors.New("invalid transcript cursor")
-	}
-	sourceIndex, err := strconv.Atoi(parts[0])
-	if err != nil || sourceIndex < 0 || sourceIndex >= sourceCount {
-		return 0, 0, errors.New("invalid transcript cursor source")
-	}
-	offset, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil || offset < 0 {
-		return 0, 0, errors.New("invalid transcript cursor offset")
-	}
-	return sourceIndex, offset, nil
 }
 
 func tokenUsageFromSession(usage sessiondomain.TokenUsage) *TokenUsageDTO {
@@ -240,11 +172,6 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 	if input.SessionID == "" {
 		return nil, errors.New("session id is required")
 	}
-	eventSessionID := eventdomain.SessionID(input.SessionID)
-	sourceGroups, err := s.codexSourceGroups(ctx, eventdomain.Scope{SessionID: &eventSessionID})
-	if err != nil {
-		return nil, err
-	}
 	out := make(chan DTO)
 	liveCtx, cancelLive := context.WithCancel(ctx)
 	live, err := s.live.LiveCodexEvents(liveCtx, processdomain.SessionID(input.SessionID))
@@ -265,12 +192,7 @@ func (s *Service) SessionEvents(ctx context.Context, input SessionEventsInput) (
 				if _, ok := codexEvent.Content.(processdomain.CodexUsageContent); ok {
 					continue
 				}
-				sourceGroup := sourceGroups[codexEvent.CodexSessionID]
-				if sourceGroup == 0 && codexEvent.CodexSessionID != "" {
-					sourceGroup = len(sourceGroups) + 1
-					sourceGroups[codexEvent.CodexSessionID] = sourceGroup
-				}
-				item, ok := fromCodexEvent(codexEvent, sourceGroup)
+				item, ok := fromCodexEvent(codexEvent)
 				if !ok {
 					continue
 				}
@@ -304,7 +226,7 @@ func (s *Service) statusHistoryEvents(ctx context.Context, current sessiondomain
 		}
 		result = append(result, DTO{
 			ID:         item.ID,
-			OrderKey:   timelineOrderKey(item.CreatedAt, 0, 0, 0, string(item.ID)),
+			OrderKey:   timelineOrderKey(item.CreatedAt, 0, string(item.ID)),
 			Phase:      processdomain.CodexPhaseStandalone,
 			Content:    content,
 			OccurredAt: item.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -312,32 +234,6 @@ func (s *Service) statusHistoryEvents(ctx context.Context, current sessiondomain
 		})
 	}
 	return result, nil
-}
-
-func (s *Service) codexTranscriptSources(ctx context.Context, current sessiondomain.Session) ([]processdomain.CodexTranscriptSource, error) {
-	if s.index == nil {
-		return nil, nil
-	}
-	return s.index.TranscriptSources(ctx, processdomain.SessionID(current.ID))
-}
-
-func (s *Service) codexSourceGroups(ctx context.Context, scope eventdomain.Scope) (map[string]int, error) {
-	groups := map[string]int{}
-	if s.sessions == nil || scope.SessionID == nil {
-		return groups, nil
-	}
-	current, err := s.sessions.Find(ctx, sessiondomain.ID(*scope.SessionID))
-	if err != nil {
-		return nil, err
-	}
-	sources, err := s.codexTranscriptSources(ctx, current)
-	if err != nil {
-		return nil, err
-	}
-	for index, source := range sources {
-		groups[source.CodexSessionID] = index + 1
-	}
-	return groups, nil
 }
 
 func pageEventsBefore(events []DTO, before eventdomain.ID, limit int) ([]DTO, int, bool) {
@@ -371,7 +267,7 @@ func normalizeLimit(limit int) int {
 	return limit
 }
 
-func fromCodexEvent(event processdomain.CodexEvent, sourceGroup int) (DTO, bool) {
+func fromCodexEvent(event processdomain.CodexEvent) (DTO, bool) {
 	if !visibleCodexTimelineEvent(event) {
 		return DTO{}, false
 	}
@@ -382,7 +278,7 @@ func fromCodexEvent(event processdomain.CodexEvent, sourceGroup int) (DTO, bool)
 	return DTO{
 		ID:            eventdomain.ID(canonicalID),
 		Type:          event.Type,
-		OrderKey:      timelineOrderKey(event.CreatedAt, sourceGroup, event.SourceOffset, event.SourceIndex, canonicalID),
+		OrderKey:      timelineOrderKey(event.CreatedAt, event.Sequence, canonicalID),
 		CorrelationID: canonicalCorrelationID(event.CodexSessionID, event.CorrelationID),
 		Phase:         normalizedPhase(event.Phase),
 		Content:       event.Content,
@@ -395,7 +291,7 @@ func visibleCodexTimelineEvent(event processdomain.CodexEvent) bool {
 		return false
 	}
 	switch event.Type {
-	case processdomain.CodexEventPlan, processdomain.CodexEventTranscriptBound, processdomain.CodexEventProcessExit:
+	case processdomain.CodexEventPlan, processdomain.CodexEventProcessExit:
 		return false
 	default:
 		return true
@@ -465,7 +361,7 @@ func routineGroup(item DTO) (eventdomain.ID, string, string, bool) {
 
 func isLifecycleEvent(code string) bool {
 	switch code {
-	case "session.queued", "session.starting", "process.transcript_bound", "session.running", "session.stopping", "session.stopped", "process.exited":
+	case "session.queued", "session.starting", "session.running", "session.stopping", "session.stopped", "process.exited":
 		return true
 	default:
 		return false

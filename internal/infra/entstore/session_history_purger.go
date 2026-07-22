@@ -13,7 +13,7 @@ import (
 	entnotificationdelivery "github.com/nzlov/anycode/internal/infra/entstore/ent/notificationdelivery"
 	entprocessrun "github.com/nzlov/anycode/internal/infra/entstore/ent/processrun"
 	entpromptappend "github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
-	entquestionbatch "github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	entquestionrequest "github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 )
 
@@ -56,8 +56,8 @@ func (s *Store) PurgeSessions(ctx context.Context, ids []session.ID) error {
 		}
 	}
 	if err == nil {
-		if _, deleteErr := client.QuestionBatch.Delete().Where(entquestionbatch.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
-			err = fmt.Errorf("delete question batches: %w", deleteErr)
+		if _, deleteErr := client.QuestionRequest.Delete().Where(entquestionrequest.SessionIDIn(stringIDs...)).Exec(ctx); deleteErr != nil {
+			err = fmt.Errorf("delete question requests: %w", deleteErr)
 		}
 	}
 	if err == nil {

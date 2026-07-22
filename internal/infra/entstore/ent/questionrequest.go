@@ -10,11 +10,11 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 )
 
-// QuestionBatch is the model entity for the QuestionBatch schema.
-type QuestionBatch struct {
+// QuestionRequest is the model entity for the QuestionRequest schema.
+type QuestionRequest struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
@@ -24,10 +24,6 @@ type QuestionBatch struct {
 	OriginProcessRunID string `json:"origin_process_run_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
-	// DeliveryStatus holds the value of the "delivery_status" field.
-	DeliveryStatus string `json:"delivery_status,omitempty"`
-	// DeliveryProcessRunID holds the value of the "delivery_process_run_id" field.
-	DeliveryProcessRunID string `json:"delivery_process_run_id,omitempty"`
 	// Questions holds the value of the "questions" field.
 	Questions []map[string]interface{} `json:"questions,omitempty"`
 	// Answers holds the value of the "answers" field.
@@ -37,22 +33,20 @@ type QuestionBatch struct {
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// AnsweredAt holds the value of the "answered_at" field.
-	AnsweredAt *time.Time `json:"answered_at,omitempty"`
-	// DeliveredAt holds the value of the "delivered_at" field.
-	DeliveredAt  *time.Time `json:"delivered_at,omitempty"`
+	AnsweredAt   *time.Time `json:"answered_at,omitempty"`
 	selectValues sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*QuestionBatch) scanValues(columns []string) ([]any, error) {
+func (*QuestionRequest) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case questionbatch.FieldQuestions, questionbatch.FieldAnswers:
+		case questionrequest.FieldQuestions, questionrequest.FieldAnswers:
 			values[i] = new([]byte)
-		case questionbatch.FieldID, questionbatch.FieldSessionID, questionbatch.FieldOriginProcessRunID, questionbatch.FieldStatus, questionbatch.FieldDeliveryStatus, questionbatch.FieldDeliveryProcessRunID, questionbatch.FieldCancelReason:
+		case questionrequest.FieldID, questionrequest.FieldSessionID, questionrequest.FieldOriginProcessRunID, questionrequest.FieldStatus, questionrequest.FieldCancelReason:
 			values[i] = new(sql.NullString)
-		case questionbatch.FieldCreatedAt, questionbatch.FieldAnsweredAt, questionbatch.FieldDeliveredAt:
+		case questionrequest.FieldCreatedAt, questionrequest.FieldAnsweredAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -62,50 +56,38 @@ func (*QuestionBatch) scanValues(columns []string) ([]any, error) {
 }
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
-// to the QuestionBatch fields.
-func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
+// to the QuestionRequest fields.
+func (_m *QuestionRequest) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
 	for i := range columns {
 		switch columns[i] {
-		case questionbatch.FieldID:
+		case questionrequest.FieldID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
 				_m.ID = value.String
 			}
-		case questionbatch.FieldSessionID:
+		case questionrequest.FieldSessionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field session_id", values[i])
 			} else if value.Valid {
 				_m.SessionID = value.String
 			}
-		case questionbatch.FieldOriginProcessRunID:
+		case questionrequest.FieldOriginProcessRunID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field origin_process_run_id", values[i])
 			} else if value.Valid {
 				_m.OriginProcessRunID = value.String
 			}
-		case questionbatch.FieldStatus:
+		case questionrequest.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
 			}
-		case questionbatch.FieldDeliveryStatus:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field delivery_status", values[i])
-			} else if value.Valid {
-				_m.DeliveryStatus = value.String
-			}
-		case questionbatch.FieldDeliveryProcessRunID:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field delivery_process_run_id", values[i])
-			} else if value.Valid {
-				_m.DeliveryProcessRunID = value.String
-			}
-		case questionbatch.FieldQuestions:
+		case questionrequest.FieldQuestions:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field questions", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -113,7 +95,7 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field questions: %w", err)
 				}
 			}
-		case questionbatch.FieldAnswers:
+		case questionrequest.FieldAnswers:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field answers", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -121,31 +103,24 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field answers: %w", err)
 				}
 			}
-		case questionbatch.FieldCancelReason:
+		case questionrequest.FieldCancelReason:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field cancel_reason", values[i])
 			} else if value.Valid {
 				_m.CancelReason = value.String
 			}
-		case questionbatch.FieldCreatedAt:
+		case questionrequest.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
 				_m.CreatedAt = value.Time
 			}
-		case questionbatch.FieldAnsweredAt:
+		case questionrequest.FieldAnsweredAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field answered_at", values[i])
 			} else if value.Valid {
 				_m.AnsweredAt = new(time.Time)
 				*_m.AnsweredAt = value.Time
-			}
-		case questionbatch.FieldDeliveredAt:
-			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field delivered_at", values[i])
-			} else if value.Valid {
-				_m.DeliveredAt = new(time.Time)
-				*_m.DeliveredAt = value.Time
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -154,34 +129,34 @@ func (_m *QuestionBatch) assignValues(columns []string, values []any) error {
 	return nil
 }
 
-// Value returns the ent.Value that was dynamically selected and assigned to the QuestionBatch.
+// Value returns the ent.Value that was dynamically selected and assigned to the QuestionRequest.
 // This includes values selected through modifiers, order, etc.
-func (_m *QuestionBatch) Value(name string) (ent.Value, error) {
+func (_m *QuestionRequest) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// Update returns a builder for updating this QuestionBatch.
-// Note that you need to call QuestionBatch.Unwrap() before calling this method if this QuestionBatch
+// Update returns a builder for updating this QuestionRequest.
+// Note that you need to call QuestionRequest.Unwrap() before calling this method if this QuestionRequest
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (_m *QuestionBatch) Update() *QuestionBatchUpdateOne {
-	return NewQuestionBatchClient(_m.config).UpdateOne(_m)
+func (_m *QuestionRequest) Update() *QuestionRequestUpdateOne {
+	return NewQuestionRequestClient(_m.config).UpdateOne(_m)
 }
 
-// Unwrap unwraps the QuestionBatch entity that was returned from a transaction after it was closed,
+// Unwrap unwraps the QuestionRequest entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (_m *QuestionBatch) Unwrap() *QuestionBatch {
+func (_m *QuestionRequest) Unwrap() *QuestionRequest {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: QuestionBatch is not a transactional entity")
+		panic("ent: QuestionRequest is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m
 }
 
 // String implements the fmt.Stringer.
-func (_m *QuestionBatch) String() string {
+func (_m *QuestionRequest) String() string {
 	var builder strings.Builder
-	builder.WriteString("QuestionBatch(")
+	builder.WriteString("QuestionRequest(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("session_id=")
 	builder.WriteString(_m.SessionID)
@@ -191,12 +166,6 @@ func (_m *QuestionBatch) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
-	builder.WriteString(", ")
-	builder.WriteString("delivery_status=")
-	builder.WriteString(_m.DeliveryStatus)
-	builder.WriteString(", ")
-	builder.WriteString("delivery_process_run_id=")
-	builder.WriteString(_m.DeliveryProcessRunID)
 	builder.WriteString(", ")
 	builder.WriteString("questions=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Questions))
@@ -214,14 +183,9 @@ func (_m *QuestionBatch) String() string {
 		builder.WriteString("answered_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
-	builder.WriteString(", ")
-	if v := _m.DeliveredAt; v != nil {
-		builder.WriteString("delivered_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
 	builder.WriteByte(')')
 	return builder.String()
 }
 
-// QuestionBatches is a parsable slice of QuestionBatch.
-type QuestionBatches []*QuestionBatch
+// QuestionRequests is a parsable slice of QuestionRequest.
+type QuestionRequests []*QuestionRequest

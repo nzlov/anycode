@@ -6,6 +6,7 @@ import (
 
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
@@ -790,12 +791,16 @@ func mapSessionWorkflowRun(dto sessionapp.WorkflowRunDTO) *model.WorkflowRun {
 	}
 }
 
-func mapQuestionBatch(dto questionapp.BatchDTO) *model.QuestionBatch {
+func mapWebPushConfig(dto notificationapp.ConfigDTO) *model.WebPushConfig {
+	return &model.WebPushConfig{Enabled: dto.Enabled, PublicKey: dto.PublicKey, ProxyURL: dto.ProxyURL}
+}
+
+func mapQuestionRequest(dto questionapp.RequestDTO) *model.QuestionRequest {
 	questions := make([]*model.Question, 0, len(dto.Questions))
 	for _, question := range dto.Questions {
 		questions = append(questions, mapQuestion(question))
 	}
-	return &model.QuestionBatch{
+	return &model.QuestionRequest{
 		ID:        string(dto.ID),
 		SessionID: string(dto.SessionID),
 		Status:    string(dto.Status),
@@ -839,7 +844,7 @@ func mapQuestion(question questiondomain.Question) *model.Question {
 	}
 	return &model.Question{
 		ID:               string(question.ID),
-		BatchID:          string(question.BatchID),
+		RequestID:        string(question.RequestID),
 		Title:            question.Title,
 		Body:             question.Body,
 		Type:             question.Type,

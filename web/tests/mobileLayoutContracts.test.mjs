@@ -14,7 +14,7 @@ const composerSource = readSource('../src/components/PromptComposer.vue');
 const configControlsSource = readSource('../src/components/PromptConfigControls.vue');
 const paginationSource = readSource('../src/components/AppPagination.vue');
 const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
-const answerUserSource = readSource('../src/components/AnswerUserDialog.vue');
+const questionsSource = readSource('../src/components/QuestionsDialog.vue');
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
 const detailSource = readSource('../src/components/SessionDetailView.vue');
@@ -60,15 +60,15 @@ test('new session mobile entry uses a page and keeps one scrolling body', () => 
   );
 });
 
-test('answer user mobile entry opens session detail without maximizing the desktop dialog', () => {
-  assert.doesNotMatch(answerUserSource, /:maximized=/);
-  assert.match(indexSource, /openAnswerDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-detail'/);
-  assert.match(answerUserSource, /class="answer-dialog app-content-dialog"/);
+test('questions mobile entry opens session detail without maximizing the desktop dialog', () => {
+  assert.doesNotMatch(questionsSource, /:maximized=/);
+  assert.match(indexSource, /openQuestionsDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-detail'/);
+  assert.match(questionsSource, /class="questions-dialog app-content-dialog"/);
   assert.match(
     smallStyles,
     /\.app-content-dialog\s*{[^}]*height:\s*auto\s*!important[^}]*max-height:\s*calc\(100dvh - 24px\)\s*!important/s,
   );
-  assert.doesNotMatch(answerUserSource, /@media \(max-width:\s*699px\)/);
+  assert.doesNotMatch(questionsSource, /@media \(max-width:\s*699px\)/);
 });
 
 test('headless approval fixture includes the required workflow node position', () => {

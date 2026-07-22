@@ -6,9 +6,9 @@ import (
 )
 
 func TestDefaultPolicyAllowsCustomAnswerForEveryQuestion(t *testing.T) {
-	batch := Batch{
-		ID:     "batch-1",
-		Status: BatchPending,
+	request := Request{
+		ID:     "request-1",
+		Status: RequestPending,
 		Questions: []Question{
 			{ID: "q1", Options: []Option{{ID: "preset", Label: "Preset"}}},
 			{ID: "q2"},
@@ -19,7 +19,7 @@ func TestDefaultPolicyAllowsCustomAnswerForEveryQuestion(t *testing.T) {
 		{QuestionID: "q2", CustomAnswer: "custom without preset"},
 	}
 
-	if err := (DefaultPolicy{}).CanSubmit(batch, answers); err != nil {
+	if err := (DefaultPolicy{}).CanSubmit(request, answers); err != nil {
 		t.Fatalf("CanSubmit() error = %v", err)
 	}
 }
@@ -63,8 +63,8 @@ func TestDefaultPolicyRejectsInvalidAnswers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			batch := Batch{ID: "batch-1", Status: BatchPending, Questions: tt.questions}
-			err := (DefaultPolicy{}).CanSubmit(batch, tt.answers)
+			request := Request{ID: "request-1", Status: RequestPending, Questions: tt.questions}
+			err := (DefaultPolicy{}).CanSubmit(request, tt.answers)
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
 				t.Fatalf("CanSubmit() error = %v, want substring %q", err, tt.wantError)
 			}

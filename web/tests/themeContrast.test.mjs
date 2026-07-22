@@ -93,7 +93,7 @@ test('scenario manifest fixes the approved 8 route, 14 dialog, 6 menu and 3 view
   assert.deepEqual(darkThemeSurfaceStates, {
     'route-diff': ['all', 'single'],
     'dialog-global-settings': ['projects', 'quick-commands'],
-    'dialog-answer-user': ['questions', 'diff'],
+    'dialog-questions': ['questions', 'diff'],
     'dialog-forward-approval': ['result', 'diff'],
   });
   assert.deepEqual(darkThemeSurfaceViewports, { 'menu-prompt-config': ['tablet', 'mobile'] });

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const panelSource = readFileSync(
-  new URL('../src/components/AnswerUserPanel.vue', import.meta.url),
+  new URL('../src/components/QuestionsPanel.vue', import.meta.url),
   'utf8',
 );
 

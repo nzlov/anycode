@@ -174,7 +174,7 @@ type ComplexityRoot struct {
 		StageAttachment             func(childComplexity int, file graphql.Upload) int
 		StartSession                func(childComplexity int, id string, force *bool) int
 		StopSession                 func(childComplexity int, id string) int
-		SubmitQuestionBatch         func(childComplexity int, input model.SubmitQuestionBatchInput) int
+		SubmitQuestionRequest       func(childComplexity int, input model.SubmitQuestionRequestInput) int
 		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
 		UnregisterPushSubscription  func(childComplexity int, id string) int
 		UpdateAppearanceSettings    func(childComplexity int, input model.UpdateAppearanceSettingsInput) int
@@ -237,11 +237,11 @@ type ComplexityRoot struct {
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions       func(childComplexity int) int
 		CodexSlashCommands      func(childComplexity int) int
-		PendingQuestionBatches  func(childComplexity int, sessionID string) int
+		PendingQuestionRequests func(childComplexity int, sessionID string) int
 		ProjectGitState         func(childComplexity int, projectID string, refresh bool) int
 		Projects                func(childComplexity int) int
 		PromptFileMatches       func(childComplexity int, input model.PromptFileMatchInput) int
-		QuestionBatch           func(childComplexity int, id string) int
+		QuestionRequest         func(childComplexity int, id string) int
 		QuickCommands           func(childComplexity int, input *model.ListQuickCommandsInput) int
 		ResolveSessionArtifacts func(childComplexity int, input model.ResolveSessionArtifactsInput) int
 		Session                 func(childComplexity int, id string) int
@@ -257,22 +257,15 @@ type ComplexityRoot struct {
 
 	Question struct {
 		Answer           func(childComplexity int) int
-		BatchID          func(childComplexity int) int
 		Body             func(childComplexity int) int
 		CustomAnswer     func(childComplexity int) int
 		ID               func(childComplexity int) int
 		Options          func(childComplexity int) int
+		RequestID        func(childComplexity int) int
 		SelectedOptionID func(childComplexity int) int
 		Status           func(childComplexity int) int
 		Title            func(childComplexity int) int
 		Type             func(childComplexity int) int
-	}
-
-	QuestionBatch struct {
-		ID        func(childComplexity int) int
-		Questions func(childComplexity int) int
-		SessionID func(childComplexity int) int
-		Status    func(childComplexity int) int
 	}
 
 	QuestionOption struct {
@@ -280,6 +273,13 @@ type ComplexityRoot struct {
 		ID          func(childComplexity int) int
 		Label       func(childComplexity int) int
 		Payload     func(childComplexity int) int
+	}
+
+	QuestionRequest struct {
+		ID        func(childComplexity int) int
+		Questions func(childComplexity int) int
+		SessionID func(childComplexity int) int
+		Status    func(childComplexity int) int
 	}
 
 	QuickCommand struct {
@@ -690,7 +690,7 @@ type MutationResolver interface {
 	SaveWorkflowDefinition(ctx context.Context, input model.SaveWorkflowDefinitionInput) (*model.WorkflowDefinition, error)
 	ActivateWorkflowDefinition(ctx context.Context, id string) (bool, error)
 	SubmitWorkflowApproval(ctx context.Context, input model.SubmitWorkflowApprovalInput) (*model.WorkflowRun, error)
-	SubmitQuestionBatch(ctx context.Context, input model.SubmitQuestionBatchInput) (*model.QuestionBatch, error)
+	SubmitQuestionRequest(ctx context.Context, input model.SubmitQuestionRequestInput) (*model.QuestionRequest, error)
 }
 type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
@@ -710,8 +710,8 @@ type QueryResolver interface {
 	BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error)
 	SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error)
 	WorkflowDefinition(ctx context.Context, id string) (*model.WorkflowDefinition, error)
-	QuestionBatch(ctx context.Context, id string) (*model.QuestionBatch, error)
-	PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error)
+	QuestionRequest(ctx context.Context, id string) (*model.QuestionRequest, error)
+	PendingQuestionRequests(ctx context.Context, sessionID string) ([]*model.QuestionRequest, error)
 	SessionFiles(ctx context.Context, input model.ListSessionFilesInput) ([]*model.SessionFile, error)
 	ResolveSessionArtifacts(ctx context.Context, input model.ResolveSessionArtifactsInput) ([]*model.ResolvedSessionArtifact, error)
 }
@@ -1354,17 +1354,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.StopSession(childComplexity, args["id"].(string)), true
-	case "Mutation.submitQuestionBatch":
-		if e.ComplexityRoot.Mutation.SubmitQuestionBatch == nil {
+	case "Mutation.submitQuestionRequest":
+		if e.ComplexityRoot.Mutation.SubmitQuestionRequest == nil {
 			break
 		}
 
-		args, err := ec.field_Mutation_submitQuestionBatch_args(ctx, rawArgs)
+		args, err := ec.field_Mutation_submitQuestionRequest_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.SubmitQuestionBatch(childComplexity, args["input"].(model.SubmitQuestionBatchInput)), true
+		return e.ComplexityRoot.Mutation.SubmitQuestionRequest(childComplexity, args["input"].(model.SubmitQuestionRequestInput)), true
 	case "Mutation.submitWorkflowApproval":
 		if e.ComplexityRoot.Mutation.SubmitWorkflowApproval == nil {
 			break
@@ -1664,17 +1664,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Query.CodexSlashCommands(childComplexity), true
 
-	case "Query.pendingQuestionBatches":
-		if e.ComplexityRoot.Query.PendingQuestionBatches == nil {
+	case "Query.pendingQuestionRequests":
+		if e.ComplexityRoot.Query.PendingQuestionRequests == nil {
 			break
 		}
 
-		args, err := ec.field_Query_pendingQuestionBatches_args(ctx, rawArgs)
+		args, err := ec.field_Query_pendingQuestionRequests_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.PendingQuestionBatches(childComplexity, args["sessionId"].(string)), true
+		return e.ComplexityRoot.Query.PendingQuestionRequests(childComplexity, args["sessionId"].(string)), true
 	case "Query.projectGitState":
 		if e.ComplexityRoot.Query.ProjectGitState == nil {
 			break
@@ -1703,17 +1703,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.PromptFileMatches(childComplexity, args["input"].(model.PromptFileMatchInput)), true
-	case "Query.questionBatch":
-		if e.ComplexityRoot.Query.QuestionBatch == nil {
+	case "Query.questionRequest":
+		if e.ComplexityRoot.Query.QuestionRequest == nil {
 			break
 		}
 
-		args, err := ec.field_Query_questionBatch_args(ctx, rawArgs)
+		args, err := ec.field_Query_questionRequest_args(ctx, rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.QuestionBatch(childComplexity, args["id"].(string)), true
+		return e.ComplexityRoot.Query.QuestionRequest(childComplexity, args["id"].(string)), true
 	case "Query.quickCommands":
 		if e.ComplexityRoot.Query.QuickCommands == nil {
 			break
@@ -1837,12 +1837,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Question.Answer(childComplexity), true
-	case "Question.batchId":
-		if e.ComplexityRoot.Question.BatchID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Question.BatchID(childComplexity), true
 	case "Question.body":
 		if e.ComplexityRoot.Question.Body == nil {
 			break
@@ -1867,6 +1861,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Question.Options(childComplexity), true
+	case "Question.requestId":
+		if e.ComplexityRoot.Question.RequestID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Question.RequestID(childComplexity), true
 	case "Question.selectedOptionId":
 		if e.ComplexityRoot.Question.SelectedOptionID == nil {
 			break
@@ -1892,31 +1892,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.Question.Type(childComplexity), true
 
-	case "QuestionBatch.id":
-		if e.ComplexityRoot.QuestionBatch.ID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.QuestionBatch.ID(childComplexity), true
-	case "QuestionBatch.questions":
-		if e.ComplexityRoot.QuestionBatch.Questions == nil {
-			break
-		}
-
-		return e.ComplexityRoot.QuestionBatch.Questions(childComplexity), true
-	case "QuestionBatch.sessionId":
-		if e.ComplexityRoot.QuestionBatch.SessionID == nil {
-			break
-		}
-
-		return e.ComplexityRoot.QuestionBatch.SessionID(childComplexity), true
-	case "QuestionBatch.status":
-		if e.ComplexityRoot.QuestionBatch.Status == nil {
-			break
-		}
-
-		return e.ComplexityRoot.QuestionBatch.Status(childComplexity), true
-
 	case "QuestionOption.description":
 		if e.ComplexityRoot.QuestionOption.Description == nil {
 			break
@@ -1941,6 +1916,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QuestionOption.Payload(childComplexity), true
+
+	case "QuestionRequest.id":
+		if e.ComplexityRoot.QuestionRequest.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionRequest.ID(childComplexity), true
+	case "QuestionRequest.questions":
+		if e.ComplexityRoot.QuestionRequest.Questions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionRequest.Questions(childComplexity), true
+	case "QuestionRequest.sessionId":
+		if e.ComplexityRoot.QuestionRequest.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionRequest.SessionID(childComplexity), true
+	case "QuestionRequest.status":
+		if e.ComplexityRoot.QuestionRequest.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionRequest.Status(childComplexity), true
 
 	case "QuickCommand.content":
 		if e.ComplexityRoot.QuickCommand.Content == nil {
@@ -3467,6 +3467,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputListTranscriptEventsInput,
 		ec.unmarshalInputMergeConfigInput,
 		ec.unmarshalInputPromptFileMatchInput,
+		ec.unmarshalInputPromptMentionInput,
 		ec.unmarshalInputQuestionAnswerInput,
 		ec.unmarshalInputRegisterPushSubscriptionInput,
 		ec.unmarshalInputResolveSessionArtifactsInput,
@@ -3477,7 +3478,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSessionDiffInput,
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
-		ec.unmarshalInputSubmitQuestionBatchInput,
+		ec.unmarshalInputSubmitQuestionRequestInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateAppearanceSettingsInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
@@ -3605,8 +3606,8 @@ type Query {
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
   workflowDefinition(id: ID!): WorkflowDefinition
-  questionBatch(id: ID!): QuestionBatch!
-  pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
+  questionRequest(id: ID!): QuestionRequest!
+  pendingQuestionRequests(sessionId: ID!): [QuestionRequest!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
 }
@@ -3660,7 +3661,7 @@ type Mutation {
   saveWorkflowDefinition(input: SaveWorkflowDefinitionInput!): WorkflowDefinition!
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
-  submitQuestionBatch(input: SubmitQuestionBatchInput!): QuestionBatch!
+  submitQuestionRequest(input: SubmitQuestionRequestInput!): QuestionRequest!
 }
 
 type Subscription {
@@ -4257,7 +4258,7 @@ type WorkflowRun {
   context: JSON!
 }
 
-type QuestionBatch {
+type QuestionRequest {
   id: ID!
   sessionId: ID!
   status: String!
@@ -4266,7 +4267,7 @@ type QuestionBatch {
 
 type Question {
   id: ID!
-  batchId: ID!
+  requestId: ID!
   title: String!
   body: String!
   type: String!
@@ -4329,6 +4330,11 @@ input CreateSessionInput {
   baseBranch: String
   config: SessionConfigInput
   stagedAttachmentIds: [ID!]
+  mentions: [PromptMentionInput!]
+}
+
+input PromptMentionInput {
+  path: String!
 }
 
 input SessionConfigInput {
@@ -4358,6 +4364,7 @@ input AppendPromptInput {
   body: String!
   stagedAttachmentIds: [ID!]
   artifactIds: [ID!]
+  mentions: [PromptMentionInput!]
 }
 
 input UpdatePromptAppendInput {
@@ -4468,8 +4475,8 @@ input SubmitWorkflowApprovalInput {
   comment: String
 }
 
-input SubmitQuestionBatchInput {
-  batchId: ID!
+input SubmitQuestionRequestInput {
+  requestId: ID!
   answers: [QuestionAnswerInput!]!
 }
 
@@ -4744,10 +4751,10 @@ func (ec *executionContext) field_Mutation_stopSession_args(ctx context.Context,
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_submitQuestionBatch_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Mutation_submitQuestionRequest_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSubmitQuestionBatchInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSubmitQuestionBatchInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSubmitQuestionRequestInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSubmitQuestionRequestInput)
 	if err != nil {
 		return nil, err
 	}
@@ -4865,7 +4872,7 @@ func (ec *executionContext) field_Query_browseDirectory_args(ctx context.Context
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_pendingQuestionBatches_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Query_pendingQuestionRequests_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
@@ -4903,7 +4910,7 @@ func (ec *executionContext) field_Query_promptFileMatches_args(ctx context.Conte
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_questionBatch_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Query_questionRequest_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
@@ -8552,24 +8559,24 @@ func (ec *executionContext) fieldContext_Mutation_submitWorkflowApproval(ctx con
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_submitQuestionBatch(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_submitQuestionRequest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_submitQuestionBatch,
+		ec.fieldContext_Mutation_submitQuestionRequest,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().SubmitQuestionBatch(ctx, fc.Args["input"].(model.SubmitQuestionBatchInput))
+			return ec.Resolvers.Mutation().SubmitQuestionRequest(ctx, fc.Args["input"].(model.SubmitQuestionRequestInput))
 		},
 		nil,
-		ec.marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch,
+		ec.marshalNQuestionRequest2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequest,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_submitQuestionBatch(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_submitQuestionRequest(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -8578,15 +8585,15 @@ func (ec *executionContext) fieldContext_Mutation_submitQuestionBatch(ctx contex
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_QuestionBatch_id(ctx, field)
+				return ec.fieldContext_QuestionRequest_id(ctx, field)
 			case "sessionId":
-				return ec.fieldContext_QuestionBatch_sessionId(ctx, field)
+				return ec.fieldContext_QuestionRequest_sessionId(ctx, field)
 			case "status":
-				return ec.fieldContext_QuestionBatch_status(ctx, field)
+				return ec.fieldContext_QuestionRequest_status(ctx, field)
 			case "questions":
-				return ec.fieldContext_QuestionBatch_questions(ctx, field)
+				return ec.fieldContext_QuestionRequest_questions(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type QuestionBatch", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type QuestionRequest", field.Name)
 		},
 	}
 	defer func() {
@@ -8596,7 +8603,7 @@ func (ec *executionContext) fieldContext_Mutation_submitQuestionBatch(ctx contex
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_submitQuestionBatch_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_submitQuestionRequest_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10385,24 +10392,24 @@ func (ec *executionContext) fieldContext_Query_workflowDefinition(ctx context.Co
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_questionBatch(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_questionRequest(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_questionBatch,
+		ec.fieldContext_Query_questionRequest,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().QuestionBatch(ctx, fc.Args["id"].(string))
+			return ec.Resolvers.Query().QuestionRequest(ctx, fc.Args["id"].(string))
 		},
 		nil,
-		ec.marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch,
+		ec.marshalNQuestionRequest2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequest,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_questionBatch(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_questionRequest(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -10411,15 +10418,15 @@ func (ec *executionContext) fieldContext_Query_questionBatch(ctx context.Context
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_QuestionBatch_id(ctx, field)
+				return ec.fieldContext_QuestionRequest_id(ctx, field)
 			case "sessionId":
-				return ec.fieldContext_QuestionBatch_sessionId(ctx, field)
+				return ec.fieldContext_QuestionRequest_sessionId(ctx, field)
 			case "status":
-				return ec.fieldContext_QuestionBatch_status(ctx, field)
+				return ec.fieldContext_QuestionRequest_status(ctx, field)
 			case "questions":
-				return ec.fieldContext_QuestionBatch_questions(ctx, field)
+				return ec.fieldContext_QuestionRequest_questions(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type QuestionBatch", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type QuestionRequest", field.Name)
 		},
 	}
 	defer func() {
@@ -10429,31 +10436,31 @@ func (ec *executionContext) fieldContext_Query_questionBatch(ctx context.Context
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_questionBatch_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Query_questionRequest_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_pendingQuestionBatches(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_pendingQuestionRequests(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_pendingQuestionBatches,
+		ec.fieldContext_Query_pendingQuestionRequests,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().PendingQuestionBatches(ctx, fc.Args["sessionId"].(string))
+			return ec.Resolvers.Query().PendingQuestionRequests(ctx, fc.Args["sessionId"].(string))
 		},
 		nil,
-		ec.marshalNQuestionBatch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatchᚄ,
+		ec.marshalNQuestionRequest2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequestᚄ,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_pendingQuestionBatches(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_pendingQuestionRequests(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -10462,15 +10469,15 @@ func (ec *executionContext) fieldContext_Query_pendingQuestionBatches(ctx contex
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
-				return ec.fieldContext_QuestionBatch_id(ctx, field)
+				return ec.fieldContext_QuestionRequest_id(ctx, field)
 			case "sessionId":
-				return ec.fieldContext_QuestionBatch_sessionId(ctx, field)
+				return ec.fieldContext_QuestionRequest_sessionId(ctx, field)
 			case "status":
-				return ec.fieldContext_QuestionBatch_status(ctx, field)
+				return ec.fieldContext_QuestionRequest_status(ctx, field)
 			case "questions":
-				return ec.fieldContext_QuestionBatch_questions(ctx, field)
+				return ec.fieldContext_QuestionRequest_questions(ctx, field)
 			}
-			return nil, fmt.Errorf("no field named %q was found under type QuestionBatch", field.Name)
+			return nil, fmt.Errorf("no field named %q was found under type QuestionRequest", field.Name)
 		},
 	}
 	defer func() {
@@ -10480,7 +10487,7 @@ func (ec *executionContext) fieldContext_Query_pendingQuestionBatches(ctx contex
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_pendingQuestionBatches_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Query_pendingQuestionRequests_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -10740,14 +10747,14 @@ func (ec *executionContext) fieldContext_Question_id(_ context.Context, field gr
 	return fc, nil
 }
 
-func (ec *executionContext) _Question_batchId(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
+func (ec *executionContext) _Question_requestId(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Question_batchId,
+		ec.fieldContext_Question_requestId,
 		func(ctx context.Context) (any, error) {
-			return obj.BatchID, nil
+			return obj.RequestID, nil
 		},
 		nil,
 		ec.marshalNID2string,
@@ -10756,7 +10763,7 @@ func (ec *executionContext) _Question_batchId(ctx context.Context, field graphql
 	)
 }
 
-func (ec *executionContext) fieldContext_Question_batchId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Question_requestId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Question",
 		Field:      field,
@@ -11011,144 +11018,6 @@ func (ec *executionContext) fieldContext_Question_status(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _QuestionBatch_id(ctx context.Context, field graphql.CollectedField, obj *model.QuestionBatch) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QuestionBatch_id,
-		func(ctx context.Context) (any, error) {
-			return obj.ID, nil
-		},
-		nil,
-		ec.marshalNID2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QuestionBatch_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QuestionBatch",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QuestionBatch_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.QuestionBatch) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QuestionBatch_sessionId,
-		func(ctx context.Context) (any, error) {
-			return obj.SessionID, nil
-		},
-		nil,
-		ec.marshalNID2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QuestionBatch_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QuestionBatch",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type ID does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QuestionBatch_status(ctx context.Context, field graphql.CollectedField, obj *model.QuestionBatch) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QuestionBatch_status,
-		func(ctx context.Context) (any, error) {
-			return obj.Status, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QuestionBatch_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QuestionBatch",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _QuestionBatch_questions(ctx context.Context, field graphql.CollectedField, obj *model.QuestionBatch) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_QuestionBatch_questions,
-		func(ctx context.Context) (any, error) {
-			return obj.Questions, nil
-		},
-		nil,
-		ec.marshalNQuestion2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionᚄ,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_QuestionBatch_questions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "QuestionBatch",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_Question_id(ctx, field)
-			case "batchId":
-				return ec.fieldContext_Question_batchId(ctx, field)
-			case "title":
-				return ec.fieldContext_Question_title(ctx, field)
-			case "body":
-				return ec.fieldContext_Question_body(ctx, field)
-			case "type":
-				return ec.fieldContext_Question_type(ctx, field)
-			case "options":
-				return ec.fieldContext_Question_options(ctx, field)
-			case "selectedOptionId":
-				return ec.fieldContext_Question_selectedOptionId(ctx, field)
-			case "customAnswer":
-				return ec.fieldContext_Question_customAnswer(ctx, field)
-			case "answer":
-				return ec.fieldContext_Question_answer(ctx, field)
-			case "status":
-				return ec.fieldContext_Question_status(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Question", field.Name)
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _QuestionOption_id(ctx context.Context, field graphql.CollectedField, obj *model.QuestionOption) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11260,6 +11129,144 @@ func (ec *executionContext) fieldContext_QuestionOption_payload(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionRequest_id(ctx context.Context, field graphql.CollectedField, obj *model.QuestionRequest) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionRequest_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionRequest_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionRequest_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.QuestionRequest) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionRequest_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionRequest_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionRequest_status(ctx context.Context, field graphql.CollectedField, obj *model.QuestionRequest) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionRequest_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionRequest_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionRequest_questions(ctx context.Context, field graphql.CollectedField, obj *model.QuestionRequest) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionRequest_questions,
+		func(ctx context.Context) (any, error) {
+			return obj.Questions, nil
+		},
+		nil,
+		ec.marshalNQuestion2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionRequest_questions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionRequest",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Question_id(ctx, field)
+			case "requestId":
+				return ec.fieldContext_Question_requestId(ctx, field)
+			case "title":
+				return ec.fieldContext_Question_title(ctx, field)
+			case "body":
+				return ec.fieldContext_Question_body(ctx, field)
+			case "type":
+				return ec.fieldContext_Question_type(ctx, field)
+			case "options":
+				return ec.fieldContext_Question_options(ctx, field)
+			case "selectedOptionId":
+				return ec.fieldContext_Question_selectedOptionId(ctx, field)
+			case "customAnswer":
+				return ec.fieldContext_Question_customAnswer(ctx, field)
+			case "answer":
+				return ec.fieldContext_Question_answer(ctx, field)
+			case "status":
+				return ec.fieldContext_Question_status(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Question", field.Name)
 		},
 	}
 	return fc, nil
@@ -20482,7 +20489,7 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds"}
+	fieldsInOrder := [...]string{"sessionId", "body", "stagedAttachmentIds", "artifactIds", "mentions"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -20517,6 +20524,13 @@ func (ec *executionContext) unmarshalInputAppendPromptInput(ctx context.Context,
 				return it, err
 			}
 			it.ArtifactIds = data
+		case "mentions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mentions"))
+			data, err := ec.unmarshalOPromptMentionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mentions = data
 		}
 	}
 	return it, nil
@@ -20820,7 +20834,7 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "requirement", "mode", "priority", "baseBranch", "config", "stagedAttachmentIds"}
+	fieldsInOrder := [...]string{"projectId", "requirement", "mode", "priority", "baseBranch", "config", "stagedAttachmentIds", "mentions"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -20876,6 +20890,13 @@ func (ec *executionContext) unmarshalInputCreateSessionInput(ctx context.Context
 				return it, err
 			}
 			it.StagedAttachmentIds = data
+		case "mentions":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mentions"))
+			data, err := ec.unmarshalOPromptMentionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mentions = data
 		}
 	}
 	return it, nil
@@ -21175,6 +21196,36 @@ func (ec *executionContext) unmarshalInputPromptFileMatchInput(ctx context.Conte
 				return it, err
 			}
 			it.Query = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputPromptMentionInput(ctx context.Context, obj any) (model.PromptMentionInput, error) {
+	var it model.PromptMentionInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"path"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "path":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("path"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Path = data
 		}
 	}
 	return it, nil
@@ -21613,8 +21664,8 @@ func (ec *executionContext) unmarshalInputSetSessionPriorityInput(ctx context.Co
 	return it, nil
 }
 
-func (ec *executionContext) unmarshalInputSubmitQuestionBatchInput(ctx context.Context, obj any) (model.SubmitQuestionBatchInput, error) {
-	var it model.SubmitQuestionBatchInput
+func (ec *executionContext) unmarshalInputSubmitQuestionRequestInput(ctx context.Context, obj any) (model.SubmitQuestionRequestInput, error) {
+	var it model.SubmitQuestionRequestInput
 	if obj == nil {
 		return it, nil
 	}
@@ -21624,20 +21675,20 @@ func (ec *executionContext) unmarshalInputSubmitQuestionBatchInput(ctx context.C
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"batchId", "answers"}
+	fieldsInOrder := [...]string{"requestId", "answers"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
-		case "batchId":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("batchId"))
+		case "requestId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestId"))
 			data, err := ec.unmarshalNID2string(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.BatchID = data
+			it.RequestID = data
 		case "answers":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("answers"))
 			data, err := ec.unmarshalNQuestionAnswerInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionAnswerInputᚄ(ctx, v)
@@ -23384,9 +23435,9 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "submitQuestionBatch":
+		case "submitQuestionRequest":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_submitQuestionBatch(ctx, field)
+				return ec._Mutation_submitQuestionRequest(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -24144,7 +24195,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "questionBatch":
+		case "questionRequest":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -24153,7 +24204,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_questionBatch(ctx, field)
+				res = ec._Query_questionRequest(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -24166,7 +24217,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "pendingQuestionBatches":
+		case "pendingQuestionRequests":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -24175,7 +24226,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_pendingQuestionBatches(ctx, field)
+				res = ec._Query_pendingQuestionRequests(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -24279,8 +24330,8 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "batchId":
-			out.Values[i] = ec._Question_batchId(ctx, field, obj)
+		case "requestId":
+			out.Values[i] = ec._Question_requestId(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -24344,60 +24395,6 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
-var questionBatchImplementors = []string{"QuestionBatch"}
-
-func (ec *executionContext) _QuestionBatch(ctx context.Context, sel ast.SelectionSet, obj *model.QuestionBatch) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, questionBatchImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("QuestionBatch")
-		case "id":
-			out.Values[i] = ec._QuestionBatch_id(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "sessionId":
-			out.Values[i] = ec._QuestionBatch_sessionId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "status":
-			out.Values[i] = ec._QuestionBatch_status(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "questions":
-			out.Values[i] = ec._QuestionBatch_questions(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.ProcessDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var questionOptionImplementors = []string{"QuestionOption"}
 
 func (ec *executionContext) _QuestionOption(ctx context.Context, sel ast.SelectionSet, obj *model.QuestionOption) graphql.Marshaler {
@@ -24426,6 +24423,60 @@ func (ec *executionContext) _QuestionOption(ctx context.Context, sel ast.Selecti
 			}
 		case "payload":
 			out.Values[i] = ec._QuestionOption_payload(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var questionRequestImplementors = []string{"QuestionRequest"}
+
+func (ec *executionContext) _QuestionRequest(ctx context.Context, sel ast.SelectionSet, obj *model.QuestionRequest) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, questionRequestImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("QuestionRequest")
+		case "id":
+			out.Values[i] = ec._QuestionRequest_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionId":
+			out.Values[i] = ec._QuestionRequest_sessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._QuestionRequest_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "questions":
+			out.Values[i] = ec._QuestionRequest_questions(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -28016,6 +28067,11 @@ func (ec *executionContext) unmarshalNPromptFileMatchInput2githubᚗcomᚋnzlov�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNPromptMentionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInput(ctx context.Context, v any) (*model.PromptMentionInput, error) {
+	res, err := ec.unmarshalInputPromptMentionInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNPushSubscriptionRegistration2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPushSubscriptionRegistration(ctx context.Context, sel ast.SelectionSet, v model.PushSubscriptionRegistration) graphql.Marshaler {
 	return ec._PushSubscriptionRegistration(ctx, sel, &v)
 }
@@ -28076,36 +28132,6 @@ func (ec *executionContext) unmarshalNQuestionAnswerInput2ᚖgithubᚗcomᚋnzlo
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNQuestionBatch2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx context.Context, sel ast.SelectionSet, v model.QuestionBatch) graphql.Marshaler {
-	return ec._QuestionBatch(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNQuestionBatch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatchᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuestionBatch) graphql.Marshaler {
-	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
-		fc := graphql.GetFieldContext(ctx)
-		fc.Result = &v[i]
-		return ec.marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx, sel, v[i])
-	})
-
-	for _, e := range ret {
-		if e == graphql.Null {
-			return graphql.Null
-		}
-	}
-
-	return ret
-}
-
-func (ec *executionContext) marshalNQuestionBatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionBatch(ctx context.Context, sel ast.SelectionSet, v *model.QuestionBatch) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._QuestionBatch(ctx, sel, v)
-}
-
 func (ec *executionContext) marshalNQuestionOption2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuestionOption) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -28130,6 +28156,36 @@ func (ec *executionContext) marshalNQuestionOption2ᚖgithubᚗcomᚋnzlovᚋany
 		return graphql.Null
 	}
 	return ec._QuestionOption(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNQuestionRequest2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequest(ctx context.Context, sel ast.SelectionSet, v model.QuestionRequest) graphql.Marshaler {
+	return ec._QuestionRequest(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNQuestionRequest2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequestᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuestionRequest) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNQuestionRequest2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequest(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNQuestionRequest2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionRequest(ctx context.Context, sel ast.SelectionSet, v *model.QuestionRequest) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._QuestionRequest(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNQuickCommand2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommand(ctx context.Context, sel ast.SelectionSet, v model.QuickCommand) graphql.Marshaler {
@@ -28474,8 +28530,8 @@ func (ec *executionContext) marshalNString2ᚕstringᚄ(ctx context.Context, sel
 	return ret
 }
 
-func (ec *executionContext) unmarshalNSubmitQuestionBatchInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSubmitQuestionBatchInput(ctx context.Context, v any) (model.SubmitQuestionBatchInput, error) {
-	res, err := ec.unmarshalInputSubmitQuestionBatchInput(ctx, v)
+func (ec *executionContext) unmarshalNSubmitQuestionRequestInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSubmitQuestionRequestInput(ctx context.Context, v any) (model.SubmitQuestionRequestInput, error) {
+	res, err := ec.unmarshalInputSubmitQuestionRequestInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -29318,6 +29374,24 @@ func (ec *executionContext) marshalOPendingApproval2ᚖgithubᚗcomᚋnzlovᚋan
 		return graphql.Null
 	}
 	return ec._PendingApproval(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOPromptMentionInput2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInputᚄ(ctx context.Context, v any) ([]*model.PromptMentionInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*model.PromptMentionInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNPromptMentionInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptMentionInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalORetryConfigInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐRetryConfigInput(ctx context.Context, v any) (*model.RetryConfigInput, error) {

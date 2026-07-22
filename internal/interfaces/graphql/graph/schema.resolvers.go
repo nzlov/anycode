@@ -185,6 +185,7 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input model.Create
 		BaseBranch:          stringValue(input.BaseBranch, ""),
 		Config:              buildSessionConfig(input.Config),
 		StagedAttachmentIDs: stagedAttachmentIDs,
+		Mentions:            promptMentionsFromInput(input.Mentions),
 	})
 	if err != nil {
 		return nil, err
@@ -325,6 +326,7 @@ func (r *mutationResolver) AppendPrompt(ctx context.Context, input model.AppendP
 		Body:                input.Body,
 		StagedAttachmentIDs: stagedAttachmentIDs,
 		ArtifactIDs:         artifactIDs,
+		Mentions:            promptMentionsFromInput(input.Mentions),
 	})
 	if err != nil {
 		return nil, err
@@ -438,19 +440,19 @@ func (r *mutationResolver) SubmitWorkflowApproval(ctx context.Context, input mod
 	return mapSessionWorkflowRun(dto), nil
 }
 
-// SubmitQuestionBatch is the resolver for the submitQuestionBatch field.
-func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.SubmitQuestionBatchInput) (*model.QuestionBatch, error) {
+// SubmitQuestionRequest is the resolver for the submitQuestionRequest field.
+func (r *mutationResolver) SubmitQuestionRequest(ctx context.Context, input model.SubmitQuestionRequestInput) (*model.QuestionRequest, error) {
 	if r.UseCases.Sessions == nil {
 		return nil, missingUseCase("sessions")
 	}
-	dto, err := r.UseCases.Sessions.SubmitQuestionBatch(ctx, questionapp.SubmitBatchInput{
-		BatchID: questiondomain.BatchID(input.BatchID),
-		Answers: buildQuestionAnswers(input.Answers),
+	dto, err := r.UseCases.Sessions.SubmitQuestionRequest(ctx, questionapp.SubmitRequestInput{
+		RequestID: questiondomain.RequestID(input.RequestID),
+		Answers:   buildQuestionAnswers(input.Answers),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return mapQuestionBatch(dto), nil
+	return mapQuestionRequest(dto), nil
 }
 
 // CodexModelOptions is the resolver for the codexModelOptions field.
@@ -526,10 +528,6 @@ func (r *queryResolver) WebPushConfig(ctx context.Context) (*model.WebPushConfig
 		return nil, err
 	}
 	return mapWebPushConfig(dto), nil
-}
-
-func mapWebPushConfig(dto notificationapp.ConfigDTO) *model.WebPushConfig {
-	return &model.WebPushConfig{Enabled: dto.Enabled, PublicKey: dto.PublicKey, ProxyURL: dto.ProxyURL}
 }
 
 // QuickCommands is the resolver for the quickCommands field.
@@ -714,32 +712,32 @@ func (r *queryResolver) WorkflowDefinition(ctx context.Context, id string) (*mod
 	return mapWorkflowDefinition(dto), nil
 }
 
-// QuestionBatch is the resolver for the questionBatch field.
-func (r *queryResolver) QuestionBatch(ctx context.Context, id string) (*model.QuestionBatch, error) {
+// QuestionRequest is the resolver for the questionRequest field.
+func (r *queryResolver) QuestionRequest(ctx context.Context, id string) (*model.QuestionRequest, error) {
 	if r.UseCases.Questions == nil {
 		return nil, missingUseCase("questions")
 	}
-	dto, err := r.UseCases.Questions.GetBatch(ctx, questiondomain.BatchID(id))
+	dto, err := r.UseCases.Questions.GetRequest(ctx, questiondomain.RequestID(id))
 	if err != nil {
 		return nil, err
 	}
-	return mapQuestionBatch(dto), nil
+	return mapQuestionRequest(dto), nil
 }
 
-// PendingQuestionBatches is the resolver for the pendingQuestionBatches field.
-func (r *queryResolver) PendingQuestionBatches(ctx context.Context, sessionID string) ([]*model.QuestionBatch, error) {
+// PendingQuestionRequests is the resolver for the pendingQuestionRequests field.
+func (r *queryResolver) PendingQuestionRequests(ctx context.Context, sessionID string) ([]*model.QuestionRequest, error) {
 	if r.UseCases.Questions == nil {
 		return nil, missingUseCase("questions")
 	}
-	dtos, err := r.UseCases.Questions.ListPendingBySession(ctx, questiondomain.SessionID(sessionID))
+	dtos, err := r.UseCases.Questions.ListPendingRequestsBySession(ctx, questiondomain.SessionID(sessionID))
 	if err != nil {
 		return nil, err
 	}
-	batches := make([]*model.QuestionBatch, 0, len(dtos))
+	requests := make([]*model.QuestionRequest, 0, len(dtos))
 	for _, dto := range dtos {
-		batches = append(batches, mapQuestionBatch(dto))
+		requests = append(requests, mapQuestionRequest(dto))
 	}
-	return batches, nil
+	return requests, nil
 }
 
 // SessionFiles is the resolver for the sessionFiles field.

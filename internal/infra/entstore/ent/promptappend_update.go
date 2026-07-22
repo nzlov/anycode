@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
+	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 )
@@ -54,6 +55,24 @@ func (_u *PromptAppendUpdate) SetNillableBody(v *string) *PromptAppendUpdate {
 	if v != nil {
 		_u.SetBody(*v)
 	}
+	return _u
+}
+
+// SetMentions sets the "mentions" field.
+func (_u *PromptAppendUpdate) SetMentions(v []session.PromptMention) *PromptAppendUpdate {
+	_u.mutation.SetMentions(v)
+	return _u
+}
+
+// AppendMentions appends value to the "mentions" field.
+func (_u *PromptAppendUpdate) AppendMentions(v []session.PromptMention) *PromptAppendUpdate {
+	_u.mutation.AppendMentions(v)
+	return _u
+}
+
+// ClearMentions clears the value of the "mentions" field.
+func (_u *PromptAppendUpdate) ClearMentions() *PromptAppendUpdate {
+	_u.mutation.ClearMentions()
 	return _u
 }
 
@@ -177,6 +196,17 @@ func (_u *PromptAppendUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Mentions(); ok {
+		_spec.SetField(promptappend.FieldMentions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMentions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldMentions, value)
+		})
+	}
+	if _u.mutation.MentionsCleared() {
+		_spec.ClearField(promptappend.FieldMentions, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ArtifactIds(); ok {
 		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)
 	}
@@ -242,6 +272,24 @@ func (_u *PromptAppendUpdateOne) SetNillableBody(v *string) *PromptAppendUpdateO
 	if v != nil {
 		_u.SetBody(*v)
 	}
+	return _u
+}
+
+// SetMentions sets the "mentions" field.
+func (_u *PromptAppendUpdateOne) SetMentions(v []session.PromptMention) *PromptAppendUpdateOne {
+	_u.mutation.SetMentions(v)
+	return _u
+}
+
+// AppendMentions appends value to the "mentions" field.
+func (_u *PromptAppendUpdateOne) AppendMentions(v []session.PromptMention) *PromptAppendUpdateOne {
+	_u.mutation.AppendMentions(v)
+	return _u
+}
+
+// ClearMentions clears the value of the "mentions" field.
+func (_u *PromptAppendUpdateOne) ClearMentions() *PromptAppendUpdateOne {
+	_u.mutation.ClearMentions()
 	return _u
 }
 
@@ -394,6 +442,17 @@ func (_u *PromptAppendUpdateOne) sqlSave(ctx context.Context) (_node *PromptAppe
 	}
 	if value, ok := _u.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Mentions(); ok {
+		_spec.SetField(promptappend.FieldMentions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMentions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, promptappend.FieldMentions, value)
+		})
+	}
+	if _u.mutation.MentionsCleared() {
+		_spec.ClearField(promptappend.FieldMentions, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ArtifactIds(); ok {
 		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)

@@ -75,7 +75,7 @@ test('session event presentation moves usage out of the event list into session 
   assert.match(pageSource, /contextUsagePercent/);
 });
 
-test('session text messages fold runtime context and AnyCode guidance', () => {
+test('session text messages fold runtime context without parsing developer instructions', () => {
   const componentSource = readFileSync(
     new URL('../src/components/SessionTextMessage.vue', import.meta.url),
     'utf8',
@@ -91,15 +91,14 @@ test('session text messages fold runtime context and AnyCode guidance', () => {
 
   assert.match(componentSource, /sessionTextPresentation/);
   assert.match(componentSource, /knownUserPrompts/);
-  assert.match(componentSource, /workflowPrompt/);
   assert.match(componentSource, /presentation\.foldedLabel/);
   assert.match(componentSource, /:aria-expanded="expanded"/);
   assert.match(presentationSource, /# AGENTS\.md instructions for/);
   assert.match(presentationSource, /<environment_context>/);
-  assert.match(presentationSource, /AnyCode 附加说明/);
+  assert.doesNotMatch(presentationSource, /AnyCode 附加说明/);
   assert.match(pageSource, /const knownUserPrompts = computed/);
   assert.match(pageSource, /:known-user-prompts="knownUserPrompts"/);
-  assert.match(pageSource, /:workflow-prompt="session\?\.mode === 'workflow'"/);
+  assert.doesNotMatch(pageSource, /workflow-prompt/);
 });
 
 test('session detail loads the first transcript page before starting subscriptions', () => {
@@ -127,7 +126,7 @@ test('session detail loads the first transcript page before starting subscriptio
   assert.match(composableSource, /subscribeSessionEvents\(sessionId/);
   assert.match(composableSource, /useSessionUpdates\(\{/);
   assert.equal(composableSource.includes('subscribeSessionCardChanged'), false);
-  assert.equal(composableSource.includes('subscribePendingQuestionBatches'), false);
+  assert.equal(composableSource.includes('subscribePendingQuestionRequests'), false);
   assert.doesNotMatch(
     composableSource,
     /bufferedLiveEvents|mergeSnapshotEvents|onSubscribed|registration\.ready/,
@@ -620,7 +619,7 @@ test('overview invalidates late card requests and waiting dialogs across its sub
     overviewSource,
     /detail\.status !== 'waiting_approval' \|\| !detail\.pendingApproval/,
   );
-  assert.match(overviewSource, /card\?\.status !== 'waiting_user' \|\| batches\.length === 0/);
+  assert.match(overviewSource, /card\?\.status !== 'waiting_user' \|\| requests\.length === 0/);
 });
 
 test('known session updates patch event payloads without automatic card or detail queries', () => {
@@ -683,9 +682,9 @@ test('overview answer submission closes the dialog without refetching questions 
     overviewSource.indexOf('async function openApprovalDialog'),
   );
 
-  assert.match(submitBlock, /await submitQuestionBatch\(batchId, answers\)/);
-  assert.match(submitBlock, /answerDialog\.value = false/);
-  assert.doesNotMatch(submitBlock, /getPendingQuestionBatches|refreshOverviewCard|getSessionCard/);
+  assert.match(submitBlock, /await submitQuestionRequest\(requestId, answers\)/);
+  assert.match(submitBlock, /questionsDialog\.value = false/);
+  assert.doesNotMatch(submitBlock, /getPendingQuestionRequests|refreshOverviewCard|getSessionCard/);
 });
 
 test('detail approval loads cannot clear a newer waiting-state request', () => {

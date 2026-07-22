@@ -280,27 +280,27 @@ test('overview waiting approval dialog shows model output and diff before submit
   );
 });
 
-test('overview waiting answer dialog shows questions and diff before submit', () => {
+test('overview waiting questions dialog shows questions and diff before submit', () => {
   const overviewSource = readFileSync(
     new URL('../src/pages/IndexPage.vue', import.meta.url),
     'utf8',
   );
-  const answerDialogSource = readFileSync(
-    new URL('../src/components/AnswerUserDialog.vue', import.meta.url),
+  const questionsDialogSource = readFileSync(
+    new URL('../src/components/QuestionsDialog.vue', import.meta.url),
     'utf8',
   );
 
-  assert.match(answerDialogSource, /<q-tab name="questions"[^>]*label="问题"/);
-  assert.match(answerDialogSource, /<q-tab name="diff"[^>]*label="Diff"/);
-  assert.match(answerDialogSource, /<AnswerUserPanel/);
-  assert.match(answerDialogSource, /<DiffWorkspace[\s\S]*v-model="diffWorkspaceState"/);
-  assert.match(answerDialogSource, /:target="diffTarget"/);
-  assert.match(answerDialogSource, /:to="fullDiffRoute"/);
-  assert.match(overviewSource, /<AnswerUserDialog[\s\S]*:diff-target="answerDiffTarget"/);
-  assert.match(overviewSource, /getPendingQuestionBatches\(sessionId\)/);
+  assert.match(questionsDialogSource, /<q-tab name="questions"[^>]*label="问题"/);
+  assert.match(questionsDialogSource, /<q-tab name="diff"[^>]*label="Diff"/);
+  assert.match(questionsDialogSource, /<QuestionsPanel/);
+  assert.match(questionsDialogSource, /<DiffWorkspace[\s\S]*v-model="diffWorkspaceState"/);
+  assert.match(questionsDialogSource, /:target="diffTarget"/);
+  assert.match(questionsDialogSource, /:to="fullDiffRoute"/);
+  assert.match(overviewSource, /<QuestionsDialog[\s\S]*:diff-target="questionsDiffTarget"/);
+  assert.match(overviewSource, /getPendingQuestionRequests\(sessionId\)/);
   assert.match(overviewSource, /const requestGeneration = \+\+questionRequestGeneration/);
   assert.match(overviewSource, /activeQuestionSessionId\.value === sessionId/);
-  assert.doesNotMatch(overviewSource, /answerDiffLoading|answerDiffs|answerDiffError/);
+  assert.doesNotMatch(overviewSource, /questionsDiffLoading|questionsDiffs|questionsDiffError/);
   assert.match(
     overviewSource,
     /query: \{ sessionId: activeQuestionSessionId\.value, mode: 'all' \}/,
@@ -312,8 +312,8 @@ test('all current diff surfaces reuse one workspace without triggering card navi
     new URL('../src/pages/IndexPage.vue', import.meta.url),
     'utf8',
   );
-  const answerDialogSource = readFileSync(
-    new URL('../src/components/AnswerUserDialog.vue', import.meta.url),
+  const questionsDialogSource = readFileSync(
+    new URL('../src/components/QuestionsDialog.vue', import.meta.url),
     'utf8',
   );
   const workspaceSource = readFileSync(
@@ -386,7 +386,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.doesNotMatch(diffPageSource, /<AppPagination|<DiffViewer/);
   assert.doesNotMatch(diffPageSource, /getSessionAllDiff|getBranchAllDiff/);
   assert.doesNotMatch(stylesSource, /\.diff-layout/);
-  assert.match(answerDialogSource, /<DiffWorkspace/);
+  assert.match(questionsDialogSource, /<DiffWorkspace/);
   assert.match(detailSource, /<DiffWorkspace[\s\S]*:target="detailDiffTarget"/);
   assert.match(detailSource, /:show-file-navigation="false"/);
   assert.match(detailSource, /lazy-file-details/);
@@ -397,7 +397,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(detailSource, /resolveSessionEventResource[\s\S]*getSessionDiffFiles/);
   assert.match(fileChangeSource, /<DiffViewer[^>]*:file-diffs="diffFileChanges"/);
   assert.doesNotMatch(fileChangeSource, /<DiffWorkspace|getSessionAllDiff|getSessionSingleDiff/);
-  assert.doesNotMatch(answerDialogSource, /SessionDiffPreview/);
+  assert.doesNotMatch(questionsDialogSource, /SessionDiffPreview/);
   assert.equal(overviewSource.includes('SessionDiffPreview'), false);
   assert.match(overviewSource, /class="overview-diff-dialog app-content-dialog"/);
   assert.match(stylesSource, /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important/s);

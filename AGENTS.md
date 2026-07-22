@@ -37,7 +37,7 @@ AnyCode 仓库的项目级代理规范。用户当前明确指令优先于本文
 - `project` 管理项目身份、路径、Git 探测结果、默认流程和 worktree 初始化配置；只表达 Git 事实，不执行 Git 命令。
 - `session` 管理卡片需求、模式、状态机、执行配置、队列意图、附件及 worktree 清理所有权；不推进流程节点。
 - `workflow` 管理流程定义、运行、节点尝试、条件、重试和审批规则；跨节点推进由 application runner 编排。
-- `question` 管理 `answer_user` 问题批次、选项、答案和交付状态；不直接启动、恢复或停止进程。
+- `question` 管理 `questions` 请求、选项和答案；不直接启动、恢复或停止进程。
 - `process` 管理 Codex 运行记录、生命周期、能力和标准化事件，并定义 Codex 进程端口；CLI 与操作系统进程实现在 infra。
 - `gitdiff` 管理 worktree、Diff、提交历史和合并的数据合同及端口；Git CLI 副作用实现在 infra。
 - `setting` 管理可复用快捷命令；`auth` 只表达访问主体；`event` 管理可持久化领域事件及提交后发布合同。

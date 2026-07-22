@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 )
 
@@ -37,6 +38,12 @@ func (_c *PromptAppendCreate) SetNillableBody(v *string) *PromptAppendCreate {
 	if v != nil {
 		_c.SetBody(*v)
 	}
+	return _c
+}
+
+// SetMentions sets the "mentions" field.
+func (_c *PromptAppendCreate) SetMentions(v []session.PromptMention) *PromptAppendCreate {
+	_c.mutation.SetMentions(v)
 	return _c
 }
 
@@ -232,6 +239,10 @@ func (_c *PromptAppendCreate) createSpec() (*PromptAppend, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Body(); ok {
 		_spec.SetField(promptappend.FieldBody, field.TypeString, value)
 		_node.Body = value
+	}
+	if value, ok := _c.mutation.Mentions(); ok {
+		_spec.SetField(promptappend.FieldMentions, field.TypeJSON, value)
+		_node.Mentions = value
 	}
 	if value, ok := _c.mutation.ArtifactIds(); ok {
 		_spec.SetField(promptappend.FieldArtifactIds, field.TypeJSON, value)

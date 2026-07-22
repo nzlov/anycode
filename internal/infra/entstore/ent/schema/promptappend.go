@@ -18,6 +18,7 @@ func (PromptAppend) Fields() []ent.Field {
 		field.String("id").Immutable(),
 		field.String("session_id").NotEmpty(),
 		field.Text("body").Default(""),
+		field.JSON("mentions", []domainsession.PromptMention{}).Optional(),
 		field.JSON("artifact_ids", []string{}).Default([]string{}),
 		field.String("status").Default(string(domainsession.PromptAppendPending)),
 		field.Time("dispatched_at").Optional().Nillable(),

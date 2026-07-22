@@ -193,7 +193,7 @@
                   icon="help"
                   aria-label="回答问题"
                   :loading="questionsLoading && activeQuestionSessionId === card.id"
-                  @click.stop="openAnswerDialog(card.id)"
+                  @click.stop="openQuestionsDialog(card.id)"
                 >
                   <q-tooltip>回答待处理问题</q-tooltip>
                 </q-btn>
@@ -314,13 +314,13 @@
       {{ latestCards.length > 0 ? '当前没有显示的会话' : '暂无会话' }}
     </div>
 
-    <AnswerUserDialog
-      v-model="answerDialog"
-      :batches="pendingQuestionBatches"
+    <QuestionsDialog
+      v-model="questionsDialog"
+      :requests="pendingQuestionRequests"
       :loading="questionsLoading"
       :submitting="questionsSubmitting"
-      :diff-target="answerDiffTarget"
-      :full-diff-route="answerAllDiffRoute"
+      :diff-target="questionsDiffTarget"
+      :full-diff-route="questionsAllDiffRoute"
       @submit="submitAnswers"
     />
 
@@ -443,7 +443,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
-import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
+import QuestionsDialog from '@/components/QuestionsDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import OverviewHorizontalSession from '@/components/OverviewHorizontalSession.vue';
 import PageToolbar from '@/components/PageToolbar.vue';
@@ -469,15 +469,15 @@ import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPrese
 import {
   closeSession,
   executeSession,
-  getPendingQuestionBatches,
+  getPendingQuestionRequests,
   getSession,
   getSessionCard,
   stopSession,
-  submitQuestionBatch,
+  submitQuestionRequest,
   submitWorkflowApproval,
   updateSessionPriority,
   type QuestionAnswerInput,
-  type QuestionBatch,
+  type QuestionRequest,
   type PendingApproval,
   type SessionCard,
   type SessionMode,
@@ -542,9 +542,9 @@ const visibleLatestCards = computed(() =>
 );
 const sessionColumnWidths = ref(readSessionColumnWidths());
 const activeTodoMenuId = ref('');
-const answerDialog = ref(false);
+const questionsDialog = ref(false);
 const activeQuestionSessionId = ref('');
-const pendingQuestionBatches = ref<QuestionBatch[]>([]);
+const pendingQuestionRequests = ref<QuestionRequest[]>([]);
 const questionsLoading = ref(false);
 const questionsSubmitting = ref(false);
 let questionRequestGeneration = 0;
@@ -574,11 +574,11 @@ const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
 const activeCloseSessionId = ref('');
 const priorities: SessionPriority[] = ['high', 'medium', 'low'];
-const answerAllDiffRoute = computed(() => ({
+const questionsAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: activeQuestionSessionId.value, mode: 'all' },
 }));
-const answerDiffTarget = computed<DiffWorkspaceTarget>(() => ({
+const questionsDiffTarget = computed<DiffWorkspaceTarget>(() => ({
   kind: 'session',
   sessionId: activeQuestionSessionId.value,
 }));
@@ -637,8 +637,8 @@ watch(
   () => pruneHiddenProjectIds(),
 );
 
-watch(answerDialog, (open) => {
-  if (!open) clearAnswerContext();
+watch(questionsDialog, (open) => {
+  if (!open) clearQuestionsContext();
 });
 
 async function startOverview() {
@@ -735,8 +735,8 @@ function handleSessionUpdate(update: SessionUpdateEvent) {
   cardRefreshRequests.invalidate(update.sessionId);
   const status = update.status?.status;
   if (activeQuestionSessionId.value === update.sessionId && status && status !== 'waiting_user') {
-    answerDialog.value = false;
-    clearAnswerContext();
+    questionsDialog.value = false;
+    clearQuestionsContext();
   }
   if (approvalSessionId.value === update.sessionId && status && status !== 'waiting_approval') {
     approvalDialog.value = false;
@@ -977,29 +977,29 @@ async function closeCard(card: SessionCard) {
   }
 }
 
-async function openAnswerDialog(sessionId: string) {
+async function openQuestionsDialog(sessionId: string) {
   if ($q.screen.lt.sm) {
     await router.push({ name: 'session-detail', params: { id: sessionId } });
     return;
   }
   const requestGeneration = ++questionRequestGeneration;
   activeQuestionSessionId.value = sessionId;
-  pendingQuestionBatches.value = [];
+  pendingQuestionRequests.value = [];
   questionsLoading.value = true;
-  answerDialog.value = true;
+  questionsDialog.value = true;
   try {
-    const batches = await getPendingQuestionBatches(sessionId);
+    const requests = await getPendingQuestionRequests(sessionId);
     if (
       requestGeneration === questionRequestGeneration &&
       activeQuestionSessionId.value === sessionId
     ) {
       const card = latestRows.value.find((item) => item.id === sessionId);
-      if (card?.status !== 'waiting_user' || batches.length === 0) {
-        answerDialog.value = false;
-        clearAnswerContext();
+      if (card?.status !== 'waiting_user' || requests.length === 0) {
+        questionsDialog.value = false;
+        clearQuestionsContext();
         return;
       }
-      pendingQuestionBatches.value = batches;
+      pendingQuestionRequests.value = requests;
     }
   } finally {
     if (
@@ -1011,11 +1011,11 @@ async function openAnswerDialog(sessionId: string) {
   }
 }
 
-async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
+async function submitAnswers(requestId: string, answers: QuestionAnswerInput[]) {
   questionsSubmitting.value = true;
   try {
-    await submitQuestionBatch(batchId, answers);
-    answerDialog.value = false;
+    await submitQuestionRequest(requestId, answers);
+    questionsDialog.value = false;
   } finally {
     questionsSubmitting.value = false;
   }
@@ -1122,10 +1122,10 @@ function clearApprovalContext() {
   approvalArtifactFocus.value = null;
 }
 
-function clearAnswerContext() {
+function clearQuestionsContext() {
   questionRequestGeneration += 1;
   activeQuestionSessionId.value = '';
-  pendingQuestionBatches.value = [];
+  pendingQuestionRequests.value = [];
   questionsLoading.value = false;
 }
 

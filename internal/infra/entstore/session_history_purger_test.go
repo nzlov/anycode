@@ -34,7 +34,7 @@ func TestPurgeSessionsDeletesOwnedHistory(t *testing.T) {
 	if err := store.client.NotificationDelivery.Create().SetID("delivery-1").SetEventID("event-1").SetSubscriptionID("subscription-1").SetPayload([]byte("payload")).SetStatus("pending").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.client.QuestionBatch.Create().SetID("batch-1").SetSessionID("session-1").SetStatus("answered").Exec(ctx); err != nil {
+	if err := store.client.QuestionRequest.Create().SetID("request-1").SetSessionID("session-1").SetStatus("answered").Exec(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.client.NodeRun.Create().SetID("node-1").SetSessionID("session-1").SetNodeID("build").SetStatus("succeeded").Exec(ctx); err != nil {
@@ -57,7 +57,7 @@ func TestPurgeSessionsDeletesOwnedHistory(t *testing.T) {
 	counts["sessions"] = mustCount(t, func() (int, error) { return store.client.Session.Query().Count(ctx) })
 	counts["events"] = mustCount(t, func() (int, error) { return store.client.EventRecord.Query().Count(ctx) })
 	counts["deliveries"] = mustCount(t, func() (int, error) { return store.client.NotificationDelivery.Query().Count(ctx) })
-	counts["questions"] = mustCount(t, func() (int, error) { return store.client.QuestionBatch.Query().Count(ctx) })
+	counts["questions"] = mustCount(t, func() (int, error) { return store.client.QuestionRequest.Query().Count(ctx) })
 	counts["nodes"] = mustCount(t, func() (int, error) { return store.client.NodeRun.Query().Count(ctx) })
 	counts["processes"] = mustCount(t, func() (int, error) { return store.client.ProcessRun.Query().Count(ctx) })
 	counts["appends"] = mustCount(t, func() (int, error) { return store.client.PromptAppend.Query().Count(ctx) })

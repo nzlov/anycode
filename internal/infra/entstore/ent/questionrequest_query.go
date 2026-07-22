@@ -12,67 +12,67 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 )
 
-// QuestionBatchQuery is the builder for querying QuestionBatch entities.
-type QuestionBatchQuery struct {
+// QuestionRequestQuery is the builder for querying QuestionRequest entities.
+type QuestionRequestQuery struct {
 	config
 	ctx        *QueryContext
-	order      []questionbatch.OrderOption
+	order      []questionrequest.OrderOption
 	inters     []Interceptor
-	predicates []predicate.QuestionBatch
+	predicates []predicate.QuestionRequest
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the QuestionBatchQuery builder.
-func (_q *QuestionBatchQuery) Where(ps ...predicate.QuestionBatch) *QuestionBatchQuery {
+// Where adds a new predicate for the QuestionRequestQuery builder.
+func (_q *QuestionRequestQuery) Where(ps ...predicate.QuestionRequest) *QuestionRequestQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *QuestionBatchQuery) Limit(limit int) *QuestionBatchQuery {
+func (_q *QuestionRequestQuery) Limit(limit int) *QuestionRequestQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *QuestionBatchQuery) Offset(offset int) *QuestionBatchQuery {
+func (_q *QuestionRequestQuery) Offset(offset int) *QuestionRequestQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *QuestionBatchQuery) Unique(unique bool) *QuestionBatchQuery {
+func (_q *QuestionRequestQuery) Unique(unique bool) *QuestionRequestQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *QuestionBatchQuery) Order(o ...questionbatch.OrderOption) *QuestionBatchQuery {
+func (_q *QuestionRequestQuery) Order(o ...questionrequest.OrderOption) *QuestionRequestQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
-// First returns the first QuestionBatch entity from the query.
-// Returns a *NotFoundError when no QuestionBatch was found.
-func (_q *QuestionBatchQuery) First(ctx context.Context) (*QuestionBatch, error) {
+// First returns the first QuestionRequest entity from the query.
+// Returns a *NotFoundError when no QuestionRequest was found.
+func (_q *QuestionRequestQuery) First(ctx context.Context) (*QuestionRequest, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{questionbatch.Label}
+		return nil, &NotFoundError{questionrequest.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *QuestionBatchQuery) FirstX(ctx context.Context) *QuestionBatch {
+func (_q *QuestionRequestQuery) FirstX(ctx context.Context) *QuestionRequest {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -80,22 +80,22 @@ func (_q *QuestionBatchQuery) FirstX(ctx context.Context) *QuestionBatch {
 	return node
 }
 
-// FirstID returns the first QuestionBatch ID from the query.
-// Returns a *NotFoundError when no QuestionBatch ID was found.
-func (_q *QuestionBatchQuery) FirstID(ctx context.Context) (id string, err error) {
+// FirstID returns the first QuestionRequest ID from the query.
+// Returns a *NotFoundError when no QuestionRequest ID was found.
+func (_q *QuestionRequestQuery) FirstID(ctx context.Context) (id string, err error) {
 	var ids []string
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{questionbatch.Label}
+		err = &NotFoundError{questionrequest.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *QuestionBatchQuery) FirstIDX(ctx context.Context) string {
+func (_q *QuestionRequestQuery) FirstIDX(ctx context.Context) string {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -103,10 +103,10 @@ func (_q *QuestionBatchQuery) FirstIDX(ctx context.Context) string {
 	return id
 }
 
-// Only returns a single QuestionBatch entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one QuestionBatch entity is found.
-// Returns a *NotFoundError when no QuestionBatch entities are found.
-func (_q *QuestionBatchQuery) Only(ctx context.Context) (*QuestionBatch, error) {
+// Only returns a single QuestionRequest entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one QuestionRequest entity is found.
+// Returns a *NotFoundError when no QuestionRequest entities are found.
+func (_q *QuestionRequestQuery) Only(ctx context.Context) (*QuestionRequest, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -115,14 +115,14 @@ func (_q *QuestionBatchQuery) Only(ctx context.Context) (*QuestionBatch, error) 
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{questionbatch.Label}
+		return nil, &NotFoundError{questionrequest.Label}
 	default:
-		return nil, &NotSingularError{questionbatch.Label}
+		return nil, &NotSingularError{questionrequest.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *QuestionBatchQuery) OnlyX(ctx context.Context) *QuestionBatch {
+func (_q *QuestionRequestQuery) OnlyX(ctx context.Context) *QuestionRequest {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -130,10 +130,10 @@ func (_q *QuestionBatchQuery) OnlyX(ctx context.Context) *QuestionBatch {
 	return node
 }
 
-// OnlyID is like Only, but returns the only QuestionBatch ID in the query.
-// Returns a *NotSingularError when more than one QuestionBatch ID is found.
+// OnlyID is like Only, but returns the only QuestionRequest ID in the query.
+// Returns a *NotSingularError when more than one QuestionRequest ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *QuestionBatchQuery) OnlyID(ctx context.Context) (id string, err error) {
+func (_q *QuestionRequestQuery) OnlyID(ctx context.Context) (id string, err error) {
 	var ids []string
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -142,15 +142,15 @@ func (_q *QuestionBatchQuery) OnlyID(ctx context.Context) (id string, err error)
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{questionbatch.Label}
+		err = &NotFoundError{questionrequest.Label}
 	default:
-		err = &NotSingularError{questionbatch.Label}
+		err = &NotSingularError{questionrequest.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *QuestionBatchQuery) OnlyIDX(ctx context.Context) string {
+func (_q *QuestionRequestQuery) OnlyIDX(ctx context.Context) string {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -158,18 +158,18 @@ func (_q *QuestionBatchQuery) OnlyIDX(ctx context.Context) string {
 	return id
 }
 
-// All executes the query and returns a list of QuestionBatches.
-func (_q *QuestionBatchQuery) All(ctx context.Context) ([]*QuestionBatch, error) {
+// All executes the query and returns a list of QuestionRequests.
+func (_q *QuestionRequestQuery) All(ctx context.Context) ([]*QuestionRequest, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*QuestionBatch, *QuestionBatchQuery]()
-	return withInterceptors[[]*QuestionBatch](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*QuestionRequest, *QuestionRequestQuery]()
+	return withInterceptors[[]*QuestionRequest](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *QuestionBatchQuery) AllX(ctx context.Context) []*QuestionBatch {
+func (_q *QuestionRequestQuery) AllX(ctx context.Context) []*QuestionRequest {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -177,20 +177,20 @@ func (_q *QuestionBatchQuery) AllX(ctx context.Context) []*QuestionBatch {
 	return nodes
 }
 
-// IDs executes the query and returns a list of QuestionBatch IDs.
-func (_q *QuestionBatchQuery) IDs(ctx context.Context) (ids []string, err error) {
+// IDs executes the query and returns a list of QuestionRequest IDs.
+func (_q *QuestionRequestQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(questionbatch.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(questionrequest.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *QuestionBatchQuery) IDsX(ctx context.Context) []string {
+func (_q *QuestionRequestQuery) IDsX(ctx context.Context) []string {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -199,16 +199,16 @@ func (_q *QuestionBatchQuery) IDsX(ctx context.Context) []string {
 }
 
 // Count returns the count of the given query.
-func (_q *QuestionBatchQuery) Count(ctx context.Context) (int, error) {
+func (_q *QuestionRequestQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*QuestionBatchQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*QuestionRequestQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *QuestionBatchQuery) CountX(ctx context.Context) int {
+func (_q *QuestionRequestQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -217,7 +217,7 @@ func (_q *QuestionBatchQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *QuestionBatchQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *QuestionRequestQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -230,7 +230,7 @@ func (_q *QuestionBatchQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *QuestionBatchQuery) ExistX(ctx context.Context) bool {
+func (_q *QuestionRequestQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -238,18 +238,18 @@ func (_q *QuestionBatchQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the QuestionBatchQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the QuestionRequestQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *QuestionBatchQuery) Clone() *QuestionBatchQuery {
+func (_q *QuestionRequestQuery) Clone() *QuestionRequestQuery {
 	if _q == nil {
 		return nil
 	}
-	return &QuestionBatchQuery{
+	return &QuestionRequestQuery{
 		config:     _q.config,
 		ctx:        _q.ctx.Clone(),
-		order:      append([]questionbatch.OrderOption{}, _q.order...),
+		order:      append([]questionrequest.OrderOption{}, _q.order...),
 		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.QuestionBatch{}, _q.predicates...),
+		predicates: append([]predicate.QuestionRequest{}, _q.predicates...),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -266,15 +266,15 @@ func (_q *QuestionBatchQuery) Clone() *QuestionBatchQuery {
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.QuestionBatch.Query().
-//		GroupBy(questionbatch.FieldSessionID).
+//	client.QuestionRequest.Query().
+//		GroupBy(questionrequest.FieldSessionID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *QuestionBatchQuery) GroupBy(field string, fields ...string) *QuestionBatchGroupBy {
+func (_q *QuestionRequestQuery) GroupBy(field string, fields ...string) *QuestionRequestGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &QuestionBatchGroupBy{build: _q}
+	grbuild := &QuestionRequestGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = questionbatch.Label
+	grbuild.label = questionrequest.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -288,23 +288,23 @@ func (_q *QuestionBatchQuery) GroupBy(field string, fields ...string) *QuestionB
 //		SessionID string `json:"session_id,omitempty"`
 //	}
 //
-//	client.QuestionBatch.Query().
-//		Select(questionbatch.FieldSessionID).
+//	client.QuestionRequest.Query().
+//		Select(questionrequest.FieldSessionID).
 //		Scan(ctx, &v)
-func (_q *QuestionBatchQuery) Select(fields ...string) *QuestionBatchSelect {
+func (_q *QuestionRequestQuery) Select(fields ...string) *QuestionRequestSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &QuestionBatchSelect{QuestionBatchQuery: _q}
-	sbuild.label = questionbatch.Label
+	sbuild := &QuestionRequestSelect{QuestionRequestQuery: _q}
+	sbuild.label = questionrequest.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a QuestionBatchSelect configured with the given aggregations.
-func (_q *QuestionBatchQuery) Aggregate(fns ...AggregateFunc) *QuestionBatchSelect {
+// Aggregate returns a QuestionRequestSelect configured with the given aggregations.
+func (_q *QuestionRequestQuery) Aggregate(fns ...AggregateFunc) *QuestionRequestSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *QuestionBatchQuery) prepareQuery(ctx context.Context) error {
+func (_q *QuestionRequestQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -316,7 +316,7 @@ func (_q *QuestionBatchQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !questionbatch.ValidColumn(f) {
+		if !questionrequest.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -330,16 +330,16 @@ func (_q *QuestionBatchQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *QuestionBatchQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*QuestionBatch, error) {
+func (_q *QuestionRequestQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*QuestionRequest, error) {
 	var (
-		nodes = []*QuestionBatch{}
+		nodes = []*QuestionRequest{}
 		_spec = _q.querySpec()
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*QuestionBatch).scanValues(nil, columns)
+		return (*QuestionRequest).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &QuestionBatch{config: _q.config}
+		node := &QuestionRequest{config: _q.config}
 		nodes = append(nodes, node)
 		return node.assignValues(columns, values)
 	}
@@ -355,7 +355,7 @@ func (_q *QuestionBatchQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 	return nodes, nil
 }
 
-func (_q *QuestionBatchQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *QuestionRequestQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -364,8 +364,8 @@ func (_q *QuestionBatchQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *QuestionBatchQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(questionbatch.Table, questionbatch.Columns, sqlgraph.NewFieldSpec(questionbatch.FieldID, field.TypeString))
+func (_q *QuestionRequestQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(questionrequest.Table, questionrequest.Columns, sqlgraph.NewFieldSpec(questionrequest.FieldID, field.TypeString))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -374,9 +374,9 @@ func (_q *QuestionBatchQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, questionbatch.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, questionrequest.FieldID)
 		for i := range fields {
-			if fields[i] != questionbatch.FieldID {
+			if fields[i] != questionrequest.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
@@ -404,12 +404,12 @@ func (_q *QuestionBatchQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *QuestionBatchQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *QuestionRequestQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(questionbatch.Table)
+	t1 := builder.Table(questionrequest.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = questionbatch.Columns
+		columns = questionrequest.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -436,28 +436,28 @@ func (_q *QuestionBatchQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// QuestionBatchGroupBy is the group-by builder for QuestionBatch entities.
-type QuestionBatchGroupBy struct {
+// QuestionRequestGroupBy is the group-by builder for QuestionRequest entities.
+type QuestionRequestGroupBy struct {
 	selector
-	build *QuestionBatchQuery
+	build *QuestionRequestQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *QuestionBatchGroupBy) Aggregate(fns ...AggregateFunc) *QuestionBatchGroupBy {
+func (_g *QuestionRequestGroupBy) Aggregate(fns ...AggregateFunc) *QuestionRequestGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *QuestionBatchGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *QuestionRequestGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*QuestionBatchQuery, *QuestionBatchGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*QuestionRequestQuery, *QuestionRequestGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *QuestionBatchGroupBy) sqlScan(ctx context.Context, root *QuestionBatchQuery, v any) error {
+func (_g *QuestionRequestGroupBy) sqlScan(ctx context.Context, root *QuestionRequestQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -484,28 +484,28 @@ func (_g *QuestionBatchGroupBy) sqlScan(ctx context.Context, root *QuestionBatch
 	return sql.ScanSlice(rows, v)
 }
 
-// QuestionBatchSelect is the builder for selecting fields of QuestionBatch entities.
-type QuestionBatchSelect struct {
-	*QuestionBatchQuery
+// QuestionRequestSelect is the builder for selecting fields of QuestionRequest entities.
+type QuestionRequestSelect struct {
+	*QuestionRequestQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *QuestionBatchSelect) Aggregate(fns ...AggregateFunc) *QuestionBatchSelect {
+func (_s *QuestionRequestSelect) Aggregate(fns ...AggregateFunc) *QuestionRequestSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *QuestionBatchSelect) Scan(ctx context.Context, v any) error {
+func (_s *QuestionRequestSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*QuestionBatchQuery, *QuestionBatchSelect](ctx, _s.QuestionBatchQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*QuestionRequestQuery, *QuestionRequestSelect](ctx, _s.QuestionRequestQuery, _s, _s.inters, v)
 }
 
-func (_s *QuestionBatchSelect) sqlScan(ctx context.Context, root *QuestionBatchQuery, v any) error {
+func (_s *QuestionRequestSelect) sqlScan(ctx context.Context, root *QuestionRequestQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

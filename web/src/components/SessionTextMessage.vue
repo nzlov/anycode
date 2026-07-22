@@ -42,16 +42,10 @@ import { sessionTextPresentation, timelineTime } from '@/services/sessionTimelin
 const props = defineProps<{
   event: TranscriptItem & { content: TranscriptMessageContent };
   knownUserPrompts: readonly string[];
-  workflowPrompt: boolean;
 }>();
 const content = computed(() => props.event.content);
 const presentation = computed(() =>
-  sessionTextPresentation(
-    content.value.role,
-    content.value.text,
-    props.knownUserPrompts,
-    props.workflowPrompt,
-  ),
+  sessionTextPresentation(content.value.role, content.value.text, props.knownUserPrompts),
 );
 const expanded = ref(false);
 </script>

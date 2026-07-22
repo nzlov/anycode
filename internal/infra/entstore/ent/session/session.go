@@ -17,6 +17,8 @@ const (
 	FieldProjectID = "project_id"
 	// FieldRequirement holds the string denoting the requirement field in the database.
 	FieldRequirement = "requirement"
+	// FieldMentions holds the string denoting the mentions field in the database.
+	FieldMentions = "mentions"
 	// FieldMode holds the string denoting the mode field in the database.
 	FieldMode = "mode"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -93,8 +95,6 @@ const (
 	FieldQueueResumeCodexSessionID = "queue_resume_codex_session_id"
 	// FieldQueueResumeOfProcessRunID holds the string denoting the queue_resume_of_process_run_id field in the database.
 	FieldQueueResumeOfProcessRunID = "queue_resume_of_process_run_id"
-	// FieldQueueAnswerBatchID holds the string denoting the queue_answer_batch_id field in the database.
-	FieldQueueAnswerBatchID = "queue_answer_batch_id"
 	// FieldWorkflowDefinitionID holds the string denoting the workflow_definition_id field in the database.
 	FieldWorkflowDefinitionID = "workflow_definition_id"
 	// FieldWorkflowStatus holds the string denoting the workflow_status field in the database.
@@ -128,6 +128,7 @@ var Columns = []string{
 	FieldID,
 	FieldProjectID,
 	FieldRequirement,
+	FieldMentions,
 	FieldMode,
 	FieldStatus,
 	FieldPriority,
@@ -166,7 +167,6 @@ var Columns = []string{
 	FieldQueuePrompt,
 	FieldQueueResumeCodexSessionID,
 	FieldQueueResumeOfProcessRunID,
-	FieldQueueAnswerBatchID,
 	FieldWorkflowDefinitionID,
 	FieldWorkflowStatus,
 	FieldWorkflowCurrentNodeID,
@@ -256,8 +256,6 @@ var (
 	DefaultQueueResumeCodexSessionID string
 	// DefaultQueueResumeOfProcessRunID holds the default value on creation for the "queue_resume_of_process_run_id" field.
 	DefaultQueueResumeOfProcessRunID string
-	// DefaultQueueAnswerBatchID holds the default value on creation for the "queue_answer_batch_id" field.
-	DefaultQueueAnswerBatchID string
 	// DefaultWorkflowDefinitionID holds the default value on creation for the "workflow_definition_id" field.
 	DefaultWorkflowDefinitionID string
 	// DefaultWorkflowStatus holds the default value on creation for the "workflow_status" field.
@@ -472,11 +470,6 @@ func ByQueueResumeCodexSessionID(opts ...sql.OrderTermOption) OrderOption {
 // ByQueueResumeOfProcessRunID orders the results by the queue_resume_of_process_run_id field.
 func ByQueueResumeOfProcessRunID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldQueueResumeOfProcessRunID, opts...).ToFunc()
-}
-
-// ByQueueAnswerBatchID orders the results by the queue_answer_batch_id field.
-func ByQueueAnswerBatchID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldQueueAnswerBatchID, opts...).ToFunc()
 }
 
 // ByWorkflowDefinitionID orders the results by the workflow_definition_id field.

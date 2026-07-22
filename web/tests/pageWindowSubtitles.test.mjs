@@ -16,7 +16,7 @@ const sources = [
   '../src/components/NewSessionDialog.vue',
   '../src/components/ProjectDirectoryDialog.vue',
   '../src/components/ProjectSettingsDialog.vue',
-  '../src/components/AnswerUserDialog.vue',
+  '../src/components/QuestionsDialog.vue',
   '../src/layouts/MainLayout.vue',
 ].map(readSource);
 

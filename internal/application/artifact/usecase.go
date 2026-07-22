@@ -26,7 +26,7 @@ type UseCase interface {
 	Publish(ctx context.Context, input PublishInput) (session.SessionFile, error)
 	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error)
 	Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
-	ReadMCPContent(ctx context.Context, id session.SessionFileID) (MCPContent, bool, error)
+	ReadToolContent(ctx context.Context, id session.SessionFileID) (ToolContent, bool, error)
 	ReconcileQuarantines(ctx context.Context) (int, error)
 	ReconcileOutputs(ctx context.Context) (int, error)
 }
@@ -36,7 +36,7 @@ type PublishInput struct {
 	Path      string
 }
 
-type MCPContent struct {
+type ToolContent struct {
 	Type     string
 	MIMEType string
 	Data     []byte
@@ -171,13 +171,13 @@ func (s *Service) Resolve(ctx context.Context, sessionID session.ID, logicalPath
 	return s.store.ResolveArtifacts(ctx, sessionID, normalized)
 }
 
-func (s *Service) ReadMCPContent(ctx context.Context, id session.SessionFileID) (MCPContent, bool, error) {
+func (s *Service) ReadToolContent(ctx context.Context, id session.SessionFileID) (ToolContent, bool, error) {
 	if s == nil || s.store == nil {
-		return MCPContent{}, false, errors.New("artifact usecase is not configured")
+		return ToolContent{}, false, errors.New("artifact usecase is not configured")
 	}
 	artifact, err := s.store.FindArtifact(ctx, id)
 	if err != nil {
-		return MCPContent{}, false, err
+		return ToolContent{}, false, err
 	}
 	contentType := ""
 	switch artifact.ArtifactKind {
@@ -187,21 +187,21 @@ func (s *Service) ReadMCPContent(ctx context.Context, id session.SessionFileID) 
 		contentType = "audio"
 	}
 	if contentType == "" || artifact.Size > MaxInlineArtifactBytes {
-		return MCPContent{}, false, nil
+		return ToolContent{}, false, nil
 	}
 	stream, err := s.store.OpenArtifact(ctx, id)
 	if err != nil {
-		return MCPContent{}, false, err
+		return ToolContent{}, false, err
 	}
 	defer stream.Reader.Close()
 	data, err := io.ReadAll(io.LimitReader(stream.Reader, MaxInlineArtifactBytes+1))
 	if err != nil {
-		return MCPContent{}, false, err
+		return ToolContent{}, false, err
 	}
 	if int64(len(data)) > MaxInlineArtifactBytes {
-		return MCPContent{}, false, nil
+		return ToolContent{}, false, nil
 	}
-	return MCPContent{Type: contentType, MIMEType: artifact.MimeType, Data: data}, true, nil
+	return ToolContent{Type: contentType, MIMEType: artifact.MimeType, Data: data}, true, nil
 }
 
 func (s *Service) PublishInlineArtifact(ctx context.Context, input session.InlineArtifactRequest) (session.SessionFile, error) {

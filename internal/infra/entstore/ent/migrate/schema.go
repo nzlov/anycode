@@ -173,10 +173,7 @@ var (
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "node_run_id", Type: field.TypeString, Nullable: true},
 		{Name: "status", Type: field.TypeString},
-		{Name: "pid", Type: field.TypeInt, Nullable: true},
 		{Name: "codex_session_id", Type: field.TypeString, Default: ""},
-		{Name: "transcript_relative_path", Type: field.TypeString, Default: ""},
-		{Name: "transcript_bound_at", Type: field.TypeTime, Nullable: true},
 		{Name: "resume_of", Type: field.TypeString, Nullable: true},
 		{Name: "exit_code", Type: field.TypeInt, Nullable: true},
 		{Name: "failure_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
@@ -197,12 +194,12 @@ var (
 			{
 				Name:    "processrun_session_id_started_at",
 				Unique:  false,
-				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[11]},
+				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[8]},
 			},
 			{
-				Name:    "processrun_session_id_codex_session_id_transcript_bound_at",
+				Name:    "processrun_session_id_codex_session_id",
 				Unique:  false,
-				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[5], ProcessRunsColumns[7]},
+				Columns: []*schema.Column{ProcessRunsColumns[1], ProcessRunsColumns[4]},
 			},
 		},
 	}
@@ -236,6 +233,7 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "body", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "mentions", Type: field.TypeJSON, Nullable: true},
 		{Name: "artifact_ids", Type: field.TypeJSON},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "dispatched_at", Type: field.TypeTime, Nullable: true},
@@ -251,12 +249,12 @@ var (
 			{
 				Name:    "promptappend_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[7]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[8]},
 			},
 			{
 				Name:    "promptappend_session_id_status_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[4], PromptAppendsColumns[7]},
+				Columns: []*schema.Column{PromptAppendsColumns[1], PromptAppendsColumns[5], PromptAppendsColumns[8]},
 			},
 		},
 	}
@@ -284,51 +282,38 @@ var (
 			},
 		},
 	}
-	// QuestionBatchesColumns holds the columns for the "question_batches" table.
-	QuestionBatchesColumns = []*schema.Column{
+	// QuestionRequestsColumns holds the columns for the "question_requests" table.
+	QuestionRequestsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "session_id", Type: field.TypeString},
 		{Name: "origin_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "status", Type: field.TypeString},
-		{Name: "delivery_status", Type: field.TypeString, Default: "none"},
-		{Name: "delivery_process_run_id", Type: field.TypeString, Default: ""},
 		{Name: "questions", Type: field.TypeJSON},
 		{Name: "answers", Type: field.TypeJSON},
 		{Name: "cancel_reason", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "answered_at", Type: field.TypeTime, Nullable: true},
-		{Name: "delivered_at", Type: field.TypeTime, Nullable: true},
 	}
-	// QuestionBatchesTable holds the schema information for the "question_batches" table.
-	QuestionBatchesTable = &schema.Table{
-		Name:       "question_batches",
-		Columns:    QuestionBatchesColumns,
-		PrimaryKey: []*schema.Column{QuestionBatchesColumns[0]},
+	// QuestionRequestsTable holds the schema information for the "question_requests" table.
+	QuestionRequestsTable = &schema.Table{
+		Name:       "question_requests",
+		Columns:    QuestionRequestsColumns,
+		PrimaryKey: []*schema.Column{QuestionRequestsColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "questionbatch_session_id_status",
+				Name:    "questionrequest_session_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[3]},
+				Columns: []*schema.Column{QuestionRequestsColumns[1], QuestionRequestsColumns[3]},
 			},
 			{
-				Name:    "questionbatch_session_id_created_at",
+				Name:    "questionrequest_session_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[9]},
+				Columns: []*schema.Column{QuestionRequestsColumns[1], QuestionRequestsColumns[7]},
 			},
 			{
-				Name:    "questionbatch_origin_process_run_id_status",
+				Name:    "questionrequest_origin_process_run_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[2], QuestionBatchesColumns[3]},
-			},
-			{
-				Name:    "questionbatch_session_id_delivery_status",
-				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[1], QuestionBatchesColumns[4]},
-			},
-			{
-				Name:    "questionbatch_delivery_process_run_id",
-				Unique:  false,
-				Columns: []*schema.Column{QuestionBatchesColumns[5]},
+				Columns: []*schema.Column{QuestionRequestsColumns[2], QuestionRequestsColumns[3]},
 			},
 		},
 	}
@@ -349,6 +334,7 @@ var (
 		{Name: "id", Type: field.TypeString},
 		{Name: "project_id", Type: field.TypeString},
 		{Name: "requirement", Type: field.TypeString, Default: ""},
+		{Name: "mentions", Type: field.TypeJSON, Nullable: true},
 		{Name: "mode", Type: field.TypeString},
 		{Name: "status", Type: field.TypeString},
 		{Name: "priority", Type: field.TypeString, Default: "medium"},
@@ -387,7 +373,6 @@ var (
 		{Name: "queue_prompt", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_codex_session_id", Type: field.TypeString, Default: ""},
 		{Name: "queue_resume_of_process_run_id", Type: field.TypeString, Default: ""},
-		{Name: "queue_answer_batch_id", Type: field.TypeString, Default: ""},
 		{Name: "workflow_definition_id", Type: field.TypeString, Default: ""},
 		{Name: "workflow_status", Type: field.TypeString, Default: ""},
 		{Name: "workflow_current_node_id", Type: field.TypeString, Default: ""},
@@ -425,17 +410,17 @@ var (
 			{
 				Name:    "session_status",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4]},
+				Columns: []*schema.Column{SessionsColumns[5]},
 			},
 			{
 				Name:    "session_status_queue_priority_priority_queued_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[4], SessionsColumns[34], SessionsColumns[5], SessionsColumns[32]},
+				Columns: []*schema.Column{SessionsColumns[5], SessionsColumns[35], SessionsColumns[6], SessionsColumns[33]},
 			},
 			{
 				Name:    "session_worktree_cleanup_status_worktree_cleanup_next_at_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{SessionsColumns[12], SessionsColumns[18], SessionsColumns[52]},
+				Columns: []*schema.Column{SessionsColumns[13], SessionsColumns[19], SessionsColumns[52]},
 			},
 		},
 	}
@@ -516,7 +501,7 @@ var (
 		ProjectsTable,
 		PromptAppendsTable,
 		PushSubscriptionsTable,
-		QuestionBatchesTable,
+		QuestionRequestsTable,
 		QuickCommandsTable,
 		SessionsTable,
 		StagedAttachmentsTable,

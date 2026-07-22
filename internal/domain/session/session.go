@@ -106,7 +106,6 @@ const (
 	QueueKindStart        QueueKind = "start"
 	QueueKindResume       QueueKind = "resume"
 	QueueKindPromptAppend QueueKind = "prompt_append"
-	QueueKindAnswerUser   QueueKind = "answer_user"
 )
 
 type QueuePriority string
@@ -141,6 +140,7 @@ type Session struct {
 	ID                    ID
 	ProjectID             ProjectID
 	Requirement           string
+	Mentions              []PromptMention
 	Mode                  Mode
 	Status                Status
 	Priority              Priority
@@ -208,7 +208,6 @@ type QueueIntent struct {
 	Prompt                  string
 	ResumeCodexSessionID    string
 	ResumeOfProcessRunID    string
-	AnswerBatchID           string
 }
 
 func (s *Session) QueueExecution(intent QueueIntent, now time.Time) error {
@@ -229,9 +228,6 @@ func (s *Session) QueueExecution(intent QueueIntent, now time.Time) error {
 func (s *Session) TransitionTo(next Status, now time.Time) error {
 	if next == StatusQueued {
 		return fmt.Errorf("%w: use QueueExecution", ErrInvalidQueueIntent)
-	}
-	if s.Status == StatusQueued && next == StatusWaitingUser && s.Queue.Kind != QueueKindAnswerUser {
-		return invalidTransition(s.Status, next)
 	}
 	if !canTransition(s.Status, next) {
 		return invalidTransition(s.Status, next)
@@ -382,7 +378,7 @@ func queueIntentsEqual(left QueueIntent, right QueueIntent) bool {
 	if left.Kind != right.Kind || left.Priority != right.Priority || left.InitialStart != right.InitialStart ||
 		left.ReviewAfterReuseFailure != right.ReviewAfterReuseFailure ||
 		left.Prompt != right.Prompt || left.ResumeCodexSessionID != right.ResumeCodexSessionID ||
-		left.ResumeOfProcessRunID != right.ResumeOfProcessRunID || left.AnswerBatchID != right.AnswerBatchID {
+		left.ResumeOfProcessRunID != right.ResumeOfProcessRunID {
 		return false
 	}
 	if left.NodeRunID == nil || right.NodeRunID == nil {
@@ -434,7 +430,7 @@ func canTransition(current Status, next Status) bool {
 }
 
 func validQueueKind(kind QueueKind) bool {
-	return kind == QueueKindStart || kind == QueueKindResume || kind == QueueKindPromptAppend || kind == QueueKindAnswerUser
+	return kind == QueueKindStart || kind == QueueKindResume || kind == QueueKindPromptAppend
 }
 
 func validQueuePriority(priority QueuePriority) bool {
@@ -502,7 +498,7 @@ func (f SessionFile) IsArtifact() bool {
 	return f.Role == FileRoleArtifact
 }
 
-// SessionAttachment is the input-file projection kept for existing attachment workflows.
+// SessionAttachment names an input-role SessionFile in attachment workflows.
 type SessionAttachment = SessionFile
 
 type ArtifactQuery struct {
@@ -573,6 +569,7 @@ type PromptAppend struct {
 	ID                     string
 	SessionID              ID
 	Body                   string
+	Mentions               []PromptMention
 	Status                 PromptAppendStatus
 	DispatchedAt           *time.Time
 	DispatchedProcessRunID string
@@ -580,6 +577,10 @@ type PromptAppend struct {
 	Attachments            []SessionAttachment
 	ArtifactIDs            []SessionFileID
 	Artifacts              []SessionFile
+}
+
+type PromptMention struct {
+	Path string `json:"path"`
 }
 
 type MergeRecord struct {

@@ -1082,7 +1082,7 @@ func TestCompleteNodeAcceptsEmptyResultsJSON(t *testing.T) {
 	}
 }
 
-func TestCompleteNodeRequiresAnswerUserBeforeFinalResult(t *testing.T) {
+func TestCompleteNodeRequiresQuestionsBeforeFinalResult(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.definitions["workflow-1"] = domain.Definition{
@@ -1107,11 +1107,11 @@ func TestCompleteNodeRequiresAnswerUserBeforeFinalResult(t *testing.T) {
 	if !got.RequiresCodex || !got.RequireResultRetry || got.NodeRunID == nil || *got.NodeRunID != "node-run-1" {
 		t.Fatalf("CompleteNode() = %#v", got)
 	}
-	if !strings.Contains(got.Prompt, "`answer_user`") || !strings.Contains(got.Prompt, "Do not describe pending questions") {
+	if !strings.Contains(got.Prompt, "`questions`") || !strings.Contains(got.Prompt, "Do not describe pending questions") {
 		t.Fatalf("correction prompt = %q", got.Prompt)
 	}
 	if repo.nodeRuns[0].Status != domain.NodeRunning || repo.nodeRuns[0].Result != nil {
-		t.Fatalf("node completed before answer_user: %#v", repo.nodeRuns[0])
+		t.Fatalf("node completed before questions: %#v", repo.nodeRuns[0])
 	}
 }
 

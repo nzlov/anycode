@@ -8,7 +8,7 @@ import {
   toolLabel,
 } from '../src/services/sessionTimelinePresentation.ts';
 
-test('statusLabel describes durable answer_user suspension events', () => {
+test('statusLabel describes durable questions suspension events', () => {
   assert.equal(
     statusLabel({ code: 'process.suspended_for_user', level: 'info' }),
     '已挂起等待回答',
@@ -111,158 +111,21 @@ test('sessionTextPresentation rejects nested runtime context markers', () => {
   }
 });
 
-test('sessionTextPresentation separates AnyCode guidance from user text', () => {
-  const answerUserGuidance =
-    'AnyCode 提供 `answer_user` MCP 工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `answer_user` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `answer_user`。';
-  const worktreeGuidance =
-    '当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。';
-  const artifactGuidance =
-    '本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。';
-  const legacyArtifactGuidance =
-    '本卡片生成的图片、截图、PDF、音视频、压缩包和其他产物统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。';
-  const guidance = `${answerUserGuidance}\n\n${worktreeGuidance}`;
-
-  assert.deepEqual(
-    sessionTextPresentation(
-      'user',
-      `继续处理\n\n${artifactGuidance}\n\n${answerUserGuidance}\n\n${worktreeGuidance}`,
-      ['继续处理'],
-    ),
-    {
-      text: '继续处理',
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: `${artifactGuidance}\n\n${answerUserGuidance}\n\n${worktreeGuidance}`,
-    },
-  );
-
-  assert.deepEqual(
-    sessionTextPresentation('user', `继续处理\n\n${legacyArtifactGuidance}`, ['继续处理']),
-    {
-      text: '继续处理',
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: legacyArtifactGuidance,
-    },
-  );
-
-  assert.deepEqual(
-    sessionTextPresentation('user', `合并到基础分支并推送\n\n${guidance}`, [
-      '合并到基础分支并推送',
-    ]),
-    {
-      text: '合并到基础分支并推送',
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: guidance,
-    },
-  );
-  assert.deepEqual(
-    sessionTextPresentation('user', `继续处理\n\n${worktreeGuidance}`, ['继续处理']),
-    {
-      text: '继续处理',
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: worktreeGuidance,
-    },
-  );
-  const quotedMarker =
-    '请解释下面这句为何存在：\n\nAnyCode 提供 `answer_user` MCP 工具，但这里仍是用户正文。';
-  assert.deepEqual(
-    sessionTextPresentation('user', `${quotedMarker}\n\n${guidance}`, [quotedMarker]),
-    {
-      text: quotedMarker,
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: guidance,
-    },
-  );
-
-  const exactUserQuote = `请解释：\n\n${answerUserGuidance}`;
-  assert.deepEqual(sessionTextPresentation('user', exactUserQuote, [exactUserQuote]), {
-    text: exactUserQuote,
+test('sessionTextPresentation does not parse developer instructions from user text', () => {
+  const text = '继续处理\n\nAnyCode 提供 `questions` App Server 动态工具。';
+  assert.deepEqual(sessionTextPresentation('user', text, ['继续处理']), {
+    text,
     foldedLabel: '',
     foldedText: '',
   });
-
-  const attachments = 'Attached files available on disk:\n- /workspace/request.txt';
-  assert.deepEqual(
-    sessionTextPresentation('user', `${exactUserQuote}\n\n${attachments}`, [exactUserQuote]),
-    {
-      text: exactUserQuote,
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: attachments,
-    },
-  );
-  assert.deepEqual(
-    sessionTextPresentation('user', `继续处理\n\n${guidance}\n\n${attachments}`, ['继续处理']),
-    {
-      text: '继续处理',
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: `${guidance}\n\n${attachments}`,
-    },
-  );
-
-  const workflow =
-    'Validate build\n\nUser requirement:\nship it\n\nWorkflow input params JSON:\n```json\n{}\n```';
-  assert.deepEqual(
-    sessionTextPresentation('user', `${workflow}\n\n${guidance}`, ['ship it'], true),
-    {
-      text: workflow,
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: guidance,
-    },
-  );
-
-  const rebuilt = [
-    '无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。',
-    '原始需求：\n分析会话内容',
-    '追加描述：\n只前端处理隐藏或折叠可以吗？',
-    '追加描述：\n开始吧',
-  ].join('\n\n');
-  assert.deepEqual(
-    sessionTextPresentation('user', `${rebuilt}\n\n${guidance}`, [
-      '分析会话内容',
-      '只前端处理隐藏或折叠可以吗？',
-      '开始吧',
-    ]),
-    {
-      text: rebuilt,
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: guidance,
-    },
-  );
-
-  assert.deepEqual(
-    sessionTextPresentation('user', `${rebuilt}\n\n${guidance}`, [
-      '分析会话内容',
-      '只前端处理隐藏或折叠可以吗？',
-      '开始吧',
-      '后来新增的描述',
-    ]),
-    {
-      text: rebuilt,
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: guidance,
-    },
-  );
-
-  const rebuiltWorkflow = `${rebuilt}\n\n当前流程节点提示词：\n复查当前实现`;
-  assert.deepEqual(
-    sessionTextPresentation('user', `${rebuiltWorkflow}\n\n${guidance}`, [
-      '分析会话内容',
-      '只前端处理隐藏或折叠可以吗？',
-      '开始吧',
-    ]),
-    {
-      text: rebuiltWorkflow,
-      foldedLabel: 'AnyCode 附加说明',
-      foldedText: guidance,
-    },
-  );
 });
 
 test('sessionTextPresentation leaves unmatched and assistant messages unchanged', () => {
-  const incompleteMarker = 'AnyCode 提供 answer_user 工具，但这是用户自己的说明。';
+  const incompleteMarker = 'AnyCode 提供 questions 工具，但这是用户自己的说明。';
   const incompleteGuidance =
-    '用户正文\n\nAnyCode 提供 `answer_user` MCP 工具，但没有完整的固定说明。';
+    '用户正文\n\nAnyCode 提供 `questions` App Server 动态工具，但没有完整的固定说明。';
   const quotedGuidanceFragments =
-    '请分析 AnyCode 提供 `answer_user` MCP 工具的实现。后文还需要比较 `request_user_input`，并检查不得删除、移动、重建或清理当前工作树的约束。';
+    '请分析 AnyCode 提供 `questions` App Server 动态工具的实现。后文还需要比较 `request_user_input`，并检查不得删除、移动、重建或清理当前工作树的约束。';
   const assistant = '# AGENTS.md instructions for example';
 
   assert.deepEqual(sessionTextPresentation('user', incompleteMarker), {

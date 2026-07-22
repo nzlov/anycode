@@ -129,16 +129,16 @@ func (f PushSubscriptionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PushSubscriptionMutation", m)
 }
 
-// The QuestionBatchFunc type is an adapter to allow the use of ordinary
-// function as QuestionBatch mutator.
-type QuestionBatchFunc func(context.Context, *ent.QuestionBatchMutation) (ent.Value, error)
+// The QuestionRequestFunc type is an adapter to allow the use of ordinary
+// function as QuestionRequest mutator.
+type QuestionRequestFunc func(context.Context, *ent.QuestionRequestMutation) (ent.Value, error)
 
 // Mutate calls f(ctx, m).
-func (f QuestionBatchFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.QuestionBatchMutation); ok {
+func (f QuestionRequestFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.QuestionRequestMutation); ok {
 		return f(ctx, mv)
 	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QuestionBatchMutation", m)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.QuestionRequestMutation", m)
 }
 
 // The QuickCommandFunc type is an adapter to allow the use of ordinary

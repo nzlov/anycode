@@ -131,7 +131,6 @@ func updateClaimedSessionState(ctx context.Context, client *ent.Client, expected
 		SetQueuePrompt(starting.Queue.Prompt).
 		SetQueueResumeCodexSessionID(starting.Queue.ResumeCodexSessionID).
 		SetQueueResumeOfProcessRunID(starting.Queue.ResumeOfProcessRunID).
-		SetQueueAnswerBatchID(starting.Queue.AnswerBatchID).
 		SetUpdatedAt(starting.UpdatedAt)
 	if starting.Queue.NodeRunID == nil {
 		update.SetQueueNodeRunID("")

@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 )
 
@@ -22,6 +23,8 @@ type PromptAppend struct {
 	SessionID string `json:"session_id,omitempty"`
 	// Body holds the value of the "body" field.
 	Body string `json:"body,omitempty"`
+	// Mentions holds the value of the "mentions" field.
+	Mentions []session.PromptMention `json:"mentions,omitempty"`
 	// ArtifactIds holds the value of the "artifact_ids" field.
 	ArtifactIds []string `json:"artifact_ids,omitempty"`
 	// Status holds the value of the "status" field.
@@ -40,7 +43,7 @@ func (*PromptAppend) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case promptappend.FieldArtifactIds:
+		case promptappend.FieldMentions, promptappend.FieldArtifactIds:
 			values[i] = new([]byte)
 		case promptappend.FieldID, promptappend.FieldSessionID, promptappend.FieldBody, promptappend.FieldStatus, promptappend.FieldDispatchedProcessRunID:
 			values[i] = new(sql.NullString)
@@ -78,6 +81,14 @@ func (_m *PromptAppend) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field body", values[i])
 			} else if value.Valid {
 				_m.Body = value.String
+			}
+		case promptappend.FieldMentions:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field mentions", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Mentions); err != nil {
+					return fmt.Errorf("unmarshal field mentions: %w", err)
+				}
 			}
 		case promptappend.FieldArtifactIds:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -153,6 +164,9 @@ func (_m *PromptAppend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("body=")
 	builder.WriteString(_m.Body)
+	builder.WriteString(", ")
+	builder.WriteString("mentions=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Mentions))
 	builder.WriteString(", ")
 	builder.WriteString("artifact_ids=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ArtifactIds))

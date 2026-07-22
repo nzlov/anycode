@@ -17,6 +17,8 @@ const (
 	FieldSessionID = "session_id"
 	// FieldBody holds the string denoting the body field in the database.
 	FieldBody = "body"
+	// FieldMentions holds the string denoting the mentions field in the database.
+	FieldMentions = "mentions"
 	// FieldArtifactIds holds the string denoting the artifact_ids field in the database.
 	FieldArtifactIds = "artifact_ids"
 	// FieldStatus holds the string denoting the status field in the database.
@@ -36,6 +38,7 @@ var Columns = []string{
 	FieldID,
 	FieldSessionID,
 	FieldBody,
+	FieldMentions,
 	FieldArtifactIds,
 	FieldStatus,
 	FieldDispatchedAt,

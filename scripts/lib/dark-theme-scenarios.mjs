@@ -23,7 +23,7 @@ export const darkThemeDialogs = [
   'project-settings',
   'remove-project-confirmation',
   'logout-confirmation',
-  'answer-user',
+  'questions',
   'forward-approval',
   'overview-diff',
   'edit-prompt-append',
@@ -44,7 +44,7 @@ export const darkThemeMenus = [
 export const darkThemeSurfaceStates = {
   'route-diff': ['all', 'single'],
   'dialog-global-settings': ['projects', 'quick-commands'],
-  'dialog-answer-user': ['questions', 'diff'],
+  'dialog-questions': ['questions', 'diff'],
   'dialog-forward-approval': ['result', 'diff'],
 };
 

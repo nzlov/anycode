@@ -8,15 +8,15 @@ import (
 
 type DefaultPolicy struct{}
 
-func (DefaultPolicy) CanSubmit(batch Batch, answers []Answer) error {
-	if batch.ID == "" {
-		return errors.New("question batch id is required")
+func (DefaultPolicy) CanSubmit(request Request, answers []Answer) error {
+	if request.ID == "" {
+		return errors.New("question request id is required")
 	}
-	if batch.Status != BatchPending {
-		return fmt.Errorf("question batch %s is not pending", batch.ID)
+	if request.Status != RequestPending {
+		return fmt.Errorf("question request %s is not pending", request.ID)
 	}
-	questions := make(map[QuestionID]Question, len(batch.Questions))
-	for _, item := range batch.Questions {
+	questions := make(map[QuestionID]Question, len(request.Questions))
+	for _, item := range request.Questions {
 		if item.ID == "" {
 			return errors.New("question id is required")
 		}
@@ -47,31 +47,31 @@ func (DefaultPolicy) CanSubmit(batch Batch, answers []Answer) error {
 	return nil
 }
 
-func (p DefaultPolicy) ApplyAnswers(batch Batch, answers []Answer) (Batch, error) {
-	if err := p.CanSubmit(batch, answers); err != nil {
-		return Batch{}, err
+func (p DefaultPolicy) ApplyAnswers(request Request, answers []Answer) (Request, error) {
+	if err := p.CanSubmit(request, answers); err != nil {
+		return Request{}, err
 	}
 	byQuestion := make(map[QuestionID]Answer, len(answers))
 	for _, answer := range answers {
 		byQuestion[answer.QuestionID] = answer
 	}
-	for i := range batch.Questions {
-		answer := byQuestion[batch.Questions[i].ID]
-		batch.Questions[i].SelectedOptionID = answer.SelectedOptionID
-		batch.Questions[i].CustomAnswer = answer.CustomAnswer
-		batch.Questions[i].Answer = answer.Payload
-		batch.Questions[i].Status = "answered"
+	for i := range request.Questions {
+		answer := byQuestion[request.Questions[i].ID]
+		request.Questions[i].SelectedOptionID = answer.SelectedOptionID
+		request.Questions[i].CustomAnswer = answer.CustomAnswer
+		request.Questions[i].Answer = answer.Payload
+		request.Questions[i].Status = "answered"
 	}
-	batch.Status = BatchAnswered
-	return batch, nil
+	request.Status = RequestAnswered
+	return request, nil
 }
 
-func (DefaultPolicy) Cancel(batch Batch, reason string) (Batch, error) {
-	if batch.Status != BatchPending {
-		return Batch{}, fmt.Errorf("question batch %s is not pending", batch.ID)
+func (DefaultPolicy) Cancel(request Request, reason string) (Request, error) {
+	if request.Status != RequestPending {
+		return Request{}, fmt.Errorf("question request %s is not pending", request.ID)
 	}
-	batch.Status = BatchCancelled
-	return batch, nil
+	request.Status = RequestCancelled
+	return request, nil
 }
 
 func validateAnswer(question Question, answer Answer) error {

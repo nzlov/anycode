@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
@@ -54,6 +55,24 @@ func (_u *SessionUpdate) SetNillableRequirement(v *string) *SessionUpdate {
 	if v != nil {
 		_u.SetRequirement(*v)
 	}
+	return _u
+}
+
+// SetMentions sets the "mentions" field.
+func (_u *SessionUpdate) SetMentions(v []session.PromptMention) *SessionUpdate {
+	_u.mutation.SetMentions(v)
+	return _u
+}
+
+// AppendMentions appends value to the "mentions" field.
+func (_u *SessionUpdate) AppendMentions(v []session.PromptMention) *SessionUpdate {
+	_u.mutation.AppendMentions(v)
+	return _u
+}
+
+// ClearMentions clears the value of the "mentions" field.
+func (_u *SessionUpdate) ClearMentions() *SessionUpdate {
+	_u.mutation.ClearMentions()
 	return _u
 }
 
@@ -670,20 +689,6 @@ func (_u *SessionUpdate) SetNillableQueueResumeOfProcessRunID(v *string) *Sessio
 	return _u
 }
 
-// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
-func (_u *SessionUpdate) SetQueueAnswerBatchID(v string) *SessionUpdate {
-	_u.mutation.SetQueueAnswerBatchID(v)
-	return _u
-}
-
-// SetNillableQueueAnswerBatchID sets the "queue_answer_batch_id" field if the given value is not nil.
-func (_u *SessionUpdate) SetNillableQueueAnswerBatchID(v *string) *SessionUpdate {
-	if v != nil {
-		_u.SetQueueAnswerBatchID(*v)
-	}
-	return _u
-}
-
 // SetWorkflowDefinitionID sets the "workflow_definition_id" field.
 func (_u *SessionUpdate) SetWorkflowDefinitionID(v string) *SessionUpdate {
 	_u.mutation.SetWorkflowDefinitionID(v)
@@ -925,6 +930,17 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Requirement(); ok {
 		_spec.SetField(entsession.FieldRequirement, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Mentions(); ok {
+		_spec.SetField(entsession.FieldMentions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMentions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, entsession.FieldMentions, value)
+		})
+	}
+	if _u.mutation.MentionsCleared() {
+		_spec.ClearField(entsession.FieldMentions, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Mode(); ok {
 		_spec.SetField(entsession.FieldMode, field.TypeString, value)
 	}
@@ -1078,9 +1094,6 @@ func (_u *SessionUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.QueueResumeOfProcessRunID(); ok {
 		_spec.SetField(entsession.FieldQueueResumeOfProcessRunID, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
-		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
-	}
 	if value, ok := _u.mutation.WorkflowDefinitionID(); ok {
 		_spec.SetField(entsession.FieldWorkflowDefinitionID, field.TypeString, value)
 	}
@@ -1174,6 +1187,24 @@ func (_u *SessionUpdateOne) SetNillableRequirement(v *string) *SessionUpdateOne 
 	if v != nil {
 		_u.SetRequirement(*v)
 	}
+	return _u
+}
+
+// SetMentions sets the "mentions" field.
+func (_u *SessionUpdateOne) SetMentions(v []session.PromptMention) *SessionUpdateOne {
+	_u.mutation.SetMentions(v)
+	return _u
+}
+
+// AppendMentions appends value to the "mentions" field.
+func (_u *SessionUpdateOne) AppendMentions(v []session.PromptMention) *SessionUpdateOne {
+	_u.mutation.AppendMentions(v)
+	return _u
+}
+
+// ClearMentions clears the value of the "mentions" field.
+func (_u *SessionUpdateOne) ClearMentions() *SessionUpdateOne {
+	_u.mutation.ClearMentions()
 	return _u
 }
 
@@ -1790,20 +1821,6 @@ func (_u *SessionUpdateOne) SetNillableQueueResumeOfProcessRunID(v *string) *Ses
 	return _u
 }
 
-// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
-func (_u *SessionUpdateOne) SetQueueAnswerBatchID(v string) *SessionUpdateOne {
-	_u.mutation.SetQueueAnswerBatchID(v)
-	return _u
-}
-
-// SetNillableQueueAnswerBatchID sets the "queue_answer_batch_id" field if the given value is not nil.
-func (_u *SessionUpdateOne) SetNillableQueueAnswerBatchID(v *string) *SessionUpdateOne {
-	if v != nil {
-		_u.SetQueueAnswerBatchID(*v)
-	}
-	return _u
-}
-
 // SetWorkflowDefinitionID sets the "workflow_definition_id" field.
 func (_u *SessionUpdateOne) SetWorkflowDefinitionID(v string) *SessionUpdateOne {
 	_u.mutation.SetWorkflowDefinitionID(v)
@@ -2075,6 +2092,17 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	if value, ok := _u.mutation.Requirement(); ok {
 		_spec.SetField(entsession.FieldRequirement, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.Mentions(); ok {
+		_spec.SetField(entsession.FieldMentions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedMentions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, entsession.FieldMentions, value)
+		})
+	}
+	if _u.mutation.MentionsCleared() {
+		_spec.ClearField(entsession.FieldMentions, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.Mode(); ok {
 		_spec.SetField(entsession.FieldMode, field.TypeString, value)
 	}
@@ -2227,9 +2255,6 @@ func (_u *SessionUpdateOne) sqlSave(ctx context.Context) (_node *Session, err er
 	}
 	if value, ok := _u.mutation.QueueResumeOfProcessRunID(); ok {
 		_spec.SetField(entsession.FieldQueueResumeOfProcessRunID, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.QueueAnswerBatchID(); ok {
-		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.WorkflowDefinitionID(); ok {
 		_spec.SetField(entsession.FieldWorkflowDefinitionID, field.TypeString, value)

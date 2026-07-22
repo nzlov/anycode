@@ -104,6 +104,7 @@
         <CodexPromptComposer
           v-model:prompt="prompt"
           v-model:files="files"
+          v-model:mentions="mentions"
           v-model:model="model"
           v-model:effort="effort"
           v-model:permission="permission"
@@ -175,7 +176,12 @@ import {
   loadNewSessionPreferences,
   storeNewSessionPreferences,
 } from '@/services/newSessionPreferences';
-import type { CreateSessionInput, SessionConfig, SessionPriority } from '@/services/sessions';
+import type {
+  CreateSessionInput,
+  PromptMention,
+  SessionConfig,
+  SessionPriority,
+} from '@/services/sessions';
 import { getWorkflowDefinition } from '@/services/workflows';
 
 const props = defineProps<{
@@ -207,6 +213,7 @@ const preferredMode = ref<'workflow' | 'chat'>(storedLaunchMode());
 const priority = ref<SessionPriority>(cachedPreferences?.priority ?? 'medium');
 const prompt = ref('');
 const files = ref<File[]>([]);
+const mentions = ref<PromptMention[]>([]);
 const model = ref(storedRunConfig.codexModel);
 const effort = ref(storedRunConfig.reasoningEffort);
 const permission = ref(storedRunConfig.permissionMode);
@@ -375,12 +382,13 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     permissionMode: permission.value,
     fastMode: fast.value,
   };
-  const input: CreateSessionInput = {
+	const input: CreateSessionInput = {
     projectId: projectId.value,
     requirement: prompt.value,
     mode: requestedMode === 'workflow' && canUseWorkflowMode.value ? 'workflow' : 'chat',
     priority: priority.value,
-    config,
+		config,
+		mentions: mentions.value,
   };
   if (selectedProject.value?.isGit) {
     input.baseBranch = branch.value;
@@ -404,8 +412,9 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     }
     await createSessionRequest(input);
     rememberLaunchMode(input.mode);
-    files.value = [];
-    prompt.value = '';
+		files.value = [];
+		prompt.value = '';
+		mentions.value = [];
     emit('update:modelValue', false);
   } catch (error) {
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
@@ -476,7 +485,8 @@ watch(dialogVisible, (open) => {
 });
 
 watch(projectId, (value, previous) => {
-  if (!value || value === previous) return;
+	if (!value || value === previous) return;
+	mentions.value = [];
   void loadBranchesForProject(value, { refresh: true });
   void loadWorkflowAvailability();
 });

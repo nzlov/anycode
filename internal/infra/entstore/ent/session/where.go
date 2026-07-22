@@ -254,11 +254,6 @@ func QueueResumeOfProcessRunID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldQueueResumeOfProcessRunID, v))
 }
 
-// QueueAnswerBatchID applies equality check predicate on the "queue_answer_batch_id" field. It's identical to QueueAnswerBatchIDEQ.
-func QueueAnswerBatchID(v string) predicate.Session {
-	return predicate.Session(sql.FieldEQ(FieldQueueAnswerBatchID, v))
-}
-
 // WorkflowDefinitionID applies equality check predicate on the "workflow_definition_id" field. It's identical to WorkflowDefinitionIDEQ.
 func WorkflowDefinitionID(v string) predicate.Session {
 	return predicate.Session(sql.FieldEQ(FieldWorkflowDefinitionID, v))
@@ -432,6 +427,16 @@ func RequirementEqualFold(v string) predicate.Session {
 // RequirementContainsFold applies the ContainsFold predicate on the "requirement" field.
 func RequirementContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldRequirement, v))
+}
+
+// MentionsIsNil applies the IsNil predicate on the "mentions" field.
+func MentionsIsNil() predicate.Session {
+	return predicate.Session(sql.FieldIsNull(FieldMentions))
+}
+
+// MentionsNotNil applies the NotNil predicate on the "mentions" field.
+func MentionsNotNil() predicate.Session {
+	return predicate.Session(sql.FieldNotNull(FieldMentions))
 }
 
 // ModeEQ applies the EQ predicate on the "mode" field.
@@ -2427,71 +2432,6 @@ func QueueResumeOfProcessRunIDEqualFold(v string) predicate.Session {
 // QueueResumeOfProcessRunIDContainsFold applies the ContainsFold predicate on the "queue_resume_of_process_run_id" field.
 func QueueResumeOfProcessRunIDContainsFold(v string) predicate.Session {
 	return predicate.Session(sql.FieldContainsFold(FieldQueueResumeOfProcessRunID, v))
-}
-
-// QueueAnswerBatchIDEQ applies the EQ predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDEQ(v string) predicate.Session {
-	return predicate.Session(sql.FieldEQ(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDNEQ applies the NEQ predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDNEQ(v string) predicate.Session {
-	return predicate.Session(sql.FieldNEQ(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDIn applies the In predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDIn(vs ...string) predicate.Session {
-	return predicate.Session(sql.FieldIn(FieldQueueAnswerBatchID, vs...))
-}
-
-// QueueAnswerBatchIDNotIn applies the NotIn predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDNotIn(vs ...string) predicate.Session {
-	return predicate.Session(sql.FieldNotIn(FieldQueueAnswerBatchID, vs...))
-}
-
-// QueueAnswerBatchIDGT applies the GT predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDGT(v string) predicate.Session {
-	return predicate.Session(sql.FieldGT(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDGTE applies the GTE predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDGTE(v string) predicate.Session {
-	return predicate.Session(sql.FieldGTE(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDLT applies the LT predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDLT(v string) predicate.Session {
-	return predicate.Session(sql.FieldLT(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDLTE applies the LTE predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDLTE(v string) predicate.Session {
-	return predicate.Session(sql.FieldLTE(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDContains applies the Contains predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDContains(v string) predicate.Session {
-	return predicate.Session(sql.FieldContains(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDHasPrefix applies the HasPrefix predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDHasPrefix(v string) predicate.Session {
-	return predicate.Session(sql.FieldHasPrefix(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDHasSuffix applies the HasSuffix predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDHasSuffix(v string) predicate.Session {
-	return predicate.Session(sql.FieldHasSuffix(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDEqualFold applies the EqualFold predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDEqualFold(v string) predicate.Session {
-	return predicate.Session(sql.FieldEqualFold(FieldQueueAnswerBatchID, v))
-}
-
-// QueueAnswerBatchIDContainsFold applies the ContainsFold predicate on the "queue_answer_batch_id" field.
-func QueueAnswerBatchIDContainsFold(v string) predicate.Session {
-	return predicate.Session(sql.FieldContainsFold(FieldQueueAnswerBatchID, v))
 }
 
 // WorkflowDefinitionIDEQ applies the EQ predicate on the "workflow_definition_id" field.

@@ -3,11 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const panelSource = readFileSync(
-  new URL('../src/components/AnswerUserPanel.vue', import.meta.url),
-  'utf8',
-);
-const headlessSource = readFileSync(
-  new URL('../../scripts/headless-e2e.mjs', import.meta.url),
+  new URL('../src/components/QuestionsPanel.vue', import.meta.url),
   'utf8',
 );
 
@@ -55,28 +51,4 @@ test('custom answer selection keeps using setChoice without a separate advance h
     /val="__custom__"[\s\S]*@update:model-value="setChoice\(question\.id, String\(\$event\)\)"/,
   );
   assert.doesNotMatch(customItem, /advance/i);
-});
-
-test('headless flow exercises automatic navigation in both answer panel entries', () => {
-  assert.match(
-    headlessSource,
-    /questions:\s*\[[\s\S]*Choose first step[\s\S]*Choose second step[\s\S]*Choose final step/,
-  );
-  assert.match(headlessSource, /assertAnswerUserAutoAdvance\('\.detail-page \.answer-panel'/);
-  assert.match(headlessSource, /assertAnswerUserAutoAdvance\('\.answer-dialog \.answer-panel'/);
-  assert.match(headlessSource, /function assertCustomAnswerInteractiveForAllQuestions\(panelSelector\)/);
-  assert.match(
-    headlessSource,
-    /await setViewport\(390, 844\);[\s\S]*assertCustomAnswerInteractiveForAllQuestions\('\.answer-dialog \.answer-panel'\)/,
-  );
-  assert.match(
-    headlessSource,
-    /assertCustomAnswerInteractiveForAllQuestions[\s\S]*clickCustomAnswer\(panelSelector\)[\s\S]*focusCustomAnswerInput\(panelSelector\)/,
-  );
-  assert.match(
-    headlessSource,
-    /clickCustomAnswer\(panelSelector\)[\s\S]*fillCustomAnswer\(panelSelector, 'Custom response'\)[\s\S]*waitForActiveAnswerQuestion\(panelSelector, '问题 2'\)/,
-  );
-  assert.match(headlessSource, /assertPendingQuestionBatch\(session\.id, pending\.batchId\)/);
-  assert.doesNotMatch(headlessSource, /allowCustom/);
 });

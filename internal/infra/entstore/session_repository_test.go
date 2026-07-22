@@ -35,6 +35,7 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 		ID:                 session.ID("session-1"),
 		ProjectID:          projectID,
 		Requirement:        "Build session persistence",
+		Mentions:           []session.PromptMention{{Path: "src/main.go"}},
 		Mode:               session.ModeChat,
 		Status:             session.StatusRunning,
 		BaseBranch:         "main",
@@ -72,11 +73,10 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 		ArtifactCount: 3,
 		FilesChanged:  5,
 		Queue: session.QueueIntent{
-			Kind:                 session.QueueKindAnswerUser,
+			Kind:                 session.QueueKindResume,
 			InitialStart:         true,
 			ResumeCodexSessionID: "codex-1",
 			ResumeOfProcessRunID: "process-run-1",
-			AnswerBatchID:        "batch-1",
 		},
 		AppliedSystemCommands: map[string]bool{"command-1": true},
 		LastRunAt:             &now,
@@ -101,8 +101,8 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	if !found.Queue.InitialStart {
 		t.Fatalf("queue initial start = false, want true: %#v", found.Queue)
 	}
-	if found.Queue.ResumeOfProcessRunID != "process-run-1" || found.Queue.AnswerBatchID != "batch-1" {
-		t.Fatalf("answer queue metadata = %#v", found.Queue)
+	if found.Queue.ResumeOfProcessRunID != "process-run-1" {
+		t.Fatalf("resume queue metadata = %#v", found.Queue)
 	}
 	if !found.AppliedSystemCommands["command-1"] {
 		t.Fatalf("applied system commands = %#v", found.AppliedSystemCommands)
@@ -289,11 +289,11 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 		session.Session{
 			ID:             "session-9",
 			ProjectID:      projectID,
-			Requirement:    "Queued answer user",
+			Requirement:    "Queued prompt append",
 			Mode:           session.ModeChat,
 			Status:         session.StatusQueued,
 			CodexSessionID: "codex-9",
-			Queue:          session.QueueIntent{Kind: session.QueueKindAnswerUser},
+			Queue:          session.QueueIntent{Kind: session.QueueKindPromptAppend},
 			CreatedAt:      now.Add(-38 * time.Minute),
 			UpdatedAt:      now.Add(-38 * time.Minute),
 		},
@@ -336,7 +336,7 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	for _, item := range interrupted {
 		gotInterruptedIDs = append(gotInterruptedIDs, item.ID)
 	}
-	wantInterruptedIDs := []session.ID{"session-8", "session-5", "session-9"}
+	wantInterruptedIDs := []session.ID{"session-8", "session-5"}
 	if len(gotInterruptedIDs) != len(wantInterruptedIDs) {
 		t.Fatalf("interrupted sessions = %#v, want %#v", gotInterruptedIDs, wantInterruptedIDs)
 	}
@@ -351,6 +351,7 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 		ID:        "append-1",
 		SessionID: input.ID,
 		Body:      "continue with tests",
+		Mentions:  []session.PromptMention{{Path: "docs/testing.md"}},
 		ArtifactIDs: []session.SessionFileID{
 			"artifact-2", "artifact-1",
 		},
@@ -368,6 +369,9 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	}
 	if len(appends[0].ArtifactIDs) != 2 || appends[0].ArtifactIDs[0] != "artifact-2" || appends[0].ArtifactIDs[1] != "artifact-1" {
 		t.Fatalf("prompt append artifact ids = %#v", appends[0].ArtifactIDs)
+	}
+	if len(appends[0].Mentions) != 1 || appends[0].Mentions[0].Path != "docs/testing.md" {
+		t.Fatalf("prompt append mentions = %#v", appends[0].Mentions)
 	}
 	pending, err := repo.ListPendingPromptAppends(ctx, input.ID)
 	if err != nil {
@@ -691,7 +695,6 @@ func TestSessionRepositoryMigrateAddsFieldsToExistingTursoSessions(t *testing.T)
 		session_id text NOT NULL,
 		node_run_id text NULL,
 		status text NOT NULL,
-		pid integer NULL,
 		codex_session_id text NOT NULL DEFAULT '',
 		resume_of text NULL,
 		exit_code integer NULL,
@@ -796,6 +799,7 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 	if got.ID != want.ID ||
 		got.ProjectID != want.ProjectID ||
 		got.Requirement != want.Requirement ||
+		len(got.Mentions) != len(want.Mentions) ||
 		got.Mode != want.Mode ||
 		got.Status != want.Status ||
 		got.BaseBranch != want.BaseBranch ||
@@ -817,6 +821,11 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.FilesChanged != want.FilesChanged ||
 		len(got.TodoList.Items) != len(want.TodoList.Items) {
 		t.Fatalf("session mismatch:\ngot:  %#v\nwant: %#v", got, want)
+	}
+	for index := range want.Mentions {
+		if got.Mentions[index] != want.Mentions[index] {
+			t.Fatalf("mention %d mismatch: got=%#v want=%#v", index, got.Mentions[index], want.Mentions[index])
+		}
 	}
 	for index := range want.TodoList.Items {
 		if got.TodoList.Items[index] != want.TodoList.Items[index] {

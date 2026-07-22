@@ -146,7 +146,7 @@ export interface QuestionOption {
 
 export interface AgentQuestion {
   id: string;
-  batchId: string;
+  requestId: string;
   title: string;
   body: string;
   type: string;
@@ -157,7 +157,7 @@ export interface AgentQuestion {
   status: string;
 }
 
-export interface QuestionBatch {
+export interface QuestionRequest {
   id: string;
   sessionId: string;
   status: string;
@@ -227,6 +227,11 @@ export interface CreateSessionInput {
     fastMode?: boolean;
   };
   stagedAttachmentIds?: string[];
+  mentions?: PromptMention[];
+}
+
+export interface PromptMention {
+  path: string;
 }
 
 export interface SessionConfig {
@@ -398,7 +403,7 @@ export interface SessionUpdateEvent {
   updatedTime?: string;
 }
 
-interface GraphQLQuestionBatch {
+interface GraphQLQuestionRequest {
   id: string;
   sessionId: string;
   status: string;
@@ -540,13 +545,13 @@ const sessionFields = `
   updatedAt
 `;
 
-const questionBatchFields = `
+const questionRequestFields = `
   id
   sessionId
   status
   questions {
     id
-    batchId
+    requestId
     title
     body
     type
@@ -719,16 +724,18 @@ export function subscribeSessionEvents(
 }
 
 export async function appendPrompt(
-  sessionId: string,
-  body: string,
-  stagedAttachmentIds?: string[],
-  artifactIds?: string[],
+	sessionId: string,
+	body: string,
+	stagedAttachmentIds?: string[],
+	artifactIds?: string[],
+	mentions?: PromptMention[],
 ) {
   const input: {
     sessionId: string;
     body: string;
     stagedAttachmentIds?: string[];
-    artifactIds?: string[];
+		artifactIds?: string[];
+		mentions?: PromptMention[];
   } = {
     sessionId,
     body,
@@ -736,7 +743,8 @@ export async function appendPrompt(
   if (stagedAttachmentIds && stagedAttachmentIds.length > 0) {
     input.stagedAttachmentIds = stagedAttachmentIds;
   }
-  if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
+	if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
+	if (mentions && mentions.length > 0) input.mentions = mentions;
   return graphqlFetch<
     { appendPrompt: GraphQLPromptAppend },
     {
@@ -744,7 +752,8 @@ export async function appendPrompt(
         sessionId: string;
         body: string;
         stagedAttachmentIds?: string[];
-        artifactIds?: string[];
+			artifactIds?: string[];
+			mentions?: PromptMention[];
       };
     }
   >({
@@ -922,38 +931,38 @@ export async function executeSession(sessionId: string, force = false) {
   });
 }
 
-export async function getPendingQuestionBatches(sessionId: string): Promise<QuestionBatch[]> {
+export async function getPendingQuestionRequests(sessionId: string): Promise<QuestionRequest[]> {
   const data = await graphqlFetch<
-    { pendingQuestionBatches: GraphQLQuestionBatch[] },
+    { pendingQuestionRequests: GraphQLQuestionRequest[] },
     { sessionId: string }
   >({
     query: `
-      query PendingQuestionBatches($sessionId: ID!) {
-        pendingQuestionBatches(sessionId: $sessionId) {
-          ${questionBatchFields}
+      query PendingQuestionRequests($sessionId: ID!) {
+        pendingQuestionRequests(sessionId: $sessionId) {
+          ${questionRequestFields}
         }
       }
     `,
     variables: { sessionId },
   });
-  return data.pendingQuestionBatches.map(normalizeQuestionBatch);
+  return data.pendingQuestionRequests.map(normalizeQuestionRequest);
 }
 
-export async function submitQuestionBatch(batchId: string, answers: QuestionAnswerInput[]) {
+export async function submitQuestionRequest(requestId: string, answers: QuestionAnswerInput[]) {
   const data = await graphqlFetch<
-    { submitQuestionBatch: GraphQLQuestionBatch },
-    { input: { batchId: string; answers: QuestionAnswerInput[] } }
+    { submitQuestionRequest: GraphQLQuestionRequest },
+    { input: { requestId: string; answers: QuestionAnswerInput[] } }
   >({
     query: `
-      mutation SubmitQuestionBatch($input: SubmitQuestionBatchInput!) {
-        submitQuestionBatch(input: $input) {
-          ${questionBatchFields}
+      mutation SubmitQuestionRequest($input: SubmitQuestionRequestInput!) {
+        submitQuestionRequest(input: $input) {
+          ${questionRequestFields}
         }
       }
     `,
-    variables: { input: { batchId, answers } },
+    variables: { input: { requestId, answers } },
   });
-  return normalizeQuestionBatch(data.submitQuestionBatch);
+  return normalizeQuestionRequest(data.submitQuestionRequest);
 }
 
 export async function submitWorkflowApproval(input: SubmitWorkflowApprovalInput) {
@@ -999,12 +1008,12 @@ export async function createSession(input: CreateSessionInput) {
   return normalizeSession(data.createSession);
 }
 
-function normalizeQuestionBatch(batch: GraphQLQuestionBatch): QuestionBatch {
-  return {
-    id: batch.id,
-    sessionId: batch.sessionId,
-    status: batch.status,
-    questions: batch.questions.map((question) => ({
+function normalizeQuestionRequest(request: GraphQLQuestionRequest): QuestionRequest {
+	return {
+		id: request.id,
+		sessionId: request.sessionId,
+		status: request.status,
+		questions: request.questions.map((question) => ({
       ...question,
       options: question.options.map((option) => ({
         ...option,

@@ -19,14 +19,8 @@ const (
 	FieldNodeRunID = "node_run_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
-	// FieldPid holds the string denoting the pid field in the database.
-	FieldPid = "pid"
 	// FieldCodexSessionID holds the string denoting the codex_session_id field in the database.
 	FieldCodexSessionID = "codex_session_id"
-	// FieldTranscriptRelativePath holds the string denoting the transcript_relative_path field in the database.
-	FieldTranscriptRelativePath = "transcript_relative_path"
-	// FieldTranscriptBoundAt holds the string denoting the transcript_bound_at field in the database.
-	FieldTranscriptBoundAt = "transcript_bound_at"
 	// FieldResumeOf holds the string denoting the resume_of field in the database.
 	FieldResumeOf = "resume_of"
 	// FieldExitCode holds the string denoting the exit_code field in the database.
@@ -47,10 +41,7 @@ var Columns = []string{
 	FieldSessionID,
 	FieldNodeRunID,
 	FieldStatus,
-	FieldPid,
 	FieldCodexSessionID,
-	FieldTranscriptRelativePath,
-	FieldTranscriptBoundAt,
 	FieldResumeOf,
 	FieldExitCode,
 	FieldFailureReason,
@@ -75,8 +66,6 @@ var (
 	StatusValidator func(string) error
 	// DefaultCodexSessionID holds the default value on creation for the "codex_session_id" field.
 	DefaultCodexSessionID string
-	// DefaultTranscriptRelativePath holds the default value on creation for the "transcript_relative_path" field.
-	DefaultTranscriptRelativePath string
 	// DefaultFailureReason holds the default value on creation for the "failure_reason" field.
 	DefaultFailureReason string
 	// DefaultStartedAt holds the default value on creation for the "started_at" field.
@@ -106,24 +95,9 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
-// ByPid orders the results by the pid field.
-func ByPid(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPid, opts...).ToFunc()
-}
-
 // ByCodexSessionID orders the results by the codex_session_id field.
 func ByCodexSessionID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCodexSessionID, opts...).ToFunc()
-}
-
-// ByTranscriptRelativePath orders the results by the transcript_relative_path field.
-func ByTranscriptRelativePath(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTranscriptRelativePath, opts...).ToFunc()
-}
-
-// ByTranscriptBoundAt orders the results by the transcript_bound_at field.
-func ByTranscriptBoundAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTranscriptBoundAt, opts...).ToFunc()
 }
 
 // ByResumeOf orders the results by the resume_of field.

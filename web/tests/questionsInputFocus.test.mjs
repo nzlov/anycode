@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const panelSource = readFileSync(
-  new URL('../src/components/AnswerUserPanel.vue', import.meta.url),
+  new URL('../src/components/QuestionsPanel.vue', import.meta.url),
   'utf8',
 );
 const dialogSource = readFileSync(
-  new URL('../src/components/AnswerUserDialog.vue', import.meta.url),
+  new URL('../src/components/QuestionsDialog.vue', import.meta.url),
   'utf8',
 );
 const detailSource = readFileSync(
@@ -29,7 +29,7 @@ test('custom answer input is not nested in an actionable item or label', () => {
   assert.match(customItem, /<q-input/);
 });
 
-test('dialog and session detail entries share the focus-safe answer panel', () => {
-  assert.match(dialogSource, /<AnswerUserPanel/);
-  assert.match(detailSource, /<AnswerUserPanel/);
+test('dialog and session detail entries share the focus-safe questions panel', () => {
+  assert.match(dialogSource, /<QuestionsPanel/);
+  assert.match(detailSource, /<QuestionsPanel/);
 });

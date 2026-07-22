@@ -24,7 +24,7 @@ const (
 	CodeCodexParamRejected    = "codex_param_rejected"
 	CodeResumeFailed          = "resume_failed"
 	CodeAttachmentFailed      = "attachment_failed"
-	CodeAnswerUserCancelled   = "answer_user_cancelled"
+	CodeQuestionsCancelled    = "questions_cancelled"
 	CodeWorkflowBlocked       = "workflow_blocked"
 	CodeWorkflowResultInvalid = "workflow_result_invalid"
 	CodeAuthFailed            = "auth_failed"

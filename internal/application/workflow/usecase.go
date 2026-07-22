@@ -1722,7 +1722,7 @@ func resultRetryPrompt(node domain.Node, reason error) string {
 	builder.WriteString("ANYCODE_WORKFLOW_RESULT_RETRY\n")
 	builder.WriteString("Your previous response did not satisfy the workflow result protocol: ")
 	builder.WriteString(reason.Error())
-	builder.WriteString("\nIf any question, uncertainty, or user decision within this node's task remains, call `answer_user` now and wait for the answer before finishing.\n")
+	builder.WriteString("\nIf any question, uncertainty, or user decision within this node's task remains, call `questions` now and wait for the answer before finishing.\n")
 	builder.WriteString(workflowResultContract(node))
 	if len(node.OutputFields) > 0 {
 		builder.WriteString("\n\nRequired `results.data` fields:\n")
@@ -1780,7 +1780,7 @@ func outputFieldList(fields []domain.OutputField) string {
 }
 
 func workflowResultContract(node domain.Node) string {
-	return "Workflow result contract:\nBefore finishing, resolve every question, uncertainty, or user decision within this node's task through `answer_user`. Do not describe pending questions in the final result. Workflow-managed before-run or after-run approval is handled by the runner after you return `results`; do not call `answer_user` merely to obtain that approval.\nArtifacts in `ANYCODE_ARTIFACT_DIR` must use their relative logical path as `results.artifacts[].ref`: use the `logicalPath` returned by `publish_artifact`, or otherwise the path relative to `ANYCODE_ARTIFACT_DIR`. Source files, plan documents, and external URLs may remain non-linkable refs.\nReturn only one JSON object with exactly this shape and no extra fields:\n" +
+	return "Workflow result contract:\nBefore finishing, resolve every question, uncertainty, or user decision within this node's task through `questions`. Do not describe pending questions in the final result. Workflow-managed before-run or after-run approval is handled by the runner after you return `results`; do not call `questions` merely to obtain that approval.\nArtifacts in `ANYCODE_ARTIFACT_DIR` must use their relative logical path as `results.artifacts[].ref`: use the `logicalPath` returned by `publish_artifact`, or otherwise the path relative to `ANYCODE_ARTIFACT_DIR`. Source files, plan documents, and external URLs may remain non-linkable refs.\nReturn only one JSON object with exactly this shape and no extra fields:\n" +
 		`{"results":{"version":1,"outcome":"success|partial|failure","summary":"concise review summary","data":{},"checks":[{"id":"...","label":"...","status":"passed|warning|failed","detail":"...","source":"agent"}],"warnings":[{"code":"...","message":"..."}],"artifacts":[{"kind":"...","label":"...","ref":"..."}]}}` +
 		"\nThe workflow owns human approval. Never return `approval`, `approved`, `questions`, `pendingQuestions`, or `needs_input` in `results`."
 }

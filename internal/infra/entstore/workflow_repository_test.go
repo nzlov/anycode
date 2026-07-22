@@ -157,7 +157,7 @@ func TestWorkflowRepositoryPersistsDefinitionsRunsAndNodeRuns(t *testing.T) {
 	}
 }
 
-func TestWorkflowRepositoryTransitionsNodeThroughAnswerUserResume(t *testing.T) {
+func TestWorkflowRepositoryTransitionsNodeThroughQuestionsResume(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
 	if err != nil {

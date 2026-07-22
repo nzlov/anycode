@@ -46,7 +46,6 @@
                 <SessionEventMessage
                   :event="event"
                   :known-user-prompts="knownUserPrompts"
-                  :workflow-prompt="session?.mode === 'workflow'"
                 />
               </div>
             </div>
@@ -78,8 +77,8 @@
               <q-badge rounded color="warning" class="app-on-warning" label="待回答" />
             </q-card-section>
             <q-separator />
-            <AnswerUserPanel
-              :batches="pendingQuestionBatches"
+            <QuestionsPanel
+              :requests="pendingQuestionRequests"
               :loading="questionsLoading"
               :submitting="questionsSubmitting"
               @submit="submitAnswers"
@@ -108,6 +107,7 @@
             v-model:prompt="appendText"
             v-model:files="appendFiles"
             v-model:artifacts="appendArtifacts"
+            v-model:mentions="appendMentions"
             v-model:model="composerModel"
             v-model:effort="composerEffort"
             v-model:permission="composerPermission"
@@ -557,7 +557,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Notify, QPage, useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
 
-import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
+import QuestionsPanel from '@/components/QuestionsPanel.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import PromptAppendEditPanel from '@/components/PromptAppendEditPanel.vue';
@@ -589,7 +589,12 @@ import {
   resolveSessionArtifacts,
   type SessionFile,
 } from '@/services/sessionFiles';
-import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
+import type {
+  PromptAppend,
+  PromptMention,
+  QuestionAnswerInput,
+  SessionMode,
+} from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 import type { TranscriptTokenUsage } from '@/services/sessionTimeline';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
@@ -636,6 +641,7 @@ const appendText = ref('');
 const streamBodyRef = ref<HTMLElement | null>(null);
 const appendFiles = ref<File[]>([]);
 const appendArtifacts = ref<SessionFile[]>([]);
+const appendMentions = ref<PromptMention[]>([]);
 const appendUploading = ref(false);
 const promptEditDialogOpen = ref(false);
 const promptEditTarget = ref<PromptAppend | null>(null);
@@ -712,7 +718,7 @@ const {
   tokenUsage,
   nodeUsage,
   eventsPageInfo,
-  pendingQuestionBatches,
+  pendingQuestionRequests,
   artifactUpdateVersion,
   diffUpdateVersion,
   loading,
@@ -1163,10 +1169,12 @@ async function sendAppend() {
       text,
       stagedAttachmentIds,
       selectedArtifacts.map((artifact) => artifact.id),
+      appendMentions.value,
     );
     appendText.value = '';
     appendFiles.value = [];
     appendArtifacts.value = [];
+    appendMentions.value = [];
     composerCollapsed.value = true;
   } catch (err) {
     appendUploading.value = false;
@@ -1224,8 +1232,8 @@ async function retryCurrentWorktreeCleanup() {
   }
 }
 
-async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
-  await submitPendingAnswers(batchId, answers);
+async function submitAnswers(requestId: string, answers: QuestionAnswerInput[]) {
+  await submitPendingAnswers(requestId, answers);
 }
 
 function isEventStreamAtBottom(body: HTMLElement) {

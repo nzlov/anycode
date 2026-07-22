@@ -21,7 +21,6 @@ const debugPort = Number(process.env.ANYCODE_E2E_CDP_PORT || 9333);
 const debugURL = `http://127.0.0.1:${debugPort}`;
 const userDataDir = `/tmp/anycode-chromium-e2e-${stamp}`;
 const artifactDir = process.env.ANYCODE_ARTIFACT_DIR || '';
-const e2eDataDir = process.env.ANYCODE_E2E_DATA_DIR || '';
 const screenshotDir =
   process.env.ANYCODE_E2E_SCREENSHOT_DIR ||
   (artifactDir ? `${artifactDir}/headless-e2e/${stamp}` : '/tmp/anycode-headless');
@@ -167,7 +166,7 @@ try {
 
   await assertWorkflowConfigInteractions(gitProject.id);
   const approvalSession = await assertWorkflowCardFlow(gitProject.id);
-  const questionSession = await assertAnswerUserFlow(plainProject.id);
+  const questionsSession = await assertQuestionsFlow(plainProject.id);
 
   await navigate('/#/sessions');
   await waitForText('会话表格');
@@ -237,8 +236,8 @@ try {
     gitFinalStatus: gitSession.finalStatus,
     approvalSessionId: approvalSession.id,
     approvalStatus: approvalSession.status,
-    questionSessionId: questionSession.id,
-    questionBatchId: questionSession.batchId,
+    questionsSessionId: questionsSession.id,
+    questionRequestId: questionsSession.requestId,
     gitDiffFile: 'e2e-codex-output.txt',
     screenshots: [
       '01-overview-desktop.png',
@@ -252,9 +251,9 @@ try {
       '09-git-session-mobile.png',
       '10-directory-dialog.png',
       '11-new-session-dialog.png',
-      '12-answer-user-inline.png',
-      '12-answer-user-dialog.png',
-      '12-answer-user-dialog-mobile.png',
+      '12-questions-inline.png',
+      '12-questions-dialog.png',
+      '12-questions-dialog-mobile.png',
       '13-session-diff-workspace.png',
       '14-session-splitter-default.png',
       '15-session-splitter-persisted.png',
@@ -1162,162 +1161,6 @@ async function clickQuestionButtonForCard(marker) {
   await sleep(500);
 }
 
-async function clickAnswerQuestionTab(panelSelector, label) {
-  const clicked = await evaluate(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const tab = Array.from(panel?.querySelectorAll('[role="tab"]') || [])
-      .find((element) => element.innerText.trim() === ${JSON.stringify(label)});
-    if (!tab) return false;
-    tab.click();
-    return true;
-  })()`);
-  assert(clicked, `${label} tab not found in ${panelSelector}`);
-  await sleep(300);
-}
-
-async function clickAnswerOption(panelSelector, label) {
-  const clicked = await evaluate(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const option = Array.from(panel?.querySelectorAll('.q-tab-panel .option-item') || [])
-      .find((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && element.innerText.includes(${JSON.stringify(label)});
-      });
-    if (!option) return false;
-    option.click();
-    return true;
-  })()`);
-  assert(clicked, `${label} option not found in ${panelSelector}`);
-  await sleep(300);
-}
-
-async function clickCustomAnswer(panelSelector) {
-  await sleep(100);
-  const clicked = await evaluate(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const radios = Array.from(panel?.querySelectorAll('.q-tab-panel .option-item--custom .q-radio') || [])
-      .filter((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      });
-    const radio = radios.at(-1);
-    if (!radio) return false;
-    radio.click();
-    return true;
-  })()`);
-  assert(clicked, `custom answer option not found in ${panelSelector}`);
-  await sleep(300);
-}
-
-async function fillCustomAnswer(panelSelector, value) {
-  await focusCustomAnswerInput(panelSelector);
-  await page.send('Input.insertText', { text: value });
-  await waitForCondition(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    return Array.from(panel?.querySelectorAll('.q-tab-panel .custom-answer-input textarea') || [])
-      .some((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && element.value === ${JSON.stringify(value)};
-      });
-  })()`, `custom answer text in ${panelSelector}`);
-}
-
-async function focusCustomAnswerInput(panelSelector) {
-  const state = await evaluate(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const inputs = Array.from(panel?.querySelectorAll('.q-tab-panel .custom-answer-input textarea') || []);
-    const input = inputs.find((element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-    if (!input) return { count: inputs.length, visible: false, disabled: false, focused: false };
-    if (input.disabled) return { count: inputs.length, visible: true, disabled: true, focused: false };
-    input.focus();
-    return {
-      count: inputs.length,
-      visible: true,
-      disabled: false,
-      focused: document.activeElement === input,
-    };
-  })()`);
-  assert(state.focused, `custom answer input not focusable in ${panelSelector}: ${JSON.stringify(state)}`);
-}
-
-async function waitForActiveAnswerQuestion(panelSelector, label) {
-  await waitForCondition(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    return panel?.querySelector('.q-tab--active')?.innerText.trim() === ${JSON.stringify(label)};
-  })()`, `${label} to become active in ${panelSelector}`);
-}
-
-async function assertAnswerUserAutoAdvance(panelSelector, label) {
-  await waitForVisibleSelector(panelSelector);
-  await waitForActiveAnswerQuestion(panelSelector, '问题 1');
-
-  await clickAnswerQuestionTab(panelSelector, '问题 2');
-  await clickAnswerOption(panelSelector, 'Second choice');
-  await waitForActiveAnswerQuestion(panelSelector, '问题 3');
-
-  await clickAnswerQuestionTab(panelSelector, '问题 2');
-  await clickCustomAnswer(panelSelector);
-  await waitForActiveAnswerQuestion(panelSelector, '问题 2');
-  await fillCustomAnswer(panelSelector, 'Custom response');
-  await waitForActiveAnswerQuestion(panelSelector, '问题 2');
-
-  await clickAnswerQuestionTab(panelSelector, '问题 1');
-  await clickAnswerOption(panelSelector, 'First choice');
-  await waitForActiveAnswerQuestion(panelSelector, '问题 3');
-  await clickAnswerOption(panelSelector, 'Final choice');
-  await waitForActiveAnswerQuestion(panelSelector, '问题 3');
-
-  const state = await evaluate(`(() => {
-    const panel = document.querySelector(${JSON.stringify(panelSelector)});
-    const submit = Array.from(panel?.querySelectorAll('button') || [])
-      .find((element) => element.innerText.includes('提交全部答案并继续'));
-    return {
-      visible: Boolean(panel && panel.getBoundingClientRect().height > 0),
-      submitEnabled: Boolean(submit && !submit.disabled && submit.getAttribute('aria-disabled') !== 'true'),
-    };
-  })()`);
-  assert(state.visible, `${label} closed after the final choice`);
-  assert(state.submitEnabled, `${label} did not preserve three valid drafts`);
-
-  await assertCustomAnswerInteractiveForAllQuestions(panelSelector);
-}
-
-async function assertCustomAnswerInteractiveForAllQuestions(panelSelector) {
-  for (const [index, tabLabel] of ['问题 1', '问题 2', '问题 3'].entries()) {
-    await clickAnswerQuestionTab(panelSelector, tabLabel);
-    const state = await evaluate(`(() => {
-      const panel = document.querySelector(${JSON.stringify(panelSelector)});
-      const items = Array.from(panel?.querySelectorAll('.q-tab-panel .option-item--custom') || []);
-      const item = items.find((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      });
-      const radio = item?.querySelector('.q-radio');
-      const input = item?.querySelector('.custom-answer-input textarea');
-      return {
-        visible: Boolean(item && input && item.innerText.includes('自定义答案')),
-        selectable: Boolean(radio && radio.getAttribute('aria-disabled') !== 'true'),
-      };
-    })()`);
-    assert(state.visible, `custom answer option not visible for ${tabLabel} in ${panelSelector}`);
-    assert(state.selectable, `custom answer option not selectable for ${tabLabel} in ${panelSelector}`);
-    await clickCustomAnswer(panelSelector);
-    await focusCustomAnswerInput(panelSelector);
-    const hasValue = await evaluate(`(() => {
-      const panel = document.querySelector(${JSON.stringify(panelSelector)});
-      return Array.from(panel?.querySelectorAll('.q-tab-panel .custom-answer-input textarea') || [])
-        .some((element) => {
-          const rect = element.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0 && element.value.trim().length > 0;
-        });
-    })()`);
-    if (!hasValue) await fillCustomAnswer(panelSelector, `Custom response ${index + 1}`);
-  }
-}
-
 async function assertNoHorizontalOverflow(label) {
   const overflow = await evaluate(`(() => {
     const doc = document.documentElement;
@@ -1441,7 +1284,6 @@ async function auditDarkThemeDialogsAndMenus({ gitProject, gitSession, approvalS
   await auditDarkThemeSurface('dialog-edit-prompt-append');
   await closeVisibleDialog();
 
-  await publishThemeAuditArtifact(gitSession.id);
   await navigate(`/#/sessions/${gitSession.id}`);
   await clickText('产物');
   await waitForText('theme-audit.txt');
@@ -1546,30 +1388,6 @@ async function clickArtifactListItem(filename) {
   })()`);
   assert(clicked, `artifact list item not found: ${filename}`);
   await sleep(500);
-}
-
-async function publishThemeAuditArtifact(sessionId) {
-  const relativePath = `attachments/outputs/${sessionId}/theme-audit.txt`;
-  if (manageDocker) {
-    const artifactPath = `/home/anycode/.anycode/${relativePath}`;
-    await dockerCompose([
-      'exec',
-      '-T',
-      'anycode',
-      'sh',
-      '-lc',
-      `mkdir -p ${shellQuote(artifactPath.slice(0, artifactPath.lastIndexOf('/')))} && printf 'dark theme audit\\n' > ${shellQuote(artifactPath)}`,
-    ]);
-  } else {
-    if (!e2eDataDir) throw new Error('ANYCODE_E2E_DATA_DIR is required without --manage-docker');
-    const artifactPath = `${e2eDataDir}/${relativePath}`;
-    await mkdir(artifactPath.slice(0, artifactPath.lastIndexOf('/')), { recursive: true });
-    await writeFile(artifactPath, 'dark theme audit\n');
-  }
-  const response = await callSessionMCP(sessionId, 'publish_artifact', {
-    path: 'theme-audit.txt',
-  });
-  assert(response.status === 200, `publish_artifact status = ${response.status}: ${JSON.stringify(response.body)}`);
 }
 
 async function assertOverviewTodoMenuInteractions() {
@@ -1794,6 +1612,7 @@ async function runGitSession(projectId) {
       '先使用 update_plan 建立两项 TODO，并把两项都标记为完成。',
       '请直接执行 shell 命令：',
       "`printf 'ANYCODE_GIT_E2E_OK\\n' > e2e-codex-output.txt`",
+      "再执行 `printf 'dark theme artifact\\n' > \"$ANYCODE_ARTIFACT_DIR/theme-audit.txt\"`，然后调用 publish_artifact，path 为 theme-audit.txt。",
       '不要修改其他文件，然后结束。',
     ].join('\n'),
     mode: 'chat',
@@ -1878,57 +1697,52 @@ async function assertWorkflowCardFlow(projectId) {
   return session;
 }
 
-async function assertAnswerUserFlow(projectId) {
+async function assertQuestionsFlow(projectId) {
+  const marker = `E2E_QUESTIONS_CARD_${stamp}`;
   const session = await createSession({
     projectId,
     requirement: [
-      `E2E_WAITING_USER_CARD_${stamp}`,
-      '请直接执行 shell 命令：sleep 45，然后结束。',
+      marker,
+      '立即调用 questions 一次，并且只调用一次。',
+      '传入三个 choice 问题，标题分别是 Choose first step、Choose second step、Choose third step。',
+      '每个问题提供一个选项，选项 id 分别是 first、second、third，label 分别是 First choice、Second choice、Third choice。',
+      '等待用户回答后，回复 QUESTIONS_E2E_OK，然后结束。',
     ].join('\n'),
     mode: 'chat',
     config: { permissionMode: 'workspace-write' },
   });
   await startSession(session.id);
-  await waitForSessionRunning(session.id, 20_000);
-  const mcpPromise = callAnswerUser(session.id);
-  const pending = await waitForPendingQuestion(session.id);
+  const pending = await waitForPendingQuestionRequest(session.id, 120_000);
 
   await navigate(`/#/sessions/${session.id}`);
-  await waitForText('E2E_WAITING_USER_CARD');
+  await waitForText(marker);
   await waitForText('待回答问题');
   await waitForText('Choose first step');
-  await assertAnswerUserAutoAdvance('.detail-page .answer-panel', 'inline answer panel');
-  await assertPendingQuestionBatch(session.id, pending.batchId);
-  await screenshot('12-answer-user-inline.png');
+  await assertPendingQuestionRequest(session.id, pending.requestId);
+  await screenshot('12-questions-inline.png');
 
   await navigate('/');
-  await waitForText('E2E_WAITING_USER_CARD');
-  await clickQuestionButtonForCard('E2E_WAITING_USER_CARD');
-  await waitForVisibleSelector('.answer-dialog');
-  await assertAnswerUserAutoAdvance('.answer-dialog .answer-panel', 'answer dialog');
-  await assertPendingQuestionBatch(session.id, pending.batchId);
-  await screenshot('12-answer-user-dialog.png');
+  await waitForText(marker);
+  await clickQuestionButtonForCard(marker);
+  await waitForVisibleSelector('.questions-dialog');
+  await waitForText('Choose first step');
+  await assertPendingQuestionRequest(session.id, pending.requestId);
+  await screenshot('12-questions-dialog.png');
   await setViewport(390, 844);
-  await assertCustomAnswerInteractiveForAllQuestions('.answer-dialog .answer-panel');
-  await assertNoHorizontalOverflow('mobile answer dialog');
-  await screenshot('12-answer-user-dialog-mobile.png');
+  await assertNoHorizontalOverflow('mobile questions dialog');
+  await screenshot('12-questions-dialog-mobile.png');
   await setViewport(1440, 900);
   if (darkThemeAudit) {
-    await auditDarkThemeSurface('dialog-answer-user', 'questions');
+    await auditDarkThemeSurface('dialog-questions', 'questions');
     await clickTab('Diff');
-    await waitForVisibleSelector('.answer-dialog .diff-workspace');
-    await auditDarkThemeSurface('dialog-answer-user', 'diff');
+    await waitForVisibleSelector('.questions-dialog .diff-workspace');
+    await auditDarkThemeSurface('dialog-questions', 'diff');
   }
   await closeVisibleDialog();
-  await submitPendingQuestion(pending);
-  const mcpResponse = await mcpPromise;
-  assert(mcpResponse.status === 200, `answer_user MCP status = ${mcpResponse.status}: ${JSON.stringify(mcpResponse.body)}`);
-  assert(JSON.stringify(mcpResponse.body).includes(pending.batchId), 'answer_user response missing batch id');
-  await navigate(`/#/sessions/${session.id}`);
-  await waitForText('E2E_WAITING_USER_CARD');
-  await waitForSessionStatus(session.id, 10_000);
-  await stopSessionBestEffort(session.id);
-  return { id: session.id, batchId: pending.batchId };
+  await submitPendingQuestionRequest(pending);
+  const finalStatus = await waitForSessionStatus(session.id, 120_000);
+  assertTerminalStatus(finalStatus, 'questions session');
+  return { id: session.id, requestId: pending.requestId, finalStatus };
 }
 
 async function createSession(input) {
@@ -1960,18 +1774,6 @@ async function startSession(id) {
   `, { id });
   assert(['queued', 'starting', 'running', 'stopped'].includes(data.startSession.status), `unexpected start status ${data.startSession.status}`);
   return data.startSession;
-}
-
-async function stopSessionBestEffort(id) {
-  try {
-    await graphql(`
-      mutation StopSession($id: ID!) {
-        stopSession(id: $id) { id status }
-      }
-    `, { id });
-  } catch {
-    // The session may have already reached a terminal state.
-  }
 }
 
 async function saveWorkflowDefinition(input) {
@@ -2051,73 +1853,48 @@ async function waitForSessionStatus(sessionId, timeoutMs) {
   return status;
 }
 
-async function waitForSessionRunning(sessionId, timeoutMs) {
-  const terminal = new Set(['stopped', 'failed', 'blocked', 'completed', 'closed', 'resume_failed']);
-  const started = Date.now();
-  let status = 'unknown';
-  while (Date.now() - started < timeoutMs) {
-    const data = await graphql(`
-      query SessionStatus($id: ID!) {
-        session(id: $id) {
-          id
-          status
-          codexSessionId
-        }
-      }
-    `, { id: sessionId });
-    status = data.session.status;
-    if (status === 'running' && data.session.codexSessionId) return status;
-    if (terminal.has(status)) throw new Error(`session ${sessionId} reached ${status} before answer_user test`);
-    await sleep(500);
-  }
-  throw new Error(`Timed out waiting for session ${sessionId} to run; last status ${status}`);
-}
-
-async function waitForPendingQuestion(sessionId, timeoutMs = 10_000) {
+async function waitForPendingQuestionRequest(sessionId, timeoutMs) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const data = await graphql(`
-      query PendingQuestionBatches($sessionId: ID!) {
-        pendingQuestionBatches(sessionId: $sessionId) {
+      query PendingQuestionRequests($sessionId: ID!) {
+        pendingQuestionRequests(sessionId: $sessionId) {
           id
           status
           questions { id options { id label } }
         }
       }
     `, { sessionId });
-    const batch = data.pendingQuestionBatches.find((item) => item.status === 'pending');
-    const answers = batch?.questions?.map((question) => ({
+    const request = data.pendingQuestionRequests.find((item) => item.status === 'pending');
+    const answers = request?.questions?.map((question) => ({
       questionId: question.id,
       optionId: question.options?.[0]?.id || '',
     })) || [];
-    if (batch?.id && answers.length === 3 && answers.every((answer) => answer.questionId && answer.optionId)) {
-      return {
-        batchId: batch.id,
-        answers,
-      };
+    if (request?.id && answers.length === 3 && answers.every((answer) => answer.questionId && answer.optionId)) {
+      return { requestId: request.id, answers };
     }
     await sleep(250);
   }
-  throw new Error(`Timed out waiting for pending question for ${sessionId}`);
+  throw new Error(`Timed out waiting for pending question request for ${sessionId}`);
 }
 
-async function assertPendingQuestionBatch(sessionId, batchId) {
+async function assertPendingQuestionRequest(sessionId, requestId) {
   const data = await graphql(`
-    query PendingQuestionBatches($sessionId: ID!) {
-      pendingQuestionBatches(sessionId: $sessionId) { id status }
+    query PendingQuestionRequests($sessionId: ID!) {
+      pendingQuestionRequests(sessionId: $sessionId) { id status }
     }
   `, { sessionId });
   assert(
-    data.pendingQuestionBatches.some((batch) => batch.id === batchId && batch.status === 'pending'),
-    `question batch ${batchId} was submitted during automatic navigation`,
+    data.pendingQuestionRequests.some((request) => request.id === requestId && request.status === 'pending'),
+    `question request ${requestId} was submitted during navigation`,
   );
 }
 
-async function submitPendingQuestion(pending) {
-  assert(pending.batchId && pending.answers.length === 3, `invalid pending question: ${JSON.stringify(pending)}`);
+async function submitPendingQuestionRequest(pending) {
+  assert(pending.requestId && pending.answers.length === 3, `invalid pending question request: ${JSON.stringify(pending)}`);
   const data = await graphql(`
-    mutation SubmitQuestionBatch($input: SubmitQuestionBatchInput!) {
-      submitQuestionBatch(input: $input) {
+    mutation SubmitQuestionRequest($input: SubmitQuestionRequestInput!) {
+      submitQuestionRequest(input: $input) {
         id
         status
         questions { id selectedOptionId status }
@@ -2125,14 +1902,14 @@ async function submitPendingQuestion(pending) {
     }
   `, {
     input: {
-      batchId: pending.batchId,
+      requestId: pending.requestId,
       answers: pending.answers.map((answer) => ({
         questionId: answer.questionId,
         selectedOptionId: answer.optionId,
       })),
     },
   });
-  assert(data.submitQuestionBatch.status === 'answered', `submitQuestionBatch status = ${data.submitQuestionBatch.status}`);
+  assert(data.submitQuestionRequest.status === 'answered', `submitQuestionRequest status = ${data.submitQuestionRequest.status}`);
 }
 
 function assertTerminalStatus(status, label) {
@@ -2192,59 +1969,6 @@ async function assertSessionEventsDoNotContain(sessionId, text) {
   `, { input: { sessionId, limit: 100 } });
   const raw = JSON.stringify(data.sessionTranscript.events);
   assert(!raw.includes(text), `session ${sessionId} events still contain ${text}`);
-}
-
-async function callAnswerUser(sessionId) {
-  return callSessionMCP(sessionId, 'answer_user', {
-    questions: [
-      {
-        title: 'Choose first step',
-        body: 'How should Codex start?',
-        type: 'choice',
-        options: [{ id: 'first', label: 'First choice', description: 'Start' }],
-      },
-      {
-        title: 'Choose second step',
-        body: 'How should Codex continue?',
-        type: 'choice',
-        options: [{ id: 'second', label: 'Second choice', description: 'Continue' }],
-      },
-      {
-        title: 'Choose final step',
-        body: 'How should Codex finish?',
-        type: 'choice',
-        options: [{ id: 'final', label: 'Final choice', description: 'Finish' }],
-      },
-    ],
-  });
-}
-
-async function callSessionMCP(sessionId, name, toolArguments) {
-  const body = {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'tools/call',
-    params: {
-      name,
-      arguments: toolArguments,
-    },
-  };
-  const response = await fetch(`${baseURL}/mcp/sessions/${sessionId}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await response.text();
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    parsed = { text };
-  }
-  return { status: response.status, body: parsed };
 }
 
 async function graphql(query, variables = {}) {

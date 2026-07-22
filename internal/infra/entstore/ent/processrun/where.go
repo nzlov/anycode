@@ -79,24 +79,9 @@ func Status(v string) predicate.ProcessRun {
 	return predicate.ProcessRun(sql.FieldEQ(FieldStatus, v))
 }
 
-// Pid applies equality check predicate on the "pid" field. It's identical to PidEQ.
-func Pid(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEQ(FieldPid, v))
-}
-
 // CodexSessionID applies equality check predicate on the "codex_session_id" field. It's identical to CodexSessionIDEQ.
 func CodexSessionID(v string) predicate.ProcessRun {
 	return predicate.ProcessRun(sql.FieldEQ(FieldCodexSessionID, v))
-}
-
-// TranscriptRelativePath applies equality check predicate on the "transcript_relative_path" field. It's identical to TranscriptRelativePathEQ.
-func TranscriptRelativePath(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEQ(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptBoundAt applies equality check predicate on the "transcript_bound_at" field. It's identical to TranscriptBoundAtEQ.
-func TranscriptBoundAt(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEQ(FieldTranscriptBoundAt, v))
 }
 
 // ResumeOf applies equality check predicate on the "resume_of" field. It's identical to ResumeOfEQ.
@@ -329,56 +314,6 @@ func StatusContainsFold(v string) predicate.ProcessRun {
 	return predicate.ProcessRun(sql.FieldContainsFold(FieldStatus, v))
 }
 
-// PidEQ applies the EQ predicate on the "pid" field.
-func PidEQ(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEQ(FieldPid, v))
-}
-
-// PidNEQ applies the NEQ predicate on the "pid" field.
-func PidNEQ(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNEQ(FieldPid, v))
-}
-
-// PidIn applies the In predicate on the "pid" field.
-func PidIn(vs ...int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldIn(FieldPid, vs...))
-}
-
-// PidNotIn applies the NotIn predicate on the "pid" field.
-func PidNotIn(vs ...int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNotIn(FieldPid, vs...))
-}
-
-// PidGT applies the GT predicate on the "pid" field.
-func PidGT(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldGT(FieldPid, v))
-}
-
-// PidGTE applies the GTE predicate on the "pid" field.
-func PidGTE(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldGTE(FieldPid, v))
-}
-
-// PidLT applies the LT predicate on the "pid" field.
-func PidLT(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldLT(FieldPid, v))
-}
-
-// PidLTE applies the LTE predicate on the "pid" field.
-func PidLTE(v int) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldLTE(FieldPid, v))
-}
-
-// PidIsNil applies the IsNil predicate on the "pid" field.
-func PidIsNil() predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldIsNull(FieldPid))
-}
-
-// PidNotNil applies the NotNil predicate on the "pid" field.
-func PidNotNil() predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNotNull(FieldPid))
-}
-
 // CodexSessionIDEQ applies the EQ predicate on the "codex_session_id" field.
 func CodexSessionIDEQ(v string) predicate.ProcessRun {
 	return predicate.ProcessRun(sql.FieldEQ(FieldCodexSessionID, v))
@@ -442,121 +377,6 @@ func CodexSessionIDEqualFold(v string) predicate.ProcessRun {
 // CodexSessionIDContainsFold applies the ContainsFold predicate on the "codex_session_id" field.
 func CodexSessionIDContainsFold(v string) predicate.ProcessRun {
 	return predicate.ProcessRun(sql.FieldContainsFold(FieldCodexSessionID, v))
-}
-
-// TranscriptRelativePathEQ applies the EQ predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathEQ(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEQ(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathNEQ applies the NEQ predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathNEQ(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNEQ(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathIn applies the In predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathIn(vs ...string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldIn(FieldTranscriptRelativePath, vs...))
-}
-
-// TranscriptRelativePathNotIn applies the NotIn predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathNotIn(vs ...string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNotIn(FieldTranscriptRelativePath, vs...))
-}
-
-// TranscriptRelativePathGT applies the GT predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathGT(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldGT(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathGTE applies the GTE predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathGTE(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldGTE(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathLT applies the LT predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathLT(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldLT(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathLTE applies the LTE predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathLTE(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldLTE(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathContains applies the Contains predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathContains(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldContains(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathHasPrefix applies the HasPrefix predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathHasPrefix(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldHasPrefix(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathHasSuffix applies the HasSuffix predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathHasSuffix(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldHasSuffix(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathEqualFold applies the EqualFold predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathEqualFold(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEqualFold(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptRelativePathContainsFold applies the ContainsFold predicate on the "transcript_relative_path" field.
-func TranscriptRelativePathContainsFold(v string) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldContainsFold(FieldTranscriptRelativePath, v))
-}
-
-// TranscriptBoundAtEQ applies the EQ predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtEQ(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldEQ(FieldTranscriptBoundAt, v))
-}
-
-// TranscriptBoundAtNEQ applies the NEQ predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtNEQ(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNEQ(FieldTranscriptBoundAt, v))
-}
-
-// TranscriptBoundAtIn applies the In predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtIn(vs ...time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldIn(FieldTranscriptBoundAt, vs...))
-}
-
-// TranscriptBoundAtNotIn applies the NotIn predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtNotIn(vs ...time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNotIn(FieldTranscriptBoundAt, vs...))
-}
-
-// TranscriptBoundAtGT applies the GT predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtGT(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldGT(FieldTranscriptBoundAt, v))
-}
-
-// TranscriptBoundAtGTE applies the GTE predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtGTE(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldGTE(FieldTranscriptBoundAt, v))
-}
-
-// TranscriptBoundAtLT applies the LT predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtLT(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldLT(FieldTranscriptBoundAt, v))
-}
-
-// TranscriptBoundAtLTE applies the LTE predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtLTE(v time.Time) predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldLTE(FieldTranscriptBoundAt, v))
-}
-
-// TranscriptBoundAtIsNil applies the IsNil predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtIsNil() predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldIsNull(FieldTranscriptBoundAt))
-}
-
-// TranscriptBoundAtNotNil applies the NotNil predicate on the "transcript_bound_at" field.
-func TranscriptBoundAtNotNil() predicate.ProcessRun {
-	return predicate.ProcessRun(sql.FieldNotNull(FieldTranscriptBoundAt))
 }
 
 // ResumeOfEQ applies the EQ predicate on the "resume_of" field.

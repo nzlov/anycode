@@ -41,6 +41,12 @@ func (_c *SessionCreate) SetNillableRequirement(v *string) *SessionCreate {
 	return _c
 }
 
+// SetMentions sets the "mentions" field.
+func (_c *SessionCreate) SetMentions(v []session.PromptMention) *SessionCreate {
+	_c.mutation.SetMentions(v)
+	return _c
+}
+
 // SetMode sets the "mode" field.
 func (_c *SessionCreate) SetMode(v string) *SessionCreate {
 	_c.mutation.SetMode(v)
@@ -557,20 +563,6 @@ func (_c *SessionCreate) SetNillableQueueResumeOfProcessRunID(v *string) *Sessio
 	return _c
 }
 
-// SetQueueAnswerBatchID sets the "queue_answer_batch_id" field.
-func (_c *SessionCreate) SetQueueAnswerBatchID(v string) *SessionCreate {
-	_c.mutation.SetQueueAnswerBatchID(v)
-	return _c
-}
-
-// SetNillableQueueAnswerBatchID sets the "queue_answer_batch_id" field if the given value is not nil.
-func (_c *SessionCreate) SetNillableQueueAnswerBatchID(v *string) *SessionCreate {
-	if v != nil {
-		_c.SetQueueAnswerBatchID(*v)
-	}
-	return _c
-}
-
 // SetWorkflowDefinitionID sets the "workflow_definition_id" field.
 func (_c *SessionCreate) SetWorkflowDefinitionID(v string) *SessionCreate {
 	_c.mutation.SetWorkflowDefinitionID(v)
@@ -864,10 +856,6 @@ func (_c *SessionCreate) defaults() {
 		v := entsession.DefaultQueueResumeOfProcessRunID
 		_c.mutation.SetQueueResumeOfProcessRunID(v)
 	}
-	if _, ok := _c.mutation.QueueAnswerBatchID(); !ok {
-		v := entsession.DefaultQueueAnswerBatchID
-		_c.mutation.SetQueueAnswerBatchID(v)
-	}
 	if _, ok := _c.mutation.WorkflowDefinitionID(); !ok {
 		v := entsession.DefaultWorkflowDefinitionID
 		_c.mutation.SetWorkflowDefinitionID(v)
@@ -1015,9 +1003,6 @@ func (_c *SessionCreate) check() error {
 	if _, ok := _c.mutation.QueueResumeOfProcessRunID(); !ok {
 		return &ValidationError{Name: "queue_resume_of_process_run_id", err: errors.New(`ent: missing required field "Session.queue_resume_of_process_run_id"`)}
 	}
-	if _, ok := _c.mutation.QueueAnswerBatchID(); !ok {
-		return &ValidationError{Name: "queue_answer_batch_id", err: errors.New(`ent: missing required field "Session.queue_answer_batch_id"`)}
-	}
 	if _, ok := _c.mutation.WorkflowDefinitionID(); !ok {
 		return &ValidationError{Name: "workflow_definition_id", err: errors.New(`ent: missing required field "Session.workflow_definition_id"`)}
 	}
@@ -1081,6 +1066,10 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Requirement(); ok {
 		_spec.SetField(entsession.FieldRequirement, field.TypeString, value)
 		_node.Requirement = value
+	}
+	if value, ok := _c.mutation.Mentions(); ok {
+		_spec.SetField(entsession.FieldMentions, field.TypeJSON, value)
+		_node.Mentions = value
 	}
 	if value, ok := _c.mutation.Mode(); ok {
 		_spec.SetField(entsession.FieldMode, field.TypeString, value)
@@ -1233,10 +1222,6 @@ func (_c *SessionCreate) createSpec() (*Session, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.QueueResumeOfProcessRunID(); ok {
 		_spec.SetField(entsession.FieldQueueResumeOfProcessRunID, field.TypeString, value)
 		_node.QueueResumeOfProcessRunID = value
-	}
-	if value, ok := _c.mutation.QueueAnswerBatchID(); ok {
-		_spec.SetField(entsession.FieldQueueAnswerBatchID, field.TypeString, value)
-		_node.QueueAnswerBatchID = value
 	}
 	if value, ok := _c.mutation.WorkflowDefinitionID(); ok {
 		_spec.SetField(entsession.FieldWorkflowDefinitionID, field.TypeString, value)

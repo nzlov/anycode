@@ -3,6 +3,7 @@
     :prompt="prompt"
     :files="files"
     :artifacts="artifacts"
+    :mentions="mentions"
     :model="model"
     :effort="effort"
     :permission="permission"
@@ -22,6 +23,7 @@
     @update:prompt="emit('update:prompt', $event)"
     @update:files="emit('update:files', $event)"
     @update:artifacts="emit('update:artifacts', $event)"
+    @update:mentions="emit('update:mentions', $event)"
     @update:model="emit('update:model', $event)"
     @update:effort="emit('update:effort', $event)"
     @update:permission="emit('update:permission', $event)"
@@ -110,12 +112,14 @@ import { listCodexModelOptions } from '@/services/codexOptions';
 import { appendQuickCommand } from '@/services/quickCommandText';
 import { hasStoredSessionConfig } from '@/services/newSessionPreferences';
 import type { SessionFile } from '@/services/sessionFiles';
+import type { PromptMention } from '@/services/sessions';
 
 const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
     artifacts?: SessionFile[];
+    mentions?: PromptMention[];
     model: string;
     effort: string;
     permission: string;
@@ -147,6 +151,7 @@ const props = withDefaults(
     completionSessionId: '',
     completionHasThread: false,
     artifacts: () => [],
+    mentions: () => [],
   },
 );
 
@@ -154,6 +159,7 @@ const emit = defineEmits<{
   'update:prompt': [value: string];
   'update:files': [value: File[]];
   'update:artifacts': [value: SessionFile[]];
+  'update:mentions': [value: PromptMention[]];
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];

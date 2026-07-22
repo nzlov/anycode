@@ -24,8 +24,6 @@ type CodexEventContent interface {
 	isCodexEventContent()
 }
 
-func (CodexTranscriptSource) isCodexEventContent() {}
-
 func (PlanUpdate) isCodexEventContent() {}
 
 func (ExitResult) isCodexEventContent() {}

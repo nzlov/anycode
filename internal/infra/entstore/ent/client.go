@@ -24,7 +24,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/pushsubscription"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/stagedattachment"
@@ -57,8 +57,8 @@ type Client struct {
 	PromptAppend *PromptAppendClient
 	// PushSubscription is the client for interacting with the PushSubscription builders.
 	PushSubscription *PushSubscriptionClient
-	// QuestionBatch is the client for interacting with the QuestionBatch builders.
-	QuestionBatch *QuestionBatchClient
+	// QuestionRequest is the client for interacting with the QuestionRequest builders.
+	QuestionRequest *QuestionRequestClient
 	// QuickCommand is the client for interacting with the QuickCommand builders.
 	QuickCommand *QuickCommandClient
 	// Session is the client for interacting with the Session builders.
@@ -90,7 +90,7 @@ func (c *Client) init() {
 	c.Project = NewProjectClient(c.config)
 	c.PromptAppend = NewPromptAppendClient(c.config)
 	c.PushSubscription = NewPushSubscriptionClient(c.config)
-	c.QuestionBatch = NewQuestionBatchClient(c.config)
+	c.QuestionRequest = NewQuestionRequestClient(c.config)
 	c.QuickCommand = NewQuickCommandClient(c.config)
 	c.Session = NewSessionClient(c.config)
 	c.StagedAttachment = NewStagedAttachmentClient(c.config)
@@ -198,7 +198,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Project:                   NewProjectClient(cfg),
 		PromptAppend:              NewPromptAppendClient(cfg),
 		PushSubscription:          NewPushSubscriptionClient(cfg),
-		QuestionBatch:             NewQuestionBatchClient(cfg),
+		QuestionRequest:           NewQuestionRequestClient(cfg),
 		QuickCommand:              NewQuickCommandClient(cfg),
 		Session:                   NewSessionClient(cfg),
 		StagedAttachment:          NewStagedAttachmentClient(cfg),
@@ -233,7 +233,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Project:                   NewProjectClient(cfg),
 		PromptAppend:              NewPromptAppendClient(cfg),
 		PushSubscription:          NewPushSubscriptionClient(cfg),
-		QuestionBatch:             NewQuestionBatchClient(cfg),
+		QuestionRequest:           NewQuestionRequestClient(cfg),
 		QuickCommand:              NewQuickCommandClient(cfg),
 		Session:                   NewSessionClient(cfg),
 		StagedAttachment:          NewStagedAttachmentClient(cfg),
@@ -270,8 +270,8 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.EventRecord, c.MergeRecord, c.NodeRun, c.NotificationCheckpoint,
 		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
-		c.PromptAppend, c.PushSubscription, c.QuestionBatch, c.QuickCommand, c.Session,
-		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
+		c.PromptAppend, c.PushSubscription, c.QuestionRequest, c.QuickCommand,
+		c.Session, c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Use(hooks...)
 	}
@@ -283,8 +283,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.EventRecord, c.MergeRecord, c.NodeRun, c.NotificationCheckpoint,
 		c.NotificationConfiguration, c.NotificationDelivery, c.ProcessRun, c.Project,
-		c.PromptAppend, c.PushSubscription, c.QuestionBatch, c.QuickCommand, c.Session,
-		c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
+		c.PromptAppend, c.PushSubscription, c.QuestionRequest, c.QuickCommand,
+		c.Session, c.StagedAttachment, c.SystemConfiguration, c.WorkflowDefinition,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -313,8 +313,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PromptAppend.mutate(ctx, m)
 	case *PushSubscriptionMutation:
 		return c.PushSubscription.mutate(ctx, m)
-	case *QuestionBatchMutation:
-		return c.QuestionBatch.mutate(ctx, m)
+	case *QuestionRequestMutation:
+		return c.QuestionRequest.mutate(ctx, m)
 	case *QuickCommandMutation:
 		return c.QuickCommand.mutate(ctx, m)
 	case *SessionMutation:
@@ -1660,107 +1660,107 @@ func (c *PushSubscriptionClient) mutate(ctx context.Context, m *PushSubscription
 	}
 }
 
-// QuestionBatchClient is a client for the QuestionBatch schema.
-type QuestionBatchClient struct {
+// QuestionRequestClient is a client for the QuestionRequest schema.
+type QuestionRequestClient struct {
 	config
 }
 
-// NewQuestionBatchClient returns a client for the QuestionBatch from the given config.
-func NewQuestionBatchClient(c config) *QuestionBatchClient {
-	return &QuestionBatchClient{config: c}
+// NewQuestionRequestClient returns a client for the QuestionRequest from the given config.
+func NewQuestionRequestClient(c config) *QuestionRequestClient {
+	return &QuestionRequestClient{config: c}
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `questionbatch.Hooks(f(g(h())))`.
-func (c *QuestionBatchClient) Use(hooks ...Hook) {
-	c.hooks.QuestionBatch = append(c.hooks.QuestionBatch, hooks...)
+// A call to `Use(f, g, h)` equals to `questionrequest.Hooks(f(g(h())))`.
+func (c *QuestionRequestClient) Use(hooks ...Hook) {
+	c.hooks.QuestionRequest = append(c.hooks.QuestionRequest, hooks...)
 }
 
 // Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `questionbatch.Intercept(f(g(h())))`.
-func (c *QuestionBatchClient) Intercept(interceptors ...Interceptor) {
-	c.inters.QuestionBatch = append(c.inters.QuestionBatch, interceptors...)
+// A call to `Intercept(f, g, h)` equals to `questionrequest.Intercept(f(g(h())))`.
+func (c *QuestionRequestClient) Intercept(interceptors ...Interceptor) {
+	c.inters.QuestionRequest = append(c.inters.QuestionRequest, interceptors...)
 }
 
-// Create returns a builder for creating a QuestionBatch entity.
-func (c *QuestionBatchClient) Create() *QuestionBatchCreate {
-	mutation := newQuestionBatchMutation(c.config, OpCreate)
-	return &QuestionBatchCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Create returns a builder for creating a QuestionRequest entity.
+func (c *QuestionRequestClient) Create() *QuestionRequestCreate {
+	mutation := newQuestionRequestMutation(c.config, OpCreate)
+	return &QuestionRequestCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// CreateBulk returns a builder for creating a bulk of QuestionBatch entities.
-func (c *QuestionBatchClient) CreateBulk(builders ...*QuestionBatchCreate) *QuestionBatchCreateBulk {
-	return &QuestionBatchCreateBulk{config: c.config, builders: builders}
+// CreateBulk returns a builder for creating a bulk of QuestionRequest entities.
+func (c *QuestionRequestClient) CreateBulk(builders ...*QuestionRequestCreate) *QuestionRequestCreateBulk {
+	return &QuestionRequestCreateBulk{config: c.config, builders: builders}
 }
 
 // MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
 // a builder and applies setFunc on it.
-func (c *QuestionBatchClient) MapCreateBulk(slice any, setFunc func(*QuestionBatchCreate, int)) *QuestionBatchCreateBulk {
+func (c *QuestionRequestClient) MapCreateBulk(slice any, setFunc func(*QuestionRequestCreate, int)) *QuestionRequestCreateBulk {
 	rv := reflect.ValueOf(slice)
 	if rv.Kind() != reflect.Slice {
-		return &QuestionBatchCreateBulk{err: fmt.Errorf("calling to QuestionBatchClient.MapCreateBulk with wrong type %T, need slice", slice)}
+		return &QuestionRequestCreateBulk{err: fmt.Errorf("calling to QuestionRequestClient.MapCreateBulk with wrong type %T, need slice", slice)}
 	}
-	builders := make([]*QuestionBatchCreate, rv.Len())
+	builders := make([]*QuestionRequestCreate, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
 		builders[i] = c.Create()
 		setFunc(builders[i], i)
 	}
-	return &QuestionBatchCreateBulk{config: c.config, builders: builders}
+	return &QuestionRequestCreateBulk{config: c.config, builders: builders}
 }
 
-// Update returns an update builder for QuestionBatch.
-func (c *QuestionBatchClient) Update() *QuestionBatchUpdate {
-	mutation := newQuestionBatchMutation(c.config, OpUpdate)
-	return &QuestionBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Update returns an update builder for QuestionRequest.
+func (c *QuestionRequestClient) Update() *QuestionRequestUpdate {
+	mutation := newQuestionRequestMutation(c.config, OpUpdate)
+	return &QuestionRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *QuestionBatchClient) UpdateOne(_m *QuestionBatch) *QuestionBatchUpdateOne {
-	mutation := newQuestionBatchMutation(c.config, OpUpdateOne, withQuestionBatch(_m))
-	return &QuestionBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *QuestionRequestClient) UpdateOne(_m *QuestionRequest) *QuestionRequestUpdateOne {
+	mutation := newQuestionRequestMutation(c.config, OpUpdateOne, withQuestionRequest(_m))
+	return &QuestionRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *QuestionBatchClient) UpdateOneID(id string) *QuestionBatchUpdateOne {
-	mutation := newQuestionBatchMutation(c.config, OpUpdateOne, withQuestionBatchID(id))
-	return &QuestionBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *QuestionRequestClient) UpdateOneID(id string) *QuestionRequestUpdateOne {
+	mutation := newQuestionRequestMutation(c.config, OpUpdateOne, withQuestionRequestID(id))
+	return &QuestionRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// Delete returns a delete builder for QuestionBatch.
-func (c *QuestionBatchClient) Delete() *QuestionBatchDelete {
-	mutation := newQuestionBatchMutation(c.config, OpDelete)
-	return &QuestionBatchDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Delete returns a delete builder for QuestionRequest.
+func (c *QuestionRequestClient) Delete() *QuestionRequestDelete {
+	mutation := newQuestionRequestMutation(c.config, OpDelete)
+	return &QuestionRequestDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *QuestionBatchClient) DeleteOne(_m *QuestionBatch) *QuestionBatchDeleteOne {
+func (c *QuestionRequestClient) DeleteOne(_m *QuestionRequest) *QuestionRequestDeleteOne {
 	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *QuestionBatchClient) DeleteOneID(id string) *QuestionBatchDeleteOne {
-	builder := c.Delete().Where(questionbatch.ID(id))
+func (c *QuestionRequestClient) DeleteOneID(id string) *QuestionRequestDeleteOne {
+	builder := c.Delete().Where(questionrequest.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
-	return &QuestionBatchDeleteOne{builder}
+	return &QuestionRequestDeleteOne{builder}
 }
 
-// Query returns a query builder for QuestionBatch.
-func (c *QuestionBatchClient) Query() *QuestionBatchQuery {
-	return &QuestionBatchQuery{
+// Query returns a query builder for QuestionRequest.
+func (c *QuestionRequestClient) Query() *QuestionRequestQuery {
+	return &QuestionRequestQuery{
 		config: c.config,
-		ctx:    &QueryContext{Type: TypeQuestionBatch},
+		ctx:    &QueryContext{Type: TypeQuestionRequest},
 		inters: c.Interceptors(),
 	}
 }
 
-// Get returns a QuestionBatch entity by its id.
-func (c *QuestionBatchClient) Get(ctx context.Context, id string) (*QuestionBatch, error) {
-	return c.Query().Where(questionbatch.ID(id)).Only(ctx)
+// Get returns a QuestionRequest entity by its id.
+func (c *QuestionRequestClient) Get(ctx context.Context, id string) (*QuestionRequest, error) {
+	return c.Query().Where(questionrequest.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *QuestionBatchClient) GetX(ctx context.Context, id string) *QuestionBatch {
+func (c *QuestionRequestClient) GetX(ctx context.Context, id string) *QuestionRequest {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -1769,27 +1769,27 @@ func (c *QuestionBatchClient) GetX(ctx context.Context, id string) *QuestionBatc
 }
 
 // Hooks returns the client hooks.
-func (c *QuestionBatchClient) Hooks() []Hook {
-	return c.hooks.QuestionBatch
+func (c *QuestionRequestClient) Hooks() []Hook {
+	return c.hooks.QuestionRequest
 }
 
 // Interceptors returns the client interceptors.
-func (c *QuestionBatchClient) Interceptors() []Interceptor {
-	return c.inters.QuestionBatch
+func (c *QuestionRequestClient) Interceptors() []Interceptor {
+	return c.inters.QuestionRequest
 }
 
-func (c *QuestionBatchClient) mutate(ctx context.Context, m *QuestionBatchMutation) (Value, error) {
+func (c *QuestionRequestClient) mutate(ctx context.Context, m *QuestionRequestMutation) (Value, error) {
 	switch m.Op() {
 	case OpCreate:
-		return (&QuestionBatchCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&QuestionRequestCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdate:
-		return (&QuestionBatchUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&QuestionRequestUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdateOne:
-		return (&QuestionBatchUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&QuestionRequestUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpDelete, OpDeleteOne:
-		return (&QuestionBatchDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+		return (&QuestionRequestDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
-		return nil, fmt.Errorf("ent: unknown QuestionBatch mutation op: %q", m.Op())
+		return nil, fmt.Errorf("ent: unknown QuestionRequest mutation op: %q", m.Op())
 	}
 }
 
@@ -2463,13 +2463,13 @@ type (
 	hooks struct {
 		EventRecord, MergeRecord, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
-		PromptAppend, PushSubscription, QuestionBatch, QuickCommand, Session,
+		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
 		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Hook
 	}
 	inters struct {
 		EventRecord, MergeRecord, NodeRun, NotificationCheckpoint,
 		NotificationConfiguration, NotificationDelivery, ProcessRun, Project,
-		PromptAppend, PushSubscription, QuestionBatch, QuickCommand, Session,
+		PromptAppend, PushSubscription, QuestionRequest, QuickCommand, Session,
 		StagedAttachment, SystemConfiguration, WorkflowDefinition []ent.Interceptor
 	}
 )

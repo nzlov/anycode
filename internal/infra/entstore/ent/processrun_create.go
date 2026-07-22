@@ -46,20 +46,6 @@ func (_c *ProcessRunCreate) SetStatus(v string) *ProcessRunCreate {
 	return _c
 }
 
-// SetPid sets the "pid" field.
-func (_c *ProcessRunCreate) SetPid(v int) *ProcessRunCreate {
-	_c.mutation.SetPid(v)
-	return _c
-}
-
-// SetNillablePid sets the "pid" field if the given value is not nil.
-func (_c *ProcessRunCreate) SetNillablePid(v *int) *ProcessRunCreate {
-	if v != nil {
-		_c.SetPid(*v)
-	}
-	return _c
-}
-
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_c *ProcessRunCreate) SetCodexSessionID(v string) *ProcessRunCreate {
 	_c.mutation.SetCodexSessionID(v)
@@ -70,34 +56,6 @@ func (_c *ProcessRunCreate) SetCodexSessionID(v string) *ProcessRunCreate {
 func (_c *ProcessRunCreate) SetNillableCodexSessionID(v *string) *ProcessRunCreate {
 	if v != nil {
 		_c.SetCodexSessionID(*v)
-	}
-	return _c
-}
-
-// SetTranscriptRelativePath sets the "transcript_relative_path" field.
-func (_c *ProcessRunCreate) SetTranscriptRelativePath(v string) *ProcessRunCreate {
-	_c.mutation.SetTranscriptRelativePath(v)
-	return _c
-}
-
-// SetNillableTranscriptRelativePath sets the "transcript_relative_path" field if the given value is not nil.
-func (_c *ProcessRunCreate) SetNillableTranscriptRelativePath(v *string) *ProcessRunCreate {
-	if v != nil {
-		_c.SetTranscriptRelativePath(*v)
-	}
-	return _c
-}
-
-// SetTranscriptBoundAt sets the "transcript_bound_at" field.
-func (_c *ProcessRunCreate) SetTranscriptBoundAt(v time.Time) *ProcessRunCreate {
-	_c.mutation.SetTranscriptBoundAt(v)
-	return _c
-}
-
-// SetNillableTranscriptBoundAt sets the "transcript_bound_at" field if the given value is not nil.
-func (_c *ProcessRunCreate) SetNillableTranscriptBoundAt(v *time.Time) *ProcessRunCreate {
-	if v != nil {
-		_c.SetTranscriptBoundAt(*v)
 	}
 	return _c
 }
@@ -217,10 +175,6 @@ func (_c *ProcessRunCreate) defaults() {
 		v := processrun.DefaultCodexSessionID
 		_c.mutation.SetCodexSessionID(v)
 	}
-	if _, ok := _c.mutation.TranscriptRelativePath(); !ok {
-		v := processrun.DefaultTranscriptRelativePath
-		_c.mutation.SetTranscriptRelativePath(v)
-	}
 	if _, ok := _c.mutation.FailureReason(); !ok {
 		v := processrun.DefaultFailureReason
 		_c.mutation.SetFailureReason(v)
@@ -251,9 +205,6 @@ func (_c *ProcessRunCreate) check() error {
 	}
 	if _, ok := _c.mutation.CodexSessionID(); !ok {
 		return &ValidationError{Name: "codex_session_id", err: errors.New(`ent: missing required field "ProcessRun.codex_session_id"`)}
-	}
-	if _, ok := _c.mutation.TranscriptRelativePath(); !ok {
-		return &ValidationError{Name: "transcript_relative_path", err: errors.New(`ent: missing required field "ProcessRun.transcript_relative_path"`)}
 	}
 	if _, ok := _c.mutation.FailureReason(); !ok {
 		return &ValidationError{Name: "failure_reason", err: errors.New(`ent: missing required field "ProcessRun.failure_reason"`)}
@@ -308,21 +259,9 @@ func (_c *ProcessRunCreate) createSpec() (*ProcessRun, *sqlgraph.CreateSpec) {
 		_spec.SetField(processrun.FieldStatus, field.TypeString, value)
 		_node.Status = value
 	}
-	if value, ok := _c.mutation.Pid(); ok {
-		_spec.SetField(processrun.FieldPid, field.TypeInt, value)
-		_node.Pid = &value
-	}
 	if value, ok := _c.mutation.CodexSessionID(); ok {
 		_spec.SetField(processrun.FieldCodexSessionID, field.TypeString, value)
 		_node.CodexSessionID = value
-	}
-	if value, ok := _c.mutation.TranscriptRelativePath(); ok {
-		_spec.SetField(processrun.FieldTranscriptRelativePath, field.TypeString, value)
-		_node.TranscriptRelativePath = value
-	}
-	if value, ok := _c.mutation.TranscriptBoundAt(); ok {
-		_spec.SetField(processrun.FieldTranscriptBoundAt, field.TypeTime, value)
-		_node.TranscriptBoundAt = &value
 	}
 	if value, ok := _c.mutation.ResumeOf(); ok {
 		_spec.SetField(processrun.FieldResumeOf, field.TypeString, value)

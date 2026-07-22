@@ -47,6 +47,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 		update := r.client.Session.UpdateOneID(string(s.ID)).
 			SetProjectID(string(s.ProjectID)).
 			SetRequirement(s.Requirement).
+			SetMentions(s.Mentions).
 			SetMode(string(s.Mode)).
 			SetStatus(string(s.Status)).
 			SetPriority(string(normalizePriority(s.Priority))).
@@ -73,8 +74,7 @@ func (r *SessionRepository) Save(ctx context.Context, s domainsession.Session) e
 			SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
 			SetQueuePrompt(s.Queue.Prompt).
 			SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
-			SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
-			SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
+			SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID)
 		update.SetAppliedSystemCommands(nonNilAppliedSystemCommands(s.AppliedSystemCommands))
 		if s.Queue.NodeRunID == nil {
 			update.SetQueueNodeRunID("")
@@ -170,6 +170,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetID(string(s.ID)).
 		SetProjectID(string(s.ProjectID)).
 		SetRequirement(s.Requirement).
+		SetMentions(s.Mentions).
 		SetMode(string(s.Mode)).
 		SetStatus(string(s.Status)).
 		SetPriority(string(normalizePriority(s.Priority))).
@@ -199,8 +200,7 @@ func (r *SessionRepository) create(ctx context.Context, s domainsession.Session)
 		SetQueueReviewAfterReuseFailure(s.Queue.ReviewAfterReuseFailure).
 		SetQueuePrompt(s.Queue.Prompt).
 		SetQueueResumeCodexSessionID(s.Queue.ResumeCodexSessionID).
-		SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID).
-		SetQueueAnswerBatchID(s.Queue.AnswerBatchID)
+		SetQueueResumeOfProcessRunID(s.Queue.ResumeOfProcessRunID)
 	create.SetAppliedSystemCommands(nonNilAppliedSystemCommands(s.AppliedSystemCommands))
 	if s.Queue.NodeRunID != nil {
 		create.SetQueueNodeRunID(string(*s.Queue.NodeRunID))
@@ -346,7 +346,6 @@ func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context)
 				string(domainsession.StatusRunning),
 				string(domainsession.StatusWaitingUser),
 				string(domainsession.StatusStopping),
-				string(domainsession.StatusQueued),
 			),
 			entsession.CodexSessionIDNEQ(""),
 		).
@@ -357,11 +356,7 @@ func (r *SessionRepository) ListInterruptedWithCodexSession(ctx context.Context)
 	}
 	sessions := make([]domainsession.Session, 0, len(rows))
 	for _, row := range rows {
-		session := toDomainSession(row)
-		if session.Status == domainsession.StatusQueued && session.Queue.Kind != domainsession.QueueKindAnswerUser {
-			continue
-		}
-		sessions = append(sessions, session)
+		sessions = append(sessions, toDomainSession(row))
 	}
 	return sessions, nil
 }
@@ -381,6 +376,7 @@ func (r *SessionRepository) AppendPrompt(ctx context.Context, append domainsessi
 		SetID(append.ID).
 		SetSessionID(string(append.SessionID)).
 		SetBody(append.Body).
+		SetMentions(append.Mentions).
 		SetArtifactIds(sessionFileIDsToStrings(append.ArtifactIDs)).
 		SetStatus(string(append.Status)).
 		SetDispatchedProcessRunID(append.DispatchedProcessRunID)
@@ -519,6 +515,7 @@ func promptAppendFromRow(row *ent.PromptAppend) domainsession.PromptAppend {
 		ID:                     row.ID,
 		SessionID:              domainsession.ID(row.SessionID),
 		Body:                   row.Body,
+		Mentions:               row.Mentions,
 		Status:                 domainsession.PromptAppendStatus(row.Status),
 		DispatchedAt:           row.DispatchedAt,
 		DispatchedProcessRunID: row.DispatchedProcessRunID,
@@ -715,6 +712,7 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 		ID:                 domainsession.ID(row.ID),
 		ProjectID:          domainsession.ProjectID(row.ProjectID),
 		Requirement:        row.Requirement,
+		Mentions:           row.Mentions,
 		Mode:               domainsession.Mode(row.Mode),
 		Status:             domainsession.Status(row.Status),
 		Priority:           normalizePriority(domainsession.Priority(row.Priority)),
@@ -758,7 +756,6 @@ func toDomainSession(row *ent.Session) domainsession.Session {
 			Prompt:                  row.QueuePrompt,
 			ResumeCodexSessionID:    row.QueueResumeCodexSessionID,
 			ResumeOfProcessRunID:    row.QueueResumeOfProcessRunID,
-			AnswerBatchID:           row.QueueAnswerBatchID,
 		},
 		AppliedSystemCommands: nonNilAppliedSystemCommands(row.AppliedSystemCommands),
 		LastRunAt:             row.LastRunAt,

@@ -22,7 +22,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/project"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/promptappend"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/pushsubscription"
-	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionbatch"
+	"github.com/nzlov/anycode/internal/infra/entstore/ent/questionrequest"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/quickcommand"
 
 	entsession "github.com/nzlov/anycode/internal/infra/entstore/ent/session"
@@ -99,7 +99,7 @@ func checkColumn(t, c string) error {
 			project.Table:                   project.ValidColumn,
 			promptappend.Table:              promptappend.ValidColumn,
 			pushsubscription.Table:          pushsubscription.ValidColumn,
-			questionbatch.Table:             questionbatch.ValidColumn,
+			questionrequest.Table:           questionrequest.ValidColumn,
 			quickcommand.Table:              quickcommand.ValidColumn,
 			entsession.Table:                entsession.ValidColumn,
 			stagedattachment.Table:          stagedattachment.ValidColumn,

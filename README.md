@@ -13,7 +13,7 @@
 - 在一个工作台中管理多个项目和会话，集中查看运行状态、优先级、TODO 与代码变更。
 - Git 项目的会话可基于指定分支创建独立 worktree，减少并行任务互相干扰。
 - 同时支持直接与 Codex 交互的会话模式，以及包含条件、重试、审批和合并节点的流程模式。
-- Codex 可以通过 `answer_user` 请求用户补充决策；工作流也可以暂停并等待人工审批。
+- Codex 可以通过 App Server 动态工具 `questions` 请求用户补充决策；工作流也可以暂停并等待人工审批。
 - 会话时间线实时展示文本、推理、命令、工具调用和文件变更，执行完成后仍可回看。
 
 ## 主要功能
@@ -105,7 +105,7 @@ curl --fail http://127.0.0.1:8080/healthz
 
 然后打开 `http://127.0.0.1:8080`，输入 `.env` 中的 `ANYCODE_ACCESS_KEY`。
 
-建议保持默认端口 `8080`。`ANYCODE_HTTP_PORT` 会同时改变服务监听端口和宿主机映射端口，但当前镜像内置的 Docker healthcheck 固定访问容器端口 `8080`；如需修改端口，还应在自定义 Compose 配置中同步覆盖 healthcheck，否则服务虽然可以访问，容器仍会被标记为 unhealthy。
+`ANYCODE_HTTP_PORT` 会同时改变服务监听端口、宿主机映射端口和镜像内置的 Docker healthcheck 地址。
 
 ## 首次使用
 
@@ -121,7 +121,7 @@ curl --fail http://127.0.0.1:8080/healthz
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `ANYCODE_ACCESS_KEY` | 无可用默认值 | 访问 Web 数据、GraphQL、WebSocket、MCP 和会话文件的密钥；Compose 要求显式设置。 |
+| `ANYCODE_ACCESS_KEY` | 无可用默认值 | 访问 Web 数据、GraphQL、WebSocket 和会话文件的密钥；Compose 要求显式设置。 |
 | `ANYCODE_HTTP_PORT` | `8080` | 宿主机发布端口和容器监听端口。 |
 | `ANYCODE_HOST_DATA_DIR` | `./data` | 挂载到容器 `/home/anycode` 的宿主机目录，用于持久化 AnyCode 数据和 Codex 凭据。 |
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | 容器内数据库、附件、产物以及 AnyCode 创建的 worktree 目录。通常无需修改。 |

@@ -19,10 +19,11 @@ type AppearanceSettings struct {
 }
 
 type AppendPromptInput struct {
-	SessionID           string   `json:"sessionId"`
-	Body                string   `json:"body"`
-	StagedAttachmentIds []string `json:"stagedAttachmentIds,omitempty"`
-	ArtifactIds         []string `json:"artifactIds,omitempty"`
+	SessionID           string                `json:"sessionId"`
+	Body                string                `json:"body"`
+	StagedAttachmentIds []string              `json:"stagedAttachmentIds,omitempty"`
+	ArtifactIds         []string              `json:"artifactIds,omitempty"`
+	Mentions            []*PromptMentionInput `json:"mentions,omitempty"`
 }
 
 type ApprovalConfig struct {
@@ -112,13 +113,14 @@ type CreateQuickCommandInput struct {
 }
 
 type CreateSessionInput struct {
-	ProjectID           string              `json:"projectId"`
-	Requirement         string              `json:"requirement"`
-	Mode                string              `json:"mode"`
-	Priority            *string             `json:"priority,omitempty"`
-	BaseBranch          *string             `json:"baseBranch,omitempty"`
-	Config              *SessionConfigInput `json:"config,omitempty"`
-	StagedAttachmentIds []string            `json:"stagedAttachmentIds,omitempty"`
+	ProjectID           string                `json:"projectId"`
+	Requirement         string                `json:"requirement"`
+	Mode                string                `json:"mode"`
+	Priority            *string               `json:"priority,omitempty"`
+	BaseBranch          *string               `json:"baseBranch,omitempty"`
+	Config              *SessionConfigInput   `json:"config,omitempty"`
+	StagedAttachmentIds []string              `json:"stagedAttachmentIds,omitempty"`
+	Mentions            []*PromptMentionInput `json:"mentions,omitempty"`
 }
 
 type DiffFile struct {
@@ -271,6 +273,10 @@ type PromptFileMatchInput struct {
 	Query     string  `json:"query"`
 }
 
+type PromptMentionInput struct {
+	Path string `json:"path"`
+}
+
 type PushSubscriptionRegistration struct {
 	ID string `json:"id"`
 }
@@ -280,7 +286,7 @@ type Query struct {
 
 type Question struct {
 	ID               string            `json:"id"`
-	BatchID          string            `json:"batchId"`
+	RequestID        string            `json:"requestId"`
 	Title            string            `json:"title"`
 	Body             string            `json:"body"`
 	Type             string            `json:"type"`
@@ -298,18 +304,18 @@ type QuestionAnswerInput struct {
 	Payload          map[string]any `json:"payload,omitempty"`
 }
 
-type QuestionBatch struct {
-	ID        string      `json:"id"`
-	SessionID string      `json:"sessionId"`
-	Status    string      `json:"status"`
-	Questions []*Question `json:"questions"`
-}
-
 type QuestionOption struct {
 	ID          string         `json:"id"`
 	Label       string         `json:"label"`
 	Description string         `json:"description"`
 	Payload     map[string]any `json:"payload"`
+}
+
+type QuestionRequest struct {
+	ID        string      `json:"id"`
+	SessionID string      `json:"sessionId"`
+	Status    string      `json:"status"`
+	Questions []*Question `json:"questions"`
 }
 
 type QuickCommand struct {
@@ -530,9 +536,9 @@ type SetSessionPriorityInput struct {
 	Priority  string `json:"priority"`
 }
 
-type SubmitQuestionBatchInput struct {
-	BatchID string                 `json:"batchId"`
-	Answers []*QuestionAnswerInput `json:"answers"`
+type SubmitQuestionRequestInput struct {
+	RequestID string                 `json:"requestId"`
+	Answers   []*QuestionAnswerInput `json:"answers"`
 }
 
 type SubmitWorkflowApprovalInput struct {

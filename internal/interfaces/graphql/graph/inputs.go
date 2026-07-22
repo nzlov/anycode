@@ -20,6 +20,16 @@ func buildSessionConfig(input *model.SessionConfigInput) sessionapp.ConfigInput 
 	}
 }
 
+func promptMentionsFromInput(input []*model.PromptMentionInput) []sessiondomain.PromptMention {
+	mentions := make([]sessiondomain.PromptMention, 0, len(input))
+	for _, mention := range input {
+		if mention != nil {
+			mentions = append(mentions, sessiondomain.PromptMention{Path: mention.Path})
+		}
+	}
+	return mentions
+}
+
 func buildListSessionsInput(input *model.ListSessionsInput) sessionapp.ListSessionsInput {
 	if input == nil {
 		return sessionapp.ListSessionsInput{}

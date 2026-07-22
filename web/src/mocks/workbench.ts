@@ -71,13 +71,13 @@ export const projects: ProjectSummary[] = [
 
 export const sessions: SessionCard[] = [
   {
-    id: 'session-answer-user',
+    id: 'session-questions',
     projectId: 'anycode',
-    title: '实现 answer_user 选项回答',
+    title: '实现 questions 选项回答',
     summary: '会话详情页展示事件流，右侧显示会话信息和当前分支变更。',
     mode: 'workflow',
     status: 'running',
-    branch: 'feature/answer-user',
+    branch: 'feature/questions',
     node: '验证构建结果',
     updatedAt: '今天 09:42',
     pendingQuestion: false,

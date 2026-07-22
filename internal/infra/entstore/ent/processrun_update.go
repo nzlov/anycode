@@ -76,33 +76,6 @@ func (_u *ProcessRunUpdate) SetNillableStatus(v *string) *ProcessRunUpdate {
 	return _u
 }
 
-// SetPid sets the "pid" field.
-func (_u *ProcessRunUpdate) SetPid(v int) *ProcessRunUpdate {
-	_u.mutation.ResetPid()
-	_u.mutation.SetPid(v)
-	return _u
-}
-
-// SetNillablePid sets the "pid" field if the given value is not nil.
-func (_u *ProcessRunUpdate) SetNillablePid(v *int) *ProcessRunUpdate {
-	if v != nil {
-		_u.SetPid(*v)
-	}
-	return _u
-}
-
-// AddPid adds value to the "pid" field.
-func (_u *ProcessRunUpdate) AddPid(v int) *ProcessRunUpdate {
-	_u.mutation.AddPid(v)
-	return _u
-}
-
-// ClearPid clears the value of the "pid" field.
-func (_u *ProcessRunUpdate) ClearPid() *ProcessRunUpdate {
-	_u.mutation.ClearPid()
-	return _u
-}
-
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_u *ProcessRunUpdate) SetCodexSessionID(v string) *ProcessRunUpdate {
 	_u.mutation.SetCodexSessionID(v)
@@ -114,40 +87,6 @@ func (_u *ProcessRunUpdate) SetNillableCodexSessionID(v *string) *ProcessRunUpda
 	if v != nil {
 		_u.SetCodexSessionID(*v)
 	}
-	return _u
-}
-
-// SetTranscriptRelativePath sets the "transcript_relative_path" field.
-func (_u *ProcessRunUpdate) SetTranscriptRelativePath(v string) *ProcessRunUpdate {
-	_u.mutation.SetTranscriptRelativePath(v)
-	return _u
-}
-
-// SetNillableTranscriptRelativePath sets the "transcript_relative_path" field if the given value is not nil.
-func (_u *ProcessRunUpdate) SetNillableTranscriptRelativePath(v *string) *ProcessRunUpdate {
-	if v != nil {
-		_u.SetTranscriptRelativePath(*v)
-	}
-	return _u
-}
-
-// SetTranscriptBoundAt sets the "transcript_bound_at" field.
-func (_u *ProcessRunUpdate) SetTranscriptBoundAt(v time.Time) *ProcessRunUpdate {
-	_u.mutation.SetTranscriptBoundAt(v)
-	return _u
-}
-
-// SetNillableTranscriptBoundAt sets the "transcript_bound_at" field if the given value is not nil.
-func (_u *ProcessRunUpdate) SetNillableTranscriptBoundAt(v *time.Time) *ProcessRunUpdate {
-	if v != nil {
-		_u.SetTranscriptBoundAt(*v)
-	}
-	return _u
-}
-
-// ClearTranscriptBoundAt clears the value of the "transcript_bound_at" field.
-func (_u *ProcessRunUpdate) ClearTranscriptBoundAt() *ProcessRunUpdate {
-	_u.mutation.ClearTranscriptBoundAt()
 	return _u
 }
 
@@ -303,26 +242,8 @@ func (_u *ProcessRunUpdate) sqlSave(ctx context.Context) (_node int, err error) 
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(processrun.FieldStatus, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.Pid(); ok {
-		_spec.SetField(processrun.FieldPid, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedPid(); ok {
-		_spec.AddField(processrun.FieldPid, field.TypeInt, value)
-	}
-	if _u.mutation.PidCleared() {
-		_spec.ClearField(processrun.FieldPid, field.TypeInt)
-	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(processrun.FieldCodexSessionID, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TranscriptRelativePath(); ok {
-		_spec.SetField(processrun.FieldTranscriptRelativePath, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TranscriptBoundAt(); ok {
-		_spec.SetField(processrun.FieldTranscriptBoundAt, field.TypeTime, value)
-	}
-	if _u.mutation.TranscriptBoundAtCleared() {
-		_spec.ClearField(processrun.FieldTranscriptBoundAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.ResumeOf(); ok {
 		_spec.SetField(processrun.FieldResumeOf, field.TypeString, value)
@@ -416,33 +337,6 @@ func (_u *ProcessRunUpdateOne) SetNillableStatus(v *string) *ProcessRunUpdateOne
 	return _u
 }
 
-// SetPid sets the "pid" field.
-func (_u *ProcessRunUpdateOne) SetPid(v int) *ProcessRunUpdateOne {
-	_u.mutation.ResetPid()
-	_u.mutation.SetPid(v)
-	return _u
-}
-
-// SetNillablePid sets the "pid" field if the given value is not nil.
-func (_u *ProcessRunUpdateOne) SetNillablePid(v *int) *ProcessRunUpdateOne {
-	if v != nil {
-		_u.SetPid(*v)
-	}
-	return _u
-}
-
-// AddPid adds value to the "pid" field.
-func (_u *ProcessRunUpdateOne) AddPid(v int) *ProcessRunUpdateOne {
-	_u.mutation.AddPid(v)
-	return _u
-}
-
-// ClearPid clears the value of the "pid" field.
-func (_u *ProcessRunUpdateOne) ClearPid() *ProcessRunUpdateOne {
-	_u.mutation.ClearPid()
-	return _u
-}
-
 // SetCodexSessionID sets the "codex_session_id" field.
 func (_u *ProcessRunUpdateOne) SetCodexSessionID(v string) *ProcessRunUpdateOne {
 	_u.mutation.SetCodexSessionID(v)
@@ -454,40 +348,6 @@ func (_u *ProcessRunUpdateOne) SetNillableCodexSessionID(v *string) *ProcessRunU
 	if v != nil {
 		_u.SetCodexSessionID(*v)
 	}
-	return _u
-}
-
-// SetTranscriptRelativePath sets the "transcript_relative_path" field.
-func (_u *ProcessRunUpdateOne) SetTranscriptRelativePath(v string) *ProcessRunUpdateOne {
-	_u.mutation.SetTranscriptRelativePath(v)
-	return _u
-}
-
-// SetNillableTranscriptRelativePath sets the "transcript_relative_path" field if the given value is not nil.
-func (_u *ProcessRunUpdateOne) SetNillableTranscriptRelativePath(v *string) *ProcessRunUpdateOne {
-	if v != nil {
-		_u.SetTranscriptRelativePath(*v)
-	}
-	return _u
-}
-
-// SetTranscriptBoundAt sets the "transcript_bound_at" field.
-func (_u *ProcessRunUpdateOne) SetTranscriptBoundAt(v time.Time) *ProcessRunUpdateOne {
-	_u.mutation.SetTranscriptBoundAt(v)
-	return _u
-}
-
-// SetNillableTranscriptBoundAt sets the "transcript_bound_at" field if the given value is not nil.
-func (_u *ProcessRunUpdateOne) SetNillableTranscriptBoundAt(v *time.Time) *ProcessRunUpdateOne {
-	if v != nil {
-		_u.SetTranscriptBoundAt(*v)
-	}
-	return _u
-}
-
-// ClearTranscriptBoundAt clears the value of the "transcript_bound_at" field.
-func (_u *ProcessRunUpdateOne) ClearTranscriptBoundAt() *ProcessRunUpdateOne {
-	_u.mutation.ClearTranscriptBoundAt()
 	return _u
 }
 
@@ -673,26 +533,8 @@ func (_u *ProcessRunUpdateOne) sqlSave(ctx context.Context) (_node *ProcessRun, 
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(processrun.FieldStatus, field.TypeString, value)
 	}
-	if value, ok := _u.mutation.Pid(); ok {
-		_spec.SetField(processrun.FieldPid, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedPid(); ok {
-		_spec.AddField(processrun.FieldPid, field.TypeInt, value)
-	}
-	if _u.mutation.PidCleared() {
-		_spec.ClearField(processrun.FieldPid, field.TypeInt)
-	}
 	if value, ok := _u.mutation.CodexSessionID(); ok {
 		_spec.SetField(processrun.FieldCodexSessionID, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TranscriptRelativePath(); ok {
-		_spec.SetField(processrun.FieldTranscriptRelativePath, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.TranscriptBoundAt(); ok {
-		_spec.SetField(processrun.FieldTranscriptBoundAt, field.TypeTime, value)
-	}
-	if _u.mutation.TranscriptBoundAtCleared() {
-		_spec.ClearField(processrun.FieldTranscriptBoundAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.ResumeOf(); ok {
 		_spec.SetField(processrun.FieldResumeOf, field.TypeString, value)

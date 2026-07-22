@@ -21,6 +21,15 @@ const promptComposerSource = readFileSync(
   new URL('../src/components/PromptComposer.vue', import.meta.url),
   'utf8',
 );
+const sessionServiceSource = readFileSync(new URL('../src/services/sessions.ts', import.meta.url), 'utf8');
+const newSessionSource = readFileSync(
+  new URL('../src/components/NewSessionDialog.vue', import.meta.url),
+  'utf8',
+);
+const sessionDetailSource = readFileSync(
+  new URL('../src/components/SessionDetailView.vue', import.meta.url),
+  'utf8',
+);
 
 test('prompt completion refreshes from the Quasar model update event', () => {
   assert.match(promptComposerSource, /@update:model-value="queuePromptCompletionRefresh"/);
@@ -82,4 +91,13 @@ test('file match indices are grouped into display segments', () => {
     { text: 'main', matched: true },
     { text: '.go', matched: false },
   ]);
+});
+
+test('selected file completions travel as structured prompt mentions', () => {
+  assert.match(promptComposerSource, /'update:mentions'/);
+  assert.match(promptComposerSource, /\{ path: item\.file\.path \}/);
+  assert.match(promptComposerSource, /props\.mentions\.filter/);
+  assert.match(newSessionSource, /v-model:mentions="mentions"/);
+  assert.match(sessionDetailSource, /v-model:mentions="appendMentions"/);
+  assert.match(sessionServiceSource, /input\.mentions = mentions/);
 });

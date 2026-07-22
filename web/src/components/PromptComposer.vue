@@ -313,12 +313,14 @@ import {
   type PromptSlashCommand,
 } from '@/services/promptCompletions';
 import type { SessionFile } from '@/services/sessionFiles';
+import type { PromptMention } from '@/services/sessions';
 
 const props = withDefaults(
   defineProps<{
     prompt: string;
     files: File[];
     artifacts?: SessionFile[];
+    mentions?: PromptMention[];
     model: string;
     effort: string;
     permission: string;
@@ -350,6 +352,7 @@ const props = withDefaults(
     completionSessionId: '',
     completionHasThread: false,
     artifacts: () => [],
+    mentions: () => [],
   },
 );
 
@@ -357,6 +360,7 @@ const emit = defineEmits<{
   'update:prompt': [value: string];
   'update:files': [value: File[]];
   'update:artifacts': [value: SessionFile[]];
+  'update:mentions': [value: PromptMention[]];
   'update:model': [value: string];
   'update:effort': [value: string];
   'update:permission': [value: string];
@@ -389,7 +393,13 @@ let blurTimer: ReturnType<typeof setTimeout> | null = null;
 
 const promptModel = computed({
   get: () => props.prompt,
-  set: (value: string) => emit('update:prompt', value),
+  set: (value: string) => {
+    emit('update:prompt', value);
+    emit(
+      'update:mentions',
+      props.mentions.filter((mention) => value.includes(formatFileMention(mention.path))),
+    );
+  },
 });
 const filesModel = computed({
   get: () => props.files,
@@ -629,6 +639,9 @@ function selectCompletion(index: number) {
   const nextPrompt = applyPromptCompletion(input.value, range, value);
   const cursor = range.start + value.length + 1;
   closePromptCompletion();
+  if (item.kind === 'file' && !props.mentions.some((mention) => mention.path === item.file.path)) {
+    emit('update:mentions', [...props.mentions, { path: item.file.path }]);
+  }
   emit('update:prompt', nextPrompt);
   void nextTick(() => {
     const nextInput = promptInputRef.value;

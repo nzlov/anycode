@@ -58,6 +58,6 @@ type UsageAttributionDTO struct {
 	Usage        TokenUsageDTO
 }
 
-func timelineOrderKey(createdAt time.Time, sourceGroup int, sourceOffset int64, sourceIndex int, id string) string {
-	return fmt.Sprintf("%020d:%06d:%020d:%06d:%s", createdAt.UnixNano(), sourceGroup, sourceOffset, sourceIndex, id)
+func timelineOrderKey(createdAt time.Time, sequence int64, id string) string {
+	return fmt.Sprintf("%020d:%020d:%s", createdAt.UnixNano(), sequence, id)
 }

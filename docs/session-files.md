@@ -6,13 +6,13 @@ AnyCode gives each card a stable generated-file directory outside its project wo
 ANYCODE_DATA_DIR/attachments/outputs/<sessionID>/
 ```
 
-The directory is exposed to Codex as `ANYCODE_ARTIFACT_DIR`. New Codex runs receive it through
-`--add-dir`; resumed workspace-write runs receive the equivalent writable-root configuration.
+The directory is exposed to Codex as `ANYCODE_ARTIFACT_DIR`. App Server thread start and resume
+requests add it to `sandbox_workspace_write.writable_roots` when the card uses workspace-write.
 Files in this directory do not appear in the card Git diff.
 
 Codex writes screenshots, generated images, PDF, audio, video, archives, and other user deliverables
 to this directory. The directory is the only source of truth for generated files; AnyCode does not
-copy them into a database-backed file catalog. The `publish_artifact` MCP tool validates a file and
+copy them into a database-backed file catalog. The `publish_artifact` App Server dynamic tool validates a file and
 returns its path-based ID, current metadata, and optional inline preview without copying it.
 
 Uploaded requirement and prompt-append inputs are also directory-backed after promotion. Their
@@ -21,12 +21,12 @@ source type and source ID are encoded in the directory layout under
 
 ## Storage lifecycle
 
-- The output directory remains available across start, resume, `answer_user`, failure, stop, and
+- The output directory remains available across start, resume, `questions`, failure, stop, and
   workflow node retries.
 - Only a card with a matching active Codex process has an output-directory watcher. A file creation
   or deletion recalculates the derived `sessions.artifact_count` cache and publishes a
-  `session.artifacts_updated` event. The overview refreshes the card projection; the detail page
-  refreshes its directory listing.
+  `session.artifacts_updated` event. The overview refreshes the card by ID; the detail page refreshes
+  its directory listing.
 - File IDs are derived from the session ID and relative path. Metadata is read from the current file,
   so modifying a path preserves its ID without emitting a directory-change event.
 - Closing a card atomically moves its output directory under `attachments/output-trash/`, commits the

@@ -11,7 +11,7 @@ const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const globalSettingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 const projectSettingsSource = readSource('../src/components/ProjectSettingsDialog.vue');
 const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
-const answerSource = readSource('../src/components/AnswerUserDialog.vue');
+const questionsSource = readSource('../src/components/QuestionsDialog.vue');
 const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const composerSource = readSource('../src/components/PromptComposer.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
@@ -27,7 +27,7 @@ const contentDialogs = [
   [globalSettingsSource, 'global-settings-dialog'],
   [projectSettingsSource, 'project-settings-dialog'],
   [directorySource, 'directory-dialog'],
-  [answerSource, 'answer-dialog'],
+  [questionsSource, 'questions-dialog'],
   [indexSource, 'forward-approval-dialog'],
   [indexSource, 'overview-diff-dialog'],
   [composerSource, 'attachment-preview-card'],
@@ -58,7 +58,7 @@ test('content dialogs keep shared cards while mobile entries use route pages', (
   }
 
   assert.doesNotMatch(
-    [newSessionSource, globalSettingsSource, projectSettingsSource, directorySource, answerSource, indexSource, composerSource, detailSource].join('\n'),
+    [newSessionSource, globalSettingsSource, projectSettingsSource, directorySource, questionsSource, indexSource, composerSource, detailSource].join('\n'),
     /:maximized=/,
   );
   assert.match(routesSource, /name: 'new-session'/);
@@ -83,7 +83,7 @@ test('semantic dialog styles no longer own fixed dialog widths or old mobile bre
   for (const block of stylesSource.match(semanticBlocks) ?? []) {
     assert.doesNotMatch(block, /(?:width|max-width):[^;]*(?:560|680|760|880|900|920|960|1100)px/);
   }
-  assert.doesNotMatch(answerSource, /@media \(max-width:\s*699px\)/);
+  assert.doesNotMatch(questionsSource, /@media \(max-width:\s*699px\)/);
   assert.doesNotMatch(detailSource, /file-diff-dialog/);
 });
 
@@ -93,7 +93,7 @@ test('long content dialogs keep one explicit scrolling content area', () => {
     /\.new-session-body\s*{[^}]*align-content:\s*start[^}]*overflow-y:\s*auto/s,
   );
   assert.match(stylesSource, /\.quick-command-list\s*{[^}]*overflow-y:\s*auto/s);
-  assert.match(answerSource, /\.answer-dialog__body\s*{[^}]*overflow:\s*hidden/s);
+  assert.match(questionsSource, /\.questions-dialog__body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
   assert.match(diffWorkspaceSource, /\.diff-files\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);

@@ -16,35 +16,33 @@ import (
 )
 
 type UseCase interface {
-	CreateBatch(ctx context.Context, input CreateBatchInput) (BatchDTO, error)
-	SubmitBatch(ctx context.Context, input SubmitBatchInput) (BatchDTO, error)
-	GetBatch(ctx context.Context, id domain.BatchID) (BatchDTO, error)
-	ListPendingBySession(ctx context.Context, sessionID domain.SessionID) ([]BatchDTO, error)
-	QuestionBatchUpdates(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error)
-	CancelPendingBySession(ctx context.Context, sessionID domain.SessionID, reason string) error
+	CreateRequest(ctx context.Context, input CreateRequestInput) (RequestDTO, error)
+	SubmitRequest(ctx context.Context, input SubmitRequestInput) (RequestDTO, error)
+	GetRequest(ctx context.Context, id domain.RequestID) (RequestDTO, error)
+	ListPendingRequestsBySession(ctx context.Context, sessionID domain.SessionID) ([]RequestDTO, error)
+	QuestionRequestUpdates(ctx context.Context, sessionID domain.SessionID) (<-chan RequestDTO, error)
+	CancelPendingRequestsBySession(ctx context.Context, sessionID domain.SessionID, reason string) error
 }
 
-type CreateBatchInput struct {
-	BatchID            domain.BatchID
+type CreateRequestInput struct {
+	RequestID          domain.RequestID
 	SessionID          domain.SessionID
 	OriginProcessRunID *domain.ProcessRunID
 	Questions          []domain.Question
 }
 
-type SubmitBatchInput struct {
-	BatchID domain.BatchID
-	Answers []domain.Answer
+type SubmitRequestInput struct {
+	RequestID domain.RequestID
+	Answers   []domain.Answer
 }
 
-type BatchDTO struct {
-	ID                   domain.BatchID
-	SessionID            domain.SessionID
-	OriginProcessRunID   *domain.ProcessRunID
-	Status               domain.BatchStatus
-	DeliveryStatus       domain.DeliveryStatus
-	DeliveryProcessRunID *domain.ProcessRunID
-	Questions            []domain.Question
-	Created              bool
+type RequestDTO struct {
+	ID                 domain.RequestID
+	SessionID          domain.SessionID
+	OriginProcessRunID *domain.ProcessRunID
+	Status             domain.RequestStatus
+	Questions          []domain.Question
+	Created            bool
 }
 
 type Service struct {
@@ -86,25 +84,25 @@ func New(repo domain.Repository, options ...Option) *Service {
 	return service
 }
 
-func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (BatchDTO, error) {
+func (s *Service) CreateRequest(ctx context.Context, input CreateRequestInput) (RequestDTO, error) {
 	if s == nil {
-		return BatchDTO{}, errors.New("question usecase: nil service")
+		return RequestDTO{}, errors.New("question usecase: nil service")
 	}
 	if s.repo == nil {
-		return BatchDTO{}, errors.New("question repository is required")
+		return RequestDTO{}, errors.New("question repository is required")
 	}
 	if input.SessionID == "" {
-		return BatchDTO{}, errors.New("session id is required")
+		return RequestDTO{}, errors.New("session id is required")
 	}
 	if len(input.Questions) == 0 {
-		return BatchDTO{}, errors.New("questions are required")
+		return RequestDTO{}, errors.New("questions are required")
 	}
-	batchID := string(input.BatchID)
-	if batchID == "" {
+	requestID := string(input.RequestID)
+	if requestID == "" {
 		var err error
-		batchID, err = s.generateID()
+		requestID, err = s.generateID()
 		if err != nil {
-			return BatchDTO{}, fmt.Errorf("generate question batch id: %w", err)
+			return RequestDTO{}, fmt.Errorf("generate question request id: %w", err)
 		}
 	}
 	questions := make([]domain.Question, len(input.Questions))
@@ -113,75 +111,74 @@ func (s *Service) CreateBatch(ctx context.Context, input CreateBatchInput) (Batc
 		if questions[i].ID == "" {
 			id, err := s.generateID()
 			if err != nil {
-				return BatchDTO{}, fmt.Errorf("generate question id: %w", err)
+				return RequestDTO{}, fmt.Errorf("generate question id: %w", err)
 			}
 			questions[i].ID = domain.QuestionID(id)
 		}
-		questions[i].BatchID = domain.BatchID(batchID)
+		questions[i].RequestID = domain.RequestID(requestID)
 	}
-	batch := domain.Batch{
-		ID:                 domain.BatchID(batchID),
+	request := domain.Request{
+		ID:                 domain.RequestID(requestID),
 		SessionID:          input.SessionID,
 		OriginProcessRunID: input.OriginProcessRunID,
-		Status:             domain.BatchPending,
-		DeliveryStatus:     domain.DeliveryNone,
+		Status:             domain.RequestPending,
 		Questions:          questions,
 		CreatedAt:          s.now(),
 	}
-	if err := s.repo.CreateBatch(ctx, batch); err != nil {
-		if input.BatchID != "" {
-			existing, findErr := s.repo.FindBatch(ctx, input.BatchID)
-			if findErr == nil && existing.SessionID == input.SessionID && existing.Status == domain.BatchPending {
+	if err := s.repo.CreateRequest(ctx, request); err != nil {
+		if input.RequestID != "" {
+			existing, findErr := s.repo.FindRequest(ctx, input.RequestID)
+			if findErr == nil && existing.SessionID == input.SessionID && existing.Status == domain.RequestPending {
 				return toDTO(existing), nil
 			}
 		}
-		return BatchDTO{}, fmt.Errorf("create question batch: %w", err)
+		return RequestDTO{}, fmt.Errorf("create question request: %w", err)
 	}
-	dto := toDTO(batch)
+	dto := toDTO(request)
 	dto.Created = true
 	s.publish(dto)
 	return dto, nil
 }
 
-func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (BatchDTO, error) {
+func (s *Service) SubmitRequest(ctx context.Context, input SubmitRequestInput) (RequestDTO, error) {
 	if s == nil {
-		return BatchDTO{}, errors.New("question usecase: nil service")
+		return RequestDTO{}, errors.New("question usecase: nil service")
 	}
 	if s.repo == nil {
-		return BatchDTO{}, errors.New("question repository is required")
+		return RequestDTO{}, errors.New("question repository is required")
 	}
 	if s.policy == nil {
-		return BatchDTO{}, errors.New("question policy is required")
+		return RequestDTO{}, errors.New("question policy is required")
 	}
-	batch, err := s.repo.FindBatch(ctx, input.BatchID)
+	request, err := s.repo.FindRequest(ctx, input.RequestID)
 	if err != nil {
-		return BatchDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "question batch not found").WithDetails(map[string]any{"batchId": string(input.BatchID)})
+		return RequestDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "question request not found").WithDetails(map[string]any{"requestId": string(input.RequestID)})
 	}
-	if batch.Status == domain.BatchAnswered {
-		if err := ensureAnswersMatchAnsweredBatch(batch, input.Answers); err != nil {
-			return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
+	if request.Status == domain.RequestAnswered {
+		if err := ensureAnswersMatchAnsweredRequest(request, input.Answers); err != nil {
+			return RequestDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
 		}
-		return toDTO(batch), nil
+		return toDTO(request), nil
 	}
-	if err := s.policy.CanSubmit(batch, input.Answers); err != nil {
-		return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers are invalid").WithDetails(map[string]any{"batchId": string(input.BatchID)})
+	if err := s.policy.CanSubmit(request, input.Answers); err != nil {
+		return RequestDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers are invalid").WithDetails(map[string]any{"requestId": string(input.RequestID)})
 	}
-	persisted, transitioned, err := s.repo.SubmitAnswers(ctx, input.BatchID, input.Answers)
+	persisted, transitioned, err := s.repo.SubmitAnswers(ctx, input.RequestID, input.Answers)
 	if err != nil {
-		return BatchDTO{}, fmt.Errorf("submit question answers: %w", err)
+		return RequestDTO{}, fmt.Errorf("submit question answers: %w", err)
 	}
 	if !transitioned {
-		if persisted.Status == domain.BatchAnswered {
-			if err := ensureAnswersMatchAnsweredBatch(persisted, input.Answers); err != nil {
-				return BatchDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
+		if persisted.Status == domain.RequestAnswered {
+			if err := ensureAnswersMatchAnsweredRequest(persisted, input.Answers); err != nil {
+				return RequestDTO{}, apperror.Wrap(err, apperror.CodeValidationFailed, apperror.CategoryValidationError, "question answers do not match existing answers")
 			}
 			return toDTO(persisted), nil
 		}
-		return BatchDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question batch is no longer pending").WithDetails(map[string]any{"batchId": string(input.BatchID), "status": string(persisted.Status)})
+		return RequestDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "question request is no longer pending").WithDetails(map[string]any{"requestId": string(input.RequestID), "status": string(persisted.Status)})
 	}
 	dto := toDTO(persisted)
 	if s.observer != nil {
-		duration := s.now().Sub(batch.CreatedAt)
+		duration := s.now().Sub(request.CreatedAt)
 		if duration < 0 {
 			duration = 0
 		}
@@ -191,9 +188,9 @@ func (s *Service) SubmitBatch(ctx context.Context, input SubmitBatchInput) (Batc
 	return dto, nil
 }
 
-func ensureAnswersMatchAnsweredBatch(batch domain.Batch, answers []domain.Answer) error {
-	if len(answers) != len(batch.Questions) {
-		return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
+func ensureAnswersMatchAnsweredRequest(request domain.Request, answers []domain.Answer) error {
+	if len(answers) != len(request.Questions) {
+		return fmt.Errorf("question request %s is already answered with different answers", request.ID)
 	}
 	byQuestion := make(map[domain.QuestionID]domain.Answer, len(answers))
 	for _, answer := range answers {
@@ -202,19 +199,19 @@ func ensureAnswersMatchAnsweredBatch(batch domain.Batch, answers []domain.Answer
 		}
 		byQuestion[answer.QuestionID] = answer
 	}
-	for _, question := range batch.Questions {
+	for _, question := range request.Questions {
 		answer, ok := byQuestion[question.ID]
 		if !ok {
-			return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
+			return fmt.Errorf("question request %s is already answered with different answers", request.ID)
 		}
 		if !sameOptionID(question.SelectedOptionID, answer.SelectedOptionID) {
-			return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
+			return fmt.Errorf("question request %s is already answered with different answers", request.ID)
 		}
 		if strings.TrimSpace(question.CustomAnswer) != strings.TrimSpace(answer.CustomAnswer) {
-			return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
+			return fmt.Errorf("question request %s is already answered with different answers", request.ID)
 		}
 		if (len(answer.Payload) > 0 || len(question.Answer) > 0) && !reflect.DeepEqual(question.Answer, answer.Payload) {
-			return fmt.Errorf("question batch %s is already answered with different answers", batch.ID)
+			return fmt.Errorf("question request %s is already answered with different answers", request.ID)
 		}
 	}
 	return nil
@@ -231,85 +228,74 @@ func sameOptionID(left, right *domain.OptionID) bool {
 	}
 }
 
-func (s *Service) GetBatch(ctx context.Context, id domain.BatchID) (BatchDTO, error) {
+func (s *Service) GetRequest(ctx context.Context, id domain.RequestID) (RequestDTO, error) {
 	if s == nil {
-		return BatchDTO{}, errors.New("question usecase: nil service")
+		return RequestDTO{}, errors.New("question usecase: nil service")
 	}
 	if s.repo == nil {
-		return BatchDTO{}, errors.New("question repository is required")
+		return RequestDTO{}, errors.New("question repository is required")
 	}
-	batch, err := s.repo.FindBatch(ctx, id)
+	request, err := s.repo.FindRequest(ctx, id)
 	if err != nil {
-		return BatchDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "question batch not found").WithDetails(map[string]any{"batchId": string(id)})
+		return RequestDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "question request not found").WithDetails(map[string]any{"requestId": string(id)})
 	}
-	return toDTO(batch), nil
+	return toDTO(request), nil
 }
 
-func (s *Service) ListPendingBySession(ctx context.Context, sessionID domain.SessionID) ([]BatchDTO, error) {
+func (s *Service) ListPendingRequestsBySession(ctx context.Context, sessionID domain.SessionID) ([]RequestDTO, error) {
 	if s == nil {
 		return nil, errors.New("question usecase: nil service")
 	}
 	if s.repo == nil {
 		return nil, errors.New("question repository is required")
 	}
-	batches, err := s.repo.ListPendingBySession(ctx, sessionID)
+	requests, err := s.repo.ListPendingRequestsBySession(ctx, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("list pending question batches: %w", err)
+		return nil, fmt.Errorf("list pending question requests: %w", err)
 	}
-	dtos := make([]BatchDTO, 0, len(batches))
-	for _, batch := range batches {
-		dtos = append(dtos, toDTO(batch))
+	dtos := make([]RequestDTO, 0, len(requests))
+	for _, request := range requests {
+		dtos = append(dtos, toDTO(request))
 	}
 	return dtos, nil
 }
 
-func (s *Service) QuestionBatchUpdates(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error) {
+func (s *Service) QuestionRequestUpdates(ctx context.Context, sessionID domain.SessionID) (<-chan RequestDTO, error) {
 	if s == nil || s.broker == nil {
 		return nil, errors.New("question update broker is required")
 	}
 	return s.broker.subscribe(ctx, sessionID)
 }
 
-func (s *Service) CancelPendingBySession(ctx context.Context, sessionID domain.SessionID, reason string) error {
+func (s *Service) CancelPendingRequestsBySession(ctx context.Context, sessionID domain.SessionID, reason string) error {
 	if s == nil {
 		return errors.New("question usecase: nil service")
 	}
 	if s.repo == nil {
 		return errors.New("question repository is required")
 	}
-	cancelled, err := s.repo.CancelPendingBySession(ctx, sessionID, reason)
+	cancelled, err := s.repo.CancelPendingRequestsBySession(ctx, sessionID, reason)
 	if err != nil {
-		return fmt.Errorf("cancel pending question batches: %w", err)
+		return fmt.Errorf("cancel pending question requests: %w", err)
 	}
-	for _, batch := range cancelled {
-		s.publish(toDTO(batch))
-	}
-	if repo, ok := s.repo.(domain.AgentRepository); ok {
-		undelivered, err := repo.CancelUndeliveredBySession(ctx, sessionID)
-		if err != nil {
-			return fmt.Errorf("cancel undelivered question answers: %w", err)
-		}
-		for _, batch := range undelivered {
-			s.publish(toDTO(batch))
-		}
+	for _, request := range cancelled {
+		s.publish(toDTO(request))
 	}
 	return nil
 }
 
-func toDTO(batch domain.Batch) BatchDTO {
-	return BatchDTO{
-		ID:                   batch.ID,
-		SessionID:            batch.SessionID,
-		OriginProcessRunID:   batch.OriginProcessRunID,
-		Status:               batch.Status,
-		DeliveryStatus:       batch.DeliveryStatus,
-		DeliveryProcessRunID: batch.DeliveryProcessRunID,
-		Questions:            append([]domain.Question(nil), batch.Questions...),
+func toDTO(request domain.Request) RequestDTO {
+	return RequestDTO{
+		ID:                 request.ID,
+		SessionID:          request.SessionID,
+		OriginProcessRunID: request.OriginProcessRunID,
+		Status:             request.Status,
+		Questions:          append([]domain.Question(nil), request.Questions...),
 	}
 }
 
-func (s *Service) PublishBatch(batch BatchDTO) {
-	s.publish(batch)
+func (s *Service) PublishRequest(request RequestDTO) {
+	s.publish(request)
 }
 
 func generateID() (string, error) {
@@ -320,9 +306,9 @@ func generateID() (string, error) {
 	return hex.EncodeToString(b[:]), nil
 }
 
-func (s *Service) publish(batch BatchDTO) {
+func (s *Service) publish(request RequestDTO) {
 	if s != nil && s.broker != nil {
-		s.broker.publish(batch)
+		s.broker.publish(request)
 	}
 }
 
@@ -335,7 +321,7 @@ func newPendingBroker() *pendingBroker {
 	return &pendingBroker{subscribers: map[domain.SessionID]map[*pendingSubscriber]struct{}{}}
 }
 
-func (b *pendingBroker) subscribe(ctx context.Context, sessionID domain.SessionID) (<-chan BatchDTO, error) {
+func (b *pendingBroker) subscribe(ctx context.Context, sessionID domain.SessionID) (<-chan RequestDTO, error) {
 	subscriber := newPendingSubscriber()
 	b.mu.Lock()
 	if b.subscribers == nil {
@@ -374,32 +360,32 @@ func (b *pendingBroker) unsubscribe(sessionID domain.SessionID, subscriber *pend
 	subscriber.close()
 }
 
-func (b *pendingBroker) publish(batch BatchDTO) {
+func (b *pendingBroker) publish(request RequestDTO) {
 	b.mu.Lock()
-	targets := make([]*pendingSubscriber, 0, len(b.subscribers[batch.SessionID]))
-	for subscriber := range b.subscribers[batch.SessionID] {
+	targets := make([]*pendingSubscriber, 0, len(b.subscribers[request.SessionID]))
+	for subscriber := range b.subscribers[request.SessionID] {
 		targets = append(targets, subscriber)
 	}
 	b.mu.Unlock()
 
 	for _, target := range targets {
-		target.send(batch)
+		target.send(request)
 	}
 }
 
 type pendingSubscriber struct {
 	mu      sync.Mutex
-	updates chan BatchDTO
+	updates chan RequestDTO
 	wake    chan struct{}
 	done    chan struct{}
-	queue   []BatchDTO
+	queue   []RequestDTO
 	started bool
 	closed  bool
 }
 
 func newPendingSubscriber() *pendingSubscriber {
 	return &pendingSubscriber{
-		updates: make(chan BatchDTO),
+		updates: make(chan RequestDTO),
 		wake:    make(chan struct{}, 1),
 		done:    make(chan struct{}),
 	}
@@ -417,13 +403,13 @@ func (s *pendingSubscriber) start() bool {
 	return true
 }
 
-func (s *pendingSubscriber) send(batch BatchDTO) bool {
+func (s *pendingSubscriber) send(request RequestDTO) bool {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return false
 	}
-	s.queue = append(s.queue, batch)
+	s.queue = append(s.queue, request)
 	s.mu.Unlock()
 
 	select {
@@ -451,10 +437,10 @@ func (s *pendingSubscriber) close() {
 func (s *pendingSubscriber) run() {
 	defer close(s.updates)
 	for {
-		batch, ok := s.next()
+		request, ok := s.next()
 		if ok {
 			select {
-			case s.updates <- batch:
+			case s.updates <- request:
 			case <-s.done:
 				return
 			}
@@ -468,14 +454,14 @@ func (s *pendingSubscriber) run() {
 	}
 }
 
-func (s *pendingSubscriber) next() (BatchDTO, bool) {
+func (s *pendingSubscriber) next() (RequestDTO, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.queue) == 0 {
-		return BatchDTO{}, false
+		return RequestDTO{}, false
 	}
-	batch := s.queue[0]
-	s.queue[0] = BatchDTO{}
+	request := s.queue[0]
+	s.queue[0] = RequestDTO{}
 	s.queue = s.queue[1:]
-	return batch, true
+	return request, true
 }

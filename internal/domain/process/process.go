@@ -2,6 +2,7 @@ package process
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -9,7 +10,7 @@ import (
 var (
 	ErrProcessNotFound            = errors.New("codex process run is not active")
 	ErrProcessOwnershipUnverified = errors.New("codex process ownership could not be verified")
-	ErrTranscriptUnavailable      = errors.New("codex transcript is unavailable")
+	ErrThreadUnavailable          = errors.New("codex thread is unavailable")
 )
 
 type RunID string
@@ -34,19 +35,12 @@ type Run struct {
 	SessionID      SessionID
 	NodeRunID      *NodeRunID
 	Status         Status
-	PID            *int
 	CodexSessionID string
 	ResumeOf       *RunID
 	ExitCode       *int
 	FailureReason  string
 	StartedAt      time.Time
 	FinishedAt     *time.Time
-}
-
-type CodexTranscriptSource struct {
-	CodexSessionID string
-	RelativePath   string
-	BoundAt        time.Time
 }
 
 type CodexEvent struct {
@@ -56,27 +50,26 @@ type CodexEvent struct {
 	ProcessRunID   RunID
 	CodexSessionID string
 	CorrelationID  string
+	TurnID         string
 	Phase          CodexPhase
 	Content        CodexEventContent
-	SourceOffset   int64
-	SourceIndex    int
+	Sequence       int64
 	CreatedAt      time.Time
 }
 
 type CodexEventType string
 
 const (
-	CodexEventTranscriptBound CodexEventType = "transcript.bound"
-	CodexEventMessage         CodexEventType = "message"
-	CodexEventReasoning       CodexEventType = "reasoning"
-	CodexEventCommand         CodexEventType = "command"
-	CodexEventTool            CodexEventType = "tool"
-	CodexEventFileChange      CodexEventType = "file_change"
-	CodexEventPlan            CodexEventType = "plan"
-	CodexEventUsage           CodexEventType = "usage"
-	CodexEventStatus          CodexEventType = "status"
-	CodexEventProcessExit     CodexEventType = "process.exit"
-	CodexEventUnknown         CodexEventType = "unknown"
+	CodexEventMessage     CodexEventType = "message"
+	CodexEventReasoning   CodexEventType = "reasoning"
+	CodexEventCommand     CodexEventType = "command"
+	CodexEventTool        CodexEventType = "tool"
+	CodexEventFileChange  CodexEventType = "file_change"
+	CodexEventPlan        CodexEventType = "plan"
+	CodexEventUsage       CodexEventType = "usage"
+	CodexEventStatus      CodexEventType = "status"
+	CodexEventProcessExit CodexEventType = "process.exit"
+	CodexEventUnknown     CodexEventType = "unknown"
 )
 
 type PlanItemStatus string
@@ -104,21 +97,15 @@ func CanonicalCodexEventID(codexSessionID string, eventID string) string {
 	return "codex:" + codexSessionID + ":" + eventID
 }
 
-type CodexTranscriptInput struct {
-	Source CodexTranscriptSource
+type CodexHistoryPageInput struct {
+	ThreadID string
+	Cursor   string
+	Limit    int
 }
 
-type CodexTranscriptPageInput struct {
-	Source       CodexTranscriptSource
-	BeforeOffset int64
-	Limit        int
-}
-
-type CodexTranscriptPage struct {
-	Events      []CodexEvent
-	StartOffset int64
-	EndOffset   int64
-	HasMore     bool
+type CodexHistoryPage struct {
+	Events     []CodexEvent
+	NextCursor string
 }
 
 type ExitResult struct {
@@ -133,12 +120,8 @@ type Repository interface {
 	HasAnyBySession(ctx context.Context, sessionID SessionID) (bool, error)
 	FindActiveBySession(ctx context.Context, sessionID SessionID) (Run, bool, error)
 	CountActive(ctx context.Context) (int, error)
-	MarkStarted(ctx context.Context, id RunID, pid int) error
-	BindTranscript(ctx context.Context, id RunID, pid int, source CodexTranscriptSource) error
-	FindTranscriptSource(ctx context.Context, sessionID SessionID, codexSessionID string) (CodexTranscriptSource, bool, error)
-	TranscriptSources(ctx context.Context, sessionID SessionID) ([]CodexTranscriptSource, error)
 	MarkWaitingUser(ctx context.Context, id RunID) error
-	MarkRunning(ctx context.Context, id RunID, pid int, codexSessionID string) error
+	MarkRunning(ctx context.Context, id RunID, codexSessionID string) error
 	MarkStopping(ctx context.Context, id RunID) error
 	MarkExited(ctx context.Context, id RunID, result ExitResult) error
 }
@@ -157,53 +140,67 @@ type HistoricalRunFinder interface {
 }
 
 type CodexStartInput struct {
-	ProcessRunID    RunID
-	SessionID       SessionID
-	Workdir         string
-	ArtifactDir     string
-	Prompt          string
-	Model           string
-	ReasoningEffort string
-	PermissionMode  string
-	FastMode        bool
-	AttachmentPaths []string
-	ImagePaths      []string
+	ProcessRunID          RunID
+	SessionID             SessionID
+	Workdir               string
+	ArtifactDir           string
+	Input                 []CodexInputItem
+	Action                CodexAction
+	ActionArgument        string
+	DeveloperInstructions string
+	Model                 string
+	ReasoningEffort       string
+	PermissionMode        string
+	FastMode              bool
 }
 
 type CodexResumeInput struct {
-	ProcessRunID    RunID
-	SessionID       SessionID
-	CodexSessionID  string
-	Transcript      CodexTranscriptSource
-	Workdir         string
-	ArtifactDir     string
-	Prompt          string
-	Model           string
-	ReasoningEffort string
-	PermissionMode  string
-	FastMode        bool
-	ImagePaths      []string
+	ProcessRunID          RunID
+	SessionID             SessionID
+	CodexSessionID        string
+	Workdir               string
+	ArtifactDir           string
+	Input                 []CodexInputItem
+	Action                CodexAction
+	ActionArgument        string
+	DeveloperInstructions string
+	Model                 string
+	ReasoningEffort       string
+	PermissionMode        string
+	FastMode              bool
+}
+
+type CodexInputItem struct {
+	Type string
+	Text string
+	Path string
+	Name string
+}
+
+type CodexAction string
+
+const (
+	CodexActionTurn    CodexAction = "turn"
+	CodexActionPlan    CodexAction = "plan"
+	CodexActionReview  CodexAction = "review"
+	CodexActionCompact CodexAction = "compact"
+	CodexActionGoal    CodexAction = "goal"
+)
+
+type CodexSteerInput struct {
+	ProcessRunID RunID
+	Input        []CodexInputItem
 }
 
 type CodexHandle struct {
 	ProcessRunID   RunID
-	PID            int
 	CodexSessionID string
-}
-
-type DetachedProcess struct {
-	ProcessRunID RunID
-	PID          int
-}
-
-type DetachedProcessController interface {
-	StopDetached(ctx context.Context, process DetachedProcess) error
+	TurnID         string
 }
 
 type CodexCapabilities struct {
 	Version                 string
 	SupportsAppServer       bool
-	SupportsMCPToolTimeout  bool
 	SupportsImageGeneration bool
 	ImageGenerationStatus   string
 	Models                  []CodexModel
@@ -243,10 +240,45 @@ type CodexProcess interface {
 	Probe(ctx context.Context) (CodexCapabilities, error)
 	Start(ctx context.Context, input CodexStartInput) (CodexHandle, error)
 	Resume(ctx context.Context, input CodexResumeInput) (CodexHandle, error)
+	Steer(ctx context.Context, input CodexSteerInput) error
 	Stop(ctx context.Context, processRunID RunID) error
 	Events(ctx context.Context, handle CodexHandle) (<-chan CodexEvent, error)
 }
 
 type CodexSessionCleaner interface {
-	DeleteSession(ctx context.Context, source CodexTranscriptSource) error
+	DeleteThread(ctx context.Context, threadID string) error
+}
+
+type CodexHistory interface {
+	HistoryPage(ctx context.Context, input CodexHistoryPageInput) (CodexHistoryPage, error)
+}
+
+type DynamicToolCall struct {
+	ProcessRunID RunID
+	SessionID    SessionID
+	ThreadID     string
+	TurnID       string
+	CallID       string
+	Tool         string
+	Arguments    json.RawMessage
+}
+
+type DynamicToolContent struct {
+	Type     string
+	Text     string
+	ImageURL string
+	AudioURL string
+}
+
+type DynamicToolResult struct {
+	Success bool
+	Content []DynamicToolContent
+}
+
+type DynamicToolHandler interface {
+	HandleDynamicTool(ctx context.Context, call DynamicToolCall) (DynamicToolResult, error)
+}
+
+type DynamicToolHandlerRegistrar interface {
+	SetDynamicToolHandler(handler DynamicToolHandler)
 }

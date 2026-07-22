@@ -12,16 +12,17 @@ import { olderTranscriptCursor } from '@/services/sessionEventPaging';
 import {
   appendPrompt,
   closeSession as closeSessionRequest,
-  getPendingQuestionBatches,
+  getPendingQuestionRequests,
   getSession,
   subscribeSessionEvents,
   executeSession as executeSessionRequest,
   retrySessionWorktreeCleanup as retrySessionWorktreeCleanupRequest,
-  submitQuestionBatch,
+  submitQuestionRequest,
   submitWorkflowApproval as submitWorkflowApprovalRequest,
   type QuestionAnswerInput,
-  type QuestionBatch,
-  type PageInfo,
+  type QuestionRequest,
+	type PageInfo,
+	type PromptMention,
   stopSession as stopSessionRequest,
   updateSessionConfig,
   updatePromptAppend,
@@ -63,7 +64,7 @@ export function useSessionDetail(sessionId: string) {
   const questionsSubmitting = ref(false);
   const approvalLoading = ref(false);
   const approvalSubmitting = ref(false);
-  const pendingQuestionBatches = ref<QuestionBatch[]>([]);
+  const pendingQuestionRequests = ref<QuestionRequest[]>([]);
   const artifactUpdateVersion = ref(0);
   const diffUpdateVersion = ref(0);
   const error = ref('');
@@ -124,15 +125,16 @@ export function useSessionDetail(sessionId: string) {
   async function appendDescription(
     body: string,
     stagedAttachmentIds: string[] = [],
-    artifactIds: string[] = [],
-  ) {
-    const text = body.trim();
-    if (!text && stagedAttachmentIds.length === 0 && artifactIds.length === 0) return;
+		artifactIds: string[] = [],
+		mentions: PromptMention[] = [],
+	) {
+		const text = body.trim();
+		if (!text && stagedAttachmentIds.length === 0 && artifactIds.length === 0 && mentions.length === 0) return;
 
     appending.value = true;
     error.value = '';
     try {
-      await appendPrompt(sessionId, text, stagedAttachmentIds, artifactIds);
+			await appendPrompt(sessionId, text, stagedAttachmentIds, artifactIds, mentions);
       await loadSessionState();
     } catch (err) {
       const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
@@ -236,9 +238,9 @@ export function useSessionDetail(sessionId: string) {
     questionsLoading.value = true;
     error.value = '';
     try {
-      const batches = await getPendingQuestionBatches(sessionId);
+      const requests = await getPendingQuestionRequests(sessionId);
       if (questionRequests.isCurrent(requestGeneration)) {
-        pendingQuestionBatches.value = batches;
+        pendingQuestionRequests.value = requests;
       }
     } catch (err) {
       if (questionRequests.isCurrent(requestGeneration)) {
@@ -283,11 +285,11 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  async function submitPendingAnswers(batchId: string, answers: QuestionAnswerInput[]) {
+  async function submitPendingAnswers(requestId: string, answers: QuestionAnswerInput[]) {
     questionsSubmitting.value = true;
     error.value = '';
     try {
-      await submitQuestionBatch(batchId, answers);
+      await submitQuestionRequest(requestId, answers);
       await Promise.all([loadSessionState(), loadPendingQuestions()]);
     } catch (err) {
       error.value = err instanceof Error ? err.message : '提交回答失败';
@@ -444,7 +446,7 @@ export function useSessionDetail(sessionId: string) {
     } else if (status) {
       questionRequests.invalidate();
       questionsLoading.value = false;
-      pendingQuestionBatches.value = [];
+      pendingQuestionRequests.value = [];
     }
 
     if (status === 'waiting_approval') {
@@ -468,7 +470,7 @@ export function useSessionDetail(sessionId: string) {
     tokenUsage,
     nodeUsage,
     eventsPageInfo,
-    pendingQuestionBatches,
+    pendingQuestionRequests,
     artifactUpdateVersion,
     diffUpdateVersion,
     loading,

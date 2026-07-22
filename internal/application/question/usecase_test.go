@@ -11,39 +11,39 @@ import (
 	domain "github.com/nzlov/anycode/internal/domain/question"
 )
 
-func TestSubmitBatchStoresAllAnswers(t *testing.T) {
+func TestSubmitRequestStoresAllAnswers(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	batch := pendingBatch()
-	repo.batches[batch.ID] = batch
+	request := pendingRequest()
+	repo.requests[request.ID] = request
 	optionA := domain.OptionID("a")
-	input := SubmitBatchInput{BatchID: batch.ID, Answers: []domain.Answer{
+	input := SubmitRequestInput{RequestID: request.ID, Answers: []domain.Answer{
 		{QuestionID: "q1", SelectedOptionID: &optionA},
 		{QuestionID: "q2", CustomAnswer: "custom"},
 	}}
 
-	got, err := service.SubmitBatch(context.Background(), input)
+	got, err := service.SubmitRequest(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != domain.BatchAnswered || repo.batches[batch.ID].Status != domain.BatchAnswered {
-		t.Fatalf("batch = %#v", got)
+	if got.Status != domain.RequestAnswered || repo.requests[request.ID].Status != domain.RequestAnswered {
+		t.Fatalf("request = %#v", got)
 	}
-	if repo.batches[batch.ID].Questions[1].CustomAnswer != "custom" {
-		t.Fatalf("answers = %#v", repo.batches[batch.ID].Questions)
+	if repo.requests[request.ID].Questions[1].CustomAnswer != "custom" {
+		t.Fatalf("answers = %#v", repo.requests[request.ID].Questions)
 	}
 }
 
-func TestSubmitBatchObservesWaitingDurationWithoutQuestionContent(t *testing.T) {
+func TestSubmitRequestObservesWaitingDurationWithoutQuestionContent(t *testing.T) {
 	repo := newFakeRepository()
 	recorder := &questionObservationRecorder{}
 	service := New(repo, WithObserver(recorder))
-	batch := pendingBatch()
-	batch.CreatedAt = time.Unix(10, 0).UTC()
-	repo.batches[batch.ID] = batch
+	request := pendingRequest()
+	request.CreatedAt = time.Unix(10, 0).UTC()
+	repo.requests[request.ID] = request
 	service.now = func() time.Time { return time.Unix(13, 0).UTC() }
 	optionA := domain.OptionID("a")
-	_, err := service.SubmitBatch(context.Background(), SubmitBatchInput{BatchID: batch.ID, Answers: []domain.Answer{
+	_, err := service.SubmitRequest(context.Background(), SubmitRequestInput{RequestID: request.ID, Answers: []domain.Answer{
 		{QuestionID: "q1", SelectedOptionID: &optionA}, {QuestionID: "q2", CustomAnswer: "private answer"},
 	}})
 	if err != nil {
@@ -62,16 +62,16 @@ func (r *questionObservationRecorder) Observe(observation Observation) {
 	r.items = append(r.items, observation)
 }
 
-func TestSubmitBatchRejectsIncompleteAnswers(t *testing.T) {
+func TestSubmitRequestRejectsIncompleteAnswers(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	batch := pendingBatch()
-	repo.batches[batch.ID] = batch
+	request := pendingRequest()
+	repo.requests[request.ID] = request
 	optionA := domain.OptionID("a")
 
-	_, err := service.SubmitBatch(context.Background(), SubmitBatchInput{
-		BatchID: batch.ID,
-		Answers: []domain.Answer{{QuestionID: "q1", SelectedOptionID: &optionA}},
+	_, err := service.SubmitRequest(context.Background(), SubmitRequestInput{
+		RequestID: request.ID,
+		Answers:   []domain.Answer{{QuestionID: "q1", SelectedOptionID: &optionA}},
 	})
 	if err == nil {
 		t.Fatal("expected validation error")
@@ -82,20 +82,20 @@ func TestSubmitBatchRejectsIncompleteAnswers(t *testing.T) {
 	}
 }
 
-func TestSubmitBatchIsIdempotentForSameAnswers(t *testing.T) {
+func TestSubmitRequestIsIdempotentForSameAnswers(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	batch := pendingBatch()
-	repo.batches[batch.ID] = batch
+	request := pendingRequest()
+	repo.requests[request.ID] = request
 	optionA := domain.OptionID("a")
-	input := SubmitBatchInput{BatchID: batch.ID, Answers: []domain.Answer{
+	input := SubmitRequestInput{RequestID: request.ID, Answers: []domain.Answer{
 		{QuestionID: "q1", SelectedOptionID: &optionA},
 		{QuestionID: "q2", CustomAnswer: "custom"},
 	}}
-	if _, err := service.SubmitBatch(context.Background(), input); err != nil {
+	if _, err := service.SubmitRequest(context.Background(), input); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.SubmitBatch(context.Background(), input); err != nil {
+	if _, err := service.SubmitRequest(context.Background(), input); err != nil {
 		t.Fatal(err)
 	}
 	if repo.submitCalls != 1 {
@@ -103,19 +103,19 @@ func TestSubmitBatchIsIdempotentForSameAnswers(t *testing.T) {
 	}
 }
 
-func TestSubmitBatchRejectsDifferentAnsweredValue(t *testing.T) {
+func TestSubmitRequestRejectsDifferentAnsweredValue(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	batch := pendingBatch()
-	repo.batches[batch.ID] = batch
+	request := pendingRequest()
+	repo.requests[request.ID] = request
 	optionA := domain.OptionID("a")
-	if _, err := service.SubmitBatch(context.Background(), SubmitBatchInput{BatchID: batch.ID, Answers: []domain.Answer{
+	if _, err := service.SubmitRequest(context.Background(), SubmitRequestInput{RequestID: request.ID, Answers: []domain.Answer{
 		{QuestionID: "q1", SelectedOptionID: &optionA},
 		{QuestionID: "q2", CustomAnswer: "first"},
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := service.SubmitBatch(context.Background(), SubmitBatchInput{BatchID: batch.ID, Answers: []domain.Answer{
+	_, err := service.SubmitRequest(context.Background(), SubmitRequestInput{RequestID: request.ID, Answers: []domain.Answer{
 		{QuestionID: "q1", SelectedOptionID: &optionA},
 		{QuestionID: "q2", CustomAnswer: "different"},
 	}})
@@ -124,13 +124,13 @@ func TestSubmitBatchRejectsDifferentAnsweredValue(t *testing.T) {
 	}
 }
 
-func TestCreateBatchAndGetBatch(t *testing.T) {
+func TestCreateRequestAndGetRequest(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	service.generateID = sequenceIDs("batch-1", "question-1")
+	service.generateID = sequenceIDs("request-1", "question-1")
 	origin := domain.ProcessRunID("process-1")
 
-	created, err := service.CreateBatch(context.Background(), CreateBatchInput{
+	created, err := service.CreateRequest(context.Background(), CreateRequestInput{
 		SessionID:          "session-1",
 		OriginProcessRunID: &origin,
 		Questions:          []domain.Question{{Title: "Continue?", Options: []domain.Option{{ID: "yes", Label: "Yes"}}}},
@@ -138,76 +138,76 @@ func TestCreateBatchAndGetBatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID != "batch-1" || created.Questions[0].ID != "question-1" || created.OriginProcessRunID == nil {
+	if created.ID != "request-1" || created.Questions[0].ID != "question-1" || created.OriginProcessRunID == nil {
 		t.Fatalf("created = %#v", created)
 	}
-	got, err := service.GetBatch(context.Background(), created.ID)
+	got, err := service.GetRequest(context.Background(), created.ID)
 	if err != nil || got.ID != created.ID {
 		t.Fatalf("got=%#v err=%v", got, err)
 	}
 }
 
-func TestCreateBatchWithStableIDReturnsExistingBatch(t *testing.T) {
+func TestCreateRequestWithStableIDReturnsExistingRequest(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
 	service.generateID = sequenceIDs("question-1", "question-2")
-	input := CreateBatchInput{
-		BatchID:   "merge-failure-command-1",
+	input := CreateRequestInput{
+		RequestID: "merge-failure-command-1",
 		SessionID: "session-1",
 		Questions: []domain.Question{{Title: "Resolve merge?"}},
 	}
-	first, err := service.CreateBatch(context.Background(), input)
+	first, err := service.CreateRequest(context.Background(), input)
 	if err != nil {
-		t.Fatalf("first CreateBatch() error = %v", err)
+		t.Fatalf("first CreateRequest() error = %v", err)
 	}
-	second, err := service.CreateBatch(context.Background(), input)
+	second, err := service.CreateRequest(context.Background(), input)
 	if err != nil {
-		t.Fatalf("second CreateBatch() error = %v", err)
+		t.Fatalf("second CreateRequest() error = %v", err)
 	}
-	if first.ID != input.BatchID || second.ID != first.ID || second.Questions[0].ID != first.Questions[0].ID {
+	if first.ID != input.RequestID || second.ID != first.ID || second.Questions[0].ID != first.Questions[0].ID {
 		t.Fatalf("first=%#v second=%#v", first, second)
 	}
 }
 
-func TestCreateBatchWithStableIDRejectsNonPendingExistingBatch(t *testing.T) {
+func TestCreateRequestWithStableIDRejectsNonPendingExistingRequest(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
 	service.generateID = sequenceIDs("question-1", "question-2")
-	input := CreateBatchInput{
-		BatchID:   "merge-failure-command-1",
+	input := CreateRequestInput{
+		RequestID: "merge-failure-command-1",
 		SessionID: "session-1",
 		Questions: []domain.Question{{Title: "Resolve merge?"}},
 	}
-	if _, err := service.CreateBatch(context.Background(), input); err != nil {
-		t.Fatalf("first CreateBatch() error = %v", err)
+	if _, err := service.CreateRequest(context.Background(), input); err != nil {
+		t.Fatalf("first CreateRequest() error = %v", err)
 	}
-	existing := repo.batches[input.BatchID]
-	existing.Status = domain.BatchCancelled
-	repo.batches[input.BatchID] = existing
-	if _, err := service.CreateBatch(context.Background(), input); err == nil {
-		t.Fatal("CreateBatch() should reject a cancelled stable batch")
+	existing := repo.requests[input.RequestID]
+	existing.Status = domain.RequestCancelled
+	repo.requests[input.RequestID] = existing
+	if _, err := service.CreateRequest(context.Background(), input); err == nil {
+		t.Fatal("CreateRequest() should reject a cancelled stable request")
 	}
 }
 
-func TestGetBatchReturnsStructuredNotFound(t *testing.T) {
+func TestGetRequestReturnsStructuredNotFound(t *testing.T) {
 	service := New(newFakeRepository())
-	_, err := service.GetBatch(context.Background(), "missing")
+	_, err := service.GetRequest(context.Background(), "missing")
 	appErr, ok := apperror.From(err)
 	if !ok || appErr.Code != apperror.CodeNotFound {
 		t.Fatalf("error = %#v", err)
 	}
 }
 
-func TestListPendingBySessionFiltersAnsweredBatches(t *testing.T) {
+func TestListPendingRequestsBySessionFiltersAnsweredRequests(t *testing.T) {
 	repo := newFakeRepository()
-	pending := pendingBatch()
-	answered := pendingBatch()
-	answered.ID = "batch-answered"
-	answered.Status = domain.BatchAnswered
-	repo.batches[pending.ID] = pending
-	repo.batches[answered.ID] = answered
+	pending := pendingRequest()
+	answered := pendingRequest()
+	answered.ID = "request-answered"
+	answered.Status = domain.RequestAnswered
+	repo.requests[pending.ID] = pending
+	repo.requests[answered.ID] = answered
 	service := New(repo)
-	got, err := service.ListPendingBySession(context.Background(), pending.SessionID)
+	got, err := service.ListPendingRequestsBySession(context.Background(), pending.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,17 +216,17 @@ func TestListPendingBySessionFiltersAnsweredBatches(t *testing.T) {
 	}
 }
 
-func TestQuestionBatchUpdatesPublishesLiveChanges(t *testing.T) {
+func TestQuestionRequestUpdatesPublishesLiveChanges(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	service.generateID = sequenceIDs("batch-1", "question-1")
+	service.generateID = sequenceIDs("request-1", "question-1")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	updates, err := service.QuestionBatchUpdates(ctx, "session-1")
+	updates, err := service.QuestionRequestUpdates(ctx, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := service.CreateBatch(context.Background(), CreateBatchInput{
+	created, err := service.CreateRequest(context.Background(), CreateRequestInput{
 		SessionID: "session-1",
 		Questions: []domain.Question{{Title: "Continue?", Options: []domain.Option{{ID: "yes", Label: "Yes"}}}},
 	})
@@ -243,17 +243,17 @@ func TestQuestionBatchUpdatesPublishesLiveChanges(t *testing.T) {
 	}
 }
 
-func TestQuestionBatchUpdatesDoesNotDropBurst(t *testing.T) {
+func TestQuestionRequestUpdatesDoesNotDropBurst(t *testing.T) {
 	service := New(newFakeRepository())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	updates, err := service.QuestionBatchUpdates(ctx, "session-1")
+	updates, err := service.QuestionRequestUpdates(ctx, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	const count = 32
 	for i := 0; i < count; i++ {
-		service.PublishBatch(BatchDTO{ID: domain.BatchID(string(rune('a' + i))), SessionID: "session-1", Status: domain.BatchPending})
+		service.PublishRequest(RequestDTO{ID: domain.RequestID(string(rune('a' + i))), SessionID: "session-1", Status: domain.RequestPending})
 	}
 	for i := 0; i < count; i++ {
 		select {
@@ -264,10 +264,10 @@ func TestQuestionBatchUpdatesDoesNotDropBurst(t *testing.T) {
 	}
 }
 
-func TestQuestionBatchUpdatesCloseWithContext(t *testing.T) {
+func TestQuestionRequestUpdatesCloseWithContext(t *testing.T) {
 	service := New(newFakeRepository())
 	ctx, cancel := context.WithCancel(context.Background())
-	updates, err := service.QuestionBatchUpdates(ctx, "session-1")
+	updates, err := service.QuestionRequestUpdates(ctx, "session-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,20 +285,20 @@ func TestQuestionBatchUpdatesCloseWithContext(t *testing.T) {
 func TestCancelPendingBySessionPublishesCancellation(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
-	batch := pendingBatch()
-	repo.batches[batch.ID] = batch
+	request := pendingRequest()
+	repo.requests[request.ID] = request
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	updates, err := service.QuestionBatchUpdates(ctx, batch.SessionID)
+	updates, err := service.QuestionRequestUpdates(ctx, request.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.CancelPendingBySession(context.Background(), batch.SessionID, "session stopped"); err != nil {
+	if err := service.CancelPendingRequestsBySession(context.Background(), request.SessionID, "session stopped"); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case got := <-updates:
-		if got.Status != domain.BatchCancelled {
+		if got.Status != domain.RequestCancelled {
 			t.Fatalf("update = %#v", got)
 		}
 	case <-time.After(time.Second):
@@ -306,12 +306,11 @@ func TestCancelPendingBySessionPublishesCancellation(t *testing.T) {
 	}
 }
 
-func pendingBatch() domain.Batch {
-	return domain.Batch{
-		ID:             "batch-1",
-		SessionID:      "session-1",
-		Status:         domain.BatchPending,
-		DeliveryStatus: domain.DeliveryNone,
+func pendingRequest() domain.Request {
+	return domain.Request{
+		ID:        "request-1",
+		SessionID: "session-1",
+		Status:    domain.RequestPending,
 		Questions: []domain.Question{
 			{ID: "q1", Options: []domain.Option{{ID: "a", Label: "A"}}},
 			{ID: "q2"},
@@ -321,86 +320,125 @@ func pendingBatch() domain.Batch {
 
 type fakeRepository struct {
 	mu          sync.Mutex
-	batches     map[domain.BatchID]domain.Batch
+	requests    map[domain.RequestID]domain.Request
 	submitCalls int
 }
 
 func newFakeRepository() *fakeRepository {
-	return &fakeRepository{batches: map[domain.BatchID]domain.Batch{}}
+	return &fakeRepository{requests: map[domain.RequestID]domain.Request{}}
 }
 
-func (r *fakeRepository) CreateBatch(_ context.Context, batch domain.Batch) error {
+func (r *fakeRepository) CreateRequest(_ context.Context, request domain.Request) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.batches[batch.ID]; exists {
-		return errors.New("duplicate batch")
+	if _, exists := r.requests[request.ID]; exists {
+		return errors.New("duplicate request")
 	}
-	r.batches[batch.ID] = batch
+	r.requests[request.ID] = request
 	return nil
 }
 
-func (r *fakeRepository) FindBatch(_ context.Context, id domain.BatchID) (domain.Batch, error) {
+func (r *fakeRepository) FindRequest(_ context.Context, id domain.RequestID) (domain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	batch, ok := r.batches[id]
+	request, ok := r.requests[id]
 	if !ok {
-		return domain.Batch{}, errors.New("not found")
+		return domain.Request{}, errors.New("not found")
 	}
-	return batch, nil
+	return request, nil
 }
 
-func (r *fakeRepository) ListPendingBySession(_ context.Context, sessionID domain.SessionID) ([]domain.Batch, error) {
+func (r *fakeRepository) ListPendingRequestsBySession(_ context.Context, sessionID domain.SessionID) ([]domain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var result []domain.Batch
-	for _, batch := range r.batches {
-		if batch.SessionID == sessionID && batch.Status == domain.BatchPending {
-			result = append(result, batch)
+	var result []domain.Request
+	for _, request := range r.requests {
+		if request.SessionID == sessionID && request.Status == domain.RequestPending {
+			result = append(result, request)
 		}
 	}
 	return result, nil
 }
 
-func (r *fakeRepository) SubmitAnswers(_ context.Context, id domain.BatchID, answers []domain.Answer) (domain.Batch, bool, error) {
+func (r *fakeRepository) SubmitAnswers(_ context.Context, id domain.RequestID, answers []domain.Answer) (domain.Request, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	batch, ok := r.batches[id]
+	request, ok := r.requests[id]
 	if !ok {
-		return domain.Batch{}, false, errors.New("not found")
+		return domain.Request{}, false, errors.New("not found")
 	}
-	if batch.Status != domain.BatchPending {
-		return batch, false, nil
+	if request.Status != domain.RequestPending {
+		return request, false, nil
 	}
 	r.submitCalls++
 	byQuestion := map[domain.QuestionID]domain.Answer{}
 	for _, answer := range answers {
 		byQuestion[answer.QuestionID] = answer
 	}
-	for i := range batch.Questions {
-		answer := byQuestion[batch.Questions[i].ID]
-		batch.Questions[i].SelectedOptionID = answer.SelectedOptionID
-		batch.Questions[i].CustomAnswer = answer.CustomAnswer
-		batch.Questions[i].Answer = answer.Payload
-		batch.Questions[i].Status = "answered"
+	for i := range request.Questions {
+		answer := byQuestion[request.Questions[i].ID]
+		request.Questions[i].SelectedOptionID = answer.SelectedOptionID
+		request.Questions[i].CustomAnswer = answer.CustomAnswer
+		request.Questions[i].Answer = answer.Payload
+		request.Questions[i].Status = "answered"
 	}
-	batch.Status = domain.BatchAnswered
-	r.batches[id] = batch
-	return batch, true, nil
+	request.Status = domain.RequestAnswered
+	r.requests[id] = request
+	return request, true, nil
 }
 
-func (r *fakeRepository) CancelPendingBySession(_ context.Context, sessionID domain.SessionID, _ string) ([]domain.Batch, error) {
+func (r *fakeRepository) CancelPendingRequestsBySession(_ context.Context, sessionID domain.SessionID, _ string) ([]domain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var result []domain.Batch
-	for id, batch := range r.batches {
-		if batch.SessionID != sessionID || batch.Status != domain.BatchPending {
+	var result []domain.Request
+	for id, request := range r.requests {
+		if request.SessionID != sessionID || request.Status != domain.RequestPending {
 			continue
 		}
-		batch.Status = domain.BatchCancelled
-		r.batches[id] = batch
-		result = append(result, batch)
+		request.Status = domain.RequestCancelled
+		r.requests[id] = request
+		result = append(result, request)
 	}
 	return result, nil
+}
+
+func (r *fakeRepository) CancelPendingRequest(_ context.Context, id domain.RequestID, _ string) (domain.Request, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	request, ok := r.requests[id]
+	if !ok {
+		return domain.Request{}, false, errors.New("not found")
+	}
+	if request.Status != domain.RequestPending {
+		return request, false, nil
+	}
+	request.Status = domain.RequestCancelled
+	r.requests[id] = request
+	return request, true, nil
+}
+
+func (r *fakeRepository) FindLatestRequestBySession(_ context.Context, sessionID domain.SessionID) (domain.Request, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var latest domain.Request
+	var found bool
+	for _, request := range r.requests {
+		if request.SessionID == sessionID && (!found || request.CreatedAt.After(latest.CreatedAt)) {
+			latest, found = request, true
+		}
+	}
+	return latest, found, nil
+}
+
+func (r *fakeRepository) FindPendingRequestByOriginProcessRun(_ context.Context, processRunID domain.ProcessRunID) (domain.Request, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, request := range r.requests {
+		if request.OriginProcessRunID != nil && *request.OriginProcessRunID == processRunID && request.Status == domain.RequestPending {
+			return request, true, nil
+		}
+	}
+	return domain.Request{}, false, nil
 }
 
 func sequenceIDs(values ...string) func() (string, error) {

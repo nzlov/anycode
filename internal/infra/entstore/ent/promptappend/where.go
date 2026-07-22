@@ -224,6 +224,16 @@ func BodyContainsFold(v string) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldContainsFold(FieldBody, v))
 }
 
+// MentionsIsNil applies the IsNil predicate on the "mentions" field.
+func MentionsIsNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldIsNull(FieldMentions))
+}
+
+// MentionsNotNil applies the NotNil predicate on the "mentions" field.
+func MentionsNotNil() predicate.PromptAppend {
+	return predicate.PromptAppend(sql.FieldNotNull(FieldMentions))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.PromptAppend {
 	return predicate.PromptAppend(sql.FieldEQ(FieldStatus, v))

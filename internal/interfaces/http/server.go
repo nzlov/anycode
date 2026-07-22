@@ -86,19 +86,12 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
 	mux.Handle("GET /files/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
 	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
-	mux.Handle("POST /mcp/sessions/{sessionID}", NewMCPHandler(cfg, opts.sessions, opts.artifacts))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", NewMCPHandler(cfg, opts.sessions, opts.artifacts))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", NewMCPHandler(cfg, opts.sessions, opts.artifacts))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
 	mux.Handle("/", newPWAHandler())
 
 	return mux
-}
-
-func NewMCPHandler(cfg config.Config, sessions sessionapp.UseCase, artifacts ...artifactapp.UseCase) http.Handler {
-	return bearerAuth(cfg.AccessKey, newMCPHandler(sessions, artifacts...))
 }
 
 func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Handler {

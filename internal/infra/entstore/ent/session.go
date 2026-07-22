@@ -23,6 +23,8 @@ type Session struct {
 	ProjectID string `json:"project_id,omitempty"`
 	// Requirement holds the value of the "requirement" field.
 	Requirement string `json:"requirement,omitempty"`
+	// Mentions holds the value of the "mentions" field.
+	Mentions []session.PromptMention `json:"mentions,omitempty"`
 	// Mode holds the value of the "mode" field.
 	Mode string `json:"mode,omitempty"`
 	// Status holds the value of the "status" field.
@@ -99,8 +101,6 @@ type Session struct {
 	QueueResumeCodexSessionID string `json:"queue_resume_codex_session_id,omitempty"`
 	// QueueResumeOfProcessRunID holds the value of the "queue_resume_of_process_run_id" field.
 	QueueResumeOfProcessRunID string `json:"queue_resume_of_process_run_id,omitempty"`
-	// QueueAnswerBatchID holds the value of the "queue_answer_batch_id" field.
-	QueueAnswerBatchID string `json:"queue_answer_batch_id,omitempty"`
 	// WorkflowDefinitionID holds the value of the "workflow_definition_id" field.
 	WorkflowDefinitionID string `json:"workflow_definition_id,omitempty"`
 	// WorkflowStatus holds the value of the "workflow_status" field.
@@ -133,13 +133,13 @@ func (*Session) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case entsession.FieldTodoList, entsession.FieldUsage, entsession.FieldWorkflowContext, entsession.FieldWorkflowPendingApproval, entsession.FieldAppliedSystemCommands:
+		case entsession.FieldMentions, entsession.FieldTodoList, entsession.FieldUsage, entsession.FieldWorkflowContext, entsession.FieldWorkflowPendingApproval, entsession.FieldAppliedSystemCommands:
 			values[i] = new([]byte)
 		case entsession.FieldWorktreeCleanupRetryable, entsession.FieldFastMode, entsession.FieldQueueInitialStart, entsession.FieldQueueReviewAfterReuseFailure:
 			values[i] = new(sql.NullBool)
 		case entsession.FieldWorktreeCleanupAttempts, entsession.FieldArtifactCount, entsession.FieldFilesChanged:
 			values[i] = new(sql.NullInt64)
-		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldQueueAnswerBatchID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
+		case entsession.FieldID, entsession.FieldProjectID, entsession.FieldRequirement, entsession.FieldMode, entsession.FieldStatus, entsession.FieldPriority, entsession.FieldCloseReason, entsession.FieldBaseBranch, entsession.FieldWorktreePath, entsession.FieldWorktreeBranch, entsession.FieldWorktreeBaseCommit, entsession.FieldWorktreeHeadCommit, entsession.FieldWorktreeCleanupStatus, entsession.FieldWorktreeOwnershipToken, entsession.FieldWorktreeCleanupErrorCode, entsession.FieldWorktreeCleanupError, entsession.FieldCodexSessionID, entsession.FieldCodexModel, entsession.FieldReasoningEffort, entsession.FieldPermissionMode, entsession.FieldQueueKind, entsession.FieldQueuePriority, entsession.FieldQueueNodeRunID, entsession.FieldQueuePrompt, entsession.FieldQueueResumeCodexSessionID, entsession.FieldQueueResumeOfProcessRunID, entsession.FieldWorkflowDefinitionID, entsession.FieldWorkflowStatus, entsession.FieldWorkflowCurrentNodeID:
 			values[i] = new(sql.NullString)
 		case entsession.FieldWorktreeOwnershipConfirmedAt, entsession.FieldWorktreeCleanupRequestedAt, entsession.FieldWorktreeCleanupLastAt, entsession.FieldWorktreeCleanupNextAt, entsession.FieldWorktreeCleanupCompletedAt, entsession.FieldQueuedAt, entsession.FieldWorkflowStartedAt, entsession.FieldWorkflowStoppedAt, entsession.FieldLastRunAt, entsession.FieldCreatedAt, entsession.FieldUpdatedAt, entsession.FieldClosedAt:
 			values[i] = new(sql.NullTime)
@@ -175,6 +175,14 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field requirement", values[i])
 			} else if value.Valid {
 				_m.Requirement = value.String
+			}
+		case entsession.FieldMentions:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field mentions", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Mentions); err != nil {
+					return fmt.Errorf("unmarshal field mentions: %w", err)
+				}
 			}
 		case entsession.FieldMode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -416,12 +424,6 @@ func (_m *Session) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.QueueResumeOfProcessRunID = value.String
 			}
-		case entsession.FieldQueueAnswerBatchID:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field queue_answer_batch_id", values[i])
-			} else if value.Valid {
-				_m.QueueAnswerBatchID = value.String
-			}
 		case entsession.FieldWorkflowDefinitionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field workflow_definition_id", values[i])
@@ -545,6 +547,9 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("requirement=")
 	builder.WriteString(_m.Requirement)
+	builder.WriteString(", ")
+	builder.WriteString("mentions=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Mentions))
 	builder.WriteString(", ")
 	builder.WriteString("mode=")
 	builder.WriteString(_m.Mode)
@@ -675,9 +680,6 @@ func (_m *Session) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("queue_resume_of_process_run_id=")
 	builder.WriteString(_m.QueueResumeOfProcessRunID)
-	builder.WriteString(", ")
-	builder.WriteString("queue_answer_batch_id=")
-	builder.WriteString(_m.QueueAnswerBatchID)
 	builder.WriteString(", ")
 	builder.WriteString("workflow_definition_id=")
 	builder.WriteString(_m.WorkflowDefinitionID)

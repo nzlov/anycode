@@ -3,19 +3,15 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"time"
 
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
+	codextoolapp "github.com/nzlov/anycode/internal/application/codextool"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
@@ -36,7 +32,6 @@ import (
 	"github.com/nzlov/anycode/internal/infra/fsbrowser"
 	"github.com/nzlov/anycode/internal/infra/gitcli"
 	"github.com/nzlov/anycode/internal/infra/gitdiffcli"
-	"github.com/nzlov/anycode/internal/infra/mcpstdio"
 	"github.com/nzlov/anycode/internal/infra/shellinit"
 	webpushinfra "github.com/nzlov/anycode/internal/infra/webpush"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
@@ -47,13 +42,6 @@ const databaseStartupTimeout = 30 * time.Second
 const artifactReconcileInterval = 6 * time.Hour
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "mcp-stdio" {
-		if err := runMCPStdio(os.Args[2:]); err != nil {
-			log.Fatalf("mcp stdio: %s", err.Error())
-		}
-		return
-	}
-
 	cfg, err := config.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("load config: %s", err.Error())
@@ -76,23 +64,12 @@ func main() {
 	}
 	cancelDatabase()
 
-	executable, err := os.Executable()
+	application, err := newApplication(store, cfg)
 	if err != nil {
-		log.Fatalf("resolve executable: %s", err.Error())
+		log.Fatalf("wire application: %s", err.Error())
 	}
-	mcpSocket := localMCPSocketPath(os.Getuid(), os.Getpid())
-	useCases, err := newGraphQLUseCases(store, cfg, executable, mcpSocket)
-	if err != nil {
-		log.Fatalf("wire graphql usecases: %s", err.Error())
-	}
-	if closer, ok := useCases.Sessions.(interface{ Close() }); ok {
-		defer closer.Close()
-	}
-	stopMCP, err := startMCPUnixServer(cfg, useCases, mcpSocket)
-	if err != nil {
-		log.Fatalf("start mcp unix server: %s", err.Error())
-	}
-	defer stopMCP()
+	defer application.Close()
+	useCases := application.useCases
 
 	if useCases.Artifacts != nil {
 		reconcileArtifactOutputs(ctx, useCases.Artifacts)
@@ -163,67 +140,60 @@ func runArtifactReconciliation(ctx context.Context, artifacts artifactRecoveryUs
 	}
 }
 
-func runMCPStdio(args []string) error {
-	flags := flag.NewFlagSet("mcp-stdio", flag.ContinueOnError)
-	sessionID := flags.String("session-id", "", "AnyCode session id")
-	socket := flags.String("socket", "", "AnyCode MCP Unix socket")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-	return mcpstdio.Run(context.Background(), os.Stdin, os.Stdout, mcpstdio.Config{
-		SessionID: *sessionID,
-		Socket:    *socket,
-	})
+type wiredApplication struct {
+	useCases graph.UseCases
+	codex    *codexcli.Client
 }
 
-func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand string, mcpSocket string) (graph.UseCases, error) {
+func (a *wiredApplication) Close() {
+	if a == nil {
+		return
+	}
+	if closer, ok := a.useCases.Sessions.(interface{ Close() }); ok {
+		closer.Close()
+	}
+	if a.codex != nil {
+		if err := a.codex.Close(); err != nil {
+			log.Printf("close codex app-server: %s", err.Error())
+		}
+	}
+}
+
+func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication, error) {
 	if store == nil {
-		return graph.UseCases{}, errors.New("nil entstore")
+		return nil, errors.New("nil entstore")
 	}
 	files := filestore.New(cfg.DataDir)
 	attachments := store.Attachments()
 	artifacts := artifactapp.New(files, store.Sessions())
 	artifacts.SetLimits(artifactapp.Limits{MaxFileBytes: cfg.ArtifactMaxFileBytes, MaxSessionBytes: cfg.ArtifactMaxSessionBytes})
-	if cfg.PlaywrightMCPBin != "" {
-		if _, err := exec.LookPath(cfg.PlaywrightMCPBin); err != nil {
-			return graph.UseCases{}, fmt.Errorf("find Playwright MCP executable %q: %w", cfg.PlaywrightMCPBin, err)
-		}
-	}
-	codexOptions := []codexcli.Option{codexcli.WithMCP(localHTTPBaseURL(cfg.HTTPAddr), cfg.AccessKey), codexcli.WithObserver(codexMetricLogger{})}
-	if cfg.PlaywrightMCPBin != "" {
-		codexOptions = append(codexOptions, codexcli.WithPlaywrightMCP(cfg.PlaywrightMCPBin, cfg.ChromiumBin))
-	}
-	codex := codexcli.New(cfg.CodexBin, codexOptions...)
-	if mcpCommand != "" && mcpSocket != "" {
-		codexOptions = []codexcli.Option{codexcli.WithMCPStdio(mcpCommand, mcpSocket, cfg.AccessKey), codexcli.WithObserver(codexMetricLogger{})}
-		if cfg.PlaywrightMCPBin != "" {
-			codexOptions = append(codexOptions, codexcli.WithPlaywrightMCP(cfg.PlaywrightMCPBin, cfg.ChromiumBin))
-		}
-		codex = codexcli.New(cfg.CodexBin, codexOptions...)
-	}
+	codex := codexcli.New(cfg.CodexBin, codexcli.WithObserver(codexMetricLogger{}))
 	capabilities, err := ensureCodexReady(context.Background(), codex)
 	if err != nil {
-		return graph.UseCases{}, err
+		_ = codex.Close()
+		return nil, err
 	}
 	log.Printf("codex image generation capability: enabled=%t status=%s", capabilities.SupportsImageGeneration, capabilities.ImageGenerationStatus)
 	events := store.Events()
 	eventService := eventapp.New(eventapp.WithObserver(eventMetricLogger{}))
 	processes := store.Processes()
-	timelineService := timelineapp.New(eventService, store.Sessions(), codex, processes, timelineapp.WithHistory(events))
+	timelineService := timelineapp.New(eventService, store.Sessions(), codex, timelineapp.WithHistory(events))
 	questions := store.Questions()
 	questionService := questionapp.New(questions, questionapp.WithObserver(questionMetricLogger{}))
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoQueueDrain())
+	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts))
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
 	notificationService := notificationapp.New(store.Notifications(), events, store.Sessions(), store.Projects(), pushClient, pushClient, principal.KeyHash)
 	if err := notificationService.Initialize(context.Background()); err != nil {
-		return graph.UseCases{}, fmt.Errorf("initialize web push notifications: %w", err)
+		_ = codex.Close()
+		return nil, fmt.Errorf("initialize web push notifications: %w", err)
 	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
-	return graph.UseCases{
+	useCases := graph.UseCases{
 		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
 		Sessions:         sessionService,
 		Timeline:         timelineService,
@@ -237,7 +207,8 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
 		Settings:         settingapp.New(store.Settings()),
 		CodexModels:      capabilities.Models,
-	}, nil
+	}
+	return &wiredApplication{useCases: useCases, codex: codex}, nil
 }
 
 func runNotificationDispatcher(ctx context.Context, service *notificationapp.Service) {
@@ -296,43 +267,6 @@ func reconcileWorktreeCleanup(ctx context.Context, sessions recoverySessionUseCa
 	return nil
 }
 
-func startMCPUnixServer(cfg config.Config, useCases graph.UseCases, socketPath string) (func(), error) {
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(filepath.Dir(socketPath), 0o700); err != nil {
-		return nil, err
-	}
-	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	listener, err := net.Listen("unix", socketPath)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.Chmod(socketPath, 0o600); err != nil {
-		_ = listener.Close()
-		_ = os.Remove(socketPath)
-		return nil, err
-	}
-	mux := http.NewServeMux()
-	mux.Handle("POST /mcp/sessions/{sessionID}", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/ack", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
-	mux.Handle("POST /mcp/sessions/{sessionID}/deliveries/{batchID}/{action}", httpinterface.NewMCPHandler(cfg, useCases.Sessions, useCases.Artifacts))
-	server := &http.Server{Handler: mux}
-	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("mcp unix server stopped: %s", err.Error())
-		}
-	}()
-	log.Printf("mcp unix server listening: pid=%d socket=%s", os.Getpid(), filepath.Base(socketPath))
-	return func() {
-		_ = server.Close()
-		_ = listener.Close()
-		_ = os.Remove(socketPath)
-	}, nil
-}
-
 type codexProber interface {
 	Probe(ctx context.Context) (processdomain.CodexCapabilities, error)
 }
@@ -354,26 +288,8 @@ func ensureCodexReady(ctx context.Context, prober codexProber) (processdomain.Co
 	if len(capabilities.Models) == 0 {
 		return processdomain.CodexCapabilities{}, errors.New("codex cli did not return model options")
 	}
-	log.Printf("codex cli ready: version=%s app_server=%t mcp_tool_timeout=%t models=%d", capabilities.Version, capabilities.SupportsAppServer, capabilities.SupportsMCPToolTimeout, len(capabilities.Models))
+	log.Printf("codex cli ready: version=%s app_server=%t models=%d", capabilities.Version, capabilities.SupportsAppServer, len(capabilities.Models))
 	return capabilities, nil
-}
-
-func localHTTPBaseURL(addr string) string {
-	addr = strings.TrimSpace(addr)
-	if addr == "" {
-		addr = ":8080"
-	}
-	if strings.HasPrefix(addr, "http://") || strings.HasPrefix(addr, "https://") {
-		return strings.TrimRight(addr, "/")
-	}
-	if strings.HasPrefix(addr, ":") {
-		return "http://127.0.0.1" + addr
-	}
-	return "http://" + addr
-}
-
-func localMCPSocketPath(uid int, pid int) string {
-	return filepath.Join(os.TempDir(), fmt.Sprintf("anycode-%d", uid), fmt.Sprintf("mcp-%d.sock", pid))
 }
 
 type codexMetricLogger struct{}
