@@ -8,7 +8,7 @@ function readSource(relativePath) {
 
 const promptSource = readSource('../src/components/PromptComposer.vue');
 const codexPromptSource = readSource('../src/components/CodexPromptComposer.vue');
-const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+const detailSource = readSource('../src/components/SessionDetailView.vue');
 const stylesSource = readSource('../src/css/app.scss');
 
 test('session detail prompt starts collapsed with an expanding keyboard control', () => {

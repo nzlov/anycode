@@ -27,7 +27,7 @@ const workflowResult = readFileSync(
 const overviewPage = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
 const service = readFileSync(new URL('../src/services/sessionFiles.ts', import.meta.url), 'utf8');
 const detailPage = readFileSync(
-  new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+  new URL('../src/components/SessionDetailView.vue', import.meta.url),
   'utf8',
 );
 const composer = readFileSync(

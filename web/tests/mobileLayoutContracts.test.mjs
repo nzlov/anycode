@@ -17,7 +17,7 @@ const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const answerUserSource = readSource('../src/components/AnswerUserDialog.vue');
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
-const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+const detailSource = readSource('../src/components/SessionDetailView.vue');
 const diffPageSource = readSource('../src/pages/DiffPage.vue');
 const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const diffViewerSource = readSource('../src/components/DiffViewer.vue');
@@ -199,10 +199,10 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
 });
 
 test('session detail mobile navigation shows one scroll owner at a time', () => {
-  assert.match(detailSource, /class="detail-mobile-tabs lt-md"/);
+  assert.match(detailSource, /v-if="isMobileLayout"[\s\S]*class="detail-mobile-tabs"/);
   assert(
     detailSource.indexOf('<q-splitter') <
-      detailSource.indexOf('<q-tabs v-model="detailView" class="detail-mobile-tabs lt-md"'),
+      detailSource.indexOf('class="detail-mobile-tabs"'),
     'mobile detail navigation should follow the detail content',
   );
   assert.match(detailSource, /q-tab name="session"/);
@@ -221,19 +221,19 @@ test('session detail mobile navigation shows one scroll owner at a time', () => 
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page\s*{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s,
+    /\.detail-page--mobile\s*{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s,
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.stream-card,\s*\.right-panel-card\s*{[^}]*border:\s*0[^}]*border-radius:\s*0/s,
+    /\.detail-page--mobile \.stream-card,\s*\.detail-page--mobile \.right-panel-card\s*{[^}]*border:\s*0[^}]*border-radius:\s*0/s,
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page \.detail-grid\s*{[^}]*width:\s*100%/s,
+    /\.detail-page--mobile \.detail-grid\s*{[^}]*width:\s*100%/s,
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.detail-splitter__panel--mobile-hidden\)\s*{[^}]*display:\s*none/s,
+    /\.detail-page--mobile \.detail-splitter\s*>\s*:deep\(\.detail-splitter__panel--mobile-hidden\)\s*{[^}]*display:\s*none/s,
   );
   assert.doesNotMatch(
     detailSource,
@@ -246,7 +246,7 @@ test('session detail desktop splitter keeps one persisted and accessible layout 
   assert.match(detailSource, /<q-splitter[\s\S]*?reverse[\s\S]*?unit="px"/s);
   assert.match(detailSource, /:model-value="rightPanelWidth"/);
   assert.match(detailSource, /:limits="\[minRightPanelWidth, maxRightPanelWidth\]"/);
-  assert.match(detailSource, /:disable="\$q\.screen\.lt\.md"/);
+  assert.match(detailSource, /:disable="isMobileLayout"/);
   assert.match(detailSource, /<q-resize-observer\s+@resize="onDetailSplitterResize"/);
   assert.equal(detailSource.match(/class="event-panel"/g)?.length, 1);
   assert.equal(detailSource.match(/class="right-panel"/g)?.length, 1);
@@ -311,10 +311,10 @@ test('session detail desktop splitter keeps one persisted and accessible layout 
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.q-splitter__separator\)\s*{[^}]*display:\s*none/s,
+    /\.detail-page--mobile \.detail-splitter\s*>\s*:deep\(\.q-splitter__separator\)\s*{[^}]*display:\s*none/s,
   );
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-splitter\s*>\s*:deep\(\.q-splitter__panel\)\s*{[^}]*width:\s*100%\s*!important/s,
+    /\.detail-page--mobile \.detail-splitter\s*>\s*:deep\(\.q-splitter__panel\)\s*{[^}]*width:\s*100%\s*!important/s,
   );
 });

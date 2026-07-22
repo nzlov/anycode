@@ -79,7 +79,7 @@ test('shared Codex prompt composer owns the quick reply menu for both prompt sur
   const composableSource = readSource('../src/composables/useQuickCommands.ts');
   const serviceSource = readSource('../src/services/quickCommands.ts');
   const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
-  const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+  const detailSource = readSource('../src/components/SessionDetailView.vue');
 
   assert.match(
     composerSource,

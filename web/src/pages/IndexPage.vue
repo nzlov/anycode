@@ -1,7 +1,10 @@
 <template>
   <q-page
     class="workbench-page page-shell"
-    :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
+    :class="{
+      'workbench-page--desktop-focus': showDesktopFocusLayout,
+      'workbench-page--horizontal': isHorizontalView,
+    }"
   >
     <PageToolbar title="AnyCode" title-icon="img:/icons/anycode.svg">
       <div v-if="projectChips.length && !$q.screen.lt.sm" class="overview-filter-toolbar">
@@ -21,7 +24,24 @@
       @toggle="toggleProjectVisibility"
     />
 
-    <section class="overview-card-section">
+    <section
+      v-if="isHorizontalView && visibleLatestCards.length > 0"
+      class="overview-horizontal-section"
+      aria-label="横向会话详情"
+    >
+      <div class="overview-horizontal-track">
+        <OverviewHorizontalSession
+          v-for="card in visibleLatestCards"
+          :key="card.id"
+          :card="card"
+          :width="sessionColumnWidth(card.id)"
+          :min-width="minSessionColumnWidth"
+          @update:width="setSessionColumnWidth(card.id, $event)"
+        />
+      </div>
+    </section>
+
+    <section v-else-if="!isHorizontalView" class="overview-card-section">
       <div v-if="visibleLatestCards.length > 0" class="overview-card-grid">
         <q-card
           v-for="card in visibleLatestCards"
@@ -274,15 +294,25 @@
     </section>
 
     <q-banner
-      v-if="latestCards.length > 0 && visibleLatestCards.length === 0"
+      v-if="!isHorizontalView && latestCards.length > 0 && visibleLatestCards.length === 0"
       rounded
       class="empty-lane-banner q-mt-md"
     >
       当前没有显示的卡片
     </q-banner>
-    <q-banner v-else-if="latestCards.length === 0" rounded class="empty-lane-banner q-mt-md">
+    <q-banner
+      v-else-if="!isHorizontalView && latestCards.length === 0"
+      rounded
+      class="empty-lane-banner q-mt-md"
+    >
       暂无卡片
     </q-banner>
+    <div
+      v-else-if="isHorizontalView && visibleLatestCards.length === 0"
+      class="overview-horizontal-empty"
+    >
+      {{ latestCards.length > 0 ? '当前没有显示的会话' : '暂无会话' }}
+    </div>
 
     <AnswerUserDialog
       v-model="answerDialog"
@@ -415,6 +445,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
+import OverviewHorizontalSession from '@/components/OverviewHorizontalSession.vue';
 import PageToolbar from '@/components/PageToolbar.vue';
 import ProjectVisibilityFilters from '@/components/ProjectVisibilityFilters.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
@@ -460,8 +491,15 @@ const router = useRouter();
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
+const horizontalWidthStorageKey = 'anycode.overview.horizontal-widths.v1';
+const defaultSessionColumnWidth = 480;
+const minSessionColumnWidth = 320;
 const todoMenuHideDelay = 120;
-const showDesktopFocusLayout = computed(() => $q.screen.width >= overviewDesktopMinWidth);
+const isDesktopOverview = computed(() => $q.screen.width >= overviewDesktopMinWidth);
+const isHorizontalView = computed(
+  () => isDesktopOverview.value && route.query.view === 'horizontal',
+);
+const showDesktopFocusLayout = computed(() => isDesktopOverview.value && !isHorizontalView.value);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
   return typeof value === 'string' ? value : '';
@@ -500,6 +538,7 @@ const projectChips = computed(() => {
 const visibleLatestCards = computed(() =>
   latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
 );
+const sessionColumnWidths = ref(readSessionColumnWidths());
 const activeTodoMenuId = ref('');
 const answerDialog = ref(false);
 const activeQuestionSessionId = ref('');
@@ -632,6 +671,40 @@ function persistHiddenProjectIds() {
     );
   } catch {
     // Browser storage can be unavailable; filtering still works for the current page.
+  }
+}
+
+function readSessionColumnWidths() {
+  if (typeof window === 'undefined') return {} as Record<string, number>;
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(horizontalWidthStorageKey) ?? '{}');
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+    return Object.fromEntries(
+      Object.entries(stored).flatMap(([sessionId, width]) =>
+        typeof width === 'number' && Number.isFinite(width) && width >= minSessionColumnWidth
+          ? [[sessionId, Math.round(width)]]
+          : [],
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function sessionColumnWidth(sessionId: string) {
+  return sessionColumnWidths.value[sessionId] ?? defaultSessionColumnWidth;
+}
+
+function setSessionColumnWidth(sessionId: string, width: number) {
+  const nextWidth = Math.max(minSessionColumnWidth, Math.round(width));
+  sessionColumnWidths.value = { ...sessionColumnWidths.value, [sessionId]: nextWidth };
+  try {
+    window.localStorage.setItem(
+      horizontalWidthStorageKey,
+      JSON.stringify(sessionColumnWidths.value),
+    );
+  } catch {
+    // The resized columns remain usable when browser storage is unavailable.
   }
 }
 

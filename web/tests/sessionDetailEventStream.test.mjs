@@ -8,7 +8,7 @@ import { stripUnsupportedAnsiControls } from '../src/services/sessionTimelinePre
 
 test('session detail event stream uses transcript events instead of database prompts', () => {
   const source = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const streamBlock = source.slice(
@@ -65,7 +65,7 @@ test('session event presentation moves usage out of the event list into session 
   assert.match(toolComponentSource, /content\.images/);
 
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   assert.match(pageSource, /const latestTokenUsage = computed/);
@@ -85,7 +85,7 @@ test('session text messages fold runtime context and AnyCode guidance', () => {
     'utf8',
   );
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -116,7 +116,7 @@ test('session detail loads the first transcript page before starting subscriptio
     'utf8',
   );
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -163,7 +163,7 @@ test('session detail applies todo updates to the existing session state', () => 
 
 test('session detail removes the old pending-question watcher', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -172,7 +172,7 @@ test('session detail removes the old pending-question watcher', () => {
 
 test('closed session detail removes the prompt area instead of showing a hint', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -183,7 +183,7 @@ test('closed session detail removes the prompt area instead of showing a hint', 
 
 test('session detail replaces the prompt composer with the shared inline approval panel', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const composableSource = readFileSync(
@@ -262,7 +262,7 @@ test('session subscriptions do not wait for readiness or reload on reconnect', (
 
 test('session detail never drops distinct transcript events by content or timestamp', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -319,7 +319,7 @@ test('session detail reopens acknowledged subscriptions completed by the server'
 
 test('subscription refresh does not force a scrolled transcript back to the bottom', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -506,7 +506,7 @@ test('overview cards load persisted usage and apply live usage updates', () => {
 
 test('older timeline pages restore a stable visible event anchor', () => {
   const source = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -518,7 +518,7 @@ test('older timeline pages restore a stable visible event anchor', () => {
 
 test('older event loading crosses pages that add no visible height', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -529,7 +529,7 @@ test('older event loading crosses pages that add no visible height', () => {
 
 test('older event loading ignores follow-up layout scroll events', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 

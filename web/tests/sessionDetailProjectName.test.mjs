@@ -13,7 +13,7 @@ test('session detail displays the project name returned by its query', () => {
 });
 
 test('session detail renders current node information only in workflow mode', () => {
-  const source = readFileSync(new URL('../src/pages/SessionDetailPage.vue', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/components/SessionDetailView.vue', import.meta.url), 'utf8');
 
   assert.match(
     source,

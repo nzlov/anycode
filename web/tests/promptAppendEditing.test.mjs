@@ -21,7 +21,7 @@ test('prompt append editing uses a dedicated mutation and updates one append', (
 
 test('session detail opens a body-only dialog without local status gating', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const panelSource = readFileSync(
@@ -49,7 +49,7 @@ test('session detail opens a body-only dialog without local status gating', () =
 
 test('failed prompt append save keeps the dialog and edited body intact', () => {
   const pageSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const saveBlock = pageSource.slice(

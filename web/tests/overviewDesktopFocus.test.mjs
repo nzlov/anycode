@@ -11,14 +11,15 @@ const indexSource = readSource('../src/pages/IndexPage.vue');
 const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const stylesSource = readSource('../src/css/app.scss');
 
-test('desktop overview replaces the create FAB with the persistent create panel', () => {
+test('desktop card overview replaces the create FAB with the persistent create panel', () => {
   assert.match(
     layoutSource,
-    /v-if="\$route\.name === 'overview' && \$q\.screen\.width < overviewDesktopMinWidth"/,
+    /\(\$q\.screen\.width < overviewDesktopMinWidth \|\| isOverviewHorizontalView\)/,
   );
   assert.match(layoutSource, /:panel="showOverviewCreatePanel"/);
   assert.match(layoutSource, /const overviewDesktopMinWidth = 700/);
   assert.match(layoutSource, /const showOverviewCreatePanel = computed/);
+  assert.match(layoutSource, /!isOverviewHorizontalView\.value/);
 
   assert.match(newSessionSource, /panel\?: boolean/);
   assert.match(newSessionSource, /:model-value="page \? undefined : dialogVisible"/);

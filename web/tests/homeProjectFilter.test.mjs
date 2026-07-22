@@ -48,7 +48,7 @@ test('overview uses project chips and a single icon-only history entry', () => {
 test('mobile overview moves project filters into the page flow before cards', () => {
   assert.match(
     indexSource,
-    /<PageToolbar[\s\S]*?v-if="projectChips\.length && !\$q\.screen\.lt\.sm"[\s\S]*?<\/PageToolbar>\s*<ProjectVisibilityFilters\s+v-if="\$q\.screen\.lt\.sm && projectChips\.length"[\s\S]*?class="overview-project-filters--mobile"[\s\S]*?<section class="overview-card-section">/,
+    /<PageToolbar[\s\S]*?v-if="projectChips\.length && !\$q\.screen\.lt\.sm"[\s\S]*?<\/PageToolbar>\s*<ProjectVisibilityFilters\s+v-if="\$q\.screen\.lt\.sm && projectChips\.length"[\s\S]*?class="overview-project-filters--mobile"[\s\S]*?<section v-else-if="!isHorizontalView" class="overview-card-section">/,
   );
   assert.match(
     stylesSource,

@@ -11,7 +11,7 @@ const dialogSource = readFileSync(
   'utf8',
 );
 const detailSource = readFileSync(
-  new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+  new URL('../src/components/SessionDetailView.vue', import.meta.url),
   'utf8',
 );
 

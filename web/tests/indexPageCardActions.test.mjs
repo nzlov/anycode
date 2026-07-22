@@ -203,6 +203,10 @@ test('overview waiting approval dialog shows model output and diff before submit
     'utf8',
   );
   const stylesSource = readFileSync(new URL('../src/css/app.scss', import.meta.url), 'utf8');
+  const approvalOpenBlock = overviewSource.slice(
+    overviewSource.indexOf('async function openApprovalDialog'),
+    overviewSource.indexOf('async function refreshApprovalArtifactReferences'),
+  );
 
   assert.match(overviewSource, /card\.status === 'waiting_approval'/);
   assert.match(overviewSource, /openApprovalDialog\(card\)/);
@@ -216,7 +220,7 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /@artifact-deleted="refreshApprovalArtifactReferences"/);
   assert.match(overviewSource, /@artifacts-refreshed="refreshApprovalArtifactReferences"/);
   assert.match(overviewSource, /approvalContextGeneration === requestGeneration/);
-  assert.doesNotMatch(overviewSource, /getSessionTranscriptPage/);
+  assert.doesNotMatch(approvalOpenBlock, /getSessionTranscriptPage/);
   assert.doesNotMatch(overviewSource, /getSessionAllDiff/);
   assert.match(overviewSource, /const detail = await getSession\(card\.id\)/);
   assert.match(overviewSource, /approvalPending\.value = detail\.pendingApproval \?\? null/);
@@ -321,7 +325,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
     'utf8',
   );
   const detailSource = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const fileChangeSource = readFileSync(

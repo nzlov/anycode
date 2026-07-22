@@ -59,7 +59,7 @@ test('event stream routes local markdown and authenticated images through modal 
     'utf8',
   );
   const detail = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
 
@@ -97,7 +97,7 @@ test('content-only diff workspaces preserve the requested diff mode', () => {
 
 test('event diff dialog removes viewer chrome and lets its body own vertical scrolling', () => {
   const detail = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const workspace = readFileSync(
@@ -128,7 +128,7 @@ test('event diff dialog removes viewer chrome and lets its body own vertical scr
 
 test('event diff dialog moves single-file metadata into its outer title', () => {
   const detail = readFileSync(
-    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
     'utf8',
   );
   const workspace = readFileSync(

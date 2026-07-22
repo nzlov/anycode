@@ -9,7 +9,7 @@ function readSource(relativePath) {
 const routes = readSource('../src/router/routes.ts');
 const layout = readSource('../src/layouts/MainLayout.vue');
 const overview = readSource('../src/pages/IndexPage.vue');
-const detail = readSource('../src/pages/SessionDetailPage.vue');
+const detail = readSource('../src/components/SessionDetailView.vue');
 const artifacts = readSource('../src/components/SessionArtifactsPanel.vue');
 const settings = readSource('../src/components/GlobalSettingsDialog.vue');
 const promptPanel = readSource('../src/components/PromptAppendEditPanel.vue');

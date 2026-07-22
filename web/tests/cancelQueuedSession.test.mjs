@@ -8,7 +8,7 @@ function readSource(relativePath) {
 
 test('queued sessions expose cancel actions without removing force start', () => {
   const overviewSource = readSource('../src/pages/IndexPage.vue');
-  const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+  const detailSource = readSource('../src/components/SessionDetailView.vue');
   const tableSource = readSource('../src/pages/SessionsPage.vue');
 
   assert.match(overviewSource, /card\.status === 'queued'[\s\S]*取消排队/);

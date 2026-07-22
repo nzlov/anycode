@@ -35,6 +35,19 @@
         >
           <q-tooltip>历史卡片</q-tooltip>
         </q-btn>
+        <q-btn
+          v-if="$route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth"
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          :icon="isOverviewHorizontalView ? 'grid_view' : 'view_column'"
+          :aria-label="isOverviewHorizontalView ? '切换卡片视图' : '切换横向视图'"
+          :aria-pressed="isOverviewHorizontalView"
+          @click="toggleOverviewView"
+        >
+          <q-tooltip>{{ isOverviewHorizontalView ? '卡片视图' : '横向视图' }}</q-tooltip>
+        </q-btn>
         <q-btn flat round dense class="app-icon-btn" icon="more_vert" aria-label="更多操作">
           <q-menu>
             <q-list dense class="app-touch-list">
@@ -95,7 +108,10 @@
     </q-page-container>
 
     <q-page-sticky
-      v-if="$route.name === 'overview' && $q.screen.width < overviewDesktopMinWidth"
+      v-if="
+        $route.name === 'overview' &&
+        ($q.screen.width < overviewDesktopMinWidth || isOverviewHorizontalView)
+      "
       v-show="applicationReady"
       position="bottom-right"
       :offset="[24, 24]"
@@ -193,7 +209,16 @@ const applicationReady = computed(
     (!initialProjectRequired.value || route.name === 'project-create'),
 );
 const showOverviewCreatePanel = computed(
-  () => route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth,
+  () =>
+    route.name === 'overview' &&
+    $q.screen.width >= overviewDesktopMinWidth &&
+    !isOverviewHorizontalView.value,
+);
+const isOverviewHorizontalView = computed(
+  () =>
+    route.name === 'overview' &&
+    $q.screen.width >= overviewDesktopMinWidth &&
+    route.query.view === 'horizontal',
 );
 const newSessionDefaultProjectId = computed(() => {
   const queryProjectId = route.query.projectId;
@@ -240,6 +265,16 @@ function openNewSession() {
     return;
   }
   newSessionOpen.value = true;
+}
+
+function toggleOverviewView() {
+  const query = { ...route.query };
+  if (isOverviewHorizontalView.value) {
+    delete query.view;
+  } else {
+    query.view = 'horizontal';
+  }
+  void router.replace({ name: 'overview', query });
 }
 
 function openSettings() {

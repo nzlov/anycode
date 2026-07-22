@@ -17,7 +17,7 @@ test('web client exposes one executeSession command', () => {
 
 test('overview and detail delegate execution choice to the backend', () => {
   const overviewSource = readSource('../src/pages/IndexPage.vue');
-  const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+  const detailSource = readSource('../src/components/SessionDetailView.vue');
   const composableSource = readSource('../src/composables/useSessionDetail.ts');
 
   assert.match(overviewSource, /card\.availableActions\.includes\('execute'\)/);
@@ -35,7 +35,7 @@ test('overview and detail delegate execution choice to the backend', () => {
 
 test('session status presentation has one owner', () => {
   const overviewSource = readSource('../src/pages/IndexPage.vue');
-  const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+  const detailSource = readSource('../src/components/SessionDetailView.vue');
   const tableSource = readSource('../src/pages/SessionsPage.vue');
   const serviceSource = readSource('../src/services/sessions.ts');
 
