@@ -24,6 +24,9 @@ func (h *testToolHandler) HandleDynamicTool(_ context.Context, call process.Dyna
 
 func TestThreadParamsExposeWritableArtifactDirectory(t *testing.T) {
 	params := appServerThreadParams("/workspace", "/outputs/session-1", "AnyCode rules", "gpt-test", "workspace-write", true)
+	if _, exists := params["approvalPolicy"]; exists {
+		t.Fatalf("thread params override Codex approval policy: %#v", params)
+	}
 	config, ok := params["config"].(map[string]any)
 	if !ok {
 		t.Fatalf("config = %#v", params["config"])
@@ -44,6 +47,38 @@ func TestThreadParamsExposeWritableArtifactDirectory(t *testing.T) {
 	readOnlyConfig := readOnly["config"].(map[string]any)
 	if _, exists := readOnlyConfig["sandbox_workspace_write"]; exists {
 		t.Fatalf("read-only config has writable roots: %#v", readOnlyConfig)
+	}
+}
+
+func TestSandboxPolicyFromPermissionMode(t *testing.T) {
+	tests := []struct {
+		name           string
+		permissionMode string
+		artifactDir    string
+		wantType       string
+		wantRoot       string
+	}{
+		{name: "read only", permissionMode: "read-only", wantType: "readOnly"},
+		{name: "workspace write", permissionMode: " workspace-write ", artifactDir: " /outputs/session-1 ", wantType: "workspaceWrite", wantRoot: "/outputs/session-1"},
+		{name: "full access", permissionMode: "danger-full-access", wantType: "dangerFullAccess"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			policy := appServerSandboxPolicy(test.permissionMode, test.artifactDir)
+			if policy["type"] != test.wantType {
+				t.Fatalf("sandbox policy = %#v", policy)
+			}
+			roots, _ := policy["writableRoots"].([]string)
+			if test.wantRoot == "" && len(roots) != 0 {
+				t.Fatalf("writable roots = %#v", roots)
+			}
+			if test.wantRoot != "" && (len(roots) != 1 || roots[0] != test.wantRoot) {
+				t.Fatalf("writable roots = %#v", roots)
+			}
+		})
+	}
+	if policy := appServerSandboxPolicy("", "/outputs/session-1"); policy != nil {
+		t.Fatalf("empty permission sandbox policy = %#v", policy)
 	}
 }
 
@@ -298,7 +333,7 @@ cat >/dev/null
 		ProcessRunID: "run-1", SessionID: "session-1", Workdir: t.TempDir(),
 		Input:  []process.CodexInputItem{{Type: "text", Text: "make a plan"}},
 		Action: process.CodexActionPlan, DeveloperInstructions: "AnyCode rules",
-		Model: "gpt-test", ReasoningEffort: "high",
+		Model: "gpt-test", ReasoningEffort: "high", PermissionMode: "danger-full-access",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -316,6 +351,9 @@ cat >/dev/null
 	var request struct {
 		Method string `json:"method"`
 		Params struct {
+			SandboxPolicy struct {
+				Type string `json:"type"`
+			} `json:"sandboxPolicy"`
 			CollaborationMode struct {
 				Mode     string `json:"mode"`
 				Settings struct {
@@ -326,7 +364,7 @@ cat >/dev/null
 			} `json:"collaborationMode"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(content, &request) != nil || request.Method != "turn/start" || request.Params.CollaborationMode.Mode != "plan" || request.Params.CollaborationMode.Settings.Model != "gpt-test" || request.Params.CollaborationMode.Settings.ReasoningEffort != "high" || request.Params.CollaborationMode.Settings.DeveloperInstructions != "AnyCode rules" {
+	if json.Unmarshal(content, &request) != nil || request.Method != "turn/start" || request.Params.SandboxPolicy.Type != "dangerFullAccess" || request.Params.CollaborationMode.Mode != "plan" || request.Params.CollaborationMode.Settings.Model != "gpt-test" || request.Params.CollaborationMode.Settings.ReasoningEffort != "high" || request.Params.CollaborationMode.Settings.DeveloperInstructions != "AnyCode rules" {
 		t.Fatalf("plan turn request = %s", content)
 	}
 }

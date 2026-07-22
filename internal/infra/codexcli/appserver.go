@@ -90,7 +90,7 @@ func (c *Client) start(
 	routeCtx, routeCancel := context.WithCancel(context.Background())
 	route := &appServerRun{handle: handle, sessionID: sessionID, workdir: workdir, ctx: routeCtx, cancel: routeCancel, events: make(chan process.CodexEvent, 1024), closed: make(chan struct{})}
 	runtime.register(route)
-	turnID, active, err := runtime.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort)
+	turnID, active, err := runtime.startInput(ctx, threadID, workdir, artifactDir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode)
 	if err != nil {
 		runtime.removeRoute(route)
 		return process.CodexHandle{}, err
@@ -106,7 +106,7 @@ func (c *Client) start(
 }
 
 func appServerThreadParams(workdir string, artifactDir string, developerInstructions string, model string, permissionMode string, fastMode bool) map[string]any {
-	params := map[string]any{"approvalPolicy": "never"}
+	params := map[string]any{}
 	if workdir != "" {
 		params["cwd"] = workdir
 	}
@@ -132,6 +132,23 @@ func appServerThreadParams(workdir string, artifactDir string, developerInstruct
 		params["config"] = config
 	}
 	return params
+}
+
+func appServerSandboxPolicy(permissionMode string, artifactDir string) map[string]any {
+	switch strings.TrimSpace(permissionMode) {
+	case "read-only":
+		return map[string]any{"type": "readOnly"}
+	case "workspace-write":
+		policy := map[string]any{"type": "workspaceWrite"}
+		if artifactDir = strings.TrimSpace(artifactDir); artifactDir != "" {
+			policy["writableRoots"] = []string{artifactDir}
+		}
+		return policy
+	case "danger-full-access":
+		return map[string]any{"type": "dangerFullAccess"}
+	default:
+		return nil
+	}
 }
 
 func anyCodeDynamicTools() []map[string]any {
@@ -172,7 +189,7 @@ func anyCodeDynamicTools() []map[string]any {
 	}
 }
 
-func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string) (string, bool, error) {
+func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, artifactDir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string) (string, bool, error) {
 	switch action {
 	case process.CodexActionCompact:
 		if err := r.request(ctx, "thread/compact/start", map[string]any{"threadId": threadID}, nil); err != nil {
@@ -227,6 +244,9 @@ func (r *appServerRuntime) startInput(ctx context.Context, threadID string, work
 	params := map[string]any{"threadId": threadID, "input": items}
 	if collaborationMode != nil {
 		params["collaborationMode"] = collaborationMode
+	}
+	if sandboxPolicy := appServerSandboxPolicy(permissionMode, artifactDir); sandboxPolicy != nil {
+		params["sandboxPolicy"] = sandboxPolicy
 	}
 	var response struct {
 		Turn struct {
