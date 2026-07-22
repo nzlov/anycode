@@ -87,8 +87,6 @@ const props = withDefaults(
 const groupExpanded = ref(false);
 const groupLabel = computed(() => {
   switch (props.event.group?.kind) {
-    case 'lifecycle':
-      return '运行状态';
     case 'artifact':
       return '临时文件';
     default:

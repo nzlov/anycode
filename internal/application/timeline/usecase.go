@@ -332,16 +332,7 @@ func newTimelineGroup(id eventdomain.ID, kind, label string, first DTO) DTO {
 }
 
 func routineGroup(item DTO) (eventdomain.ID, string, string, bool) {
-	key := firstNonEmpty(item.Causality.ProcessRunID, item.Causality.NodeRunID, "session")
 	switch content := item.Content.(type) {
-	case processdomain.CodexStatusContent:
-		code := content.Code
-		if content.Level == "error" || strings.Contains(code, "waiting_user") || strings.Contains(code, "waiting_approval") || failedProcessExit(code, content.Details) {
-			return "", "", "", false
-		}
-		if isLifecycleEvent(code) {
-			return eventdomain.ID("group:lifecycle:" + key), "lifecycle", "Lifecycle", true
-		}
 	case processdomain.CodexUnknownContent:
 		if strings.HasPrefix(content.RawType, "artifact.") && !strings.Contains(content.RawType, "failed") {
 			artifactKey := strings.TrimSpace(item.Causality.CorrelationID)
@@ -403,6 +394,13 @@ func storedEventContent(eventType string, payload map[string]any) (processdomain
 	if strings.HasPrefix(eventType, "artifact.") {
 		return processdomain.CodexUnknownContent{RawType: eventType, Payload: payload}, true
 	}
+	if isLifecycleEvent(eventType) {
+		content := statusContent(eventType, payload)
+		if failedProcessExit(content.Code, content.Details) {
+			return content, true
+		}
+		return nil, false
+	}
 	if isVisibleStatusEvent(eventType) {
 		return statusContent(eventType, payload), true
 	}
@@ -435,13 +433,8 @@ func isVisibleStatusEvent(eventType string) bool {
 		"session.execution_already_active",
 		"session.failed",
 		"session.prompt_append_cancelled",
-		"session.queued",
 		"session.recovery_waiting_user",
 		"session.resume_failed",
-		"session.running",
-		"session.starting",
-		"session.stopped",
-		"session.stopping",
 		"session.waiting_approval",
 		"session.waiting_user",
 		"session.worktree_cleanup_failed",
@@ -449,8 +442,7 @@ func isVisibleStatusEvent(eventType string) bool {
 		"workflow.approval_submitted",
 		"workflow.failed",
 		"workflow.merge",
-		"workflow.resume_action_failed",
-		"process.exited":
+		"workflow.resume_action_failed":
 		return true
 	default:
 		return false

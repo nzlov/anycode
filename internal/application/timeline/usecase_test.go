@@ -34,7 +34,7 @@ func TestListSessionEventsUsesAppServerHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(page.Items) != 2 || page.Items[1].ID != "codex:thread-1:assistant-1" {
+	if len(page.Items) != 1 || page.Items[0].ID != "codex:thread-1:assistant-1" {
 		t.Fatalf("items = %#v", page.Items)
 	}
 	if page.NextCursor != "next-turn" || page.Usage == nil || page.Usage.TotalTokens != 14 {
@@ -79,6 +79,57 @@ func TestListSessionEventsFallsBackToStoredEventsWithoutThread(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(page.Items) != 1 || page.Items[0].ID != "status-1" {
+		t.Fatalf("items = %#v", page.Items)
+	}
+}
+
+func TestListSessionEventsFiltersRoutineLifecycleAcrossProcessRuns(t *testing.T) {
+	sessionEventID := eventdomain.SessionID("session-1")
+	sessions := &fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1"}}
+	events := []eventdomain.DomainEvent{
+		{ID: "queued-1", Type: "session.queued"},
+		{ID: "starting-1", Type: "session.starting", Causality: eventdomain.Causality{ProcessRunID: "process-1"}},
+		{ID: "running-1", Type: "session.running", Causality: eventdomain.Causality{ProcessRunID: "process-1"}},
+		{ID: "stopping-1", Type: "session.stopping", Causality: eventdomain.Causality{ProcessRunID: "process-1"}},
+		{ID: "exited-1", Type: "process.exited", Causality: eventdomain.Causality{ProcessRunID: "process-1"}},
+		{ID: "stopped-1", Type: "session.stopped", Causality: eventdomain.Causality{ProcessRunID: "process-1"}},
+		{ID: "queued-2", Type: "session.queued"},
+		{ID: "starting-2", Type: "session.starting", Causality: eventdomain.Causality{ProcessRunID: "process-2"}},
+		{ID: "running-2", Type: "session.running", Causality: eventdomain.Causality{ProcessRunID: "process-2"}},
+		{ID: "stopping-2", Type: "session.stopping", Causality: eventdomain.Causality{ProcessRunID: "process-2"}},
+		{ID: "exited-2", Type: "process.exited", Causality: eventdomain.Causality{ProcessRunID: "process-2"}},
+		{ID: "stopped-2", Type: "session.stopped", Causality: eventdomain.Causality{ProcessRunID: "process-2"}},
+	}
+	for index := range events {
+		events[index].Scope = eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionEventID}
+		events[index].SessionID = &sessionEventID
+		events[index].CreatedAt = time.Unix(int64(index+1), 0).UTC()
+	}
+	service := New(&fakeLiveSource{}, sessions, nil, WithHistory(&fakeEventHistory{events: events}))
+
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1", Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 0 || page.Total != 0 {
+		t.Fatalf("routine lifecycle events = %#v", page.Items)
+	}
+}
+
+func TestListSessionEventsPreservesFailedProcessExit(t *testing.T) {
+	sessionEventID := eventdomain.SessionID("session-1")
+	sessions := &fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", ProjectID: "project-1"}}
+	history := &fakeEventHistory{events: []eventdomain.DomainEvent{{
+		ID: "failed-exit", Scope: eventdomain.Scope{ProjectID: "project-1", SessionID: &sessionEventID},
+		SessionID: &sessionEventID, Type: "process.exited", Payload: map[string]any{"exitCode": float64(1)}, CreatedAt: time.Unix(10, 0).UTC(),
+	}}}
+	service := New(&fakeLiveSource{}, sessions, nil, WithHistory(history))
+
+	page, err := service.ListSessionEvents(context.Background(), ListSessionEventsInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != "failed-exit" {
 		t.Fatalf("items = %#v", page.Items)
 	}
 }
