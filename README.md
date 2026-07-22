@@ -1,5 +1,7 @@
 # AnyCode
 
+[中文](README.md) | [English](README.en.md)
+
 面向 Codex agent 的 Web 工作台：在浏览器中统一管理项目、会话卡片、隔离 worktree、可编排工作流和人工介入。
 
 ![AnyCode 工作台预览](docs/assets/anycode-dashboard.png)
