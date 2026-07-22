@@ -6620,8 +6620,8 @@ func TestStartSessionPromptProtectsManagedWorktree(t *testing.T) {
 	if !strings.Contains(prompt, "卡片关闭时由 AnyCode") {
 		t.Fatalf("prompt should assign cleanup ownership to AnyCode: %q", prompt)
 	}
-	if !strings.Contains(prompt, "当前卡片分支名执行非 fast-forward merge") || !strings.Contains(prompt, "保留 Git 默认合并提交信息") {
-		t.Fatalf("prompt missing recoverable manual merge guidance: %q", prompt)
+	if strings.Contains(prompt, "若必须手动合并") || strings.Contains(prompt, "fast-forward merge") || strings.Contains(prompt, "默认合并提交信息") {
+		t.Fatalf("prompt should not require a merge commit for Diff recovery: %q", prompt)
 	}
 	if strings.Contains(prompt, "保存 Diff 快照") {
 		t.Fatalf("prompt should not promise Diff snapshots: %q", prompt)
