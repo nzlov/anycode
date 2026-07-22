@@ -75,11 +75,11 @@ html[data-daily-background='ready'] #q-app::before {
 }
 
 html[data-daily-background='ready'] body {
-  --ac-page-layer: color-mix(in srgb, var(--ac-page) 16%, transparent);
+  --ac-page-layer: transparent;
 }
 
 html[data-daily-background='ready'] body.body--dark {
-  --ac-page-layer: color-mix(in srgb, var(--ac-page) 16%, transparent);
+  --ac-page-layer: transparent;
 }
 
 a {
