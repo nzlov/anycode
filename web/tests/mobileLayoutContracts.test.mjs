@@ -108,15 +108,7 @@ test('mobile command controls share a 44px touch contract', () => {
     /\.lane-icon-btn\s*{[^}]*(?:width|height|min-width|min-height):/s,
   );
   assert.doesNotMatch(`${layoutSource}\n${indexSource}`, /<q-list\s+dense(?![^>]*app-touch-list)/);
-  assert.match(stylesSource, /\.toolbar-file-picker\s*{[^}]*width:\s*44px[^}]*max-width:\s*44px/s);
-  assert.match(
-    stylesSource,
-    /\.toolbar-file-picker\s*{[^}]*border:\s*0[^}]*background:\s*transparent/s,
-  );
-  assert.match(
-    stylesSource,
-    /\.toolbar-file-picker\.q-field--dense \.q-field__control[^}]*min-height:\s*44px[^}]*height:\s*44px/s,
-  );
+  assert.match(composerSource, /class="app-icon-btn toolbar-file-picker"/);
   assert.match(composerSource, /class="app-icon-btn"[^>]*aria-label="关闭预览"/s);
   assert.doesNotMatch(
     detailSource,

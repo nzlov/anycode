@@ -1531,41 +1531,6 @@ body.desktop
   object-fit: contain;
 }
 
-.toolbar-file-picker {
-  width: 44px;
-  max-width: 44px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  transition: background-color var(--ac-transition);
-}
-
-.toolbar-file-picker:hover:not(.q-field--disabled),
-.toolbar-file-picker:focus-within {
-  background: color-mix(in srgb, currentcolor 10%, transparent);
-}
-
-.toolbar-file-picker.q-field--dense .q-field__control,
-.toolbar-file-picker.q-field--dense .q-field__marginal {
-  min-height: 44px;
-  height: 44px;
-}
-
-.toolbar-file-picker .q-field__control {
-  padding: 0;
-}
-
-.toolbar-file-picker .q-field__prepend {
-  width: 100%;
-  justify-content: center;
-  padding: 0;
-}
-
-.toolbar-file-picker .q-field__native,
-.toolbar-file-picker .q-field__append {
-  display: none;
-}
-
 .prompt-input-wrap {
   position: relative;
   min-width: 0;

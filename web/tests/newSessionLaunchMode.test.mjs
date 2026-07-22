@@ -75,14 +75,7 @@ test('prompt toolbar controls use the compact icon and label treatment', () => {
   assert.equal((controlsSource.match(/hide-dropdown-icon/g) ?? []).length, 1);
   assert.equal((modelSelectorSource.match(/hide-dropdown-icon/g) ?? []).length, 2);
   assert.doesNotMatch(controlsSource, /dropdown-icon=""/);
-  assert.match(
-    stylesSource,
-    /\.toolbar-file-picker \.q-field__prepend\s*{[^}]*justify-content:\s*center/s,
-  );
-  assert.match(
-    stylesSource,
-    /\.toolbar-file-picker\s*{[^}]*border:\s*0[^}]*background:\s*transparent/s,
-  );
+  assert.match(composerSource, /class="app-icon-btn toolbar-file-picker"/);
   assert.match(stylesSource, /\.permission-select\s*{[^}]*width:\s*44px/s);
   assert.match(controlsSource, /<CodexModelSelector/);
   assert.match(modelSelectorSource, /class="compact-select model-select"/);

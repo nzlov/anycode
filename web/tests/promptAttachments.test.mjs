@@ -36,6 +36,22 @@ test('shared prompt shell owns pasted files without relying on q-input listener 
   assert.doesNotMatch(composerSource, /function onPaste[\s\S]*?preventDefault\(\)/);
 });
 
+test('attachment button opens the shared file picker', () => {
+  const composerSource = readFileSync(
+    new URL('../src/components/PromptComposer.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    composerSource,
+    /<q-btn[\s\S]*?icon="attach_file"[\s\S]*?aria-label="添加附件"[\s\S]*?@click="filePickerRef\?\.pickFiles\(\$event\)"/,
+  );
+  assert.match(
+    composerSource,
+    /<q-file\s+ref="filePickerRef"[\s\S]*?v-model="filesModel"[\s\S]*?multiple[\s\S]*?append[\s\S]*?class="hidden"/,
+  );
+});
+
 test('clipboard extraction keeps every copied file type in transfer order', () => {
   const image = { name: 'screenshot.png', type: 'image/png' };
   const archive = { name: 'source.tar.gz', type: 'application/gzip' };

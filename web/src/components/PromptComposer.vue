@@ -196,22 +196,25 @@
       >
         <q-tooltip>收起提示词</q-tooltip>
       </q-btn>
+      <q-btn
+        flat
+        round
+        icon="attach_file"
+        aria-label="添加附件"
+        class="app-icon-btn toolbar-file-picker"
+        :disable="disabled"
+        @click="filePickerRef?.pickFiles($event)"
+      >
+        <q-tooltip>添加附件</q-tooltip>
+      </q-btn>
       <q-file
+        ref="filePickerRef"
         v-model="filesModel"
-        borderless
-        dense
         multiple
         append
-        display-value=""
-        aria-label="添加附件"
-        class="toolbar-file-picker"
+        class="hidden"
         :disable="disabled"
-      >
-        <template #prepend>
-          <q-icon name="attach_file" />
-        </template>
-        <q-tooltip>添加附件</q-tooltip>
-      </q-file>
+      />
       <PromptConfigControls
         v-if="!forceConfigMenu && (!compact || !$q.screen.lt.md)"
         :model="model"
@@ -294,7 +297,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue';
-import { useQuasar, type QInput } from 'quasar';
+import { useQuasar, type QFile, type QInput } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
 import { filesFromTransfer } from '@/services/promptAttachments';
@@ -377,6 +380,7 @@ const previewUrl = ref('');
 const draggingFiles = ref(false);
 const dragDepth = ref(0);
 const fileThumbnailUrls = reactive(new Map<File, string>());
+const filePickerRef = ref<QFile | null>(null);
 const promptInputRef = ref<QInput | null>(null);
 const completionListId = useId();
 const completionRange = ref<PromptCompletionRange | null>(null);
