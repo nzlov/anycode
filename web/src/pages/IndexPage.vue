@@ -3,7 +3,7 @@
     class="workbench-page page-shell"
     :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
   >
-    <PageToolbar title="AnyCode">
+    <PageToolbar title="AnyCode" title-icon="img:/icons/anycode.svg">
       <div class="overview-filter-toolbar">
         <div
           v-if="projectChips.length"
