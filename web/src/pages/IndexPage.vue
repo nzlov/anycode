@@ -621,6 +621,7 @@ interface ApprovalContext {
 
 onMounted(() => {
   overviewMounted = true;
+  window.addEventListener('anycode:session-created', handleSessionCreated);
   void startOverview();
 });
 
@@ -629,6 +630,7 @@ onUnmounted(() => {
   cardRefreshRequests.clear();
   clearTodoMenuHideTimer();
   clearCardClickSuppression();
+  window.removeEventListener('anycode:session-created', handleSessionCreated);
   stopOverviewLiveUpdates();
 });
 
@@ -734,6 +736,11 @@ function toggleProjectVisibility(projectId: string) {
   }
   hiddenProjectIds.value = next;
   persistHiddenProjectIds();
+}
+
+function handleSessionCreated(event: Event) {
+  if (!(event instanceof CustomEvent) || typeof event.detail?.sessionId !== 'string') return;
+  void refreshOverviewCard(event.detail.sessionId);
 }
 
 function handleSessionUpdate(update: SessionUpdateEvent) {

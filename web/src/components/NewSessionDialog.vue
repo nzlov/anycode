@@ -410,7 +410,11 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     if (stagedAttachmentIds.length > 0) {
       input.stagedAttachmentIds = stagedAttachmentIds;
     }
-    await createSessionRequest(input);
+    const created = await createSessionRequest(input);
+    // GLUE: The desktop dialog lives in MainLayout while the session list lives in IndexPage.
+    window.dispatchEvent(
+      new CustomEvent('anycode:session-created', { detail: { sessionId: created.id } }),
+    );
     rememberLaunchMode(input.mode);
 		files.value = [];
 		prompt.value = '';
@@ -438,7 +442,7 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
 }
 
 async function createSessionRequest(input: CreateSessionInput) {
-  await graphqlFetch<{ createSession: { id: string } }, { input: CreateSessionInput }>({
+  const data = await graphqlFetch<{ createSession: { id: string } }, { input: CreateSessionInput }>({
     query: `
       mutation CreateSession($input: CreateSessionInput!) {
         createSession(input: $input) {
@@ -448,6 +452,7 @@ async function createSessionRequest(input: CreateSessionInput) {
     `,
     variables: { input },
   });
+  return data.createSession;
 }
 
 async function cleanupStagedAttachments(ids: string[]) {

@@ -21,6 +21,7 @@ const detailPageSource = readSource('../src/pages/SessionDetailPage.vue');
 const detailComposableSource = readSource('../src/composables/useSessionDetail.ts');
 const stylesSource = readSource('../src/css/app.scss');
 const schemaSource = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
+const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 
 test('desktop header switches between card and horizontal overview modes beside history', () => {
   assert.match(
@@ -168,4 +169,20 @@ test('horizontal mode uses the mobile-style create FAB and disables the persiste
     /showOverviewCreatePanel = computed\([\s\S]*?!isOverviewHorizontalView\.value/,
   );
   assert.match(layoutSource, /<q-btn[\s\S]*fab[\s\S]*aria-label="新建卡片"/);
+});
+
+test('successful desktop creation refreshes the new session in the mounted overview', () => {
+  assert.match(
+    newSessionSource,
+    /const created = await createSessionRequest\(input\);[\s\S]*?new CustomEvent\('anycode:session-created',[\s\S]*?sessionId: created\.id/,
+  );
+  assert.match(indexSource, /window\.addEventListener\('anycode:session-created', handleSessionCreated\)/);
+  assert.match(
+    indexSource,
+    /function handleSessionCreated\(event: Event\)[\s\S]*?refreshOverviewCard\(event\.detail\.sessionId\)/,
+  );
+  assert.match(
+    indexSource,
+    /window\.removeEventListener\('anycode:session-created', handleSessionCreated\)/,
+  );
 });
