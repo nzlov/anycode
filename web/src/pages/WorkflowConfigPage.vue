@@ -305,12 +305,13 @@ const graph = reactive<WorkflowGraph>(defaultGraph());
 const flowInteraction = workflowFlowInteractionProps();
 const { fitView: fitFlowView, project: projectFlowPoint } = useVueFlow('workflow-config-flow');
 
-const nodeTypeOptions = ['codex', 'expr', 'approval', 'merge', 'close'];
+const nodeTypeOptions = ['codex', 'expr', 'approval', 'merge', 'rebase', 'close'];
 const nodePalette = [
   { value: 'codex', label: 'Codex', caption: '运行 Codex 节点' },
   { value: 'expr', label: 'Expr', caption: '用 params 计算 results' },
   { value: 'approval', label: '人工审批', caption: '等待人工确认' },
-  { value: 'merge', label: '合并', caption: '合并或 rebase 到基础分支' },
+  { value: 'merge', label: '合并', caption: '合并到基础分支' },
+  { value: 'rebase', label: 'Rebase', caption: '变基到基础分支' },
   { value: 'close', label: '关闭', caption: '结束流程并关闭卡片' },
 ];
 const mergeStrategyOptions = ['merge', 'rebase'];
@@ -349,11 +350,11 @@ const conditionFieldOptions = computed(() => {
   ];
 });
 const systemOutputFieldKeys = computed(() => {
-  return new Set(systemOutputFields(nodeType.value, nodeType.value === 'merge').map((field) => field.key));
+  return new Set(systemOutputFields(nodeType.value, false).map((field) => field.key));
 });
 
 watch(nodeType, () => {
-  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, nodeType.value === 'merge'));
+  outputFields.value = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, false));
 });
 
 onMounted(async () => {
@@ -443,7 +444,11 @@ function applyNodeEdit() {
   node.prompt = nodePrompt.value.trim();
   const approvalBeforeRun = requiresApproval.value || nodeType.value === 'approval';
   const approvalAfterRun = requiresForwardApproval.value && nodeType.value !== 'approval' && nodeType.value !== 'close';
-  const merge = nodeType.value === 'merge' ? { strategy: mergeStrategy.value } : null;
+  const merge = nodeType.value === 'rebase'
+    ? { strategy: 'rebase' }
+    : nodeType.value === 'merge'
+      ? { strategy: mergeStrategy.value }
+      : null;
   node.outputFields = completeOutputFields(outputFields.value, systemOutputFields(nodeType.value, Boolean(merge)));
   node.retry.maxAttempts = Math.max(0, Number(retry.value) || 0);
   node.approval.beforeRun = approvalBeforeRun;
@@ -688,6 +693,7 @@ function edgeCaption(edge: WorkflowEdge) {
 function nodeIcon(type: string) {
   if (type === 'approval') return 'approval';
   if (type === 'merge') return 'merge_type';
+  if (type === 'rebase') return 'call_split';
   if (type === 'expr') return 'functions';
   if (type === 'close') return 'cancel';
   return 'terminal';
@@ -696,6 +702,7 @@ function nodeIcon(type: string) {
 function defaultNodeTitle(type: string) {
   if (type === 'approval') return '人工审批';
   if (type === 'merge') return '合并';
+  if (type === 'rebase') return 'Rebase';
   if (type === 'expr') return '表达式';
   if (type === 'close') return '关闭';
   return '新节点';
@@ -708,7 +715,7 @@ function defaultNodePrompt(type: string) {
 
 function defaultOutputFields(type: string): WorkflowOutputField[] {
   if (type === 'close') return [];
-  const fields = systemOutputFields(type, type === 'merge');
+  const fields = systemOutputFields(type, false);
   if (fields.length > 0) return fields;
   return [{ key: 'status', description: '节点执行结果，例如 passed 或 failed', valueType: 'string' }];
 }
@@ -723,14 +730,21 @@ function defaultGraph(): WorkflowGraph {
 function normalizeNode(node: Partial<WorkflowNode> & { id: string }): WorkflowNode {
   const type = node.type || 'codex';
   const approvalBeforeRun = Boolean(node.approval?.beforeRun) || type === 'approval';
-  const merge = node.merge ? { strategy: node.merge.strategy === 'rebase' ? 'rebase' : 'merge' } : null;
+  const merge = type === 'rebase'
+    ? { strategy: 'rebase' }
+    : node.merge
+      ? { strategy: node.merge.strategy === 'rebase' ? 'rebase' : 'merge' }
+      : null;
   return {
     id: normalizeID(node.id),
     type,
     title: node.title || node.id,
     prompt: node.prompt || '',
     position: normalizePosition(node.position),
-    outputFields: completeOutputFields(node.outputFields ?? [], systemOutputFields(type, type === 'merge' || Boolean(merge))),
+    outputFields: completeOutputFields(
+      node.outputFields ?? [],
+      systemOutputFields(type, Boolean(merge)),
+    ),
     approval: {
       beforeRun: approvalBeforeRun,
       afterRun: Boolean(node.approval?.afterRun),

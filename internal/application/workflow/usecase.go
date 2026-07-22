@@ -1696,8 +1696,11 @@ func isCodexNode(node domain.Node) bool {
 
 func mergeRequest(node domain.Node) *sessiondomain.WorkflowMerge {
 	nodeType := strings.TrimSpace(strings.ToLower(node.Type))
-	if node.Merge == nil && nodeType != "merge" {
+	if node.Merge == nil && nodeType != "merge" && nodeType != "rebase" {
 		return nil
+	}
+	if nodeType == "rebase" {
+		return &sessiondomain.WorkflowMerge{Strategy: "rebase"}
 	}
 	strategy := "merge"
 	if node.Merge != nil && strings.TrimSpace(node.Merge.Strategy) != "" {

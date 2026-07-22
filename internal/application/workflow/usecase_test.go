@@ -462,6 +462,37 @@ func TestStartForSessionReturnsMergeAdvanceForMergeStartNode(t *testing.T) {
 	}
 }
 
+func TestStartForSessionReturnsRebaseAdvanceForRebaseStartNode(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.definitions["workflow-1"] = domain.Definition{
+		ID:        "workflow-1",
+		ProjectID: "project-1",
+		Name:      "default",
+		Graph: domain.Graph{
+			Nodes: []domain.Node{{ID: "rebase", Type: "rebase", Title: "Rebase"}},
+		},
+	}
+	service := New(repo)
+	service.now = func() time.Time { return time.Unix(10, 0).UTC() }
+	service.generateID = func() (string, error) { return "node-run-1", nil }
+
+	got, err := service.StartForSession(ctx, sessiondomain.WorkflowStartInput{
+		ProjectID:            "project-1",
+		SessionID:            "session-1",
+		WorkflowDefinitionID: "workflow-1",
+	})
+	if err != nil {
+		t.Fatalf("StartForSession() error = %v", err)
+	}
+	if got.RequiresCodex || got.Merge == nil || got.Merge.Strategy != "rebase" {
+		t.Fatalf("StartForSession() = %#v", got)
+	}
+	if len(repo.nodeRuns) != 1 || repo.nodeRuns[0].Status != domain.NodeRunning {
+		t.Fatalf("node runs = %#v", repo.nodeRuns)
+	}
+}
+
 func TestStartForSessionClassifiesExprAsReady(t *testing.T) {
 	repo := newFakeRepository()
 	repo.definitions["workflow-1"] = domain.Definition{

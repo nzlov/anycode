@@ -26,6 +26,10 @@ func TestCanonicalGraphReservesApprovalOutputNamespace(t *testing.T) {
 					{Key: "custom", Description: "custom", ValueType: "boolean"},
 				},
 			},
+			{
+				ID:   "rebase",
+				Type: "rebase",
+			},
 		},
 		Edges: []Edge{{From: "build", To: "merge", Priority: 2}},
 	}
@@ -43,6 +47,9 @@ func TestCanonicalGraphReservesApprovalOutputNamespace(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Nodes[1].OutputFields, wantMerge) {
 		t.Fatalf("merge output fields = %#v, want %#v", got.Nodes[1].OutputFields, wantMerge)
+	}
+	if !reflect.DeepEqual(got.Nodes[2].OutputFields, mergeOutputFields) {
+		t.Fatalf("rebase output fields = %#v, want %#v", got.Nodes[2].OutputFields, mergeOutputFields)
 	}
 	if !reflect.DeepEqual(CanonicalGraph(got), got) {
 		t.Fatal("CanonicalGraph is not idempotent")
