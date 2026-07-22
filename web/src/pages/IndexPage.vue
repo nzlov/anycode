@@ -76,7 +76,7 @@
                 <span class="overview-card-meta__label">工作分支</span>
                 <span>{{ card.worktreeBranch || '-' }}</span>
               </div>
-              <div>
+              <div v-if="card.mode === 'workflow'">
                 <span class="overview-card-meta__label">当前节点</span>
                 <span>{{ card.node }}</span>
               </div>

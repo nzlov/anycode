@@ -22,10 +22,14 @@ test('session card summary remains available without being rendered in the table
   assert.match(schema, /requirementSummary: String!/);
 });
 
-test('session table hides workflow nodes for chat rows and renders persisted statistics', () => {
+test('session table renders current nodes only for workflow rows and renders persisted statistics', () => {
   const source = readSource('../src/pages/SessionsPage.vue');
 
-  assert.match(source, /props\.row\.mode === 'workflow' \? props\.row\.node : '-'/);
+  assert.match(
+    source,
+    /#body-cell-node[\s\S]*?<span v-if="props\.row\.mode === 'workflow'">[\s\S]*?props\.row\.node/,
+  );
+  assert.doesNotMatch(source, /props\.row\.mode === 'workflow' \? props\.row\.node : '-'/);
   assert.match(source, /name: 'diff',[\s\S]*?row\.filesChanged/);
   assert.match(source, /name: 'tokens',[\s\S]*?row\.usage\?\.totalTokens \?\? 0/);
   assert.match(source, /#body-cell-diff[\s\S]*?props\.row\.filesChanged/);

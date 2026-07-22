@@ -11,3 +11,12 @@ test('session detail displays the project name returned by its query', () => {
   assert.match(normalizer?.[0] ?? '', /projectName: session\.projectName/);
   assert.doesNotMatch(normalizer?.[0] ?? '', /projectName: session\.projectId/);
 });
+
+test('session detail renders current node information only in workflow mode', () => {
+  const source = readFileSync(new URL('../src/pages/SessionDetailPage.vue', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /<q-item v-if="session\?\.mode === 'workflow'">\s*<q-item-section>\s*<q-item-label caption>当前节点<\/q-item-label>/,
+  );
+});

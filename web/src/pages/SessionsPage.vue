@@ -61,7 +61,7 @@
 
         <template #body-cell-node="props">
           <q-td :props="props">
-            {{ props.row.mode === 'workflow' ? props.row.node : '-' }}
+            <span v-if="props.row.mode === 'workflow'">{{ props.row.node }}</span>
           </q-td>
         </template>
 
