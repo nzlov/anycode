@@ -331,7 +331,7 @@ a {
 .overview-project-filters .q-chip {
   max-width: min(240px, 40vw);
   flex: 0 0 auto;
-  margin: 0;
+  margin: 4px 0;
 }
 
 .overview-project-filters .q-chip__content {
@@ -2105,6 +2105,19 @@ body.desktop
 }
 
 @media (max-width: 599.98px) {
+  .overview-project-filters--mobile {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 0 12px;
+    overflow: visible;
+  }
+
+  .overview-project-filters--mobile .q-chip {
+    max-width: 100%;
+    margin: 0;
+  }
+
   .page-toolbar {
     gap: 4px;
   }

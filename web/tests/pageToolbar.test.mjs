@@ -40,13 +40,9 @@ test('route pages render their titles and actions into the application toolbar',
 test('overview navigation and title use the AnyCode project icon', () => {
   assert.match(layoutSource, /icon="img:\/icons\/anycode\.svg"/);
   assert.match(layoutSource, /aria-label="返回总览"/);
-  assert.match(
-    indexSource,
-    /<PageToolbar title="AnyCode" title-icon="img:\/icons\/anycode\.svg"/,
-  );
+  assert.match(indexSource, /<PageToolbar title="AnyCode" title-icon="img:\/icons\/anycode\.svg"/);
   assert.match(toolbarSource, /<q-icon v-if="titleIcon" :name="titleIcon"/);
-  const titleIconStyles =
-    stylesSource.match(/\.page-toolbar__title-icon\s*{([^}]*)}/)?.[1] ?? '';
+  const titleIconStyles = stylesSource.match(/\.page-toolbar__title-icon\s*{([^}]*)}/)?.[1] ?? '';
   assert.match(titleIconStyles, /font-size:\s*28px/);
   assert.match(titleIconStyles, /margin-right:\s*8px/);
 });
@@ -78,6 +74,9 @@ test('page toolbar layout remains single-line and shrinkable on narrow screens',
   );
   const projectFilterStyles =
     stylesSource.match(/\.overview-project-filters\s*{([^}]*)}/)?.[1] ?? '';
+  const projectChipStyles =
+    stylesSource.match(/\.overview-project-filters \.q-chip\s*{([^}]*)}/)?.[1] ?? '';
   assert.match(projectFilterStyles, /overflow-x:\s*auto/);
   assert.match(projectFilterStyles, /flex-wrap:\s*nowrap/);
+  assert.match(projectChipStyles, /margin:\s*4px 0/);
 });

@@ -4,33 +4,22 @@
     :class="{ 'workbench-page--desktop-focus': showDesktopFocusLayout }"
   >
     <PageToolbar title="AnyCode" title-icon="img:/icons/anycode.svg">
-      <div class="overview-filter-toolbar">
-        <div
-          v-if="projectChips.length"
-          class="overview-project-filters"
-          role="group"
-          aria-label="项目卡片显示筛选"
-        >
-          <q-chip
-            v-for="project in projectChips"
-            :key="project.id"
-            clickable
-            :outline="!isProjectVisible(project.id)"
-            class="overview-project-chip"
-            :class="{
-              'overview-project-chip--visible': isProjectVisible(project.id),
-              'overview-project-chip--hidden': !isProjectVisible(project.id),
-            }"
-            :icon="isProjectVisible(project.id) ? 'visibility' : 'visibility_off'"
-            :aria-pressed="isProjectVisible(project.id)"
-            :aria-label="`${isProjectVisible(project.id) ? '隐藏' : '显示'} ${project.name} 项目卡片`"
-            @click="toggleProjectVisibility(project.id)"
-          >
-            {{ project.name }}
-          </q-chip>
-        </div>
+      <div v-if="projectChips.length && !$q.screen.lt.sm" class="overview-filter-toolbar">
+        <ProjectVisibilityFilters
+          :projects="projectChips"
+          :hidden-project-ids="hiddenProjectIds"
+          @toggle="toggleProjectVisibility"
+        />
       </div>
     </PageToolbar>
+
+    <ProjectVisibilityFilters
+      v-if="$q.screen.lt.sm && projectChips.length"
+      class="overview-project-filters--mobile"
+      :projects="projectChips"
+      :hidden-project-ids="hiddenProjectIds"
+      @toggle="toggleProjectVisibility"
+    />
 
     <section class="overview-card-section">
       <div v-if="visibleLatestCards.length > 0" class="overview-card-grid">
@@ -305,10 +294,7 @@
       @submit="submitAnswers"
     />
 
-    <q-dialog
-      v-model="approvalDialog"
-      @hide="handleApprovalDialogClosed"
-    >
+    <q-dialog v-model="approvalDialog" @hide="handleApprovalDialogClosed">
       <q-card class="forward-approval-dialog app-content-dialog">
         <div class="forward-approval-dialog__tabs">
           <q-tabs v-model="approvalTab" dense align="left" class="text-primary">
@@ -403,10 +389,7 @@
       </q-card>
     </q-dialog>
 
-    <q-dialog
-      v-model="artifactDialog"
-      @hide="handleArtifactDialogClosed"
-    >
+    <q-dialog v-model="artifactDialog" @hide="handleArtifactDialogClosed">
       <q-card class="overview-artifact-dialog app-content-dialog">
         <div class="overview-artifact-dialog__header">
           <div class="text-subtitle1 text-weight-bold">临时文件</div>
@@ -433,6 +416,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AnswerUserDialog from '@/components/AnswerUserDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import PageToolbar from '@/components/PageToolbar.vue';
+import ProjectVisibilityFilters from '@/components/ProjectVisibilityFilters.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
@@ -659,10 +643,6 @@ function pruneHiddenProjectIds() {
   if (next.size === hiddenProjectIds.value.size) return;
   hiddenProjectIds.value = next;
   persistHiddenProjectIds();
-}
-
-function isProjectVisible(projectId: string) {
-  return !hiddenProjectIds.value.has(projectId);
 }
 
 function toggleProjectVisibility(projectId: string) {
