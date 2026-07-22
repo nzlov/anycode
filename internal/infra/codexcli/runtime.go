@@ -57,18 +57,20 @@ type appServerRuntime struct {
 }
 
 type appServerRun struct {
-	handle    process.CodexHandle
-	sessionID process.SessionID
-	workdir   string
-	ctx       context.Context
-	cancel    context.CancelFunc
-	events    chan process.CodexEvent
-	sequence  atomic.Int64
-	turnMu    sync.RWMutex
-	turnID    string
-	claimed   bool
-	closed    chan struct{}
-	closeOnce sync.Once
+	handle     process.CodexHandle
+	sessionID  process.SessionID
+	workdir    string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	events     chan process.CodexEvent
+	sequence   atomic.Int64
+	turnMu     sync.RWMutex
+	turnID     string
+	claimed    bool
+	closed     chan struct{}
+	closeOnce  sync.Once
+	finished   chan process.ExitResult
+	finishOnce sync.Once
 }
 
 func startAppServerRuntime(ctx context.Context, client *Client) (*appServerRuntime, error) {
@@ -309,10 +311,9 @@ func (r *appServerRuntime) failRoutes(cause error) {
 		if cause != nil {
 			reason += ": " + cause.Error()
 		}
-		route.emit(process.CodexEvent{Type: process.CodexEventProcessExit, Content: process.ExitResult{
+		route.finish(process.ExitResult{
 			FailureCode: "app_server_exited", FailureReason: reason, FinishedAt: time.Now(),
-		}, CreatedAt: time.Now()})
-		route.close()
+		})
 	}
 }
 
@@ -415,6 +416,12 @@ func (r *appServerRun) close() {
 		r.cancel()
 		close(r.closed)
 		close(r.events)
+	})
+}
+
+func (r *appServerRun) finish(result process.ExitResult) {
+	r.finishOnce.Do(func() {
+		r.finished <- result
 	})
 }
 

@@ -213,7 +213,7 @@ func TestRecoverInterruptedSessionCompletesPreparedCloseWithPendingQuestion(t *t
 	request := questiondomain.Request{
 		ID: "request-1", SessionID: "session-1", Status: questiondomain.RequestPending, CreatedAt: now,
 		Questions: []questiondomain.Question{{
-			ID: "question-1", RequestID: "request-1", Title: "Choose", Body: "Continue?", Type: "choice", Status: string(questiondomain.RequestPending),
+			ID: "question-1", RequestID: "request-1", Body: "Continue?", Type: "choice", Status: string(questiondomain.RequestPending),
 		}},
 	}
 	if err := store.Questions().CreateRequest(ctx, request); err != nil {

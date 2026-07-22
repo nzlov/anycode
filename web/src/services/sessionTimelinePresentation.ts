@@ -82,6 +82,7 @@ export function timelinePhaseLabel(phase: TranscriptPhase) {
 }
 
 export function toolLabel(content: TranscriptToolContent) {
+  if (content.qualifiedName === 'questions') return '向用户提问';
   if (content.qualifiedName) return content.qualifiedName;
   const labels: Record<string, string> = {
     web_search: '网页搜索',

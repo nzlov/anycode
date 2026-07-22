@@ -107,6 +107,9 @@ func (s *Service) CreateRequest(ctx context.Context, input CreateRequestInput) (
 	}
 	questions := make([]domain.Question, len(input.Questions))
 	for i, item := range input.Questions {
+		if strings.TrimSpace(item.Body) == "" {
+			return RequestDTO{}, errors.New("question body is required")
+		}
 		questions[i] = item
 		if questions[i].ID == "" {
 			id, err := s.generateID()

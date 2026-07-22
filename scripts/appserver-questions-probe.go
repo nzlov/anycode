@@ -183,11 +183,10 @@ func questionsSpec() map[string]any {
 	questionSchema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
-		"anyOf":                []map[string]any{{"required": []string{"title"}}, {"required": []string{"body"}}},
+		"required":             []string{"body"},
 		"properties": map[string]any{
-			"title": map[string]any{"type": "string"},
-			"body":  map[string]any{"type": "string"},
-			"type":  map[string]any{"type": "string"},
+			"body": map[string]any{"type": "string"},
+			"type": map[string]any{"type": "string"},
 			"options": map[string]any{
 				"type":  "array",
 				"items": optionSchema,
@@ -197,7 +196,7 @@ func questionsSpec() map[string]any {
 	return map[string]any{
 		"type":        "function",
 		"name":        questionsTool,
-		"description": "Ask the user one or more questions and wait for their answers before continuing.",
+		"description": "Ask the user one or more questions and wait for their answers. Each question requires a body; options are optional.",
 		"inputSchema": map[string]any{
 			"type":                 "object",
 			"additionalProperties": false,
@@ -350,8 +349,7 @@ func (c *appServerClient) handleServerRequest(message rpcMessage) error {
 func decodeQuestionCount(arguments json.RawMessage) (int, error) {
 	var input struct {
 		Questions []struct {
-			Title string `json:"title"`
-			Body  string `json:"body"`
+			Body string `json:"body"`
 		} `json:"questions"`
 	}
 	if err := json.Unmarshal(arguments, &input); err != nil {
@@ -361,8 +359,8 @@ func decodeQuestionCount(arguments json.RawMessage) (int, error) {
 		return 0, errors.New("questions must not be empty")
 	}
 	for _, question := range input.Questions {
-		if strings.TrimSpace(question.Title) == "" && strings.TrimSpace(question.Body) == "" {
-			return 0, errors.New("question title or body must not be empty")
+		if strings.TrimSpace(question.Body) == "" {
+			return 0, errors.New("question body must not be empty")
 		}
 	}
 	return len(input.Questions), nil

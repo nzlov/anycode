@@ -133,7 +133,7 @@ func TestCreateRequestAndGetRequest(t *testing.T) {
 	created, err := service.CreateRequest(context.Background(), CreateRequestInput{
 		SessionID:          "session-1",
 		OriginProcessRunID: &origin,
-		Questions:          []domain.Question{{Title: "Continue?", Options: []domain.Option{{ID: "yes", Label: "Yes"}}}},
+		Questions:          []domain.Question{{Body: "Continue?", Options: []domain.Option{{ID: "yes", Label: "Yes"}}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +147,17 @@ func TestCreateRequestAndGetRequest(t *testing.T) {
 	}
 }
 
+func TestCreateRequestRejectsBlankQuestionBody(t *testing.T) {
+	service := New(newFakeRepository())
+	_, err := service.CreateRequest(context.Background(), CreateRequestInput{
+		SessionID: "session-1",
+		Questions: []domain.Question{{Body: "  "}},
+	})
+	if err == nil || err.Error() != "question body is required" {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestCreateRequestWithStableIDReturnsExistingRequest(t *testing.T) {
 	repo := newFakeRepository()
 	service := New(repo)
@@ -154,7 +165,7 @@ func TestCreateRequestWithStableIDReturnsExistingRequest(t *testing.T) {
 	input := CreateRequestInput{
 		RequestID: "merge-failure-command-1",
 		SessionID: "session-1",
-		Questions: []domain.Question{{Title: "Resolve merge?"}},
+		Questions: []domain.Question{{Body: "Resolve merge?"}},
 	}
 	first, err := service.CreateRequest(context.Background(), input)
 	if err != nil {
@@ -176,7 +187,7 @@ func TestCreateRequestWithStableIDRejectsNonPendingExistingRequest(t *testing.T)
 	input := CreateRequestInput{
 		RequestID: "merge-failure-command-1",
 		SessionID: "session-1",
-		Questions: []domain.Question{{Title: "Resolve merge?"}},
+		Questions: []domain.Question{{Body: "Resolve merge?"}},
 	}
 	if _, err := service.CreateRequest(context.Background(), input); err != nil {
 		t.Fatalf("first CreateRequest() error = %v", err)
@@ -228,7 +239,7 @@ func TestQuestionRequestUpdatesPublishesLiveChanges(t *testing.T) {
 	}
 	created, err := service.CreateRequest(context.Background(), CreateRequestInput{
 		SessionID: "session-1",
-		Questions: []domain.Question{{Title: "Continue?", Options: []domain.Option{{ID: "yes", Label: "Yes"}}}},
+		Questions: []domain.Question{{Body: "Continue?", Options: []domain.Option{{ID: "yes", Label: "Yes"}}}},
 	})
 	if err != nil {
 		t.Fatal(err)

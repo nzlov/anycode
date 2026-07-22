@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -56,10 +57,12 @@ func (c *Client) start(
 	if err != nil {
 		return process.CodexHandle{}, err
 	}
+	resuming := threadID != ""
 	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode)
 	params["dynamicTools"] = anyCodeDynamicTools()
 	if threadID == "" {
 		params["ephemeral"] = false
+		params["historyMode"] = "paginated"
 		var response struct {
 			Thread struct {
 				ID string `json:"id"`
@@ -86,10 +89,27 @@ func (c *Client) start(
 	if threadID == "" {
 		return process.CodexHandle{}, errors.New("codex app-server returned an empty thread id")
 	}
+	transcriptPath := ""
+	transcriptOffset := int64(0)
+	if resuming {
+		transcriptPath, err = waitForSessionLog(ctx, c.CodexHome(), threadID)
+		if err != nil {
+			return process.CodexHandle{}, fmt.Errorf("find codex session log for resume: %w", err)
+		}
+		info, statErr := os.Stat(transcriptPath)
+		if statErr != nil {
+			return process.CodexHandle{}, fmt.Errorf("stat codex session log for resume: %w", statErr)
+		}
+		transcriptOffset = info.Size()
+	}
 	handle := process.CodexHandle{ProcessRunID: runID, CodexSessionID: threadID}
 	routeCtx, routeCancel := context.WithCancel(context.Background())
-	route := &appServerRun{handle: handle, sessionID: sessionID, workdir: workdir, ctx: routeCtx, cancel: routeCancel, events: make(chan process.CodexEvent, 1024), closed: make(chan struct{})}
+	route := &appServerRun{
+		handle: handle, sessionID: sessionID, workdir: workdir, ctx: routeCtx, cancel: routeCancel,
+		events: make(chan process.CodexEvent, 1024), closed: make(chan struct{}), finished: make(chan process.ExitResult, 1),
+	}
 	runtime.register(route)
+	go runtime.followSessionLog(route, transcriptPath, transcriptOffset)
 	turnID, active, err := runtime.startInput(ctx, threadID, workdir, artifactDir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode)
 	if err != nil {
 		runtime.removeRoute(route)
@@ -160,17 +180,16 @@ func anyCodeDynamicTools() []map[string]any {
 		},
 	}
 	questionSchema := map[string]any{
-		"type": "object", "additionalProperties": false,
-		"anyOf": []map[string]any{{"required": []string{"title"}}, {"required": []string{"body"}}},
+		"type": "object", "additionalProperties": false, "required": []string{"body"},
 		"properties": map[string]any{
-			"title": map[string]any{"type": "string"}, "body": map[string]any{"type": "string"}, "type": map[string]any{"type": "string"},
+			"body": map[string]any{"type": "string"}, "type": map[string]any{"type": "string"},
 			"options": map[string]any{"type": "array", "items": optionSchema},
 		},
 	}
 	return []map[string]any{
 		{
 			"type": "function", "name": "questions",
-			"description": "Ask the user one or more option questions and wait for their answers.",
+			"description": "Ask the user one or more questions and wait for their answers. Each question requires a body; options are optional.",
 			"inputSchema": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"questions"},
 				"properties": map[string]any{"questions": map[string]any{
@@ -437,37 +456,6 @@ func (c *Client) SearchFiles(ctx context.Context, root string, query string) ([]
 		}
 	}
 	return matches, nil
-}
-
-func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPageInput) (process.CodexHistoryPage, error) {
-	if strings.TrimSpace(input.ThreadID) == "" {
-		return process.CodexHistoryPage{}, process.ErrThreadUnavailable
-	}
-	runtime, err := c.appServer(ctx)
-	if err != nil {
-		return process.CodexHistoryPage{}, err
-	}
-	limit := input.Limit
-	if limit < 1 {
-		limit = 50
-	}
-	params := map[string]any{"threadId": input.ThreadID, "limit": limit, "sortDirection": "desc", "itemsView": "full"}
-	if input.Cursor != "" {
-		params["cursor"] = input.Cursor
-	}
-	var response struct {
-		Data       []appServerTurn `json:"data"`
-		NextCursor *string         `json:"nextCursor"`
-	}
-	if err := runtime.request(ctx, "thread/turns/list", params, &response); err != nil {
-		return process.CodexHistoryPage{}, fmt.Errorf("list codex thread turns: %w", err)
-	}
-	events := eventsFromTurns(input.ThreadID, response.Data)
-	next := ""
-	if response.NextCursor != nil {
-		next = *response.NextCursor
-	}
-	return process.CodexHistoryPage{Events: events, NextCursor: next}, nil
 }
 
 func (r *appServerRuntime) removeRoute(route *appServerRun) {

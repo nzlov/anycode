@@ -626,7 +626,7 @@ func TestQueryPendingQuestionRequestsForwardsUseCase(t *testing.T) {
 				Questions: []questiondomain.Question{
 					{
 						ID:      "question-1",
-						Title:   "Choose",
+						Body:    "Choose",
 						Options: []questiondomain.Option{{ID: "option-1", Label: "Continue"}},
 					},
 				},

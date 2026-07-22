@@ -83,24 +83,33 @@ func TestSandboxPolicyFromPermissionMode(t *testing.T) {
 }
 
 func TestRuntimeCompletesDynamicToolOnOriginalTurn(t *testing.T) {
+	codexHome := t.TempDir()
 	responses := filepath.Join(t.TempDir(), "responses")
+	startRequest := filepath.Join(t.TempDir(), "start-request")
 	t.Setenv("APP_SERVER_RESPONSES", responses)
+	t.Setenv("APP_SERVER_START_REQUEST", startRequest)
 	bin := fakeCodex(t, `#!/bin/sh
 IFS= read -r request
 printf '%s\n' '{"id":1,"result":{"codexHome":"/tmp/codex","platformFamily":"unix","platformOs":"linux","userAgent":"codex-test"}}'
 IFS= read -r request
 IFS= read -r request
+printf '%s\n' "$request" > "$APP_SERVER_START_REQUEST"
 printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
+mkdir -p "$CODEX_HOME/sessions/2026/07/22"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:00Z","type":"session_meta","payload":{"id":"thread-1","cwd":"/workspace"}}' > "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 IFS= read -r request
 printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}'
-printf '%s\n' '{"id":90,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","tool":"questions","arguments":{"questions":[{"title":"Continue?"}]}}}'
+printf '%s\n' '{"id":90,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","tool":"questions","arguments":{"questions":[{"body":"Continue?"}]}}}'
 IFS= read -r response
 printf '%s\n' "$response" > "$APP_SERVER_RESPONSES"
-printf '%s\n' '{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","completedAtMs":1784678400000,"item":{"id":"call-1","type":"dynamicToolCall","tool":"questions","arguments":{"questions":[{"title":"Continue?"}]},"status":"completed","success":true,"contentItems":[{"type":"inputText","text":"{\"answer\":\"yes\"}"}]}}}'
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-1","name":"questions","input":"{\"questions\":[{\"body\":\"Continue?\"}]}"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-1","output":[{"type":"input_text","text":"{\"answer\":\"yes\"}"}]}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:03Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
+printf '%s\n' '{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"ignored","type":"agentMessage","text":"not from transcript"}}'
 printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[],"completedAt":1784678400}}}'
 cat >/dev/null
 `)
-	client := New(bin)
+	client := New(bin, WithCodexHome(codexHome))
 	t.Cleanup(func() { _ = client.Close() })
 	handler := &testToolHandler{calls: make(chan process.DynamicToolCall, 1)}
 	client.SetDynamicToolHandler(handler)
@@ -115,6 +124,19 @@ cat >/dev/null
 	if handle.CodexSessionID != "thread-1" || handle.TurnID != "turn-1" {
 		t.Fatalf("handle = %+v", handle)
 	}
+	content, err := os.ReadFile(startRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var startEnvelope struct {
+		Method string `json:"method"`
+		Params struct {
+			HistoryMode string `json:"historyMode"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(content, &startEnvelope) != nil || startEnvelope.Method != "thread/start" || startEnvelope.Params.HistoryMode != "paginated" {
+		t.Fatalf("start request = %s", content)
+	}
 	events, err := client.Events(context.Background(), handle)
 	if err != nil {
 		t.Fatal(err)
@@ -123,8 +145,11 @@ cat >/dev/null
 	for event := range events {
 		got = append(got, event)
 	}
-	if len(got) != 3 || got[0].Type != process.CodexEventTool || got[1].Type != process.CodexEventStatus || got[2].Type != process.CodexEventProcessExit {
+	if len(got) != 4 || got[0].Type != process.CodexEventTool || got[1].Type != process.CodexEventTool || got[2].Type != process.CodexEventStatus || got[3].Type != process.CodexEventProcessExit {
 		t.Fatalf("events = %#v", got)
+	}
+	if got[0].Phase != process.CodexPhaseStarted || got[1].Phase != process.CodexPhaseCompleted {
+		t.Fatalf("tool lifecycle = %#v", got[:2])
 	}
 	call := <-handler.calls
 	if call.ProcessRunID != "run-1" || call.SessionID != "session-1" || call.Tool != "questions" {
@@ -201,6 +226,7 @@ cat >/dev/null
 }
 
 func TestSteerUsesActiveTurnAndContinuesEventStream(t *testing.T) {
+	codexHome := t.TempDir()
 	steerRequest := filepath.Join(t.TempDir(), "steer-request")
 	t.Setenv("APP_SERVER_STEER_REQUEST", steerRequest)
 	bin := fakeCodex(t, `#!/bin/sh
@@ -209,16 +235,20 @@ printf '%s\n' '{"id":1,"result":{"userAgent":"codex-test"}}'
 IFS= read -r request
 IFS= read -r request
 printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
+mkdir -p "$CODEX_HOME/sessions/2026/07/22"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:00Z","type":"session_meta","payload":{"id":"thread-1"}}' > "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 IFS= read -r request
 printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}'
 IFS= read -r request
 printf '%s\n' "$request" > "$APP_SERVER_STEER_REQUEST"
 printf '%s\n' '{"id":4,"result":{"turnId":"turn-1"}}'
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"message","id":"user-2","role":"user","content":[{"type":"input_text","text":"follow up"}]}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:02Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 printf '%s\n' '{"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"user-2","type":"userMessage","content":[{"type":"text","text":"follow up"}]}}}'
 printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}'
 cat >/dev/null
 `)
-	client := New(bin)
+	client := New(bin, WithCodexHome(codexHome))
 	t.Cleanup(func() { _ = client.Close() })
 	handle, err := client.Start(context.Background(), process.CodexStartInput{
 		ProcessRunID: "run-1", SessionID: "session-1", Workdir: t.TempDir(),
@@ -259,12 +289,14 @@ cat >/dev/null
 	for event := range events {
 		got = append(got, event)
 	}
-	if len(got) < 3 || got[0].Type != process.CodexEventMessage || got[len(got)-1].Type != process.CodexEventProcessExit {
+	if len(got) != 3 || got[0].Type != process.CodexEventMessage || got[1].Type != process.CodexEventStatus || got[2].Type != process.CodexEventProcessExit {
 		t.Fatalf("steer events = %#v", got)
 	}
 }
 
 func TestResumeRegistersDynamicTools(t *testing.T) {
+	codexHome := t.TempDir()
+	writeSessionLog(t, codexHome, "thread-1", `{"timestamp":"2026-07-22T00:00:00.500Z","type":"response_item","payload":{"type":"message","id":"old","role":"assistant","content":[{"type":"output_text","text":"old"}]}}`)
 	resumeRequest := filepath.Join(t.TempDir(), "resume-request")
 	t.Setenv("APP_SERVER_RESUME_REQUEST", resumeRequest)
 	bin := fakeCodex(t, `#!/bin/sh
@@ -276,10 +308,12 @@ printf '%s\n' "$request" > "$APP_SERVER_RESUME_REQUEST"
 printf '%s\n' '{"id":2,"result":{"thread":{"id":"thread-1"}}}'
 IFS= read -r request
 printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}'
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"message","id":"new","role":"assistant","content":[{"type":"output_text","text":"new"}]}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:02Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[]}}}'
 cat >/dev/null
 `)
-	client := New(bin)
+	client := New(bin, WithCodexHome(codexHome))
 	t.Cleanup(func() { _ = client.Close() })
 	handle, err := client.Resume(context.Background(), process.CodexResumeInput{
 		ProcessRunID: "run-1", SessionID: "session-1", CodexSessionID: "thread-1", Workdir: t.TempDir(),
@@ -292,7 +326,16 @@ cat >/dev/null
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range events {
+	var resumed []process.CodexEvent
+	for event := range events {
+		resumed = append(resumed, event)
+	}
+	if len(resumed) != 3 {
+		t.Fatalf("resume events = %#v", resumed)
+	}
+	message, ok := resumed[0].Content.(process.CodexMessageContent)
+	if !ok || message.Text != "new" {
+		t.Fatalf("resume message = %#v", resumed[0])
 	}
 	content, err := os.ReadFile(resumeRequest)
 	if err != nil {
@@ -374,7 +417,7 @@ func TestCompactionNotificationDoesNotCompleteRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	route := &appServerRun{
 		handle: process.CodexHandle{ProcessRunID: "run-1", CodexSessionID: "thread-1"}, sessionID: "session-1",
-		ctx: ctx, cancel: cancel, events: make(chan process.CodexEvent, 1), closed: make(chan struct{}),
+		ctx: ctx, cancel: cancel, events: make(chan process.CodexEvent, 1), closed: make(chan struct{}), finished: make(chan process.ExitResult, 1),
 	}
 	runtime.register(route)
 	runtime.handleNotification("thread/compacted", json.RawMessage(`{"threadId":"thread-1"}`))
@@ -383,36 +426,83 @@ func TestCompactionNotificationDoesNotCompleteRun(t *testing.T) {
 	}
 	select {
 	case event := <-route.events:
-		if event.Type != process.CodexEventStatus {
-			t.Fatalf("compaction event = %#v", event)
-		}
+		t.Fatalf("app-server notification leaked into transcript stream: %#v", event)
 	default:
-		t.Fatal("compaction status event was not emitted")
 	}
 	runtime.removeRoute(route)
 }
 
-func TestHistoryPageUsesAppServerTurnCursor(t *testing.T) {
-	bin := fakeCodex(t, `#!/bin/sh
-IFS= read -r request
-printf '%s\n' '{"id":1,"result":{"codexHome":"/tmp/codex","platformFamily":"unix","platformOs":"linux","userAgent":"codex-test"}}'
-IFS= read -r request
-IFS= read -r request
-printf '%s\n' '{"id":2,"result":{"data":[{"id":"turn-2","status":"completed","startedAt":1784678400,"items":[{"id":"user-2","type":"userMessage","content":[{"type":"text","text":"second"}]},{"id":"agent-2","type":"agentMessage","text":"done"}]}],"nextCursor":"older"}}'
-cat >/dev/null
-`)
-	client := New(bin)
-	t.Cleanup(func() { _ = client.Close() })
+func TestHistoryPageUsesSessionFile(t *testing.T) {
+	codexHome := t.TempDir()
+	writeSessionLog(t, codexHome, "thread-1", `
+{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"message","id":"user-2","role":"user","content":[{"type":"input_text","text":"second"}]}}
+{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"command-2","name":"exec","input":"const result = await tools.exec_command({\"cmd\":\"go test ./...\",\"workdir\":\"/workspace\"}); text(result);"}}
+{"timestamp":"2026-07-22T00:00:03Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"command-2","output":[{"type":"input_text","text":"Script completed\\nWall time 0.025 seconds\\nOutput:\\n"},{"type":"input_text","text":"{\"chunk_id\":\"one\",\"wall_time_seconds\":0.025,\"exit_code\":0,\"output\":\"ok\"}"}]}}
+{"timestamp":"2026-07-22T00:00:04Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"file-2","status":"completed","changes":{"/workspace/main.go":{"type":"update","unified_diff":"@@ -1 +1 @@"}}}}
+{"timestamp":"2026-07-22T00:00:05Z","type":"response_item","payload":{"type":"message","id":"agent-2","role":"assistant","content":[{"type":"output_text","text":"done"}]}}`)
+	client := New("codex", WithCodexHome(codexHome))
 	page, err := client.HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-1", Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.NextCursor != "older" || len(page.Events) != 2 {
+	if page.NextCursor != "" || len(page.Events) != 5 {
 		t.Fatalf("page = %+v", page)
 	}
-	message, ok := page.Events[1].Content.(process.CodexMessageContent)
+	command, ok := page.Events[1].Content.(process.CodexCommandContent)
+	if !ok || len(command.Commands) != 1 || command.Commands[0].Command != "go test ./..." || command.Commands[0].Workdir != "/workspace" {
+		t.Fatalf("command event = %#v", page.Events[1])
+	}
+	completedCommand, ok := page.Events[2].Content.(process.CodexCommandContent)
+	if !ok || len(completedCommand.Commands) != 1 || completedCommand.Commands[0].Output != "ok" || completedCommand.Commands[0].ExitCode == nil || *completedCommand.Commands[0].ExitCode != 0 {
+		t.Fatalf("completed command event = %#v", page.Events[2])
+	}
+	fileChange, ok := page.Events[3].Content.(process.CodexFileChangeContent)
+	if !ok || len(fileChange.Changes) != 1 || fileChange.Changes[0].Path != "main.go" || fileChange.Changes[0].UnifiedDiff != "@@ -1 +1 @@" {
+		t.Fatalf("file change event = %#v", page.Events[3])
+	}
+	message, ok := page.Events[4].Content.(process.CodexMessageContent)
 	if !ok || message.Role != "assistant" || message.Text != "done" {
-		t.Fatalf("agent event = %#v", page.Events[1])
+		t.Fatalf("agent event = %#v", page.Events[4])
+	}
+}
+
+func TestSessionFileEmitsPlanAndCommandFromSameExecRecord(t *testing.T) {
+	codexHome := t.TempDir()
+	writeSessionLog(t, codexHome, "thread-plan", `
+{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-mixed","name":"exec","input":"const p = await tools.update_plan({plan:[{step:\"Inspect\",status:\"completed\"},{step:\"Verify\",status:\"in_progress\"}]}); const r = await tools.exec_command({cmd:\"go test ./...\"}); text(r);"}}
+{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-mixed","output":[{"type":"input_text","text":"Script completed\\nWall time 0.1 seconds\\nOutput:\\n"},{"type":"input_text","text":"{\"chunk_id\":\"one\",\"wall_time_seconds\":0.1,\"exit_code\":0,\"output\":\"ok\"}"}]}}`)
+	page, err := New("codex", WithCodexHome(codexHome)).HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-plan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 3 || page.Events[0].Type != process.CodexEventPlan || page.Events[1].Type != process.CodexEventCommand || page.Events[2].Type != process.CodexEventCommand {
+		t.Fatalf("mixed exec events = %#v", page.Events)
+	}
+	plan, ok := page.Events[0].Content.(process.PlanUpdate)
+	if !ok || len(plan.Items) != 2 || plan.Items[1].Status != process.PlanItemInProgress {
+		t.Fatalf("plan event = %#v", page.Events[0])
+	}
+}
+
+func TestQuestionsDynamicToolDescriptionMatchesOptionalOptions(t *testing.T) {
+	tools := anyCodeDynamicTools()
+	if len(tools) == 0 {
+		t.Fatal("questions dynamic tool is missing")
+	}
+	description, _ := tools[0]["description"].(string)
+	if description != "Ask the user one or more questions and wait for their answers. Each question requires a body; options are optional." {
+		t.Fatalf("questions description = %q", description)
+	}
+	inputSchema := tools[0]["inputSchema"].(map[string]any)
+	questionsSchema := inputSchema["properties"].(map[string]any)["questions"].(map[string]any)
+	questionSchema := questionsSchema["items"].(map[string]any)
+	required := questionSchema["required"].([]string)
+	properties := questionSchema["properties"].(map[string]any)
+	if len(required) != 1 || required[0] != "body" {
+		t.Fatalf("question required fields = %#v", required)
+	}
+	if _, exists := properties["title"]; exists {
+		t.Fatalf("question schema still exposes title: %#v", properties)
 	}
 }
 
@@ -496,6 +586,18 @@ func fakeCodex(t *testing.T, body string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func writeSessionLog(t *testing.T, codexHome string, threadID string, body string) {
+	t.Helper()
+	path := filepath.Join(codexHome, "sessions", "2026", "07", "22", "rollout-"+threadID+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := `{"timestamp":"2026-07-22T00:00:00Z","type":"session_meta","payload":{"id":"` + threadID + `","cwd":"/workspace"}}`
+	if err := os.WriteFile(path, []byte(meta+"\n"+strings.TrimSpace(body)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestNewUsesCODEXBIN(t *testing.T) {

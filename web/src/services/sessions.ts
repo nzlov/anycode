@@ -147,7 +147,6 @@ export interface QuestionOption {
 export interface AgentQuestion {
   id: string;
   requestId: string;
-  title: string;
   body: string;
   type: string;
   options: QuestionOption[];
@@ -552,7 +551,6 @@ const questionRequestFields = `
   questions {
     id
     requestId
-    title
     body
     type
     options {

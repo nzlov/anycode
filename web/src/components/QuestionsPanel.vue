@@ -31,8 +31,7 @@
       <q-tab-panels v-model="activeQuestionId" animated>
         <q-tab-panel v-for="question in questions" :key="question.id" :name="question.id">
           <q-card flat bordered class="question-card">
-            <div class="question-title">{{ question.title || '未命名问题' }}</div>
-            <div v-if="question.body" class="question-body">{{ question.body }}</div>
+            <div class="question-body">{{ question.body }}</div>
           </q-card>
 
           <div class="text-body2 text-weight-bold q-mb-sm">选择答案</div>
@@ -276,15 +275,10 @@ function submit() {
   overflow-wrap: anywhere;
 }
 
-.question-title {
-  color: var(--ac-status-warning-text);
-  font-size: 16px;
-  font-weight: 800;
-}
-
 .question-body {
   color: var(--ac-status-warning-text);
-  font-size: 13px;
+  font-size: 16px;
+  font-weight: 700;
   white-space: pre-wrap;
 }
 

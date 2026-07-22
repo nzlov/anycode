@@ -32,6 +32,93 @@ test('appendLiveEvent ignores duplicate history replay events', () => {
   );
 });
 
+test('appendLiveEvent replaces an empty reasoning start with completed content', () => {
+  const started = {
+    id: 'reasoning-1',
+    orderKey: '01',
+    occurredAt: '2026-07-22T10:00:00Z',
+    phase: 'started',
+    content: { __typename: 'TranscriptReasoningContent', text: '' },
+  };
+  const progress = {
+    ...started,
+    phase: 'progress',
+    content: { __typename: 'TranscriptReasoningContent', text: 'thinking' },
+  };
+  const completed = {
+    ...started,
+    phase: 'completed',
+    content: { __typename: 'TranscriptReasoningContent', text: 'final reasoning' },
+  };
+
+  const withProgress = appendLiveEvent([started], progress);
+  const next = appendLiveEvent(withProgress, completed);
+
+  assert.equal(withProgress[0].content.text, 'thinking');
+  assert.equal(next[0].phase, 'completed');
+  assert.equal(next[0].content.text, 'final reasoning');
+});
+
+test('appendLiveEvent keeps command identity while accumulating output deltas', () => {
+  const started = {
+    id: 'command-1',
+    orderKey: '01',
+    occurredAt: '2026-07-22T10:00:00Z',
+    phase: 'started',
+    content: {
+      __typename: 'TranscriptCommandContent',
+      kind: 'exec',
+      commands: [{ command: 'go test ./...', workdir: '/workspace', hasOutput: false, output: '' }],
+    },
+  };
+  const delta = (output) => ({
+    ...started,
+    phase: 'progress',
+    content: {
+      __typename: 'TranscriptCommandContent',
+      kind: 'exec',
+      commands: [{ command: '', workdir: '', hasOutput: true, output }],
+    },
+  });
+
+  const first = appendLiveEvent([started], delta('pass'));
+  const second = appendLiveEvent(first, delta('ed'));
+
+  assert.equal(second[0].content.commands[0].command, 'go test ./...');
+  assert.equal(second[0].content.commands[0].workdir, '/workspace');
+  assert.equal(second[0].content.commands[0].output, 'passed');
+});
+
+test('appendLiveEvent updates a questions tool call with its completed output', () => {
+  const started = {
+    id: 'question-1',
+    orderKey: '01',
+    occurredAt: '2026-07-22T10:00:00Z',
+    phase: 'started',
+    content: {
+      __typename: 'TranscriptToolContent',
+      qualifiedName: 'questions',
+      category: 'dynamic',
+      input: { format: 'json', text: '{"questions":[]}' },
+      output: { format: 'json', text: '' },
+      images: [],
+    },
+  };
+  const completed = {
+    ...started,
+    phase: 'completed',
+    content: {
+      ...started.content,
+      output: { format: 'json', text: '{"answers":[]}' },
+    },
+  };
+
+  const [event] = appendLiveEvent([started], completed);
+
+  assert.equal(event.phase, 'completed');
+  assert.equal(event.content.output.text, '{"answers":[]}');
+});
+
 test('appendLiveEvent merges a live group delta with the same stable id', () => {
   const first = {
     ...middle,

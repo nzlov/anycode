@@ -26,7 +26,7 @@ func TestQuestionsUsesCallIDAndReturnsAnswers(t *testing.T) {
 
 	result, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
 		CallID: "call-1", SessionID: "session-1", Tool: questionsTool,
-		Arguments: json.RawMessage(`{"questions":[{"title":"Continue?","options":[{"id":"continue","label":"Continue","payload":{"action":"continue"}}]}]}`),
+		Arguments: json.RawMessage(`{"questions":[{"body":"Continue?","options":[{"id":"continue","label":"Continue","payload":{"action":"continue"}}]}]}`),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func TestQuestionsUsesCallIDAndReturnsAnswers(t *testing.T) {
 		t.Fatalf("questions input = %#v", sessions.input)
 	}
 	question := sessions.input.Questions[0]
-	if question.Title != "Continue?" || question.Type != "choice" || len(question.Options) != 1 || question.Options[0].Payload["action"] != "continue" {
+	if question.Body != "Continue?" || question.Type != "choice" || len(question.Options) != 1 || question.Options[0].Payload["action"] != "continue" {
 		t.Fatalf("question = %#v", question)
 	}
 	if !result.Success || len(result.Content) != 1 || result.Content[0].Type != "inputText" {
@@ -63,6 +63,17 @@ func TestQuestionsRejectsMissingQuestions(t *testing.T) {
 		CallID: "call-1", SessionID: "session-1", Tool: questionsTool, Arguments: json.RawMessage(`{"questions":[]}`),
 	})
 	if err == nil || !strings.Contains(err.Error(), "questions are required") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestQuestionsRejectsMissingBody(t *testing.T) {
+	service := New(&fakeSessions{}, nil)
+	_, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
+		CallID: "call-1", SessionID: "session-1", Tool: questionsTool,
+		Arguments: json.RawMessage(`{"questions":[{"title":"Legacy title"}]}`),
+	})
+	if err == nil || !strings.Contains(err.Error(), "question body is required") {
 		t.Fatalf("error = %v", err)
 	}
 }

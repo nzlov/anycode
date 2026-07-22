@@ -135,7 +135,6 @@ type questionsInput struct {
 }
 
 type questionInput struct {
-	Title   string        `json:"title"`
 	Body    string        `json:"body"`
 	Type    string        `json:"type"`
 	Options []optionInput `json:"options"`
@@ -154,10 +153,9 @@ func buildQuestions(inputs []questionInput) ([]questiondomain.Question, error) {
 	}
 	questions := make([]questiondomain.Question, 0, len(inputs))
 	for _, input := range inputs {
-		title := strings.TrimSpace(input.Title)
 		body := strings.TrimSpace(input.Body)
-		if title == "" && body == "" {
-			return nil, errors.New("question title or body is required")
+		if body == "" {
+			return nil, errors.New("question body is required")
 		}
 		questionType := strings.TrimSpace(input.Type)
 		if questionType == "" {
@@ -180,7 +178,7 @@ func buildQuestions(inputs []questionInput) ([]questiondomain.Question, error) {
 			})
 		}
 		questions = append(questions, questiondomain.Question{
-			Title: title, Body: body, Type: questionType, Options: options, Status: string(questiondomain.RequestPending),
+			Body: body, Type: questionType, Options: options, Status: string(questiondomain.RequestPending),
 		})
 	}
 	return questions, nil

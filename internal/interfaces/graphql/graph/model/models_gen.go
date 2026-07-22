@@ -287,7 +287,6 @@ type Query struct {
 type Question struct {
 	ID               string            `json:"id"`
 	RequestID        string            `json:"requestId"`
-	Title            string            `json:"title"`
 	Body             string            `json:"body"`
 	Type             string            `json:"type"`
 	Options          []*QuestionOption `json:"options"`

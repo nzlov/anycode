@@ -41,6 +41,7 @@ test('toolLabel displays the structured qualified tool name', () => {
 
   assert.equal(toolLabel(content), 'tools.update_plan');
   assert.equal(toolLabel({ ...content, qualifiedName: 'mcp.exec' }), 'mcp.exec');
+  assert.equal(toolLabel({ ...content, qualifiedName: 'questions' }), '向用户提问');
 });
 
 test('sessionTextPresentation folds injected runtime context', () => {

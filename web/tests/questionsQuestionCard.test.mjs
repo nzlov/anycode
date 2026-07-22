@@ -7,20 +7,14 @@ const panelSource = readFileSync(
   'utf8',
 );
 
-test('question title and optional body share one question card', () => {
+test('required question body is the only question text in the card', () => {
   const questionCard = panelSource.match(
     /<q-card[^>]*class="question-card"[^>]*>[\s\S]*?<\/q-card>/,
   )?.[0];
 
   assert.ok(questionCard, 'question card should exist');
-  assert.match(
-    questionCard,
-    /class="question-title"[^>]*>\{\{ question\.title \|\| '未命名问题' \}\}/,
-  );
-  assert.match(
-    questionCard,
-    /v-if="question\.body" class="question-body">\{\{ question\.body \}\}/,
-  );
+  assert.match(questionCard, /class="question-body">\{\{ question\.body \}\}/);
+  assert.doesNotMatch(questionCard, /question\.title|未命名问题/);
   assert.equal((panelSource.match(/\{\{ question\.body \}\}/g) ?? []).length, 1);
 });
 

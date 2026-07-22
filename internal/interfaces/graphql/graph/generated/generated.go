@@ -264,7 +264,6 @@ type ComplexityRoot struct {
 		RequestID        func(childComplexity int) int
 		SelectedOptionID func(childComplexity int) int
 		Status           func(childComplexity int) int
-		Title            func(childComplexity int) int
 		Type             func(childComplexity int) int
 	}
 
@@ -1879,12 +1878,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Question.Status(childComplexity), true
-	case "Question.title":
-		if e.ComplexityRoot.Question.Title == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Question.Title(childComplexity), true
 	case "Question.type":
 		if e.ComplexityRoot.Question.Type == nil {
 			break
@@ -4268,7 +4261,6 @@ type QuestionRequest {
 type Question {
   id: ID!
   requestId: ID!
-  title: String!
   body: String!
   type: String!
   options: [QuestionOption!]!
@@ -10776,35 +10768,6 @@ func (ec *executionContext) fieldContext_Question_requestId(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _Question_title(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Question_title,
-		func(ctx context.Context) (any, error) {
-			return obj.Title, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Question_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Question",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _Question_body(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11249,8 +11212,6 @@ func (ec *executionContext) fieldContext_QuestionRequest_questions(_ context.Con
 				return ec.fieldContext_Question_id(ctx, field)
 			case "requestId":
 				return ec.fieldContext_Question_requestId(ctx, field)
-			case "title":
-				return ec.fieldContext_Question_title(ctx, field)
 			case "body":
 				return ec.fieldContext_Question_body(ctx, field)
 			case "type":
@@ -24332,11 +24293,6 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "requestId":
 			out.Values[i] = ec._Question_requestId(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "title":
-			out.Values[i] = ec._Question_title(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

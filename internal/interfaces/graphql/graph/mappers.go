@@ -845,7 +845,6 @@ func mapQuestion(question questiondomain.Question) *model.Question {
 	return &model.Question{
 		ID:               string(question.ID),
 		RequestID:        string(question.RequestID),
-		Title:            question.Title,
 		Body:             question.Body,
 		Type:             question.Type,
 		Options:          options,

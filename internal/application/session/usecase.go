@@ -4954,7 +4954,6 @@ func (s *Service) askMergeFailure(ctx context.Context, session domain.Session, a
 		SessionID: questiondomain.SessionID(session.ID),
 		Questions: []questiondomain.Question{
 			{
-				Title:    "合并失败处理",
 				Body:     mergeFailureQuestionBody(result),
 				Type:     "merge_failure_action",
 				Metadata: metadata,

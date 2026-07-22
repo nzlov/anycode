@@ -32,7 +32,6 @@ type Request struct {
 type Question struct {
 	ID               QuestionID
 	RequestID        RequestID
-	Title            string
 	Body             string
 	Type             string
 	Options          []Option

@@ -37,7 +37,6 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 			{
 				ID:        question.QuestionID("question-1"),
 				RequestID: question.RequestID("request-1"),
-				Title:     "Choose path",
 				Body:      "Which path should the workflow take?",
 				Type:      "choice",
 				Status:    string(question.RequestPending),
@@ -128,7 +127,7 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 			{
 				ID:        question.QuestionID("question-2"),
 				RequestID: question.RequestID("request-2"),
-				Title:     "Pending",
+				Body:      "Pending",
 				Type:      "choice",
 				Status:    string(question.RequestPending),
 			},
