@@ -20,6 +20,34 @@ body,
   overflow-x: hidden;
 }
 
+* {
+  scrollbar-color: color-mix(in srgb, var(--ac-text) 20%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ac-text) 20%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ac-text) 30%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--ac-text) 50%, transparent);
+}
+
 #q-app {
   min-height: 100dvh;
   isolation: isolate;
@@ -47,11 +75,11 @@ html[data-daily-background='ready'] #q-app::before {
 }
 
 html[data-daily-background='ready'] body {
-  --ac-page-layer: color-mix(in srgb, var(--ac-page) 16%, transparent);
+  --ac-page-layer: transparent;
 }
 
 html[data-daily-background='ready'] body.body--dark {
-  --ac-page-layer: color-mix(in srgb, var(--ac-page) 16%, transparent);
+  --ac-page-layer: transparent;
 }
 
 a {
@@ -99,6 +127,11 @@ a {
 .page-toolbar__title {
   max-width: min(32vw, 320px);
   flex: 0 1 auto;
+}
+
+.page-toolbar__title-icon {
+  margin-right: 8px;
+  font-size: 28px;
 }
 
 .page-toolbar__actions {
@@ -161,7 +194,7 @@ a {
 }
 
 .page-shell {
-  padding: 24px 12px;
+  padding: 12px;
 }
 
 .page-shell.workbench-page {
@@ -257,7 +290,6 @@ a {
   gap: 8px;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
 }
 
 .overview-project-filters .q-chip {
@@ -1229,6 +1261,20 @@ body.desktop
   background: color-mix(in srgb, var(--q-primary) 4%, var(--ac-surface-raised));
 }
 
+.prompt-shell__collapsed {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--ac-surface-muted) 68%, transparent);
+}
+
+.prompt-shell__expand {
+  min-width: 44px;
+  flex: 1 1 auto;
+}
+
 .prompt-shell__header {
   display: flex;
   min-height: 44px;
@@ -1532,8 +1578,12 @@ body.desktop
   min-width: 0;
 }
 
-.codex-model-select {
-  max-width: 32ch;
+.model-select {
+  max-width: 24ch;
+}
+
+.effort-select {
+  max-width: 18ch;
 }
 
 .codex-model-select__status {
@@ -1543,7 +1593,11 @@ body.desktop
 }
 
 .codex-model-chip {
-  max-width: 32ch;
+  max-width: 24ch;
+}
+
+.codex-effort-chip {
+  max-width: 18ch;
 }
 
 .compact-select .q-field__native {

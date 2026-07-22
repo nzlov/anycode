@@ -7,21 +7,18 @@
       :href="image.src"
       target="_blank"
       rel="noreferrer"
+      @click="openImage($event, image, index)"
     >
-      <img
-        class="event-images__image"
-        :src="image.src"
-        :alt="`${label} ${index + 1}`"
-        loading="lazy"
-      />
+      {{ label }} {{ index + 1 }}
     </a>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { TranscriptImage } from '@/services/sessionTimeline';
+import { useSessionEventResourceOpener } from '@/services/sessionEventResources';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     eventId: string;
     images?: TranscriptImage[];
@@ -32,28 +29,30 @@ withDefaults(
     label: '事件图片',
   },
 );
+const resourceOpener = useSessionEventResourceOpener();
+
+function openImage(event: MouseEvent, image: TranscriptImage, index: number) {
+  if (!resourceOpener?.(image.src, `${props.label} ${index + 1}`)) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
 </script>
 
 <style scoped>
 .event-images {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 240px));
-  gap: 8px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .event-images__link {
-  display: block;
+  display: inline;
   min-width: 0;
+  margin-right: 12px;
+  color: var(--q-primary);
+  cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
-.event-images__image {
-  display: block;
-  width: 100%;
-  max-height: 320px;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
-  background: var(--ac-surface-muted);
-  object-fit: contain;
+.event-images__link:last-child {
+  margin-right: 0;
 }
 </style>

@@ -158,49 +158,7 @@
           </q-btn>
         </q-card-section>
         <q-separator />
-        <q-card-section class="artifact-preview-body">
-          <div v-if="previewLoading" class="artifact-preview-state">
-            <q-spinner color="primary" size="32px" />
-          </div>
-          <q-banner v-else-if="previewError" dense class="artifact-error">{{
-            previewError
-          }}</q-banner>
-          <img
-            v-else-if="selected?.previewKind === 'image' && previewURL"
-            :src="previewURL"
-            :alt="selected.filename"
-            class="artifact-image"
-          />
-          <iframe
-            v-else-if="selected?.previewKind === 'pdf' && previewURL"
-            :src="previewURL"
-            class="artifact-frame"
-            title="PDF 预览"
-          />
-          <video
-            v-else-if="selected?.previewKind === 'video' && previewURL"
-            :src="previewURL"
-            class="artifact-media"
-            controls
-          />
-          <audio
-            v-else-if="selected?.previewKind === 'audio' && previewURL"
-            :src="previewURL"
-            class="artifact-audio"
-            controls
-          />
-          <pre v-else-if="selected?.previewKind === 'text'" class="artifact-text">{{
-            previewText
-          }}</pre>
-          <div v-else-if="selected" class="artifact-preview-state text-muted">
-            <q-icon name="draft" size="36px" />
-            <span>此文件仅支持下载</span>
-          </div>
-          <div v-else class="artifact-preview-state text-muted">
-            <q-icon name="inventory_2" size="36px" />
-            <span>暂无临时文件</span>
-          </div>
-        </q-card-section>
+        <SessionFilePreview :file="selected" />
       </q-card>
     </div>
 
@@ -229,45 +187,7 @@
           </div>
         </q-card-section>
         <q-separator />
-        <q-card-section class="artifact-preview-body">
-          <div v-if="previewLoading" class="artifact-preview-state">
-            <q-spinner color="primary" size="32px" />
-          </div>
-          <q-banner v-else-if="previewError" dense class="artifact-error">{{
-            previewError
-          }}</q-banner>
-          <img
-            v-else-if="selected?.previewKind === 'image' && previewURL"
-            :src="previewURL"
-            :alt="selected.filename"
-            class="artifact-image"
-          />
-          <iframe
-            v-else-if="selected?.previewKind === 'pdf' && previewURL"
-            :src="previewURL"
-            class="artifact-frame"
-            title="PDF 预览"
-          />
-          <video
-            v-else-if="selected?.previewKind === 'video' && previewURL"
-            :src="previewURL"
-            class="artifact-media"
-            controls
-          />
-          <audio
-            v-else-if="selected?.previewKind === 'audio' && previewURL"
-            :src="previewURL"
-            class="artifact-audio"
-            controls
-          />
-          <pre v-else-if="selected?.previewKind === 'text'" class="artifact-text">{{
-            previewText
-          }}</pre>
-          <div v-else class="artifact-preview-state text-muted">
-            <q-icon name="draft" size="36px" />
-            <span>此文件仅支持下载</span>
-          </div>
-        </q-card-section>
+        <SessionFilePreview :file="selected" />
       </q-card>
     </q-dialog>
   </section>
@@ -277,10 +197,10 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Dialog, Notify } from 'quasar';
 
+import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import {
   deleteSessionFile,
   downloadSessionFile,
-  fetchSessionFile,
   listSessionFiles,
   type SessionFile,
   type SessionArtifactFocusRequest,
@@ -313,14 +233,9 @@ const deletingId = ref('');
 const downloadingId = ref('');
 const previewOpen = ref(false);
 const selected = ref<SessionFile | null>(null);
-const previewLoading = ref(false);
-const previewError = ref('');
-const previewURL = ref('');
-const previewText = ref('');
 const focusedId = ref('');
 const inlinePreviewActive = ref(false);
 let loadRequest = 0;
-let previewController: AbortController | null = null;
 let panelResizeObserver: ResizeObserver | null = null;
 const inlinePreviewMinWidth = 1024;
 const kindOptions = [
@@ -365,7 +280,7 @@ async function load() {
     const result = await listSessionFiles(input);
     if (request !== loadRequest) return;
     files.value = result;
-    if (inlinePreviewActive.value) void syncInlineSelection(result);
+    if (inlinePreviewActive.value) syncInlineSelection(result);
   } catch (err) {
     if (request === loadRequest) error.value = errorMessage(err, '读取临时文件失败');
   } finally {
@@ -378,46 +293,12 @@ async function refresh() {
   emit('artifactsRefreshed');
 }
 
-async function openPreview(file: SessionFile) {
-  if (!inlinePreviewActive.value) previewOpen.value = true;
-  await selectPreview(file);
-}
-
-async function selectPreview(file: SessionFile) {
-  clearPreviewResource();
+function openPreview(file: SessionFile) {
   selected.value = file;
-  if (file.previewKind === 'none') return;
-  if (file.previewKind === 'text' && file.size > 1 << 20) {
-    previewError.value = '文本超过 1 MiB，请下载查看';
-    return;
-  }
-  const controller = new AbortController();
-  previewController = controller;
-  previewLoading.value = true;
-  try {
-    const blob = await fetchSessionFile(file, 'preview', controller.signal);
-    if (previewController !== controller || selected.value?.id !== file.id) return;
-    if (file.previewKind === 'text') {
-      const content = await blob.text();
-      if (previewController === controller && selected.value?.id === file.id) {
-        previewText.value = content;
-      }
-    } else {
-      previewURL.value = URL.createObjectURL(blob);
-    }
-  } catch (err) {
-    if (!isAbortError(err) && previewController === controller) {
-      previewError.value = errorMessage(err, '预览文件失败');
-    }
-  } finally {
-    if (previewController === controller) {
-      previewController = null;
-      previewLoading.value = false;
-    }
-  }
+  if (!inlinePreviewActive.value) previewOpen.value = true;
 }
 
-async function syncInlineSelection(nextFiles: SessionFile[]) {
+function syncInlineSelection(nextFiles: SessionFile[]) {
   if (!inlinePreviewActive.value) return;
   if (nextFiles.length === 0) {
     clearPreview();
@@ -431,7 +312,7 @@ async function syncInlineSelection(nextFiles: SessionFile[]) {
     return;
   }
   const first = nextFiles[0];
-  if (first) await selectPreview(first);
+  if (first) selected.value = first;
 }
 
 async function download(file: SessionFile) {
@@ -472,27 +353,16 @@ async function remove(file: SessionFile) {
   }
 }
 
-async function applyFocus(request: SessionArtifactFocusRequest) {
+function applyFocus(request: SessionArtifactFocusRequest) {
   filter.value = request.file.logicalPath;
   kind.value = null;
   source.value = null;
   sort.value = 'created_at_desc';
   focusedId.value = request.file.id;
-  await openPreview(request.file);
-}
-
-function clearPreviewResource() {
-  previewController?.abort();
-  previewController = null;
-  previewLoading.value = false;
-  if (previewURL.value) URL.revokeObjectURL(previewURL.value);
-  previewURL.value = '';
-  previewText.value = '';
-  previewError.value = '';
+  openPreview(request.file);
 }
 
 function clearPreview() {
-  clearPreviewResource();
   selected.value = null;
 }
 
@@ -506,7 +376,7 @@ function updateInlinePreview(width: number) {
   inlinePreviewActive.value = active;
   if (active) {
     previewOpen.value = false;
-    void syncInlineSelection(files.value);
+    syncInlineSelection(files.value);
   } else if (!previewOpen.value) {
     clearPreview();
   }
@@ -546,10 +416,6 @@ function errorMessage(err: unknown, fallback: string) {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-function isAbortError(err: unknown) {
-  return err instanceof DOMException && err.name === 'AbortError';
-}
-
 watch([filter, kind, source, sort], () => void load());
 watch(
   () => props.refreshKey,
@@ -561,7 +427,7 @@ watch(
   () => props.focusRequest?.token,
   () => {
     const request = props.focusRequest;
-    if (request) void applyFocus(request);
+    if (request) applyFocus(request);
   },
   { immediate: true },
 );
@@ -573,13 +439,11 @@ onBeforeUnmount(() => {
   loadRequest++;
   panelResizeObserver?.disconnect();
   panelResizeObserver = null;
-  clearPreviewResource();
 });
 </script>
 
 <style scoped>
-.artifact-panel,
-.artifact-preview-body {
+.artifact-panel {
   display: grid;
   min-width: 0;
   gap: 12px;
@@ -683,48 +547,6 @@ onBeforeUnmount(() => {
   border-color: var(--ac-border);
 }
 
-.artifact-preview-body {
-  min-height: 260px;
-  flex: 1 1 auto;
-  place-items: center;
-  overflow: auto;
-  background: var(--ac-surface-muted);
-}
-
-.artifact-preview-state {
-  display: grid;
-  place-items: center;
-  gap: 8px;
-}
-
-.artifact-image,
-.artifact-media {
-  display: block;
-  max-width: 100%;
-  max-height: 72vh;
-  object-fit: contain;
-}
-
-.artifact-frame {
-  width: 100%;
-  min-height: 68vh;
-  border: 0;
-}
-
-.artifact-audio {
-  width: min(100%, 520px);
-}
-
-.artifact-text {
-  width: 100%;
-  margin: 0;
-  align-self: start;
-  overflow: auto;
-  color: var(--ac-text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 @container (min-width: 1024px) {
   .artifact-panel--inline-enabled .artifact-layout {
     display: grid;
@@ -741,12 +563,12 @@ onBeforeUnmount(() => {
     overscroll-behavior: contain;
   }
 
-  .artifact-inline-preview .artifact-preview-body {
+  .artifact-inline-preview :deep(.session-file-preview) {
     min-height: 0;
   }
 
-  .artifact-inline-preview .artifact-image,
-  .artifact-inline-preview .artifact-media {
+  .artifact-inline-preview :deep(.session-file-preview__image),
+  .artifact-inline-preview :deep(.session-file-preview__media) {
     max-height: 100%;
   }
 }

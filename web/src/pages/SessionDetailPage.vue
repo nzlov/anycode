@@ -1,12 +1,5 @@
 <template>
   <q-page class="page-shell detail-page">
-    <q-tabs v-model="detailView" class="detail-mobile-tabs lt-md" dense align="justify">
-      <q-tab name="session" icon="forum" label="会话" />
-      <q-tab name="info" icon="info" label="信息" />
-      <q-tab name="changes" icon="difference" label="变更" />
-      <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
-    </q-tabs>
-
     <q-splitter
       class="detail-grid detail-splitter"
       reverse
@@ -52,7 +45,14 @@
           </div>
         </q-card>
 
-        <div v-if="!isClosed" class="detail-composer">
+        <div
+          v-if="!isClosed"
+          class="detail-composer"
+          :class="{
+            'detail-composer--collapsed':
+              composerCollapsed && !isWaitingForAnswer && !isWaitingForApproval,
+          }"
+        >
           <q-banner v-if="detailError" rounded class="detail-error-banner">
             <template #avatar>
               <q-icon name="error_outline" />
@@ -104,7 +104,9 @@
             v-model:effort="composerEffort"
             v-model:permission="composerPermission"
             v-model:fast="composerFast"
+            v-model:collapsed="composerCollapsed"
             compact
+            collapsible
             :show-badge="false"
             title="追加描述"
             placeholder="追加描述，发送给当前会话"
@@ -453,6 +455,13 @@
       <q-resize-observer @resize="onDetailSplitterResize" />
     </q-splitter>
 
+    <q-tabs v-model="detailView" class="detail-mobile-tabs lt-md" dense align="justify">
+      <q-tab name="session" icon="forum" label="会话" />
+      <q-tab name="info" icon="info" label="信息" />
+      <q-tab name="changes" icon="difference" label="变更" />
+      <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
+    </q-tabs>
+
     <q-dialog
       v-model="promptEditDialogOpen"
       :maximized="$q.screen.lt.sm"
@@ -537,6 +546,48 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog
+      v-model="eventResourceDialogOpen"
+      :maximized="$q.screen.lt.sm"
+      @hide="clearEventResource"
+    >
+      <q-card class="event-resource-dialog app-content-dialog" aria-label="事件文件">
+        <q-card-section class="event-resource-dialog__header">
+          <div class="event-resource-dialog__title">
+            <q-icon :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)" />
+            <span>{{ eventResourceTitle }}</span>
+          </div>
+          <div class="row items-center q-gutter-xs">
+            <q-btn
+              v-if="eventResourceKind === 'file' && eventResourceFile"
+              flat
+              round
+              dense
+              icon="download"
+              aria-label="下载文件"
+              :loading="eventResourceDownloading"
+              @click="downloadEventResource"
+            >
+              <q-tooltip>下载</q-tooltip>
+            </q-btn>
+            <q-btn v-close-popup flat round dense icon="close" aria-label="关闭">
+              <q-tooltip>关闭</q-tooltip>
+            </q-btn>
+          </div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="event-resource-dialog__body">
+          <DiffWorkspace
+            v-if="eventResourceKind === 'diff'"
+            v-model="eventDiffState"
+            :target="detailDiffTarget"
+            :show-file-navigation="false"
+          />
+          <SessionFilePreview v-else :file="eventResourceFile" />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -550,6 +601,7 @@ import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
+import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -557,13 +609,24 @@ import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
 import type { DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
+import { getSessionDiffFiles } from '@/services/diff';
+import {
+  matchChangedFilePath,
+  parseSessionEventResourceReference,
+  provideSessionEventResourceOpener,
+} from '@/services/sessionEventResources';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
 import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
-import type { SessionFile } from '@/services/sessionFiles';
+import {
+  downloadSessionFile,
+  listSessionFiles,
+  resolveSessionArtifacts,
+  type SessionFile,
+} from '@/services/sessionFiles';
 import type { PromptAppend, QuestionAnswerInput, SessionMode } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 import type { TranscriptTokenUsage } from '@/services/sessionTimeline';
@@ -607,6 +670,7 @@ const composerModel = ref('');
 const composerEffort = ref('');
 const composerPermission = ref(normalizePermissionMode('workspace-write'));
 const composerFast = ref(false);
+const composerCollapsed = ref(true);
 const composerConfigReady = ref(false);
 const detailView = ref<'session' | 'info' | 'changes' | 'artifacts'>('session');
 // GLUE: mobile detail navigation adds the session view to the desktop info/changes tabs.
@@ -622,6 +686,12 @@ const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
   mode: 'all',
   filePath: '',
 });
+const eventDiffState = ref<DiffWorkspaceState>({ mode: 'single', filePath: '' });
+const eventResourceDialogOpen = ref(false);
+const eventResourceKind = ref<'diff' | 'file'>('file');
+const eventResourceFile = ref<SessionFile | null>(null);
+const eventResourceDownloading = ref(false);
+let eventResourceRequest = 0;
 let mounted = false;
 let preservingOlderEventScroll = false;
 let previousEventScrollTop = Number.POSITIVE_INFINITY;
@@ -696,6 +766,109 @@ const {
   startLiveUpdates,
   stopLiveUpdates,
 } = useSessionDetail(sessionId);
+
+provideSessionEventResourceOpener(openSessionEventResource);
+
+function openSessionEventResource(reference: string, label = '') {
+  const parsed = parseSessionEventResourceReference(reference, sessionId);
+  if (!parsed) return false;
+  void resolveSessionEventResource(parsed, label);
+  return true;
+}
+
+async function resolveSessionEventResource(
+  reference: NonNullable<ReturnType<typeof parseSessionEventResourceReference>>,
+  label: string,
+) {
+  const request = ++eventResourceRequest;
+  try {
+    if (reference.kind === 'session-file') {
+      const files = await listSessionFiles({ sessionId });
+      if (request !== eventResourceRequest) return;
+      const file = files.find((item) => item.id === reference.fileId);
+      if (file) return focusEventArtifact(file);
+      throw new Error('文件已不存在');
+    }
+    if (reference.kind === 'artifact') {
+      const resolved = await resolveSessionArtifacts(sessionId, [reference.logicalPath]);
+      if (request !== eventResourceRequest) return;
+      const file = resolved[0]?.file;
+      if (file) return focusEventArtifact(file);
+      throw new Error('临时文件已不存在');
+    }
+
+    const [diffResult, artifactResult] = await Promise.allSettled([
+      getSessionDiffFiles({ sessionId }),
+      reference.path.startsWith('/')
+        ? Promise.resolve([])
+        : resolveSessionArtifacts(sessionId, [reference.path]),
+    ]);
+    if (request !== eventResourceRequest) return;
+    if (diffResult.status === 'fulfilled') {
+      const filePath = matchChangedFilePath(
+        reference.path,
+        diffResult.value.files.map((file) => file.path),
+      );
+      if (filePath) return openEventDiff(filePath);
+    }
+    if (artifactResult.status === 'fulfilled' && artifactResult.value[0]?.file) {
+      return focusEventArtifact(artifactResult.value[0].file);
+    }
+    throw new Error(label ? `无法查看“${label}”` : '无法查看此文件');
+  } catch (err) {
+    if (request !== eventResourceRequest) return;
+    Notify.create({ type: 'negative', message: errorMessage(err) || '读取文件失败' });
+  }
+}
+
+function openEventDiff(filePath: string) {
+  eventDiffState.value = { mode: 'single', filePath };
+  eventResourceFile.value = null;
+  eventResourceKind.value = 'diff';
+  eventResourceDialogOpen.value = true;
+}
+
+function focusEventArtifact(file: SessionFile) {
+  eventResourceFile.value = file;
+  eventResourceKind.value = 'file';
+  eventResourceDialogOpen.value = true;
+}
+
+const eventResourceTitle = computed(() =>
+  eventResourceKind.value === 'diff'
+    ? eventDiffState.value.filePath
+    : eventResourceFile.value?.logicalPath || eventResourceFile.value?.filename || '文件预览',
+);
+
+async function downloadEventResource() {
+  const file = eventResourceFile.value;
+  if (!file) return;
+  eventResourceDownloading.value = true;
+  try {
+    await downloadSessionFile(file);
+  } catch (err) {
+    Notify.create({ type: 'negative', message: errorMessage(err) || '下载文件失败' });
+  } finally {
+    eventResourceDownloading.value = false;
+  }
+}
+
+function fileIcon(file: SessionFile | null) {
+  const icons: Record<string, string> = {
+    image: 'image',
+    pdf: 'picture_as_pdf',
+    video: 'movie',
+    audio: 'audio_file',
+    archive: 'folder_zip',
+    text: 'description',
+  };
+  return file ? (icons[file.artifactKind] ?? 'draft') : 'draft';
+}
+
+function clearEventResource() {
+  eventResourceRequest++;
+  eventResourceFile.value = null;
+}
 
 // GLUE: Persisted prompt text disambiguates user-authored copies of injected guidance.
 // Remove this fallback when timeline messages expose their user/injected provenance.
@@ -992,6 +1165,7 @@ async function sendAppend() {
     appendText.value = '';
     appendFiles.value = [];
     appendArtifacts.value = [];
+    composerCollapsed.value = true;
   } catch (err) {
     appendUploading.value = false;
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
@@ -1177,8 +1351,8 @@ async function scrollEventsToBottom() {
 .detail-mobile-tabs {
   min-height: 56px;
   flex: 0 0 auto;
-  border: 1px solid var(--ac-border);
-  border-radius: var(--ac-radius);
+  border: 0;
+  border-radius: 0;
   background: var(--ac-surface);
 }
 
@@ -1288,6 +1462,37 @@ async function scrollEventsToBottom() {
   min-width: 0;
 }
 
+.event-resource-dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.event-resource-dialog__header,
+.event-resource-dialog__title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.event-resource-dialog__header {
+  justify-content: space-between;
+}
+
+.event-resource-dialog__title span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.event-resource-dialog__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 12px;
+}
+
 .token-usage-summary {
   display: flex;
   flex-wrap: wrap;
@@ -1340,6 +1545,10 @@ async function scrollEventsToBottom() {
   background: var(--ac-surface-raised);
   border-top-right-radius: 0;
   border-top-left-radius: 0;
+}
+
+.detail-composer--collapsed {
+  min-height: 0;
 }
 
 .detail-answer-card {
@@ -1411,6 +1620,7 @@ async function scrollEventsToBottom() {
 
 .append-history {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -1426,6 +1636,10 @@ async function scrollEventsToBottom() {
   white-space: pre-wrap;
 }
 
+.append-history :deep(.q-item__section--main) {
+  flex-wrap: nowrap;
+}
+
 .append-history__attachments {
   display: flex;
   flex-wrap: wrap;
@@ -1434,6 +1648,7 @@ async function scrollEventsToBottom() {
 }
 
 .append-history__attachments :deep(.q-chip) {
+  margin: 0;
   max-width: 100%;
 }
 
@@ -1483,11 +1698,12 @@ async function scrollEventsToBottom() {
 @media (max-width: 1023.98px) {
   .detail-page {
     height: 100%;
+    padding: 0;
     overflow: hidden;
   }
 
   .detail-mobile-tabs {
-    margin-bottom: 12px;
+    margin: 0;
   }
 
   .detail-page .detail-grid {
@@ -1523,6 +1739,12 @@ async function scrollEventsToBottom() {
   .right-panel-card {
     height: 100%;
     min-height: 0;
+  }
+
+  .stream-card,
+  .right-panel-card {
+    border: 0;
+    border-radius: 0;
   }
 }
 </style>

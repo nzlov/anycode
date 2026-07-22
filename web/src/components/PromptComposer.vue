@@ -8,7 +8,21 @@
     @drop.prevent="onDrop"
     @paste="onPaste"
   >
-    <div v-if="title || showBadge" class="prompt-shell__header">
+    <div v-if="isCollapsed" class="prompt-shell__collapsed">
+      <q-btn
+        flat
+        class="prompt-shell__expand"
+        icon="keyboard"
+        aria-label="展开提示词"
+        @click="emit('update:collapsed', false)"
+      >
+        <q-tooltip>展开提示词</q-tooltip>
+      </q-btn>
+      <slot name="quick-actions" :collapsed="true" />
+      <slot name="actions" />
+    </div>
+
+    <div v-if="!isCollapsed && (title || showBadge)" class="prompt-shell__header">
       <div class="text-subtitle2 text-weight-bold">{{ title }}</div>
       <q-badge
         v-if="showBadge"
@@ -18,7 +32,7 @@
       />
     </div>
 
-    <div v-if="showAttachmentZone" class="attachment-zone">
+    <div v-if="!isCollapsed && showAttachmentZone" class="attachment-zone">
       <div class="text-caption text-muted">附件</div>
       <div v-if="attachmentCount > 0" class="attachment-list">
         <template v-for="file in files" :key="`${file.name}-${file.size}-${file.lastModified}`">
@@ -92,6 +106,8 @@
     </div>
 
     <q-input
+      v-if="!isCollapsed"
+      ref="promptInputRef"
       v-model.trim="promptModel"
       autogrow
       borderless
@@ -102,7 +118,18 @@
       @keydown.shift.enter.prevent="emit('submit')"
     />
 
-    <div class="prompt-toolbar">
+    <div v-if="!isCollapsed" class="prompt-toolbar">
+      <q-btn
+        v-if="collapsible"
+        flat
+        round
+        class="app-icon-btn prompt-shell__collapse"
+        icon="keyboard_hide"
+        aria-label="收起提示词"
+        @click="emit('update:collapsed', true)"
+      >
+        <q-tooltip>收起提示词</q-tooltip>
+      </q-btn>
       <q-file
         v-model="filesModel"
         borderless
@@ -158,6 +185,7 @@
         </q-menu>
       </q-btn>
       <q-space />
+      <slot name="quick-actions" :collapsed="false" />
       <slot name="actions" />
     </div>
 
@@ -199,8 +227,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useQuasar } from 'quasar';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useQuasar, type QInput } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
 import { filesFromTransfer } from '@/services/promptAttachments';
@@ -222,6 +250,8 @@ const props = withDefaults(
     showBadge?: boolean;
     forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
+    collapsible?: boolean;
+    collapsed?: boolean;
   }>(),
   {
     title: '',
@@ -231,6 +261,8 @@ const props = withDefaults(
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
+    collapsible: false,
+    collapsed: false,
     artifacts: () => [],
   },
 );
@@ -243,6 +275,7 @@ const emit = defineEmits<{
   'update:effort': [value: string];
   'update:permission': [value: string];
   'update:fast': [value: boolean];
+  'update:collapsed': [value: boolean];
   submit: [];
 }>();
 
@@ -254,6 +287,7 @@ const previewUrl = ref('');
 const draggingFiles = ref(false);
 const dragDepth = ref(0);
 const fileThumbnailUrls = reactive(new Map<File, string>());
+const promptInputRef = ref<QInput | null>(null);
 
 const promptModel = computed({
   get: () => props.prompt,
@@ -266,6 +300,7 @@ const filesModel = computed({
 });
 const attachmentCount = computed(() => props.files.length + props.artifacts.length);
 const showAttachmentZone = computed(() => attachmentCount.value > 0 || draggingFiles.value);
+const isCollapsed = computed(() => props.collapsible && props.collapsed);
 
 function fileIcon(file: File) {
   if (file.type.startsWith('video/')) return 'movie';
@@ -396,6 +431,15 @@ function appendFiles(nextFiles: File[]) {
 }
 
 watch(() => props.files, syncFileThumbnailUrls, { immediate: true });
+watch(isCollapsed, async (collapsed) => {
+  if (collapsed) return;
+  await nextTick();
+  const input = promptInputRef.value;
+  if (!input) return;
+  const cursor = input.nativeEl.value.length;
+  input.focus();
+  input.nativeEl.setSelectionRange(cursor, cursor);
+});
 
 onBeforeUnmount(() => {
   revokePreviewUrl();

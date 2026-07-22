@@ -8145,34 +8145,80 @@ func TestStartSessionQueuesWhenAgentLimitReached(t *testing.T) {
 	}
 }
 
-func TestExecuteSessionRejectsResumeWithoutPendingPrompt(t *testing.T) {
+func TestExecuteSessionResumesWithoutPendingPrompt(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
 	repo.sessions["session-1"] = domain.Session{
 		ID:             "session-1",
 		ProjectID:      "project-1",
+		Requirement:    "implement session",
 		Status:         domain.StatusStopped,
 		CodexSessionID: "codex-session-1",
 		WorktreePath:   "/workspace/session-1",
 	}
 	processes := newFakeProcessRepository()
 	processes.activeCount = 1
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
 	service := New(
 		repo,
 		newFakeProjectRepository("project-1"),
-		WithProcesses(processes, &fakeCodexProcess{}),
+		WithProcesses(processes, codex),
 		WithMaxConcurrentAgents(1),
 	)
 	service.now = func() time.Time { return time.Unix(42, 0).UTC() }
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 
-	_, err := service.ExecuteSession(ctx, "session-1")
-	appErr, ok := apperror.From(err)
-	if !ok || appErr.Code != apperror.CodePendingPromptRequired {
+	got, err := service.ExecuteSession(ctx, "session-1")
+	if err != nil {
 		t.Fatalf("ExecuteSession() error = %v", err)
 	}
+	if got.Status != domain.StatusQueued {
+		t.Fatalf("ExecuteSession() status = %q", got.Status)
+	}
 	saved := repo.sessions["session-1"]
-	if saved.Status != domain.StatusStopped || saved.Queue != (domain.QueueIntent{}) || len(processes.created) != 0 {
-		t.Fatalf("empty resume mutated execution state: session=%#v processes=%#v", saved, processes.created)
+	if saved.Queue.Kind != domain.QueueKindResume || saved.Queue.ResumeCodexSessionID != "codex-session-1" || saved.Queue.Prompt != "" {
+		t.Fatalf("queued execution = %#v", saved.Queue)
+	}
+
+	processes.activeCount = 0
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil || started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
+	}
+	if !codex.resumeCalled || codex.resumeInput.Prompt != "implement session" {
+		t.Fatalf("codex resume input = %#v", codex.resumeInput)
+	}
+}
+
+func TestDrainQueuedRecoveredChatResumeWithoutPendingPrompt(t *testing.T) {
+	ctx := context.Background()
+	queuedAt := time.Unix(41, 0).UTC()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Requirement:    "implement session",
+		Status:         domain.StatusQueued,
+		CodexSessionID: "codex-session-1",
+		WorktreePath:   "/workspace/session-1",
+		QueuedAt:       &queuedAt,
+		Queue: domain.QueueIntent{
+			Kind:                 domain.QueueKindResume,
+			Prompt:               restartRecoveryPrompt,
+			ResumeCodexSessionID: "codex-session-1",
+		},
+	}
+	processes := newFakeProcessRepository()
+	codex := &fakeCodexProcess{resumeHandle: processdomain.CodexHandle{PID: 2233, CodexSessionID: "codex-session-1"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
+
+	started, err := service.DrainQueuedSessions(ctx)
+	if err != nil || started != 1 {
+		t.Fatalf("DrainQueuedSessions() = %d, %v", started, err)
+	}
+	if !codex.resumeCalled || codex.resumeInput.Prompt != restartRecoveryPrompt {
+		t.Fatalf("codex resume input = %#v", codex.resumeInput)
 	}
 }
 
@@ -9992,6 +10038,9 @@ func TestStopSessionFromQueuedCancelsQueue(t *testing.T) {
 	if gotEvents[0].Payload["reason"] != "queue_cancelled" {
 		t.Fatalf("events = %#v", gotEvents)
 	}
+	if gotEvents[0].Payload["cause"] != "stop_requested" {
+		t.Fatalf("session stopped cause = %#v", gotEvents[0].Payload["cause"])
+	}
 	if questions.cancelledSessionID != "" {
 		t.Fatalf("ordinary queued cancellation touched questions: %q", questions.cancelledSessionID)
 	}
@@ -10899,6 +10948,9 @@ func TestHandleCodexProcessExitRetriesOnlyFailedProcessRun(t *testing.T) {
 	}
 	gotEvents := events.snapshot()
 	requireSessionEventTypes(t, gotEvents, "process.exited", "session.stopped", sessionStatusUpdatedEvent)
+	if gotEvents[1].Payload["cause"] != "completed" {
+		t.Fatalf("session stopped cause = %#v", gotEvents[1].Payload["cause"])
+	}
 }
 
 func TestHandleCodexProcessExitStopsRetryingWhenServiceCloses(t *testing.T) {

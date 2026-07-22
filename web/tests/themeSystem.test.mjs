@@ -81,6 +81,17 @@ test('application styles consume the dedicated theme source', () => {
   );
 });
 
+test('native scrollbars follow the global Quasar-style theme treatment', () => {
+  assert.match(appStylesSource, /\*\s*\{[^}]*scrollbar-width:\s*thin/s);
+  assert.match(appStylesSource, /\*\s*\{[^}]*scrollbar-color:[^}]*var\(--ac-text\)/s);
+  assert.match(
+    appStylesSource,
+    /\*::\-webkit-scrollbar\s*\{[^}]*width:\s*10px[^}]*height:\s*10px/s,
+  );
+  assert.match(appStylesSource, /\*::\-webkit-scrollbar-thumb:hover\s*\{/);
+  assert.match(appStylesSource, /\*::\-webkit-scrollbar-thumb:active\s*\{/);
+});
+
 test('theme runtime only owns mode persistence and Quasar dark switching', () => {
   assert.doesNotMatch(runtimeSource, /setCssVar|themeTokens|#[0-9a-f]{3,8}/i);
   assert.match(runtimeSource, /Dark\.set/);
@@ -229,10 +240,11 @@ test('root exposes the shared background without an image caption', () => {
   assert.match(appStylesSource, /html\[data-daily-background='ready'\]/);
   assert.doesNotMatch(appStylesSource, /#q-app::after|--ac-daily-veil/);
   assert.doesNotMatch(themeSource, /--ac-daily-veil/);
+  assert.doesNotMatch(appStylesSource, /var\(--ac-page\) 16%, transparent/);
   assert.equal(
-    appStylesSource.match(/var\(--ac-page\) 16%, transparent/g)?.length,
+    appStylesSource.match(/--ac-page-layer:\s*transparent/g)?.length,
     2,
-    'light and dark modes use the reduced page layer',
+    'light and dark modes remove the page layer over the background',
   );
   assert.match(appStylesSource, /\.app-layout\s*\{[^}]*background:\s*var\(--ac-page-layer\)/s);
   assert.doesNotMatch(appStylesSource, /\.app-layout\s*,\s*\.workbench-page\s*\{/s);

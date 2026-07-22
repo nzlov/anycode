@@ -8,11 +8,11 @@
           round
           dense
           class="app-icon-btn"
-          icon="space_dashboard"
-          aria-label="返回总揽"
+          icon="img:/icons/anycode.svg"
+          aria-label="返回总览"
           :to="{ name: 'overview' }"
         >
-          <q-tooltip>总揽</q-tooltip>
+          <q-tooltip>总览</q-tooltip>
         </q-btn>
         <q-toolbar-title v-if="$route.name === 'session-detail'" class="app-header__title">
           {{ sessionTitle || '会话详情' }}
@@ -167,6 +167,7 @@ import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
+import { disablePushNotifications } from '@/services/pushNotifications';
 
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
@@ -213,6 +214,7 @@ watch(
 );
 
 async function logout() {
+  await disablePushNotifications().catch(() => undefined);
   clearGraphQLAccessKey();
   logoutDialogOpen.value = false;
   await router.replace({ name: 'login' });

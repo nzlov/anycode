@@ -37,7 +37,7 @@
       <q-card-section class="new-session-body">
         <div class="new-session-grid new-session-context">
           <q-select
-            v-model="projectId"
+            v-model="projectModel"
             :outlined="!panel"
             :borderless="panel"
             dense
@@ -170,7 +170,10 @@ import { useProjectBranches } from '@/composables/useProjectBranches';
 import { useProjects } from '@/composables/useProjects';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { graphqlFetch } from '@/services/graphqlClient';
-import { loadStoredSessionConfig, storeSessionConfig } from '@/services/sessionConfigCache';
+import {
+  loadNewSessionPreferences,
+  storeNewSessionPreferences,
+} from '@/services/newSessionPreferences';
 import type { CreateSessionInput, SessionConfig, SessionPriority } from '@/services/sessions';
 import { getWorkflowDefinition } from '@/services/workflows';
 
@@ -185,22 +188,21 @@ const emit = defineEmits<{
 }>();
 
 const $q = useQuasar();
-const { projects, projectOptions, loadProjects } = useProjects();
+const { projects, projectOptions, loaded: projectsLoaded, loadProjects } = useProjects();
 const { branchCache, branchLoading, loadProjectBranches } = useProjectBranches();
-const lastProjectStorageKey = 'anycode.lastNewSessionProjectId';
 const lastLaunchModeStorageKey = 'anycode.lastNewSessionLaunchMode';
 const overviewInlineConfigMinWidth = 1536;
-const cachedRunConfig = loadStoredSessionConfig();
+const cachedPreferences = loadNewSessionPreferences();
 const storedRunConfig: SessionConfig = {
-  codexModel: cachedRunConfig?.codexModel ?? '',
-  reasoningEffort: cachedRunConfig?.reasoningEffort ?? '',
-  permissionMode: normalizePermissionMode(cachedRunConfig?.permissionMode ?? 'workspace-write'),
-  fastMode: cachedRunConfig?.fastMode ?? false,
+  codexModel: cachedPreferences?.codexModel ?? '',
+  reasoningEffort: cachedPreferences?.reasoningEffort ?? '',
+  permissionMode: normalizePermissionMode(cachedPreferences?.permissionMode ?? 'workspace-write'),
+  fastMode: cachedPreferences?.fastMode ?? false,
 };
-const projectId = ref(projects.value[0]?.id ?? '');
-const branch = ref('');
+const projectId = ref(cachedPreferences?.projectId ?? '');
+const branch = ref(cachedPreferences?.baseBranch ?? '');
 const preferredMode = ref<'workflow' | 'chat'>(storedLaunchMode());
-const priority = ref<SessionPriority>('medium');
+const priority = ref<SessionPriority>(cachedPreferences?.priority ?? 'medium');
 const prompt = ref('');
 const files = ref<File[]>([]);
 const model = ref(storedRunConfig.codexModel);
@@ -212,6 +214,14 @@ const launchingMode = ref<'workflow' | 'chat' | ''>('');
 const workflowAvailable = ref(false);
 const workflowAvailabilityToken = ref(0);
 const dialogVisible = computed(() => Boolean(props.panel || props.modelValue));
+const projectModel = computed({
+  get: () => projectId.value,
+  set: (value: string) => {
+    if (value === projectId.value) return;
+    branch.value = '';
+    projectId.value = value;
+  },
+});
 
 const branchOptions = computed(() => {
   return projectBranchState(projectId.value).branches;
@@ -242,22 +252,6 @@ function emitModel(value: boolean) {
   emit('update:modelValue', value);
 }
 
-function storedProjectId() {
-  try {
-    return window.localStorage.getItem(lastProjectStorageKey) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function rememberProjectId(value: string) {
-  try {
-    window.localStorage.setItem(lastProjectStorageKey, value);
-  } catch {
-    // Ignore storage failures; project selection still works for the current dialog.
-  }
-}
-
 function storedLaunchMode(): 'workflow' | 'chat' {
   try {
     return window.localStorage.getItem(lastLaunchModeStorageKey) === 'workflow'
@@ -278,10 +272,9 @@ function rememberLaunchMode(value: 'workflow' | 'chat') {
 }
 
 function selectInitialProject() {
+  if (!projectsLoaded.value && projects.value.length === 0) return false;
   const fallback = projects.value[0]?.id ?? '';
-  const candidates = [props.defaultProjectId, storedProjectId(), projectId.value, fallback].filter(
-    Boolean,
-  );
+  const candidates = [props.defaultProjectId, projectId.value, fallback].filter(Boolean);
   const nextProjectId =
     candidates.find((candidate) => projects.value.some((project) => project.id === candidate)) ??
     fallback;
@@ -292,10 +285,10 @@ function selectInitialProject() {
     return true;
   }
   if (projectId.value === nextProjectId) {
-    branch.value = '';
     void loadBranchesForProject(nextProjectId, { refresh: true });
     return false;
   }
+  branch.value = nextProjectId === cachedPreferences?.projectId ? cachedPreferences.baseBranch : '';
   projectId.value = nextProjectId;
   return true;
 }
@@ -408,9 +401,7 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
       input.stagedAttachmentIds = stagedAttachmentIds;
     }
     await createSessionRequest(input);
-    rememberProjectId(input.projectId);
     rememberLaunchMode(input.mode);
-    storeSessionConfig(config);
     files.value = [];
     prompt.value = '';
     emit('update:modelValue', false);
@@ -484,10 +475,33 @@ watch(dialogVisible, (open) => {
 
 watch(projectId, (value, previous) => {
   if (!value || value === previous) return;
-  branch.value = '';
   void loadBranchesForProject(value, { refresh: true });
   void loadWorkflowAvailability();
 });
+
+watch(
+  [projectId, branch, model, effort, permission, fast, priority],
+  ([
+    selectedProjectId,
+    baseBranch,
+    codexModel,
+    reasoningEffort,
+    permissionMode,
+    fastMode,
+    value,
+  ]) => {
+    storeNewSessionPreferences({
+      projectId: selectedProjectId,
+      baseBranch,
+      codexModel,
+      reasoningEffort,
+      permissionMode,
+      fastMode,
+      priority: value,
+    });
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.defaultProjectId,

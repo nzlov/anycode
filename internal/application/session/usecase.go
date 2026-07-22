@@ -1100,7 +1100,7 @@ func (s *Service) recoverAnswerUserBatch(ctx context.Context, batchID questiondo
 					return err
 				}
 				created, err := s.newSessionEvents(session, statusUpdateInputs(sessionEventInput{
-					eventType: "session.stopped", payload: map[string]any{"reason": "service_restarted"},
+					eventType: "session.stopped", payload: map[string]any{"reason": "service_restarted", "cause": "stop_requested"},
 				}))
 				if err != nil {
 					return err
@@ -1408,6 +1408,7 @@ func (s *Service) persistStoppedAfterRestart(ctx context.Context, session domain
 	}
 	return s.saveInterruptedRecoveryState(ctx, expected, session, run, true, "session.stopped", map[string]any{
 		"reason":         "service_restarted_while_stopping",
+		"cause":          "stop_requested",
 		"previousStatus": string(previousStatus),
 	})
 }
@@ -2632,6 +2633,7 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		payload: map[string]any{
 			"processRunId": string(active.ID),
 			"reason":       "user_stopped",
+			"cause":        "stop_requested",
 		},
 	}}, promptAppendSettlementRelease); err != nil {
 		return DTO{}, err
@@ -2647,7 +2649,7 @@ func (s *Service) stopSessionWithoutActiveProcess(ctx context.Context, session d
 	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
 		return DTO{}, err
 	}
-	if err := s.saveSessionWithStatusUpdate(ctx, session, "session.stopped", map[string]any{"reason": reason}); err != nil {
+	if err := s.saveSessionWithStatusUpdate(ctx, session, "session.stopped", map[string]any{"reason": reason, "cause": "stop_requested"}); err != nil {
 		return DTO{}, err
 	}
 	s.scheduleQueueDrain()
@@ -2824,8 +2826,6 @@ func (s *Service) resumeLoadedSession(ctx context.Context, session domain.Sessio
 		if options.prompt == "" || options.queueKind == domain.QueueKindPromptAppend {
 			options.prompt = advance.Prompt
 		}
-	} else if err := s.requirePendingChatResume(ctx, session.ID); err != nil {
-		return DTO{}, err
 	}
 	if startOptions.Force {
 		return s.startCodex(ctx, session, options, true)
@@ -4424,22 +4424,6 @@ func newCodexStartInput(session domain.Session, runID processdomain.RunID, workd
 	}
 }
 
-func (s *Service) requirePendingChatResume(ctx context.Context, sessionID domain.ID) error {
-	pending, err := s.repo.ListPendingPromptAppends(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("list pending prompt appends: %w", err)
-	}
-	if len(pending) == 0 {
-		return pendingPromptRequiredError(sessionID)
-	}
-	return nil
-}
-
-func pendingPromptRequiredError(sessionID domain.ID) error {
-	return apperror.New(apperror.CodePendingPromptRequired, apperror.CategoryValidationError, "没有待执行的追加描述，请先输入追加描述").
-		WithDetails(map[string]any{"sessionId": string(sessionID)})
-}
-
 var errNoEffectivePromptAppend = errors.New("no effective prompt append")
 
 func (s *Service) settleEmptyPromptAppendQueue(ctx context.Context, session domain.Session) (DTO, error) {
@@ -4487,8 +4471,8 @@ func (s *Service) resolveCodexInput(ctx context.Context, session domain.Session,
 	} else if options.reviewAfterReuseFailure {
 		prompt = rebuiltSessionPrompt(session, basePrompt, true, appends)
 	} else if options.resumeCodexSessionID != "" {
-		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && len(pendingIDs) == 0 {
-			return codexStartOptions{}, pendingPromptRequiredError(session.ID)
+		if session.Mode != domain.ModeWorkflow && options.answerBatchID == "" && basePrompt == "" && len(pendingIDs) == 0 {
+			basePrompt = strings.TrimSpace(session.Requirement)
 		}
 		prompt = joinPromptParts(basePrompt, pendingPrompt)
 	} else if session.Mode != domain.ModeWorkflow {
@@ -5571,6 +5555,7 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 				payload: map[string]any{
 					"processRunId": string(handle.ProcessRunID),
 					"reason":       "process_exited",
+					"cause":        "stop_requested",
 				},
 			})
 		}
@@ -5587,8 +5572,9 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	inputs := []sessionEventInput{processEvent}
 	switch current.Status {
 	case domain.StatusStarting, domain.StatusRunning, domain.StatusWaitingUser, domain.StatusStopping:
+		wasStopping := current.Status == domain.StatusStopping
 		settlement := promptAppendSettlementAutomatic
-		if current.Status == domain.StatusStopping {
+		if wasStopping {
 			settlement = promptAppendSettlementRelease
 		}
 		nextStatus := domain.StatusStopped
@@ -5610,6 +5596,12 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 		}
 		payload := processExitPayload(handle.ProcessRunID, exitResult)
 		payload["reason"] = "process_exited"
+		if eventType == "session.stopped" {
+			payload["cause"] = "completed"
+			if wasStopping {
+				payload["cause"] = "stop_requested"
+			}
+		}
 		inputs = append(inputs, sessionEventInput{eventType: eventType, payload: payload})
 		if err := s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, true, inputs, settlement); err != nil {
 			return domain.Session{}, false, err

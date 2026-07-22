@@ -18,12 +18,20 @@ type Tx struct {
 	MergeRecord *MergeRecordClient
 	// NodeRun is the client for interacting with the NodeRun builders.
 	NodeRun *NodeRunClient
+	// NotificationCheckpoint is the client for interacting with the NotificationCheckpoint builders.
+	NotificationCheckpoint *NotificationCheckpointClient
+	// NotificationConfiguration is the client for interacting with the NotificationConfiguration builders.
+	NotificationConfiguration *NotificationConfigurationClient
+	// NotificationDelivery is the client for interacting with the NotificationDelivery builders.
+	NotificationDelivery *NotificationDeliveryClient
 	// ProcessRun is the client for interacting with the ProcessRun builders.
 	ProcessRun *ProcessRunClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
 	// PromptAppend is the client for interacting with the PromptAppend builders.
 	PromptAppend *PromptAppendClient
+	// PushSubscription is the client for interacting with the PushSubscription builders.
+	PushSubscription *PushSubscriptionClient
 	// QuestionBatch is the client for interacting with the QuestionBatch builders.
 	QuestionBatch *QuestionBatchClient
 	// QuickCommand is the client for interacting with the QuickCommand builders.
@@ -170,9 +178,13 @@ func (tx *Tx) init() {
 	tx.EventRecord = NewEventRecordClient(tx.config)
 	tx.MergeRecord = NewMergeRecordClient(tx.config)
 	tx.NodeRun = NewNodeRunClient(tx.config)
+	tx.NotificationCheckpoint = NewNotificationCheckpointClient(tx.config)
+	tx.NotificationConfiguration = NewNotificationConfigurationClient(tx.config)
+	tx.NotificationDelivery = NewNotificationDeliveryClient(tx.config)
 	tx.ProcessRun = NewProcessRunClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.PromptAppend = NewPromptAppendClient(tx.config)
+	tx.PushSubscription = NewPushSubscriptionClient(tx.config)
 	tx.QuestionBatch = NewQuestionBatchClient(tx.config)
 	tx.QuickCommand = NewQuickCommandClient(tx.config)
 	tx.Session = NewSessionClient(tx.config)

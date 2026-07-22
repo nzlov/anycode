@@ -119,7 +119,7 @@ test('mobile command controls share a 44px touch contract', () => {
 });
 
 test('shared pages use compact desktop spacing and no mobile horizontal boundary', () => {
-  assert.match(baseStyles, /\.page-shell\s*{[^}]*padding:\s*24px 12px/s);
+  assert.match(baseStyles, /\.page-shell\s*{[^}]*padding:\s*12px/s);
   assert.match(mobileStyles, /\.page-shell\s*{[^}]*padding:\s*16px 0/s);
 });
 
@@ -184,6 +184,11 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
 
 test('session detail mobile navigation shows one scroll owner at a time', () => {
   assert.match(detailSource, /class="detail-mobile-tabs lt-md"/);
+  assert(
+    detailSource.indexOf('<q-splitter') <
+      detailSource.indexOf('<q-tabs v-model="detailView" class="detail-mobile-tabs lt-md"'),
+    'mobile detail navigation should follow the detail content',
+  );
   assert.match(detailSource, /q-tab name="session"/);
   assert.match(detailSource, /q-tab name="info"/);
   assert.match(detailSource, /q-tab name="changes"/);
@@ -194,10 +199,17 @@ test('session detail mobile navigation shows one scroll owner at a time', () => 
   );
   assert.match(detailSource, /const rightPanelTab = computed/);
   assert.match(detailSource, /GLUE: mobile detail navigation/);
-  assert.match(detailSource, /\.detail-mobile-tabs\s*{[^}]*flex:\s*0\s+0\s+auto/s);
   assert.match(
     detailSource,
-    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page\s*{[^}]*overflow:\s*hidden/s,
+    /\.detail-mobile-tabs\s*{[^}]*flex:\s*0\s+0\s+auto[^}]*border:\s*0[^}]*border-radius:\s*0/s,
+  );
+  assert.match(
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.detail-page\s*{[^}]*padding:\s*0[^}]*overflow:\s*hidden/s,
+  );
+  assert.match(
+    detailSource,
+    /@media \(max-width:\s*1023\.98px\)[\s\S]*?\.stream-card,\s*\.right-panel-card\s*{[^}]*border:\s*0[^}]*border-radius:\s*0/s,
   );
   assert.match(
     detailSource,
@@ -260,6 +272,26 @@ test('session detail desktop splitter keeps one persisted and accessible layout 
   assert.match(
     detailSource,
     /\.detail-splitter\s*>\s*:deep\(\.q-splitter__panel\)\s*{[^}]*overflow:\s*hidden/s,
+  );
+  assert.match(
+    detailSource,
+    /\.right-panel-card\s+:deep\(\.q-tab-panels\)\s*{[^}]*overflow:\s*auto/s,
+  );
+  assert.doesNotMatch(
+    detailSource,
+    /\.right-panel-card\s+:deep\(\.q-tab-panels\)\s*{[^}]*overflow-x:\s*hidden/s,
+  );
+  assert.match(
+    detailSource,
+    /\.append-history\s*{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
+  );
+  assert.match(
+    detailSource,
+    /\.append-history\s+:deep\(\.q-item__section--main\)\s*{[^}]*flex-wrap:\s*nowrap/s,
+  );
+  assert.match(
+    detailSource,
+    /\.append-history__attachments\s+:deep\(\.q-chip\)\s*{[^}]*margin:\s*0[^}]*max-width:\s*100%/s,
   );
   assert.match(
     detailSource,

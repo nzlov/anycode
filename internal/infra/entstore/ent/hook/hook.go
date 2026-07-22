@@ -45,6 +45,42 @@ func (f NodeRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NodeRunMutation", m)
 }
 
+// The NotificationCheckpointFunc type is an adapter to allow the use of ordinary
+// function as NotificationCheckpoint mutator.
+type NotificationCheckpointFunc func(context.Context, *ent.NotificationCheckpointMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NotificationCheckpointFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NotificationCheckpointMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NotificationCheckpointMutation", m)
+}
+
+// The NotificationConfigurationFunc type is an adapter to allow the use of ordinary
+// function as NotificationConfiguration mutator.
+type NotificationConfigurationFunc func(context.Context, *ent.NotificationConfigurationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NotificationConfigurationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NotificationConfigurationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NotificationConfigurationMutation", m)
+}
+
+// The NotificationDeliveryFunc type is an adapter to allow the use of ordinary
+// function as NotificationDelivery mutator.
+type NotificationDeliveryFunc func(context.Context, *ent.NotificationDeliveryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f NotificationDeliveryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.NotificationDeliveryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.NotificationDeliveryMutation", m)
+}
+
 // The ProcessRunFunc type is an adapter to allow the use of ordinary
 // function as ProcessRun mutator.
 type ProcessRunFunc func(context.Context, *ent.ProcessRunMutation) (ent.Value, error)
@@ -79,6 +115,18 @@ func (f PromptAppendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PromptAppendMutation", m)
+}
+
+// The PushSubscriptionFunc type is an adapter to allow the use of ordinary
+// function as PushSubscription mutator.
+type PushSubscriptionFunc func(context.Context, *ent.PushSubscriptionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PushSubscriptionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PushSubscriptionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PushSubscriptionMutation", m)
 }
 
 // The QuestionBatchFunc type is an adapter to allow the use of ordinary

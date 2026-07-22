@@ -11,6 +11,7 @@ import (
 	"github.com/nzlov/anycode/internal/application/apperror"
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
+	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	"github.com/nzlov/anycode/internal/application/port"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
@@ -19,6 +20,7 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
+	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
@@ -213,6 +215,33 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 	}
 	if settings.appearanceInput.WallpaperColorScheme != settingdomain.WallpaperColorSchemeFruitSalad || updated.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
 		t.Fatalf("update input=%#v result=%#v", settings.appearanceInput, updated)
+	}
+}
+
+func TestWebPushResolversForwardPrincipalAndSubscription(t *testing.T) {
+	notifications := &fakeNotificationUseCase{
+		config:       notificationapp.ConfigDTO{Enabled: true, PublicKey: "public"},
+		registration: notificationapp.SubscriptionDTO{ID: "subscription-1"},
+	}
+	resolver := NewResolver(UseCases{Notifications: notifications})
+	ctx := WithPrincipal(context.Background(), authdomain.AccessPrincipal{KeyHash: "principal", Kind: "test"})
+
+	config, err := resolver.Query().WebPushConfig(ctx)
+	if err != nil || !config.Enabled || config.PublicKey != "public" {
+		t.Fatalf("WebPushConfig() = %#v, %v", config, err)
+	}
+	registered, err := resolver.Mutation().RegisterPushSubscription(ctx, model.RegisterPushSubscriptionInput{
+		Endpoint: "https://push.example/1", P256dh: "p256dh", Auth: "auth",
+	})
+	if err != nil || registered.ID != "subscription-1" {
+		t.Fatalf("RegisterPushSubscription() = %#v, %v", registered, err)
+	}
+	if notifications.registerInput.PrincipalKeyHash != "principal" || notifications.registerInput.Endpoint != "https://push.example/1" {
+		t.Fatalf("register input = %#v", notifications.registerInput)
+	}
+	unregistered, err := resolver.Mutation().UnregisterPushSubscription(ctx, "subscription-1")
+	if err != nil || !unregistered || notifications.unregisterInput.PrincipalKeyHash != "principal" || notifications.unregisterInput.ID != "subscription-1" {
+		t.Fatalf("UnregisterPushSubscription() = %t, input = %#v, error = %v", unregistered, notifications.unregisterInput, err)
 	}
 }
 
@@ -1122,6 +1151,28 @@ type fakeSettingUseCase struct {
 	createInput      settingapp.CreateQuickCommandInput
 	createResult     settingapp.QuickCommandDTO
 	deleteInput      settingapp.DeleteQuickCommandInput
+}
+
+type fakeNotificationUseCase struct {
+	notificationapp.UseCase
+	config          notificationapp.ConfigDTO
+	registration    notificationapp.SubscriptionDTO
+	registerInput   notificationapp.RegisterSubscriptionInput
+	unregisterInput notificationapp.UnregisterSubscriptionInput
+}
+
+func (f *fakeNotificationUseCase) GetConfig(context.Context) (notificationapp.ConfigDTO, error) {
+	return f.config, nil
+}
+
+func (f *fakeNotificationUseCase) RegisterSubscription(_ context.Context, input notificationapp.RegisterSubscriptionInput) (notificationapp.SubscriptionDTO, error) {
+	f.registerInput = input
+	return f.registration, nil
+}
+
+func (f *fakeNotificationUseCase) UnregisterSubscription(_ context.Context, input notificationapp.UnregisterSubscriptionInput) error {
+	f.unregisterInput = input
+	return nil
 }
 
 func (f *fakeSettingUseCase) GetAppearanceSettings(context.Context) (settingapp.AppearanceSettingsDTO, error) {

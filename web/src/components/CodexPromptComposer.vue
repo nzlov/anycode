@@ -14,6 +14,8 @@
     :show-badge="showBadge"
     :force-config-menu="forceConfigMenu"
     :readonly-config="readonlyConfig"
+    :collapsible="collapsible"
+    :collapsed="collapsed"
     @update:prompt="emit('update:prompt', $event)"
     @update:files="emit('update:files', $event)"
     @update:artifacts="emit('update:artifacts', $event)"
@@ -21,14 +23,19 @@
     @update:effort="emit('update:effort', $event)"
     @update:permission="emit('update:permission', $event)"
     @update:fast="emit('update:fast', $event)"
+    @update:collapsed="emit('update:collapsed', $event)"
     @submit="emit('submit')"
   >
-    <template #actions>
+    <template #quick-actions>
       <q-btn
         flat
         :round="compact"
         :no-caps="!compact"
-        :class="compact ? 'quick-reply-btn app-icon-btn' : 'quick-reply-btn app-command-btn'"
+        :class="
+          compact
+            ? 'quick-reply-btn app-icon-btn'
+            : 'quick-reply-btn app-command-btn'
+        "
         icon="bolt"
         :label="compact ? undefined : '快捷回复'"
         :aria-label="compact ? '快捷回复' : undefined"
@@ -86,6 +93,8 @@
           </div>
         </q-menu>
       </q-btn>
+    </template>
+    <template #actions>
       <slot name="actions" />
     </template>
   </PromptComposer>
@@ -100,7 +109,7 @@ import { normalizeCodexSelection } from '@/components/promptOptions';
 import { useQuickCommands } from '@/composables/useQuickCommands';
 import { listCodexModelOptions } from '@/services/codexOptions';
 import { appendQuickCommand } from '@/services/quickCommandText';
-import { hasStoredSessionConfig } from '@/services/sessionConfigCache';
+import { hasStoredSessionConfig } from '@/services/newSessionPreferences';
 import type { SessionFile } from '@/services/sessionFiles';
 
 const props = withDefaults(
@@ -119,6 +128,8 @@ const props = withDefaults(
     showBadge?: boolean;
     forceConfigMenu?: boolean;
     readonlyConfig?: boolean;
+    collapsible?: boolean;
+    collapsed?: boolean;
   }>(),
   {
     title: '',
@@ -128,6 +139,8 @@ const props = withDefaults(
     showBadge: true,
     forceConfigMenu: false,
     readonlyConfig: false,
+    collapsible: false,
+    collapsed: false,
     artifacts: () => [],
   },
 );
@@ -140,6 +153,7 @@ const emit = defineEmits<{
   'update:effort': [value: string];
   'update:permission': [value: string];
   'update:fast': [value: boolean];
+  'update:collapsed': [value: boolean];
   submit: [];
 }>();
 
@@ -156,6 +170,7 @@ const quickCommandPageMax = computed(() =>
 
 function applyQuickCommand(command: string) {
   emit('update:prompt', appendQuickCommand(props.prompt, command));
+  if (props.collapsible) emit('update:collapsed', false);
 }
 
 function refreshQuickCommands() {
