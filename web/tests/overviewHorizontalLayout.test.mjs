@@ -76,6 +76,10 @@ test('overview view mode persists across page changes and reloads', () => {
 test('horizontal overview renders one independently resized component per visible session', () => {
   assert.match(indexSource, /<OverviewHorizontalSession[\s\S]*v-for="card in horizontalCards"/);
   assert.match(indexSource, /const minSessionColumnWidth = 320/);
+  assert.match(
+    indexSource,
+    /sessionColumnWidths\.value\[sessionId\][\s\S]*?Math\.max\(minSessionColumnWidth, Math\.round\(\$q\.screen\.width \/ 3\)\)/,
+  );
   assert.match(indexSource, /@update:width="setSessionColumnWidth\(card\.id, \$event\)"/);
   assert.match(horizontalSessionSource, /role="separator"/);
   assert.match(horizontalSessionSource, /Math\.max\(props\.minWidth, Math\.round\(value\)\)/);

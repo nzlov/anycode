@@ -514,7 +514,6 @@ const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
 const horizontalWidthStorageKey = 'anycode.overview.horizontal-widths.v1';
-const defaultSessionColumnWidth = 480;
 const minSessionColumnWidth = 320;
 const todoMenuHideDelay = 120;
 const { overviewViewMode } = useOverviewViewMode();
@@ -721,7 +720,10 @@ function readSessionColumnWidths() {
 }
 
 function sessionColumnWidth(sessionId: string) {
-  return sessionColumnWidths.value[sessionId] ?? defaultSessionColumnWidth;
+  return (
+    sessionColumnWidths.value[sessionId] ??
+    Math.max(minSessionColumnWidth, Math.round($q.screen.width / 3))
+  );
 }
 
 function setSessionColumnWidth(sessionId: string, width: number) {
