@@ -162,7 +162,7 @@
       </q-card>
     </div>
 
-    <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.sm" @hide="handlePreviewDialogHide">
+    <q-dialog v-model="previewOpen" @hide="handlePreviewDialogHide">
       <q-card class="artifact-preview-dialog app-content-dialog">
         <q-card-section class="artifact-preview-header">
           <div class="artifact-preview-title">
@@ -195,7 +195,8 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Dialog, Notify } from 'quasar';
+import { Dialog, Notify, useQuasar } from 'quasar';
+import { useRouter } from 'vue-router';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import {
@@ -221,6 +222,8 @@ const emit = defineEmits<{
   artifactsRefreshed: [];
   referenceArtifact: [file: SessionFile];
 }>();
+const $q = useQuasar();
+const router = useRouter();
 const files = ref<SessionFile[]>([]);
 const panelElement = ref<HTMLElement | null>(null);
 const loading = ref(false);
@@ -294,6 +297,13 @@ async function refresh() {
 }
 
 function openPreview(file: SessionFile) {
+  if ($q.screen.lt.sm) {
+    void router.push({
+      name: 'session-artifact',
+      params: { id: props.sessionId, fileId: file.id },
+    });
+    return;
+  }
   selected.value = file;
   if (!inlinePreviewActive.value) previewOpen.value = true;
 }

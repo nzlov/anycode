@@ -1,13 +1,13 @@
 <template>
-  <q-dialog
-    :model-value="dialogVisible"
-    :maximized="!panel && $q.screen.lt.sm"
+  <component
+    :is="page ? 'div' : QDialog"
+    :model-value="page ? undefined : dialogVisible"
     :seamless="panel"
     :no-focus="panel"
     :no-refocus="panel"
     :class="{ 'new-session-panel-host': panel }"
     persistent
-    @update:model-value="emitModel"
+    @update:model-value="page ? undefined : emitModel($event)"
   >
     <q-card
       class="new-session-dialog app-content-dialog"
@@ -19,7 +19,6 @@
         <div class="text-subtitle1 text-weight-bold">新建卡片</div>
         <q-space />
         <q-btn
-          v-close-popup
           flat
           round
           dense
@@ -27,6 +26,7 @@
           icon="close"
           aria-label="关闭"
           :disable="creating"
+          @click="emitModel(false)"
         >
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
@@ -157,12 +157,12 @@
 
       <q-inner-loading :showing="branchesLoading" color="primary" />
     </q-card>
-  </q-dialog>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Notify, useQuasar } from 'quasar';
+import { Notify, QDialog, useQuasar } from 'quasar';
 
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';
@@ -181,6 +181,7 @@ const props = defineProps<{
   modelValue: boolean;
   defaultProjectId?: string;
   panel?: boolean;
+  page?: boolean;
 }>();
 
 const emit = defineEmits<{

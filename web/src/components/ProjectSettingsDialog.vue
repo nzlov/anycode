@@ -1,7 +1,7 @@
 <template>
-  <q-dialog
-    :model-value="modelValue"
-    :maximized="$q.screen.lt.sm"
+  <component
+    :is="page ? 'div' : QDialog"
+    :model-value="page ? undefined : modelValue"
     :persistent="saving"
     aria-label="项目设置"
     @update:model-value="emitModel"
@@ -11,7 +11,6 @@
         <div class="text-subtitle1 text-weight-bold">项目设置</div>
         <q-space />
         <q-btn
-          v-close-popup
           flat
           round
           dense
@@ -19,6 +18,7 @@
           icon="close"
           aria-label="关闭"
           :disable="saving"
+          @click="emitModel(false)"
         >
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
@@ -40,7 +40,6 @@
 
       <q-card-actions align="right">
         <q-btn
-          v-close-popup
           flat
           round
           class="app-icon-btn"
@@ -48,6 +47,7 @@
           color="primary"
           aria-label="取消"
           :disable="saving"
+          @click="emitModel(false)"
         >
           <q-tooltip>取消</q-tooltip>
         </q-btn>
@@ -64,12 +64,12 @@
         />
       </q-card-actions>
     </q-card>
-  </q-dialog>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { useQuasar } from 'quasar';
+import { QDialog, useQuasar } from 'quasar';
 
 import { useProjects } from '@/composables/useProjects';
 import type { ProjectSummary } from '@/services/projects';
@@ -77,6 +77,7 @@ import type { ProjectSummary } from '@/services/projects';
 const props = defineProps<{
   modelValue: boolean;
   project: ProjectSummary | null;
+  page?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -95,6 +96,7 @@ watch(
       worktreeInitCommand.value = props.project?.worktreeInitCommand ?? '';
     }
   },
+  { immediate: true },
 );
 
 function emitModel(value: boolean) {

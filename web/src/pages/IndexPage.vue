@@ -307,7 +307,6 @@
 
     <q-dialog
       v-model="approvalDialog"
-      :maximized="$q.screen.lt.sm"
       @hide="handleApprovalDialogClosed"
     >
       <q-card class="forward-approval-dialog app-content-dialog">
@@ -374,7 +373,7 @@
       </q-card>
     </q-dialog>
 
-    <q-dialog v-model="diffDialog" :maximized="$q.screen.lt.sm" @hide="handleDiffDialogClosed">
+    <q-dialog v-model="diffDialog" @hide="handleDiffDialogClosed">
       <q-card class="overview-diff-dialog app-content-dialog">
         <div class="overview-diff-dialog__header">
           <div class="text-subtitle1 text-weight-bold">Diff</div>
@@ -406,7 +405,6 @@
 
     <q-dialog
       v-model="artifactDialog"
-      :maximized="$q.screen.lt.sm"
       @hide="handleArtifactDialogClosed"
     >
       <q-card class="overview-artifact-dialog app-content-dialog">
@@ -925,6 +923,10 @@ async function closeCard(card: SessionCard) {
 }
 
 async function openAnswerDialog(sessionId: string) {
+  if ($q.screen.lt.sm) {
+    await router.push({ name: 'session-detail', params: { id: sessionId } });
+    return;
+  }
   const requestGeneration = ++questionRequestGeneration;
   activeQuestionSessionId.value = sessionId;
   pendingQuestionBatches.value = [];
@@ -965,6 +967,10 @@ async function submitAnswers(batchId: string, answers: QuestionAnswerInput[]) {
 }
 
 async function openApprovalDialog(card: SessionCard) {
+  if ($q.screen.lt.sm) {
+    await router.push({ name: 'session-detail', params: { id: card.id } });
+    return;
+  }
   const requestGeneration = ++approvalContextGeneration;
   approvalSessionId.value = card.id;
   approvalTab.value = 'output';
@@ -1073,6 +1079,10 @@ function isCurrentApprovalContext(requestGeneration: number, sessionId: string) 
 }
 
 function openDiffDialog(card: SessionCard) {
+  if ($q.screen.lt.sm) {
+    void router.push({ path: '/diff', query: { sessionId: card.id, mode: 'all' } });
+    return;
+  }
   diffDialogSessionId.value = card.id;
   diffDialogWorkspaceState.value = { mode: 'all', filePath: '' };
   diffDialog.value = true;
@@ -1087,6 +1097,10 @@ function handleDiffDialogClosed() {
 }
 
 function openArtifactDialog(card: SessionCard) {
+  if ($q.screen.lt.sm) {
+    void router.push({ name: 'session-artifacts', params: { id: card.id } });
+    return;
+  }
   artifactDialogSessionId.value = card.id;
   artifactDialog.value = true;
 }

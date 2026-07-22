@@ -1,7 +1,6 @@
 <template>
   <q-dialog
     :model-value="modelValue"
-    :maximized="$q.screen.lt.sm"
     persistent
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -23,13 +22,13 @@
             <q-tooltip>打开完整 Diff 页面</q-tooltip>
           </q-btn>
           <q-btn
-            v-close-popup
             flat
             round
             dense
             icon="close"
             aria-label="关闭"
             :disable="submitting"
+            @click="emit('update:modelValue', false)"
           >
             <q-tooltip>关闭</q-tooltip>
           </q-btn>

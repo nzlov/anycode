@@ -197,6 +197,42 @@ a {
   padding: 12px;
 }
 
+.surface-page {
+  width: 100%;
+  max-width: 960px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+.surface-page--wide {
+  max-width: 1280px;
+}
+
+.surface-page__card {
+  min-height: calc(100dvh - 74px);
+}
+
+.surface-page__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.surface-page__body {
+  min-height: 0;
+}
+
+.surface-page .app-content-dialog {
+  width: 100%;
+  max-width: none;
+  height: auto !important;
+  max-height: none !important;
+  box-shadow: none;
+}
+
 .page-shell.workbench-page {
   padding-bottom: 88px;
 }
@@ -2087,12 +2123,11 @@ body.desktop
   }
 
   .app-content-dialog {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    height: 100dvh !important;
-    min-height: 100dvh !important;
-    max-height: 100dvh !important;
-    border-radius: 0;
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: calc(100dvh - 24px) !important;
   }
 
   .global-settings-grid {

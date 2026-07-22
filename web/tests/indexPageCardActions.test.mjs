@@ -241,7 +241,11 @@ test('overview waiting approval dialog shows model output and diff before submit
   assert.match(overviewSource, /aria-label="关闭人工审核"/);
   assert.match(
     overviewSource,
-    /<q-dialog[\s\S]*?v-model="approvalDialog"[\s\S]*?:maximized="\$q\.screen\.lt\.sm"[\s\S]*?@hide="handleApprovalDialogClosed"/,
+    /<q-dialog[\s\S]*?v-model="approvalDialog"[\s\S]*?@hide="handleApprovalDialogClosed"/,
+  );
+  assert.match(
+    overviewSource,
+    /openApprovalDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-detail'/,
   );
   assert.match(overviewSource, /submitWorkflowApproval\(/);
   assert.doesNotMatch(overviewSource, /approvalRejectPrompt|recentModelOutput/);
@@ -336,7 +340,11 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.doesNotMatch(overviewSource, /loadSummaries|syncPolling|visibilitychange/);
   assert.match(
     overviewSource,
-    /<q-dialog[\s\S]*?v-model="diffDialog"[\s\S]*?:maximized="\$q\.screen\.lt\.sm"/,
+    /<q-dialog v-model="diffDialog" @hide="handleDiffDialogClosed"/,
+  );
+  assert.match(
+    overviewSource,
+    /openDiffDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*path: '\/diff'/,
   );
   assert.match(overviewSource, /<DiffWorkspace[\s\S]*:target="diffDialogTarget"/);
   assert.match(overviewSource, /v-model="diffDialogWorkspaceState"/);
@@ -426,7 +434,11 @@ test('overview cards open the full artifact panel from a subscribed count', () =
   assert.match(overviewSource, /:session-id="artifactDialogSessionId"[\s\S]*?inline-preview/);
   assert.match(
     overviewSource,
-    /<q-dialog[\s\S]*v-model="artifactDialog"[\s\S]*:maximized="\$q\.screen\.lt\.sm"/,
+    /<q-dialog[\s\S]*v-model="artifactDialog"[\s\S]*@hide="handleArtifactDialogClosed"/,
+  );
+  assert.match(
+    overviewSource,
+    /openArtifactDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-artifacts'/,
   );
   assert.match(stylesSource, /\.overview-artifact-dialog__body\s*{[^}]*overflow:\s*auto/s);
 });

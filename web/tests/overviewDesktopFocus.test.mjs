@@ -21,7 +21,7 @@ test('desktop overview replaces the create FAB with the persistent create panel'
   assert.match(layoutSource, /const showOverviewCreatePanel = computed/);
 
   assert.match(newSessionSource, /panel\?: boolean/);
-  assert.match(newSessionSource, /:model-value="dialogVisible"/);
+  assert.match(newSessionSource, /:model-value="page \? undefined : dialogVisible"/);
   assert.match(newSessionSource, /:seamless="panel"/);
   assert.match(newSessionSource, /:no-focus="panel"/);
   assert.match(newSessionSource, /new-session-dialog--panel/);

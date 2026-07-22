@@ -24,16 +24,26 @@ test('session detail opens a body-only dialog without local status gating', () =
     new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
     'utf8',
   );
+  const panelSource = readFileSync(
+    new URL('../src/components/PromptAppendEditPanel.vue', import.meta.url),
+    'utf8',
+  );
+  const routePageSource = readFileSync(
+    new URL('../src/pages/PromptAppendEditPage.vue', import.meta.url),
+    'utf8',
+  );
   const openBlock = pageSource.slice(
     pageSource.indexOf('function openPromptAppendEditor'),
     pageSource.indexOf('async function savePromptAppendEdit'),
   );
 
   assert.match(pageSource, /@click="openPromptAppendEditor\(item\)"/);
-  assert.match(pageSource, /v-model="promptEditBody"/);
-  assert.match(pageSource, /附件保持不变/);
-  assert.match(pageSource, /:disable="!canSavePromptAppendEdit"/);
+  assert.match(pageSource, /v-model:body="promptEditBody"/);
+  assert.match(panelSource, /附件保持不变/);
+  assert.match(pageSource, /:can-save="canSavePromptAppendEdit"/);
   assert.match(pageSource, /body && body !== target\.body\.trim\(\)/);
+  assert.match(routePageSource, /<PromptAppendEditPanel/);
+  assert.match(openBlock, /name: 'prompt-append-edit'/);
   assert.doesNotMatch(openBlock, /session\.value\?\.status/);
 });
 

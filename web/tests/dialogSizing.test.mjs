@@ -16,7 +16,11 @@ const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const composerSource = readSource('../src/components/PromptComposer.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
 const detailSource = readSource('../src/pages/SessionDetailPage.vue');
+const promptEditSource = readSource('../src/components/PromptAppendEditPanel.vue');
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
+const routesSource = readSource('../src/router/routes.ts');
+const settingsPageSource = readSource('../src/pages/SettingsPage.vue');
+const newSessionPageSource = readSource('../src/pages/NewSessionPage.vue');
 
 const contentDialogs = [
   [newSessionSource, 'new-session-dialog'],
@@ -27,23 +31,24 @@ const contentDialogs = [
   [indexSource, 'forward-approval-dialog'],
   [indexSource, 'overview-diff-dialog'],
   [composerSource, 'attachment-preview-card'],
-  [detailSource, 'prompt-edit-dialog'],
+  [promptEditSource, 'prompt-edit-dialog'],
   [detailSource, 'event-resource-dialog'],
 ];
 
-test('one shared class owns content dialog sizing at the 600px breakpoint', () => {
+test('one shared class keeps fallback content dialogs compact at the 600px breakpoint', () => {
   assert.match(
     stylesSource,
     /\.app-content-dialog\s*{[^}]*width:\s*90vw\s*!important[^}]*max-width:\s*90vw\s*!important[^}]*max-height:\s*90dvh/s,
   );
   assert.match(
     stylesSource,
-    /@media \(max-width:\s*599\.98px\)[\s\S]*?\.app-content-dialog\s*{[^}]*width:\s*100vw\s*!important[^}]*height:\s*100dvh[^}]*max-height:\s*100dvh[^}]*border-radius:\s*0/s,
+    /@media \(max-width:\s*599\.98px\)[\s\S]*?\.app-content-dialog\s*{[^}]*width:\s*calc\(100vw - 24px\)\s*!important[^}]*height:\s*auto\s*!important[^}]*max-height:\s*calc\(100dvh - 24px\)\s*!important/s,
   );
+  assert.match(stylesSource, /\.surface-page \.app-content-dialog\s*{[^}]*width:\s*100%[^}]*max-height:\s*none/s);
   assert.doesNotMatch(stylesSource, /\.app-content-dialog\s*{[^}]*max-width:\s*\d+px/s);
 });
 
-test('all content dialogs use the shared card class and Quasar mobile maximization', () => {
+test('content dialogs keep shared cards while mobile entries use route pages', () => {
   for (const [source, semanticClass] of contentDialogs) {
     assert.match(
       source,
@@ -52,24 +57,16 @@ test('all content dialogs use the shared card class and Quasar mobile maximizati
     );
   }
 
-  assert.match(
-    newSessionSource,
-    /<q-dialog[\s\S]{0,180}:maximized="!panel && \$q\.screen\.lt\.sm"/,
+  assert.doesNotMatch(
+    [newSessionSource, globalSettingsSource, projectSettingsSource, directorySource, answerSource, indexSource, composerSource, detailSource].join('\n'),
+    /:maximized=/,
   );
-  for (const source of [
-    globalSettingsSource,
-    projectSettingsSource,
-    directorySource,
-    answerSource,
-    indexSource,
-    composerSource,
-  ]) {
-    assert.match(source, /<q-dialog[\s\S]{0,180}:maximized="\$q\.screen\.lt\.sm"/);
-  }
-  assert.equal(
-    (detailSource.match(/<q-dialog[^>]*:maximized="\$q\.screen\.lt\.sm"/g) ?? []).length,
-    2,
-  );
+  assert.match(routesSource, /name: 'new-session'/);
+  assert.match(routesSource, /name: 'settings'/);
+  assert.match(newSessionPageSource, /<NewSessionDialog[\s\S]*page/);
+  assert.match(settingsPageSource, /<GlobalSettingsDialog page/);
+  assert.match(layoutSource, /if \(\$q\.screen\.lt\.sm\)[\s\S]*name: 'new-session'/);
+  assert.match(layoutSource, /if \(\$q\.screen\.lt\.sm\)[\s\S]*name: 'settings'/);
 });
 
 test('compact confirmation dialogs do not use the content dialog contract', () => {

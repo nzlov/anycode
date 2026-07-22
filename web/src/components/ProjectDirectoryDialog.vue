@@ -1,7 +1,7 @@
 <template>
-  <q-dialog
-    :model-value="modelValue"
-    :maximized="$q.screen.lt.sm"
+  <component
+    :is="page ? 'div' : QDialog"
+    :model-value="page ? undefined : modelValue"
     :persistent="persistent"
     @update:model-value="emitModel"
   >
@@ -9,7 +9,7 @@
       <q-card-section class="row items-center q-pb-sm">
         <div class="text-subtitle1 text-weight-bold">选择项目目录</div>
         <q-space />
-        <q-btn v-if="!persistent" v-close-popup flat round dense icon="close" aria-label="关闭">
+        <q-btn v-if="!persistent" flat round dense icon="close" aria-label="关闭" @click="emitModel(false)">
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
       </q-card-section>
@@ -106,7 +106,7 @@
       </q-card-section>
 
       <q-card-actions class="directory-dialog__actions">
-        <q-btn v-if="!persistent" v-close-popup flat round color="primary" icon="close" aria-label="取消">
+        <q-btn v-if="!persistent" flat round color="primary" icon="close" aria-label="取消" @click="emitModel(false)">
           <q-tooltip>取消</q-tooltip>
         </q-btn>
         <q-btn
@@ -122,11 +122,12 @@
         />
       </q-card-actions>
     </q-card>
-  </q-dialog>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { QDialog } from 'quasar';
 
 import { useDirectoryBrowser } from '@/composables/useDirectoryBrowser';
 import type { DirectoryEntry } from '@/services/projects';
@@ -135,6 +136,7 @@ import { useProjects } from '@/composables/useProjects';
 const props = defineProps<{
   modelValue: boolean;
   persistent?: boolean;
+  page?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -162,6 +164,7 @@ watch(
       void goToPath(pathInput.value || '/');
     }
   },
+  { immediate: true },
 );
 
 watch(currentPath, (path) => {

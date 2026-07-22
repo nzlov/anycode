@@ -1,14 +1,14 @@
 <template>
-  <q-dialog
-    :model-value="modelValue"
-    :maximized="$q.screen.lt.sm"
-    @update:model-value="emit('update:modelValue', $event)"
+  <component
+    :is="page ? 'div' : QDialog"
+    :model-value="page ? undefined : modelValue"
+    @update:model-value="page ? undefined : emit('update:modelValue', $event)"
   >
     <q-card class="global-settings-dialog app-content-dialog">
       <q-card-section class="global-settings-header row items-center">
         <div class="text-subtitle1 text-weight-bold">全局设置</div>
         <q-space />
-        <q-btn v-close-popup flat round dense class="app-icon-btn" icon="close" aria-label="关闭">
+        <q-btn flat round dense class="app-icon-btn" icon="close" aria-label="关闭" @click="close">
           <q-tooltip>关闭</q-tooltip>
         </q-btn>
       </q-card-section>
@@ -151,7 +151,7 @@
             icon="add"
             aria-label="新增项目"
             :disable="projectsLoading"
-            @click="directoryDialogOpen = true"
+            @click="openProjectDirectory"
           >
             <q-tooltip>新增项目</q-tooltip>
           </q-btn>
@@ -473,11 +473,12 @@
         </q-card>
       </q-dialog>
     </q-card>
-  </q-dialog>
+  </component>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { QDialog, useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import AppPagination from '@/components/AppPagination.vue';
@@ -503,6 +504,7 @@ import type { WallpaperColorScheme } from '@/theme/dailyBackgroundModel';
 
 const props = defineProps<{
   modelValue: boolean;
+  page?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -511,6 +513,7 @@ const emit = defineEmits<{
 
 const route = useRoute();
 const router = useRouter();
+const $q = useQuasar();
 const activeSection = ref<'projects' | 'appearance' | 'notifications' | 'quick_commands'>(
   'projects',
 );
@@ -657,17 +660,31 @@ async function saveWallpaperColorScheme(scheme: WallpaperColorScheme) {
 }
 
 function openProjectOverview(projectId: string) {
-  emit('update:modelValue', false);
+  close();
   void router.push({ name: 'overview', query: { projectId } });
 }
 
 function openProjectSettings(project: ProjectSummary) {
+  if ($q.screen.lt.sm || props.page) {
+    close();
+    void router.push({ name: 'project-settings', params: { projectId: project.id } });
+    return;
+  }
   settingsProject.value = project;
   projectSettingsOpen.value = true;
 }
 
+function openProjectDirectory() {
+  if ($q.screen.lt.sm || props.page) {
+    close();
+    void router.push({ name: 'project-create' });
+    return;
+  }
+  directoryDialogOpen.value = true;
+}
+
 function openWorkflowConfig(projectId: string) {
-  emit('update:modelValue', false);
+  close();
   void router.push({ name: 'workflow-config', params: { projectId } });
 }
 
@@ -685,12 +702,16 @@ async function removeSelectedProject() {
     await removeProjectById(projectId);
     removeProjectDialogOpen.value = false;
     if (route.query.projectId === projectId || route.params.projectId === projectId) {
-      emit('update:modelValue', false);
+      close();
       await router.push({ name: 'overview' });
     }
   } finally {
     removingProject.value = false;
   }
+}
+
+function close() {
+  emit('update:modelValue', false);
 }
 
 function startAdd() {

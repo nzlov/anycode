@@ -22,6 +22,8 @@ const diffPageSource = readSource('../src/pages/DiffPage.vue');
 const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const diffViewerSource = readSource('../src/components/DiffViewer.vue');
 const commitHistorySource = readSource('../src/pages/CommitHistoryPage.vue');
+const routesSource = readSource('../src/router/routes.ts');
+const newSessionPageSource = readSource('../src/pages/NewSessionPage.vue');
 const headlessE2ESource = readSource('../../scripts/headless-e2e.mjs');
 const stylesSource = readSource('../src/css/app.scss');
 const baseStyles = stylesSource.slice(0, stylesSource.indexOf('@media'));
@@ -40,8 +42,11 @@ test('prompt runtime controls have one shared component owner', () => {
   assert.doesNotMatch(composerSource, /<q-select/);
 });
 
-test('new session dialog uses Quasar mobile maximization and one scrolling body', () => {
-  assert.match(newSessionSource, /:maximized="!panel && \$q\.screen\.lt\.sm"/);
+test('new session mobile entry uses a page and keeps one scrolling body', () => {
+  assert.doesNotMatch(newSessionSource, /:maximized=/);
+  assert.match(newSessionSource, /page\?: boolean/);
+  assert.match(newSessionPageSource, /<NewSessionDialog[\s\S]*page/);
+  assert.match(routesSource, /name: 'new-session'/);
   assert.match(newSessionSource, /const \$q = useQuasar\(\)/);
   assert.match(newSessionSource, /class="new-session-dialog app-content-dialog"/);
   assert.match(
@@ -51,16 +56,17 @@ test('new session dialog uses Quasar mobile maximization and one scrolling body'
   assert.match(stylesSource, /\.new-session-body\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(
     smallStyles,
-    /\.app-content-dialog\s*{[^}]*width:\s*100vw\s*!important[^}]*height:\s*100dvh/s,
+    /\.app-content-dialog\s*{[^}]*width:\s*calc\(100vw - 24px\)\s*!important[^}]*height:\s*auto/s,
   );
 });
 
-test('answer user dialog uses Quasar mobile maximization without viewport clipping', () => {
-  assert.match(answerUserSource, /:maximized="\$q\.screen\.lt\.sm"/);
+test('answer user mobile entry opens session detail without maximizing the desktop dialog', () => {
+  assert.doesNotMatch(answerUserSource, /:maximized=/);
+  assert.match(indexSource, /openAnswerDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-detail'/);
   assert.match(answerUserSource, /class="answer-dialog app-content-dialog"/);
   assert.match(
     smallStyles,
-    /\.app-content-dialog\s*{[^}]*height:\s*100dvh\s*!important[^}]*max-height:\s*100dvh\s*!important/s,
+    /\.app-content-dialog\s*{[^}]*height:\s*auto\s*!important[^}]*max-height:\s*calc\(100dvh - 24px\)\s*!important/s,
   );
   assert.doesNotMatch(answerUserSource, /@media \(max-width:\s*699px\)/);
 });

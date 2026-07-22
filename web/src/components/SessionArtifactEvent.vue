@@ -34,7 +34,7 @@
       </q-btn>
     </div>
 
-    <q-dialog v-model="previewOpen" :maximized="$q.screen.lt.sm" @hide="clearPreview">
+    <q-dialog v-model="previewOpen" @hide="clearPreview">
       <q-card class="artifact-event-preview app-content-dialog">
         <q-card-section class="artifact-event-preview__header">
           <span>{{ filename }}</span>
@@ -63,7 +63,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
-import { Notify } from 'quasar';
+import { Notify, useQuasar } from 'quasar';
+import { useRoute, useRouter } from 'vue-router';
 
 import { downloadSessionFile, fetchSessionFile } from '@/services/sessionFiles';
 import type { TranscriptItem, TranscriptUnknownContent } from '@/services/sessionTimeline';
@@ -71,6 +72,9 @@ import type { TranscriptItem, TranscriptUnknownContent } from '@/services/sessio
 const props = defineProps<{
   event: TranscriptItem & { content: TranscriptUnknownContent };
 }>();
+const $q = useQuasar();
+const route = useRoute();
+const router = useRouter();
 const payload = computed(() => props.event.content.payload);
 const filename = computed(
   () => payloadString('filename') || payloadString('logicalPath') || '临时文件',
@@ -118,6 +122,12 @@ async function download() {
 }
 
 async function openPreview() {
+  const fileId = payloadString('id');
+  const sessionId = String(route.params.id ?? '');
+  if ($q.screen.lt.sm && fileId && sessionId) {
+    await router.push({ name: 'session-artifact', params: { id: sessionId, fileId } });
+    return;
+  }
   clearPreview();
   previewOpen.value = true;
   previewLoading.value = true;

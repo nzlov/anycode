@@ -464,92 +464,21 @@
 
     <q-dialog
       v-model="promptEditDialogOpen"
-      :maximized="$q.screen.lt.sm"
       :persistent="promptEditSaving"
     >
-      <q-card class="prompt-edit-dialog app-content-dialog" aria-label="编辑追加提示">
-        <q-card-section class="prompt-edit-dialog__header">
-          <div class="text-subtitle1 text-weight-bold">编辑追加提示</div>
-          <q-btn
-            v-close-popup
-            flat
-            round
-            dense
-            class="app-icon-btn"
-            icon="close"
-            aria-label="关闭"
-            :disable="promptEditSaving"
-          >
-            <q-tooltip>关闭</q-tooltip>
-          </q-btn>
-        </q-card-section>
-        <q-separator />
-        <q-card-section class="prompt-edit-dialog__body">
-          <q-banner v-if="promptEditError" dense class="prompt-edit-dialog__error">
-            <template #avatar>
-              <q-icon name="error_outline" />
-            </template>
-            {{ promptEditError }}
-          </q-banner>
-          <q-input
-            v-model="promptEditBody"
-            outlined
-            type="textarea"
-            autogrow
-            label="追加提示正文"
-            :disable="promptEditSaving"
-          />
-          <div
-            v-if="promptEditTarget?.attachments.length || promptEditTarget?.artifacts.length"
-            class="prompt-edit-dialog__attachments"
-          >
-            <div class="text-caption text-muted">附件保持不变</div>
-            <div class="append-history__attachments">
-              <q-chip
-                v-for="attachment in promptEditTarget.attachments"
-                :key="attachment.id"
-                dense
-                square
-                outline
-                icon="attach_file"
-                color="primary"
-                text-color="primary"
-                :label="attachment.filename"
-              />
-              <q-chip
-                v-for="artifact in promptEditTarget.artifacts"
-                :key="artifact.id"
-                dense
-                square
-                outline
-                icon="link"
-                color="primary"
-                text-color="primary"
-                :label="artifact.logicalPath || artifact.filename"
-              />
-            </div>
-          </div>
-        </q-card-section>
-        <q-separator />
-        <q-card-actions align="right">
-          <q-btn v-close-popup flat no-caps icon="close" label="取消" :disable="promptEditSaving" />
-          <q-btn
-            unelevated
-            no-caps
-            color="primary"
-            icon="save"
-            label="保存"
-            :loading="promptEditSaving"
-            :disable="!canSavePromptAppendEdit"
-            @click="savePromptAppendEdit"
-          />
-        </q-card-actions>
-      </q-card>
+      <PromptAppendEditPanel
+        v-model:body="promptEditBody"
+        :target="promptEditTarget"
+        :saving="promptEditSaving"
+        :error="promptEditError"
+        :can-save="canSavePromptAppendEdit"
+        @cancel="promptEditDialogOpen = false"
+        @save="savePromptAppendEdit"
+      />
     </q-dialog>
 
     <q-dialog
       v-model="eventResourceDialogOpen"
-      :maximized="$q.screen.lt.sm"
       @hide="clearEventResource"
     >
       <q-card class="event-resource-dialog app-content-dialog" aria-label="事件文件">
@@ -594,11 +523,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Notify, useQuasar } from 'quasar';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import AnswerUserPanel from '@/components/AnswerUserPanel.vue';
 import CodexPromptComposer from '@/components/CodexPromptComposer.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
+import PromptAppendEditPanel from '@/components/PromptAppendEditPanel.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
@@ -637,6 +567,7 @@ const emit = defineEmits<{
 }>();
 const $q = useQuasar();
 const route = useRoute();
+const router = useRouter();
 const sessionId = String(route.params.id ?? '');
 const defaultRightPanelWidth = 360;
 const minRightPanelWidth = 320;
@@ -822,6 +753,13 @@ async function resolveSessionEventResource(
 }
 
 function openEventDiff(filePath: string) {
+  if ($q.screen.lt.sm) {
+    void router.push({
+      path: '/diff',
+      query: { sessionId, mode: 'single', filePath },
+    });
+    return;
+  }
   eventDiffState.value = { mode: 'single', filePath };
   eventResourceFile.value = null;
   eventResourceKind.value = 'diff';
@@ -829,6 +767,13 @@ function openEventDiff(filePath: string) {
 }
 
 function focusEventArtifact(file: SessionFile) {
+  if ($q.screen.lt.sm) {
+    void router.push({
+      name: 'session-artifact',
+      params: { id: sessionId, fileId: file.id },
+    });
+    return;
+  }
   eventResourceFile.value = file;
   eventResourceKind.value = 'file';
   eventResourceDialogOpen.value = true;
@@ -1117,6 +1062,13 @@ function wasNotified(err: unknown) {
 }
 
 function openPromptAppendEditor(prompt: PromptAppend) {
+  if ($q.screen.lt.sm) {
+    void router.push({
+      name: 'prompt-append-edit',
+      params: { id: sessionId, promptId: prompt.id },
+    });
+    return;
+  }
   promptEditTarget.value = prompt;
   promptEditBody.value = prompt.body;
   promptEditError.value = '';

@@ -27,7 +27,7 @@ test('application shell removes the global drawer and duplicate project entry', 
   assert.match(layoutSource, /\{\{ sessionTitle \|\| '会话详情' \}\}/);
   assert.match(layoutSource, /@session-title="sessionTitle = \$event"/);
   assert.match(layoutSource, /id="app-page-toolbar"/);
-  assert.match(layoutSource, /<GlobalSettingsDialog v-model="settingsDialogOpen"/);
+  assert.match(layoutSource, /<GlobalSettingsDialog[\s\S]*v-model="settingsDialogOpen"/);
 });
 
 test('overview uses project chips and a single icon-only history entry', () => {

@@ -38,7 +38,7 @@
         <q-btn flat round dense class="app-icon-btn" icon="more_vert" aria-label="更多操作">
           <q-menu>
             <q-list dense class="app-touch-list">
-              <q-item v-close-popup clickable @click="settingsDialogOpen = true">
+              <q-item v-close-popup clickable @click="openSettings">
                 <q-item-section avatar>
                   <q-icon name="settings" />
                 </q-item-section>
@@ -83,7 +83,7 @@
     >
       <router-view
         :key="$route.fullPath"
-        @create-session="newSessionOpen = true"
+        @create-session="openNewSession"
         @session-title="sessionTitle = $event"
       />
     </q-page-container>
@@ -106,7 +106,7 @@
         class="app-on-primary"
         icon="add"
         aria-label="新建卡片"
-        @click="newSessionOpen = true"
+        @click="openNewSession"
       >
         <q-tooltip>新建卡片</q-tooltip>
       </q-btn>
@@ -118,7 +118,10 @@
       :default-project-id="newSessionDefaultProjectId"
       :panel="showOverviewCreatePanel"
     />
-    <GlobalSettingsDialog v-model="settingsDialogOpen" v-if="applicationReady" />
+    <GlobalSettingsDialog
+      v-if="applicationReady && !$q.screen.lt.sm"
+      v-model="settingsDialogOpen"
+    />
 
     <q-dialog v-if="applicationReady" v-model="logoutDialogOpen">
       <q-card class="confirm-dialog">
@@ -150,6 +153,7 @@
       </q-card>
     </q-dialog>
     <ProjectDirectoryDialog
+      v-if="!$q.screen.lt.sm"
       :model-value="initialProjectRequired"
       :persistent="initialProjectRequired"
     />
@@ -183,7 +187,11 @@ const { projects, loaded: projectsLoaded, loadProjects } = useProjects();
 const initialProjectRequired = computed(
   () => !checkingProjects.value && projectsLoaded.value && projects.value.length === 0,
 );
-const applicationReady = computed(() => !checkingProjects.value && !initialProjectRequired.value);
+const applicationReady = computed(
+  () =>
+    !checkingProjects.value &&
+    (!initialProjectRequired.value || route.name === 'project-create'),
+);
 const showOverviewCreatePanel = computed(
   () => route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth,
 );
@@ -212,6 +220,35 @@ watch(
     sessionTitle.value = '';
   },
 );
+
+watch(
+  [checkingProjects, initialProjectRequired, () => $q.screen.lt.sm],
+  ([checking, required, mobile]) => {
+    if (checking || !required || !mobile || route.name === 'project-create') return;
+    void router.replace({ name: 'project-create' });
+  },
+  { immediate: true },
+);
+
+function openNewSession() {
+  if ($q.screen.lt.sm) {
+    void router.push(
+      newSessionDefaultProjectId.value
+        ? { name: 'new-session', query: { projectId: newSessionDefaultProjectId.value } }
+        : { name: 'new-session' },
+    );
+    return;
+  }
+  newSessionOpen.value = true;
+}
+
+function openSettings() {
+  if ($q.screen.lt.sm) {
+    void router.push({ name: 'settings' });
+    return;
+  }
+  settingsDialogOpen.value = true;
+}
 
 async function logout() {
   await disablePushNotifications().catch(() => undefined);
