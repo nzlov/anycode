@@ -27,7 +27,8 @@ func TestNotificationRepositoryPersistsConfigurationAndPlansDeliveriesOnce(t *te
 		t.Fatalf("initial configuration exists = %t, error = %v", ok, err)
 	}
 	wantConfig := notificationdomain.Configuration{
-		VAPIDPublicKey: "public", VAPIDPrivateKey: "private", VAPIDSubject: "https://example.test", CreatedAt: now,
+		VAPIDPublicKey: "public", VAPIDPrivateKey: "private", VAPIDSubject: "https://example.test",
+		ProxyURL: "http://proxy.example:8080", CreatedAt: now,
 	}
 	if _, err := repo.CreateConfiguration(ctx, wantConfig); err != nil {
 		t.Fatalf("create configuration: %v", err)
@@ -35,6 +36,14 @@ func TestNotificationRepositoryPersistsConfigurationAndPlansDeliveriesOnce(t *te
 	gotConfig, ok, err := repo.GetConfiguration(ctx)
 	if err != nil || !ok || gotConfig != wantConfig {
 		t.Fatalf("configuration = %#v, %t, %v", gotConfig, ok, err)
+	}
+	wantConfig.ProxyURL = "socks5://proxy.example:1080"
+	if _, err := repo.SetProxyURL(ctx, wantConfig.ProxyURL); err != nil {
+		t.Fatalf("update configuration: %v", err)
+	}
+	gotConfig, ok, err = repo.GetConfiguration(ctx)
+	if err != nil || !ok || gotConfig != wantConfig {
+		t.Fatalf("updated configuration = %#v, %t, %v", gotConfig, ok, err)
 	}
 
 	subscription := notificationdomain.Subscription{

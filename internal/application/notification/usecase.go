@@ -29,6 +29,7 @@ const (
 
 type UseCase interface {
 	GetConfig(ctx context.Context) (ConfigDTO, error)
+	UpdateProxy(ctx context.Context, input UpdateProxyInput) (ConfigDTO, error)
 	RegisterSubscription(ctx context.Context, input RegisterSubscriptionInput) (SubscriptionDTO, error)
 	UnregisterSubscription(ctx context.Context, input UnregisterSubscriptionInput) error
 }
@@ -36,6 +37,11 @@ type UseCase interface {
 type ConfigDTO struct {
 	Enabled   bool
 	PublicKey string
+	ProxyURL  string
+}
+
+type UpdateProxyInput struct {
+	ProxyURL string
 }
 
 type RegisterSubscriptionInput struct {
@@ -104,7 +110,23 @@ func (s *Service) GetConfig(ctx context.Context) (ConfigDTO, error) {
 	if err != nil {
 		return ConfigDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get web push configuration failed").WithRetryable(true)
 	}
-	return ConfigDTO{Enabled: true, PublicKey: configuration.VAPIDPublicKey}, nil
+	return configDTO(configuration), nil
+}
+
+func (s *Service) UpdateProxy(ctx context.Context, input UpdateProxyInput) (ConfigDTO, error) {
+	proxyURL, err := normalizeProxyURL(input.ProxyURL)
+	if err != nil {
+		return ConfigDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "notification proxy URL is invalid").
+			WithDetails(map[string]any{"field": "proxyUrl"})
+	}
+	if _, err := s.EnsureConfiguration(ctx); err != nil {
+		return ConfigDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "initialize web push configuration failed").WithRetryable(true)
+	}
+	configuration, err := s.repo.SetProxyURL(ctx, proxyURL)
+	if err != nil {
+		return ConfigDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update notification proxy failed").WithRetryable(true)
+	}
+	return configDTO(configuration), nil
 }
 
 func (s *Service) RegisterSubscription(ctx context.Context, input RegisterSubscriptionInput) (SubscriptionDTO, error) {
@@ -349,6 +371,33 @@ func firstLine(value string) string {
 func validEndpoint(endpoint string) bool {
 	parsed, err := url.Parse(endpoint)
 	return err == nil && parsed.Scheme == "https" && parsed.Host != ""
+}
+
+func normalizeProxyURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Hostname() == "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" {
+		return "", errors.New("invalid proxy URL")
+	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	switch parsed.Scheme {
+	case "http", "https", "socks5", "socks5h":
+	default:
+		return "", errors.New("unsupported proxy URL scheme")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", errors.New("proxy URL path is not supported")
+	}
+	parsed.Path = ""
+	parsed.RawPath = ""
+	return parsed.String(), nil
+}
+
+func configDTO(configuration notificationdomain.Configuration) ConfigDTO {
+	return ConfigDTO{Enabled: true, PublicKey: configuration.VAPIDPublicKey, ProxyURL: configuration.ProxyURL}
 }
 
 func deliveryError(err error, statusCode int) string {

@@ -28,6 +28,7 @@ type Query {
 
 type Mutation {
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
+  updateWebPushProxy(proxyUrl: String!): WebPushConfig!
   registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
   unregisterPushSubscription(id: ID!): Boolean!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
@@ -88,6 +89,7 @@ type AppearanceSettings {
 type WebPushConfig {
   enabled: Boolean!
   publicKey: String!
+  proxyUrl: String!
 }
 
 type PushSubscriptionRegistration {

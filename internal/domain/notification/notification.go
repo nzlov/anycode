@@ -12,6 +12,7 @@ type Configuration struct {
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
 	VAPIDSubject    string
+	ProxyURL        string
 	CreatedAt       time.Time
 }
 
@@ -55,6 +56,7 @@ type SendResult struct {
 type Repository interface {
 	GetConfiguration(ctx context.Context) (Configuration, bool, error)
 	CreateConfiguration(ctx context.Context, configuration Configuration) (Configuration, error)
+	SetProxyURL(ctx context.Context, proxyURL string) (Configuration, error)
 	UpsertSubscription(ctx context.Context, subscription Subscription) (Subscription, error)
 	DeleteSubscription(ctx context.Context, id string, principalKeyHash string) error
 	GetCheckpoint(ctx context.Context) (string, bool, error)

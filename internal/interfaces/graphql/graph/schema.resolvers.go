@@ -40,6 +40,18 @@ func (r *mutationResolver) UpdateAppearanceSettings(ctx context.Context, input m
 	return mapAppearanceSettings(dto), nil
 }
 
+// UpdateWebPushProxy is the resolver for the updateWebPushProxy field.
+func (r *mutationResolver) UpdateWebPushProxy(ctx context.Context, proxyURL string) (*model.WebPushConfig, error) {
+	if r.UseCases.Notifications == nil {
+		return nil, missingUseCase("notifications")
+	}
+	dto, err := r.UseCases.Notifications.UpdateProxy(ctx, notificationapp.UpdateProxyInput{ProxyURL: proxyURL})
+	if err != nil {
+		return nil, err
+	}
+	return mapWebPushConfig(dto), nil
+}
+
 // RegisterPushSubscription is the resolver for the registerPushSubscription field.
 func (r *mutationResolver) RegisterPushSubscription(ctx context.Context, input model.RegisterPushSubscriptionInput) (*model.PushSubscriptionRegistration, error) {
 	if r.UseCases.Notifications == nil {
@@ -458,7 +470,11 @@ func (r *queryResolver) WebPushConfig(ctx context.Context) (*model.WebPushConfig
 	if err != nil {
 		return nil, err
 	}
-	return &model.WebPushConfig{Enabled: dto.Enabled, PublicKey: dto.PublicKey}, nil
+	return mapWebPushConfig(dto), nil
+}
+
+func mapWebPushConfig(dto notificationapp.ConfigDTO) *model.WebPushConfig {
+	return &model.WebPushConfig{Enabled: dto.Enabled, PublicKey: dto.PublicKey, ProxyURL: dto.ProxyURL}
 }
 
 // QuickCommands is the resolver for the quickCommands field.

@@ -3066,6 +3066,7 @@ type NotificationConfigurationMutation struct {
 	vapid_public_key  *string
 	vapid_private_key *string
 	vapid_subject     *string
+	proxy_url         *string
 	created_at        *time.Time
 	clearedFields     map[string]struct{}
 	done              bool
@@ -3285,6 +3286,42 @@ func (m *NotificationConfigurationMutation) ResetVapidSubject() {
 	m.vapid_subject = nil
 }
 
+// SetProxyURL sets the "proxy_url" field.
+func (m *NotificationConfigurationMutation) SetProxyURL(s string) {
+	m.proxy_url = &s
+}
+
+// ProxyURL returns the value of the "proxy_url" field in the mutation.
+func (m *NotificationConfigurationMutation) ProxyURL() (r string, exists bool) {
+	v := m.proxy_url
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProxyURL returns the old "proxy_url" field's value of the NotificationConfiguration entity.
+// If the NotificationConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *NotificationConfigurationMutation) OldProxyURL(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProxyURL is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProxyURL requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProxyURL: %w", err)
+	}
+	return oldValue.ProxyURL, nil
+}
+
+// ResetProxyURL resets all changes to the "proxy_url" field.
+func (m *NotificationConfigurationMutation) ResetProxyURL() {
+	m.proxy_url = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *NotificationConfigurationMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -3355,7 +3392,7 @@ func (m *NotificationConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *NotificationConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 5)
 	if m.vapid_public_key != nil {
 		fields = append(fields, notificationconfiguration.FieldVapidPublicKey)
 	}
@@ -3364,6 +3401,9 @@ func (m *NotificationConfigurationMutation) Fields() []string {
 	}
 	if m.vapid_subject != nil {
 		fields = append(fields, notificationconfiguration.FieldVapidSubject)
+	}
+	if m.proxy_url != nil {
+		fields = append(fields, notificationconfiguration.FieldProxyURL)
 	}
 	if m.created_at != nil {
 		fields = append(fields, notificationconfiguration.FieldCreatedAt)
@@ -3382,6 +3422,8 @@ func (m *NotificationConfigurationMutation) Field(name string) (ent.Value, bool)
 		return m.VapidPrivateKey()
 	case notificationconfiguration.FieldVapidSubject:
 		return m.VapidSubject()
+	case notificationconfiguration.FieldProxyURL:
+		return m.ProxyURL()
 	case notificationconfiguration.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -3399,6 +3441,8 @@ func (m *NotificationConfigurationMutation) OldField(ctx context.Context, name s
 		return m.OldVapidPrivateKey(ctx)
 	case notificationconfiguration.FieldVapidSubject:
 		return m.OldVapidSubject(ctx)
+	case notificationconfiguration.FieldProxyURL:
+		return m.OldProxyURL(ctx)
 	case notificationconfiguration.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	}
@@ -3430,6 +3474,13 @@ func (m *NotificationConfigurationMutation) SetField(name string, value ent.Valu
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetVapidSubject(v)
+		return nil
+	case notificationconfiguration.FieldProxyURL:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProxyURL(v)
 		return nil
 	case notificationconfiguration.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -3495,6 +3546,9 @@ func (m *NotificationConfigurationMutation) ResetField(name string) error {
 		return nil
 	case notificationconfiguration.FieldVapidSubject:
 		m.ResetVapidSubject()
+		return nil
+	case notificationconfiguration.FieldProxyURL:
+		m.ResetProxyURL()
 		return nil
 	case notificationconfiguration.FieldCreatedAt:
 		m.ResetCreatedAt()

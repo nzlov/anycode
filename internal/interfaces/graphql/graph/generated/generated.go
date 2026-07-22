@@ -173,6 +173,7 @@ type ComplexityRoot struct {
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
+		UpdateWebPushProxy          func(childComplexity int, proxyURL string) int
 	}
 
 	PageInfo struct {
@@ -562,6 +563,7 @@ type ComplexityRoot struct {
 
 	WebPushConfig struct {
 		Enabled   func(childComplexity int) int
+		ProxyURL  func(childComplexity int) int
 		PublicKey func(childComplexity int) int
 	}
 
@@ -644,6 +646,7 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error)
+	UpdateWebPushProxy(ctx context.Context, proxyURL string) (*model.WebPushConfig, error)
 	RegisterPushSubscription(ctx context.Context, input model.RegisterPushSubscriptionInput) (*model.PushSubscriptionRegistration, error)
 	UnregisterPushSubscription(ctx context.Context, id string) (bool, error)
 	CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error)
@@ -1373,6 +1376,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateSessionConfig(childComplexity, args["input"].(model.UpdateSessionConfigInput)), true
+	case "Mutation.updateWebPushProxy":
+		if e.ComplexityRoot.Mutation.UpdateWebPushProxy == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateWebPushProxy_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateWebPushProxy(childComplexity, args["proxyUrl"].(string)), true
 
 	case "PageInfo.nextCursor":
 		if e.ComplexityRoot.PageInfo.NextCursor == nil {
@@ -3040,6 +3054,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WebPushConfig.Enabled(childComplexity), true
+	case "WebPushConfig.proxyUrl":
+		if e.ComplexityRoot.WebPushConfig.ProxyURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WebPushConfig.ProxyURL(childComplexity), true
 	case "WebPushConfig.publicKey":
 		if e.ComplexityRoot.WebPushConfig.PublicKey == nil {
 			break
@@ -3498,6 +3518,7 @@ type Query {
 
 type Mutation {
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
+  updateWebPushProxy(proxyUrl: String!): WebPushConfig!
   registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
   unregisterPushSubscription(id: ID!): Boolean!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
@@ -3558,6 +3579,7 @@ type AppearanceSettings {
 type WebPushConfig {
   enabled: Boolean!
   publicKey: String!
+  proxyUrl: String!
 }
 
 type PushSubscriptionRegistration {
@@ -4662,6 +4684,17 @@ func (ec *executionContext) field_Mutation_updateSessionConfig_args(ctx context.
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateWebPushProxy_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "proxyUrl", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["proxyUrl"] = arg0
 	return args, nil
 }
 
@@ -6654,6 +6687,55 @@ func (ec *executionContext) fieldContext_Mutation_updateAppearanceSettings(ctx c
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateAppearanceSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateWebPushProxy(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateWebPushProxy,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateWebPushProxy(ctx, fc.Args["proxyUrl"].(string))
+		},
+		nil,
+		ec.marshalNWebPushConfig2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWebPushConfig,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateWebPushProxy(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "enabled":
+				return ec.fieldContext_WebPushConfig_enabled(ctx, field)
+			case "publicKey":
+				return ec.fieldContext_WebPushConfig_publicKey(ctx, field)
+			case "proxyUrl":
+				return ec.fieldContext_WebPushConfig_proxyUrl(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WebPushConfig", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateWebPushProxy_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -9131,6 +9213,8 @@ func (ec *executionContext) fieldContext_Query_webPushConfig(_ context.Context, 
 				return ec.fieldContext_WebPushConfig_enabled(ctx, field)
 			case "publicKey":
 				return ec.fieldContext_WebPushConfig_publicKey(ctx, field)
+			case "proxyUrl":
+				return ec.fieldContext_WebPushConfig_proxyUrl(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WebPushConfig", field.Name)
 		},
@@ -16957,6 +17041,35 @@ func (ec *executionContext) fieldContext_WebPushConfig_publicKey(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _WebPushConfig_proxyUrl(ctx context.Context, field graphql.CollectedField, obj *model.WebPushConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WebPushConfig_proxyUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.ProxyURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WebPushConfig_proxyUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WebPushConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkflowCondition_mode(ctx context.Context, field graphql.CollectedField, obj *model.WorkflowCondition) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -22442,6 +22555,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "updateWebPushProxy":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateWebPushProxy(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "registerPushSubscription":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_registerPushSubscription(ctx, field)
@@ -25626,6 +25746,11 @@ func (ec *executionContext) _WebPushConfig(ctx context.Context, sel ast.Selectio
 			}
 		case "publicKey":
 			out.Values[i] = ec._WebPushConfig_publicKey(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "proxyUrl":
+			out.Values[i] = ec._WebPushConfig_proxyUrl(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

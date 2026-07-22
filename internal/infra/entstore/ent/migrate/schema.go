@@ -122,6 +122,7 @@ var (
 		{Name: "vapid_public_key", Type: field.TypeString},
 		{Name: "vapid_private_key", Type: field.TypeString},
 		{Name: "vapid_subject", Type: field.TypeString},
+		{Name: "proxy_url", Type: field.TypeString, Default: ""},
 		{Name: "created_at", Type: field.TypeTime},
 	}
 	// NotificationConfigurationsTable holds the schema information for the "notification_configurations" table.

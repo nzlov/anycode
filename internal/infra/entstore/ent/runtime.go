@@ -156,8 +156,12 @@ func init() {
 	notificationconfigurationDescVapidSubject := notificationconfigurationFields[3].Descriptor()
 	// notificationconfiguration.VapidSubjectValidator is a validator for the "vapid_subject" field. It is called by the builders before save.
 	notificationconfiguration.VapidSubjectValidator = notificationconfigurationDescVapidSubject.Validators[0].(func(string) error)
+	// notificationconfigurationDescProxyURL is the schema descriptor for proxy_url field.
+	notificationconfigurationDescProxyURL := notificationconfigurationFields[4].Descriptor()
+	// notificationconfiguration.DefaultProxyURL holds the default value on creation for the proxy_url field.
+	notificationconfiguration.DefaultProxyURL = notificationconfigurationDescProxyURL.Default.(string)
 	// notificationconfigurationDescCreatedAt is the schema descriptor for created_at field.
-	notificationconfigurationDescCreatedAt := notificationconfigurationFields[4].Descriptor()
+	notificationconfigurationDescCreatedAt := notificationconfigurationFields[5].Descriptor()
 	// notificationconfiguration.DefaultCreatedAt holds the default value on creation for the created_at field.
 	notificationconfiguration.DefaultCreatedAt = notificationconfigurationDescCreatedAt.Default.(func() time.Time)
 	notificationdeliveryFields := schema.NotificationDelivery{}.Fields()

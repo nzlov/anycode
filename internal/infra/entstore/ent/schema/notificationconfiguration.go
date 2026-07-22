@@ -17,6 +17,7 @@ func (NotificationConfiguration) Fields() []ent.Field {
 		field.String("vapid_public_key").NotEmpty(),
 		field.String("vapid_private_key").NotEmpty().Sensitive(),
 		field.String("vapid_subject").NotEmpty(),
+		field.String("proxy_url").Default("").Sensitive(),
 		field.Time("created_at").Default(time.Now).Immutable(),
 	}
 }

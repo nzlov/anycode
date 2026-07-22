@@ -69,6 +69,20 @@ func (_u *NotificationConfigurationUpdate) SetNillableVapidSubject(v *string) *N
 	return _u
 }
 
+// SetProxyURL sets the "proxy_url" field.
+func (_u *NotificationConfigurationUpdate) SetProxyURL(v string) *NotificationConfigurationUpdate {
+	_u.mutation.SetProxyURL(v)
+	return _u
+}
+
+// SetNillableProxyURL sets the "proxy_url" field if the given value is not nil.
+func (_u *NotificationConfigurationUpdate) SetNillableProxyURL(v *string) *NotificationConfigurationUpdate {
+	if v != nil {
+		_u.SetProxyURL(*v)
+	}
+	return _u
+}
+
 // Mutation returns the NotificationConfigurationMutation object of the builder.
 func (_u *NotificationConfigurationUpdate) Mutation() *NotificationConfigurationMutation {
 	return _u.mutation
@@ -142,6 +156,9 @@ func (_u *NotificationConfigurationUpdate) sqlSave(ctx context.Context) (_node i
 	if value, ok := _u.mutation.VapidSubject(); ok {
 		_spec.SetField(notificationconfiguration.FieldVapidSubject, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ProxyURL(); ok {
+		_spec.SetField(notificationconfiguration.FieldProxyURL, field.TypeString, value)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{notificationconfiguration.Label}
@@ -200,6 +217,20 @@ func (_u *NotificationConfigurationUpdateOne) SetVapidSubject(v string) *Notific
 func (_u *NotificationConfigurationUpdateOne) SetNillableVapidSubject(v *string) *NotificationConfigurationUpdateOne {
 	if v != nil {
 		_u.SetVapidSubject(*v)
+	}
+	return _u
+}
+
+// SetProxyURL sets the "proxy_url" field.
+func (_u *NotificationConfigurationUpdateOne) SetProxyURL(v string) *NotificationConfigurationUpdateOne {
+	_u.mutation.SetProxyURL(v)
+	return _u
+}
+
+// SetNillableProxyURL sets the "proxy_url" field if the given value is not nil.
+func (_u *NotificationConfigurationUpdateOne) SetNillableProxyURL(v *string) *NotificationConfigurationUpdateOne {
+	if v != nil {
+		_u.SetProxyURL(*v)
 	}
 	return _u
 }
@@ -306,6 +337,9 @@ func (_u *NotificationConfigurationUpdateOne) sqlSave(ctx context.Context) (_nod
 	}
 	if value, ok := _u.mutation.VapidSubject(); ok {
 		_spec.SetField(notificationconfiguration.FieldVapidSubject, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ProxyURL(); ok {
+		_spec.SetField(notificationconfiguration.FieldProxyURL, field.TypeString, value)
 	}
 	_node = &NotificationConfiguration{config: _u.config}
 	_spec.Assign = _node.assignValues

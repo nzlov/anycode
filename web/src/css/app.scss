@@ -1106,6 +1106,14 @@ body.desktop
   width: 100%;
 }
 
+.notification-proxy-control {
+  width: min(420px, 62%);
+}
+
+.notification-proxy-control .q-field {
+  width: 100%;
+}
+
 .global-project-list .q-item {
   min-height: 68px;
 }
@@ -2129,6 +2137,11 @@ body.desktop
   }
 
   .appearance-settings-list__control {
+    width: 100%;
+    padding-left: 44px;
+  }
+
+  .notification-proxy-control {
     width: 100%;
     padding-left: 44px;
   }
