@@ -15,6 +15,10 @@ type UnitOfWork interface {
 	Do(ctx context.Context, fn func(ctx context.Context, tx Tx) error) error
 }
 
+type SessionHistoryPurger interface {
+	PurgeSessions(ctx context.Context, ids []session.ID) error
+}
+
 type ExecutionClaimStatus string
 
 const (

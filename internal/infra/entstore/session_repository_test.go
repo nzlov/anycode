@@ -219,6 +219,20 @@ func TestSessionRepositorySaveFindListAndAppendPrompt(t *testing.T) {
 	if total != 2 || len(cards) != 2 || cards[0].ID != "session-closed" || cards[1].ID != "session-closed-old" {
 		t.Fatalf("history cards mismatch: total=%d cards=%#v", total, cards)
 	}
+	cutoff := now.Add(-3 * 24 * time.Hour)
+	cards, total, err = repo.ListCards(ctx, session.ListQuery{
+		ProjectID:     &projectID,
+		Scope:         string(session.StatusClosed),
+		UpdatedBefore: &cutoff,
+		Page:          1,
+		PageSize:      10,
+	})
+	if err != nil {
+		t.Fatalf("list old history cards: %v", err)
+	}
+	if total != 1 || len(cards) != 1 || cards[0].ID != "session-closed-old" {
+		t.Fatalf("old history cards mismatch: total=%d cards=%#v", total, cards)
+	}
 
 	cards, total, err = repo.ListCards(ctx, session.ListQuery{
 		Scope:    "overview",

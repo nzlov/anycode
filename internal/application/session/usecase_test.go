@@ -3624,6 +3624,85 @@ func TestListSessionsReturnsCardsPage(t *testing.T) {
 	}
 }
 
+func TestListSessionsAppliesOlderThanCutoff(t *testing.T) {
+	repo := newFakeRepository()
+	service := New(repo, newFakeProjectRepository("project-1"))
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return now }
+
+	if _, err := service.ListSessions(context.Background(), ListSessionsInput{OlderThanDays: 7}); err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+	if repo.lastListQuery.UpdatedBefore == nil || !repo.lastListQuery.UpdatedBefore.Equal(now.Add(-7*24*time.Hour)) {
+		t.Fatalf("UpdatedBefore = %#v", repo.lastListQuery.UpdatedBefore)
+	}
+}
+
+func TestCleanupSessionsDeletesFilteredHistoryAndCodexSessions(t *testing.T) {
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	projectID := domain.ProjectID("project-1")
+	old := domain.Session{
+		ID: "old", ProjectID: projectID, Requirement: "remove me", Status: domain.StatusClosed,
+		BaseBranch: "main", WorktreeCleanup: domain.WorktreeCleanup{Status: domain.WorktreeCleanupCleaned},
+		CodexSessionID: "codex-current", UpdatedAt: now.Add(-8 * 24 * time.Hour),
+	}
+	recent := domain.Session{
+		ID: "recent", ProjectID: projectID, Requirement: "keep me", Status: domain.StatusClosed,
+		UpdatedAt: now.Add(-2 * 24 * time.Hour),
+	}
+	repo := newFakeRepository()
+	repo.listSessions = []domain.Session{old, recent}
+	files := newFakeAttachmentStore()
+	files.sessionAttachments["attachment-1"] = domain.SessionAttachment{ID: "attachment-1", SessionID: old.ID, Role: domain.FileRoleInput}
+	processes := newFakeProcessRepository()
+	processes.created = []processdomain.Run{{ID: "run-1", SessionID: processdomain.SessionID(old.ID), CodexSessionID: "codex-previous"}}
+	processes.transcriptSources["codex-previous"] = processdomain.CodexTranscriptSource{CodexSessionID: "codex-previous", RelativePath: "2026/07/01/previous.jsonl"}
+	codex := &fakeCodexProcess{}
+	purger := &fakeSessionHistoryPurger{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithAttachments(repo, files), WithProcesses(processes, codex), WithSessionHistoryPurger(purger))
+	service.now = func() time.Time { return now }
+
+	count, err := service.CleanupSessions(context.Background(), CleanupSessionsInput{
+		ProjectID: &projectID, Scope: string(domain.StatusClosed), Filter: "remove", OlderThanDays: 7,
+	})
+	if err != nil {
+		t.Fatalf("CleanupSessions() error = %v", err)
+	}
+	if count != 1 || !slices.Equal(purger.ids, []domain.ID{"old"}) {
+		t.Fatalf("CleanupSessions() = %d, ids = %#v", count, purger.ids)
+	}
+	if !files.deletedSessions["attachment-1"] {
+		t.Fatal("session attachment was not deleted")
+	}
+	deletedCodexIDs := make([]string, 0, len(codex.deletedSessions))
+	for _, source := range codex.deletedSessions {
+		deletedCodexIDs = append(deletedCodexIDs, source.CodexSessionID)
+	}
+	slices.Sort(deletedCodexIDs)
+	if !slices.Equal(deletedCodexIDs, []string{"codex-current", "codex-previous"}) {
+		t.Fatalf("deleted Codex sessions = %#v", deletedCodexIDs)
+	}
+}
+
+func TestCleanupSessionsRejectsPendingWorktreeCleanup(t *testing.T) {
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	repo := newFakeRepository()
+	repo.listSessions = []domain.Session{{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusClosed, BaseBranch: "main",
+		WorktreeCleanup: domain.WorktreeCleanup{Status: domain.WorktreeCleanupPending}, UpdatedAt: now.Add(-8 * 24 * time.Hour),
+	}}
+	purger := &fakeSessionHistoryPurger{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithSessionHistoryPurger(purger))
+	service.now = func() time.Time { return now }
+
+	if _, err := service.CleanupSessions(context.Background(), CleanupSessionsInput{Scope: "closed", OlderThanDays: 7}); err == nil {
+		t.Fatal("CleanupSessions() error = nil")
+	}
+	if len(purger.ids) != 0 {
+		t.Fatalf("purged ids = %#v", purger.ids)
+	}
+}
+
 func TestGetSessionReturnsDetailWithResumeAction(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -11381,7 +11460,20 @@ func (r *fakeRepository) ListCards(_ context.Context, query domain.ListQuery) ([
 	filtered := make([]domain.Session, 0, len(r.listSessions))
 	for _, session := range r.listSessions {
 		session = normalizeFakeSessionWorktree(session)
+		if query.ProjectID != nil && session.ProjectID != *query.ProjectID {
+			continue
+		}
 		if query.Scope != "" && string(session.Status) != query.Scope {
+			continue
+		}
+		if query.UpdatedBefore != nil && session.UpdatedAt.After(*query.UpdatedBefore) {
+			continue
+		}
+		if filter := strings.ToLower(strings.TrimSpace(query.Filter)); filter != "" &&
+			!strings.Contains(strings.ToLower(session.Requirement), filter) &&
+			!strings.Contains(strings.ToLower(session.BaseBranch), filter) &&
+			!strings.Contains(strings.ToLower(session.CodexSessionID), filter) &&
+			!strings.Contains(strings.ToLower(string(session.Status)), filter) {
 			continue
 		}
 		filtered = append(filtered, session)
@@ -13030,31 +13122,38 @@ func waitForAnswerUserBatch(t *testing.T, store *entstore.Store) questiondomain.
 }
 
 type fakeCodexProcess struct {
-	startCalled   bool
-	startInput    processdomain.CodexStartInput
-	startInputs   []processdomain.CodexStartInput
-	startHandle   processdomain.CodexHandle
-	startHandles  []processdomain.CodexHandle
-	startErr      error
-	startErrs     []error
-	resumeCalled  bool
-	resumeInput   processdomain.CodexResumeInput
-	resumeHandle  processdomain.CodexHandle
-	resumeErr     error
-	stoppedID     processdomain.RunID
-	stopErr       error
-	stopHook      func(context.Context, processdomain.RunID) error
-	detachedStops []processdomain.DetachedProcess
-	detachedErr   error
-	detachedHook  func(processdomain.DetachedProcess)
-	eventsCalled  bool
-	eventsErr     error
-	events        <-chan processdomain.CodexEvent
-	eventStreams  []<-chan processdomain.CodexEvent
+	startCalled      bool
+	startInput       processdomain.CodexStartInput
+	startInputs      []processdomain.CodexStartInput
+	startHandle      processdomain.CodexHandle
+	startHandles     []processdomain.CodexHandle
+	startErr         error
+	startErrs        []error
+	resumeCalled     bool
+	resumeInput      processdomain.CodexResumeInput
+	resumeHandle     processdomain.CodexHandle
+	resumeErr        error
+	stoppedID        processdomain.RunID
+	stopErr          error
+	stopHook         func(context.Context, processdomain.RunID) error
+	detachedStops    []processdomain.DetachedProcess
+	detachedErr      error
+	detachedHook     func(processdomain.DetachedProcess)
+	eventsCalled     bool
+	eventsErr        error
+	events           <-chan processdomain.CodexEvent
+	eventStreams     []<-chan processdomain.CodexEvent
+	deletedSessions  []processdomain.CodexTranscriptSource
+	deleteSessionErr error
 }
 
 func (p *fakeCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
 	return processdomain.CodexCapabilities{}, nil
+}
+
+func (p *fakeCodexProcess) DeleteSession(_ context.Context, source processdomain.CodexTranscriptSource) error {
+	p.deletedSessions = append(p.deletedSessions, source)
+	return p.deleteSessionErr
 }
 
 func (p *fakeCodexProcess) Start(_ context.Context, input processdomain.CodexStartInput) (processdomain.CodexHandle, error) {
@@ -13152,6 +13251,16 @@ type fakeUnitOfWork struct {
 	publisher             *fakeEventPublisher
 	publishedBeforeReturn int
 	publishedDuringCall   bool
+}
+
+type fakeSessionHistoryPurger struct {
+	ids []domain.ID
+	err error
+}
+
+func (p *fakeSessionHistoryPurger) PurgeSessions(_ context.Context, ids []domain.ID) error {
+	p.ids = append([]domain.ID(nil), ids...)
+	return p.err
 }
 
 func (u *fakeUnitOfWork) Do(ctx context.Context, fn func(context.Context, port.Tx) error) error {

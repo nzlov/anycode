@@ -110,6 +110,51 @@ EOF
 	}
 }
 
+func TestDeleteSessionRemovesMatchingTranscript(t *testing.T) {
+	codexHome := t.TempDir()
+	relativePath := "2026/07/08/rollout-codex-session-1.jsonl"
+	path := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\",\"payload\":{\"session_id\":\"codex-session-1\"}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := New("codex", WithCodexHome(codexHome))
+	source := process.CodexTranscriptSource{CodexSessionID: "codex-session-1", RelativePath: relativePath}
+	if err := client.DeleteSession(context.Background(), source); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("transcript still exists: %v", err)
+	}
+	if err := client.DeleteSession(context.Background(), source); err != nil {
+		t.Fatalf("DeleteSession() retry error = %v", err)
+	}
+}
+
+func TestDeleteSessionRejectsMismatchedTranscript(t *testing.T) {
+	codexHome := t.TempDir()
+	relativePath := "2026/07/08/rollout-other.jsonl"
+	path := filepath.Join(codexHome, "sessions", filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{\"type\":\"session_meta\",\"payload\":{\"session_id\":\"other\"}}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := New("codex", WithCodexHome(codexHome))
+	err := client.DeleteSession(context.Background(), process.CodexTranscriptSource{
+		CodexSessionID: "codex-session-1", RelativePath: relativePath,
+	})
+	if !errors.Is(err, process.ErrTranscriptUnavailable) {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("mismatched transcript was deleted: %v", err)
+	}
+}
+
 func TestEventsWaitsForDelayedSessionLogWhileProcessRuns(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()

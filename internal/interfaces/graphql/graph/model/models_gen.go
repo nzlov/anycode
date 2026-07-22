@@ -56,6 +56,13 @@ type BrowseDirectoryInput struct {
 	Path string `json:"path"`
 }
 
+type CleanupSessionsInput struct {
+	ProjectID     *string `json:"projectId,omitempty"`
+	Scope         *string `json:"scope,omitempty"`
+	Filter        *string `json:"filter,omitempty"`
+	OlderThanDays int     `json:"olderThanDays"`
+}
+
 type CloseSessionInput struct {
 	SessionID string `json:"sessionId"`
 	Reason    string `json:"reason"`
@@ -187,13 +194,14 @@ type ListSessionFilesInput struct {
 }
 
 type ListSessionsInput struct {
-	ProjectID *string `json:"projectId,omitempty"`
-	Scope     *string `json:"scope,omitempty"`
-	Range     *string `json:"range,omitempty"`
-	Page      *int    `json:"page,omitempty"`
-	PageSize  *int    `json:"pageSize,omitempty"`
-	Filter    *string `json:"filter,omitempty"`
-	Sort      *string `json:"sort,omitempty"`
+	ProjectID     *string `json:"projectId,omitempty"`
+	Scope         *string `json:"scope,omitempty"`
+	Range         *string `json:"range,omitempty"`
+	OlderThanDays *int    `json:"olderThanDays,omitempty"`
+	Page          *int    `json:"page,omitempty"`
+	PageSize      *int    `json:"pageSize,omitempty"`
+	Filter        *string `json:"filter,omitempty"`
+	Sort          *string `json:"sort,omitempty"`
 }
 
 type ListTranscriptEventsInput struct {

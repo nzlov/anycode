@@ -1033,6 +1033,44 @@ func (c *Client) SessionEvents(ctx context.Context, input process.CodexTranscrip
 	return events, nil
 }
 
+func (c *Client) DeleteSession(ctx context.Context, source process.CodexTranscriptSource) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(source.CodexSessionID) == "" {
+		return fmt.Errorf("%w: Codex session id is required", process.ErrTranscriptUnavailable)
+	}
+	path := ""
+	if strings.TrimSpace(source.RelativePath) != "" {
+		resolved, _, err := resolveTranscriptPath(c.CodexHome(), source)
+		if err != nil {
+			return err
+		}
+		path = resolved
+	} else {
+		var err error
+		path, err = sessionLogByID(c.CodexHome(), source.CodexSessionID)
+		if err != nil {
+			return err
+		}
+	}
+	if path == "" {
+		return nil
+	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("stat Codex session log: %w", err)
+	}
+	if !sessionLogMatchesSessionID(path, source.CodexSessionID) {
+		return fmt.Errorf("%w: transcript does not match Codex session id", process.ErrTranscriptUnavailable)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("delete Codex session log: %w", err)
+	}
+	return nil
+}
+
 const (
 	defaultTranscriptPageLimit   = 50
 	maxTranscriptPageLimit       = 500

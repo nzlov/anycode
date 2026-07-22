@@ -66,6 +66,7 @@ type Mutation {
   stopSession(id: ID!): Session!
   resumeSession(id: ID!, force: Boolean): Session!
   closeSession(input: CloseSessionInput!): Session!
+  cleanupSessions(input: CleanupSessionsInput!): Int!
   retrySessionWorktreeCleanup(id: ID!): Session!
   appendPrompt(input: AppendPromptInput!): PromptAppend!
   updatePromptAppend(input: UpdatePromptAppendInput!): PromptAppend!
@@ -723,10 +724,18 @@ input ListSessionsInput {
   projectId: ID
   scope: String
   range: String
+  olderThanDays: Int
   page: Int
   pageSize: Int
   filter: String
   sort: String
+}
+
+input CleanupSessionsInput {
+  projectId: ID
+  scope: String
+  filter: String
+  olderThanDays: Int!
 }
 
 input CreateSessionInput {

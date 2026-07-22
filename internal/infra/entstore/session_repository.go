@@ -616,6 +616,9 @@ func applySessionListFilters(q *ent.SessionQuery, query domainsession.ListQuery)
 	case "history":
 		q.Where(entsession.StatusEQ(string(domainsession.StatusClosed)))
 	}
+	if query.UpdatedBefore != nil {
+		q.Where(entsession.UpdatedAtLTE(*query.UpdatedBefore))
+	}
 	filter := strings.TrimSpace(query.Filter)
 	if filter != "" {
 		q.Where(entsession.Or(
