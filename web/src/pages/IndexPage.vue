@@ -773,6 +773,9 @@ function openNewSession() {
 }
 
 function handleSessionUpdate(update: SessionUpdateEvent) {
+  const index = latestRows.value.findIndex((card) => card.id === update.sessionId);
+  if (index < 0) return;
+
   cardRefreshRequests.invalidate(update.sessionId);
   const status = update.status?.status;
   if (activeQuestionSessionId.value === update.sessionId && status && status !== 'waiting_user') {
@@ -783,14 +786,8 @@ function handleSessionUpdate(update: SessionUpdateEvent) {
     approvalDialog.value = false;
     clearApprovalContext();
   }
-  const index = latestRows.value.findIndex((card) => card.id === update.sessionId);
   if (status === 'closed') {
-    if (index >= 0)
-      latestRows.value = latestRows.value.filter((card) => card.id !== update.sessionId);
-    return;
-  }
-  if (index < 0) {
-    if (update.status) void refreshOverviewCard(update.sessionId);
+    latestRows.value = latestRows.value.filter((card) => card.id !== update.sessionId);
     return;
   }
 
