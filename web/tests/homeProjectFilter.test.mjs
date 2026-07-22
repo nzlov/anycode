@@ -8,6 +8,7 @@ function readSource(relativePath) {
 
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
+const projectFiltersSource = readSource('../src/components/ProjectVisibilityFilters.vue');
 const toolbarSource = readSource('../src/components/PageToolbar.vue');
 const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
@@ -32,15 +33,27 @@ test('application shell removes the global drawer and duplicate project entry', 
 
 test('overview uses project chips and a single icon-only history entry', () => {
   assert.match(indexSource, /class="overview-filter-toolbar"/);
-  assert.match(indexSource, /v-for="project in projectChips"/);
-  assert.match(indexSource, /:aria-pressed="isProjectVisible\(project\.id\)"/);
-  assert.match(indexSource, /visibility_off/);
+  assert.match(indexSource, /<ProjectVisibilityFilters/);
+  assert.match(projectFiltersSource, /v-for="project in projects"/);
+  assert.match(projectFiltersSource, /:aria-pressed="isProjectVisible\(project\.id\)"/);
+  assert.match(projectFiltersSource, /visibility_off/);
   assert.match(layoutSource, /icon="history"/);
   assert.match(layoutSource, /aria-label="历史卡片"/);
   assert.doesNotMatch(layoutSource, /\slabel="历史卡片"/);
   assert.doesNotMatch(indexSource, /title:\s*'最新'|title:\s*'历史'|pageTitle/);
   assert.doesNotMatch(indexSource, /uniqueHistoryCards|historyCards|hasMoreHistory/);
   assert.match(layoutSource, /scope:\s*'closed'/);
+});
+
+test('mobile overview moves project filters into the page flow before cards', () => {
+  assert.match(
+    indexSource,
+    /<PageToolbar[\s\S]*?v-if="projectChips\.length && !\$q\.screen\.lt\.sm"[\s\S]*?<\/PageToolbar>\s*<ProjectVisibilityFilters\s+v-if="\$q\.screen\.lt\.sm && projectChips\.length"[\s\S]*?class="overview-project-filters--mobile"[\s\S]*?<section class="overview-card-section">/,
+  );
+  assert.match(
+    stylesSource,
+    /@media \(max-width:\s*599\.98px\)[\s\S]*?\.overview-project-filters--mobile\s*{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/s,
+  );
 });
 
 test('overview derives unique project chips by id and filters only cards', () => {
