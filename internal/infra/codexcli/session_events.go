@@ -1351,7 +1351,7 @@ func codexEventsFromEventMessage(timestamp string, payload map[string]any, creat
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
-	case "user_message", "context_compacted", "web_search_end":
+	case "user_message", "context_compacted", "web_search_end", "item_started", "item_completed":
 		// Richer canonical records are emitted as response_item or compacted entries.
 		return nil
 	case "task_started":
