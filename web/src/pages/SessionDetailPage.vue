@@ -280,7 +280,7 @@
                     }}</q-item-label>
                   </q-item-section>
                 </q-item>
-                <q-item>
+                <q-item v-if="session?.mode === 'workflow'">
                   <q-item-section>
                     <q-item-label caption>当前节点</q-item-label>
                     <q-item-label>{{ session?.node ?? '-' }}</q-item-label>

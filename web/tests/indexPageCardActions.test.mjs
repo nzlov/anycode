@@ -77,6 +77,15 @@ test('overview token usage separates uncached input, output, and cached totals',
   assert.match(display, /const menuOpen = ref\(false\);/);
 });
 
+test('overview cards render current nodes only in workflow mode', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /<div v-if="card\.mode === 'workflow'">\s*<span class="overview-card-meta__label">当前节点<\/span>/,
+  );
+});
+
 test('overview TODO headless scenario covers pointer, keyboard, and narrow-screen access', () => {
   const source = readFileSync(new URL('../../scripts/headless-e2e.mjs', import.meta.url), 'utf8');
 
