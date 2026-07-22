@@ -2,9 +2,10 @@ import { graphqlFetch } from '@/services/graphqlClient';
 
 const subscriptionStorageKey = 'anycode.push-subscription-id';
 
-interface WebPushConfig {
+export interface WebPushConfig {
   enabled: boolean;
   publicKey: string;
+  proxyUrl: string;
 }
 
 export interface PushNotificationState {
@@ -12,11 +13,12 @@ export interface PushNotificationState {
   available: boolean;
   permission: NotificationPermission | 'unsupported';
   enabled: boolean;
+  proxyUrl: string;
 }
 
 export async function getPushNotificationState(): Promise<PushNotificationState> {
-  if (!browserSupportsPush()) return unsupportedState();
   const config = await getWebPushConfig();
+  if (!browserSupportsPush()) return unsupportedState(config);
   const registration = await navigator.serviceWorker.ready;
   let subscription = await registration.pushManager.getSubscription();
   if (Notification.permission !== 'granted') {
@@ -45,6 +47,7 @@ export async function getPushNotificationState(): Promise<PushNotificationState>
     available: config.enabled,
     permission: Notification.permission,
     enabled: Boolean(subscription && Notification.permission === 'granted'),
+    proxyUrl: config.proxyUrl,
   };
 }
 
@@ -57,11 +60,18 @@ export async function enablePushNotifications(): Promise<PushNotificationState> 
       available: false,
       permission: Notification.permission,
       enabled: false,
+      proxyUrl: config.proxyUrl,
     };
   }
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    return { supported: true, available: true, permission, enabled: false };
+    return {
+      supported: true,
+      available: true,
+      permission,
+      enabled: false,
+      proxyUrl: config.proxyUrl,
+    };
   }
   const registration = await navigator.serviceWorker.ready;
   let subscription = await registration.pushManager.getSubscription();
@@ -76,7 +86,20 @@ export async function enablePushNotifications(): Promise<PushNotificationState> 
     applicationServerKey: base64URLBytes(config.publicKey),
   });
   await registerBrowserSubscription(subscription);
-  return { supported: true, available: true, permission, enabled: true };
+  return { supported: true, available: true, permission, enabled: true, proxyUrl: config.proxyUrl };
+}
+
+export async function updateWebPushProxy(proxyUrl: string): Promise<WebPushConfig> {
+  const data = await graphqlFetch<{ updateWebPushProxy: WebPushConfig }, { proxyUrl: string }>({
+    query: `
+      mutation UpdateWebPushProxy($proxyUrl: String!) {
+        updateWebPushProxy(proxyUrl: $proxyUrl) { enabled publicKey proxyUrl }
+      }
+    `,
+    variables: { proxyUrl },
+    notify: false,
+  });
+  return data.updateWebPushProxy;
 }
 
 export async function disablePushNotifications() {
@@ -105,15 +128,21 @@ function browserSupportsPush() {
   );
 }
 
-function unsupportedState(): PushNotificationState {
-  return { supported: false, available: false, permission: 'unsupported', enabled: false };
+function unsupportedState(config?: WebPushConfig): PushNotificationState {
+  return {
+    supported: false,
+    available: config?.enabled ?? false,
+    permission: 'unsupported',
+    enabled: false,
+    proxyUrl: config?.proxyUrl ?? '',
+  };
 }
 
 async function getWebPushConfig() {
   const data = await graphqlFetch<{ webPushConfig: WebPushConfig }>({
     query: `
       query WebPushConfig {
-        webPushConfig { enabled publicKey }
+        webPushConfig { enabled publicKey proxyUrl }
       }
     `,
     notify: false,

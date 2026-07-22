@@ -43,6 +43,7 @@ func (r *NotificationRepository) CreateConfiguration(ctx context.Context, config
 		SetVapidPublicKey(configuration.VAPIDPublicKey).
 		SetVapidPrivateKey(configuration.VAPIDPrivateKey).
 		SetVapidSubject(configuration.VAPIDSubject).
+		SetProxyURL(configuration.ProxyURL).
 		SetCreatedAt(configuration.CreatedAt).
 		Save(ctx)
 	if ent.IsConstraintError(err) {
@@ -53,6 +54,16 @@ func (r *NotificationRepository) CreateConfiguration(ctx context.Context, config
 	}
 	if err != nil {
 		return notificationdomain.Configuration{}, fmt.Errorf("create notification configuration: %w", err)
+	}
+	return toNotificationConfiguration(row), nil
+}
+
+func (r *NotificationRepository) SetProxyURL(ctx context.Context, proxyURL string) (notificationdomain.Configuration, error) {
+	row, err := r.client.NotificationConfiguration.UpdateOneID(globalNotificationConfigurationID).
+		SetProxyURL(proxyURL).
+		Save(ctx)
+	if err != nil {
+		return notificationdomain.Configuration{}, fmt.Errorf("update notification proxy URL: %w", err)
 	}
 	return toNotificationConfiguration(row), nil
 }
@@ -281,7 +292,7 @@ func advanceNotificationCheckpoint(ctx context.Context, client *ent.Client, even
 func toNotificationConfiguration(row *ent.NotificationConfiguration) notificationdomain.Configuration {
 	return notificationdomain.Configuration{
 		VAPIDPublicKey: row.VapidPublicKey, VAPIDPrivateKey: row.VapidPrivateKey,
-		VAPIDSubject: row.VapidSubject, CreatedAt: row.CreatedAt,
+		VAPIDSubject: row.VapidSubject, ProxyURL: row.ProxyURL, CreatedAt: row.CreatedAt,
 	}
 }
 

@@ -79,6 +79,11 @@ func VapidSubject(v string) predicate.NotificationConfiguration {
 	return predicate.NotificationConfiguration(sql.FieldEQ(FieldVapidSubject, v))
 }
 
+// ProxyURL applies equality check predicate on the "proxy_url" field. It's identical to ProxyURLEQ.
+func ProxyURL(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldEQ(FieldProxyURL, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.NotificationConfiguration {
 	return predicate.NotificationConfiguration(sql.FieldEQ(FieldCreatedAt, v))
@@ -277,6 +282,71 @@ func VapidSubjectEqualFold(v string) predicate.NotificationConfiguration {
 // VapidSubjectContainsFold applies the ContainsFold predicate on the "vapid_subject" field.
 func VapidSubjectContainsFold(v string) predicate.NotificationConfiguration {
 	return predicate.NotificationConfiguration(sql.FieldContainsFold(FieldVapidSubject, v))
+}
+
+// ProxyURLEQ applies the EQ predicate on the "proxy_url" field.
+func ProxyURLEQ(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldEQ(FieldProxyURL, v))
+}
+
+// ProxyURLNEQ applies the NEQ predicate on the "proxy_url" field.
+func ProxyURLNEQ(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldNEQ(FieldProxyURL, v))
+}
+
+// ProxyURLIn applies the In predicate on the "proxy_url" field.
+func ProxyURLIn(vs ...string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldIn(FieldProxyURL, vs...))
+}
+
+// ProxyURLNotIn applies the NotIn predicate on the "proxy_url" field.
+func ProxyURLNotIn(vs ...string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldNotIn(FieldProxyURL, vs...))
+}
+
+// ProxyURLGT applies the GT predicate on the "proxy_url" field.
+func ProxyURLGT(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldGT(FieldProxyURL, v))
+}
+
+// ProxyURLGTE applies the GTE predicate on the "proxy_url" field.
+func ProxyURLGTE(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldGTE(FieldProxyURL, v))
+}
+
+// ProxyURLLT applies the LT predicate on the "proxy_url" field.
+func ProxyURLLT(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldLT(FieldProxyURL, v))
+}
+
+// ProxyURLLTE applies the LTE predicate on the "proxy_url" field.
+func ProxyURLLTE(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldLTE(FieldProxyURL, v))
+}
+
+// ProxyURLContains applies the Contains predicate on the "proxy_url" field.
+func ProxyURLContains(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldContains(FieldProxyURL, v))
+}
+
+// ProxyURLHasPrefix applies the HasPrefix predicate on the "proxy_url" field.
+func ProxyURLHasPrefix(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldHasPrefix(FieldProxyURL, v))
+}
+
+// ProxyURLHasSuffix applies the HasSuffix predicate on the "proxy_url" field.
+func ProxyURLHasSuffix(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldHasSuffix(FieldProxyURL, v))
+}
+
+// ProxyURLEqualFold applies the EqualFold predicate on the "proxy_url" field.
+func ProxyURLEqualFold(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldEqualFold(FieldProxyURL, v))
+}
+
+// ProxyURLContainsFold applies the ContainsFold predicate on the "proxy_url" field.
+func ProxyURLContainsFold(v string) predicate.NotificationConfiguration {
+	return predicate.NotificationConfiguration(sql.FieldContainsFold(FieldProxyURL, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

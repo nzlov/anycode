@@ -19,6 +19,8 @@ const (
 	FieldVapidPrivateKey = "vapid_private_key"
 	// FieldVapidSubject holds the string denoting the vapid_subject field in the database.
 	FieldVapidSubject = "vapid_subject"
+	// FieldProxyURL holds the string denoting the proxy_url field in the database.
+	FieldProxyURL = "proxy_url"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// Table holds the table name of the notificationconfiguration in the database.
@@ -31,6 +33,7 @@ var Columns = []string{
 	FieldVapidPublicKey,
 	FieldVapidPrivateKey,
 	FieldVapidSubject,
+	FieldProxyURL,
 	FieldCreatedAt,
 }
 
@@ -51,6 +54,8 @@ var (
 	VapidPrivateKeyValidator func(string) error
 	// VapidSubjectValidator is a validator for the "vapid_subject" field. It is called by the builders before save.
 	VapidSubjectValidator func(string) error
+	// DefaultProxyURL holds the default value on creation for the "proxy_url" field.
+	DefaultProxyURL string
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -76,6 +81,11 @@ func ByVapidPrivateKey(opts ...sql.OrderTermOption) OrderOption {
 // ByVapidSubject orders the results by the vapid_subject field.
 func ByVapidSubject(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldVapidSubject, opts...).ToFunc()
+}
+
+// ByProxyURL orders the results by the proxy_url field.
+func ByProxyURL(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProxyURL, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

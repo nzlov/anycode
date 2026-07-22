@@ -256,6 +256,45 @@
                 />
               </q-item-section>
             </q-item>
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="router" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>通知代理</q-item-label>
+              </q-item-section>
+              <q-item-section side class="notification-proxy-control">
+                <q-input
+                  v-model="notificationProxy"
+                  outlined
+                  dense
+                  clearable
+                  clear-value=""
+                  hide-bottom-space
+                  type="url"
+                  placeholder="socks5://127.0.0.1:1080"
+                  aria-label="通知代理 URL"
+                  :disable="notificationLoading || notificationProxySaving"
+                  @keyup.enter="saveNotificationProxy"
+                >
+                  <template #append>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      class="app-icon-btn"
+                      icon="save"
+                      aria-label="保存通知代理"
+                      :loading="notificationProxySaving"
+                      :disable="!notificationProxyChanged"
+                      @click="saveNotificationProxy"
+                    >
+                      <q-tooltip>保存</q-tooltip>
+                    </q-btn>
+                  </template>
+                </q-input>
+              </q-item-section>
+            </q-item>
           </q-list>
         </section>
 
@@ -457,6 +496,7 @@ import {
   enablePushNotifications,
   getPushNotificationState,
   type PushNotificationState,
+  updateWebPushProxy,
 } from '@/services/pushNotifications';
 import { setWallpaperColorScheme } from '@/theme/dailyBackground';
 import type { WallpaperColorScheme } from '@/theme/dailyBackgroundModel';
@@ -507,13 +547,20 @@ const wallpaperColorScheme = ref<WallpaperColorScheme>('content');
 const persistedWallpaperColorScheme = ref<WallpaperColorScheme>('content');
 const notificationLoading = ref(false);
 const notificationSaving = ref(false);
+const notificationProxySaving = ref(false);
 const notificationError = ref('');
+const notificationProxy = ref('');
+const persistedNotificationProxy = ref('');
 const notificationState = ref<PushNotificationState>({
   supported: true,
   available: true,
   permission: 'default',
   enabled: false,
+  proxyUrl: '',
 });
+const notificationProxyChanged = computed(
+  () => notificationProxy.value.trim() !== persistedNotificationProxy.value,
+);
 const notificationToggleAvailable = computed(
   () =>
     notificationState.value.supported &&
@@ -533,10 +580,29 @@ async function refreshNotifications() {
   notificationError.value = '';
   try {
     notificationState.value = await getPushNotificationState();
+    notificationProxy.value = notificationState.value.proxyUrl;
+    persistedNotificationProxy.value = notificationState.value.proxyUrl;
   } catch {
     notificationError.value = '无法加载通知设置';
   } finally {
     notificationLoading.value = false;
+  }
+}
+
+async function saveNotificationProxy() {
+  const proxyURL = notificationProxy.value.trim();
+  if (proxyURL === persistedNotificationProxy.value) return;
+  notificationProxySaving.value = true;
+  notificationError.value = '';
+  try {
+    const config = await updateWebPushProxy(proxyURL);
+    notificationProxy.value = config.proxyUrl;
+    persistedNotificationProxy.value = config.proxyUrl;
+    notificationState.value.proxyUrl = config.proxyUrl;
+  } catch {
+    notificationError.value = '无法保存通知代理，请检查 URL';
+  } finally {
+    notificationProxySaving.value = false;
   }
 }
 

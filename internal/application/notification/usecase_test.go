@@ -2,10 +2,12 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nzlov/anycode/internal/application/apperror"
 	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	notificationdomain "github.com/nzlov/anycode/internal/domain/notification"
 )
@@ -71,6 +73,40 @@ func TestRegisterSubscriptionValidatesAndHashesEndpoint(t *testing.T) {
 	}
 }
 
+func TestUpdateProxyValidatesAndPersistsSupportedURLs(t *testing.T) {
+	repo := &fakeNotificationRepository{
+		configuration: notificationdomain.Configuration{
+			VAPIDPublicKey: "public", VAPIDPrivateKey: "private", VAPIDSubject: "https://example.test",
+		},
+		hasConfig: true,
+	}
+	service := New(repo, nil, nil, nil, &fakeKeyGenerator{}, nil, "principal")
+
+	for _, proxyURL := range []string{
+		"http://proxy.example:8080",
+		"https://user:password@proxy.example:8443",
+		"socks5://127.0.0.1:1080",
+		"socks5h://proxy.example:1080",
+		"",
+	} {
+		got, err := service.UpdateProxy(context.Background(), UpdateProxyInput{ProxyURL: " " + proxyURL + " "})
+		if err != nil {
+			t.Fatalf("UpdateProxy(%q) error = %v", proxyURL, err)
+		}
+		if got.ProxyURL != proxyURL || repo.configuration.ProxyURL != proxyURL {
+			t.Fatalf("UpdateProxy(%q) = %#v, stored = %#v", proxyURL, got, repo.configuration)
+		}
+	}
+
+	for _, proxyURL := range []string{"ftp://proxy.example:21", "socks5://", "proxy.example:8080"} {
+		_, err := service.UpdateProxy(context.Background(), UpdateProxyInput{ProxyURL: proxyURL})
+		var appErr *apperror.Error
+		if !errors.As(err, &appErr) || appErr.Code != apperror.CodeValidationFailed || appErr.Details["field"] != "proxyUrl" {
+			t.Fatalf("UpdateProxy(%q) error = %#v", proxyURL, err)
+		}
+	}
+}
+
 func TestFirstLineLimitsNotificationPayload(t *testing.T) {
 	got := firstLine("  " + strings.Repeat("字", maxSummaryRunes+20))
 	if len([]rune(got)) != maxSummaryRunes || got[len(got)-3:] != "..." {
@@ -119,6 +155,12 @@ func (f *fakeNotificationRepository) CreateConfiguration(_ context.Context, conf
 	f.hasConfig = true
 	f.createCalls++
 	return configuration, nil
+}
+
+func (f *fakeNotificationRepository) SetProxyURL(_ context.Context, proxyURL string) (notificationdomain.Configuration, error) {
+	f.configuration.ProxyURL = proxyURL
+	f.hasConfig = true
+	return f.configuration, nil
 }
 
 func (f *fakeNotificationRepository) UpsertSubscription(_ context.Context, subscription notificationdomain.Subscription) (notificationdomain.Subscription, error) {

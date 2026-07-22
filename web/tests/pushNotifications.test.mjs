@@ -64,8 +64,13 @@ test('browser subscription is server-owned and rotates with the persisted VAPID 
   assert.match(serviceSource, /query WebPushConfig/);
   assert.match(serviceSource, /mutation RegisterPushSubscription/);
   assert.match(serviceSource, /mutation UnregisterPushSubscription/);
+  assert.match(serviceSource, /webPushConfig \{ enabled publicKey proxyUrl \}/);
+  assert.match(serviceSource, /mutation UpdateWebPushProxy/);
+  assert.match(serviceSource, /updateWebPushProxy\(proxyUrl: \$proxyUrl\)/);
   assert.match(serviceSource, /!subscriptionUsesKey\(subscription, config\.publicKey\)/);
   assert.match(serviceSource, /applicationServerKey: base64URLBytes\(config\.publicKey\)/);
   assert.match(settingsSource, /卡片系统通知/);
+  assert.match(settingsSource, /通知代理/);
+  assert.match(settingsSource, /saveNotificationProxy/);
   assert.match(settingsSource, /<q-toggle/);
 });

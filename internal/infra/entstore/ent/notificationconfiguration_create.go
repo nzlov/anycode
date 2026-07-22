@@ -38,6 +38,20 @@ func (_c *NotificationConfigurationCreate) SetVapidSubject(v string) *Notificati
 	return _c
 }
 
+// SetProxyURL sets the "proxy_url" field.
+func (_c *NotificationConfigurationCreate) SetProxyURL(v string) *NotificationConfigurationCreate {
+	_c.mutation.SetProxyURL(v)
+	return _c
+}
+
+// SetNillableProxyURL sets the "proxy_url" field if the given value is not nil.
+func (_c *NotificationConfigurationCreate) SetNillableProxyURL(v *string) *NotificationConfigurationCreate {
+	if v != nil {
+		_c.SetProxyURL(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *NotificationConfigurationCreate) SetCreatedAt(v time.Time) *NotificationConfigurationCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -93,6 +107,10 @@ func (_c *NotificationConfigurationCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *NotificationConfigurationCreate) defaults() {
+	if _, ok := _c.mutation.ProxyURL(); !ok {
+		v := notificationconfiguration.DefaultProxyURL
+		_c.mutation.SetProxyURL(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := notificationconfiguration.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -124,6 +142,9 @@ func (_c *NotificationConfigurationCreate) check() error {
 		if err := notificationconfiguration.VapidSubjectValidator(v); err != nil {
 			return &ValidationError{Name: "vapid_subject", err: fmt.Errorf(`ent: validator failed for field "NotificationConfiguration.vapid_subject": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.ProxyURL(); !ok {
+		return &ValidationError{Name: "proxy_url", err: errors.New(`ent: missing required field "NotificationConfiguration.proxy_url"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "NotificationConfiguration.created_at"`)}
@@ -174,6 +195,10 @@ func (_c *NotificationConfigurationCreate) createSpec() (*NotificationConfigurat
 	if value, ok := _c.mutation.VapidSubject(); ok {
 		_spec.SetField(notificationconfiguration.FieldVapidSubject, field.TypeString, value)
 		_node.VapidSubject = value
+	}
+	if value, ok := _c.mutation.ProxyURL(); ok {
+		_spec.SetField(notificationconfiguration.FieldProxyURL, field.TypeString, value)
+		_node.ProxyURL = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(notificationconfiguration.FieldCreatedAt, field.TypeTime, value)

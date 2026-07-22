@@ -679,6 +679,7 @@ type UpdateSessionConfigInput struct {
 type WebPushConfig struct {
 	Enabled   bool   `json:"enabled"`
 	PublicKey string `json:"publicKey"`
+	ProxyURL  string `json:"proxyUrl"`
 }
 
 type WorkflowCondition struct {

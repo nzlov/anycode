@@ -220,15 +220,19 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 
 func TestWebPushResolversForwardPrincipalAndSubscription(t *testing.T) {
 	notifications := &fakeNotificationUseCase{
-		config:       notificationapp.ConfigDTO{Enabled: true, PublicKey: "public"},
+		config:       notificationapp.ConfigDTO{Enabled: true, PublicKey: "public", ProxyURL: "http://old-proxy.example:8080"},
 		registration: notificationapp.SubscriptionDTO{ID: "subscription-1"},
 	}
 	resolver := NewResolver(UseCases{Notifications: notifications})
 	ctx := WithPrincipal(context.Background(), authdomain.AccessPrincipal{KeyHash: "principal", Kind: "test"})
 
 	config, err := resolver.Query().WebPushConfig(ctx)
-	if err != nil || !config.Enabled || config.PublicKey != "public" {
+	if err != nil || !config.Enabled || config.PublicKey != "public" || config.ProxyURL != "http://old-proxy.example:8080" {
 		t.Fatalf("WebPushConfig() = %#v, %v", config, err)
+	}
+	updated, err := resolver.Mutation().UpdateWebPushProxy(ctx, "socks5://proxy.example:1080")
+	if err != nil || notifications.updateProxyInput.ProxyURL != "socks5://proxy.example:1080" || updated.ProxyURL != "http://old-proxy.example:8080" {
+		t.Fatalf("UpdateWebPushProxy() = %#v, input = %#v, error = %v", updated, notifications.updateProxyInput, err)
 	}
 	registered, err := resolver.Mutation().RegisterPushSubscription(ctx, model.RegisterPushSubscriptionInput{
 		Endpoint: "https://push.example/1", P256dh: "p256dh", Auth: "auth",
@@ -1155,13 +1159,19 @@ type fakeSettingUseCase struct {
 
 type fakeNotificationUseCase struct {
 	notificationapp.UseCase
-	config          notificationapp.ConfigDTO
-	registration    notificationapp.SubscriptionDTO
-	registerInput   notificationapp.RegisterSubscriptionInput
-	unregisterInput notificationapp.UnregisterSubscriptionInput
+	config           notificationapp.ConfigDTO
+	registration     notificationapp.SubscriptionDTO
+	updateProxyInput notificationapp.UpdateProxyInput
+	registerInput    notificationapp.RegisterSubscriptionInput
+	unregisterInput  notificationapp.UnregisterSubscriptionInput
 }
 
 func (f *fakeNotificationUseCase) GetConfig(context.Context) (notificationapp.ConfigDTO, error) {
+	return f.config, nil
+}
+
+func (f *fakeNotificationUseCase) UpdateProxy(_ context.Context, input notificationapp.UpdateProxyInput) (notificationapp.ConfigDTO, error) {
+	f.updateProxyInput = input
 	return f.config, nil
 }
 

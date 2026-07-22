@@ -23,6 +23,8 @@ type NotificationConfiguration struct {
 	VapidPrivateKey string `json:"-"`
 	// VapidSubject holds the value of the "vapid_subject" field.
 	VapidSubject string `json:"vapid_subject,omitempty"`
+	// ProxyURL holds the value of the "proxy_url" field.
+	ProxyURL string `json:"-"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt    time.Time `json:"created_at,omitempty"`
 	selectValues sql.SelectValues
@@ -33,7 +35,7 @@ func (*NotificationConfiguration) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case notificationconfiguration.FieldID, notificationconfiguration.FieldVapidPublicKey, notificationconfiguration.FieldVapidPrivateKey, notificationconfiguration.FieldVapidSubject:
+		case notificationconfiguration.FieldID, notificationconfiguration.FieldVapidPublicKey, notificationconfiguration.FieldVapidPrivateKey, notificationconfiguration.FieldVapidSubject, notificationconfiguration.FieldProxyURL:
 			values[i] = new(sql.NullString)
 		case notificationconfiguration.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -75,6 +77,12 @@ func (_m *NotificationConfiguration) assignValues(columns []string, values []any
 				return fmt.Errorf("unexpected type %T for field vapid_subject", values[i])
 			} else if value.Valid {
 				_m.VapidSubject = value.String
+			}
+		case notificationconfiguration.FieldProxyURL:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field proxy_url", values[i])
+			} else if value.Valid {
+				_m.ProxyURL = value.String
 			}
 		case notificationconfiguration.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -125,6 +133,8 @@ func (_m *NotificationConfiguration) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("vapid_subject=")
 	builder.WriteString(_m.VapidSubject)
+	builder.WriteString(", ")
+	builder.WriteString("proxy_url=<sensitive>")
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
