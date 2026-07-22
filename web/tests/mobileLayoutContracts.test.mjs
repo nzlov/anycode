@@ -162,7 +162,10 @@ test('shared pagination remains available outside the unpaginated diff workspace
 });
 
 test('diff workspace keeps file navigation fixed while content scrolls with sticky file titles', () => {
-  assert.match(diffViewerSource, /\.diff-viewer\s*{[^}]*align-content:\s*start/s);
+  assert.match(
+    diffViewerSource,
+    /\.diff-viewer\s*{[^}]*min-width:\s*0[^}]*align-content:\s*start/s,
+  );
   assert.match(
     diffWorkspaceSource,
     /\.diff-workspace__layout\s*{[^}]*grid-template-columns:\s*320px\s+minmax\(0,\s*1fr\)[^}]*grid-template-rows:\s*minmax\(0,\s*1fr\)/s,
@@ -183,7 +186,14 @@ test('diff workspace keeps file navigation fixed while content scrolls with stic
     diffViewerSource,
     /\.diff-file-header\s*{[^}]*position:\s*sticky[^}]*top:\s*0[^}]*z-index:\s*1/s,
   );
-  assert.match(diffViewerSource, /\.diff-file-card\s*{[^}]*overflow:\s*visible/s);
+  assert.match(
+    diffViewerSource,
+    /\.diff-file-card\s*{[^}]*min-width:\s*0[^}]*overflow:\s*visible/s,
+  );
+  assert.match(
+    diffViewerSource,
+    /@media \(max-width:\s*720px\)[\s\S]*?\.diff-file-header\s*{[^}]*flex-wrap:\s*wrap/s,
+  );
   assert.match(diffPageSource, /height:\s*calc\(100dvh\s*-\s*98px\)/);
   assert.match(detailSource, /:show-file-navigation="false"/);
 });

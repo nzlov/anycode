@@ -485,7 +485,17 @@
         <q-card-section class="event-resource-dialog__header">
           <div class="event-resource-dialog__title">
             <q-icon :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)" />
-            <span>{{ eventResourceTitle }}</span>
+            <div class="event-resource-dialog__title-content">
+              <span>{{ eventResourceTitle }}</span>
+              <div
+                v-if="eventResourceKind === 'diff' && eventDiffFile"
+                class="event-resource-dialog__diff-meta"
+              >
+                <q-badge outline color="positive" :label="`+${eventDiffFile.additions}`" />
+                <q-badge outline color="negative" :label="`-${eventDiffFile.deletions}`" />
+                <q-badge outline color="primary" :label="eventDiffFile.status" />
+              </div>
+            </div>
           </div>
           <div class="row items-center q-gutter-xs">
             <q-btn
@@ -506,12 +516,17 @@
           </div>
         </q-card-section>
         <q-separator />
-        <q-card-section class="event-resource-dialog__body">
+        <q-card-section
+          class="event-resource-dialog__body"
+          :class="{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' }"
+        >
           <DiffWorkspace
             v-if="eventResourceKind === 'diff'"
             v-model="eventDiffState"
             :target="detailDiffTarget"
             :show-file-navigation="false"
+            :show-file-headers="false"
+            :show-refresh="false"
           />
           <SessionFilePreview v-else :file="eventResourceFile" />
         </q-card-section>
@@ -538,7 +553,7 @@ import { normalizePermissionMode } from '@/components/promptOptions';
 import { useSessionDetail } from '@/composables/useSessionDetail';
 import { deleteStagedAttachment, stageAttachment } from '@/services/attachments';
 import { AnyCodeGraphQLError } from '@/services/graphqlClient';
-import type { DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
+import type { DiffFile, DiffWorkspaceState, DiffWorkspaceTarget } from '@/services/diff';
 import { getSessionDiffFiles } from '@/services/diff';
 import {
   matchChangedFilePath,
@@ -618,6 +633,7 @@ const detailDiffWorkspaceState = ref<DiffWorkspaceState>({
   filePath: '',
 });
 const eventDiffState = ref<DiffWorkspaceState>({ mode: 'single', filePath: '' });
+const eventDiffFile = ref<DiffFile | null>(null);
 const eventResourceDialogOpen = ref(false);
 const eventResourceKind = ref<'diff' | 'file'>('file');
 const eventResourceFile = ref<SessionFile | null>(null);
@@ -740,7 +756,8 @@ async function resolveSessionEventResource(
         reference.path,
         diffResult.value.files.map((file) => file.path),
       );
-      if (filePath) return openEventDiff(filePath);
+      const diffFile = diffResult.value.files.find((file) => file.path === filePath);
+      if (diffFile) return openEventDiff(diffFile);
     }
     if (artifactResult.status === 'fulfilled' && artifactResult.value[0]?.file) {
       return focusEventArtifact(artifactResult.value[0].file);
@@ -752,15 +769,16 @@ async function resolveSessionEventResource(
   }
 }
 
-function openEventDiff(filePath: string) {
+function openEventDiff(file: DiffFile) {
   if ($q.screen.lt.sm) {
     void router.push({
       path: '/diff',
-      query: { sessionId, mode: 'single', filePath },
+      query: { sessionId, mode: 'single', filePath: file.path },
     });
     return;
   }
-  eventDiffState.value = { mode: 'single', filePath };
+  eventDiffState.value = { mode: 'single', filePath: file.path };
+  eventDiffFile.value = file;
   eventResourceFile.value = null;
   eventResourceKind.value = 'diff';
   eventResourceDialogOpen.value = true;
@@ -774,6 +792,7 @@ function focusEventArtifact(file: SessionFile) {
     });
     return;
   }
+  eventDiffFile.value = null;
   eventResourceFile.value = file;
   eventResourceKind.value = 'file';
   eventResourceDialogOpen.value = true;
@@ -812,6 +831,7 @@ function fileIcon(file: SessionFile | null) {
 
 function clearEventResource() {
   eventResourceRequest++;
+  eventDiffFile.value = null;
   eventResourceFile.value = null;
 }
 
@@ -1432,10 +1452,21 @@ async function scrollEventsToBottom() {
   justify-content: space-between;
 }
 
-.event-resource-dialog__title span {
+.event-resource-dialog__title-content {
+  display: grid;
   min-width: 0;
+  gap: 6px;
+}
+
+.event-resource-dialog__title-content > span {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.event-resource-dialog__diff-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .event-resource-dialog__body {
@@ -1443,6 +1474,20 @@ async function scrollEventsToBottom() {
   flex: 1 1 auto;
   overflow: auto;
   padding: 12px;
+}
+
+.event-resource-dialog__body--diff {
+  padding: 0;
+}
+
+.event-resource-dialog__body--diff :deep(.diff-file-card) {
+  border: 0;
+  border-radius: 0;
+}
+
+.event-resource-dialog__body :deep(.diff-content) {
+  overflow-y: visible;
+  overscroll-behavior-y: auto;
 }
 
 .token-usage-summary {

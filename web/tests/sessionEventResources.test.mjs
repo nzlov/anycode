@@ -73,7 +73,10 @@ test('event stream routes local markdown and authenticated images through modal 
   assert.match(markdown, /const anchor = document\.createElement\('a'\)/);
   assert.doesNotMatch(markdown, /markdown-content__image-link/);
   assert.match(detail, /getSessionDiffFiles/);
-  assert.match(detail, /eventDiffState\.value = \{ mode: 'single', filePath \}/);
+  assert.match(
+    detail,
+    /function openEventDiff\(file: DiffFile\)[\s\S]*eventDiffState\.value = \{ mode: 'single', filePath: file\.path \}/,
+  );
   assert.match(detail, /resolveSessionArtifacts/);
   assert.match(detail, /<SessionFilePreview v-else :file="eventResourceFile"/);
   assert.match(detail, /class="event-resource-dialog app-content-dialog"/);
@@ -90,4 +93,60 @@ test('content-only diff workspaces preserve the requested diff mode', () => {
     /const workspaceMode = computed<DiffMode>\(\(\) => props\.modelValue\.mode\);/,
   );
   assert.doesNotMatch(source, /showFileNavigation \? props\.modelValue\.mode : 'all'/);
+});
+
+test('event diff dialog removes viewer chrome and lets its body own vertical scrolling', () => {
+  const detail = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+  const workspace = readFileSync(
+    new URL('../src/components/DiffWorkspace.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    detail,
+    /<DiffWorkspace[\s\S]*?v-if="eventResourceKind === 'diff'"[\s\S]*?:show-refresh="false"/,
+  );
+  assert.match(
+    detail,
+    /\.event-resource-dialog__body :deep\(\.diff-content\)\s*{[^}]*overflow-y:\s*visible[^}]*overscroll-behavior-y:\s*auto/s,
+  );
+  assert.match(
+    detail,
+    /:class="\{ 'event-resource-dialog__body--diff': eventResourceKind === 'diff' \}"/,
+  );
+  assert.match(detail, /\.event-resource-dialog__body--diff\s*{[^}]*padding:\s*0/s);
+  assert.match(
+    detail,
+    /\.event-resource-dialog__body--diff :deep\(\.diff-file-card\)\s*{[^}]*border:\s*0[^}]*border-radius:\s*0/s,
+  );
+  assert.match(workspace, /<q-btn\s+v-if="showRefresh"[\s\S]*?aria-label="刷新 Diff"/);
+  assert.match(workspace, /showRefresh:\s*true/);
+});
+
+test('event diff dialog moves single-file metadata into its outer title', () => {
+  const detail = readFileSync(
+    new URL('../src/pages/SessionDetailPage.vue', import.meta.url),
+    'utf8',
+  );
+  const workspace = readFileSync(
+    new URL('../src/components/DiffWorkspace.vue', import.meta.url),
+    'utf8',
+  );
+  const viewer = readFileSync(new URL('../src/components/DiffViewer.vue', import.meta.url), 'utf8');
+
+  assert.match(detail, /const eventDiffFile = ref<DiffFile \| null>\(null\)/);
+  assert.match(detail, /const diffFile = diffResult\.value\.files\.find/);
+  assert.match(detail, /eventDiffFile\.value = file/);
+  assert.match(
+    detail,
+    /class="event-resource-dialog__diff-meta"[\s\S]*eventDiffFile\.additions[\s\S]*eventDiffFile\.deletions[\s\S]*eventDiffFile\.status/,
+  );
+  assert.match(detail, /:show-file-headers="false"/);
+  assert.match(workspace, /:show-file-headers="showFileHeaders"/);
+  assert.match(workspace, /showFileHeaders:\s*true/);
+  assert.match(viewer, /v-if="showFileHeaders" class="diff-file-header"/);
+  assert.match(viewer, /showFileHeaders:\s*true/);
 });

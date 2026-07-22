@@ -3,6 +3,7 @@
     <!-- GLUE: standalone Diff owns these controls; the target only moves them into the app layout. -->
     <Teleport defer :to="toolbarTarget || 'body'" :disabled="!toolbarTarget">
       <div
+        v-if="toolbarTitle || showFileNavigation || workspaceMode === 'all' || showRefresh"
         class="diff-workspace__toolbar"
         :class="{ 'diff-workspace__toolbar--header': toolbarTarget }"
       >
@@ -45,6 +46,7 @@
           </q-btn>
         </template>
         <q-btn
+          v-if="showRefresh"
           flat
           round
           dense
@@ -167,6 +169,7 @@
           :files="visibleFiles"
           :file-diffs="visibleDiffs"
           :collapsible="workspaceMode === 'all'"
+          :show-file-headers="showFileHeaders"
           :collapsed-paths="collapseState.collapsedPaths"
           :loading-paths="fileLoadingPaths"
           @expand="expandDiff"
@@ -233,12 +236,19 @@ const props = withDefaults(
     target: DiffWorkspaceTarget;
     modelValue: DiffWorkspaceState;
     showFileNavigation?: boolean;
+    showFileHeaders?: boolean;
+    showRefresh?: boolean;
     lazyFileDetails?: boolean;
     refreshKey?: string | number;
     toolbarTarget?: string;
     toolbarTitle?: string;
   }>(),
-  { showFileNavigation: true, lazyFileDetails: false },
+  {
+    showFileNavigation: true,
+    showFileHeaders: true,
+    showRefresh: true,
+    lazyFileDetails: false,
+  },
 );
 
 const emit = defineEmits<{
