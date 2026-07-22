@@ -1,7 +1,14 @@
 <template>
   <div class="diff-viewer">
-    <q-card v-for="file in visibleFiles" :key="file.path" flat bordered class="diff-file-card">
-      <q-card-section class="diff-file-header">
+    <q-card
+      v-for="file in visibleFiles"
+      :key="file.path"
+      flat
+      bordered
+      class="diff-file-card"
+      :class="{ 'diff-file-card--headerless': !showFileHeaders }"
+    >
+      <q-card-section v-if="showFileHeaders" class="diff-file-header">
         <div
           class="file-title"
           :class="{ 'file-title--collapsible': collapsible }"
@@ -28,7 +35,7 @@
           <q-badge outline :color="fileColor(file.status)" :label="file.status" />
         </div>
       </q-card-section>
-      <q-separator v-if="!isCollapsed(file.path) && fileDiffFor(file.path)" />
+      <q-separator v-if="showFileHeaders && !isCollapsed(file.path) && fileDiffFor(file.path)" />
       <q-card-section v-if="!isCollapsed(file.path) && fileDiffFor(file.path)" class="diff-code">
         <template
           v-for="hunk in fileDiffFor(file.path)?.hunks ?? []"
@@ -80,12 +87,14 @@ const props = withDefaults(
     fileDiffs: FileDiff[];
     files?: DiffFile[];
     collapsible?: boolean;
+    showFileHeaders?: boolean;
     collapsedPaths?: string[];
     loadingPaths?: string[];
   }>(),
   {
     files: () => [],
     collapsible: false,
+    showFileHeaders: true,
     collapsedPaths: () => [],
     loadingPaths: () => [],
   },
@@ -146,15 +155,21 @@ function lineClass(kind: DiffLineKind) {
 <style scoped>
 .diff-viewer {
   display: grid;
+  min-width: 0;
   align-content: start;
   gap: 12px;
 }
 
 .diff-file-card {
+  min-width: 0;
   overflow: visible;
   background: var(--ac-surface);
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
+}
+
+.diff-file-card--headerless {
+  overflow: hidden;
 }
 
 .diff-file-header {
@@ -252,6 +267,14 @@ function lineClass(kind: DiffLineKind) {
 }
 
 @media (max-width: 720px) {
+  .diff-file-header {
+    flex-wrap: wrap;
+  }
+
+  .diff-file-header > .row {
+    margin-left: auto;
+  }
+
   .diff-line {
     grid-template-columns: 44px 44px minmax(max-content, 1fr);
     font-size: 11px;
