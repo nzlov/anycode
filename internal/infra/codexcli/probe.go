@@ -163,8 +163,7 @@ func (c *Client) Probe(ctx context.Context) (process.CodexCapabilities, error) {
 	c.mcpToolTimeout = supportsMCPToolTimeout
 	return process.CodexCapabilities{
 		Version:                 firstLine(version),
-		SupportsExec:            commandWorks(ctx, bin, "exec", "--help"),
-		SupportsResume:          commandWorks(ctx, bin, "exec", "resume", "--help"),
+		SupportsAppServer:       commandWorks(ctx, bin, "app-server", "--help"),
 		SupportsMCPToolTimeout:  supportsMCPToolTimeout,
 		SupportsImageGeneration: supportsImageGeneration,
 		ImageGenerationStatus:   imageGenerationStatus,

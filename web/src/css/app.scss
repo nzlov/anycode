@@ -1517,6 +1517,11 @@ body.desktop
   display: none;
 }
 
+.prompt-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
 .prompt-input {
   padding: 12px 16px;
 }
@@ -1527,6 +1532,95 @@ body.desktop
 
 .prompt-shell--compact .prompt-input .q-field__control {
   min-height: 92px;
+}
+
+.prompt-completion {
+  position: absolute;
+  z-index: 20;
+  right: 12px;
+  bottom: 8px;
+  left: 12px;
+  display: flex;
+  max-height: min(280px, 50dvh);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--ac-border-strong);
+  border-radius: 6px;
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-dialog);
+  color: var(--ac-text);
+}
+
+.prompt-completion__header {
+  display: flex;
+  min-height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--ac-border);
+  background: var(--ac-surface-muted);
+  color: var(--ac-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.prompt-completion__list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.prompt-completion__item {
+  min-height: 48px;
+  padding: 6px 10px;
+}
+
+.prompt-completion__item + .prompt-completion__item {
+  border-top: 1px solid color-mix(in srgb, var(--ac-border) 70%, transparent);
+}
+
+.prompt-completion__item .q-item__section--avatar {
+  min-width: 32px;
+  padding-right: 8px;
+  color: var(--ac-text-muted);
+}
+
+.prompt-completion__item--active {
+  background: color-mix(in srgb, var(--q-primary) 11%, var(--ac-surface));
+  color: var(--ac-text);
+}
+
+.prompt-completion__item:focus-visible {
+  outline: 2px solid var(--q-primary);
+  outline-offset: -2px;
+}
+
+.prompt-completion__value {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.prompt-completion__path {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.prompt-completion__match {
+  color: var(--q-primary);
+  font-weight: 700;
+}
+
+.prompt-completion__empty {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  color: var(--ac-text-muted);
+  font-size: 12px;
 }
 
 .prompt-toolbar {
@@ -2116,6 +2210,13 @@ body.desktop
   .overview-project-filters--mobile .q-chip {
     max-width: 100%;
     margin: 0;
+  }
+
+  .prompt-completion {
+    right: 8px;
+    bottom: 6px;
+    left: 8px;
+    max-height: min(220px, 45dvh);
   }
 
   .page-toolbar {

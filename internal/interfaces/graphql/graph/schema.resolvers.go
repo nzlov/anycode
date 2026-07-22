@@ -12,6 +12,7 @@ import (
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
+	promptcompletionapp "github.com/nzlov/anycode/internal/application/promptcompletion"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
@@ -447,6 +448,52 @@ func (r *mutationResolver) SubmitQuestionBatch(ctx context.Context, input model.
 // CodexModelOptions is the resolver for the codexModelOptions field.
 func (r *queryResolver) CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error) {
 	return mapCodexModelOptions(r.UseCases.CodexModels), nil
+}
+
+// CodexSlashCommands is the resolver for the codexSlashCommands field.
+func (r *queryResolver) CodexSlashCommands(ctx context.Context) ([]*model.CodexSlashCommand, error) {
+	if r.UseCases.PromptCompletion == nil {
+		return nil, missingUseCase("prompt completion")
+	}
+	commands := r.UseCases.PromptCompletion.SlashCommands(ctx)
+	result := make([]*model.CodexSlashCommand, 0, len(commands))
+	for _, command := range commands {
+		result = append(result, &model.CodexSlashCommand{
+			Name: command.Name, Description: command.Description,
+			AcceptsArgs: command.AcceptsArgs, RequiresThread: command.RequiresThread,
+		})
+	}
+	return result, nil
+}
+
+// PromptFileMatches is the resolver for the promptFileMatches field.
+func (r *queryResolver) PromptFileMatches(ctx context.Context, input model.PromptFileMatchInput) ([]*model.PromptFileMatch, error) {
+	if r.UseCases.PromptCompletion == nil {
+		return nil, missingUseCase("prompt completion")
+	}
+	var projectID projectdomain.ID
+	if input.ProjectID != nil {
+		projectID = projectdomain.ID(*input.ProjectID)
+	}
+	var sessionID sessiondomain.ID
+	if input.SessionID != nil {
+		sessionID = sessiondomain.ID(*input.SessionID)
+	}
+	matches, err := r.UseCases.PromptCompletion.SearchFiles(ctx, promptcompletionapp.SearchFilesInput{
+		ProjectID: projectID,
+		SessionID: sessionID,
+		Query:     input.Query,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.PromptFileMatch, 0, len(matches))
+	for _, match := range matches {
+		result = append(result, &model.PromptFileMatch{
+			Path: match.Path, Score: match.Score, Indices: match.Indices,
+		})
+	}
+	return result, nil
 }
 
 // AppearanceSettings is the resolver for the appearanceSettings field.

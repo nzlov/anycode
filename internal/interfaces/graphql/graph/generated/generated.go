@@ -67,6 +67,13 @@ type ComplexityRoot struct {
 		Value       func(childComplexity int) int
 	}
 
+	CodexSlashCommand struct {
+		AcceptsArgs    func(childComplexity int) int
+		Description    func(childComplexity int) int
+		Name           func(childComplexity int) int
+		RequiresThread func(childComplexity int) int
+	}
+
 	CommitRecord struct {
 		AuthorEmail func(childComplexity int) int
 		AuthorName  func(childComplexity int) int
@@ -213,6 +220,12 @@ type ComplexityRoot struct {
 		SessionID   func(childComplexity int) int
 	}
 
+	PromptFileMatch struct {
+		Indices func(childComplexity int) int
+		Path    func(childComplexity int) int
+		Score   func(childComplexity int) int
+	}
+
 	PushSubscriptionRegistration struct {
 		ID func(childComplexity int) int
 	}
@@ -222,9 +235,11 @@ type ComplexityRoot struct {
 		BranchDiff              func(childComplexity int, input model.BranchDiffInput) int
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions       func(childComplexity int) int
+		CodexSlashCommands      func(childComplexity int) int
 		PendingQuestionBatches  func(childComplexity int, sessionID string) int
 		ProjectGitState         func(childComplexity int, projectID string, refresh bool) int
 		Projects                func(childComplexity int) int
+		PromptFileMatches       func(childComplexity int, input model.PromptFileMatchInput) int
 		QuestionBatch           func(childComplexity int, id string) int
 		QuickCommands           func(childComplexity int, input *model.ListQuickCommandsInput) int
 		ResolveSessionArtifacts func(childComplexity int, input model.ResolveSessionArtifactsInput) int
@@ -677,6 +692,8 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
+	CodexSlashCommands(ctx context.Context) ([]*model.CodexSlashCommand, error)
+	PromptFileMatches(ctx context.Context, input model.PromptFileMatchInput) ([]*model.PromptFileMatch, error)
 	AppearanceSettings(ctx context.Context) (*model.AppearanceSettings, error)
 	WebPushConfig(ctx context.Context) (*model.WebPushConfig, error)
 	QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error)
@@ -809,6 +826,31 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.CodexReasoningEffortOption.Value(childComplexity), true
+
+	case "CodexSlashCommand.acceptsArgs":
+		if e.ComplexityRoot.CodexSlashCommand.AcceptsArgs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSlashCommand.AcceptsArgs(childComplexity), true
+	case "CodexSlashCommand.description":
+		if e.ComplexityRoot.CodexSlashCommand.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSlashCommand.Description(childComplexity), true
+	case "CodexSlashCommand.name":
+		if e.ComplexityRoot.CodexSlashCommand.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSlashCommand.Name(childComplexity), true
+	case "CodexSlashCommand.requiresThread":
+		if e.ComplexityRoot.CodexSlashCommand.RequiresThread == nil {
+			break
+		}
+
+		return e.ComplexityRoot.CodexSlashCommand.RequiresThread(childComplexity), true
 
 	case "CommitRecord.authorEmail":
 		if e.ComplexityRoot.CommitRecord.AuthorEmail == nil {
@@ -1542,6 +1584,25 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.PromptAppend.SessionID(childComplexity), true
 
+	case "PromptFileMatch.indices":
+		if e.ComplexityRoot.PromptFileMatch.Indices == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileMatch.Indices(childComplexity), true
+	case "PromptFileMatch.path":
+		if e.ComplexityRoot.PromptFileMatch.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileMatch.Path(childComplexity), true
+	case "PromptFileMatch.score":
+		if e.ComplexityRoot.PromptFileMatch.Score == nil {
+			break
+		}
+
+		return e.ComplexityRoot.PromptFileMatch.Score(childComplexity), true
+
 	case "PushSubscriptionRegistration.id":
 		if e.ComplexityRoot.PushSubscriptionRegistration.ID == nil {
 			break
@@ -1583,6 +1644,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.CodexModelOptions(childComplexity), true
+	case "Query.codexSlashCommands":
+		if e.ComplexityRoot.Query.CodexSlashCommands == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.CodexSlashCommands(childComplexity), true
 
 	case "Query.pendingQuestionBatches":
 		if e.ComplexityRoot.Query.PendingQuestionBatches == nil {
@@ -1612,6 +1679,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Projects(childComplexity), true
+	case "Query.promptFileMatches":
+		if e.ComplexityRoot.Query.PromptFileMatches == nil {
+			break
+		}
+
+		args, err := ec.field_Query_promptFileMatches_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.PromptFileMatches(childComplexity, args["input"].(model.PromptFileMatchInput)), true
 	case "Query.questionBatch":
 		if e.ComplexityRoot.Query.QuestionBatch == nil {
 			break
@@ -3374,6 +3452,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputListSessionsInput,
 		ec.unmarshalInputListTranscriptEventsInput,
 		ec.unmarshalInputMergeConfigInput,
+		ec.unmarshalInputPromptFileMatchInput,
 		ec.unmarshalInputQuestionAnswerInput,
 		ec.unmarshalInputRegisterPushSubscriptionInput,
 		ec.unmarshalInputResolveSessionArtifactsInput,
@@ -3496,6 +3575,8 @@ scalar Int64
 
 type Query {
   codexModelOptions: [CodexModelOption!]!
+  codexSlashCommands: [CodexSlashCommand!]!
+  promptFileMatches(input: PromptFileMatchInput!): [PromptFileMatch!]!
   appearanceSettings: AppearanceSettings!
   webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
@@ -3514,6 +3595,25 @@ type Query {
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
+}
+
+type CodexSlashCommand {
+  name: String!
+  description: String!
+  acceptsArgs: Boolean!
+  requiresThread: Boolean!
+}
+
+type PromptFileMatch {
+  path: String!
+  score: Int!
+  indices: [Int!]!
+}
+
+input PromptFileMatchInput {
+  projectId: ID
+  sessionId: ID
+  query: String!
 }
 
 type Mutation {
@@ -4758,6 +4858,17 @@ func (ec *executionContext) field_Query_projectGitState_args(ctx context.Context
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_promptFileMatches_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNPromptFileMatchInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatchInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_questionBatch_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5380,6 +5491,122 @@ func (ec *executionContext) fieldContext_CodexReasoningEffortOption_description(
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexSlashCommand_name(ctx context.Context, field graphql.CollectedField, obj *model.CodexSlashCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSlashCommand_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSlashCommand_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSlashCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexSlashCommand_description(ctx context.Context, field graphql.CollectedField, obj *model.CodexSlashCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSlashCommand_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSlashCommand_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSlashCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexSlashCommand_acceptsArgs(ctx context.Context, field graphql.CollectedField, obj *model.CodexSlashCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSlashCommand_acceptsArgs,
+		func(ctx context.Context) (any, error) {
+			return obj.AcceptsArgs, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSlashCommand_acceptsArgs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSlashCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _CodexSlashCommand_requiresThread(ctx context.Context, field graphql.CollectedField, obj *model.CodexSlashCommand) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_CodexSlashCommand_requiresThread,
+		func(ctx context.Context) (any, error) {
+			return obj.RequiresThread, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_CodexSlashCommand_requiresThread(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "CodexSlashCommand",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -9084,6 +9311,93 @@ func (ec *executionContext) fieldContext_PromptAppend_createdAt(_ context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _PromptFileMatch_path(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileMatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileMatch_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileMatch_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileMatch",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptFileMatch_score(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileMatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileMatch_score,
+		func(ctx context.Context) (any, error) {
+			return obj.Score, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileMatch_score(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileMatch",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _PromptFileMatch_indices(ctx context.Context, field graphql.CollectedField, obj *model.PromptFileMatch) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_PromptFileMatch_indices,
+		func(ctx context.Context) (any, error) {
+			return obj.Indices, nil
+		},
+		nil,
+		ec.marshalNInt2ᚕintᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_PromptFileMatch_indices(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "PromptFileMatch",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PushSubscriptionRegistration_id(ctx context.Context, field graphql.CollectedField, obj *model.PushSubscriptionRegistration) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9148,6 +9462,94 @@ func (ec *executionContext) fieldContext_Query_codexModelOptions(_ context.Conte
 			}
 			return nil, fmt.Errorf("no field named %q was found under type CodexModelOption", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_codexSlashCommands(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_codexSlashCommands,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().CodexSlashCommands(ctx)
+		},
+		nil,
+		ec.marshalNCodexSlashCommand2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSlashCommandᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_codexSlashCommands(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_CodexSlashCommand_name(ctx, field)
+			case "description":
+				return ec.fieldContext_CodexSlashCommand_description(ctx, field)
+			case "acceptsArgs":
+				return ec.fieldContext_CodexSlashCommand_acceptsArgs(ctx, field)
+			case "requiresThread":
+				return ec.fieldContext_CodexSlashCommand_requiresThread(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type CodexSlashCommand", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_promptFileMatches(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_promptFileMatches,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().PromptFileMatches(ctx, fc.Args["input"].(model.PromptFileMatchInput))
+		},
+		nil,
+		ec.marshalNPromptFileMatch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatchᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_promptFileMatches(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_PromptFileMatch_path(ctx, field)
+			case "score":
+				return ec.fieldContext_PromptFileMatch_score(ctx, field)
+			case "indices":
+				return ec.fieldContext_PromptFileMatch_indices(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PromptFileMatch", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_promptFileMatches_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -20601,6 +21003,50 @@ func (ec *executionContext) unmarshalInputMergeConfigInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputPromptFileMatchInput(ctx context.Context, obj any) (model.PromptFileMatchInput, error) {
+	var it model.PromptFileMatchInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"projectId", "sessionId", "query"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "projectId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("projectId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProjectID = data
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalOID2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "query":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("query"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Query = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputQuestionAnswerInput(ctx context.Context, obj any) (model.QuestionAnswerInput, error) {
 	var it model.QuestionAnswerInput
 	if obj == nil {
@@ -21919,6 +22365,60 @@ func (ec *executionContext) _CodexReasoningEffortOption(ctx context.Context, sel
 	return out
 }
 
+var codexSlashCommandImplementors = []string{"CodexSlashCommand"}
+
+func (ec *executionContext) _CodexSlashCommand(ctx context.Context, sel ast.SelectionSet, obj *model.CodexSlashCommand) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, codexSlashCommandImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("CodexSlashCommand")
+		case "name":
+			out.Values[i] = ec._CodexSlashCommand_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._CodexSlashCommand_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "acceptsArgs":
+			out.Values[i] = ec._CodexSlashCommand_acceptsArgs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "requiresThread":
+			out.Values[i] = ec._CodexSlashCommand_requiresThread(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var commitRecordImplementors = []string{"CommitRecord"}
 
 func (ec *executionContext) _CommitRecord(ctx context.Context, sel ast.SelectionSet, obj *model.CommitRecord) graphql.Marshaler {
@@ -23026,6 +23526,55 @@ func (ec *executionContext) _PromptAppend(ctx context.Context, sel ast.Selection
 	return out
 }
 
+var promptFileMatchImplementors = []string{"PromptFileMatch"}
+
+func (ec *executionContext) _PromptFileMatch(ctx context.Context, sel ast.SelectionSet, obj *model.PromptFileMatch) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, promptFileMatchImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("PromptFileMatch")
+		case "path":
+			out.Values[i] = ec._PromptFileMatch_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "score":
+			out.Values[i] = ec._PromptFileMatch_score(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "indices":
+			out.Values[i] = ec._PromptFileMatch_indices(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var pushSubscriptionRegistrationImplementors = []string{"PushSubscriptionRegistration"}
 
 func (ec *executionContext) _PushSubscriptionRegistration(ctx context.Context, sel ast.SelectionSet, obj *model.PushSubscriptionRegistration) graphql.Marshaler {
@@ -23094,6 +23643,50 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_codexModelOptions(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "codexSlashCommands":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_codexSlashCommands(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "promptFileMatches":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_promptFileMatches(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -26790,6 +27383,32 @@ func (ec *executionContext) marshalNCodexReasoningEffortOption2ᚖgithubᚗcom�
 	return ec._CodexReasoningEffortOption(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNCodexSlashCommand2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSlashCommandᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CodexSlashCommand) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNCodexSlashCommand2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSlashCommand(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNCodexSlashCommand2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCodexSlashCommand(ctx context.Context, sel ast.SelectionSet, v *model.CodexSlashCommand) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._CodexSlashCommand(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNCommitRecord2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐCommitRecordᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.CommitRecord) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -27073,6 +27692,36 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
+func (ec *executionContext) unmarshalNInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]int, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNInt2int(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalNInt2ᚕintᚄ(ctx context.Context, sel ast.SelectionSet, v []int) graphql.Marshaler {
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNInt2int(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
 func (ec *executionContext) unmarshalNInt642int64(ctx context.Context, v any) (int64, error) {
 	res, err := graphql.UnmarshalInt64(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -27189,6 +27838,37 @@ func (ec *executionContext) marshalNPromptAppend2ᚖgithubᚗcomᚋnzlovᚋanyco
 		return graphql.Null
 	}
 	return ec._PromptAppend(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNPromptFileMatch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatchᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.PromptFileMatch) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNPromptFileMatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatch(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNPromptFileMatch2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatch(ctx context.Context, sel ast.SelectionSet, v *model.PromptFileMatch) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._PromptFileMatch(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNPromptFileMatchInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPromptFileMatchInput(ctx context.Context, v any) (model.PromptFileMatchInput, error) {
+	res, err := ec.unmarshalInputPromptFileMatchInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNPushSubscriptionRegistration2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐPushSubscriptionRegistration(ctx context.Context, sel ast.SelectionSet, v model.PushSubscriptionRegistration) graphql.Marshaler {

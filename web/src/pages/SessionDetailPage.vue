@@ -111,6 +111,8 @@
             title="追加描述"
             placeholder="追加描述，发送给当前会话"
             :disabled="!session || appendUploading || appending || stopping || isClosed"
+            :completion-session-id="sessionId"
+            :completion-has-thread="Boolean(session?.codexSessionId)"
           >
             <template #actions>
               <q-btn

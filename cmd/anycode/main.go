@@ -20,6 +20,7 @@ import (
 	eventapp "github.com/nzlov/anycode/internal/application/event"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
+	promptcompletionapp "github.com/nzlov/anycode/internal/application/promptcompletion"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
@@ -223,18 +224,19 @@ func newGraphQLUseCases(store *entstore.Store, cfg config.Config, mcpCommand str
 	}
 	sessionEventService := sessioneventapp.New(timelineService, eventService, sessionService)
 	return graph.UseCases{
-		Projects:      projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
-		Sessions:      sessionService,
-		Timeline:      timelineService,
-		SessionEvents: sessionEventService,
-		Attachments:   attachmentapp.New(attachments, files),
-		Artifacts:     artifacts,
-		Diff:          diffService,
-		Workflows:     workflowService,
-		Questions:     questionService,
-		Notifications: notificationService,
-		Settings:      settingapp.New(store.Settings()),
-		CodexModels:   capabilities.Models,
+		Projects:         projectapp.New(store.Projects(), fsbrowser.New(), gitcli.New("")),
+		Sessions:         sessionService,
+		Timeline:         timelineService,
+		SessionEvents:    sessionEventService,
+		Attachments:      attachmentapp.New(attachments, files),
+		Artifacts:        artifacts,
+		Diff:             diffService,
+		Workflows:        workflowService,
+		Questions:        questionService,
+		Notifications:    notificationService,
+		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
+		Settings:         settingapp.New(store.Settings()),
+		CodexModels:      capabilities.Models,
 	}, nil
 }
 
@@ -346,16 +348,13 @@ func ensureCodexReady(ctx context.Context, prober codexProber) (processdomain.Co
 	if err != nil {
 		return processdomain.CodexCapabilities{}, fmt.Errorf("probe codex cli: %w", err)
 	}
-	if !capabilities.SupportsExec {
-		return processdomain.CodexCapabilities{}, errors.New("codex cli does not support exec")
-	}
-	if !capabilities.SupportsResume {
-		return processdomain.CodexCapabilities{}, errors.New("codex cli does not support exec resume")
+	if !capabilities.SupportsAppServer {
+		return processdomain.CodexCapabilities{}, errors.New("codex cli does not support app-server")
 	}
 	if len(capabilities.Models) == 0 {
 		return processdomain.CodexCapabilities{}, errors.New("codex cli did not return model options")
 	}
-	log.Printf("codex cli ready: version=%s exec=%t resume=%t mcp_tool_timeout=%t models=%d", capabilities.Version, capabilities.SupportsExec, capabilities.SupportsResume, capabilities.SupportsMCPToolTimeout, len(capabilities.Models))
+	log.Printf("codex cli ready: version=%s app_server=%t mcp_tool_timeout=%t models=%d", capabilities.Version, capabilities.SupportsAppServer, capabilities.SupportsMCPToolTimeout, len(capabilities.Models))
 	return capabilities, nil
 }
 

@@ -74,6 +74,13 @@ type CodexReasoningEffortOption struct {
 	Description string `json:"description"`
 }
 
+type CodexSlashCommand struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	AcceptsArgs    bool   `json:"acceptsArgs"`
+	RequiresThread bool   `json:"requiresThread"`
+}
+
 type CommitRecord struct {
 	Hash        string `json:"hash"`
 	ShortHash   string `json:"shortHash"`
@@ -242,6 +249,18 @@ type PromptAppend struct {
 	Attachments []*SessionAttachment `json:"attachments"`
 	Artifacts   []*SessionFile       `json:"artifacts"`
 	CreatedAt   time.Time            `json:"createdAt"`
+}
+
+type PromptFileMatch struct {
+	Path    string `json:"path"`
+	Score   int    `json:"score"`
+	Indices []int  `json:"indices"`
+}
+
+type PromptFileMatchInput struct {
+	ProjectID *string `json:"projectId,omitempty"`
+	SessionID *string `json:"sessionId,omitempty"`
+	Query     string  `json:"query"`
 }
 
 type PushSubscriptionRegistration struct {

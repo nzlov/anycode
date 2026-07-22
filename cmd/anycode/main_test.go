@@ -153,10 +153,9 @@ func assertSocketPermissions(t *testing.T, socketPath string) {
 func TestEnsureCodexReady(t *testing.T) {
 	got, err := ensureCodexReady(context.Background(), fakeCodexProber{
 		capabilities: processdomain.CodexCapabilities{
-			Version:        "codex 1.2.3",
-			SupportsExec:   true,
-			SupportsResume: true,
-			Models:         []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
+			Version:           "codex 1.2.3",
+			SupportsAppServer: true,
+			Models:            []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
 		},
 	})
 	if err != nil {
@@ -174,24 +173,13 @@ func TestEnsureCodexReadyRejectsProbeFailure(t *testing.T) {
 	}
 }
 
-func TestEnsureCodexReadyRequiresExecAndResume(t *testing.T) {
+func TestEnsureCodexReadyRequiresAppServer(t *testing.T) {
 	_, err := ensureCodexReady(context.Background(), fakeCodexProber{
 		capabilities: processdomain.CodexCapabilities{
-			SupportsExec: true,
-			Models:       []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
+			Models: []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "exec resume") {
-		t.Fatalf("ensureCodexReady() error = %v", err)
-	}
-
-	_, err = ensureCodexReady(context.Background(), fakeCodexProber{
-		capabilities: processdomain.CodexCapabilities{
-			SupportsResume: true,
-			Models:         []processdomain.CodexModel{{Slug: "gpt-5.6-sol"}},
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "support exec") {
+	if err == nil || !strings.Contains(err.Error(), "app-server") {
 		t.Fatalf("ensureCodexReady() error = %v", err)
 	}
 }
@@ -199,8 +187,7 @@ func TestEnsureCodexReadyRequiresExecAndResume(t *testing.T) {
 func TestEnsureCodexReadyRequiresModelOptions(t *testing.T) {
 	_, err := ensureCodexReady(context.Background(), fakeCodexProber{
 		capabilities: processdomain.CodexCapabilities{
-			SupportsExec:   true,
-			SupportsResume: true,
+			SupportsAppServer: true,
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "model options") {

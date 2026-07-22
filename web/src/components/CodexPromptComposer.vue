@@ -16,6 +16,9 @@
     :readonly-config="readonlyConfig"
     :collapsible="collapsible"
     :collapsed="collapsed"
+    :completion-project-id="completionProjectId"
+    :completion-session-id="completionSessionId"
+    :completion-has-thread="completionHasThread"
     @update:prompt="emit('update:prompt', $event)"
     @update:files="emit('update:files', $event)"
     @update:artifacts="emit('update:artifacts', $event)"
@@ -31,11 +34,7 @@
         flat
         :round="compact"
         :no-caps="!compact"
-        :class="
-          compact
-            ? 'quick-reply-btn app-icon-btn'
-            : 'quick-reply-btn app-command-btn'
-        "
+        :class="compact ? 'quick-reply-btn app-icon-btn' : 'quick-reply-btn app-command-btn'"
         icon="bolt"
         :label="compact ? undefined : '快捷回复'"
         :aria-label="compact ? '快捷回复' : undefined"
@@ -130,6 +129,9 @@ const props = withDefaults(
     readonlyConfig?: boolean;
     collapsible?: boolean;
     collapsed?: boolean;
+    completionProjectId?: string;
+    completionSessionId?: string;
+    completionHasThread?: boolean;
   }>(),
   {
     title: '',
@@ -141,6 +143,9 @@ const props = withDefaults(
     readonlyConfig: false,
     collapsible: false,
     collapsed: false,
+    completionProjectId: '',
+    completionSessionId: '',
+    completionHasThread: false,
     artifacts: () => [],
   },
 );

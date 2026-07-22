@@ -106,6 +106,7 @@ export interface SessionTodoItem {
 }
 
 export interface SessionDetail extends SessionCard {
+  codexSessionId: string;
   pendingApproval?: PendingApproval | null;
   config: SessionConfig;
   closeReason?: string | null;
@@ -289,6 +290,7 @@ interface GraphQLSessionDetail {
   closeReason?: string | null;
   baseBranch: string;
   worktreeBranch: string;
+  codexSessionId: string;
   worktreeCleanup: WorktreeCleanup;
   currentNodeTitle: string;
   pendingApproval?: GraphQLPendingApproval | null;
@@ -435,6 +437,7 @@ const sessionDetailFields = `
   closeReason
   baseBranch
   worktreeBranch
+  codexSessionId
   worktreeCleanup {
     status
     attempts
@@ -1098,6 +1101,7 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     priority: normalizePriority(session.priority),
     branch: session.baseBranch || 'main',
     worktreeBranch: session.worktreeBranch || '',
+    codexSessionId: session.codexSessionId || '',
     node: session.currentNodeTitle || statusNode(status),
     createdAt: session.createdAt,
     createdTime: formatEventTime(session.createdAt),

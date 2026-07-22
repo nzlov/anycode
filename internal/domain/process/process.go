@@ -202,12 +202,29 @@ type DetachedProcessController interface {
 
 type CodexCapabilities struct {
 	Version                 string
-	SupportsExec            bool
-	SupportsResume          bool
+	SupportsAppServer       bool
 	SupportsMCPToolTimeout  bool
 	SupportsImageGeneration bool
 	ImageGenerationStatus   string
 	Models                  []CodexModel
+}
+
+type CodexSlashCommand struct {
+	Name           string
+	Description    string
+	AcceptsArgs    bool
+	RequiresThread bool
+}
+
+type CodexFileMatch struct {
+	Path    string
+	Score   uint32
+	Indices []uint32
+}
+
+type CodexPromptCompletionProvider interface {
+	SlashCommands() []CodexSlashCommand
+	SearchFiles(ctx context.Context, root string, query string) ([]CodexFileMatch, error)
 }
 
 type CodexModel struct {

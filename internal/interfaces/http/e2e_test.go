@@ -924,7 +924,7 @@ type retryCodexProcess struct {
 }
 
 func (p *retryCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
-	return processdomain.CodexCapabilities{SupportsExec: true, SupportsResume: true}, nil
+	return processdomain.CodexCapabilities{SupportsAppServer: true}, nil
 }
 
 func (p *retryCodexProcess) Start(context.Context, processdomain.CodexStartInput) (processdomain.CodexHandle, error) {
@@ -954,7 +954,7 @@ func (p *retryCodexProcess) Events(context.Context, processdomain.CodexHandle) (
 }
 
 func (p *smokeCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {
-	return processdomain.CodexCapabilities{Version: "smoke", SupportsExec: true, SupportsResume: true}, nil
+	return processdomain.CodexCapabilities{Version: "smoke", SupportsAppServer: true}, nil
 }
 
 func (p *smokeCodexProcess) Start(_ context.Context, input processdomain.CodexStartInput) (processdomain.CodexHandle, error) {

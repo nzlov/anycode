@@ -22,14 +22,10 @@ func TestStartBuildsExecCommandAndStreamsSessionLogEvents(t *testing.T) {
 	argsFile := filepath.Join(dir, "args")
 	pwdFile := filepath.Join(dir, "pwd")
 	stdinFile := filepath.Join(dir, "stdin")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
-pwd > "$CODEX_PWD_FILE"
-cat > "$CODEX_STDIN_FILE"
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-1"}'
+	bin := fakeAppServer(t, "codex-session-1", true, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-codex-session-1.jsonl" <<EOF
-{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-1","id":"codex-session-1","cwd":"$PWD","originator":"codex_exec"}}
+{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-1","id":"codex-session-1","cwd":"$PWD","originator":"codex_app_server"}}
 {"timestamp":"2026-07-08T09:16:07.034Z","type":"response_item","payload":{"type":"function_call","call_id":"call-command","name":"exec_command","arguments":"{\"cmd\":\"go test ./...\"}"}}
 {"timestamp":"2026-07-08T09:16:08.034Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-command","output":"ok"}}
 {"timestamp":"2026-07-08T09:16:09.034Z","type":"event_msg","payload":{"type":"patch_apply_end","call_id":"call-patch","stdout":"Success","stderr":"","success":true,"changes":{"$PWD/probe.txt":{"type":"update","unified_diff":"@@ -1 +1 @@\n-old\n+new\n","move_path":null}},"status":"completed"}}
@@ -101,12 +97,13 @@ EOF
 	}
 
 	args := strings.TrimSpace(readFile(t, argsFile))
-	want := `exec --json --skip-git-repo-check -C ` + dir + ` -m gpt-test -c model_reasoning_effort="medium" -c service_tier="priority" --sandbox workspace-write -i /kept/in/input.png -`
-	if args != want {
-		t.Fatalf("args = %q, want %q", args, want)
+	for _, want := range []string{`app-server --stdio`, `model_reasoning_effort="medium"`, `service_tier="priority"`} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args = %q, want fragment %q", args, want)
+		}
 	}
-	if got := readFile(t, stdinFile); got != "implement adapter" {
-		t.Fatalf("stdin = %q, want prompt", got)
+	if got := readFile(t, stdinFile); !strings.Contains(got, `"method":"turn/start"`) || !strings.Contains(got, `"text":"implement adapter"`) || !strings.Contains(got, `"type":"localImage"`) {
+		t.Fatalf("app-server requests = %q", got)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {
 		t.Fatalf("pwd = %q, want %q", gotDir, dir)
@@ -116,13 +113,12 @@ EOF
 func TestEventsWaitsForDelayedSessionLogWhileProcessRuns(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "delayed-session", false, `
 sleep 6
 mkdir -p "$CODEX_HOME/sessions/2026/07/15"
 cat > "$CODEX_HOME/sessions/2026/07/15/rollout-delayed-session.jsonl" <<EOF
-{"timestamp":"2026-07-15T12:00:00Z","type":"session_meta","payload":{"session_id":"delayed-session","cwd":"$PWD","originator":"codex_exec"}}
+{"timestamp":"2026-07-15T12:00:00Z","type":"session_meta","payload":{"session_id":"delayed-session","cwd":"$PWD","originator":"codex_app_server"}}
 EOF
-printf '%s\n' '{"type":"thread.started","thread_id":"delayed-session"}'
 `)
 	t.Setenv("CODEX_HOME", codexHome)
 
@@ -162,9 +158,7 @@ printf '%s\n' '{"type":"thread.started","thread_id":"delayed-session"}'
 func TestEventsStopsWaitingWhenProcessExitsWithoutSessionLog(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-exit 0
-`)
+	bin := fakeAppServer(t, "missing-session-log", false, ``)
 	t.Setenv("CODEX_HOME", codexHome)
 
 	handle, err := New(bin).Start(context.Background(), process.CodexStartInput{
@@ -641,10 +635,8 @@ func TestResumeBuildsResumeCommandInWorkdir(t *testing.T) {
 	argsFile := filepath.Join(dir, "args")
 	pwdFile := filepath.Join(dir, "pwd")
 	stdinFile := filepath.Join(dir, "stdin")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
-cat > "$CODEX_STDIN_FILE"
-pwd > "$CODEX_PWD_FILE"
+	bin := fakeAppServer(t, "codex-session-1", true, `
+printf '%s\n' '{"timestamp":"2026-07-08T09:01:00Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}' >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume-command.jsonl"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_PWD_FILE", pwdFile)
@@ -673,12 +665,14 @@ pwd > "$CODEX_PWD_FILE"
 	waitForFile(t, argsFile)
 	waitForFile(t, pwdFile)
 
-	wantArgs := `exec resume --json --skip-git-repo-check -m gpt-test -c model_reasoning_effort="high" -c service_tier="priority" codex-session-1 -`
-	if args := strings.TrimSpace(readFile(t, argsFile)); args != wantArgs {
-		t.Fatalf("args = %q", args)
+	args := strings.TrimSpace(readFile(t, argsFile))
+	for _, want := range []string{`app-server --stdio`, `model_reasoning_effort="high"`, `service_tier="priority"`} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args = %q, want fragment %q", args, want)
+		}
 	}
-	if got := readFile(t, stdinFile); got != "next node" {
-		t.Fatalf("stdin = %q, want prompt", got)
+	if got := readFile(t, stdinFile); !strings.Contains(got, `"method":"thread/resume"`) || !strings.Contains(got, `"text":"next node"`) {
+		t.Fatalf("app-server requests = %q", got)
 	}
 	if gotDir := strings.TrimSpace(readFile(t, pwdFile)); gotDir != dir {
 		t.Fatalf("pwd = %q, want %q", gotDir, dir)
@@ -686,39 +680,23 @@ pwd > "$CODEX_PWD_FILE"
 }
 
 func TestBuildArgsOmitServiceTierWhenFastModeIsDisabled(t *testing.T) {
-	client := New("codex")
-	for name, args := range map[string][]string{
-		"start":  client.buildStartArgs(process.CodexStartInput{Model: "gpt-test"}),
-		"resume": client.buildResumeArgs(process.CodexResumeInput{Model: "gpt-test", CodexSessionID: "codex-session-1"}),
-	} {
-		if joined := strings.Join(args, " "); strings.Contains(joined, "service_tier") {
-			t.Fatalf("%s args contain service_tier with FastMode disabled: %q", name, joined)
-		}
-	}
-}
-
-func TestBuildResumeArgsIncludesImagePaths(t *testing.T) {
-	args := New("codex").buildResumeArgs(process.CodexResumeInput{
-		CodexSessionID: "codex-session-1",
-		ImagePaths:     []string{"/archive/first.png", "", "/archive/second.png"},
-	})
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-i /archive/first.png -i /archive/second.png") {
-		t.Fatalf("resume args = %q", joined)
+	args := New("codex").buildAppServerArgs(appServerRunInput{model: "gpt-test"})
+	if joined := strings.Join(args, " "); strings.Contains(joined, "service_tier") {
+		t.Fatalf("app-server args contain service_tier with FastMode disabled: %q", joined)
 	}
 }
 
 func TestArtifactDirectoryIsWritableAndInjectedAcrossStartAndResume(t *testing.T) {
 	client := New("codex")
 	artifactDir := "/data/attachments/outputs/session-1"
-	startArgs := strings.Join(client.buildStartArgs(process.CodexStartInput{
-		Workdir: "/workspace", ArtifactDir: artifactDir,
+	startArgs := strings.Join(client.buildAppServerArgs(appServerRunInput{
+		workdir: "/workspace", artifactDir: artifactDir, permissionMode: "workspace-write",
 	}), " ")
-	if !strings.Contains(startArgs, "--add-dir "+artifactDir) {
+	if !strings.Contains(startArgs, `sandbox_workspace_write.writable_roots=["`+artifactDir+`"]`) {
 		t.Fatalf("start args = %q", startArgs)
 	}
-	resumeArgs := strings.Join(client.buildResumeArgs(process.CodexResumeInput{
-		CodexSessionID: "codex-session-1", ArtifactDir: artifactDir, PermissionMode: "workspace-write",
+	resumeArgs := strings.Join(client.buildAppServerArgs(appServerRunInput{
+		codexSessionID: "codex-session-1", artifactDir: artifactDir, permissionMode: "workspace-write",
 	}), " ")
 	if !strings.Contains(resumeArgs, `sandbox_workspace_write.writable_roots=["`+artifactDir+`"]`) {
 		t.Fatalf("resume args = %q", resumeArgs)
@@ -726,9 +704,7 @@ func TestArtifactDirectoryIsWritableAndInjectedAcrossStartAndResume(t *testing.T
 
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, "artifact-env")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s' "$ANYCODE_ARTIFACT_DIR" > "$ARTIFACT_ENV_FILE"
-`)
+	bin := fakeAppServer(t, "codex-session-artifact", false, ``)
 	t.Setenv("ARTIFACT_ENV_FILE", envFile)
 	if _, err := New(bin).Start(context.Background(), process.CodexStartInput{
 		ProcessRunID: "process-1", ArtifactDir: artifactDir,
@@ -773,8 +749,8 @@ func TestCodexImagesRecognizesInlineAudioAndEmbeddedResourceBlobs(t *testing.T) 
 
 func TestBuildArgsInjectsIsolatedPlaywrightOutputPerProcessRun(t *testing.T) {
 	client := New("codex", WithPlaywrightMCP("playwright-mcp", "/usr/bin/chromium"))
-	args := strings.Join(client.buildStartArgs(process.CodexStartInput{
-		ProcessRunID: "process-1", ArtifactDir: "/data/attachments/outputs/session-1",
+	args := strings.Join(client.buildAppServerArgs(appServerRunInput{
+		processRunID: "process-1", artifactDir: "/data/attachments/outputs/session-1",
 	}), " ")
 	for _, expected := range []string{
 		`mcp_servers.playwright.command="playwright-mcp"`,
@@ -785,8 +761,8 @@ func TestBuildArgsInjectsIsolatedPlaywrightOutputPerProcessRun(t *testing.T) {
 			t.Fatalf("playwright args %q missing %q", args, expected)
 		}
 	}
-	resumeArgs := strings.Join(client.buildResumeArgs(process.CodexResumeInput{
-		ProcessRunID: "process-2", ArtifactDir: "/data/attachments/outputs/session-1", CodexSessionID: "codex-1",
+	resumeArgs := strings.Join(client.buildAppServerArgs(appServerRunInput{
+		processRunID: "process-2", artifactDir: "/data/attachments/outputs/session-1", codexSessionID: "codex-1",
 	}), " ")
 	if !strings.Contains(resumeArgs, "/browser/process-2") {
 		t.Fatalf("resume playwright args = %q", resumeArgs)
@@ -816,7 +792,7 @@ printf '\n' >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl"`},
 {"timestamp":"2026-07-08T09:01:00Z","type":"response_item","payload":{"type":"message","id":"msg-old","role":"assistant","content":[{"type":"output_text","text":"old"}]}}`), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			bin := fakeCodex(t, `#!/bin/sh
+			bin := fakeAppServer(t, "codex-session-1", true, `
 sleep 0.2
 `+test.writeTerminator+`
 cat >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume.jsonl" <<EOF
@@ -863,12 +839,8 @@ func TestResumeIgnoresStdoutPlansBeforeNewTurn(t *testing.T) {
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-resume-plan"}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"old-plan","type":"todo_list","items":[{"text":"Historical plan","status":"in_progress"}]}}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"old-plan","type":"todo_list","items":[{"text":"Historical plan","status":"completed"}]}}'
-printf '%s\n' '{"type":"turn.started","turn_id":"new-turn"}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"new-plan","type":"todo_list","items":[{"text":"Current plan","status":"in_progress"}]}}'
+	bin := fakeAppServer(t, "codex-session-resume-plan", true, `
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"new-plan","type":"todo_list","items":[{"text":"Current plan","status":"in_progress"}]}}}'
 sleep 0.2
 cat >> "$CODEX_HOME/sessions/2026/07/08/rollout-resume-plan.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:02:00Z","type":"response_item","payload":{"type":"message","id":"msg-new","role":"assistant","content":[{"type":"output_text","text":"new"}]}}
@@ -883,6 +855,7 @@ EOF
 		CodexSessionID: "codex-session-resume-plan",
 		Transcript:     transcriptInput(t, codexHome, "codex-session-resume-plan").Source,
 		Workdir:        dir,
+		Prompt:         "continue",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -902,14 +875,14 @@ EOF
 	}
 }
 
-func TestStdoutPlanUpdateParsesTypedItemsWithStableID(t *testing.T) {
-	raw := []byte(`{"type":"item.updated","item":{"id":"plan-1","type":"todo_list","items":[{"text":"Inspect stream","completed":true},{"text":"Persist TODO","completed":false}]}}`)
-	first, ok := stdoutPlanUpdate(raw)
+func TestAppServerPlanUpdateParsesTypedItemsWithStableID(t *testing.T) {
+	raw := []byte(`{"method":"item/updated","params":{"item":{"id":"plan-1","type":"todo_list","items":[{"text":"Inspect stream","completed":true},{"text":"Persist TODO","completed":false}]}}}`)
+	first, ok := appServerPlanUpdate(raw)
 	firstUpdate, contentOK := first.Content.(process.PlanUpdate)
 	if !ok || !contentOK {
 		t.Fatalf("stdout plan update = %#v, %v", first, ok)
 	}
-	second, ok := stdoutPlanUpdate(raw)
+	second, ok := appServerPlanUpdate(raw)
 	if !ok || second.EventID != first.EventID || first.EventID == "" {
 		t.Fatalf("stable event ids = %q and %q", first.EventID, second.EventID)
 	}
@@ -934,9 +907,9 @@ func TestStdoutPlanUpdateParsesTypedItemsWithStableID(t *testing.T) {
 	}
 }
 
-func TestStdoutPlanUpdateRejectsTodoPayloadOnUnrelatedEvent(t *testing.T) {
-	raw := []byte(`{"type":"assistant_message","item":{"type":"todo_list","items":[{"text":"Do not persist","status":"completed"}]}}`)
-	if event, ok := stdoutPlanUpdate(raw); ok {
+func TestAppServerPlanUpdateRejectsTodoPayloadOnUnrelatedEvent(t *testing.T) {
+	raw := []byte(`{"method":"assistant/message","params":{"item":{"type":"todo_list","items":[{"text":"Do not persist","status":"completed"}]}}}`)
+	if event, ok := appServerPlanUpdate(raw); ok {
 		t.Fatalf("unrelated event parsed as plan update: %#v", event)
 	}
 }
@@ -944,9 +917,8 @@ func TestStdoutPlanUpdateRejectsTodoPayloadOnUnrelatedEvent(t *testing.T) {
 func TestEventsMergesStdoutAndSessionPlanUpdatesWithoutDuplicates(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan"}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"},{"text":"Persist TODO","status":"in_progress"}]}}'
+	bin := fakeAppServer(t, "codex-session-plan", true, `
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"stdout-plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"},{"text":"Persist TODO","status":"in_progress"}]}}}'
 sleep 0.2
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan.jsonl" <<EOF
@@ -957,7 +929,7 @@ EOF
 	t.Setenv("CODEX_HOME", codexHome)
 
 	client := New(bin)
-	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan", Workdir: dir})
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan", Workdir: dir, Prompt: "run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -988,20 +960,19 @@ EOF
 func TestEventsMergesSessionAndStdoutPlanUpdatesWithoutDuplicates(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan-transcript-first"}'
+	bin := fakeAppServer(t, "codex-session-plan-transcript-first", true, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan-transcript-first.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-plan-transcript-first","cwd":"$PWD"}}
 {"timestamp":"2026-07-08T09:00:01Z","type":"response_item","payload":{"type":"function_call","call_id":"session-plan-call","name":"update_plan","arguments":"{\"plan\":[{\"step\":\"Inspect stream\",\"status\":\"completed\"},{\"step\":\"Persist TODO\",\"status\":\"in_progress\"}]}"}}
 EOF
 sleep 0.2
-printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"},{"text":"Persist TODO","status":"in_progress"}]}}'
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"stdout-plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"},{"text":"Persist TODO","status":"in_progress"}]}}}'
 `)
 	t.Setenv("CODEX_HOME", codexHome)
 
 	client := New(bin)
-	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-transcript-first", Workdir: dir})
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-transcript-first", Workdir: dir, Prompt: "run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1027,11 +998,10 @@ printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan-item","type":"to
 func TestEventsPreservesRepeatedPlanAfterIntermediateChange(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan-repeat"}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"}]}}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}'
+	bin := fakeAppServer(t, "codex-session-plan-repeat", true, `
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}}'
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"completed"}]}}}'
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"plan-item","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}}'
 sleep 0.2
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan-repeat.jsonl" <<EOF
@@ -1041,7 +1011,7 @@ EOF
 	t.Setenv("CODEX_HOME", codexHome)
 
 	client := New(bin)
-	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-repeat", Workdir: dir})
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-repeat", Workdir: dir, Prompt: "run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1064,9 +1034,8 @@ EOF
 func TestEventsDoesNotPairPlanAcrossInterveningDifferentSessionUpdate(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-plan-gap"}'
-printf '%s\n' '{"type":"item.updated","item":{"id":"stdout-plan","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}'
+	bin := fakeAppServer(t, "codex-session-plan-gap", true, `
+printf '%s\n' '{"method":"item/updated","params":{"item":{"id":"stdout-plan","type":"todo_list","items":[{"text":"Inspect stream","status":"in_progress"}]}}}'
 sleep 0.2
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-plan-gap.jsonl" <<EOF
@@ -1078,7 +1047,7 @@ EOF
 	t.Setenv("CODEX_HOME", codexHome)
 
 	client := New(bin)
-	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-gap", Workdir: dir})
+	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-plan-gap", Workdir: dir, Prompt: "run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1113,7 +1082,7 @@ func TestTailSessionLogDrainsStdoutPlanWhileTranscriptHasBacklog(t *testing.T) {
 	if err := os.WriteFile(sessionFile, []byte(log.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	plan, ok := stdoutPlanUpdate([]byte(`{"type":"item.updated","item":{"id":"plan-backlog","type":"todo_list","items":[{"text":"Realtime plan","status":"in_progress"}]}}`))
+	plan, ok := appServerPlanUpdate([]byte(`{"method":"item/updated","params":{"item":{"id":"plan-backlog","type":"todo_list","items":[{"text":"Realtime plan","status":"in_progress"}]}}}`))
 	if !ok {
 		t.Fatal("stdout plan was not parsed")
 	}
@@ -1192,9 +1161,8 @@ func TestTailSessionLogAnnouncesTranscriptSourceOnce(t *testing.T) {
 func TestEventsDeduplicatesMessageMirrorBeforeCanonicalMessage(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "codex-session-mirror-first", false, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-mirror-first"}'
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-first.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-mirror-first","cwd":"$PWD"}}
 {"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"working"}}
@@ -1225,9 +1193,8 @@ func TestEventsFlushesUnmatchedMessageMirrorWhileProcessIsRunning(t *testing.T) 
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	exitMarker := filepath.Join(dir, "exiting")
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "codex-session-mirror-running", false, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-mirror-running"}'
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-running.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-mirror-running","cwd":"$PWD"}}
 {"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"legacy output"}}
@@ -1262,9 +1229,8 @@ touch "$CODEX_EXIT_MARKER"
 func TestEventsFlushesUnmatchedMessageMirrorOnProcessExit(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "codex-session-mirror-exit", false, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-mirror-exit"}'
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-mirror-exit.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:00:00Z","type":"session_meta","payload":{"session_id":"codex-session-mirror-exit","cwd":"$PWD"}}
 {"timestamp":"2026-07-08T09:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"legacy output"}}
@@ -1287,12 +1253,13 @@ EOF
 	}
 }
 
-func TestObserveStdoutDoesNotBlockWhenPlanBufferIsFull(t *testing.T) {
-	var stdout strings.Builder
+func TestSendLatestPlanUpdateDoesNotBlockWhenBufferIsFull(t *testing.T) {
+	plans := make(chan process.CodexEvent, 64)
 	for index := 0; index < 100; index++ {
-		stdout.WriteString(`{"type":"item.updated","item":{"id":"plan","type":"todo_list","items":[{"text":"step-` + strconv.Itoa(index) + `","status":"in_progress"}]}}` + "\n")
+		update := process.PlanUpdate{Items: []process.PlanItem{{Step: "step-" + strconv.Itoa(index), Status: process.PlanItemInProgress}}}
+		sendLatestPlanUpdate(plans, process.CodexEvent{Type: process.CodexEventPlan, Content: update})
 	}
-	_, plans := observeStdout(strings.NewReader(stdout.String()), false)
+	close(plans)
 	var got []process.CodexEvent
 	for event := range plans {
 		got = append(got, event)
@@ -1305,7 +1272,7 @@ func TestObserveStdoutDoesNotBlockWhenPlanBufferIsFull(t *testing.T) {
 func TestStartAllowsConcurrentActiveReadersForSameWorkdir(t *testing.T) {
 	dir := t.TempDir()
 	started := filepath.Join(dir, "started")
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "codex-session-running", false, `
 touch "$CODEX_STARTED_FILE"
 sleep 30
 `)
@@ -1334,13 +1301,18 @@ func TestEventsBindConcurrentSameWorkdirProcessesToStdoutThreadID(t *testing.T) 
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-prompt=$(cat)
-case "$prompt" in
+case "$ANYCODE_PROCESS_RUN_ID" in
   *first*) id=a ;;
   *second*) id=b ;;
   *) exit 2 ;;
 esac
-printf '{"type":"thread.started","thread_id":"codex-session-%s"}\n' "$id"
+IFS= read -r request
+printf '%s\n' '{"id":1,"result":{"userAgent":"anycode-test"}}'
+IFS= read -r request
+IFS= read -r request
+printf '{"id":2,"result":{"thread":{"id":"codex-session-%s"}}}\n' "$id"
+IFS= read -r request
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","items":[],"status":"inProgress"}}}'
 touch "$CODEX_HOME/$id.started"
 while [ ! -f "$CODEX_HOME/a.started" ] || [ ! -f "$CODEX_HOME/b.started" ]; do
   sleep 0.01
@@ -1352,6 +1324,8 @@ cat > "$CODEX_HOME/sessions/2026/07/08/rollout-concurrent-$id.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-$id","id":"codex-session-$id","cwd":"$PWD","originator":"codex_exec"}}
 {"timestamp":"2026-07-08T09:16:03.939Z","type":"response_item","payload":{"type":"message","id":"msg-$id","role":"assistant","content":[{"type":"output_text","text":"message-$id"}]}}
 EOF
+printf '{"method":"turn/completed","params":{"threadId":"codex-session-%s","turn":{"id":"turn-1","items":[],"status":"completed"}}}\n' "$id"
+cat >/dev/null
 `)
 	t.Setenv("CODEX_HOME", codexHome)
 
@@ -1390,11 +1364,10 @@ EOF
 func TestEventsBuffersPartialSessionLogLine(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "codex-session-partial", false, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-partial"}'
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl" <<EOF
-{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-partial","id":"codex-session-partial","cwd":"$PWD","originator":"codex_exec"}}
+{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-partial","id":"codex-session-partial","cwd":"$PWD","originator":"codex_app_server"}}
 EOF
 printf '%s' '{"timestamp":"2026-07-08T09:16:03.939Z","type":"response_item","payload":{"type":"message","id":"msg-partial","role":"assistant","content":[{"type":"output_text","text":"part' >> "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl"
 sleep 0.15
@@ -1424,12 +1397,11 @@ printf '%s' 'ial"}]}}' >> "$CODEX_HOME/sessions/2026/07/08/rollout-partial.jsonl
 func TestStartProcessOutlivesCallerContextCancellation(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-after-cancel"}'
+	bin := fakeAppServer(t, "codex-session-after-cancel", false, `
 sleep 0.2
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-after-cancel.jsonl" <<EOF
-{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-after-cancel","id":"codex-session-after-cancel","cwd":"$PWD","originator":"codex_exec"}}
+{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-after-cancel","id":"codex-session-after-cancel","cwd":"$PWD","originator":"codex_app_server"}}
 {"timestamp":"2026-07-08T09:16:07.034Z","type":"response_item","payload":{"type":"message","id":"msg-running","role":"assistant","content":[{"type":"output_text","text":"still running"}]}}
 EOF
 `)
@@ -1455,10 +1427,7 @@ func TestStartInjectsMCPServerConfig(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
 	tokenFile := filepath.Join(dir, "token")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
-printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
-`)
+	bin := fakeAppServer(t, "codex-session-mcp", true, ``)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_TOKEN_FILE", tokenFile)
 
@@ -1496,10 +1465,7 @@ func TestStartInjectsStdioMCPServerConfig(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
 	tokenFile := filepath.Join(dir, "token")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
-printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
-`)
+	bin := fakeAppServer(t, "codex-session-mcp-stdio", true, ``)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_TOKEN_FILE", tokenFile)
 
@@ -1537,9 +1503,7 @@ printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"
 func TestStartInjectsUnixSocketPermissionProfileForStdioMCP(t *testing.T) {
 	dir := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
-`)
+	bin := fakeAppServer(t, "codex-session-mcp-profile", true, ``)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 
 	_, err := New(bin, WithMCPStdio("/app/anycode", "/tmp/anycode-1000/mcp-2000.sock", "secret")).Start(context.Background(), process.CodexStartInput{
@@ -1577,8 +1541,8 @@ func TestResumeInjectsUnixSocketPermissionProfileForStdioMCP(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	argsFile := filepath.Join(dir, "args")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
+	bin := fakeAppServer(t, "codex-session-1", true, `
+printf '%s\n' '{"timestamp":"2026-07-08T09:01:00Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}' >> "$CODEX_HOME/sessions/2026/07/08/rollout-mcp-resume.jsonl"
 `)
 	t.Setenv("CODEX_ARGS_FILE", argsFile)
 	t.Setenv("CODEX_HOME", codexHome)
@@ -1620,8 +1584,7 @@ printf '%s\n' "$*" > "$CODEX_ARGS_FILE"
 func TestEventsParsesNestedMessageTypeAndInvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-invalid"}'
+	bin := fakeAppServer(t, "codex-session-invalid", false, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-invalid-json.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-invalid","id":"codex-session-invalid","cwd":"$PWD","originator":"codex_exec"}}
@@ -2345,8 +2308,7 @@ func TestSessionEventsPreservesUnknownJSONLRecords(t *testing.T) {
 func TestEventsEmitsProcessExitWithFailureCode(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s\n' '{"type":"thread.started","thread_id":"codex-session-exit"}'
+	bin := fakeAppServer(t, "codex-session-exit", false, `
 mkdir -p "$CODEX_HOME/sessions/2026/07/08"
 cat > "$CODEX_HOME/sessions/2026/07/08/rollout-test-exit.jsonl" <<EOF
 {"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-exit","id":"codex-session-exit","cwd":"$PWD","originator":"codex_exec"}}
@@ -2378,37 +2340,21 @@ exit 7
 	}
 }
 
-func TestEventsRejectsAmbiguousSessionLogsWithoutStdoutThreadID(t *testing.T) {
+func TestStartRejectsEmptyAppServerThreadID(t *testing.T) {
 	dir := t.TempDir()
 	codexHome := t.TempDir()
 	bin := fakeCodex(t, `#!/bin/sh
-mkdir -p "$CODEX_HOME/sessions/2026/07/08"
-cat > "$CODEX_HOME/sessions/2026/07/08/rollout-ambiguous-a.jsonl" <<EOF
-{"timestamp":"2026-07-08T09:16:02.939Z","type":"session_meta","payload":{"session_id":"codex-session-a","id":"codex-session-a","cwd":"$PWD","originator":"codex_exec"}}
-EOF
-cat > "$CODEX_HOME/sessions/2026/07/08/rollout-ambiguous-b.jsonl" <<EOF
-{"timestamp":"2026-07-08T09:16:03.939Z","type":"session_meta","payload":{"session_id":"codex-session-b","id":"codex-session-b","cwd":"$PWD","originator":"codex_exec"}}
-{"timestamp":"2026-07-08T09:16:04.939Z","type":"response_item","payload":{"type":"message","id":"msg-latest","role":"assistant","content":[{"type":"output_text","text":"latest"}]}}
-EOF
-sleep 0.2
+IFS= read -r request
+printf '%s\n' '{"id":1,"result":{"userAgent":"anycode-test"}}'
+IFS= read -r request
+IFS= read -r request
+printf '%s\n' '{"id":2,"result":{"thread":{"id":""}}}'
 `)
 	t.Setenv("CODEX_HOME", codexHome)
 
-	handle, err := New(bin).Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-ambiguous", Workdir: dir})
-	if err != nil {
-		t.Fatal(err)
-	}
-	events, err := New(bin).Events(context.Background(), handle)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := collectEvents(t, events, 1)
-	if got[0].Type != process.CodexEventProcessExit {
-		t.Fatalf("ambiguous transcript event = %+v", got[0])
-	}
-	exit := eventContent[process.ExitResult](t, got[0])
-	if !strings.Contains(exit.FailureReason, "codex transcript is unavailable") {
-		t.Fatalf("ambiguous transcript failure = %+v", got[0])
+	_, err := New(bin).Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-empty-thread", Workdir: dir})
+	if err == nil || !strings.Contains(err.Error(), "empty thread id") {
+		t.Fatalf("empty thread id error = %v", err)
 	}
 }
 
@@ -2773,7 +2719,7 @@ func TestStopKillsActiveProcess(t *testing.T) {
 	dir := t.TempDir()
 	started := filepath.Join(dir, "started")
 	childPIDFile := filepath.Join(dir, "child-pid")
-	bin := fakeCodex(t, `#!/bin/sh
+	bin := fakeAppServer(t, "codex-session-stop", false, `
 touch "$CODEX_STARTED_FILE"
 sleep 30 &
 child="$!"
@@ -2815,8 +2761,7 @@ wait "$child"
 func TestStartInjectsProcessRunOwnerToken(t *testing.T) {
 	dir := t.TempDir()
 	ownerFile := filepath.Join(dir, "owner")
-	bin := fakeCodex(t, `#!/bin/sh
-printf '%s' "$ANYCODE_PROCESS_RUN_ID" > "$CODEX_OWNER_FILE"
+	bin := fakeAppServer(t, "codex-session-owner", false, `
 sleep 30
 `)
 	t.Setenv("CODEX_OWNER_FILE", ownerFile)
@@ -2931,9 +2876,7 @@ func TestStopDetachedTreatsExitDuringOwnershipCheckAsSuccess(t *testing.T) {
 }
 
 func TestExitedProcessIsReapedWithoutStartingEventConsumer(t *testing.T) {
-	bin := fakeCodex(t, `#!/bin/sh
-exit 0
-`)
+	bin := fakeAppServer(t, "codex-session-reaped", false, ``)
 	client := New(bin)
 	handle, err := client.Start(context.Background(), process.CodexStartInput{ProcessRunID: "process-run-reaped"})
 	if err != nil {
@@ -2962,6 +2905,42 @@ func collectEvents(t *testing.T, events <-chan process.CodexEvent, count int) []
 		}
 	}
 	return got
+}
+
+func fakeAppServer(t *testing.T, threadID string, hasAction bool, body string) string {
+	t.Helper()
+	action := ""
+	if hasAction {
+		action = `
+IFS= read -r request
+capture_request "$request"
+printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","items":[],"status":"inProgress"}}}'
+` + body + `
+printf '%s\n' '{"method":"turn/completed","params":{"threadId":"` + threadID + `","turn":{"id":"turn-1","items":[],"status":"completed"}}}'
+`
+	} else {
+		action = body
+	}
+	return fakeCodex(t, `#!/bin/sh
+if [ -n "$CODEX_ARGS_FILE" ]; then printf '%s\n' "$*" > "$CODEX_ARGS_FILE"; fi
+if [ -n "$CODEX_PWD_FILE" ]; then pwd > "$CODEX_PWD_FILE"; fi
+if [ -n "$ARTIFACT_ENV_FILE" ]; then printf '%s' "$ANYCODE_ARTIFACT_DIR" > "$ARTIFACT_ENV_FILE"; fi
+if [ -n "$CODEX_TOKEN_FILE" ]; then printf '%s\n' "$ANYCODE_MCP_TOKEN" > "$CODEX_TOKEN_FILE"; fi
+if [ -n "$CODEX_OWNER_FILE" ]; then printf '%s' "$ANYCODE_PROCESS_RUN_ID" > "$CODEX_OWNER_FILE"; fi
+capture_request() {
+  if [ -n "$CODEX_STDIN_FILE" ]; then printf '%s\n' "$1" >> "$CODEX_STDIN_FILE"; fi
+}
+IFS= read -r request
+capture_request "$request"
+printf '%s\n' '{"id":1,"result":{"userAgent":"anycode-test"}}'
+IFS= read -r request
+capture_request "$request"
+IFS= read -r request
+capture_request "$request"
+printf '%s\n' '{"id":2,"result":{"thread":{"id":"`+threadID+`"}}}'
+`+action+`
+cat >/dev/null
+`)
 }
 
 func transcriptInput(t *testing.T, codexHome, codexSessionID string) process.CodexTranscriptInput {

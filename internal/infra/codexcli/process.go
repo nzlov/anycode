@@ -50,6 +50,7 @@ func defaultDetachedProcessOps() detachedProcessOps {
 
 type activeProcess struct {
 	cmd                    *exec.Cmd
+	stdin                  io.WriteCloser
 	stderr                 *bytes.Buffer
 	home                   string
 	workdir                string
@@ -64,6 +65,7 @@ type activeProcess struct {
 	done                   chan struct{}
 	mu                     sync.Mutex
 	exitResult             process.ExitResult
+	protocolFailure        string
 	eventsStarted          bool
 	observer               Observer
 }
@@ -71,97 +73,24 @@ type activeProcess struct {
 var processRegistry sync.Map
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
-	args := c.buildStartArgs(input)
-	return c.start(ctx, input.ProcessRunID, input.SessionID, args, input.Prompt, input.Workdir, input.ArtifactDir, "", process.CodexTranscriptSource{})
+	return c.startAppServer(ctx, appServerRunInput{
+		processRunID: input.ProcessRunID, sessionID: input.SessionID,
+		workdir: input.Workdir, artifactDir: input.ArtifactDir, prompt: input.Prompt,
+		model: input.Model, reasoningEffort: input.ReasoningEffort,
+		permissionMode: input.PermissionMode, fastMode: input.FastMode,
+		imagePaths: input.ImagePaths,
+	})
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
-	args := c.buildResumeArgs(input)
-	return c.start(ctx, input.ProcessRunID, input.SessionID, args, input.Prompt, input.Workdir, input.ArtifactDir, input.CodexSessionID, input.Transcript)
-}
-
-func (c *Client) start(ctx context.Context, runID process.RunID, sessionID process.SessionID, args []string, prompt string, workdir string, artifactDir string, codexSessionID string, source process.CodexTranscriptSource) (process.CodexHandle, error) {
-	if runID == "" {
-		return process.CodexHandle{}, errors.New("process run id is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return process.CodexHandle{}, err
-	}
-	codexHome := c.CodexHome()
-	transcriptPath := ""
-	transcriptRelativePath := ""
-	baselineOffset := int64(0)
-	if codexSessionID != "" {
-		if source.CodexSessionID != codexSessionID {
-			return process.CodexHandle{}, fmt.Errorf("%w: transcript source does not match resume session", process.ErrTranscriptUnavailable)
-		}
-		var err error
-		transcriptPath, transcriptRelativePath, err = resolveTranscriptPath(codexHome, source)
-		if err != nil {
-			return process.CodexHandle{}, err
-		}
-		info, err := os.Stat(transcriptPath)
-		if err != nil {
-			return process.CodexHandle{}, fmt.Errorf("%w: open resume transcript", process.ErrTranscriptUnavailable)
-		}
-		baselineOffset = info.Size()
-	}
-	cmd := exec.CommandContext(context.Background(), c.Bin(), args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if prompt != "" {
-		cmd.Stdin = strings.NewReader(prompt)
-	}
-	env := os.Environ()
-	if codexHome != "" {
-		env = upsertEnv(env, "CODEX_HOME", codexHome)
-	}
-	if c.mcpAuthToken != "" {
-		env = upsertEnv(env, "ANYCODE_MCP_TOKEN", c.mcpAuthToken)
-	}
-	env = upsertEnv(env, processRunOwnerEnv, string(runID))
-	if artifactDir != "" {
-		env = upsertEnv(env, artifactDirEnv, artifactDir)
-	}
-	cmd.Env = env
-	if workdir != "" {
-		cmd.Dir = workdir
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return process.CodexHandle{}, err
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Start(); err != nil {
-		return process.CodexHandle{}, err
-	}
-
-	handle := process.CodexHandle{
-		ProcessRunID:   runID,
-		PID:            cmd.Process.Pid,
-		CodexSessionID: codexSessionID,
-	}
-	stdoutSessionIDs, stdoutPlanUpdates := observeStdout(stdout, codexSessionID != "")
-	active := &activeProcess{
-		cmd:                    cmd,
-		stderr:                 &stderr,
-		home:                   codexHome,
-		workdir:                workdir,
-		processRunID:           runID,
-		sessionID:              sessionID,
-		codexSessionID:         codexSessionID,
-		transcriptPath:         transcriptPath,
-		transcriptRelativePath: transcriptRelativePath,
-		baselineOffset:         baselineOffset,
-		stdoutSessionIDs:       stdoutSessionIDs,
-		stdoutPlanUpdates:      stdoutPlanUpdates,
-		observer:               c.observer,
-		done:                   make(chan struct{}),
-	}
-	processRegistry.Store(runID, active)
-	go active.wait()
-	return handle, nil
+	return c.startAppServer(ctx, appServerRunInput{
+		processRunID: input.ProcessRunID, sessionID: input.SessionID,
+		codexSessionID: input.CodexSessionID, transcript: input.Transcript,
+		workdir: input.Workdir, artifactDir: input.ArtifactDir, prompt: input.Prompt,
+		model: input.Model, reasoningEffort: input.ReasoningEffort,
+		permissionMode: input.PermissionMode, fastMode: input.FastMode,
+		imagePaths: input.ImagePaths,
+	})
 }
 
 func (c *Client) Stop(ctx context.Context, processRunID process.RunID) error {
@@ -411,48 +340,6 @@ func (c *Client) Events(ctx context.Context, handle process.CodexHandle) (<-chan
 	return events, nil
 }
 
-func observeStdout(stdout io.Reader, waitForTurn bool) (<-chan string, <-chan process.CodexEvent) {
-	sessionIDs := make(chan string, 1)
-	planUpdates := make(chan process.CodexEvent, 64)
-	go func() {
-		defer close(sessionIDs)
-		defer close(planUpdates)
-		reader := bufio.NewReader(stdout)
-		identified := false
-		turnStarted := !waitForTurn
-		for {
-			line, err := reader.ReadBytes('\n')
-			raw := bytes.TrimSpace(line)
-			if !identified && len(raw) > 0 {
-				if sessionID := stdoutSessionID(raw); sessionID != "" {
-					sessionIDs <- sessionID
-					identified = true
-				}
-			}
-			if stdoutEventType(raw) == "turn.started" {
-				turnStarted = true
-			}
-			if turnStarted && len(raw) > 0 {
-				if event, ok := stdoutPlanUpdate(raw); ok {
-					sendLatestPlanUpdate(planUpdates, event)
-				}
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
-	return sessionIDs, planUpdates
-}
-
-func stdoutEventType(raw []byte) string {
-	var event map[string]any
-	if json.Unmarshal(raw, &event) != nil {
-		return ""
-	}
-	return stringValue(event, "type")
-}
-
 func sendLatestPlanUpdate(updates chan process.CodexEvent, event process.CodexEvent) {
 	select {
 	case updates <- event:
@@ -472,8 +359,25 @@ func sendLatestPlanUpdate(updates chan process.CodexEvent, event process.CodexEv
 func (a *activeProcess) wait() {
 	result := waitProcess(a.cmd, a.stderr)
 	a.mu.Lock()
+	if a.protocolFailure != "" {
+		if result.ExitCode == nil || *result.ExitCode == 0 {
+			code := 1
+			result.ExitCode = &code
+		}
+		result.FailureReason = a.protocolFailure
+	}
 	a.exitResult = result
 	close(a.done)
+	a.mu.Unlock()
+}
+
+func (a *activeProcess) failProtocol(reason string) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return
+	}
+	a.mu.Lock()
+	a.protocolFailure = reason
 	a.mu.Unlock()
 }
 
@@ -528,36 +432,6 @@ func waitForProcessDone(ctx context.Context, done <-chan struct{}, timeout time.
 	case <-timer.C:
 		return false, nil
 	}
-}
-
-func stdoutSessionID(raw []byte) string {
-	var event map[string]any
-	if json.Unmarshal(raw, &event) != nil || stringValue(event, "type") != "thread.started" {
-		return ""
-	}
-	return stringValue(event, "thread_id", "session_id")
-}
-
-func stdoutPlanUpdate(raw []byte) (process.CodexEvent, bool) {
-	var payload map[string]any
-	if json.Unmarshal(raw, &payload) != nil {
-		return process.CodexEvent{}, false
-	}
-	eventType := stringValue(payload, "type")
-	update, correlationID, ok := planUpdateFromEvent(eventType, payload)
-	if !ok {
-		return process.CodexEvent{}, false
-	}
-	update.EventID = stablePlanUpdateEventID(update)
-	event := process.CodexEvent{
-		Type:          process.CodexEventPlan,
-		Phase:         process.CodexPhaseStandalone,
-		Content:       update,
-		CorrelationID: correlationID,
-		EventID:       update.EventID,
-		CreatedAt:     parseSessionTimestamp(stringValue(payload, "timestamp")),
-	}
-	return event, true
 }
 
 func planUpdateFromEvent(eventType string, payload map[string]any) (process.PlanUpdate, string, bool) {
@@ -3135,50 +3009,6 @@ func stringValue(payload map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func (c *Client) buildStartArgs(input process.CodexStartInput) []string {
-	args := []string{"exec", "--json", "--skip-git-repo-check"}
-	if input.Workdir != "" {
-		args = append(args, "-C", input.Workdir)
-	}
-	if input.ArtifactDir != "" {
-		args = append(args, "--add-dir", input.ArtifactDir)
-	}
-	args = c.appendMCPArgs(args, input.SessionID)
-	args = c.appendPlaywrightMCPArgs(args, input.ProcessRunID, input.ArtifactDir)
-	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, true)
-	for _, path := range input.ImagePaths {
-		if path != "" {
-			args = append(args, "-i", path)
-		}
-	}
-	if input.Prompt != "" {
-		args = append(args, "-")
-	}
-	return args
-}
-
-func (c *Client) buildResumeArgs(input process.CodexResumeInput) []string {
-	args := []string{"exec", "resume", "--json", "--skip-git-repo-check"}
-	args = c.appendMCPArgs(args, input.SessionID)
-	args = c.appendPlaywrightMCPArgs(args, input.ProcessRunID, input.ArtifactDir)
-	args = c.appendRuntimeConfigArgs(args, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode, false)
-	if input.ArtifactDir != "" && input.PermissionMode == "workspace-write" {
-		args = append(args, "-c", fmt.Sprintf("sandbox_workspace_write.writable_roots=[%q]", input.ArtifactDir))
-	}
-	for _, path := range input.ImagePaths {
-		if path != "" {
-			args = append(args, "-i", path)
-		}
-	}
-	if input.CodexSessionID != "" {
-		args = append(args, input.CodexSessionID)
-	}
-	if input.Prompt != "" {
-		args = append(args, "-")
-	}
-	return args
 }
 
 func (c *Client) appendPlaywrightMCPArgs(args []string, runID process.RunID, artifactDir string) []string {

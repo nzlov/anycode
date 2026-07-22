@@ -115,6 +115,7 @@
             $q.screen.lt.md || (panel && $q.screen.width < overviewInlineConfigMinWidth)
           "
           :disabled="creating"
+          :completion-project-id="projectId"
           @submit="createSession(preferredAvailableMode)"
         >
           <template #actions>

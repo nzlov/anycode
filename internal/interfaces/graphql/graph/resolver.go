@@ -10,6 +10,7 @@ import (
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
 	notificationapp "github.com/nzlov/anycode/internal/application/notification"
 	projectapp "github.com/nzlov/anycode/internal/application/project"
+	promptcompletionapp "github.com/nzlov/anycode/internal/application/promptcompletion"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
@@ -25,19 +26,20 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type UseCases struct {
-	Auth          authapp.UseCase
-	Projects      projectapp.UseCase
-	Sessions      sessionapp.UseCase
-	Timeline      timelineapp.UseCase
-	SessionEvents sessioneventapp.UseCase
-	Attachments   attachmentapp.UseCase
-	Artifacts     artifactapp.UseCase
-	Diff          diffapp.UseCase
-	Workflows     workflowapp.UseCase
-	Questions     questionapp.UseCase
-	Notifications notificationapp.UseCase
-	Settings      settingapp.UseCase
-	CodexModels   []processdomain.CodexModel
+	Auth             authapp.UseCase
+	Projects         projectapp.UseCase
+	Sessions         sessionapp.UseCase
+	Timeline         timelineapp.UseCase
+	SessionEvents    sessioneventapp.UseCase
+	Attachments      attachmentapp.UseCase
+	Artifacts        artifactapp.UseCase
+	Diff             diffapp.UseCase
+	Workflows        workflowapp.UseCase
+	Questions        questionapp.UseCase
+	Notifications    notificationapp.UseCase
+	PromptCompletion promptcompletionapp.UseCase
+	Settings         settingapp.UseCase
+	CodexModels      []processdomain.CodexModel
 }
 
 type Resolver struct {

@@ -105,18 +105,84 @@
       <div v-else class="text-caption text-muted attachment-empty">松开添加附件</div>
     </div>
 
-    <q-input
-      v-if="!isCollapsed"
-      ref="promptInputRef"
-      v-model.trim="promptModel"
-      autogrow
-      borderless
-      type="textarea"
-      class="prompt-input"
-      :placeholder="placeholder"
-      :disable="disabled"
-      @keydown.shift.enter.prevent="emit('submit')"
-    />
+    <div v-if="!isCollapsed" class="prompt-input-wrap">
+      <q-input
+        ref="promptInputRef"
+        v-model="promptModel"
+        autogrow
+        borderless
+        type="textarea"
+        class="prompt-input"
+        :placeholder="placeholder"
+        :disable="disabled"
+        :aria-expanded="completionOpen"
+        :aria-controls="completionOpen ? completionListId : undefined"
+        :aria-activedescendant="activeCompletionId"
+        @update:model-value="queuePromptCompletionRefresh"
+        @focus="queuePromptCompletionRefresh"
+        @click="queuePromptCompletionRefresh"
+        @keyup="onPromptKeyup"
+        @keydown="onPromptKeydown"
+        @keydown.shift.enter.prevent="emit('submit')"
+        @blur="onPromptBlur"
+      />
+
+      <div
+        v-if="completionOpen"
+        :id="completionListId"
+        class="prompt-completion"
+        role="listbox"
+        :aria-label="completionHeading"
+      >
+        <div class="prompt-completion__header">
+          <q-icon :name="completionRange?.kind === 'command' ? 'terminal' : 'description'" />
+          <span>{{ completionHeading }}</span>
+          <q-space />
+          <q-spinner v-if="completionLoading" color="primary" size="16px" />
+        </div>
+        <q-list v-if="completionItems.length" dense class="prompt-completion__list">
+          <q-item
+            v-for="(item, index) in completionItems"
+            :id="`${completionListId}-option-${index}`"
+            :key="item.key"
+            clickable
+            role="option"
+            :active="index === activeCompletionIndex"
+            :aria-selected="index === activeCompletionIndex"
+            active-class="prompt-completion__item--active"
+            class="prompt-completion__item"
+            @mouseenter="activeCompletionIndex = index"
+            @mousedown.prevent
+            @click="selectCompletion(index)"
+          >
+            <q-item-section avatar>
+              <q-icon :name="item.kind === 'command' ? 'terminal' : 'insert_drive_file'" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label v-if="item.kind === 'command'" class="prompt-completion__value">
+                {{ item.command.name }}
+              </q-item-label>
+              <q-item-label v-else class="prompt-completion__value prompt-completion__path">
+                <span
+                  v-for="(segment, segmentIndex) in fileMatchSegments(item.file)"
+                  :key="segmentIndex"
+                  :class="{ 'prompt-completion__match': segment.matched }"
+                  >{{ segment.text }}</span
+                >
+              </q-item-label>
+              <q-item-label v-if="item.kind === 'command'" caption>
+                {{ item.command.description }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+        </q-list>
+        <div v-else class="prompt-completion__empty">
+          <template v-if="completionLoading">正在匹配</template>
+          <template v-else-if="completionError">加载失败</template>
+          <template v-else>无匹配项</template>
+        </div>
+      </div>
+    </div>
 
     <div v-if="!isCollapsed" class="prompt-toolbar">
       <q-btn
@@ -227,11 +293,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, useId, watch } from 'vue';
 import { useQuasar, type QInput } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
 import { filesFromTransfer } from '@/services/promptAttachments';
+import {
+  activePromptCompletion,
+  applyPromptCompletion,
+  filterSlashCommands,
+  formatFileMention,
+  promptMatchSegments,
+  type PromptCompletionRange,
+} from '@/services/promptCompletionText.js';
+import {
+  listCodexSlashCommands,
+  searchPromptFiles,
+  type PromptFileMatch,
+  type PromptSlashCommand,
+} from '@/services/promptCompletions';
 import type { SessionFile } from '@/services/sessionFiles';
 
 const props = withDefaults(
@@ -252,6 +332,9 @@ const props = withDefaults(
     readonlyConfig?: boolean;
     collapsible?: boolean;
     collapsed?: boolean;
+    completionProjectId?: string;
+    completionSessionId?: string;
+    completionHasThread?: boolean;
   }>(),
   {
     title: '',
@@ -263,6 +346,9 @@ const props = withDefaults(
     readonlyConfig: false,
     collapsible: false,
     collapsed: false,
+    completionProjectId: '',
+    completionSessionId: '',
+    completionHasThread: false,
     artifacts: () => [],
   },
 );
@@ -288,6 +374,18 @@ const draggingFiles = ref(false);
 const dragDepth = ref(0);
 const fileThumbnailUrls = reactive(new Map<File, string>());
 const promptInputRef = ref<QInput | null>(null);
+const completionListId = useId();
+const completionRange = ref<PromptCompletionRange | null>(null);
+const slashCommands = ref<PromptSlashCommand[]>([]);
+const fileMatches = ref<PromptFileMatch[]>([]);
+const slashCommandsLoaded = ref(false);
+const commandLoading = ref(false);
+const fileLoading = ref(false);
+const completionError = ref(false);
+const activeCompletionIndex = ref(0);
+let fileSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let fileSearchGeneration = 0;
+let blurTimer: ReturnType<typeof setTimeout> | null = null;
 
 const promptModel = computed({
   get: () => props.prompt,
@@ -301,6 +399,37 @@ const filesModel = computed({
 const attachmentCount = computed(() => props.files.length + props.artifacts.length);
 const showAttachmentZone = computed(() => attachmentCount.value > 0 || draggingFiles.value);
 const isCollapsed = computed(() => props.collapsible && props.collapsed);
+const completionScopeReady = computed(
+  () => Boolean(props.completionProjectId) !== Boolean(props.completionSessionId),
+);
+const completionItems = computed(() => {
+  const range = completionRange.value;
+  if (!range) return [];
+  if (range.kind === 'command') {
+    return filterSlashCommands(slashCommands.value, range.query, props.completionHasThread).map(
+      (command) => ({ kind: 'command' as const, key: command.name, command }),
+    );
+  }
+  return fileMatches.value.map((file) => ({ kind: 'file' as const, key: file.path, file }));
+});
+const completionOpen = computed(
+  () =>
+    Boolean(completionRange.value) &&
+    !props.disabled &&
+    !isCollapsed.value &&
+    (completionRange.value?.kind === 'command' || completionScopeReady.value),
+);
+const completionLoading = computed(() =>
+  completionRange.value?.kind === 'command' ? commandLoading.value : fileLoading.value,
+);
+const completionHeading = computed(() =>
+  completionRange.value?.kind === 'command' ? 'Codex 指令' : '项目文件',
+);
+const activeCompletionId = computed(() =>
+  completionOpen.value && completionItems.value.length > 0
+    ? `${completionListId}-option-${activeCompletionIndex.value}`
+    : undefined,
+);
 
 function fileIcon(file: File) {
   if (file.type.startsWith('video/')) return 'movie';
@@ -416,6 +545,149 @@ function onDrop(event: DragEvent) {
   appendFiles(filesFromTransfer(event.dataTransfer));
 }
 
+function queuePromptCompletionRefresh() {
+  void nextTick(refreshPromptCompletion);
+}
+
+function refreshPromptCompletion() {
+  if (props.disabled || isCollapsed.value) {
+    closePromptCompletion();
+    return;
+  }
+  const input = promptInputRef.value?.nativeEl;
+  if (!input) return;
+  const range = activePromptCompletion(input.value, input.selectionStart ?? input.value.length);
+  if (!range || (range.kind === 'file' && !completionScopeReady.value)) {
+    closePromptCompletion();
+    return;
+  }
+  completionRange.value = range;
+  completionError.value = false;
+  activeCompletionIndex.value = 0;
+  if (range.kind === 'command') {
+    cancelFileSearch();
+    void loadSlashCommands();
+    return;
+  }
+  scheduleFileSearch(range.query);
+}
+
+async function loadSlashCommands() {
+  if (slashCommandsLoaded.value || commandLoading.value) return;
+  commandLoading.value = true;
+  try {
+    slashCommands.value = await listCodexSlashCommands();
+    slashCommandsLoaded.value = true;
+  } catch {
+    completionError.value = true;
+  } finally {
+    commandLoading.value = false;
+  }
+}
+
+function scheduleFileSearch(query: string) {
+  cancelFileSearch();
+  fileMatches.value = [];
+  fileLoading.value = true;
+  const generation = fileSearchGeneration;
+  fileSearchTimer = setTimeout(() => {
+    fileSearchTimer = null;
+    void runFileSearch(query, generation);
+  }, 120);
+}
+
+async function runFileSearch(query: string, generation: number) {
+  try {
+    const matches = await searchPromptFiles({
+      query,
+      ...(props.completionProjectId ? { projectId: props.completionProjectId } : {}),
+      ...(props.completionSessionId ? { sessionId: props.completionSessionId } : {}),
+    });
+    if (generation !== fileSearchGeneration) return;
+    fileMatches.value = matches;
+  } catch {
+    if (generation === fileSearchGeneration) completionError.value = true;
+  } finally {
+    if (generation === fileSearchGeneration) fileLoading.value = false;
+  }
+}
+
+function cancelFileSearch() {
+  fileSearchGeneration += 1;
+  if (fileSearchTimer) clearTimeout(fileSearchTimer);
+  fileSearchTimer = null;
+  fileLoading.value = false;
+}
+
+function selectCompletion(index: number) {
+  const range = completionRange.value;
+  const item = completionItems.value[index];
+  const input = promptInputRef.value?.nativeEl;
+  if (!range || !item || !input) return;
+  if (blurTimer) clearTimeout(blurTimer);
+  const value = item.kind === 'command' ? item.command.name : formatFileMention(item.file.path);
+  const nextPrompt = applyPromptCompletion(input.value, range, value);
+  const cursor = range.start + value.length + 1;
+  closePromptCompletion();
+  emit('update:prompt', nextPrompt);
+  void nextTick(() => {
+    const nextInput = promptInputRef.value;
+    if (!nextInput) return;
+    nextInput.focus();
+    nextInput.nativeEl.setSelectionRange(cursor, cursor);
+  });
+}
+
+function onPromptKeydown(event: KeyboardEvent) {
+  if (event.isComposing) return;
+  if (completionOpen.value && completionItems.value.length > 0) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      activeCompletionIndex.value =
+        (activeCompletionIndex.value + 1) % completionItems.value.length;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      activeCompletionIndex.value =
+        (activeCompletionIndex.value - 1 + completionItems.value.length) %
+        completionItems.value.length;
+      return;
+    }
+    if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+      event.preventDefault();
+      selectCompletion(activeCompletionIndex.value);
+      return;
+    }
+  }
+  if (completionOpen.value && event.key === 'Escape') {
+    event.preventDefault();
+    closePromptCompletion();
+    return;
+  }
+}
+
+function onPromptKeyup(event: KeyboardEvent) {
+  if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+    queuePromptCompletionRefresh();
+  }
+}
+
+function onPromptBlur() {
+  blurTimer = setTimeout(closePromptCompletion, 100);
+}
+
+function closePromptCompletion() {
+  cancelFileSearch();
+  completionRange.value = null;
+  fileMatches.value = [];
+  completionError.value = false;
+  activeCompletionIndex.value = 0;
+}
+
+function fileMatchSegments(file: PromptFileMatch) {
+  return promptMatchSegments(file.path, file.indices);
+}
 function onPaste(event: ClipboardEvent) {
   if (props.disabled) return;
   appendFiles(filesFromTransfer(event.clipboardData));
@@ -440,9 +712,19 @@ watch(isCollapsed, async (collapsed) => {
   input.focus();
   input.nativeEl.setSelectionRange(cursor, cursor);
 });
+watch(() => [props.completionProjectId, props.completionSessionId], closePromptCompletion);
+watch(
+  () => completionItems.value.length,
+  (length) => {
+    if (length === 0) activeCompletionIndex.value = 0;
+    else activeCompletionIndex.value = Math.min(activeCompletionIndex.value, length - 1);
+  },
+);
 
 onBeforeUnmount(() => {
   revokePreviewUrl();
   revokeFileThumbnailUrls();
+  cancelFileSearch();
+  if (blurTimer) clearTimeout(blurTimer);
 });
 </script>

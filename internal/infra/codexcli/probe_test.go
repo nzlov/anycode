@@ -8,14 +8,13 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/nzlov/anycode/internal/domain/process"
 )
 
 func TestProbeReadsVersionAndCapabilities(t *testing.T) {
 	bin := fakeCodex(t, `#!/bin/sh
 case "$*" in
   "--version") echo "codex 1.2.3"; exit 0 ;;
+  "app-server --help") echo "app-server help"; exit 0 ;;
   "exec --help") echo "exec help"; exit 0 ;;
   "exec --help --strict-config -c mcp_servers.anycode.tool_timeout_sec=86400") echo "exec timeout config help"; exit 0 ;;
   "exec resume --help") echo "resume help"; exit 0 ;;
@@ -33,7 +32,7 @@ exit 2
 	if got.Version != "codex 1.2.3" {
 		t.Fatalf("Version = %q", got.Version)
 	}
-	if !got.SupportsExec || !got.SupportsResume || !got.SupportsMCPToolTimeout {
+	if !got.SupportsAppServer || !got.SupportsMCPToolTimeout {
 		t.Fatalf("capabilities = %+v", got)
 	}
 	if !got.SupportsImageGeneration || got.ImageGenerationStatus != "stable" {
@@ -144,7 +143,7 @@ exit 2
 	if capabilities.SupportsMCPToolTimeout {
 		t.Fatal("tool timeout capability = true")
 	}
-	args := strings.Join(client.buildStartArgs(process.CodexStartInput{SessionID: "session-1"}), " ")
+	args := strings.Join(client.buildAppServerArgs(appServerRunInput{sessionID: "session-1"}), " ")
 	if strings.Contains(args, "tool_timeout_sec") {
 		t.Fatalf("unsupported timeout was injected: %s", args)
 	}

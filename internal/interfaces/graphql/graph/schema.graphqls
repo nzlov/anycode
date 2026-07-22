@@ -6,6 +6,8 @@ scalar Int64
 
 type Query {
   codexModelOptions: [CodexModelOption!]!
+  codexSlashCommands: [CodexSlashCommand!]!
+  promptFileMatches(input: PromptFileMatchInput!): [PromptFileMatch!]!
   appearanceSettings: AppearanceSettings!
   webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
@@ -24,6 +26,25 @@ type Query {
   pendingQuestionBatches(sessionId: ID!): [QuestionBatch!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
+}
+
+type CodexSlashCommand {
+  name: String!
+  description: String!
+  acceptsArgs: Boolean!
+  requiresThread: Boolean!
+}
+
+type PromptFileMatch {
+  path: String!
+  score: Int!
+  indices: [Int!]!
+}
+
+input PromptFileMatchInput {
+  projectId: ID
+  sessionId: ID
+  query: String!
 }
 
 type Mutation {
