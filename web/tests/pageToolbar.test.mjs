@@ -37,6 +37,20 @@ test('route pages render their titles and actions into the application toolbar',
   assert.doesNotMatch(sessionsSource, /table-filter-card/);
 });
 
+test('overview navigation and title use the AnyCode project icon', () => {
+  assert.match(layoutSource, /icon="img:\/icons\/anycode\.svg"/);
+  assert.match(layoutSource, /aria-label="返回总览"/);
+  assert.match(
+    indexSource,
+    /<PageToolbar title="AnyCode" title-icon="img:\/icons\/anycode\.svg"/,
+  );
+  assert.match(toolbarSource, /<q-icon v-if="titleIcon" :name="titleIcon"/);
+  const titleIconStyles =
+    stylesSource.match(/\.page-toolbar__title-icon\s*{([^}]*)}/)?.[1] ?? '';
+  assert.match(titleIconStyles, /font-size:\s*28px/);
+  assert.match(titleIconStyles, /margin-right:\s*8px/);
+});
+
 test('standalone diff keeps its state owner while moving controls into the header', () => {
   assert.match(diffPageSource, /toolbar-target="#app-page-toolbar"/);
   assert.match(diffPageSource, /toolbar-title="当前分支变更"/);

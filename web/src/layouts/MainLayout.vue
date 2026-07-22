@@ -8,11 +8,11 @@
           round
           dense
           class="app-icon-btn"
-          icon="space_dashboard"
-          aria-label="返回总揽"
+          icon="img:/icons/anycode.svg"
+          aria-label="返回总览"
           :to="{ name: 'overview' }"
         >
-          <q-tooltip>总揽</q-tooltip>
+          <q-tooltip>总览</q-tooltip>
         </q-btn>
         <q-toolbar-title v-if="$route.name === 'session-detail'" class="app-header__title">
           {{ sessionTitle || '会话详情' }}

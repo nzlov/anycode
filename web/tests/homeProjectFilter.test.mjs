@@ -21,8 +21,8 @@ test('application shell removes the global drawer and duplicate project entry', 
   assert.match(toolbarSource, /<q-toolbar-title/);
   assert.doesNotMatch(layoutSource, /aria-label="选择项目目录"/);
   assert.doesNotMatch(layoutSource, /activeProjectId|refreshActiveProject|projectActive/);
-  assert.match(layoutSource, /icon="space_dashboard"/);
-  assert.match(layoutSource, /aria-label="返回总揽"/);
+  assert.match(layoutSource, /icon="img:\/icons\/anycode\.svg"/);
+  assert.match(layoutSource, /aria-label="返回总览"/);
   assert.match(layoutSource, /:to="\{ name: 'overview' \}"/);
   assert.match(layoutSource, /\{\{ sessionTitle \|\| '会话详情' \}\}/);
   assert.match(layoutSource, /@session-title="sessionTitle = \$event"/);

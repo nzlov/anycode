@@ -129,6 +129,11 @@ a {
   flex: 0 1 auto;
 }
 
+.page-toolbar__title-icon {
+  margin-right: 8px;
+  font-size: 28px;
+}
+
 .page-toolbar__actions {
   display: flex;
   min-width: 0;
