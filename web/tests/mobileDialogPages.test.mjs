@@ -30,7 +30,7 @@ test('every persisted mobile content surface has a direct route', () => {
 });
 
 test('mobile entry handlers navigate while desktop dialog state remains available', () => {
-  assert.match(layout, /function openNewSession[\s\S]*\$q\.screen\.lt\.sm[\s\S]*newSessionOpen\.value = true/);
+  assert.match(overview, /function openNewSession[\s\S]*\$q\.screen\.lt\.sm[\s\S]*newSessionOpen\.value = true/);
   assert.match(layout, /function openSettings[\s\S]*\$q\.screen\.lt\.sm[\s\S]*settingsDialogOpen\.value = true/);
   assert.match(settings, /function openProjectDirectory[\s\S]*name: 'project-create'/);
   assert.match(settings, /function openProjectSettings[\s\S]*name: 'project-settings'/);

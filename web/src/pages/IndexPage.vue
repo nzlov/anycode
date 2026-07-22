@@ -314,6 +314,26 @@
       {{ latestCards.length > 0 ? '当前没有显示的会话' : '暂无会话' }}
     </div>
 
+    <q-page-sticky v-if="!showDesktopFocusLayout" position="bottom-right" :offset="[24, 24]">
+      <q-btn
+        fab
+        color="primary"
+        class="app-on-primary"
+        icon="add"
+        aria-label="新建卡片"
+        @click="openNewSession"
+      >
+        <q-tooltip>新建卡片</q-tooltip>
+      </q-btn>
+    </q-page-sticky>
+
+    <NewSessionDialog
+      v-model="newSessionOpen"
+      :default-project-id="projectScopeId"
+      :panel="showDesktopFocusLayout"
+      @created="refreshOverviewCard"
+    />
+
     <QuestionsDialog
       v-model="questionsDialog"
       :requests="pendingQuestionRequests"
@@ -445,6 +465,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import QuestionsDialog from '@/components/QuestionsDialog.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
+import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import OverviewHorizontalSession from '@/components/OverviewHorizontalSession.vue';
 import PageToolbar from '@/components/PageToolbar.vue';
 import ProjectVisibilityFilters from '@/components/ProjectVisibilityFilters.vue';
@@ -502,6 +523,7 @@ const isHorizontalView = computed(
   () => isDesktopOverview.value && overviewViewMode.value === 'horizontal',
 );
 const showDesktopFocusLayout = computed(() => isDesktopOverview.value && !isHorizontalView.value);
+const newSessionOpen = ref(false);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
   return typeof value === 'string' ? value : '';
@@ -621,7 +643,6 @@ interface ApprovalContext {
 
 onMounted(() => {
   overviewMounted = true;
-  window.addEventListener('anycode:session-created', handleSessionCreated);
   void startOverview();
 });
 
@@ -630,7 +651,6 @@ onUnmounted(() => {
   cardRefreshRequests.clear();
   clearTodoMenuHideTimer();
   clearCardClickSuppression();
-  window.removeEventListener('anycode:session-created', handleSessionCreated);
   stopOverviewLiveUpdates();
 });
 
@@ -738,9 +758,16 @@ function toggleProjectVisibility(projectId: string) {
   persistHiddenProjectIds();
 }
 
-function handleSessionCreated(event: Event) {
-  if (!(event instanceof CustomEvent) || typeof event.detail?.sessionId !== 'string') return;
-  void refreshOverviewCard(event.detail.sessionId);
+function openNewSession() {
+  if ($q.screen.lt.sm) {
+    void router.push(
+      projectScopeId.value
+        ? { name: 'new-session', query: { projectId: projectScopeId.value } }
+        : { name: 'new-session' },
+    );
+    return;
+  }
+  newSessionOpen.value = true;
 }
 
 function handleSessionUpdate(update: SessionUpdateEvent) {

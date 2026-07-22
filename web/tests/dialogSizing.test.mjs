@@ -65,7 +65,7 @@ test('content dialogs keep shared cards while mobile entries use route pages', (
   assert.match(routesSource, /name: 'settings'/);
   assert.match(newSessionPageSource, /<NewSessionDialog[\s\S]*page/);
   assert.match(settingsPageSource, /<GlobalSettingsDialog page/);
-  assert.match(layoutSource, /if \(\$q\.screen\.lt\.sm\)[\s\S]*name: 'new-session'/);
+  assert.match(indexSource, /if \(\$q\.screen\.lt\.sm\)[\s\S]*name: 'new-session'/);
   assert.match(layoutSource, /if \(\$q\.screen\.lt\.sm\)[\s\S]*name: 'settings'/);
 });
 

@@ -160,29 +160,16 @@ test('horizontal mode keeps one existing detail subscription per session', () =>
 });
 
 test('horizontal mode uses the mobile-style create FAB and disables the persistent prompt panel', () => {
-  assert.match(
-    layoutSource,
-    /\(\$q\.screen\.width < overviewDesktopMinWidth \|\| isOverviewHorizontalView\)/,
-  );
-  assert.match(
-    layoutSource,
-    /showOverviewCreatePanel = computed\([\s\S]*?!isOverviewHorizontalView\.value/,
-  );
-  assert.match(layoutSource, /<q-btn[\s\S]*fab[\s\S]*aria-label="新建卡片"/);
+  assert.match(indexSource, /<q-page-sticky v-if="!showDesktopFocusLayout"/);
+  assert.match(indexSource, /:panel="showDesktopFocusLayout"/);
+  assert.match(indexSource, /<q-btn[\s\S]*fab[\s\S]*aria-label="新建卡片"/);
 });
 
 test('successful desktop creation refreshes the new session in the mounted overview', () => {
   assert.match(
     newSessionSource,
-    /const created = await createSessionRequest\(input\);[\s\S]*?new CustomEvent\('anycode:session-created',[\s\S]*?sessionId: created\.id/,
+    /const sessionId = await createSessionRequest\(input\);[\s\S]*?emit\('created', sessionId\)/,
   );
-  assert.match(indexSource, /window\.addEventListener\('anycode:session-created', handleSessionCreated\)/);
-  assert.match(
-    indexSource,
-    /function handleSessionCreated\(event: Event\)[\s\S]*?refreshOverviewCard\(event\.detail\.sessionId\)/,
-  );
-  assert.match(
-    indexSource,
-    /window\.removeEventListener\('anycode:session-created', handleSessionCreated\)/,
-  );
+  assert.match(indexSource, /@created="refreshOverviewCard"/);
+  assert.doesNotMatch(newSessionSource + indexSource, /anycode:session-created|handleSessionCreated/);
 });

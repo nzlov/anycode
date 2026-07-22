@@ -269,7 +269,7 @@ test('session detail never drops distinct transcript events by content or timest
   assert.equal(pageSource.includes('< 1500'), false);
 });
 
-test('session creation preserves the overview page while route changes still remount it', () => {
+test('session creation refreshes the owning overview by the created id without remounting it', () => {
   const layoutSource = readFileSync(
     new URL('../src/layouts/MainLayout.vue', import.meta.url),
     'utf8',
@@ -278,10 +278,17 @@ test('session creation preserves the overview page while route changes still rem
     new URL('../src/components/NewSessionDialog.vue', import.meta.url),
     'utf8',
   );
+  const overviewSource = readFileSync(
+    new URL('../src/pages/IndexPage.vue', import.meta.url),
+    'utf8',
+  );
 
   assert.match(layoutSource, /<router-view\s+:key="\$route\.fullPath"/);
   assert.doesNotMatch(layoutSource, /pageRefreshKey|handleSessionCreated|@create=/);
-  assert.doesNotMatch(newSessionSource, /emit\('create'\)/);
+  assert.match(newSessionSource, /const sessionId = await createSessionRequest\(input\)/);
+  assert.match(newSessionSource, /emit\('created', sessionId\)/);
+  assert.match(overviewSource, /@created="refreshOverviewCard"/);
+  assert.doesNotMatch(layoutSource, /<new-session-dialog|NewSessionDialog/);
 });
 
 test('subscription close reports acknowledgement and completion state', () => {

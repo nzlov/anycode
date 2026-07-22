@@ -96,7 +96,6 @@
     >
       <router-view
         :key="$route.fullPath"
-        @create-session="openNewSession"
         @session-title="sessionTitle = $event"
       />
     </q-page-container>
@@ -107,33 +106,6 @@
       </q-page>
     </q-page-container>
 
-    <q-page-sticky
-      v-if="
-        $route.name === 'overview' &&
-        ($q.screen.width < overviewDesktopMinWidth || isOverviewHorizontalView)
-      "
-      v-show="applicationReady"
-      position="bottom-right"
-      :offset="[24, 24]"
-    >
-      <q-btn
-        fab
-        color="primary"
-        class="app-on-primary"
-        icon="add"
-        aria-label="新建卡片"
-        @click="openNewSession"
-      >
-        <q-tooltip>新建卡片</q-tooltip>
-      </q-btn>
-    </q-page-sticky>
-
-    <new-session-dialog
-      v-if="applicationReady && $route.name === 'overview'"
-      v-model="newSessionOpen"
-      :default-project-id="newSessionDefaultProjectId"
-      :panel="showOverviewCreatePanel"
-    />
     <GlobalSettingsDialog
       v-if="applicationReady && !$q.screen.lt.sm"
       v-model="settingsDialogOpen"
@@ -182,7 +154,6 @@ import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
-import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
@@ -192,7 +163,6 @@ import { disablePushNotifications } from '@/services/pushNotifications';
 
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
-const newSessionOpen = ref(false);
 const settingsDialogOpen = ref(false);
 const logoutDialogOpen = ref(false);
 const { themeMode, themeModes } = useThemeMode();
@@ -210,22 +180,12 @@ const applicationReady = computed(
     !checkingProjects.value &&
     (!initialProjectRequired.value || route.name === 'project-create'),
 );
-const showOverviewCreatePanel = computed(
-  () =>
-    route.name === 'overview' &&
-    $q.screen.width >= overviewDesktopMinWidth &&
-    !isOverviewHorizontalView.value,
-);
 const isOverviewHorizontalView = computed(
   () =>
     route.name === 'overview' &&
     $q.screen.width >= overviewDesktopMinWidth &&
     overviewViewMode.value === 'horizontal',
 );
-const newSessionDefaultProjectId = computed(() => {
-  const queryProjectId = route.query.projectId;
-  return typeof queryProjectId === 'string' ? queryProjectId : '';
-});
 const sessionsRoute = computed(() => {
   const projectId = route.query.projectId;
   return typeof projectId === 'string'
@@ -266,18 +226,6 @@ watch(
   },
   { immediate: true },
 );
-
-function openNewSession() {
-  if ($q.screen.lt.sm) {
-    void router.push(
-      newSessionDefaultProjectId.value
-        ? { name: 'new-session', query: { projectId: newSessionDefaultProjectId.value } }
-        : { name: 'new-session' },
-    );
-    return;
-  }
-  newSessionOpen.value = true;
-}
 
 function toggleOverviewView() {
   const query = { ...route.query };

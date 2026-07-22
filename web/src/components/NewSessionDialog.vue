@@ -193,6 +193,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
+  created: [sessionId: string];
 }>();
 
 const $q = useQuasar();
@@ -410,15 +411,12 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
     if (stagedAttachmentIds.length > 0) {
       input.stagedAttachmentIds = stagedAttachmentIds;
     }
-    const created = await createSessionRequest(input);
-    // GLUE: The desktop dialog lives in MainLayout while the session list lives in IndexPage.
-    window.dispatchEvent(
-      new CustomEvent('anycode:session-created', { detail: { sessionId: created.id } }),
-    );
+    const sessionId = await createSessionRequest(input);
     rememberLaunchMode(input.mode);
-		files.value = [];
-		prompt.value = '';
-		mentions.value = [];
+    files.value = [];
+    prompt.value = '';
+    mentions.value = [];
+    emit('created', sessionId);
     emit('update:modelValue', false);
   } catch (error) {
     const cleanupError = await cleanupStagedAttachments(stagedAttachmentIds);
@@ -442,7 +440,10 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
 }
 
 async function createSessionRequest(input: CreateSessionInput) {
-  const data = await graphqlFetch<{ createSession: { id: string } }, { input: CreateSessionInput }>({
+  const data = await graphqlFetch<
+    { createSession: { id: string } },
+    { input: CreateSessionInput }
+  >({
     query: `
       mutation CreateSession($input: CreateSessionInput!) {
         createSession(input: $input) {
@@ -452,7 +453,7 @@ async function createSessionRequest(input: CreateSessionInput) {
     `,
     variables: { input },
   });
-  return data.createSession;
+  return data.createSession.id;
 }
 
 async function cleanupStagedAttachments(ids: string[]) {

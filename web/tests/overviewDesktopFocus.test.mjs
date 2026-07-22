@@ -12,14 +12,12 @@ const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
 const stylesSource = readSource('../src/css/app.scss');
 
 test('desktop card overview replaces the create FAB with the persistent create panel', () => {
-  assert.match(
-    layoutSource,
-    /\(\$q\.screen\.width < overviewDesktopMinWidth \|\| isOverviewHorizontalView\)/,
-  );
-  assert.match(layoutSource, /:panel="showOverviewCreatePanel"/);
-  assert.match(layoutSource, /const overviewDesktopMinWidth = 700/);
-  assert.match(layoutSource, /const showOverviewCreatePanel = computed/);
-  assert.match(layoutSource, /!isOverviewHorizontalView\.value/);
+  assert.match(indexSource, /<q-page-sticky v-if="!showDesktopFocusLayout"/);
+  assert.match(indexSource, /:panel="showDesktopFocusLayout"/);
+  assert.match(indexSource, /const overviewDesktopMinWidth = 700/);
+  assert.match(indexSource, /const showDesktopFocusLayout = computed/);
+  assert.match(indexSource, /!isHorizontalView\.value/);
+  assert.doesNotMatch(layoutSource, /<new-session-dialog|NewSessionDialog/);
 
   assert.match(newSessionSource, /panel\?: boolean/);
   assert.match(newSessionSource, /:model-value="page \? undefined : dialogVisible"/);
