@@ -31,7 +31,7 @@
     >
       <div class="overview-horizontal-track">
         <OverviewHorizontalSession
-          v-for="card in visibleLatestCards"
+          v-for="card in horizontalCards"
           :key="card.id"
           :card="card"
           :width="sessionColumnWidth(card.id)"
@@ -539,6 +539,11 @@ const projectChips = computed(() => {
 });
 const visibleLatestCards = computed(() =>
   latestCards.value.filter((card: SessionCard) => !hiddenProjectIds.value.has(card.projectId)),
+);
+const horizontalCards = computed(() =>
+  overviewCardGroups.value.horizontalCards.filter(
+    (card: SessionCard) => !hiddenProjectIds.value.has(card.projectId),
+  ),
 );
 const sessionColumnWidths = ref(readSessionColumnWidths());
 const activeTodoMenuId = ref('');

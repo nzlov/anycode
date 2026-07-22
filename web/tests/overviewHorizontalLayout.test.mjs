@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import ts from 'typescript';
 
+import { createOverviewCardGroups } from '../src/services/overviewCardGroups.js';
+
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 }
@@ -71,7 +73,7 @@ test('overview view mode persists across page changes and reloads', () => {
 });
 
 test('horizontal overview renders one independently resized component per visible session', () => {
-  assert.match(indexSource, /<OverviewHorizontalSession[\s\S]*v-for="card in visibleLatestCards"/);
+  assert.match(indexSource, /<OverviewHorizontalSession[\s\S]*v-for="card in horizontalCards"/);
   assert.match(indexSource, /const minSessionColumnWidth = 320/);
   assert.match(indexSource, /@update:width="setSessionColumnWidth\(card\.id, \$event\)"/);
   assert.match(horizontalSessionSource, /role="separator"/);
@@ -79,6 +81,46 @@ test('horizontal overview renders one independently resized component per visibl
   assert.doesNotMatch(horizontalSessionSource, /maxWidth|aria-valuemax/);
   assert.match(stylesSource, /\.overview-horizontal-section\s*{[^}]*overflow-x:\s*auto/s);
   assert.match(stylesSource, /\.overview-horizontal-track\s*{[^}]*width:\s*max-content/s);
+});
+
+test('horizontal session columns keep identity order when live updates change recency', () => {
+  const cards = [
+    {
+      id: 'older-session',
+      status: 'running',
+      createdAt: '2026-07-20T08:00:00Z',
+      updatedTime: '2026-07-22T08:00:00Z',
+    },
+    {
+      id: 'newer-session',
+      status: 'running',
+      createdAt: '2026-07-21T08:00:00Z',
+      updatedTime: '2026-07-22T09:00:00Z',
+    },
+  ];
+  const beforeAppend = createOverviewCardGroups(cards, []);
+  const afterAppend = createOverviewCardGroups(
+    cards.map((card) =>
+      card.id === 'older-session' ? { ...card, updatedTime: '2026-07-22T11:00:00Z' } : card,
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    beforeAppend.horizontalCards.map((card) => card.id),
+    ['newer-session', 'older-session'],
+  );
+  assert.deepEqual(
+    afterAppend.horizontalCards.map((card) => card.id),
+    ['newer-session', 'older-session'],
+  );
+  assert.equal(beforeAppend.latestCards[0].id, 'newer-session');
+  assert.equal(afterAppend.latestCards[0].id, 'older-session');
+  assert.match(indexSource, /overviewCardGroups\.value\.horizontalCards/);
+  assert.match(
+    indexSource,
+    /v-else-if="!isHorizontalView"[\s\S]*v-for="card in visibleLatestCards"/,
+  );
 });
 
 test('single horizontal session selects dedicated mobile and desktop components by column width', () => {
