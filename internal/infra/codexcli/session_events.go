@@ -639,6 +639,16 @@ func (v standardTranscriptVisibility) visible(event codexLogEvent) bool {
 	if event.CorrelationID == "" {
 		return true
 	}
+	if event.PlanUpdate != nil {
+		v.hiddenToolCalls[event.CorrelationID] = struct{}{}
+		return true
+	}
+	if _, hidden := v.hiddenToolCalls[event.CorrelationID]; hidden {
+		if _, command := event.Content.(process.CodexCommandContent); command {
+			delete(v.hiddenToolCalls, event.CorrelationID)
+			return true
+		}
+	}
 	tool, ok := event.Content.(process.CodexToolContent)
 	if !ok {
 		return true
@@ -677,7 +687,9 @@ func applyCodexSemantic(event *codexLogEvent) {
 	if itemType == "" {
 		itemType = stringValue(item, "type")
 	}
-	event.CorrelationID = codexCorrelationID(item, event.Payload)
+	if correlationID := codexCorrelationID(item, event.Payload); correlationID != "" {
+		event.CorrelationID = correlationID
+	}
 	if update, correlationID, ok := planUpdateFromEvent(event.Type, event.Payload); ok {
 		update.EventID = stablePlanUpdateEventID(update)
 		event.PlanUpdate = &update

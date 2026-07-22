@@ -484,6 +484,24 @@ func TestSessionFileEmitsPlanAndCommandFromSameExecRecord(t *testing.T) {
 	}
 }
 
+func TestSessionFileHidesUpdatePlanCustomToolCompletion(t *testing.T) {
+	codexHome := t.TempDir()
+	writeSessionLog(t, codexHome, "thread-plan-only", `
+{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-plan-only","name":"exec","input":"const r = await tools.update_plan({plan:[{step:\"Inspect\",status:\"completed\"},{step:\"Verify\",status:\"in_progress\"}]}); text(r);"}}
+{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-plan-only","output":[{"type":"input_text","text":"Script completed\nWall time 0.1 seconds\nOutput:\n"},{"type":"input_text","text":"{}"}]}}`)
+	page, err := New("codex", WithCodexHome(codexHome)).HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-plan-only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 || page.Events[0].Type != process.CodexEventPlan {
+		t.Fatalf("plan-only events = %#v", page.Events)
+	}
+	plan, ok := page.Events[0].Content.(process.PlanUpdate)
+	if !ok || len(plan.Items) != 2 || plan.Items[1].Status != process.PlanItemInProgress {
+		t.Fatalf("plan event = %#v", page.Events[0])
+	}
+}
+
 func TestQuestionsDynamicToolDescriptionMatchesOptionalOptions(t *testing.T) {
 	tools := anyCodeDynamicTools()
 	if len(tools) == 0 {
