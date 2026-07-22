@@ -184,6 +184,7 @@ import { useRoute, useRouter } from 'vue-router';
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
 import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
 import { clearGraphQLAccessKey } from '@/services/graphqlClient';
@@ -195,6 +196,7 @@ const newSessionOpen = ref(false);
 const settingsDialogOpen = ref(false);
 const logoutDialogOpen = ref(false);
 const { themeMode, themeModes } = useThemeMode();
+const { overviewViewMode } = useOverviewViewMode();
 const route = useRoute();
 const router = useRouter();
 const sessionTitle = ref('');
@@ -218,7 +220,7 @@ const isOverviewHorizontalView = computed(
   () =>
     route.name === 'overview' &&
     $q.screen.width >= overviewDesktopMinWidth &&
-    route.query.view === 'horizontal',
+    overviewViewMode.value === 'horizontal',
 );
 const newSessionDefaultProjectId = computed(() => {
   const queryProjectId = route.query.projectId;
@@ -247,6 +249,16 @@ watch(
 );
 
 watch(
+  () => [route.name, route.query.view] as const,
+  ([routeName, view]) => {
+    if (routeName === 'overview' && view === 'horizontal') {
+      overviewViewMode.value = 'horizontal';
+    }
+  },
+  { immediate: true },
+);
+
+watch(
   [checkingProjects, initialProjectRequired, () => $q.screen.lt.sm],
   ([checking, required, mobile]) => {
     if (checking || !required || !mobile || route.name === 'project-create') return;
@@ -270,8 +282,10 @@ function openNewSession() {
 function toggleOverviewView() {
   const query = { ...route.query };
   if (isOverviewHorizontalView.value) {
+    overviewViewMode.value = 'card';
     delete query.view;
   } else {
+    overviewViewMode.value = 'horizontal';
     query.view = 'horizontal';
   }
   void router.replace({ name: 'overview', query });

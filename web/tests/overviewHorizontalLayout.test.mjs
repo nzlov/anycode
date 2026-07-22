@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import ts from 'typescript';
 
 function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
@@ -8,6 +10,7 @@ function readSource(relativePath) {
 
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
+const viewModeSource = readSource('../src/composables/useOverviewViewMode.ts');
 const horizontalSessionSource = readSource('../src/components/OverviewHorizontalSession.vue');
 const desktopSessionSource = readSource('../src/components/OverviewHorizontalSessionDesktop.vue');
 const mobileSessionSource = readSource('../src/components/OverviewHorizontalSessionMobile.vue');
@@ -26,6 +29,45 @@ test('desktop header switches between card and horizontal overview modes beside 
   assert.match(layoutSource, /query\.view = 'horizontal'/);
   assert.match(layoutSource, /delete query\.view/);
   assert.match(layoutSource, /\$q\.screen\.width >= overviewDesktopMinWidth/);
+});
+
+test('overview view mode persists across page changes and reloads', () => {
+  const storage = new Map([['anycode.overview.view-mode.v1', 'horizontal']]);
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+    },
+  };
+
+  try {
+    const compiled = ts.transpileModule(viewModeSource, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const module = { exports: {} };
+    new Function('require', 'module', 'exports', compiled)(
+      createRequire(import.meta.url),
+      module,
+      module.exports,
+    );
+
+    const firstConsumer = module.exports.useOverviewViewMode();
+    const secondConsumer = module.exports.useOverviewViewMode();
+    assert.equal(firstConsumer.overviewViewMode.value, 'horizontal');
+    firstConsumer.overviewViewMode.value = 'card';
+    assert.equal(secondConsumer.overviewViewMode.value, 'card');
+    assert.equal(storage.get('anycode.overview.view-mode.v1'), 'card');
+  } finally {
+    globalThis.window = originalWindow;
+  }
+
+  assert.match(layoutSource, /const \{ overviewViewMode \} = useOverviewViewMode\(\)/);
+  assert.match(indexSource, /const \{ overviewViewMode \} = useOverviewViewMode\(\)/);
+  assert.match(layoutSource, /view === 'horizontal'[\s\S]*overviewViewMode\.value = 'horizontal'/);
 });
 
 test('horizontal overview renders one independently resized component per visible session', () => {

@@ -452,6 +452,7 @@ import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
+import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
 import { useSessionsPage } from '@/composables/useSessionsPage';
@@ -495,9 +496,10 @@ const horizontalWidthStorageKey = 'anycode.overview.horizontal-widths.v1';
 const defaultSessionColumnWidth = 480;
 const minSessionColumnWidth = 320;
 const todoMenuHideDelay = 120;
+const { overviewViewMode } = useOverviewViewMode();
 const isDesktopOverview = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const isHorizontalView = computed(
-  () => isDesktopOverview.value && route.query.view === 'horizontal',
+  () => isDesktopOverview.value && overviewViewMode.value === 'horizontal',
 );
 const showDesktopFocusLayout = computed(() => isDesktopOverview.value && !isHorizontalView.value);
 const projectScopeId = computed(() => {
