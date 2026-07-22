@@ -19,6 +19,7 @@
         <q-tooltip>展开提示词</q-tooltip>
       </q-btn>
       <slot name="quick-actions" :collapsed="true" />
+      <slot name="actions" />
     </div>
 
     <div v-if="!isCollapsed && (title || showBadge)" class="prompt-shell__header">
@@ -106,6 +107,7 @@
 
     <q-input
       v-if="!isCollapsed"
+      ref="promptInputRef"
       v-model.trim="promptModel"
       autogrow
       borderless
@@ -225,8 +227,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { useQuasar } from 'quasar';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { useQuasar, type QInput } from 'quasar';
 
 import PromptConfigControls from '@/components/PromptConfigControls.vue';
 import { filesFromTransfer } from '@/services/promptAttachments';
@@ -285,6 +287,7 @@ const previewUrl = ref('');
 const draggingFiles = ref(false);
 const dragDepth = ref(0);
 const fileThumbnailUrls = reactive(new Map<File, string>());
+const promptInputRef = ref<QInput | null>(null);
 
 const promptModel = computed({
   get: () => props.prompt,
@@ -428,6 +431,15 @@ function appendFiles(nextFiles: File[]) {
 }
 
 watch(() => props.files, syncFileThumbnailUrls, { immediate: true });
+watch(isCollapsed, async (collapsed) => {
+  if (collapsed) return;
+  await nextTick();
+  const input = promptInputRef.value;
+  if (!input) return;
+  const cursor = input.nativeEl.value.length;
+  input.focus();
+  input.nativeEl.setSelectionRange(cursor, cursor);
+});
 
 onBeforeUnmount(() => {
   revokePreviewUrl();
