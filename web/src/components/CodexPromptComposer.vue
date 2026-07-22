@@ -26,22 +26,22 @@
     @update:collapsed="emit('update:collapsed', $event)"
     @submit="emit('submit')"
   >
-    <template #quick-actions="{ collapsed: promptCollapsed }">
+    <template #quick-actions>
       <q-btn
         flat
-        :round="compact && !promptCollapsed"
-        :no-caps="!compact || promptCollapsed"
+        :round="compact"
+        :no-caps="!compact"
         :class="
-          compact && !promptCollapsed
+          compact
             ? 'quick-reply-btn app-icon-btn'
             : 'quick-reply-btn app-command-btn'
         "
         icon="bolt"
-        :label="promptCollapsed ? '快捷指令' : compact ? undefined : '快捷回复'"
-        :aria-label="compact && !promptCollapsed ? '快捷回复' : undefined"
+        :label="compact ? undefined : '快捷回复'"
+        :aria-label="compact ? '快捷回复' : undefined"
         :disable="disabled"
       >
-        <q-tooltip v-if="compact && !promptCollapsed">快捷回复</q-tooltip>
+        <q-tooltip v-if="compact">快捷回复</q-tooltip>
         <q-menu
           class="quick-reply-menu"
           anchor="top right"

@@ -28,13 +28,26 @@ test('session detail prompt starts collapsed with an expanding keyboard control'
     stylesSource,
     /\.prompt-shell__expand\s*{[^}]*min-width:\s*44px[^}]*flex:\s*1 1 auto/s,
   );
-  assert.match(codexPromptSource, /promptCollapsed \? '快捷指令'/);
+  assert.match(
+    promptSource,
+    /<slot name="quick-actions" :collapsed="true" \/>\s*<slot name="actions" \/>/,
+  );
+  assert.match(codexPromptSource, /:label="compact \? undefined : '快捷回复'"/);
+  assert.doesNotMatch(codexPromptSource, /promptCollapsed \? '快捷指令'/);
 });
 
 test('expanded session detail prompt can collapse before the attachment control', () => {
   assert.match(promptSource, /icon="keyboard_hide"[\s\S]*aria-label="收起提示词"[\s\S]*<q-file/);
   assert.match(promptSource, /@click="emit\('update:collapsed', true\)"/);
   assert.match(codexPromptSource, /if \(props\.collapsible\) emit\('update:collapsed', false\)/);
+});
+
+test('expanding the session detail prompt focuses the input at the end', () => {
+  assert.match(promptSource, /ref="promptInputRef"/);
+  assert.match(
+    promptSource,
+    /watch\(isCollapsed,[\s\S]*if \(collapsed\) return;[\s\S]*await nextTick\(\);[\s\S]*input\.focus\(\);[\s\S]*input\.nativeEl\.setSelectionRange\(cursor, cursor\)/,
+  );
 });
 
 test('successful prompt submission clears the draft and collapses the composer', () => {
