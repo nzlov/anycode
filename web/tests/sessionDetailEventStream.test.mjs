@@ -335,7 +335,7 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
   assert.match(
     pageSource,
-    /await Promise\.all\(\[loadSessionDetail\(\), loadPendingQuestions\(\)\]\);\s*if \(!mounted\) return;\s*startLiveUpdates\(\);\s*await scrollEventsToBottom\(\)/,
+    /async function initializeSessionDetail\(\)[\s\S]*?startLiveUpdates\(\);[\s\S]*?await scrollEventsToBottom\(\)/,
   );
   assert.match(pageSource, /function isEventStreamAtBottom\(body: HTMLElement\)[\s\S]*?<= 1/);
   assert.match(pageSource, /\{ flush: 'pre' \}/);
@@ -520,6 +520,25 @@ test('older timeline pages restore a stable visible event anchor', () => {
   assert.match(source, /const anchor = captureEventScrollAnchor\(body\)/);
   assert.match(source, /restoreEventScrollAnchor\(body, anchor\)/);
   assert.match(source, /candidate\.dataset\.timelineId === anchor\.id/);
+});
+
+test('initial transcript loading fills the viewport before waiting for upward scroll', () => {
+  const pageSource = readFileSync(
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
+    'utf8',
+  );
+  const match =
+    /async function initializeSessionDetail\(\) \{(?<body>[\s\S]*?)\n\}/.exec(pageSource);
+
+  assert.ok(match?.groups?.body);
+  assert.match(match.groups.body, /await nextTick\(\)/);
+  assert.match(
+    match.groups.body,
+    /while \(mounted && body\.clientHeight > 0 && body\.scrollHeight <= body\.clientHeight\)/,
+  );
+  assert.match(match.groups.body, /const requestedCursor = eventsPageInfo\.value\.nextCursor/);
+  assert.match(match.groups.body, /await loadOlderEvents\(\)/);
+  assert.match(match.groups.body, /eventsPageInfo\.value\.nextCursor === requestedCursor/);
 });
 
 test('older event loading crosses pages that add no visible height', () => {

@@ -1304,6 +1304,17 @@ async function initializeSessionDetail() {
   await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
   if (!mounted) return;
   startLiveUpdates();
+  await nextTick();
+  const body = streamBodyRef.value;
+  if (!body) return;
+  while (mounted && body.clientHeight > 0 && body.scrollHeight <= body.clientHeight) {
+    const requestedCursor = eventsPageInfo.value.nextCursor;
+    if (!requestedCursor) break;
+    await loadOlderEvents();
+    await nextTick();
+    if (!eventsPageInfo.value.nextCursor || eventsPageInfo.value.nextCursor === requestedCursor)
+      break;
+  }
   await scrollEventsToBottom();
 }
 
