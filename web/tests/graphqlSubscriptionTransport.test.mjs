@@ -89,6 +89,30 @@ test('connection close reports acknowledgement state to every active operation',
   );
 });
 
+test('connection failure closes for reconnect without reporting a subscription error', () => {
+  const socket = new FakeSocket();
+  const errors = [];
+  const closes = [];
+  const transport = createGraphQLSubscriptionTransport({
+    createSocket: () => socket,
+    connectionInitPayload: () => ({}),
+  });
+
+  transport.subscribe({
+    query: 'subscription First { first }',
+    onError: (error) => errors.push(error),
+    onClose: (close) => closes.push(close),
+  });
+  socket.open();
+  socket.message({ type: 'connection_ack' });
+  socket.connectionFailure(1006);
+
+  assert.deepEqual(errors, []);
+  assert.equal(closes.length, 1);
+  assert.equal(closes[0].acknowledged, true);
+  assert.equal(closes[0].completedByServer, false);
+});
+
 test('server completion removes one operation without closing the shared connection', () => {
   const socket = new FakeSocket();
   const closes = [];
@@ -218,6 +242,11 @@ class FakeSocket {
     this.closed = true;
     this.readyState = 3;
     this.emit('close', { code });
+  }
+
+  connectionFailure(code) {
+    this.emit('error', {});
+    this.remoteClose(code);
   }
 
   emit(type, event) {

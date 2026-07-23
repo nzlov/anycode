@@ -105,10 +105,6 @@ export function createGraphQLSubscriptionTransport({
         if (idle) socket.close();
       }
     });
-    socket.addEventListener('error', () => {
-      const error = new Error('GraphQL subscription connection failed');
-      for (const operation of operations.values()) operation.onError?.(error);
-    });
     socket.addEventListener('close', (event) => {
       if (state.closed) return;
       detach();
