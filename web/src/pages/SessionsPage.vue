@@ -61,14 +61,19 @@
         row-key="id"
         :loading="loading"
         v-model:pagination="pagination"
-        :rows-per-page-options="[8, 20, 50]"
+        :rows-per-page-options="[15, 25, 50]"
         binary-state-sort
         class="session-table"
         @request="onTableRequest"
+        @row-click="openSession"
       >
         <template #body-cell-title="props">
           <q-td :props="props">
-            <router-link class="table-link" :to="`/sessions/${props.row.id}`">
+            <router-link
+              class="table-link"
+              :to="`/sessions/${props.row.id}`"
+              @click.stop
+            >
               {{ props.row.title }}
             </router-link>
           </q-td>
@@ -114,20 +119,9 @@
               color="negative"
               aria-label="取消排队"
               :loading="cancellingSessionId === props.row.id"
-              @click="cancelQueuedSession(props.row)"
+              @click.stop="cancelQueuedSession(props.row)"
             >
               <q-tooltip>取消排队</q-tooltip>
-            </q-btn>
-            <q-btn
-              flat
-              round
-              dense
-              icon="open_in_new"
-              color="primary"
-              aria-label="打开卡片"
-              :to="`/sessions/${props.row.id}`"
-            >
-              <q-tooltip>打开卡片详情</q-tooltip>
             </q-btn>
             <q-btn
               flat
@@ -137,6 +131,7 @@
               color="primary"
               aria-label="查看 Diff"
               :to="{ path: '/diff', query: { sessionId: props.row.id, mode: 'all' } }"
+              @click.stop
             >
               <q-tooltip>查看完整 Diff</q-tooltip>
             </q-btn>
@@ -150,7 +145,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import PageToolbar from '@/components/PageToolbar.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
@@ -169,6 +164,7 @@ import {
 
 const $q = useQuasar();
 const route = useRoute();
+const router = useRouter();
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
   return typeof value === 'string' ? value : '';
@@ -187,7 +183,7 @@ const {
   loadSessions,
 } = useSessionsPage({
   page: 1,
-  pageSize: 8,
+  pageSize: 15,
   sort: 'updated_at desc',
 });
 
@@ -341,6 +337,10 @@ function onTableRequest(props: {
 }) {
   pagination.value = props.pagination;
   void loadSessions();
+}
+
+function openSession(_event: Event, session: SessionCard) {
+  void router.push(`/sessions/${session.id}`);
 }
 
 async function cancelQueuedSession(session: SessionCard) {

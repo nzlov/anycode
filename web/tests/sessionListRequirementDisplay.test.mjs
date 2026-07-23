@@ -6,11 +6,22 @@ function readSource(relativePath) {
   return readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 }
 
-test('session table renders the requirement once as the detail link', () => {
+test('session table renders the requirement once and opens details by row click', () => {
   const source = readSource('../src/pages/SessionsPage.vue');
 
   assert.match(source, /\{\{ props\.row\.title \}\}/);
   assert.doesNotMatch(source, /props\.row\.summary/);
+  assert.match(source, /@row-click="openSession"/);
+  assert.match(source, /router\.push\(`\/sessions\/\$\{session\.id\}`\)/);
+  assert.match(source, /<router-link[\s\S]*?@click\.stop/);
+  assert.doesNotMatch(source, /打开卡片详情/);
+});
+
+test('session table defaults to 15 rows and offers the requested page sizes', () => {
+  const source = readSource('../src/pages/SessionsPage.vue');
+
+  assert.match(source, /:rows-per-page-options="\[15, 25, 50\]"/);
+  assert.match(source, /useSessionsPage\(\{[\s\S]*?pageSize: 15,/);
 });
 
 test('session card summary remains available without being rendered in the table', () => {

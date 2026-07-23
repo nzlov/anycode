@@ -23,6 +23,6 @@ test('queued sessions expose cancel actions without removing force start', () =>
 
   assert.match(tableSource, /import \{[^}]*stopSession[^}]*\} from '@\/services\/sessions'/s);
   assert.match(tableSource, /props\.row\.status === 'queued'[\s\S]*aria-label="取消排队"/);
-  assert.match(tableSource, /@click="cancelQueuedSession\(props\.row\)"/);
+  assert.match(tableSource, /@click\.stop="cancelQueuedSession\(props\.row\)"/);
   assert.match(tableSource, /catch \{[\s\S]*loadSessions\(\)\.catch/);
 });
