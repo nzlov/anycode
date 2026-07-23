@@ -88,6 +88,21 @@ test('horizontal overview renders one independently resized component per visibl
   assert.match(stylesSource, /\.overview-horizontal-track\s*{[^}]*width:\s*max-content/s);
 });
 
+test('horizontal overview uses the Quasar layout offset without creating page-level overflow', () => {
+  assert.match(
+    indexSource,
+    /:style-fn="isHorizontalView \? horizontalPageStyle : undefined"/,
+  );
+  assert.match(
+    indexSource,
+    /function horizontalPageStyle\(offset: number, height: number\)\s*{\s*return { height: `\$\{Math\.max\(0, height - offset\)\}px` };/,
+  );
+  assert.doesNotMatch(
+    stylesSource,
+    /\.page-shell\.workbench-page--horizontal\s*{[^}]*height:\s*calc\(100dvh\s*-\s*50px\)/s,
+  );
+});
+
 test('horizontal session columns keep identity order when live updates change recency', () => {
   const cards = [
     {

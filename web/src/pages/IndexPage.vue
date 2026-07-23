@@ -1,6 +1,7 @@
 <template>
   <q-page
     class="workbench-page page-shell"
+    :style-fn="isHorizontalView ? horizontalPageStyle : undefined"
     :class="{
       'workbench-page--desktop-focus': showDesktopFocusLayout,
       'workbench-page--horizontal': isHorizontalView,
@@ -523,6 +524,11 @@ const isHorizontalView = computed(
   () => isDesktopOverview.value && overviewViewMode.value === 'horizontal',
 );
 const showDesktopFocusLayout = computed(() => isDesktopOverview.value && !isHorizontalView.value);
+
+function horizontalPageStyle(offset: number, height: number) {
+  return { height: `${Math.max(0, height - offset)}px` };
+}
+
 const newSessionOpen = ref(false);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
