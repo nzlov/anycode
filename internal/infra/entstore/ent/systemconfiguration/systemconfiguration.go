@@ -15,6 +15,18 @@ const (
 	FieldID = "id"
 	// FieldWallpaperColorScheme holds the string denoting the wallpaper_color_scheme field in the database.
 	FieldWallpaperColorScheme = "wallpaper_color_scheme"
+	// FieldBackgroundType holds the string denoting the background_type field in the database.
+	FieldBackgroundType = "background_type"
+	// FieldSolidTheme holds the string denoting the solid_theme field in the database.
+	FieldSolidTheme = "solid_theme"
+	// FieldBackgroundMask holds the string denoting the background_mask field in the database.
+	FieldBackgroundMask = "background_mask"
+	// FieldWallpaperID holds the string denoting the wallpaper_id field in the database.
+	FieldWallpaperID = "wallpaper_id"
+	// FieldWallpaperFilename holds the string denoting the wallpaper_filename field in the database.
+	FieldWallpaperFilename = "wallpaper_filename"
+	// FieldWallpaperMimeType holds the string denoting the wallpaper_mime_type field in the database.
+	FieldWallpaperMimeType = "wallpaper_mime_type"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
 	// Table holds the table name of the systemconfiguration in the database.
@@ -25,6 +37,12 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldWallpaperColorScheme,
+	FieldBackgroundType,
+	FieldSolidTheme,
+	FieldBackgroundMask,
+	FieldWallpaperID,
+	FieldWallpaperFilename,
+	FieldWallpaperMimeType,
 	FieldUpdatedAt,
 }
 
@@ -41,6 +59,22 @@ func ValidColumn(column string) bool {
 var (
 	// WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	WallpaperColorSchemeValidator func(string) error
+	// DefaultBackgroundType holds the default value on creation for the "background_type" field.
+	DefaultBackgroundType string
+	// BackgroundTypeValidator is a validator for the "background_type" field. It is called by the builders before save.
+	BackgroundTypeValidator func(string) error
+	// DefaultSolidTheme holds the default value on creation for the "solid_theme" field.
+	DefaultSolidTheme string
+	// SolidThemeValidator is a validator for the "solid_theme" field. It is called by the builders before save.
+	SolidThemeValidator func(string) error
+	// DefaultBackgroundMask holds the default value on creation for the "background_mask" field.
+	DefaultBackgroundMask int
+	// DefaultWallpaperID holds the default value on creation for the "wallpaper_id" field.
+	DefaultWallpaperID string
+	// DefaultWallpaperFilename holds the default value on creation for the "wallpaper_filename" field.
+	DefaultWallpaperFilename string
+	// DefaultWallpaperMimeType holds the default value on creation for the "wallpaper_mime_type" field.
+	DefaultWallpaperMimeType string
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
@@ -58,6 +92,36 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByWallpaperColorScheme orders the results by the wallpaper_color_scheme field.
 func ByWallpaperColorScheme(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWallpaperColorScheme, opts...).ToFunc()
+}
+
+// ByBackgroundType orders the results by the background_type field.
+func ByBackgroundType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBackgroundType, opts...).ToFunc()
+}
+
+// BySolidTheme orders the results by the solid_theme field.
+func BySolidTheme(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSolidTheme, opts...).ToFunc()
+}
+
+// ByBackgroundMask orders the results by the background_mask field.
+func ByBackgroundMask(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBackgroundMask, opts...).ToFunc()
+}
+
+// ByWallpaperID orders the results by the wallpaper_id field.
+func ByWallpaperID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWallpaperID, opts...).ToFunc()
+}
+
+// ByWallpaperFilename orders the results by the wallpaper_filename field.
+func ByWallpaperFilename(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWallpaperFilename, opts...).ToFunc()
+}
+
+// ByWallpaperMimeType orders the results by the wallpaper_mime_type field.
+func ByWallpaperMimeType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWallpaperMimeType, opts...).ToFunc()
 }
 
 // ByUpdatedAt orders the results by the updated_at field.

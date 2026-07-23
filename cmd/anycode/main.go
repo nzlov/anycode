@@ -208,7 +208,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Questions:        questionService,
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
-		Settings:         settingapp.New(store.Settings()),
+		Settings:         settingapp.New(store.Settings(), files),
 		CodexModels:      capabilities.Models,
 	}
 	return &wiredApplication{useCases: useCases, codex: codex}, nil

@@ -1,3 +1,4 @@
+import { getGraphQLAccessKey } from '@/services/graphqlClient';
 import {
   createMaterialPalettes,
   dailyBackgroundStorageKey,
@@ -18,35 +19,85 @@ const metadataEndpoint = 'https://bing.ee123.net/img/?size=UHD&imgtype=jpg&type=
 const imageEndpoint = 'https://bing.ee123.net/img/4k';
 const attributionSource = 'https://bing.ee123.net/' as const;
 
-let initialized = false;
+type BackgroundSource = 'solid' | 'image' | 'bing';
+
+let activeSource: BackgroundSource | null = null;
 let activeRecord: DailyBackgroundRecord | null = null;
-let activeScheme: WallpaperColorScheme | null = null;
+let activeScheme: WallpaperColorScheme = 'content';
+let requestVersion = 0;
+let uploadedObjectURL = '';
 
 export function initializeDailyBackground() {
-  if (initialized) return;
-  initialized = true;
+  activateBingBackground('content');
+}
+
+export function activateBingBackground(scheme: WallpaperColorScheme) {
+  if (!isWallpaperColorScheme(scheme)) return;
+  activeSource = 'bing';
+  activeScheme = scheme;
+  const version = ++requestVersion;
   const cached = readCachedRecord();
-  if (cached) applyRecord(cached);
-  void refreshDailyBackground(cached);
+  if (cached) commitRecord(cached, false);
+  void refreshDailyBackground(cached, version);
+}
+
+export function activateSolidBackground(sourceColor: string) {
+  activeSource = 'solid';
+  requestVersion += 1;
+  releaseUploadedObjectURL();
+  applyPalettes(createMaterialPalettes(sourceColor, 'tonal_spot'));
+  applyBackground({ color: sourceColor, image: 'none' });
+}
+
+export async function activateUploadedBackground(id: string, scheme: WallpaperColorScheme) {
+  if (!id || !isWallpaperColorScheme(scheme)) return;
+  activeSource = 'image';
+  activeScheme = scheme;
+  const version = ++requestVersion;
+  try {
+    const response = await fetch(`/api/appearance/wallpapers/${encodeURIComponent(id)}`, {
+      cache: 'no-cache',
+      headers: authorizationHeaders(),
+    });
+    const mimeType = response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
+    if (!response.ok || !['image/jpeg', 'image/png'].includes(mimeType)) {
+      throw new Error(`uploaded wallpaper returned ${response.status} ${mimeType}`);
+    }
+    const bytes = await response.arrayBuffer();
+    const sourceColor = await extractImageSourceColor(bytes, mimeType);
+    if (activeSource !== 'image' || version !== requestVersion) return;
+    const objectURL = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+    releaseUploadedObjectURL();
+    uploadedObjectURL = objectURL;
+    applyPalettes(createMaterialPalettes(sourceColor, scheme));
+    applyBackground({ image: `url(${JSON.stringify(objectURL)})` });
+  } catch {
+    // The previous complete background remains visible when the upload cannot be loaded.
+  }
 }
 
 export function setWallpaperColorScheme(scheme: WallpaperColorScheme) {
-  if (!isWallpaperColorScheme(scheme) || scheme === activeScheme) return;
+  if (!isWallpaperColorScheme(scheme)) return;
   activeScheme = scheme;
-  if (activeRecord) commitRecord(activeRecord);
+  if (activeSource === 'bing' && activeRecord) commitRecord(activeRecord);
 }
 
-async function refreshDailyBackground(cached: DailyBackgroundRecord | null) {
+export function setBackgroundMask(opacity: number) {
+  const normalized = Math.min(100, Math.max(0, Math.round(opacity)));
+  document.documentElement.style.setProperty(
+    '--ac-background-mask-opacity',
+    String(normalized / 100),
+  );
+}
+
+async function refreshDailyBackground(cached: DailyBackgroundRecord | null, version: number) {
   try {
     const metadata = await fetchMetadata();
     const checkedAt = new Date().toISOString();
     const localDate = currentLocalDate();
     if (!dailyImageRefreshReason(cached, metadata, localDate) && cached) {
-      commitRecord({
-        ...cached,
-        checkedAt,
-        attribution: attributionFrom(metadata),
-      });
+      if (activeSource !== 'bing' || version !== requestVersion) return;
+      commitRecord({ ...cached, checkedAt, attribution: attributionFrom(metadata) });
       return;
     }
 
@@ -58,13 +109,14 @@ async function refreshDailyBackground(cached: DailyBackgroundRecord | null) {
       sameImage && cached
         ? cached.sourceColor
         : await extractImageSourceColor(image.bytes, image.mimeType);
+    if (activeSource !== 'bing' || version !== requestVersion) return;
     const colorCache =
       sameImage && cached
         ? cached.colorCache
         : {
             sha256,
-            wallpaperColorScheme: activeScheme ?? 'content',
-            palettes: createMaterialPalettes(sourceColor, activeScheme ?? 'content'),
+            wallpaperColorScheme: activeScheme,
+            palettes: createMaterialPalettes(sourceColor, activeScheme),
           };
     commitRecord({
       version: 2,
@@ -80,7 +132,7 @@ async function refreshDailyBackground(cached: DailyBackgroundRecord | null) {
       colorCache,
     });
   } catch {
-    // The already-applied record or static CSS tokens remain the complete fallback.
+    // The already-applied background or static CSS tokens remain the complete fallback.
   }
 }
 
@@ -124,7 +176,7 @@ async function extractImageSourceColor(bytes: ArrayBuffer, mimeType: string) {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) throw new Error('daily image canvas is unavailable');
+    if (!context) throw new Error('background image canvas is unavailable');
     context.drawImage(bitmap, 0, 0, width, height);
     return extractSourceColor(context.getImageData(0, 0, width, height).data);
   } finally {
@@ -140,10 +192,14 @@ function readCachedRecord() {
   }
 }
 
-function commitRecord(record: DailyBackgroundRecord) {
+function commitRecord(record: DailyBackgroundRecord, persist = true) {
   const validated = parseDailyBackgroundRecord(withCurrentPaletteCache(record));
   if (!validated) throw new Error('daily background record is invalid');
-  applyRecord(validated);
+  activeRecord = validated;
+  if (activeSource === 'bing') releaseUploadedObjectURL();
+  applyPalettes(validated.colorCache.palettes);
+  applyBackground({ image: `url(${JSON.stringify(validated.imageUrl)})` });
+  if (!persist) return;
   try {
     window.localStorage.setItem(dailyBackgroundStorageKey, JSON.stringify(validated));
   } catch {
@@ -151,18 +207,7 @@ function commitRecord(record: DailyBackgroundRecord) {
   }
 }
 
-function applyRecord(record: DailyBackgroundRecord) {
-  activeRecord = record;
-  const root = document.documentElement;
-  const palettes = record.colorCache.palettes;
-  applyPalette(root, 'light', palettes.light);
-  applyPalette(root, 'dark', palettes.dark);
-  root.style.setProperty('--ac-daily-background-image', `url(${JSON.stringify(record.imageUrl)})`);
-  root.dataset.dailyBackground = 'ready';
-}
-
 function withCurrentPaletteCache(record: DailyBackgroundRecord): DailyBackgroundRecord {
-  if (!activeScheme) return record;
   const colorCache = resolveMaterialPaletteCache(
     record.sha256,
     record.sourceColor,
@@ -172,18 +217,40 @@ function withCurrentPaletteCache(record: DailyBackgroundRecord): DailyBackground
   return colorCache === record.colorCache ? record : { ...record, colorCache };
 }
 
+function applyPalettes(palettes: { light: MaterialPalette; dark: MaterialPalette }) {
+  const root = document.documentElement;
+  applyPalette(root, 'light', palettes.light);
+  applyPalette(root, 'dark', palettes.dark);
+}
+
 function applyPalette(root: HTMLElement, mode: 'light' | 'dark', palette: MaterialPalette) {
   for (const key of materialPaletteKeys) {
     root.style.setProperty(`--ac-m3-${mode}-${toKebabCase(key)}`, palette[key]);
   }
 }
 
+function applyBackground({ image, color }: { image?: string; color?: string }) {
+  const root = document.documentElement;
+  if (image !== undefined) root.style.setProperty('--ac-background-image', image);
+  if (color !== undefined) root.style.setProperty('--ac-background-color', color);
+  root.dataset.background = 'ready';
+}
+
+function releaseUploadedObjectURL() {
+  if (!uploadedObjectURL) return;
+  URL.revokeObjectURL(uploadedObjectURL);
+  uploadedObjectURL = '';
+}
+
+function authorizationHeaders() {
+  const headers = new Headers();
+  const accessKey = getGraphQLAccessKey();
+  if (accessKey) headers.set('authorization', `Bearer ${accessKey}`);
+  return headers;
+}
+
 function attributionFrom(metadata: DailyMetadata) {
-  return {
-    title: metadata.title,
-    copyright: metadata.copyright,
-    sourceUrl: attributionSource,
-  };
+  return { title: metadata.title, copyright: metadata.copyright, sourceUrl: attributionSource };
 }
 
 function currentLocalDate() {

@@ -12999,6 +12999,13 @@ type SystemConfigurationMutation struct {
 	typ                    string
 	id                     *string
 	wallpaper_color_scheme *string
+	background_type        *string
+	solid_theme            *string
+	background_mask        *int
+	addbackground_mask     *int
+	wallpaper_id           *string
+	wallpaper_filename     *string
+	wallpaper_mime_type    *string
 	updated_at             *time.Time
 	clearedFields          map[string]struct{}
 	done                   bool
@@ -13146,6 +13153,242 @@ func (m *SystemConfigurationMutation) ResetWallpaperColorScheme() {
 	m.wallpaper_color_scheme = nil
 }
 
+// SetBackgroundType sets the "background_type" field.
+func (m *SystemConfigurationMutation) SetBackgroundType(s string) {
+	m.background_type = &s
+}
+
+// BackgroundType returns the value of the "background_type" field in the mutation.
+func (m *SystemConfigurationMutation) BackgroundType() (r string, exists bool) {
+	v := m.background_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBackgroundType returns the old "background_type" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldBackgroundType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBackgroundType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBackgroundType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBackgroundType: %w", err)
+	}
+	return oldValue.BackgroundType, nil
+}
+
+// ResetBackgroundType resets all changes to the "background_type" field.
+func (m *SystemConfigurationMutation) ResetBackgroundType() {
+	m.background_type = nil
+}
+
+// SetSolidTheme sets the "solid_theme" field.
+func (m *SystemConfigurationMutation) SetSolidTheme(s string) {
+	m.solid_theme = &s
+}
+
+// SolidTheme returns the value of the "solid_theme" field in the mutation.
+func (m *SystemConfigurationMutation) SolidTheme() (r string, exists bool) {
+	v := m.solid_theme
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSolidTheme returns the old "solid_theme" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldSolidTheme(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSolidTheme is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSolidTheme requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSolidTheme: %w", err)
+	}
+	return oldValue.SolidTheme, nil
+}
+
+// ResetSolidTheme resets all changes to the "solid_theme" field.
+func (m *SystemConfigurationMutation) ResetSolidTheme() {
+	m.solid_theme = nil
+}
+
+// SetBackgroundMask sets the "background_mask" field.
+func (m *SystemConfigurationMutation) SetBackgroundMask(i int) {
+	m.background_mask = &i
+	m.addbackground_mask = nil
+}
+
+// BackgroundMask returns the value of the "background_mask" field in the mutation.
+func (m *SystemConfigurationMutation) BackgroundMask() (r int, exists bool) {
+	v := m.background_mask
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBackgroundMask returns the old "background_mask" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldBackgroundMask(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBackgroundMask is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBackgroundMask requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBackgroundMask: %w", err)
+	}
+	return oldValue.BackgroundMask, nil
+}
+
+// AddBackgroundMask adds i to the "background_mask" field.
+func (m *SystemConfigurationMutation) AddBackgroundMask(i int) {
+	if m.addbackground_mask != nil {
+		*m.addbackground_mask += i
+	} else {
+		m.addbackground_mask = &i
+	}
+}
+
+// AddedBackgroundMask returns the value that was added to the "background_mask" field in this mutation.
+func (m *SystemConfigurationMutation) AddedBackgroundMask() (r int, exists bool) {
+	v := m.addbackground_mask
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBackgroundMask resets all changes to the "background_mask" field.
+func (m *SystemConfigurationMutation) ResetBackgroundMask() {
+	m.background_mask = nil
+	m.addbackground_mask = nil
+}
+
+// SetWallpaperID sets the "wallpaper_id" field.
+func (m *SystemConfigurationMutation) SetWallpaperID(s string) {
+	m.wallpaper_id = &s
+}
+
+// WallpaperID returns the value of the "wallpaper_id" field in the mutation.
+func (m *SystemConfigurationMutation) WallpaperID() (r string, exists bool) {
+	v := m.wallpaper_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWallpaperID returns the old "wallpaper_id" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldWallpaperID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWallpaperID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWallpaperID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWallpaperID: %w", err)
+	}
+	return oldValue.WallpaperID, nil
+}
+
+// ResetWallpaperID resets all changes to the "wallpaper_id" field.
+func (m *SystemConfigurationMutation) ResetWallpaperID() {
+	m.wallpaper_id = nil
+}
+
+// SetWallpaperFilename sets the "wallpaper_filename" field.
+func (m *SystemConfigurationMutation) SetWallpaperFilename(s string) {
+	m.wallpaper_filename = &s
+}
+
+// WallpaperFilename returns the value of the "wallpaper_filename" field in the mutation.
+func (m *SystemConfigurationMutation) WallpaperFilename() (r string, exists bool) {
+	v := m.wallpaper_filename
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWallpaperFilename returns the old "wallpaper_filename" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldWallpaperFilename(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWallpaperFilename is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWallpaperFilename requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWallpaperFilename: %w", err)
+	}
+	return oldValue.WallpaperFilename, nil
+}
+
+// ResetWallpaperFilename resets all changes to the "wallpaper_filename" field.
+func (m *SystemConfigurationMutation) ResetWallpaperFilename() {
+	m.wallpaper_filename = nil
+}
+
+// SetWallpaperMimeType sets the "wallpaper_mime_type" field.
+func (m *SystemConfigurationMutation) SetWallpaperMimeType(s string) {
+	m.wallpaper_mime_type = &s
+}
+
+// WallpaperMimeType returns the value of the "wallpaper_mime_type" field in the mutation.
+func (m *SystemConfigurationMutation) WallpaperMimeType() (r string, exists bool) {
+	v := m.wallpaper_mime_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWallpaperMimeType returns the old "wallpaper_mime_type" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldWallpaperMimeType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWallpaperMimeType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWallpaperMimeType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWallpaperMimeType: %w", err)
+	}
+	return oldValue.WallpaperMimeType, nil
+}
+
+// ResetWallpaperMimeType resets all changes to the "wallpaper_mime_type" field.
+func (m *SystemConfigurationMutation) ResetWallpaperMimeType() {
+	m.wallpaper_mime_type = nil
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (m *SystemConfigurationMutation) SetUpdatedAt(t time.Time) {
 	m.updated_at = &t
@@ -13216,9 +13459,27 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 2)
+	fields := make([]string, 0, 8)
 	if m.wallpaper_color_scheme != nil {
 		fields = append(fields, systemconfiguration.FieldWallpaperColorScheme)
+	}
+	if m.background_type != nil {
+		fields = append(fields, systemconfiguration.FieldBackgroundType)
+	}
+	if m.solid_theme != nil {
+		fields = append(fields, systemconfiguration.FieldSolidTheme)
+	}
+	if m.background_mask != nil {
+		fields = append(fields, systemconfiguration.FieldBackgroundMask)
+	}
+	if m.wallpaper_id != nil {
+		fields = append(fields, systemconfiguration.FieldWallpaperID)
+	}
+	if m.wallpaper_filename != nil {
+		fields = append(fields, systemconfiguration.FieldWallpaperFilename)
+	}
+	if m.wallpaper_mime_type != nil {
+		fields = append(fields, systemconfiguration.FieldWallpaperMimeType)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, systemconfiguration.FieldUpdatedAt)
@@ -13233,6 +13494,18 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case systemconfiguration.FieldWallpaperColorScheme:
 		return m.WallpaperColorScheme()
+	case systemconfiguration.FieldBackgroundType:
+		return m.BackgroundType()
+	case systemconfiguration.FieldSolidTheme:
+		return m.SolidTheme()
+	case systemconfiguration.FieldBackgroundMask:
+		return m.BackgroundMask()
+	case systemconfiguration.FieldWallpaperID:
+		return m.WallpaperID()
+	case systemconfiguration.FieldWallpaperFilename:
+		return m.WallpaperFilename()
+	case systemconfiguration.FieldWallpaperMimeType:
+		return m.WallpaperMimeType()
 	case systemconfiguration.FieldUpdatedAt:
 		return m.UpdatedAt()
 	}
@@ -13246,6 +13519,18 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 	switch name {
 	case systemconfiguration.FieldWallpaperColorScheme:
 		return m.OldWallpaperColorScheme(ctx)
+	case systemconfiguration.FieldBackgroundType:
+		return m.OldBackgroundType(ctx)
+	case systemconfiguration.FieldSolidTheme:
+		return m.OldSolidTheme(ctx)
+	case systemconfiguration.FieldBackgroundMask:
+		return m.OldBackgroundMask(ctx)
+	case systemconfiguration.FieldWallpaperID:
+		return m.OldWallpaperID(ctx)
+	case systemconfiguration.FieldWallpaperFilename:
+		return m.OldWallpaperFilename(ctx)
+	case systemconfiguration.FieldWallpaperMimeType:
+		return m.OldWallpaperMimeType(ctx)
 	case systemconfiguration.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
 	}
@@ -13264,6 +13549,48 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 		}
 		m.SetWallpaperColorScheme(v)
 		return nil
+	case systemconfiguration.FieldBackgroundType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBackgroundType(v)
+		return nil
+	case systemconfiguration.FieldSolidTheme:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSolidTheme(v)
+		return nil
+	case systemconfiguration.FieldBackgroundMask:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBackgroundMask(v)
+		return nil
+	case systemconfiguration.FieldWallpaperID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWallpaperID(v)
+		return nil
+	case systemconfiguration.FieldWallpaperFilename:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWallpaperFilename(v)
+		return nil
+	case systemconfiguration.FieldWallpaperMimeType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWallpaperMimeType(v)
+		return nil
 	case systemconfiguration.FieldUpdatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -13278,13 +13605,21 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 // AddedFields returns all numeric fields that were incremented/decremented during
 // this mutation.
 func (m *SystemConfigurationMutation) AddedFields() []string {
-	return nil
+	var fields []string
+	if m.addbackground_mask != nil {
+		fields = append(fields, systemconfiguration.FieldBackgroundMask)
+	}
+	return fields
 }
 
 // AddedField returns the numeric value that was incremented/decremented on a field
 // with the given name. The second boolean return value indicates that this field
 // was not set, or was not defined in the schema.
 func (m *SystemConfigurationMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case systemconfiguration.FieldBackgroundMask:
+		return m.AddedBackgroundMask()
+	}
 	return nil, false
 }
 
@@ -13293,6 +13628,13 @@ func (m *SystemConfigurationMutation) AddedField(name string) (ent.Value, bool) 
 // type.
 func (m *SystemConfigurationMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case systemconfiguration.FieldBackgroundMask:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBackgroundMask(v)
+		return nil
 	}
 	return fmt.Errorf("unknown SystemConfiguration numeric field %s", name)
 }
@@ -13322,6 +13664,24 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 	switch name {
 	case systemconfiguration.FieldWallpaperColorScheme:
 		m.ResetWallpaperColorScheme()
+		return nil
+	case systemconfiguration.FieldBackgroundType:
+		m.ResetBackgroundType()
+		return nil
+	case systemconfiguration.FieldSolidTheme:
+		m.ResetSolidTheme()
+		return nil
+	case systemconfiguration.FieldBackgroundMask:
+		m.ResetBackgroundMask()
+		return nil
+	case systemconfiguration.FieldWallpaperID:
+		m.ResetWallpaperID()
+		return nil
+	case systemconfiguration.FieldWallpaperFilename:
+		m.ResetWallpaperFilename()
+		return nil
+	case systemconfiguration.FieldWallpaperMimeType:
+		m.ResetWallpaperMimeType()
 		return nil
 	case systemconfiguration.FieldUpdatedAt:
 		m.ResetUpdatedAt()

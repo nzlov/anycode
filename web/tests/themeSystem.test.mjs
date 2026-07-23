@@ -31,6 +31,8 @@ const appStylesSource = readSource('../src/css/app.scss');
 const runtimeSource = readSource('../src/theme/tokens.ts');
 const dailyBackgroundSource = readSource('../src/theme/dailyBackground.ts');
 const dailyBackgroundModelSource = readSource('../src/theme/dailyBackgroundModel.js');
+const appearanceRuntimeSource = readSource('../src/theme/appearance.ts');
+const solidThemesSource = readSource('../src/theme/solidThemes.ts');
 const bootSource = readSource('../src/boot/theme.ts');
 const appearanceSettingsSource = readSource('../src/services/appearanceSettings.ts');
 const globalSettingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
@@ -117,7 +119,7 @@ test('daily background maps official M3 roles through the theme boundary', () =>
   assert.match(themeSource, /--q-primary:\s*var\(--ac-action-primary-bg\)/);
   assert.match(bootSource, /initializeDailyBackground\(\)/);
   assert.match(bootSource, /getAppearanceSettings/);
-  assert.match(bootSource, /setWallpaperColorScheme/);
+  assert.match(bootSource, /applyAppearanceSettings/);
   assert.match(dailyBackgroundSource, /crypto\.subtle\.digest\('SHA-256'/);
   assert.match(dailyBackgroundSource, /cache:\s*'no-store'/);
   assert.match(dailyBackgroundSource, /cache:\s*'no-cache'/);
@@ -156,9 +158,7 @@ test('Quasar and application status colors are aliases of M3 dynamic roles', () 
 
   for (const [quasarRole, appRole] of Object.entries(quasarRoles)) {
     assert.equal(
-      themeSource.match(
-        new RegExp(`--q-${quasarRole}:\\s*var\\(--ac-${appRole}\\)`, 'g'),
-      )?.length,
+      themeSource.match(new RegExp(`--q-${quasarRole}:\\s*var\\(--ac-${appRole}\\)`, 'g'))?.length,
       2,
       `${quasarRole} must follow the light and dark M3 palettes`,
     );
@@ -188,9 +188,7 @@ test('Quasar and application status colors are aliases of M3 dynamic roles', () 
 
   for (const [statusRole, appRole] of Object.entries(statusRoles)) {
     assert.equal(
-      themeSource.match(
-        new RegExp(`--ac-${statusRole}:\\s*var\\(--ac-${appRole}\\)`, 'g'),
-      )?.length,
+      themeSource.match(new RegExp(`--ac-${statusRole}:\\s*var\\(--ac-${appRole}\\)`, 'g'))?.length,
       2,
       `${statusRole} must follow the light and dark M3 palettes`,
     );
@@ -220,14 +218,31 @@ test('shared Quasar page surfaces use the M3 theme boundary', () => {
   );
 });
 
-test('global appearance setting persists the algorithm through GraphQL and applies it immediately', () => {
+test('global appearance persists all background modes and applies them immediately', () => {
   assert.match(globalSettingsSource, /name="appearance"[^>]*icon="palette"/);
+  assert.match(globalSettingsSource, /backgroundTypeOptions/);
+  assert.match(globalSettingsSource, /solidThemeOptions/);
+  assert.match(globalSettingsSource, /uploadAppearanceWallpaper/);
+  assert.match(globalSettingsSource, /背景遮罩/);
   assert.match(globalSettingsSource, /壁纸选色算法/);
   assert.match(globalSettingsSource, /wallpaperColorSchemeOptions/);
-  assert.match(globalSettingsSource, /setWallpaperColorScheme\(settings\.wallpaperColorScheme\)/);
+  assert.match(globalSettingsSource, /applyAppearanceSettings\(settings\)/);
   assert.match(appearanceSettingsSource, /query AppearanceSettings/);
   assert.match(appearanceSettingsSource, /mutation UpdateAppearanceSettings/);
+  assert.match(appearanceSettingsSource, /mutation UploadAppearanceWallpaper/);
   assert.equal(appearanceSettingsSource.match(/\{ label: '[^']+', value: '[^']+' \}/g)?.length, 9);
+  assert.equal(
+    solidThemesSource.match(/label: '[^']+', value: '[^']+', color: '#[0-9a-f]+'/g)?.length,
+    8,
+  );
+  assert.match(appearanceRuntimeSource, /activateSolidBackground\(theme\.color\)/);
+  assert.match(appearanceRuntimeSource, /activateUploadedBackground/);
+  assert.match(appearanceRuntimeSource, /activateBingBackground/);
+  assert.match(
+    dailyBackgroundSource,
+    /activateSolidBackground[\s\S]*createMaterialPalettes\(sourceColor, 'tonal_spot'\)/,
+  );
+  assert.match(dailyBackgroundSource, /activateUploadedBackground[\s\S]*extractImageSourceColor/);
 });
 
 test('root exposes the shared background without an image caption', () => {
@@ -235,10 +250,11 @@ test('root exposes the shared background without an image caption', () => {
   assert.doesNotMatch(appStylesSource, /\.app-daily-credit/);
   assert.match(
     appStylesSource,
-    /#q-app::before[^}]*background-image:\s*var\(--ac-daily-background-image/s,
+    /#q-app::before[^}]*background-image:\s*var\(--ac-background-image/s,
   );
-  assert.match(appStylesSource, /html\[data-daily-background='ready'\]/);
-  assert.doesNotMatch(appStylesSource, /#q-app::after|--ac-daily-veil/);
+  assert.match(appStylesSource, /html\[data-background='ready'\]/);
+  assert.match(appStylesSource, /#q-app::after[^}]*--ac-background-mask-opacity/s);
+  assert.doesNotMatch(appStylesSource, /--ac-daily-veil/);
   assert.doesNotMatch(themeSource, /--ac-daily-veil/);
   assert.doesNotMatch(appStylesSource, /var\(--ac-page\) 16%, transparent/);
   assert.equal(
@@ -265,6 +281,7 @@ test('components do not introduce fixed application colors or light-only palette
     'css/theme.scss',
     'components/StaticAnsiOutput.vue',
     'mocks/workbench.ts',
+    'theme/solidThemes.ts',
   ]);
   const violations = [];
 

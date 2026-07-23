@@ -7,6 +7,7 @@ package graph
 
 import (
 	"context"
+	"strings"
 
 	"github.com/99designs/gqlgen/graphql"
 	diffapp "github.com/nzlov/anycode/internal/application/diff"
@@ -33,7 +34,26 @@ func (r *mutationResolver) UpdateAppearanceSettings(ctx context.Context, input m
 		return nil, missingUseCase("settings")
 	}
 	dto, err := r.UseCases.Settings.UpdateAppearanceSettings(ctx, settingapp.UpdateAppearanceSettingsInput{
+		BackgroundType:       settingdomain.BackgroundType(strings.ToLower(string(input.BackgroundType))),
+		SolidTheme:           settingdomain.SolidTheme(strings.ToLower(string(input.SolidTheme))),
+		BackgroundMask:       input.BackgroundMask,
 		WallpaperColorScheme: wallpaperColorSchemeFromModel(input.WallpaperColorScheme),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapAppearanceSettings(dto), nil
+}
+
+// UploadAppearanceWallpaper is the resolver for the uploadAppearanceWallpaper field.
+func (r *mutationResolver) UploadAppearanceWallpaper(ctx context.Context, file graphql.Upload) (*model.AppearanceSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.UploadAppearanceWallpaper(ctx, settingapp.UploadAppearanceWallpaperInput{
+		Filename: file.Filename,
+		Size:     file.Size,
+		Reader:   file.File,
 	})
 	if err != nil {
 		return nil, err

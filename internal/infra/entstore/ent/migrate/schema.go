@@ -459,6 +459,12 @@ var (
 	SystemConfigurationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "wallpaper_color_scheme", Type: field.TypeString},
+		{Name: "background_type", Type: field.TypeString, Default: "bing"},
+		{Name: "solid_theme", Type: field.TypeString, Default: "vermilion"},
+		{Name: "background_mask", Type: field.TypeInt, Default: 0},
+		{Name: "wallpaper_id", Type: field.TypeString, Default: ""},
+		{Name: "wallpaper_filename", Type: field.TypeString, Default: ""},
+		{Name: "wallpaper_mime_type", Type: field.TypeString, Default: ""},
 		{Name: "updated_at", Type: field.TypeTime},
 	}
 	// SystemConfigurationsTable holds the schema information for the "system_configurations" table.

@@ -15,7 +15,12 @@ type TranscriptContent interface {
 }
 
 type AppearanceSettings struct {
-	WallpaperColorScheme WallpaperColorScheme `json:"wallpaperColorScheme"`
+	BackgroundType       AppearanceBackgroundType `json:"backgroundType"`
+	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`
+	BackgroundMask       int                      `json:"backgroundMask"`
+	WallpaperColorScheme WallpaperColorScheme     `json:"wallpaperColorScheme"`
+	WallpaperID          string                   `json:"wallpaperId"`
+	WallpaperFilename    string                   `json:"wallpaperFilename"`
 }
 
 type AppendPromptInput struct {
@@ -691,7 +696,10 @@ type TranscriptUsageAttribution struct {
 }
 
 type UpdateAppearanceSettingsInput struct {
-	WallpaperColorScheme WallpaperColorScheme `json:"wallpaperColorScheme"`
+	BackgroundType       AppearanceBackgroundType `json:"backgroundType"`
+	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`
+	BackgroundMask       int                      `json:"backgroundMask"`
+	WallpaperColorScheme WallpaperColorScheme     `json:"wallpaperColorScheme"`
 }
 
 type UpdateProjectSettingsInput struct {
@@ -836,6 +844,130 @@ type WorktreeCleanupError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
+}
+
+type AppearanceBackgroundType string
+
+const (
+	AppearanceBackgroundTypeSolid AppearanceBackgroundType = "SOLID"
+	AppearanceBackgroundTypeImage AppearanceBackgroundType = "IMAGE"
+	AppearanceBackgroundTypeBing  AppearanceBackgroundType = "BING"
+)
+
+var AllAppearanceBackgroundType = []AppearanceBackgroundType{
+	AppearanceBackgroundTypeSolid,
+	AppearanceBackgroundTypeImage,
+	AppearanceBackgroundTypeBing,
+}
+
+func (e AppearanceBackgroundType) IsValid() bool {
+	switch e {
+	case AppearanceBackgroundTypeSolid, AppearanceBackgroundTypeImage, AppearanceBackgroundTypeBing:
+		return true
+	}
+	return false
+}
+
+func (e AppearanceBackgroundType) String() string {
+	return string(e)
+}
+
+func (e *AppearanceBackgroundType) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AppearanceBackgroundType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AppearanceBackgroundType", str)
+	}
+	return nil
+}
+
+func (e AppearanceBackgroundType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AppearanceBackgroundType) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AppearanceBackgroundType) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+type AppearanceSolidTheme string
+
+const (
+	AppearanceSolidThemeVermilion AppearanceSolidTheme = "VERMILION"
+	AppearanceSolidThemeAmber     AppearanceSolidTheme = "AMBER"
+	AppearanceSolidThemeBamboo    AppearanceSolidTheme = "BAMBOO"
+	AppearanceSolidThemeAzure     AppearanceSolidTheme = "AZURE"
+	AppearanceSolidThemeIndigo    AppearanceSolidTheme = "INDIGO"
+	AppearanceSolidThemePurple    AppearanceSolidTheme = "PURPLE"
+	AppearanceSolidThemePeach     AppearanceSolidTheme = "PEACH"
+	AppearanceSolidThemeInk       AppearanceSolidTheme = "INK"
+)
+
+var AllAppearanceSolidTheme = []AppearanceSolidTheme{
+	AppearanceSolidThemeVermilion,
+	AppearanceSolidThemeAmber,
+	AppearanceSolidThemeBamboo,
+	AppearanceSolidThemeAzure,
+	AppearanceSolidThemeIndigo,
+	AppearanceSolidThemePurple,
+	AppearanceSolidThemePeach,
+	AppearanceSolidThemeInk,
+}
+
+func (e AppearanceSolidTheme) IsValid() bool {
+	switch e {
+	case AppearanceSolidThemeVermilion, AppearanceSolidThemeAmber, AppearanceSolidThemeBamboo, AppearanceSolidThemeAzure, AppearanceSolidThemeIndigo, AppearanceSolidThemePurple, AppearanceSolidThemePeach, AppearanceSolidThemeInk:
+		return true
+	}
+	return false
+}
+
+func (e AppearanceSolidTheme) String() string {
+	return string(e)
+}
+
+func (e *AppearanceSolidTheme) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AppearanceSolidTheme(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AppearanceSolidTheme", str)
+	}
+	return nil
+}
+
+func (e AppearanceSolidTheme) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AppearanceSolidTheme) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AppearanceSolidTheme) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 type TranscriptEventPhase string

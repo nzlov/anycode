@@ -1,10 +1,16 @@
 package setting
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"strings"
 	"time"
 
@@ -16,17 +22,39 @@ import (
 type UseCase interface {
 	GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error)
 	UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error)
+	UploadAppearanceWallpaper(ctx context.Context, input UploadAppearanceWallpaperInput) (AppearanceSettingsDTO, error)
+	OpenAppearanceWallpaper(ctx context.Context, id string) (WallpaperStream, error)
 	ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error)
 	CreateQuickCommand(ctx context.Context, input CreateQuickCommandInput) (QuickCommandDTO, error)
 	DeleteQuickCommand(ctx context.Context, input DeleteQuickCommandInput) error
 }
 
 type UpdateAppearanceSettingsInput struct {
+	BackgroundType       domain.BackgroundType
+	SolidTheme           domain.SolidTheme
+	BackgroundMask       int
 	WallpaperColorScheme domain.WallpaperColorScheme
 }
 
 type AppearanceSettingsDTO struct {
+	BackgroundType       domain.BackgroundType
+	SolidTheme           domain.SolidTheme
+	BackgroundMask       int
 	WallpaperColorScheme domain.WallpaperColorScheme
+	WallpaperID          string
+	WallpaperFilename    string
+}
+
+type UploadAppearanceWallpaperInput struct {
+	Filename string
+	Size     int64
+	Reader   io.Reader
+}
+
+type WallpaperStream struct {
+	Filename string
+	MimeType string
+	Reader   io.ReadCloser
 }
 
 type ListQuickCommandsInput struct {
@@ -50,18 +78,25 @@ type QuickCommandDTO struct {
 
 type Service struct {
 	repo       domain.Repository
+	wallpapers domain.WallpaperStore
 	now        func() time.Time
 	generateID func() (domain.QuickCommandID, error)
 }
 
 const (
-	defaultPageSize = 20
-	maxPageSize     = 100
+	defaultPageSize  = 20
+	maxPageSize      = 100
+	maxWallpaperSize = 20 << 20
 )
 
-func New(repo domain.Repository) *Service {
+func New(repo domain.Repository, wallpapers ...domain.WallpaperStore) *Service {
+	var wallpaperStore domain.WallpaperStore
+	if len(wallpapers) > 0 {
+		wallpaperStore = wallpapers[0]
+	}
 	return &Service{
 		repo:       repo,
+		wallpapers: wallpaperStore,
 		now:        time.Now,
 		generateID: generateID,
 	}
@@ -75,25 +110,127 @@ func (s *Service) GetAppearanceSettings(ctx context.Context) (AppearanceSettings
 	if err != nil {
 		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get appearance settings failed").WithRetryable(true)
 	}
-	if !configuration.WallpaperColorScheme.Valid() {
+	if !configuration.BackgroundType.Valid() || !configuration.SolidTheme.Valid() || !configuration.WallpaperColorScheme.Valid() || configuration.BackgroundMask < 0 || configuration.BackgroundMask > 100 || configuration.BackgroundType == domain.BackgroundTypeImage && configuration.WallpaperID == "" {
 		configuration = domain.DefaultSystemConfiguration()
 	}
-	return AppearanceSettingsDTO{WallpaperColorScheme: configuration.WallpaperColorScheme}, nil
+	return appearanceDTO(configuration), nil
 }
 
 func (s *Service) UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error) {
 	if s == nil || s.repo == nil {
 		return AppearanceSettingsDTO{}, errors.New("setting usecase: nil service")
 	}
+	if !input.BackgroundType.Valid() {
+		return AppearanceSettingsDTO{}, validationError("backgroundType", "background type is invalid")
+	}
+	if !input.SolidTheme.Valid() {
+		return AppearanceSettingsDTO{}, validationError("solidTheme", "solid theme is invalid")
+	}
+	if input.BackgroundMask < 0 || input.BackgroundMask > 100 {
+		return AppearanceSettingsDTO{}, validationError("backgroundMask", "background mask must be between 0 and 100")
+	}
 	if !input.WallpaperColorScheme.Valid() {
 		return AppearanceSettingsDTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "wallpaper color scheme is invalid").
 			WithDetails(map[string]any{"field": "wallpaperColorScheme"})
 	}
-	configuration := domain.SystemConfiguration{WallpaperColorScheme: input.WallpaperColorScheme}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get appearance settings failed").WithRetryable(true)
+	}
+	if input.BackgroundType == domain.BackgroundTypeImage && configuration.WallpaperID == "" {
+		return AppearanceSettingsDTO{}, validationError("backgroundType", "an uploaded wallpaper is required")
+	}
+	configuration.BackgroundType = input.BackgroundType
+	configuration.SolidTheme = input.SolidTheme
+	configuration.BackgroundMask = input.BackgroundMask
+	configuration.WallpaperColorScheme = input.WallpaperColorScheme
 	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
 		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update appearance settings failed").WithRetryable(true)
 	}
-	return AppearanceSettingsDTO{WallpaperColorScheme: configuration.WallpaperColorScheme}, nil
+	return appearanceDTO(configuration), nil
+}
+
+func (s *Service) UploadAppearanceWallpaper(ctx context.Context, input UploadAppearanceWallpaperInput) (AppearanceSettingsDTO, error) {
+	if s == nil || s.repo == nil || s.wallpapers == nil {
+		return AppearanceSettingsDTO{}, errors.New("setting usecase: wallpaper service unavailable")
+	}
+	if input.Reader == nil || input.Size <= 0 || input.Size > maxWallpaperSize {
+		return AppearanceSettingsDTO{}, validationError("file", "wallpaper must be a non-empty image up to 20 MiB")
+	}
+	data, err := io.ReadAll(io.LimitReader(input.Reader, maxWallpaperSize+1))
+	if err != nil {
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "read wallpaper failed").WithRetryable(true)
+	}
+	if int64(len(data)) > maxWallpaperSize || int64(len(data)) != input.Size {
+		return AppearanceSettingsDTO{}, validationError("file", "wallpaper size is invalid")
+	}
+	config, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || config.Width <= 0 || config.Height <= 0 || int64(config.Width) > 40_000_000/int64(config.Height) {
+		return AppearanceSettingsDTO{}, validationError("file", "wallpaper image is invalid or too large")
+	}
+	mimeType := map[string]string{"jpeg": "image/jpeg", "png": "image/png"}[format]
+	if mimeType == "" {
+		return AppearanceSettingsDTO{}, validationError("file", "wallpaper must be a JPEG or PNG image")
+	}
+	id, err := generateStringID()
+	if err != nil {
+		return AppearanceSettingsDTO{}, fmt.Errorf("generate wallpaper id: %w", err)
+	}
+	if err := s.wallpapers.SaveWallpaper(ctx, id, bytes.NewReader(data)); err != nil {
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeAttachmentFailed, apperror.CategoryInfraError, "save wallpaper failed").WithRetryable(true)
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		_ = s.wallpapers.DeleteWallpaper(ctx, id)
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get appearance settings failed").WithRetryable(true)
+	}
+	previousID := configuration.WallpaperID
+	configuration.BackgroundType = domain.BackgroundTypeImage
+	configuration.WallpaperID = id
+	configuration.WallpaperFilename = strings.TrimSpace(input.Filename)
+	configuration.WallpaperMimeType = mimeType
+	if err := s.repo.SaveSystemConfiguration(ctx, configuration); err != nil {
+		_ = s.wallpapers.DeleteWallpaper(ctx, id)
+		return AppearanceSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update appearance settings failed").WithRetryable(true)
+	}
+	if previousID != "" && previousID != id {
+		_ = s.wallpapers.DeleteWallpaper(ctx, previousID)
+	}
+	return appearanceDTO(configuration), nil
+}
+
+func (s *Service) OpenAppearanceWallpaper(ctx context.Context, id string) (WallpaperStream, error) {
+	if s == nil || s.repo == nil || s.wallpapers == nil {
+		return WallpaperStream{}, errors.New("setting usecase: wallpaper service unavailable")
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return WallpaperStream{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get appearance settings failed").WithRetryable(true)
+	}
+	if id == "" || id != configuration.WallpaperID {
+		return WallpaperStream{}, apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "wallpaper not found")
+	}
+	reader, err := s.wallpapers.OpenWallpaper(ctx, id)
+	if err != nil {
+		return WallpaperStream{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryInfraError, "wallpaper not found")
+	}
+	return WallpaperStream{Filename: configuration.WallpaperFilename, MimeType: configuration.WallpaperMimeType, Reader: reader}, nil
+}
+
+func validationError(field string, message string) error {
+	return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, message).
+		WithDetails(map[string]any{"field": field})
+}
+
+func appearanceDTO(configuration domain.SystemConfiguration) AppearanceSettingsDTO {
+	return AppearanceSettingsDTO{
+		BackgroundType:       configuration.BackgroundType,
+		SolidTheme:           configuration.SolidTheme,
+		BackgroundMask:       configuration.BackgroundMask,
+		WallpaperColorScheme: configuration.WallpaperColorScheme,
+		WallpaperID:          configuration.WallpaperID,
+		WallpaperFilename:    configuration.WallpaperFilename,
+	}
 }
 
 func (s *Service) ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error) {
@@ -181,9 +318,14 @@ func toDTO(command domain.QuickCommand) QuickCommandDTO {
 }
 
 func generateID() (domain.QuickCommandID, error) {
+	id, err := generateStringID()
+	return domain.QuickCommandID(id), err
+}
+
+func generateStringID() (string, error) {
 	var value [16]byte
 	if _, err := rand.Read(value[:]); err != nil {
 		return "", err
 	}
-	return domain.QuickCommandID(hex.EncodeToString(value[:])), nil
+	return hex.EncodeToString(value[:]), nil
 }

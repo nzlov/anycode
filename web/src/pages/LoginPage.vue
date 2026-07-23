@@ -54,7 +54,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import { getAppearanceSettings } from '@/services/appearanceSettings';
 import { setGraphQLAccessKey, verifyGraphQLAccessKey } from '@/services/graphqlClient';
-import { setWallpaperColorScheme } from '@/theme/dailyBackground';
+import { applyAppearanceSettings } from '@/theme/appearance';
 
 const $q = useQuasar();
 const route = useRoute();
@@ -79,7 +79,7 @@ async function login() {
     setGraphQLAccessKey(key);
     try {
       const settings = await getAppearanceSettings({ notify: false });
-      setWallpaperColorScheme(settings.wallpaperColorScheme);
+      applyAppearanceSettings(settings);
     } catch {
       // Appearance settings are non-blocking during authentication.
     }

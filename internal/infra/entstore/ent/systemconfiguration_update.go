@@ -42,6 +42,97 @@ func (_u *SystemConfigurationUpdate) SetNillableWallpaperColorScheme(v *string) 
 	return _u
 }
 
+// SetBackgroundType sets the "background_type" field.
+func (_u *SystemConfigurationUpdate) SetBackgroundType(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetBackgroundType(v)
+	return _u
+}
+
+// SetNillableBackgroundType sets the "background_type" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableBackgroundType(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetBackgroundType(*v)
+	}
+	return _u
+}
+
+// SetSolidTheme sets the "solid_theme" field.
+func (_u *SystemConfigurationUpdate) SetSolidTheme(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetSolidTheme(v)
+	return _u
+}
+
+// SetNillableSolidTheme sets the "solid_theme" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableSolidTheme(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetSolidTheme(*v)
+	}
+	return _u
+}
+
+// SetBackgroundMask sets the "background_mask" field.
+func (_u *SystemConfigurationUpdate) SetBackgroundMask(v int) *SystemConfigurationUpdate {
+	_u.mutation.ResetBackgroundMask()
+	_u.mutation.SetBackgroundMask(v)
+	return _u
+}
+
+// SetNillableBackgroundMask sets the "background_mask" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableBackgroundMask(v *int) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetBackgroundMask(*v)
+	}
+	return _u
+}
+
+// AddBackgroundMask adds value to the "background_mask" field.
+func (_u *SystemConfigurationUpdate) AddBackgroundMask(v int) *SystemConfigurationUpdate {
+	_u.mutation.AddBackgroundMask(v)
+	return _u
+}
+
+// SetWallpaperID sets the "wallpaper_id" field.
+func (_u *SystemConfigurationUpdate) SetWallpaperID(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetWallpaperID(v)
+	return _u
+}
+
+// SetNillableWallpaperID sets the "wallpaper_id" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableWallpaperID(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetWallpaperID(*v)
+	}
+	return _u
+}
+
+// SetWallpaperFilename sets the "wallpaper_filename" field.
+func (_u *SystemConfigurationUpdate) SetWallpaperFilename(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetWallpaperFilename(v)
+	return _u
+}
+
+// SetNillableWallpaperFilename sets the "wallpaper_filename" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableWallpaperFilename(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetWallpaperFilename(*v)
+	}
+	return _u
+}
+
+// SetWallpaperMimeType sets the "wallpaper_mime_type" field.
+func (_u *SystemConfigurationUpdate) SetWallpaperMimeType(v string) *SystemConfigurationUpdate {
+	_u.mutation.SetWallpaperMimeType(v)
+	return _u
+}
+
+// SetNillableWallpaperMimeType sets the "wallpaper_mime_type" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableWallpaperMimeType(v *string) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetWallpaperMimeType(*v)
+	}
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *SystemConfigurationUpdate) SetUpdatedAt(v time.Time) *SystemConfigurationUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -96,6 +187,16 @@ func (_u *SystemConfigurationUpdate) check() error {
 			return &ValidationError{Name: "wallpaper_color_scheme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.wallpaper_color_scheme": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BackgroundType(); ok {
+		if err := systemconfiguration.BackgroundTypeValidator(v); err != nil {
+			return &ValidationError{Name: "background_type", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.background_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SolidTheme(); ok {
+		if err := systemconfiguration.SolidThemeValidator(v); err != nil {
+			return &ValidationError{Name: "solid_theme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.solid_theme": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -113,6 +214,27 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 	}
 	if value, ok := _u.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BackgroundType(); ok {
+		_spec.SetField(systemconfiguration.FieldBackgroundType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SolidTheme(); ok {
+		_spec.SetField(systemconfiguration.FieldSolidTheme, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BackgroundMask(); ok {
+		_spec.SetField(systemconfiguration.FieldBackgroundMask, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedBackgroundMask(); ok {
+		_spec.AddField(systemconfiguration.FieldBackgroundMask, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WallpaperID(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WallpaperFilename(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperFilename, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WallpaperMimeType(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperMimeType, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(systemconfiguration.FieldUpdatedAt, field.TypeTime, value)
@@ -147,6 +269,97 @@ func (_u *SystemConfigurationUpdateOne) SetWallpaperColorScheme(v string) *Syste
 func (_u *SystemConfigurationUpdateOne) SetNillableWallpaperColorScheme(v *string) *SystemConfigurationUpdateOne {
 	if v != nil {
 		_u.SetWallpaperColorScheme(*v)
+	}
+	return _u
+}
+
+// SetBackgroundType sets the "background_type" field.
+func (_u *SystemConfigurationUpdateOne) SetBackgroundType(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetBackgroundType(v)
+	return _u
+}
+
+// SetNillableBackgroundType sets the "background_type" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableBackgroundType(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetBackgroundType(*v)
+	}
+	return _u
+}
+
+// SetSolidTheme sets the "solid_theme" field.
+func (_u *SystemConfigurationUpdateOne) SetSolidTheme(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetSolidTheme(v)
+	return _u
+}
+
+// SetNillableSolidTheme sets the "solid_theme" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableSolidTheme(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetSolidTheme(*v)
+	}
+	return _u
+}
+
+// SetBackgroundMask sets the "background_mask" field.
+func (_u *SystemConfigurationUpdateOne) SetBackgroundMask(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.ResetBackgroundMask()
+	_u.mutation.SetBackgroundMask(v)
+	return _u
+}
+
+// SetNillableBackgroundMask sets the "background_mask" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableBackgroundMask(v *int) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetBackgroundMask(*v)
+	}
+	return _u
+}
+
+// AddBackgroundMask adds value to the "background_mask" field.
+func (_u *SystemConfigurationUpdateOne) AddBackgroundMask(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.AddBackgroundMask(v)
+	return _u
+}
+
+// SetWallpaperID sets the "wallpaper_id" field.
+func (_u *SystemConfigurationUpdateOne) SetWallpaperID(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetWallpaperID(v)
+	return _u
+}
+
+// SetNillableWallpaperID sets the "wallpaper_id" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableWallpaperID(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetWallpaperID(*v)
+	}
+	return _u
+}
+
+// SetWallpaperFilename sets the "wallpaper_filename" field.
+func (_u *SystemConfigurationUpdateOne) SetWallpaperFilename(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetWallpaperFilename(v)
+	return _u
+}
+
+// SetNillableWallpaperFilename sets the "wallpaper_filename" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableWallpaperFilename(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetWallpaperFilename(*v)
+	}
+	return _u
+}
+
+// SetWallpaperMimeType sets the "wallpaper_mime_type" field.
+func (_u *SystemConfigurationUpdateOne) SetWallpaperMimeType(v string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetWallpaperMimeType(v)
+	return _u
+}
+
+// SetNillableWallpaperMimeType sets the "wallpaper_mime_type" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableWallpaperMimeType(v *string) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetWallpaperMimeType(*v)
 	}
 	return _u
 }
@@ -218,6 +431,16 @@ func (_u *SystemConfigurationUpdateOne) check() error {
 			return &ValidationError{Name: "wallpaper_color_scheme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.wallpaper_color_scheme": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.BackgroundType(); ok {
+		if err := systemconfiguration.BackgroundTypeValidator(v); err != nil {
+			return &ValidationError{Name: "background_type", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.background_type": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SolidTheme(); ok {
+		if err := systemconfiguration.SolidThemeValidator(v); err != nil {
+			return &ValidationError{Name: "solid_theme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.solid_theme": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -252,6 +475,27 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 	}
 	if value, ok := _u.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BackgroundType(); ok {
+		_spec.SetField(systemconfiguration.FieldBackgroundType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SolidTheme(); ok {
+		_spec.SetField(systemconfiguration.FieldSolidTheme, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BackgroundMask(); ok {
+		_spec.SetField(systemconfiguration.FieldBackgroundMask, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedBackgroundMask(); ok {
+		_spec.AddField(systemconfiguration.FieldBackgroundMask, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.WallpaperID(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WallpaperFilename(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperFilename, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.WallpaperMimeType(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperMimeType, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(systemconfiguration.FieldUpdatedAt, field.TypeTime, value)

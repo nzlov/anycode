@@ -69,6 +69,36 @@ func WallpaperColorScheme(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperColorScheme, v))
 }
 
+// BackgroundType applies equality check predicate on the "background_type" field. It's identical to BackgroundTypeEQ.
+func BackgroundType(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldBackgroundType, v))
+}
+
+// SolidTheme applies equality check predicate on the "solid_theme" field. It's identical to SolidThemeEQ.
+func SolidTheme(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldSolidTheme, v))
+}
+
+// BackgroundMask applies equality check predicate on the "background_mask" field. It's identical to BackgroundMaskEQ.
+func BackgroundMask(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldBackgroundMask, v))
+}
+
+// WallpaperID applies equality check predicate on the "wallpaper_id" field. It's identical to WallpaperIDEQ.
+func WallpaperID(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperID, v))
+}
+
+// WallpaperFilename applies equality check predicate on the "wallpaper_filename" field. It's identical to WallpaperFilenameEQ.
+func WallpaperFilename(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperFilename, v))
+}
+
+// WallpaperMimeType applies equality check predicate on the "wallpaper_mime_type" field. It's identical to WallpaperMimeTypeEQ.
+func WallpaperMimeType(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperMimeType, v))
+}
+
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldUpdatedAt, v))
@@ -137,6 +167,371 @@ func WallpaperColorSchemeEqualFold(v string) predicate.SystemConfiguration {
 // WallpaperColorSchemeContainsFold applies the ContainsFold predicate on the "wallpaper_color_scheme" field.
 func WallpaperColorSchemeContainsFold(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldWallpaperColorScheme, v))
+}
+
+// BackgroundTypeEQ applies the EQ predicate on the "background_type" field.
+func BackgroundTypeEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldBackgroundType, v))
+}
+
+// BackgroundTypeNEQ applies the NEQ predicate on the "background_type" field.
+func BackgroundTypeNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldBackgroundType, v))
+}
+
+// BackgroundTypeIn applies the In predicate on the "background_type" field.
+func BackgroundTypeIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldBackgroundType, vs...))
+}
+
+// BackgroundTypeNotIn applies the NotIn predicate on the "background_type" field.
+func BackgroundTypeNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldBackgroundType, vs...))
+}
+
+// BackgroundTypeGT applies the GT predicate on the "background_type" field.
+func BackgroundTypeGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldBackgroundType, v))
+}
+
+// BackgroundTypeGTE applies the GTE predicate on the "background_type" field.
+func BackgroundTypeGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldBackgroundType, v))
+}
+
+// BackgroundTypeLT applies the LT predicate on the "background_type" field.
+func BackgroundTypeLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldBackgroundType, v))
+}
+
+// BackgroundTypeLTE applies the LTE predicate on the "background_type" field.
+func BackgroundTypeLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldBackgroundType, v))
+}
+
+// BackgroundTypeContains applies the Contains predicate on the "background_type" field.
+func BackgroundTypeContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldBackgroundType, v))
+}
+
+// BackgroundTypeHasPrefix applies the HasPrefix predicate on the "background_type" field.
+func BackgroundTypeHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldBackgroundType, v))
+}
+
+// BackgroundTypeHasSuffix applies the HasSuffix predicate on the "background_type" field.
+func BackgroundTypeHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldBackgroundType, v))
+}
+
+// BackgroundTypeEqualFold applies the EqualFold predicate on the "background_type" field.
+func BackgroundTypeEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldBackgroundType, v))
+}
+
+// BackgroundTypeContainsFold applies the ContainsFold predicate on the "background_type" field.
+func BackgroundTypeContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldBackgroundType, v))
+}
+
+// SolidThemeEQ applies the EQ predicate on the "solid_theme" field.
+func SolidThemeEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldSolidTheme, v))
+}
+
+// SolidThemeNEQ applies the NEQ predicate on the "solid_theme" field.
+func SolidThemeNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldSolidTheme, v))
+}
+
+// SolidThemeIn applies the In predicate on the "solid_theme" field.
+func SolidThemeIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldSolidTheme, vs...))
+}
+
+// SolidThemeNotIn applies the NotIn predicate on the "solid_theme" field.
+func SolidThemeNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldSolidTheme, vs...))
+}
+
+// SolidThemeGT applies the GT predicate on the "solid_theme" field.
+func SolidThemeGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldSolidTheme, v))
+}
+
+// SolidThemeGTE applies the GTE predicate on the "solid_theme" field.
+func SolidThemeGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldSolidTheme, v))
+}
+
+// SolidThemeLT applies the LT predicate on the "solid_theme" field.
+func SolidThemeLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldSolidTheme, v))
+}
+
+// SolidThemeLTE applies the LTE predicate on the "solid_theme" field.
+func SolidThemeLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldSolidTheme, v))
+}
+
+// SolidThemeContains applies the Contains predicate on the "solid_theme" field.
+func SolidThemeContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldSolidTheme, v))
+}
+
+// SolidThemeHasPrefix applies the HasPrefix predicate on the "solid_theme" field.
+func SolidThemeHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldSolidTheme, v))
+}
+
+// SolidThemeHasSuffix applies the HasSuffix predicate on the "solid_theme" field.
+func SolidThemeHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldSolidTheme, v))
+}
+
+// SolidThemeEqualFold applies the EqualFold predicate on the "solid_theme" field.
+func SolidThemeEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldSolidTheme, v))
+}
+
+// SolidThemeContainsFold applies the ContainsFold predicate on the "solid_theme" field.
+func SolidThemeContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldSolidTheme, v))
+}
+
+// BackgroundMaskEQ applies the EQ predicate on the "background_mask" field.
+func BackgroundMaskEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldBackgroundMask, v))
+}
+
+// BackgroundMaskNEQ applies the NEQ predicate on the "background_mask" field.
+func BackgroundMaskNEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldBackgroundMask, v))
+}
+
+// BackgroundMaskIn applies the In predicate on the "background_mask" field.
+func BackgroundMaskIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldBackgroundMask, vs...))
+}
+
+// BackgroundMaskNotIn applies the NotIn predicate on the "background_mask" field.
+func BackgroundMaskNotIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldBackgroundMask, vs...))
+}
+
+// BackgroundMaskGT applies the GT predicate on the "background_mask" field.
+func BackgroundMaskGT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldBackgroundMask, v))
+}
+
+// BackgroundMaskGTE applies the GTE predicate on the "background_mask" field.
+func BackgroundMaskGTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldBackgroundMask, v))
+}
+
+// BackgroundMaskLT applies the LT predicate on the "background_mask" field.
+func BackgroundMaskLT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldBackgroundMask, v))
+}
+
+// BackgroundMaskLTE applies the LTE predicate on the "background_mask" field.
+func BackgroundMaskLTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldBackgroundMask, v))
+}
+
+// WallpaperIDEQ applies the EQ predicate on the "wallpaper_id" field.
+func WallpaperIDEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperID, v))
+}
+
+// WallpaperIDNEQ applies the NEQ predicate on the "wallpaper_id" field.
+func WallpaperIDNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldWallpaperID, v))
+}
+
+// WallpaperIDIn applies the In predicate on the "wallpaper_id" field.
+func WallpaperIDIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldWallpaperID, vs...))
+}
+
+// WallpaperIDNotIn applies the NotIn predicate on the "wallpaper_id" field.
+func WallpaperIDNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldWallpaperID, vs...))
+}
+
+// WallpaperIDGT applies the GT predicate on the "wallpaper_id" field.
+func WallpaperIDGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldWallpaperID, v))
+}
+
+// WallpaperIDGTE applies the GTE predicate on the "wallpaper_id" field.
+func WallpaperIDGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldWallpaperID, v))
+}
+
+// WallpaperIDLT applies the LT predicate on the "wallpaper_id" field.
+func WallpaperIDLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldWallpaperID, v))
+}
+
+// WallpaperIDLTE applies the LTE predicate on the "wallpaper_id" field.
+func WallpaperIDLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldWallpaperID, v))
+}
+
+// WallpaperIDContains applies the Contains predicate on the "wallpaper_id" field.
+func WallpaperIDContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldWallpaperID, v))
+}
+
+// WallpaperIDHasPrefix applies the HasPrefix predicate on the "wallpaper_id" field.
+func WallpaperIDHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldWallpaperID, v))
+}
+
+// WallpaperIDHasSuffix applies the HasSuffix predicate on the "wallpaper_id" field.
+func WallpaperIDHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldWallpaperID, v))
+}
+
+// WallpaperIDEqualFold applies the EqualFold predicate on the "wallpaper_id" field.
+func WallpaperIDEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldWallpaperID, v))
+}
+
+// WallpaperIDContainsFold applies the ContainsFold predicate on the "wallpaper_id" field.
+func WallpaperIDContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldWallpaperID, v))
+}
+
+// WallpaperFilenameEQ applies the EQ predicate on the "wallpaper_filename" field.
+func WallpaperFilenameEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameNEQ applies the NEQ predicate on the "wallpaper_filename" field.
+func WallpaperFilenameNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameIn applies the In predicate on the "wallpaper_filename" field.
+func WallpaperFilenameIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldWallpaperFilename, vs...))
+}
+
+// WallpaperFilenameNotIn applies the NotIn predicate on the "wallpaper_filename" field.
+func WallpaperFilenameNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldWallpaperFilename, vs...))
+}
+
+// WallpaperFilenameGT applies the GT predicate on the "wallpaper_filename" field.
+func WallpaperFilenameGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameGTE applies the GTE predicate on the "wallpaper_filename" field.
+func WallpaperFilenameGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameLT applies the LT predicate on the "wallpaper_filename" field.
+func WallpaperFilenameLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameLTE applies the LTE predicate on the "wallpaper_filename" field.
+func WallpaperFilenameLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameContains applies the Contains predicate on the "wallpaper_filename" field.
+func WallpaperFilenameContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameHasPrefix applies the HasPrefix predicate on the "wallpaper_filename" field.
+func WallpaperFilenameHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameHasSuffix applies the HasSuffix predicate on the "wallpaper_filename" field.
+func WallpaperFilenameHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameEqualFold applies the EqualFold predicate on the "wallpaper_filename" field.
+func WallpaperFilenameEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldWallpaperFilename, v))
+}
+
+// WallpaperFilenameContainsFold applies the ContainsFold predicate on the "wallpaper_filename" field.
+func WallpaperFilenameContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldWallpaperFilename, v))
+}
+
+// WallpaperMimeTypeEQ applies the EQ predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeNEQ applies the NEQ predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeNEQ(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeIn applies the In predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldWallpaperMimeType, vs...))
+}
+
+// WallpaperMimeTypeNotIn applies the NotIn predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeNotIn(vs ...string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldWallpaperMimeType, vs...))
+}
+
+// WallpaperMimeTypeGT applies the GT predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeGT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeGTE applies the GTE predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeGTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeLT applies the LT predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeLT(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeLTE applies the LTE predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeLTE(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeContains applies the Contains predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeContains(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContains(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeHasPrefix applies the HasPrefix predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeHasPrefix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasPrefix(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeHasSuffix applies the HasSuffix predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeHasSuffix(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldHasSuffix(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeEqualFold applies the EqualFold predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeEqualFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEqualFold(FieldWallpaperMimeType, v))
+}
+
+// WallpaperMimeTypeContainsFold applies the ContainsFold predicate on the "wallpaper_mime_type" field.
+func WallpaperMimeTypeContainsFold(v string) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldWallpaperMimeType, v))
 }
 
 // UpdatedAtEQ applies the EQ predicate on the "updated_at" field.

@@ -56,7 +56,12 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 
 func mapAppearanceSettings(dto settingapp.AppearanceSettingsDTO) *model.AppearanceSettings {
 	return &model.AppearanceSettings{
+		BackgroundType:       model.AppearanceBackgroundType(strings.ToUpper(string(dto.BackgroundType))),
+		SolidTheme:           model.AppearanceSolidTheme(strings.ToUpper(string(dto.SolidTheme))),
+		BackgroundMask:       dto.BackgroundMask,
 		WallpaperColorScheme: wallpaperColorSchemeToModel(dto.WallpaperColorScheme),
+		WallpaperID:          dto.WallpaperID,
+		WallpaperFilename:    dto.WallpaperFilename,
 	}
 }
 

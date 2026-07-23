@@ -18,6 +18,7 @@ import (
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
@@ -101,6 +102,29 @@ func TestGraphQLRequiresBearerWhenAccessKeyIsConfigured(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"__typename":"Query"`) {
 		t.Fatalf("graphql response missing query typename: %s", rec.Body.String())
+	}
+}
+
+func TestAppearanceWallpaperRequiresBearerAndStreamsConfiguredImage(t *testing.T) {
+	settings := &fakeAppearanceSettingsUseCase{wallpaperID: "wallpaper-1", content: []byte("png")}
+	handler := NewHandler(
+		config.Config{AccessKey: "secret"},
+		WithGraphQLUseCases(graph.UseCases{Settings: settings}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/appearance/wallpapers/wallpaper-1", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wallpaper without bearer status = %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/appearance/wallpapers/wallpaper-1", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "png" || rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("wallpaper response = status:%d type:%q body:%q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
 	}
 }
 
@@ -545,6 +569,23 @@ type sessionDetailCountUseCase struct {
 
 func (sessionDetailCountUseCase) GetSession(context.Context, sessiondomain.ID) (sessionapp.DetailDTO, error) {
 	return sessionapp.DetailDTO{DTO: sessionapp.DTO{ArtifactCount: 2, FilesChanged: 4}}, nil
+}
+
+type fakeAppearanceSettingsUseCase struct {
+	settingapp.UseCase
+	wallpaperID string
+	content     []byte
+}
+
+func (u *fakeAppearanceSettingsUseCase) OpenAppearanceWallpaper(_ context.Context, id string) (settingapp.WallpaperStream, error) {
+	if id != u.wallpaperID {
+		return settingapp.WallpaperStream{}, errors.New("not found")
+	}
+	return settingapp.WallpaperStream{
+		Filename: "background.png",
+		MimeType: "image/png",
+		Reader:   io.NopCloser(bytes.NewReader(u.content)),
+	}, nil
 }
 
 func (u *fakeSessionEventUseCase) SessionEvents(context.Context, sessiondomain.ID) (<-chan timelineapp.DTO, error) {

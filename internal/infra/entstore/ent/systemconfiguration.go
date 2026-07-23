@@ -19,6 +19,18 @@ type SystemConfiguration struct {
 	ID string `json:"id,omitempty"`
 	// WallpaperColorScheme holds the value of the "wallpaper_color_scheme" field.
 	WallpaperColorScheme string `json:"wallpaper_color_scheme,omitempty"`
+	// BackgroundType holds the value of the "background_type" field.
+	BackgroundType string `json:"background_type,omitempty"`
+	// SolidTheme holds the value of the "solid_theme" field.
+	SolidTheme string `json:"solid_theme,omitempty"`
+	// BackgroundMask holds the value of the "background_mask" field.
+	BackgroundMask int `json:"background_mask,omitempty"`
+	// WallpaperID holds the value of the "wallpaper_id" field.
+	WallpaperID string `json:"wallpaper_id,omitempty"`
+	// WallpaperFilename holds the value of the "wallpaper_filename" field.
+	WallpaperFilename string `json:"wallpaper_filename,omitempty"`
+	// WallpaperMimeType holds the value of the "wallpaper_mime_type" field.
+	WallpaperMimeType string `json:"wallpaper_mime_type,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 	selectValues sql.SelectValues
@@ -29,7 +41,9 @@ func (*SystemConfiguration) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case systemconfiguration.FieldID, systemconfiguration.FieldWallpaperColorScheme:
+		case systemconfiguration.FieldBackgroundMask:
+			values[i] = new(sql.NullInt64)
+		case systemconfiguration.FieldID, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
 			values[i] = new(sql.NullString)
 		case systemconfiguration.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -59,6 +73,42 @@ func (_m *SystemConfiguration) assignValues(columns []string, values []any) erro
 				return fmt.Errorf("unexpected type %T for field wallpaper_color_scheme", values[i])
 			} else if value.Valid {
 				_m.WallpaperColorScheme = value.String
+			}
+		case systemconfiguration.FieldBackgroundType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field background_type", values[i])
+			} else if value.Valid {
+				_m.BackgroundType = value.String
+			}
+		case systemconfiguration.FieldSolidTheme:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field solid_theme", values[i])
+			} else if value.Valid {
+				_m.SolidTheme = value.String
+			}
+		case systemconfiguration.FieldBackgroundMask:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field background_mask", values[i])
+			} else if value.Valid {
+				_m.BackgroundMask = int(value.Int64)
+			}
+		case systemconfiguration.FieldWallpaperID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field wallpaper_id", values[i])
+			} else if value.Valid {
+				_m.WallpaperID = value.String
+			}
+		case systemconfiguration.FieldWallpaperFilename:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field wallpaper_filename", values[i])
+			} else if value.Valid {
+				_m.WallpaperFilename = value.String
+			}
+		case systemconfiguration.FieldWallpaperMimeType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field wallpaper_mime_type", values[i])
+			} else if value.Valid {
+				_m.WallpaperMimeType = value.String
 			}
 		case systemconfiguration.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -104,6 +154,24 @@ func (_m *SystemConfiguration) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("wallpaper_color_scheme=")
 	builder.WriteString(_m.WallpaperColorScheme)
+	builder.WriteString(", ")
+	builder.WriteString("background_type=")
+	builder.WriteString(_m.BackgroundType)
+	builder.WriteString(", ")
+	builder.WriteString("solid_theme=")
+	builder.WriteString(_m.SolidTheme)
+	builder.WriteString(", ")
+	builder.WriteString("background_mask=")
+	builder.WriteString(fmt.Sprintf("%v", _m.BackgroundMask))
+	builder.WriteString(", ")
+	builder.WriteString("wallpaper_id=")
+	builder.WriteString(_m.WallpaperID)
+	builder.WriteString(", ")
+	builder.WriteString("wallpaper_filename=")
+	builder.WriteString(_m.WallpaperFilename)
+	builder.WriteString(", ")
+	builder.WriteString("wallpaper_mime_type=")
+	builder.WriteString(_m.WallpaperMimeType)
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))

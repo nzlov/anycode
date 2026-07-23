@@ -64,22 +64,33 @@ body,
 }
 
 #q-app::before {
-  background-image: var(--ac-daily-background-image, none);
+  background-color: var(--ac-background-color, var(--ac-page));
+  background-image: var(--ac-background-image, none);
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
 }
 
-html[data-daily-background='ready'] #q-app::before {
+html[data-background='ready'] #q-app::before {
   opacity: 1;
 }
 
-html[data-daily-background='ready'] body {
+html[data-background='ready'] body {
   --ac-page-layer: transparent;
 }
 
-html[data-daily-background='ready'] body.body--dark {
+html[data-background='ready'] body.body--dark {
   --ac-page-layer: transparent;
+}
+
+#q-app::after {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  content: '';
+  opacity: var(--ac-background-mask-opacity, 0);
+  background: var(--ac-background-mask-color);
+  pointer-events: none;
 }
 
 a {
@@ -1175,6 +1186,9 @@ body.desktop
 }
 
 .appearance-settings-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
 }
@@ -1187,8 +1201,58 @@ body.desktop
   width: min(240px, 46%);
 }
 
+.appearance-settings-list__control--wide {
+  width: min(440px, 64%);
+}
+
 .appearance-settings-list__control .q-select {
   width: 100%;
+}
+
+.appearance-settings-list__control .q-btn-toggle,
+.appearance-settings-list__control .q-file {
+  width: 100%;
+}
+
+.traditional-theme-options {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
+  gap: 4px;
+}
+
+.traditional-theme-option {
+  min-width: 0;
+  border: 1px solid transparent;
+}
+
+.traditional-theme-option--active {
+  border-color: var(--ac-primary);
+  background: var(--ac-primary-container);
+  color: var(--ac-on-primary-container);
+}
+
+.traditional-theme-option__swatch {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  border: 1px solid var(--ac-border-strong);
+  border-radius: 50%;
+}
+
+.background-mask-control {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(120px, 1fr) 44px;
+  align-items: center;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.background-mask-control__value {
+  color: var(--ac-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .notification-proxy-control {
@@ -2311,6 +2375,10 @@ body.desktop
   .appearance-settings-list__control {
     width: 100%;
     padding-left: 44px;
+  }
+
+  .traditional-theme-options {
+    grid-template-columns: repeat(2, minmax(88px, 1fr));
   }
 
   .notification-proxy-control {

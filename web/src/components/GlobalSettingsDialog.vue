@@ -186,6 +186,91 @@
           <q-list bordered separator class="appearance-settings-list">
             <q-item>
               <q-item-section avatar>
+                <q-icon name="wallpaper" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>背景</q-item-label>
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-btn-toggle
+                  :model-value="appearance.backgroundType"
+                  no-caps
+                  dense
+                  spread
+                  unelevated
+                  toggle-color="primary"
+                  :options="backgroundTypeOptions"
+                  :disable="appearanceBusy"
+                  aria-label="背景类型"
+                  @update:model-value="selectBackgroundType"
+                />
+              </q-item-section>
+            </q-item>
+            <q-item v-if="appearance.backgroundType === 'solid'">
+              <q-item-section avatar>
+                <q-icon name="palette" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>色系</q-item-label>
+              </q-item-section>
+              <q-item-section
+                side
+                class="appearance-settings-list__control appearance-settings-list__control--wide"
+              >
+                <div class="traditional-theme-options" role="radiogroup" aria-label="中国传统色系">
+                  <q-btn
+                    v-for="theme in solidThemeOptions"
+                    :key="theme.value"
+                    flat
+                    no-caps
+                    dense
+                    :disable="appearanceBusy"
+                    :class="[
+                      'traditional-theme-option',
+                      { 'traditional-theme-option--active': appearance.solidTheme === theme.value },
+                    ]"
+                    :aria-pressed="appearance.solidTheme === theme.value"
+                    @click="saveSolidTheme(theme.value)"
+                  >
+                    <span
+                      class="traditional-theme-option__swatch"
+                      :style="{ backgroundColor: theme.color }"
+                    />
+                    <span>{{ theme.label }}</span>
+                  </q-btn>
+                </div>
+              </q-item-section>
+            </q-item>
+            <q-item v-if="appearance.backgroundType === 'image'">
+              <q-item-section avatar>
+                <q-icon name="add_photo_alternate" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>自定义图片</q-item-label>
+                <q-item-label v-if="appearance.wallpaperFilename" caption lines="1">
+                  {{ appearance.wallpaperFilename }}
+                </q-item-label>
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-file
+                  v-model="wallpaperFile"
+                  outlined
+                  dense
+                  accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                  :max-file-size="20 * 1024 * 1024"
+                  :disable="appearanceBusy"
+                  aria-label="上传背景图片"
+                  @update:model-value="uploadWallpaper"
+                  @rejected="rejectWallpaper"
+                >
+                  <template #prepend>
+                    <q-icon name="upload" />
+                  </template>
+                </q-file>
+              </q-item-section>
+            </q-item>
+            <q-item v-if="appearance.backgroundType !== 'solid'">
+              <q-item-section avatar>
                 <q-icon name="format_color_fill" color="primary" />
               </q-item-section>
               <q-item-section>
@@ -193,17 +278,43 @@
               </q-item-section>
               <q-item-section side class="appearance-settings-list__control">
                 <q-select
-                  v-model="wallpaperColorScheme"
+                  :model-value="appearance.wallpaperColorScheme"
                   outlined
                   dense
                   emit-value
                   map-options
                   options-dense
                   :options="wallpaperColorSchemeOptions"
-                  :disable="appearanceLoading || appearanceSaving"
+                  :disable="appearanceBusy"
                   aria-label="壁纸选色算法"
                   @update:model-value="saveWallpaperColorScheme"
                 />
+              </q-item-section>
+            </q-item>
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="contrast" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>背景遮罩</q-item-label>
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <div class="background-mask-control">
+                  <q-slider
+                    v-model="appearance.backgroundMask"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    label
+                    label-always
+                    :disable="appearanceBusy"
+                    aria-label="背景遮罩透明度"
+                    @change="saveBackgroundMask"
+                  />
+                  <span class="background-mask-control__value"
+                    >{{ appearance.backgroundMask }}%</span
+                  >
+                </div>
               </q-item-section>
             </q-item>
           </q-list>
@@ -487,8 +598,12 @@ import ProjectSettingsDialog from '@/components/ProjectSettingsDialog.vue';
 import { useProjects } from '@/composables/useProjects';
 import { useQuickCommands } from '@/composables/useQuickCommands';
 import {
+  backgroundTypeOptions,
   getAppearanceSettings,
+  type AppearanceBackgroundType,
+  type AppearanceSettings,
   updateAppearanceSettings,
+  uploadAppearanceWallpaper,
   wallpaperColorSchemeOptions,
 } from '@/services/appearanceSettings';
 import type { ProjectSummary } from '@/services/projects';
@@ -499,8 +614,9 @@ import {
   type PushNotificationState,
   updateWebPushProxy,
 } from '@/services/pushNotifications';
-import { setWallpaperColorScheme } from '@/theme/dailyBackground';
+import { applyAppearanceSettings } from '@/theme/appearance';
 import type { WallpaperColorScheme } from '@/theme/dailyBackgroundModel';
+import { solidThemeOptions, type AppearanceSolidTheme } from '@/theme/solidThemes';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -545,9 +661,22 @@ const quickCommandPageMax = computed(() =>
 );
 const appearanceLoading = ref(false);
 const appearanceSaving = ref(false);
+const appearanceUploading = ref(false);
 const appearanceError = ref('');
-const wallpaperColorScheme = ref<WallpaperColorScheme>('content');
-const persistedWallpaperColorScheme = ref<WallpaperColorScheme>('content');
+const defaultAppearance: AppearanceSettings = {
+  backgroundType: 'bing',
+  solidTheme: 'vermilion',
+  backgroundMask: 0,
+  wallpaperColorScheme: 'content',
+  wallpaperId: '',
+  wallpaperFilename: '',
+};
+const appearance = ref<AppearanceSettings>({ ...defaultAppearance });
+const persistedAppearance = ref<AppearanceSettings>({ ...defaultAppearance });
+const wallpaperFile = ref<File | null>(null);
+const appearanceBusy = computed(
+  () => appearanceLoading.value || appearanceSaving.value || appearanceUploading.value,
+);
 const notificationLoading = ref(false);
 const notificationSaving = ref(false);
 const notificationProxySaving = ref(false);
@@ -632,9 +761,7 @@ async function refreshAppearance() {
   appearanceError.value = '';
   try {
     const settings = await getAppearanceSettings({ notify: false });
-    wallpaperColorScheme.value = settings.wallpaperColorScheme;
-    persistedWallpaperColorScheme.value = settings.wallpaperColorScheme;
-    setWallpaperColorScheme(settings.wallpaperColorScheme);
+    commitAppearance(settings);
   } catch {
     appearanceError.value = '无法加载外观设置';
   } finally {
@@ -642,21 +769,64 @@ async function refreshAppearance() {
   }
 }
 
-async function saveWallpaperColorScheme(scheme: WallpaperColorScheme) {
-  if (scheme === persistedWallpaperColorScheme.value) return;
+async function saveAppearance(patch: Partial<AppearanceSettings>) {
+  const candidate = { ...appearance.value, ...patch };
   appearanceSaving.value = true;
   appearanceError.value = '';
   try {
-    const settings = await updateAppearanceSettings(scheme);
-    wallpaperColorScheme.value = settings.wallpaperColorScheme;
-    persistedWallpaperColorScheme.value = settings.wallpaperColorScheme;
-    setWallpaperColorScheme(settings.wallpaperColorScheme);
+    commitAppearance(await updateAppearanceSettings(candidate));
   } catch {
-    wallpaperColorScheme.value = persistedWallpaperColorScheme.value;
+    appearance.value = { ...persistedAppearance.value };
     appearanceError.value = '无法保存外观设置';
   } finally {
     appearanceSaving.value = false;
   }
+}
+
+function commitAppearance(settings: AppearanceSettings) {
+  appearance.value = { ...settings };
+  persistedAppearance.value = { ...settings };
+  applyAppearanceSettings(settings);
+}
+
+function selectBackgroundType(backgroundType: AppearanceBackgroundType) {
+  appearance.value.backgroundType = backgroundType;
+  if (backgroundType === 'image' && !appearance.value.wallpaperId) return;
+  void saveAppearance({ backgroundType });
+}
+
+function saveSolidTheme(solidTheme: AppearanceSolidTheme) {
+  appearance.value.solidTheme = solidTheme;
+  void saveAppearance({ solidTheme });
+}
+
+function saveWallpaperColorScheme(scheme: WallpaperColorScheme) {
+  appearance.value.wallpaperColorScheme = scheme;
+  void saveAppearance({ wallpaperColorScheme: scheme });
+}
+
+function saveBackgroundMask(backgroundMask: number) {
+  void saveAppearance({ backgroundMask });
+}
+
+async function uploadWallpaper(file: File | null) {
+  if (!file) return;
+  appearanceUploading.value = true;
+  appearanceError.value = '';
+  try {
+    commitAppearance(await uploadAppearanceWallpaper(file));
+  } catch {
+    appearance.value = { ...persistedAppearance.value };
+    appearanceError.value = '无法上传背景图片';
+  } finally {
+    wallpaperFile.value = null;
+    appearanceUploading.value = false;
+  }
+}
+
+function rejectWallpaper() {
+  wallpaperFile.value = null;
+  appearanceError.value = '请选择不超过 20 MiB 的 JPEG 或 PNG 图片';
 }
 
 function openProjectOverview(projectId: string) {

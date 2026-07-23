@@ -49,6 +49,7 @@ input PromptFileMatchInput {
 
 type Mutation {
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
+  uploadAppearanceWallpaper(file: Upload!): AppearanceSettings!
   updateWebPushProxy(proxyUrl: String!): WebPushConfig!
   registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
   unregisterPushSubscription(id: ID!): Boolean!
@@ -105,8 +106,30 @@ enum WallpaperColorScheme {
   MONOCHROME
 }
 
+enum AppearanceBackgroundType {
+  SOLID
+  IMAGE
+  BING
+}
+
+enum AppearanceSolidTheme {
+  VERMILION
+  AMBER
+  BAMBOO
+  AZURE
+  INDIGO
+  PURPLE
+  PEACH
+  INK
+}
+
 type AppearanceSettings {
+  backgroundType: AppearanceBackgroundType!
+  solidTheme: AppearanceSolidTheme!
+  backgroundMask: Int!
   wallpaperColorScheme: WallpaperColorScheme!
+  wallpaperId: ID!
+  wallpaperFilename: String!
 }
 
 type WebPushConfig {
@@ -126,6 +149,9 @@ input RegisterPushSubscriptionInput {
 }
 
 input UpdateAppearanceSettingsInput {
+  backgroundType: AppearanceBackgroundType!
+  solidTheme: AppearanceSolidTheme!
+  backgroundMask: Int!
   wallpaperColorScheme: WallpaperColorScheme!
 }
 

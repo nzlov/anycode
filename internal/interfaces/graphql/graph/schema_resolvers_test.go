@@ -210,6 +210,9 @@ func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
 func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 	settings := &fakeSettingUseCase{
 		appearanceResult: settingapp.AppearanceSettingsDTO{
+			BackgroundType:       settingdomain.BackgroundTypeBing,
+			SolidTheme:           settingdomain.SolidThemeVermilion,
+			BackgroundMask:       20,
 			WallpaperColorScheme: settingdomain.WallpaperColorSchemeRainbow,
 		},
 	}
@@ -219,17 +222,20 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppearanceSettings() error = %v", err)
 	}
-	if got.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
+	if got.BackgroundType != model.AppearanceBackgroundTypeBing || got.SolidTheme != model.AppearanceSolidThemeVermilion || got.BackgroundMask != 20 || got.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
 		t.Fatalf("AppearanceSettings() = %#v", got)
 	}
 
 	updated, err := resolver.Mutation().UpdateAppearanceSettings(context.Background(), model.UpdateAppearanceSettingsInput{
+		BackgroundType:       model.AppearanceBackgroundTypeSolid,
+		SolidTheme:           model.AppearanceSolidThemeBamboo,
+		BackgroundMask:       35,
 		WallpaperColorScheme: model.WallpaperColorSchemeFruitSalad,
 	})
 	if err != nil {
 		t.Fatalf("UpdateAppearanceSettings() error = %v", err)
 	}
-	if settings.appearanceInput.WallpaperColorScheme != settingdomain.WallpaperColorSchemeFruitSalad || updated.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
+	if settings.appearanceInput.BackgroundType != settingdomain.BackgroundTypeSolid || settings.appearanceInput.SolidTheme != settingdomain.SolidThemeBamboo || settings.appearanceInput.BackgroundMask != 35 || settings.appearanceInput.WallpaperColorScheme != settingdomain.WallpaperColorSchemeFruitSalad || updated.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
 		t.Fatalf("update input=%#v result=%#v", settings.appearanceInput, updated)
 	}
 }

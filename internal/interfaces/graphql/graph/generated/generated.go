@@ -38,7 +38,12 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	AppearanceSettings struct {
+		BackgroundMask       func(childComplexity int) int
+		BackgroundType       func(childComplexity int) int
+		SolidTheme           func(childComplexity int) int
 		WallpaperColorScheme func(childComplexity int) int
+		WallpaperFilename    func(childComplexity int) int
+		WallpaperID          func(childComplexity int) int
 	}
 
 	ApprovalConfig struct {
@@ -183,6 +188,7 @@ type ComplexityRoot struct {
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
 		UpdateWebPushProxy          func(childComplexity int, proxyURL string) int
+		UploadAppearanceWallpaper   func(childComplexity int, file graphql.Upload) int
 	}
 
 	PageInfo struct {
@@ -664,6 +670,7 @@ type ComplexityRoot struct {
 
 type MutationResolver interface {
 	UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error)
+	UploadAppearanceWallpaper(ctx context.Context, file graphql.Upload) (*model.AppearanceSettings, error)
 	UpdateWebPushProxy(ctx context.Context, proxyURL string) (*model.WebPushConfig, error)
 	RegisterPushSubscription(ctx context.Context, input model.RegisterPushSubscriptionInput) (*model.PushSubscriptionRegistration, error)
 	UnregisterPushSubscription(ctx context.Context, id string) (bool, error)
@@ -737,12 +744,42 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	_ = ec
 	switch typeName + "." + field {
 
+	case "AppearanceSettings.backgroundMask":
+		if e.ComplexityRoot.AppearanceSettings.BackgroundMask == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AppearanceSettings.BackgroundMask(childComplexity), true
+	case "AppearanceSettings.backgroundType":
+		if e.ComplexityRoot.AppearanceSettings.BackgroundType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AppearanceSettings.BackgroundType(childComplexity), true
+	case "AppearanceSettings.solidTheme":
+		if e.ComplexityRoot.AppearanceSettings.SolidTheme == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AppearanceSettings.SolidTheme(childComplexity), true
 	case "AppearanceSettings.wallpaperColorScheme":
 		if e.ComplexityRoot.AppearanceSettings.WallpaperColorScheme == nil {
 			break
 		}
 
 		return e.ComplexityRoot.AppearanceSettings.WallpaperColorScheme(childComplexity), true
+	case "AppearanceSettings.wallpaperFilename":
+		if e.ComplexityRoot.AppearanceSettings.WallpaperFilename == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AppearanceSettings.WallpaperFilename(childComplexity), true
+	case "AppearanceSettings.wallpaperId":
+		if e.ComplexityRoot.AppearanceSettings.WallpaperID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AppearanceSettings.WallpaperID(childComplexity), true
 
 	case "ApprovalConfig.afterRun":
 		if e.ComplexityRoot.ApprovalConfig.AfterRun == nil {
@@ -1456,6 +1493,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateWebPushProxy(childComplexity, args["proxyUrl"].(string)), true
+	case "Mutation.uploadAppearanceWallpaper":
+		if e.ComplexityRoot.Mutation.UploadAppearanceWallpaper == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_uploadAppearanceWallpaper_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UploadAppearanceWallpaper(childComplexity, args["file"].(graphql.Upload)), true
 
 	case "PageInfo.nextCursor":
 		if e.ComplexityRoot.PageInfo.NextCursor == nil {
@@ -3653,6 +3701,7 @@ input PromptFileMatchInput {
 
 type Mutation {
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
+  uploadAppearanceWallpaper(file: Upload!): AppearanceSettings!
   updateWebPushProxy(proxyUrl: String!): WebPushConfig!
   registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
   unregisterPushSubscription(id: ID!): Boolean!
@@ -3709,8 +3758,30 @@ enum WallpaperColorScheme {
   MONOCHROME
 }
 
+enum AppearanceBackgroundType {
+  SOLID
+  IMAGE
+  BING
+}
+
+enum AppearanceSolidTheme {
+  VERMILION
+  AMBER
+  BAMBOO
+  AZURE
+  INDIGO
+  PURPLE
+  PEACH
+  INK
+}
+
 type AppearanceSettings {
+  backgroundType: AppearanceBackgroundType!
+  solidTheme: AppearanceSolidTheme!
+  backgroundMask: Int!
   wallpaperColorScheme: WallpaperColorScheme!
+  wallpaperId: ID!
+  wallpaperFilename: String!
 }
 
 type WebPushConfig {
@@ -3730,6 +3801,9 @@ input RegisterPushSubscriptionInput {
 }
 
 input UpdateAppearanceSettingsInput {
+  backgroundType: AppearanceBackgroundType!
+  solidTheme: AppearanceSolidTheme!
+  backgroundMask: Int!
   wallpaperColorScheme: WallpaperColorScheme!
 }
 
@@ -4872,6 +4946,17 @@ func (ec *executionContext) field_Mutation_updateWebPushProxy_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_uploadAppearanceWallpaper_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "file", ec.unmarshalNUpload2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚐUpload)
+	if err != nil {
+		return nil, err
+	}
+	args["file"] = arg0
+	return args, nil
+}
+
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -5127,6 +5212,93 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 
 // region    **************************** field.gotpl *****************************
 
+func (ec *executionContext) _AppearanceSettings_backgroundType(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppearanceSettings_backgroundType,
+		func(ctx context.Context) (any, error) {
+			return obj.BackgroundType, nil
+		},
+		nil,
+		ec.marshalNAppearanceBackgroundType2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceBackgroundType,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppearanceSettings_backgroundType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppearanceSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type AppearanceBackgroundType does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AppearanceSettings_solidTheme(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppearanceSettings_solidTheme,
+		func(ctx context.Context) (any, error) {
+			return obj.SolidTheme, nil
+		},
+		nil,
+		ec.marshalNAppearanceSolidTheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSolidTheme,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppearanceSettings_solidTheme(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppearanceSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type AppearanceSolidTheme does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AppearanceSettings_backgroundMask(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppearanceSettings_backgroundMask,
+		func(ctx context.Context) (any, error) {
+			return obj.BackgroundMask, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppearanceSettings_backgroundMask(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppearanceSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AppearanceSettings_wallpaperColorScheme(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5151,6 +5323,64 @@ func (ec *executionContext) fieldContext_AppearanceSettings_wallpaperColorScheme
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type WallpaperColorScheme does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AppearanceSettings_wallpaperId(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppearanceSettings_wallpaperId,
+		func(ctx context.Context) (any, error) {
+			return obj.WallpaperID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppearanceSettings_wallpaperId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppearanceSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AppearanceSettings_wallpaperFilename(ctx context.Context, field graphql.CollectedField, obj *model.AppearanceSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AppearanceSettings_wallpaperFilename,
+		func(ctx context.Context) (any, error) {
+			return obj.WallpaperFilename, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AppearanceSettings_wallpaperFilename(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AppearanceSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -6974,8 +7204,18 @@ func (ec *executionContext) fieldContext_Mutation_updateAppearanceSettings(ctx c
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "backgroundType":
+				return ec.fieldContext_AppearanceSettings_backgroundType(ctx, field)
+			case "solidTheme":
+				return ec.fieldContext_AppearanceSettings_solidTheme(ctx, field)
+			case "backgroundMask":
+				return ec.fieldContext_AppearanceSettings_backgroundMask(ctx, field)
 			case "wallpaperColorScheme":
 				return ec.fieldContext_AppearanceSettings_wallpaperColorScheme(ctx, field)
+			case "wallpaperId":
+				return ec.fieldContext_AppearanceSettings_wallpaperId(ctx, field)
+			case "wallpaperFilename":
+				return ec.fieldContext_AppearanceSettings_wallpaperFilename(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AppearanceSettings", field.Name)
 		},
@@ -6988,6 +7228,61 @@ func (ec *executionContext) fieldContext_Mutation_updateAppearanceSettings(ctx c
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_updateAppearanceSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_uploadAppearanceWallpaper(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_uploadAppearanceWallpaper,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UploadAppearanceWallpaper(ctx, fc.Args["file"].(graphql.Upload))
+		},
+		nil,
+		ec.marshalNAppearanceSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_uploadAppearanceWallpaper(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "backgroundType":
+				return ec.fieldContext_AppearanceSettings_backgroundType(ctx, field)
+			case "solidTheme":
+				return ec.fieldContext_AppearanceSettings_solidTheme(ctx, field)
+			case "backgroundMask":
+				return ec.fieldContext_AppearanceSettings_backgroundMask(ctx, field)
+			case "wallpaperColorScheme":
+				return ec.fieldContext_AppearanceSettings_wallpaperColorScheme(ctx, field)
+			case "wallpaperId":
+				return ec.fieldContext_AppearanceSettings_wallpaperId(ctx, field)
+			case "wallpaperFilename":
+				return ec.fieldContext_AppearanceSettings_wallpaperFilename(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AppearanceSettings", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_uploadAppearanceWallpaper_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -9768,8 +10063,18 @@ func (ec *executionContext) fieldContext_Query_appearanceSettings(_ context.Cont
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
+			case "backgroundType":
+				return ec.fieldContext_AppearanceSettings_backgroundType(ctx, field)
+			case "solidTheme":
+				return ec.fieldContext_AppearanceSettings_solidTheme(ctx, field)
+			case "backgroundMask":
+				return ec.fieldContext_AppearanceSettings_backgroundMask(ctx, field)
 			case "wallpaperColorScheme":
 				return ec.fieldContext_AppearanceSettings_wallpaperColorScheme(ctx, field)
+			case "wallpaperId":
+				return ec.fieldContext_AppearanceSettings_wallpaperId(ctx, field)
+			case "wallpaperFilename":
+				return ec.fieldContext_AppearanceSettings_wallpaperFilename(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AppearanceSettings", field.Name)
 		},
@@ -21902,13 +22207,34 @@ func (ec *executionContext) unmarshalInputUpdateAppearanceSettingsInput(ctx cont
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"wallpaperColorScheme"}
+	fieldsInOrder := [...]string{"backgroundType", "solidTheme", "backgroundMask", "wallpaperColorScheme"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
 			continue
 		}
 		switch k {
+		case "backgroundType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("backgroundType"))
+			data, err := ec.unmarshalNAppearanceBackgroundType2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceBackgroundType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BackgroundType = data
+		case "solidTheme":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("solidTheme"))
+			data, err := ec.unmarshalNAppearanceSolidTheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSolidTheme(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SolidTheme = data
+		case "backgroundMask":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("backgroundMask"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BackgroundMask = data
 		case "wallpaperColorScheme":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("wallpaperColorScheme"))
 			data, err := ec.unmarshalNWallpaperColorScheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐWallpaperColorScheme(ctx, v)
@@ -22454,8 +22780,33 @@ func (ec *executionContext) _AppearanceSettings(ctx context.Context, sel ast.Sel
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("AppearanceSettings")
+		case "backgroundType":
+			out.Values[i] = ec._AppearanceSettings_backgroundType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "solidTheme":
+			out.Values[i] = ec._AppearanceSettings_solidTheme(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "backgroundMask":
+			out.Values[i] = ec._AppearanceSettings_backgroundMask(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "wallpaperColorScheme":
 			out.Values[i] = ec._AppearanceSettings_wallpaperColorScheme(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "wallpaperId":
+			out.Values[i] = ec._AppearanceSettings_wallpaperId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "wallpaperFilename":
+			out.Values[i] = ec._AppearanceSettings_wallpaperFilename(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -23374,6 +23725,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "updateAppearanceSettings":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateAppearanceSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "uploadAppearanceWallpaper":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_uploadAppearanceWallpaper(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -27599,6 +27957,16 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
+func (ec *executionContext) unmarshalNAppearanceBackgroundType2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceBackgroundType(ctx context.Context, v any) (model.AppearanceBackgroundType, error) {
+	var res model.AppearanceBackgroundType
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAppearanceBackgroundType2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceBackgroundType(ctx context.Context, sel ast.SelectionSet, v model.AppearanceBackgroundType) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNAppearanceSettings2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSettings(ctx context.Context, sel ast.SelectionSet, v model.AppearanceSettings) graphql.Marshaler {
 	return ec._AppearanceSettings(ctx, sel, &v)
 }
@@ -27611,6 +27979,16 @@ func (ec *executionContext) marshalNAppearanceSettings2ᚖgithubᚗcomᚋnzlov�
 		return graphql.Null
 	}
 	return ec._AppearanceSettings(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAppearanceSolidTheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSolidTheme(ctx context.Context, v any) (model.AppearanceSolidTheme, error) {
+	var res model.AppearanceSolidTheme
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAppearanceSolidTheme2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppearanceSolidTheme(ctx context.Context, sel ast.SelectionSet, v model.AppearanceSolidTheme) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNAppendPromptInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐAppendPromptInput(ctx context.Context, v any) (model.AppendPromptInput, error) {

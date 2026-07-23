@@ -8,7 +8,7 @@ import (
 	"github.com/nzlov/anycode/internal/domain/setting"
 )
 
-func TestSystemConfigurationRepositoryPersistsWallpaperColorScheme(t *testing.T) {
+func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	ctx := context.Background()
 	store, err := Open(ctx, OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
 	if err != nil {
@@ -23,11 +23,17 @@ func TestSystemConfigurationRepositoryPersistsWallpaperColorScheme(t *testing.T)
 	if err != nil {
 		t.Fatalf("get default system configuration: %v", err)
 	}
-	if configuration.WallpaperColorScheme != setting.WallpaperColorSchemeContent {
+	if configuration.BackgroundType != setting.BackgroundTypeBing || configuration.SolidTheme != setting.SolidThemeVermilion || configuration.WallpaperColorScheme != setting.WallpaperColorSchemeContent {
 		t.Fatalf("default system configuration = %#v", configuration)
 	}
 
+	configuration.BackgroundType = setting.BackgroundTypeImage
+	configuration.SolidTheme = setting.SolidThemeIndigo
+	configuration.BackgroundMask = 42
 	configuration.WallpaperColorScheme = setting.WallpaperColorSchemeRainbow
+	configuration.WallpaperID = "wallpaper-id"
+	configuration.WallpaperFilename = "山水.png"
+	configuration.WallpaperMimeType = "image/png"
 	if err := store.Settings().SaveSystemConfiguration(ctx, configuration); err != nil {
 		t.Fatalf("save system configuration: %v", err)
 	}
@@ -35,7 +41,7 @@ func TestSystemConfigurationRepositoryPersistsWallpaperColorScheme(t *testing.T)
 	if err != nil {
 		t.Fatalf("get saved system configuration: %v", err)
 	}
-	if got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow {
+	if got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
 		t.Fatalf("saved system configuration = %#v", got)
 	}
 }

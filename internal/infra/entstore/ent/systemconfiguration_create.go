@@ -26,6 +26,90 @@ func (_c *SystemConfigurationCreate) SetWallpaperColorScheme(v string) *SystemCo
 	return _c
 }
 
+// SetBackgroundType sets the "background_type" field.
+func (_c *SystemConfigurationCreate) SetBackgroundType(v string) *SystemConfigurationCreate {
+	_c.mutation.SetBackgroundType(v)
+	return _c
+}
+
+// SetNillableBackgroundType sets the "background_type" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableBackgroundType(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetBackgroundType(*v)
+	}
+	return _c
+}
+
+// SetSolidTheme sets the "solid_theme" field.
+func (_c *SystemConfigurationCreate) SetSolidTheme(v string) *SystemConfigurationCreate {
+	_c.mutation.SetSolidTheme(v)
+	return _c
+}
+
+// SetNillableSolidTheme sets the "solid_theme" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableSolidTheme(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetSolidTheme(*v)
+	}
+	return _c
+}
+
+// SetBackgroundMask sets the "background_mask" field.
+func (_c *SystemConfigurationCreate) SetBackgroundMask(v int) *SystemConfigurationCreate {
+	_c.mutation.SetBackgroundMask(v)
+	return _c
+}
+
+// SetNillableBackgroundMask sets the "background_mask" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableBackgroundMask(v *int) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetBackgroundMask(*v)
+	}
+	return _c
+}
+
+// SetWallpaperID sets the "wallpaper_id" field.
+func (_c *SystemConfigurationCreate) SetWallpaperID(v string) *SystemConfigurationCreate {
+	_c.mutation.SetWallpaperID(v)
+	return _c
+}
+
+// SetNillableWallpaperID sets the "wallpaper_id" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableWallpaperID(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetWallpaperID(*v)
+	}
+	return _c
+}
+
+// SetWallpaperFilename sets the "wallpaper_filename" field.
+func (_c *SystemConfigurationCreate) SetWallpaperFilename(v string) *SystemConfigurationCreate {
+	_c.mutation.SetWallpaperFilename(v)
+	return _c
+}
+
+// SetNillableWallpaperFilename sets the "wallpaper_filename" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableWallpaperFilename(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetWallpaperFilename(*v)
+	}
+	return _c
+}
+
+// SetWallpaperMimeType sets the "wallpaper_mime_type" field.
+func (_c *SystemConfigurationCreate) SetWallpaperMimeType(v string) *SystemConfigurationCreate {
+	_c.mutation.SetWallpaperMimeType(v)
+	return _c
+}
+
+// SetNillableWallpaperMimeType sets the "wallpaper_mime_type" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableWallpaperMimeType(v *string) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetWallpaperMimeType(*v)
+	}
+	return _c
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_c *SystemConfigurationCreate) SetUpdatedAt(v time.Time) *SystemConfigurationCreate {
 	_c.mutation.SetUpdatedAt(v)
@@ -81,6 +165,30 @@ func (_c *SystemConfigurationCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *SystemConfigurationCreate) defaults() {
+	if _, ok := _c.mutation.BackgroundType(); !ok {
+		v := systemconfiguration.DefaultBackgroundType
+		_c.mutation.SetBackgroundType(v)
+	}
+	if _, ok := _c.mutation.SolidTheme(); !ok {
+		v := systemconfiguration.DefaultSolidTheme
+		_c.mutation.SetSolidTheme(v)
+	}
+	if _, ok := _c.mutation.BackgroundMask(); !ok {
+		v := systemconfiguration.DefaultBackgroundMask
+		_c.mutation.SetBackgroundMask(v)
+	}
+	if _, ok := _c.mutation.WallpaperID(); !ok {
+		v := systemconfiguration.DefaultWallpaperID
+		_c.mutation.SetWallpaperID(v)
+	}
+	if _, ok := _c.mutation.WallpaperFilename(); !ok {
+		v := systemconfiguration.DefaultWallpaperFilename
+		_c.mutation.SetWallpaperFilename(v)
+	}
+	if _, ok := _c.mutation.WallpaperMimeType(); !ok {
+		v := systemconfiguration.DefaultWallpaperMimeType
+		_c.mutation.SetWallpaperMimeType(v)
+	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		v := systemconfiguration.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
@@ -96,6 +204,34 @@ func (_c *SystemConfigurationCreate) check() error {
 		if err := systemconfiguration.WallpaperColorSchemeValidator(v); err != nil {
 			return &ValidationError{Name: "wallpaper_color_scheme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.wallpaper_color_scheme": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.BackgroundType(); !ok {
+		return &ValidationError{Name: "background_type", err: errors.New(`ent: missing required field "SystemConfiguration.background_type"`)}
+	}
+	if v, ok := _c.mutation.BackgroundType(); ok {
+		if err := systemconfiguration.BackgroundTypeValidator(v); err != nil {
+			return &ValidationError{Name: "background_type", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.background_type": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SolidTheme(); !ok {
+		return &ValidationError{Name: "solid_theme", err: errors.New(`ent: missing required field "SystemConfiguration.solid_theme"`)}
+	}
+	if v, ok := _c.mutation.SolidTheme(); ok {
+		if err := systemconfiguration.SolidThemeValidator(v); err != nil {
+			return &ValidationError{Name: "solid_theme", err: fmt.Errorf(`ent: validator failed for field "SystemConfiguration.solid_theme": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.BackgroundMask(); !ok {
+		return &ValidationError{Name: "background_mask", err: errors.New(`ent: missing required field "SystemConfiguration.background_mask"`)}
+	}
+	if _, ok := _c.mutation.WallpaperID(); !ok {
+		return &ValidationError{Name: "wallpaper_id", err: errors.New(`ent: missing required field "SystemConfiguration.wallpaper_id"`)}
+	}
+	if _, ok := _c.mutation.WallpaperFilename(); !ok {
+		return &ValidationError{Name: "wallpaper_filename", err: errors.New(`ent: missing required field "SystemConfiguration.wallpaper_filename"`)}
+	}
+	if _, ok := _c.mutation.WallpaperMimeType(); !ok {
+		return &ValidationError{Name: "wallpaper_mime_type", err: errors.New(`ent: missing required field "SystemConfiguration.wallpaper_mime_type"`)}
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "SystemConfiguration.updated_at"`)}
@@ -138,6 +274,30 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)
 		_node.WallpaperColorScheme = value
+	}
+	if value, ok := _c.mutation.BackgroundType(); ok {
+		_spec.SetField(systemconfiguration.FieldBackgroundType, field.TypeString, value)
+		_node.BackgroundType = value
+	}
+	if value, ok := _c.mutation.SolidTheme(); ok {
+		_spec.SetField(systemconfiguration.FieldSolidTheme, field.TypeString, value)
+		_node.SolidTheme = value
+	}
+	if value, ok := _c.mutation.BackgroundMask(); ok {
+		_spec.SetField(systemconfiguration.FieldBackgroundMask, field.TypeInt, value)
+		_node.BackgroundMask = value
+	}
+	if value, ok := _c.mutation.WallpaperID(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperID, field.TypeString, value)
+		_node.WallpaperID = value
+	}
+	if value, ok := _c.mutation.WallpaperFilename(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperFilename, field.TypeString, value)
+		_node.WallpaperFilename = value
+	}
+	if value, ok := _c.mutation.WallpaperMimeType(); ok {
+		_spec.SetField(systemconfiguration.FieldWallpaperMimeType, field.TypeString, value)
+		_node.WallpaperMimeType = value
 	}
 	if value, ok := _c.mutation.UpdatedAt(); ok {
 		_spec.SetField(systemconfiguration.FieldUpdatedAt, field.TypeTime, value)

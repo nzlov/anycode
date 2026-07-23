@@ -20,6 +20,7 @@ import (
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	attachmentapp "github.com/nzlov/anycode/internal/application/attachment"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -34,6 +35,7 @@ type HandlerOption func(*handlerOptions)
 type handlerOptions struct {
 	graphqlHandler  http.Handler
 	attachments     attachmentapp.UseCase
+	settings        settingapp.UseCase
 	artifacts       artifactapp.UseCase
 	sessions        sessionapp.UseCase
 	accessKey       string
@@ -48,6 +50,7 @@ func WithGraphQLUseCases(useCases graph.UseCases) HandlerOption {
 		opts.graphqlHandler = newGraphQLServer(schema, opts.accessKey)
 		opts.sessions = useCases.Sessions
 		opts.artifacts = useCases.Artifacts
+		opts.settings = useCases.Settings
 	}
 }
 
@@ -86,12 +89,33 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
 	mux.Handle("GET /files/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
 	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))
+	mux.Handle("GET /api/appearance/wallpapers/{id}", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveAppearanceWallpaper(w, r, opts.settings)
+	})))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
 	mux.Handle("/", newPWAHandler())
 
 	return mux
+}
+
+func serveAppearanceWallpaper(w http.ResponseWriter, r *http.Request, settings settingapp.UseCase) {
+	if settings == nil {
+		writeApplicationError(w, http.StatusServiceUnavailable, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "appearance service unavailable").WithRetryable(true))
+		return
+	}
+	stream, err := settings.OpenAppearanceWallpaper(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeApplicationError(w, http.StatusNotFound, apperror.New(apperror.CodeNotFound, apperror.CategoryValidationError, "wallpaper not found"))
+		return
+	}
+	defer stream.Reader.Close()
+	w.Header().Set("Content-Type", stream.MimeType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": stream.Filename}))
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.Copy(w, stream.Reader)
 }
 
 func newGraphQLServer(schema graphql.ExecutableSchema, accessKey string) http.Handler {

@@ -1,7 +1,12 @@
 package setting
 
 import (
+	"bytes"
 	"context"
+	"image"
+	"image/color"
+	"image/png"
+	"io"
 	"testing"
 	"time"
 
@@ -42,13 +47,60 @@ func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
 		t.Fatalf("GetAppearanceSettings() = %#v, %v", got, err)
 	}
 	got, err = service.UpdateAppearanceSettings(context.Background(), UpdateAppearanceSettingsInput{
+		BackgroundType:       domain.BackgroundTypeSolid,
+		SolidTheme:           domain.SolidThemeAzure,
+		BackgroundMask:       35,
 		WallpaperColorScheme: domain.WallpaperColorSchemeRainbow,
 	})
-	if err != nil || got.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow || repo.configuration.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow {
+	if err != nil || got.BackgroundType != domain.BackgroundTypeSolid || got.SolidTheme != domain.SolidThemeAzure || got.BackgroundMask != 35 || got.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow || repo.configuration.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow {
 		t.Fatalf("UpdateAppearanceSettings() = %#v, %v; stored %#v", got, err, repo.configuration)
 	}
 	_, err = service.UpdateAppearanceSettings(context.Background(), UpdateAppearanceSettingsInput{
+		BackgroundType:       domain.BackgroundTypeSolid,
+		SolidTheme:           domain.SolidThemeAzure,
 		WallpaperColorScheme: "unknown",
+	})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+}
+
+func TestUploadAppearanceWallpaperStoresImageAndSelectsIt(t *testing.T) {
+	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
+	wallpapers := &fakeWallpaperStore{files: map[string][]byte{}}
+	service := New(repo, wallpapers)
+	imageData := testPNG(t)
+
+	got, err := service.UploadAppearanceWallpaper(context.Background(), UploadAppearanceWallpaperInput{
+		Filename: "山水.png",
+		Size:     int64(len(imageData)),
+		Reader:   bytes.NewReader(imageData),
+	})
+	if err != nil {
+		t.Fatalf("UploadAppearanceWallpaper() error = %v", err)
+	}
+	if got.BackgroundType != domain.BackgroundTypeImage || got.WallpaperID == "" || got.WallpaperFilename != "山水.png" {
+		t.Fatalf("UploadAppearanceWallpaper() = %#v", got)
+	}
+	if len(wallpapers.files[got.WallpaperID]) != len(imageData) || repo.configuration.WallpaperMimeType != "image/png" {
+		t.Fatalf("stored wallpaper = %#v config=%#v", wallpapers.files, repo.configuration)
+	}
+	stream, err := service.OpenAppearanceWallpaper(context.Background(), got.WallpaperID)
+	if err != nil {
+		t.Fatalf("OpenAppearanceWallpaper() error = %v", err)
+	}
+	defer stream.Reader.Close()
+	opened, _ := io.ReadAll(stream.Reader)
+	if !bytes.Equal(opened, imageData) || stream.MimeType != "image/png" {
+		t.Fatalf("opened wallpaper = %d bytes %q", len(opened), stream.MimeType)
+	}
+}
+
+func TestUploadAppearanceWallpaperRejectsNonImage(t *testing.T) {
+	service := New(&fakeRepository{configuration: domain.DefaultSystemConfiguration()}, &fakeWallpaperStore{})
+	data := []byte("not an image")
+	_, err := service.UploadAppearanceWallpaper(context.Background(), UploadAppearanceWallpaperInput{
+		Filename: "note.txt",
+		Size:     int64(len(data)),
+		Reader:   bytes.NewReader(data),
 	})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
@@ -120,6 +172,45 @@ type fakeRepository struct {
 	listQuery     domain.QuickCommandQuery
 	deleteErr     error
 	configuration domain.SystemConfiguration
+}
+
+type fakeWallpaperStore struct {
+	files map[string][]byte
+}
+
+func (s *fakeWallpaperStore) SaveWallpaper(_ context.Context, id string, reader io.Reader) error {
+	if s.files == nil {
+		s.files = map[string][]byte{}
+	}
+	data, err := io.ReadAll(reader)
+	if err == nil {
+		s.files[id] = data
+	}
+	return err
+}
+
+func (s *fakeWallpaperStore) OpenWallpaper(_ context.Context, id string) (io.ReadCloser, error) {
+	data, ok := s.files[id]
+	if !ok {
+		return nil, io.EOF
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+func (s *fakeWallpaperStore) DeleteWallpaper(_ context.Context, id string) error {
+	delete(s.files, id)
+	return nil
+}
+
+func testPNG(t *testing.T) []byte {
+	t.Helper()
+	var output bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.Set(0, 0, color.RGBA{R: 210, G: 48, B: 35, A: 255})
+	if err := png.Encode(&output, img); err != nil {
+		t.Fatal(err)
+	}
+	return output.Bytes()
 }
 
 func (r *fakeRepository) GetSystemConfiguration(_ context.Context) (domain.SystemConfiguration, error) {
