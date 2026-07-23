@@ -70,6 +70,8 @@ test('light and dark themes expose the same complete semantic token contract', (
   assert.ok(light.size > 40, 'theme must define the complete application color roles');
   assert.deepEqual([...dark].sort(), [...light].sort());
   for (const name of required) assert.ok(light.has(name), `${name} is required`);
+  assert.match(themeSource, /:root\s*\{[^}]*--ac-background-mask-color:\s*#ffffff/s);
+  assert.match(themeSource, /\.body--dark\s*\{[^}]*--ac-background-mask-color:\s*#000000/s);
   assert.match(themeSource, /\.body--dark\s*\{[^}]*color-scheme:\s*dark/s);
 });
 

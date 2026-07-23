@@ -1,5 +1,5 @@
 :root {
-  --ac-background-mask-color: var(--ac-m3-light-scrim, #000000);
+  --ac-background-mask-color: #ffffff;
   color-scheme: light;
   --ac-page: var(--ac-m3-light-background, #faf8ff);
   --ac-page-layer: var(--ac-page);
@@ -113,7 +113,7 @@
 }
 
 .body--dark {
-  --ac-background-mask-color: var(--ac-m3-dark-scrim, #000000);
+  --ac-background-mask-color: #000000;
   color-scheme: dark;
   --ac-page: var(--ac-m3-dark-background, #11131b);
   --ac-page-layer: var(--ac-page);
