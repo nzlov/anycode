@@ -10,29 +10,6 @@
           <q-tab name="questions" icon="quiz" label="问题" />
           <q-tab name="diff" icon="difference" label="Diff" />
         </q-tabs>
-        <div class="questions-dialog__actions">
-          <q-btn
-            flat
-            round
-            dense
-            icon="open_in_new"
-            aria-label="打开完整 Diff 页面"
-            :to="fullDiffRoute"
-          >
-            <q-tooltip>打开完整 Diff 页面</q-tooltip>
-          </q-btn>
-          <q-btn
-            flat
-            round
-            dense
-            icon="close"
-            aria-label="关闭"
-            :disable="submitting"
-            @click="emit('update:modelValue', false)"
-          >
-            <q-tooltip>关闭</q-tooltip>
-          </q-btn>
-        </div>
       </div>
       <q-separator />
 
@@ -43,8 +20,6 @@
             :requests="requests"
             :loading="loading"
             :submitting="submitting"
-            show-close
-            @close="emit('update:modelValue', false)"
             @submit="(requestId, answers) => emit('submit', requestId, answers)"
           />
         </q-tab-panel>
@@ -58,7 +33,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import type { RouteLocationRaw } from 'vue-router';
 
 import QuestionsPanel from '@/components/QuestionsPanel.vue';
 import DiffWorkspace from '@/components/DiffWorkspace.vue';
@@ -72,7 +46,6 @@ const props = defineProps<{
   loading?: boolean;
   submitting?: boolean;
   diffTarget: DiffWorkspaceTarget;
-  fullDiffRoute: RouteLocationRaw;
 }>();
 
 const emit = defineEmits<{
@@ -104,18 +77,13 @@ watch(
   overflow: hidden;
 }
 
+.questions-dialog.app-content-dialog {
+  max-height: none !important;
+}
+
 .questions-dialog__tabs {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-right: 8px;
-}
-
-.questions-dialog__actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .questions-dialog__panels,

@@ -10,23 +10,25 @@
     </q-card-section>
 
     <template v-else>
-      <q-tabs
-        v-model="activeQuestionId"
-        dense
-        outside-arrows
-        mobile-arrows
-        align="left"
-        active-class="question-tab--active"
-        class="question-tabs"
-      >
-        <q-tab
-          v-for="(question, index) in questions"
-          :key="question.id"
-          :name="question.id"
-          :label="`问题 ${index + 1}`"
-        />
-      </q-tabs>
-      <q-separator />
+      <template v-if="questions.length > 1">
+        <q-tabs
+          v-model="activeQuestionId"
+          dense
+          outside-arrows
+          mobile-arrows
+          align="left"
+          active-class="question-tab--active"
+          class="question-tabs"
+        >
+          <q-tab
+            v-for="(question, index) in questions"
+            :key="question.id"
+            :name="question.id"
+            :label="`问题 ${index + 1}`"
+          />
+        </q-tabs>
+        <q-separator />
+      </template>
 
       <q-tab-panels v-model="activeQuestionId" animated>
         <q-tab-panel v-for="question in questions" :key="question.id" :name="question.id">
@@ -34,7 +36,7 @@
             <div class="question-body">{{ question.body }}</div>
           </q-card>
 
-          <div class="text-body2 text-weight-bold q-mb-sm">选择答案</div>
+          <div class="text-body2 text-weight-bold q-mb-xs">选择答案</div>
           <q-list class="option-list">
             <q-item
               v-for="option in question.options"
@@ -59,20 +61,21 @@
             </q-item>
 
             <q-item class="option-item option-item--custom">
-              <q-item-section>
+              <q-item-section avatar>
                 <q-radio
                   :model-value="drafts[question.id]?.choice"
                   val="__custom__"
-                  label="自定义答案"
                   @update:model-value="setChoice(question.id, String($event))"
                 />
+              </q-item-section>
+              <q-item-section>
                 <q-input
                   :model-value="draftFor(question.id).customAnswer"
                   dense
                   outlined
                   autogrow
                   class="custom-answer-input"
-                  placeholder="输入自己的答案"
+                  placeholder="输入自定义答案"
                   :disable="drafts[question.id]?.choice !== '__custom__'"
                   @update:model-value="setCustomAnswer(question.id, String($event ?? ''))"
                 />
@@ -85,18 +88,6 @@
 
     <q-separator />
     <q-card-actions class="questions-panel__actions">
-      <q-btn
-        v-if="showClose"
-        flat
-        round
-        icon="close"
-        aria-label="取消"
-        :disable="submitting"
-        @click="emit('close')"
-      >
-        <q-tooltip>取消</q-tooltip>
-      </q-btn>
-      <q-space v-else />
       <q-btn
         unelevated
         color="primary"
@@ -121,11 +112,9 @@ const props = defineProps<{
   requests: QuestionRequest[];
   loading?: boolean;
   submitting?: boolean;
-  showClose?: boolean;
 }>();
 
 const emit = defineEmits<{
-  close: [];
   submit: [requestId: string, answers: QuestionAnswerInput[]];
 }>();
 
@@ -237,8 +226,8 @@ function submit() {
 }
 
 .question-tabs {
-  margin: 14px 36px 0;
-  padding: 8px;
+  margin: 8px 16px 0;
+  padding: 4px;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius);
   background: var(--ac-surface-muted);
@@ -262,14 +251,14 @@ function submit() {
 }
 
 .q-tab-panel {
-  padding: 36px;
+  padding: 16px;
 }
 
 .question-card {
   display: grid;
   gap: 8px;
-  margin-bottom: 22px;
-  padding: 18px;
+  margin-bottom: 10px;
+  padding: 12px;
   border-color: var(--ac-status-warning-border);
   background: var(--ac-status-warning-bg);
   overflow-wrap: anywhere;
@@ -284,7 +273,7 @@ function submit() {
 
 .option-list {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .option-item {
@@ -293,31 +282,26 @@ function submit() {
   background: var(--ac-surface);
 }
 
-.option-item--custom {
-  border-color: var(--ac-status-info-border);
-  background: var(--ac-status-info-bg);
-}
-
 .custom-answer-input {
-  margin: 8px 0 0 40px;
+  margin: 0;
 }
 
 .questions-panel__actions {
-  justify-content: space-between;
-  padding: 12px 36px 22px;
+  justify-content: flex-end;
+  padding: 8px 16px 10px;
 }
 
 @media (max-width: 599.98px) {
   .question-tabs {
-    margin: 12px 16px 0;
+    margin: 8px 12px 0;
   }
 
   .q-tab-panel {
-    padding: 20px 16px;
+    padding: 12px;
   }
 
   .questions-panel__actions {
-    padding: 12px 16px 18px;
+    padding: 8px 12px 10px;
   }
 }
 </style>

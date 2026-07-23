@@ -40,15 +40,12 @@ test('preset choices advance to the next unanswered question without wrapping or
   assert.doesNotMatch(setChoice, /submit\(/);
 });
 
-test('custom answer selection keeps using setChoice without a separate advance handler', () => {
-  const customItem = panelSource.match(
-    /<q-item\s+class="option-item option-item--custom"[\s\S]*?<\/q-item>/,
+test('custom answer text cannot select the option or advance questions', () => {
+  const setCustomAnswer = panelSource.match(
+    /function setCustomAnswer\(questionId: string, customAnswer: string\) \{[\s\S]*?\n\}/,
   )?.[0];
 
-  assert.ok(customItem, 'custom answer item should exist');
-  assert.match(
-    customItem,
-    /val="__custom__"[\s\S]*@update:model-value="setChoice\(question\.id, String\(\$event\)\)"/,
-  );
-  assert.doesNotMatch(customItem, /advance/i);
+  assert.ok(setCustomAnswer, 'setCustomAnswer should exist');
+  assert.match(setCustomAnswer, /customAnswer/);
+  assert.doesNotMatch(setCustomAnswer, /choice:|setChoice|activeQuestionId|submit|advance/i);
 });

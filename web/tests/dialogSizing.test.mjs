@@ -12,6 +12,7 @@ const globalSettingsSource = readSource('../src/components/GlobalSettingsDialog.
 const projectSettingsSource = readSource('../src/components/ProjectSettingsDialog.vue');
 const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
 const questionsSource = readSource('../src/components/QuestionsDialog.vue');
+const questionsPanelSource = readSource('../src/components/QuestionsPanel.vue');
 const diffWorkspaceSource = readSource('../src/components/DiffWorkspace.vue');
 const composerSource = readSource('../src/components/PromptComposer.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
@@ -97,6 +98,23 @@ test('long content dialogs keep one explicit scrolling content area', () => {
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
   assert.match(diffWorkspaceSource, /\.diff-files\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);
+});
+
+test('questions dialog removes its shared height cap and uses compact content spacing', () => {
+  assert.match(
+    questionsSource,
+    /\.questions-dialog\.app-content-dialog\s*{[^}]*max-height:\s*none\s*!important/s,
+  );
+  assert.match(questionsPanelSource, /\.q-tab-panel\s*{[^}]*padding:\s*16px/s);
+  assert.match(
+    questionsPanelSource,
+    /\.question-card\s*{[^}]*margin-bottom:\s*10px[^}]*padding:\s*12px/s,
+  );
+  assert.match(questionsPanelSource, /\.option-list\s*{[^}]*gap:\s*6px/s);
+  assert.match(
+    questionsPanelSource,
+    /\.questions-panel__actions\s*{[^}]*padding:\s*8px 16px 10px/s,
+  );
 });
 
 test('desktop new session panel expands with prompt content without an internal scrollbar', () => {

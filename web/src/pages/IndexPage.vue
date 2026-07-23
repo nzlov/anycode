@@ -306,7 +306,6 @@
       :loading="questionsLoading"
       :submitting="questionsSubmitting"
       :diff-target="questionsDiffTarget"
-      :full-diff-route="questionsAllDiffRoute"
       @submit="submitAnswers"
     />
 
@@ -575,10 +574,6 @@ const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
 const activeCloseSessionId = ref('');
-const questionsAllDiffRoute = computed(() => ({
-  path: '/diff',
-  query: { sessionId: activeQuestionSessionId.value, mode: 'all' },
-}));
 const questionsDiffTarget = computed<DiffWorkspaceTarget>(() => ({
   kind: 'session',
   sessionId: activeQuestionSessionId.value,

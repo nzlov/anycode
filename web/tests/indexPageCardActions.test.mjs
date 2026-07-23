@@ -311,16 +311,13 @@ test('overview waiting questions dialog shows questions and diff before submit',
   assert.match(questionsDialogSource, /<QuestionsPanel/);
   assert.match(questionsDialogSource, /<DiffWorkspace[\s\S]*v-model="diffWorkspaceState"/);
   assert.match(questionsDialogSource, /:target="diffTarget"/);
-  assert.match(questionsDialogSource, /:to="fullDiffRoute"/);
   assert.match(overviewSource, /<QuestionsDialog[\s\S]*:diff-target="questionsDiffTarget"/);
+  assert.doesNotMatch(questionsDialogSource, /fullDiffRoute|打开完整 Diff 页面/);
+  assert.doesNotMatch(overviewSource, /questionsAllDiffRoute|:full-diff-route/);
   assert.match(overviewSource, /getPendingQuestionRequests\(sessionId\)/);
   assert.match(overviewSource, /const requestGeneration = \+\+questionRequestGeneration/);
   assert.match(overviewSource, /activeQuestionSessionId\.value === sessionId/);
   assert.doesNotMatch(overviewSource, /questionsDiffLoading|questionsDiffs|questionsDiffError/);
-  assert.match(
-    overviewSource,
-    /query: \{ sessionId: activeQuestionSessionId\.value, mode: 'all' \}/,
-  );
 });
 
 test('all current diff surfaces reuse one workspace without triggering card navigation', () => {
