@@ -99,13 +99,13 @@ test('long content dialogs keep one explicit scrolling content area', () => {
   assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);
 });
 
-test('desktop new session panel is capped to the viewport and scrolls its body', () => {
+test('desktop new session panel expands with prompt content without an internal scrollbar', () => {
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel\s*{[^}]*max-height:\s*var\(--overview-create-panel-height\)\s*!important/s,
+    /\.new-session-dialog--panel\s*{[^}]*max-height:\s*none\s*!important/s,
   );
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s,
+    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*visible/s,
   );
 });

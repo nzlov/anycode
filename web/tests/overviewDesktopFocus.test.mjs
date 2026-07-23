@@ -39,7 +39,7 @@ test('overview keeps only latest cards and links history from the application he
   assert.doesNotMatch(indexSource, /historySection|historyCards|hasMoreHistory/);
 });
 
-test('desktop create panel uses one project row within its reserved maximum height', () => {
+test('desktop create panel uses one project row and expands with prompt content', () => {
   assert.match(
     stylesSource,
     /:root\s*{[^}]*--overview-create-panel-height:\s*min\(320px, calc\(100dvh - 104px\)\)/s,
@@ -50,11 +50,11 @@ test('desktop create panel uses one project row within its reserved maximum heig
   );
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel\s*{[^}]*position:\s*fixed[^}]*bottom:\s*24px[^}]*height:\s*auto[^}]*max-height:\s*var\(--overview-create-panel-height\)\s*!important[^}]*z-index:/s,
+    /\.new-session-dialog--panel\s*{[^}]*position:\s*fixed[^}]*bottom:\s*24px[^}]*height:\s*auto[^}]*max-height:\s*none\s*!important[^}]*z-index:/s,
   );
   assert.match(
     stylesSource,
-    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*auto/s,
+    /\.new-session-dialog--panel \.new-session-body\s*{[^}]*flex:\s*1 1 auto[^}]*overflow-y:\s*visible/s,
   );
   assert.match(
     stylesSource,

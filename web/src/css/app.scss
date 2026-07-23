@@ -997,7 +997,7 @@ body.desktop
   right: 24px;
   bottom: 24px;
   height: auto;
-  max-height: var(--overview-create-panel-height) !important;
+  max-height: none !important;
   margin: 0;
   border: 1px solid var(--ac-border);
   border-radius: var(--ac-radius) !important;
@@ -1013,7 +1013,7 @@ body.desktop
   flex: 1 1 auto;
   gap: 0;
   padding: 0;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .new-session-dialog--panel .prompt-shell {
