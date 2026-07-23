@@ -187,8 +187,22 @@
             narrow-indicator
           >
             <q-tab name="info" icon="info" label="会话信息" />
-            <q-tab name="changes" icon="difference" label="当前变更" />
-            <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
+            <q-tab name="changes" icon="difference" label="当前变更">
+              <q-badge
+                v-if="session && session.filesChanged > 0"
+                floating
+                color="primary"
+                :label="String(session.filesChanged)"
+              />
+            </q-tab>
+            <q-tab name="artifacts" icon="inventory_2" label="临时文件">
+              <q-badge
+                v-if="session && session.artifactCount > 0"
+                floating
+                color="primary"
+                :label="String(session.artifactCount)"
+              />
+            </q-tab>
           </q-tabs>
           <q-separator v-if="!isMobileLayout" />
           <q-tab-panels v-model="rightPanelTab" animated>
@@ -476,8 +490,22 @@
     >
       <q-tab name="session" icon="forum" label="会话" />
       <q-tab name="info" icon="info" label="信息" />
-      <q-tab name="changes" icon="difference" label="变更" />
-      <q-tab name="artifacts" icon="inventory_2" label="临时文件" />
+      <q-tab name="changes" icon="difference" label="变更">
+        <q-badge
+          v-if="session && session.filesChanged > 0"
+          floating
+          color="primary"
+          :label="String(session.filesChanged)"
+        />
+      </q-tab>
+      <q-tab name="artifacts" icon="inventory_2" label="临时文件">
+        <q-badge
+          v-if="session && session.artifactCount > 0"
+          floating
+          color="primary"
+          :label="String(session.artifactCount)"
+        />
+      </q-tab>
     </q-tabs>
 
     <q-dialog
@@ -582,6 +610,7 @@ import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
+import { sessionPriorityLabel as priorityLabel } from '@/services/sessionPriorityPresentation';
 import { formatTokenCount } from '@/services/sessionTimelinePresentation';
 import { reduceTranscriptEvents } from '@/services/sessionTimelineReducer';
 import {
@@ -1045,15 +1074,6 @@ const allDiffRoute = computed(() => ({
 
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
-}
-
-function priorityLabel(priority: 'high' | 'medium' | 'low') {
-  const labels: Record<'high' | 'medium' | 'low', string> = {
-    high: '高优先级',
-    medium: '中优先级',
-    low: '低优先级',
-  };
-  return labels[priority];
 }
 
 function closeReasonLabel(value: string) {

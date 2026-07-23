@@ -37,7 +37,11 @@
           :card="card"
           :width="sessionColumnWidth(card.id)"
           :min-width="minSessionColumnWidth"
+          :priority-loading="activePrioritySessionId === card.id"
+          :close-loading="activeCloseSessionId === card.id"
           @update:width="setSessionColumnWidth(card.id, $event)"
+          @set-priority="setCardPriority(card, $event)"
+          @close="closeCard(card)"
         />
       </div>
     </section>
@@ -61,14 +65,18 @@
         >
           <q-card-section class="overview-session-card__body">
             <div class="overview-card-chips">
+              <SessionPriorityControl
+                :priority="card.priority"
+                :loading="activePrioritySessionId === card.id"
+                :disabled="card.status === 'closed'"
+                @change="setCardPriority(card, $event)"
+              />
               <q-badge
-                rounded
-                class="lane-status-chip"
-                :class="statusChipClass(card.status)"
+                outline
+                :color="statusColor(card.status)"
                 :label="statusLabel(card.status)"
               />
-              <q-badge rounded class="lane-mode-chip" :label="modeLabel(card.mode)" />
-              <q-badge rounded class="lane-mode-chip" :label="priorityLabel(card.priority)" />
+              <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
             </div>
 
             <div class="overview-card-title">{{ card.title }}</div>
@@ -239,57 +247,14 @@
               </div>
             </div>
           </q-card-section>
-          <q-menu
-            context-menu
+          <SessionCardContextMenu
+            :card="card"
+            :priority-loading="activePrioritySessionId === card.id"
+            :close-loading="activeCloseSessionId === card.id"
             @before-show="handleCardContextMenuBeforeShow(card.id, $event)"
-            @click.stop
-          >
-            <q-list dense class="overview-card-menu app-touch-list">
-              <q-item
-                v-close-popup
-                clickable
-                tag="a"
-                :href="router.resolve({ name: 'session-detail', params: { id: card.id } }).href"
-                target="_blank"
-                rel="noopener noreferrer"
-                @click.stop
-              >
-                <q-item-section avatar>
-                  <q-icon name="open_in_new" />
-                </q-item-section>
-                <q-item-section>在新标签页中打开</q-item-section>
-              </q-item>
-              <q-separator />
-              <q-item-label header>优先级</q-item-label>
-              <q-item
-                v-for="priority in priorities"
-                :key="priority"
-                v-close-popup
-                clickable
-                :active="card.priority === priority"
-                :disable="card.status === 'closed'"
-                @click.stop="setCardPriority(card, priority)"
-              >
-                <q-item-section>{{ priorityLabel(priority) }}</q-item-section>
-                <q-item-section v-if="card.priority === priority" side>
-                  <q-icon name="check" color="primary" />
-                </q-item-section>
-              </q-item>
-              <q-separator />
-              <q-item
-                v-close-popup
-                clickable
-                class="text-negative"
-                :disable="!card.availableActions.includes('close')"
-                @click.stop="closeCard(card)"
-              >
-                <q-item-section avatar>
-                  <q-icon name="close" />
-                </q-item-section>
-                <q-item-section>关闭卡片</q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
+            @set-priority="setCardPriority(card, $event)"
+            @close="closeCard(card)"
+          />
         </q-card>
       </div>
     </section>
@@ -470,6 +435,8 @@ import NewSessionDialog from '@/components/NewSessionDialog.vue';
 import OverviewHorizontalSession from '@/components/OverviewHorizontalSession.vue';
 import PageToolbar from '@/components/PageToolbar.vue';
 import ProjectVisibilityFilters from '@/components/ProjectVisibilityFilters.vue';
+import SessionCardContextMenu from '@/components/SessionCardContextMenu.vue';
+import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
@@ -487,7 +454,11 @@ import {
   type SessionArtifactFocusRequest,
   type SessionFile,
 } from '@/services/sessionFiles';
-import { sessionStatusLabel as statusLabel } from '@/services/sessionStatusPresentation';
+import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
+import {
+  sessionStatusColor as statusColor,
+  sessionStatusLabel as statusLabel,
+} from '@/services/sessionStatusPresentation';
 import {
   closeSession,
   executeSession,
@@ -503,9 +474,7 @@ import {
   type QuestionRequest,
   type PendingApproval,
   type SessionCard,
-  type SessionMode,
   type SessionPriority,
-  type SessionStatus,
   type SessionUpdateEvent,
 } from '@/services/sessions';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
@@ -606,7 +575,6 @@ const cardActionLoading = ref(false);
 const activeActionSessionId = ref('');
 const activePrioritySessionId = ref('');
 const activeCloseSessionId = ref('');
-const priorities: SessionPriority[] = ['high', 'medium', 'low'];
 const questionsAllDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId: activeQuestionSessionId.value, mode: 'all' },
@@ -857,23 +825,6 @@ function replaceOverviewCard(card: SessionCard) {
   latestRows.value = [card, ...withoutCurrent].sort((left, right) =>
     right.updatedTime.localeCompare(left.updatedTime),
   );
-}
-
-function modeLabel(mode: SessionMode) {
-  return mode === 'workflow' ? '流程模式' : '会话模式';
-}
-
-function priorityLabel(priority: SessionPriority) {
-  const labels: Record<SessionPriority, string> = {
-    high: '高优先级',
-    medium: '中优先级',
-    low: '低优先级',
-  };
-  return labels[priority];
-}
-
-function statusChipClass(status: SessionStatus) {
-  return `lane-status-chip--${status}`;
 }
 
 function overviewCardClass(card: SessionCard) {

@@ -308,6 +308,8 @@ interface GraphQLSessionDetail {
   currentNodeTitle: string;
   pendingApproval?: GraphQLPendingApproval | null;
   todoList?: GraphQLSessionTodoList | null;
+  artifactCount: number;
+  filesChanged: number;
   config: SessionConfig;
   usage?: TranscriptTokenUsage | null;
   promptAppends?: GraphQLPromptAppend[];
@@ -479,6 +481,8 @@ const sessionDetailFields = `
       completed
     }
   }
+  artifactCount
+  filesChanged
   config {
     codexModel
     reasoningEffort
@@ -1151,8 +1155,8 @@ function normalizeSessionDetail(session: GraphQLSessionDetail): SessionDetail {
     updatedTime: session.updatedAt,
     pendingApproval: normalizePendingApproval(session.pendingApproval),
     todoList: normalizeTodoList(session.todoList),
-    artifactCount: 0,
-    filesChanged: 0,
+    artifactCount: Math.max(0, session.artifactCount),
+    filesChanged: Math.max(0, session.filesChanged),
     usage: session.usage ?? null,
     config: session.config,
     closeReason: session.closeReason ?? null,

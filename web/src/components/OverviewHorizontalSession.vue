@@ -8,8 +8,22 @@
       <OverviewHorizontalSessionMobile
         v-if="sessionLayout === 'mobile'"
         :card="card"
+        :priority-loading="priorityLoading"
+        @set-priority="emit('set-priority', $event)"
       />
-      <OverviewHorizontalSessionDesktop v-else :card="card" />
+      <OverviewHorizontalSessionDesktop
+        v-else
+        :card="card"
+        :priority-loading="priorityLoading"
+        @set-priority="emit('set-priority', $event)"
+      />
+      <SessionCardContextMenu
+        :card="card"
+        :priority-loading="priorityLoading"
+        :close-loading="closeLoading"
+        @set-priority="emit('set-priority', $event)"
+        @close="emit('close')"
+      />
     </div>
 
     <div
@@ -38,16 +52,21 @@ import { computed, ref } from 'vue';
 
 import OverviewHorizontalSessionDesktop from '@/components/OverviewHorizontalSessionDesktop.vue';
 import OverviewHorizontalSessionMobile from '@/components/OverviewHorizontalSessionMobile.vue';
-import type { SessionCard } from '@/services/sessions';
+import SessionCardContextMenu from '@/components/SessionCardContextMenu.vue';
+import type { SessionCard, SessionPriority } from '@/services/sessions';
 
 const props = defineProps<{
   card: SessionCard;
   width: number;
   minWidth: number;
+  priorityLoading?: boolean;
+  closeLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:width': [width: number];
+  'set-priority': [priority: SessionPriority];
+  close: [];
 }>();
 
 const desktopSessionMinWidth = 1024;

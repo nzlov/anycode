@@ -16,12 +16,15 @@ const viewModeSource = readSource('../src/composables/useOverviewViewMode.ts');
 const horizontalSessionSource = readSource('../src/components/OverviewHorizontalSession.vue');
 const desktopSessionSource = readSource('../src/components/OverviewHorizontalSessionDesktop.vue');
 const mobileSessionSource = readSource('../src/components/OverviewHorizontalSessionMobile.vue');
+const contextMenuSource = readSource('../src/components/SessionCardContextMenu.vue');
+const priorityControlSource = readSource('../src/components/SessionPriorityControl.vue');
 const detailViewSource = readSource('../src/components/SessionDetailView.vue');
 const detailPageSource = readSource('../src/pages/SessionDetailPage.vue');
 const detailComposableSource = readSource('../src/composables/useSessionDetail.ts');
 const stylesSource = readSource('../src/css/app.scss');
 const schemaSource = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
 const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
+const sessionsSource = readSource('../src/services/sessions.ts');
 
 test('desktop header switches between card and horizontal overview modes beside history', () => {
   assert.match(
@@ -172,6 +175,30 @@ test('single horizontal session selects dedicated mobile and desktop components 
   assert.match(desktopSessionSource, /<SessionDetailView[\s\S]*layout="desktop"/);
 });
 
+test('horizontal headers expose live card metadata and priority controls in both widths', () => {
+  for (const source of [desktopSessionSource, mobileSessionSource]) {
+    assert.match(source, /<SessionPriorityControl/);
+    assert.match(source, /:priority="card\.priority"/);
+    assert.match(source, /@change="emit\('set-priority', \$event\)"/);
+    assert.match(source, /<TokenUsageDisplay v-if="card\.usage" :usage="card\.usage"/);
+  }
+  assert.match(priorityControlSource, /aria-label="变更会话优先级"/);
+  assert.match(priorityControlSource, /v-for="option in priorities"/);
+  assert.match(indexSource, /@set-priority="setCardPriority\(card, \$event\)"/);
+  assert.match(indexSource, /if \(update\.usage\)[\s\S]*usage: update\.usage/);
+  assert.match(indexSource, /if \(update\.priority\)[\s\S]*priority: update\.priority/);
+});
+
+test('horizontal sessions share the card context menu actions', () => {
+  assert.match(horizontalSessionSource, /<SessionCardContextMenu/);
+  assert.match(horizontalSessionSource, /@set-priority="emit\('set-priority', \$event\)"/);
+  assert.match(horizontalSessionSource, /@close="emit\('close'\)"/);
+  assert.match(contextMenuSource, /<q-menu\s+context-menu/);
+  assert.match(contextMenuSource, /在新标签页中打开/);
+  assert.match(contextMenuSource, /@click\.stop="emit\('set-priority', priority\)"/);
+  assert.match(contextMenuSource, /@click\.stop="emit\('close'\)"/);
+});
+
 test('horizontal sessions render the complete reusable detail surface', () => {
   assert.match(detailPageSource, /<SessionDetailView[\s\S]*layout="responsive"[\s\S]*page/);
   assert.match(detailViewSource, /<SessionEventMessage/);
@@ -182,6 +209,28 @@ test('horizontal sessions render the complete reusable detail surface', () => {
   assert.match(detailViewSource, /<DiffWorkspace/);
   assert.match(detailViewSource, /<SessionArtifactsPanel/);
   assert.match(detailViewSource, /class="append-history"/);
+});
+
+test('detail tabs show persisted counts and apply websocket count updates', () => {
+  assert.match(
+    sessionsSource,
+    /const sessionDetailFields = `[\s\S]*artifactCount[\s\S]*filesChanged[\s\S]*config \{/,
+  );
+  assert.match(
+    sessionsSource,
+    /artifactCount: Math\.max\(0, session\.artifactCount\)[\s\S]*filesChanged: Math\.max\(0, session\.filesChanged\)/,
+  );
+  assert.equal((detailViewSource.match(/session\.filesChanged > 0/g) ?? []).length, 2);
+  assert.equal((detailViewSource.match(/session\.artifactCount > 0/g) ?? []).length, 2);
+  assert.equal((detailViewSource.match(/floating\s+color="primary"/g) ?? []).length, 4);
+  assert.match(
+    detailComposableSource,
+    /typeof update\.filesChanged === 'number'[\s\S]*filesChanged: update\.filesChanged/,
+  );
+  assert.match(
+    detailComposableSource,
+    /typeof update\.artifactCount === 'number'[\s\S]*artifactCount: update\.artifactCount/,
+  );
 });
 
 test('horizontal mode keeps one existing detail subscription per session', () => {

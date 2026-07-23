@@ -13,10 +13,15 @@ test('overview cards rely on the card click target instead of a duplicate detail
 
 test('overview card actions use a context menu without a visible trigger', () => {
   const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+  const contextMenuSource = readFileSync(
+    new URL('../src/components/SessionCardContextMenu.vue', import.meta.url),
+    'utf8',
+  );
 
   assert.doesNotMatch(source, /aria-label="卡片操作"/);
   assert.doesNotMatch(source, /icon="more_vert"/);
-  assert.match(source, /<q-menu\s+context-menu/);
+  assert.match(source, /<SessionCardContextMenu/);
+  assert.match(contextMenuSource, /<q-menu\s+context-menu/);
   assert.match(
     source,
     /class="overview-todo-btn app-command-btn"[\s\S]*?@contextmenu\.stop[\s\S]*?@touchstart\.stop/,
@@ -28,12 +33,23 @@ test('overview card actions use a context menu without a visible trigger', () =>
   assert.match(source, /@click="openSessionCard\(card\.id\)"/);
   assert.match(source, /@touchend="releaseCardContextMenuTouch\(card\.id\)"/);
   assert.match(source, /@before-show="handleCardContextMenuBeforeShow\(card\.id, \$event\)"/);
-  assert.match(source, /在新标签页中打开/);
-  assert.match(source, /target="_blank"/);
-  assert.match(source, /rel="noopener noreferrer"/);
+  assert.match(contextMenuSource, /在新标签页中打开/);
+  assert.match(contextMenuSource, /target="_blank"/);
+  assert.match(contextMenuSource, /rel="noopener noreferrer"/);
   assert.match(source, /GLUE: suppress Quasar's synthetic post-long-press click/);
   assert.match(source, /@keyup\.enter\.self=/);
   assert.match(source, /@keyup\.space\.self\.prevent=/);
+});
+
+test('overview card badges match horizontal priority, status, and mode presentation', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+
+  assert.match(
+    source,
+    /class="overview-card-chips"[\s\S]*?<SessionPriorityControl[\s\S]*?:priority="card\.priority"[\s\S]*?@change="setCardPriority\(card, \$event\)"[\s\S]*?<q-badge[\s\S]*?outline[\s\S]*?:color="statusColor\(card\.status\)"[\s\S]*?:label="statusLabel\(card\.status\)"[\s\S]*?<q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel\(card\.mode\)"/,
+  );
+  assert.doesNotMatch(source, /:class="statusChipClass\(card\.status\)"/);
+  assert.doesNotMatch(source, /:label="priorityLabel\(card\.priority\)"/);
 });
 
 test('overview TODO menu supports hover without removing click, touch, or keyboard access', () => {

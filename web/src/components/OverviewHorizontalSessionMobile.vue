@@ -3,14 +3,21 @@
     <header class="overview-horizontal-session-mobile__header">
       <div class="overview-horizontal-session-mobile__heading">
         <div class="overview-horizontal-session-mobile__badges">
+          <SessionPriorityControl
+            :priority="card.priority"
+            :loading="priorityLoading"
+            :disabled="card.status === 'closed'"
+            @change="emit('set-priority', $event)"
+          />
           <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
-          <q-badge rounded class="lane-mode-chip" :label="modeLabel" />
+          <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
         </div>
         <div class="overview-horizontal-session-mobile__title" :title="card.title">
           {{ card.title }}
         </div>
-        <div class="overview-horizontal-session-mobile__project" :title="card.projectName">
-          {{ card.projectName }}
+        <div class="overview-horizontal-session-mobile__project">
+          <span :title="card.projectName">{{ card.projectName }}</span>
+          <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
         </div>
       </div>
       <q-btn
@@ -34,20 +41,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-
 import SessionDetailView from '@/components/SessionDetailView.vue';
+import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
+import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
+import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
-import type { SessionCard } from '@/services/sessions';
+import type { SessionCard, SessionPriority } from '@/services/sessions';
 
-const props = defineProps<{
+defineProps<{
   card: SessionCard;
+  priorityLoading?: boolean;
 }>();
 
-const modeLabel = computed(() => (props.card.mode === 'workflow' ? '流程' : '对话'));
+const emit = defineEmits<{
+  'set-priority': [priority: SessionPriority];
+}>();
+
 </script>
 
 <style scoped>
@@ -103,8 +115,18 @@ const modeLabel = computed(() => (props.card.mode === 'workflow' ? '流程' : '�
 }
 
 .overview-horizontal-session-mobile__project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--ac-text-muted);
   font-size: 12px;
+}
+
+.overview-horizontal-session-mobile__project > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-horizontal-session-mobile__detail {

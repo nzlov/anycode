@@ -7,13 +7,20 @@
         </div>
         <div class="overview-horizontal-session-desktop__meta">
           <span :title="card.projectName">{{ card.projectName }}</span>
+          <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
           <span :title="card.branch">{{ card.branch }}</span>
           <span v-if="card.mode === 'workflow'" :title="card.node">{{ card.node }}</span>
         </div>
       </div>
       <div class="overview-horizontal-session-desktop__actions">
+        <SessionPriorityControl
+          :priority="card.priority"
+          :loading="priorityLoading"
+          :disabled="card.status === 'closed'"
+          @change="emit('set-priority', $event)"
+        />
         <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
-        <q-badge rounded class="lane-mode-chip" :label="modeLabel" />
+        <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
         <q-btn
           flat
           round
@@ -36,20 +43,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-
 import SessionDetailView from '@/components/SessionDetailView.vue';
+import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
+import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
+import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
-import type { SessionCard } from '@/services/sessions';
+import type { SessionCard, SessionPriority } from '@/services/sessions';
 
-const props = defineProps<{
+defineProps<{
   card: SessionCard;
+  priorityLoading?: boolean;
 }>();
 
-const modeLabel = computed(() => (props.card.mode === 'workflow' ? '流程' : '对话'));
+const emit = defineEmits<{
+  'set-priority': [priority: SessionPriority];
+}>();
+
 </script>
 
 <style scoped>
