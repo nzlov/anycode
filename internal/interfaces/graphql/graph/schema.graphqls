@@ -274,6 +274,8 @@ type SessionDetail {
   currentNodeTitle: String!
   pendingApproval: PendingApproval
   todoList: TodoList
+  artifactCount: Int!
+  filesChanged: Int!
   worktreePath: String!
   worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!

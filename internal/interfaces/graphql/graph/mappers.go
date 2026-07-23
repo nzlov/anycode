@@ -240,6 +240,8 @@ func mapSessionDetail(dto sessionapp.DetailDTO) *model.SessionDetail {
 		CurrentNodeTitle: dto.CurrentNodeTitle,
 		PendingApproval:  mapPendingApproval(dto.PendingApproval),
 		TodoList:         mapTodoList(dto.TodoList),
+		ArtifactCount:    dto.ArtifactCount,
+		FilesChanged:     dto.FilesChanged,
 		WorktreePath:     dto.WorktreePath,
 		WorktreeCleanup:  mapWorktreeCleanup(dto.WorktreeCleanup),
 		CodexSessionID:   dto.CodexSessionID,

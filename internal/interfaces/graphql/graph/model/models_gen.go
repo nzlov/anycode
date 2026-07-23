@@ -455,6 +455,8 @@ type SessionDetail struct {
 	CurrentNodeTitle string                `json:"currentNodeTitle"`
 	PendingApproval  *PendingApproval      `json:"pendingApproval,omitempty"`
 	TodoList         *TodoList             `json:"todoList,omitempty"`
+	ArtifactCount    int                   `json:"artifactCount"`
+	FilesChanged     int                   `json:"filesChanged"`
 	WorktreePath     string                `json:"worktreePath"`
 	WorktreeCleanup  *WorktreeCleanup      `json:"worktreeCleanup"`
 	CodexSessionID   string                `json:"codexSessionId"`

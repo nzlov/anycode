@@ -56,6 +56,36 @@ func TestGraphQLAllowsLocalDevelopmentWithoutAccessKey(t *testing.T) {
 	}
 }
 
+func TestGraphQLSessionDetailReturnsPersistedCounts(t *testing.T) {
+	handler := NewHandler(config.Config{}, WithGraphQLUseCases(graph.UseCases{
+		Sessions: sessionDetailCountUseCase{},
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(
+		`{"query":"query { session(id: \"session-1\") { artifactCount filesChanged } }"}`,
+	))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("session detail status = %d, want %d; body: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var response struct {
+		Data struct {
+			Session struct {
+				ArtifactCount int `json:"artifactCount"`
+				FilesChanged  int `json:"filesChanged"`
+			} `json:"session"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode session detail response: %v; body: %s", err, rec.Body.String())
+	}
+	if response.Data.Session.ArtifactCount != 2 || response.Data.Session.FilesChanged != 4 {
+		t.Fatalf("session detail counts = %#v, want artifactCount=2 filesChanged=4", response.Data.Session)
+	}
+}
+
 func TestGraphQLRequiresBearerWhenAccessKeyIsConfigured(t *testing.T) {
 	handler := NewHandler(config.Config{AccessKey: "secret"}, WithGraphQLUseCases(graph.UseCases{}))
 
@@ -507,6 +537,14 @@ type fakeSessionEventUseCase struct {
 	events     chan timelineapp.DTO
 	updates    chan sessioneventapp.UpdateDTO
 	subscribed chan struct{}
+}
+
+type sessionDetailCountUseCase struct {
+	sessionapp.UseCase
+}
+
+func (sessionDetailCountUseCase) GetSession(context.Context, sessiondomain.ID) (sessionapp.DetailDTO, error) {
+	return sessionapp.DetailDTO{DTO: sessionapp.DTO{ArtifactCount: 2, FilesChanged: 4}}, nil
 }
 
 func (u *fakeSessionEventUseCase) SessionEvents(context.Context, sessiondomain.ID) (<-chan timelineapp.DTO, error) {

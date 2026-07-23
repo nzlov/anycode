@@ -373,6 +373,7 @@ type ComplexityRoot struct {
 	}
 
 	SessionDetail struct {
+		ArtifactCount    func(childComplexity int) int
 		Attachments      func(childComplexity int) int
 		AvailableActions func(childComplexity int) int
 		BaseBranch       func(childComplexity int) int
@@ -382,6 +383,7 @@ type ComplexityRoot struct {
 		Config           func(childComplexity int) int
 		CreatedAt        func(childComplexity int) int
 		CurrentNodeTitle func(childComplexity int) int
+		FilesChanged     func(childComplexity int) int
 		ID               func(childComplexity int) int
 		LastRunAt        func(childComplexity int) int
 		Mode             func(childComplexity int) int
@@ -2318,6 +2320,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.SessionConfig.ReasoningEffort(childComplexity), true
 
+	case "SessionDetail.artifactCount":
+		if e.ComplexityRoot.SessionDetail.ArtifactCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.ArtifactCount(childComplexity), true
 	case "SessionDetail.attachments":
 		if e.ComplexityRoot.SessionDetail.Attachments == nil {
 			break
@@ -2372,6 +2380,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionDetail.CurrentNodeTitle(childComplexity), true
+	case "SessionDetail.filesChanged":
+		if e.ComplexityRoot.SessionDetail.FilesChanged == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionDetail.FilesChanged(childComplexity), true
 	case "SessionDetail.id":
 		if e.ComplexityRoot.SessionDetail.ID == nil {
 			break
@@ -3864,6 +3878,8 @@ type SessionDetail {
   currentNodeTitle: String!
   pendingApproval: PendingApproval
   todoList: TodoList
+  artifactCount: Int!
+  filesChanged: Int!
   worktreePath: String!
   worktreeCleanup: WorktreeCleanup!
   codexSessionId: String!
@@ -10177,6 +10193,10 @@ func (ec *executionContext) fieldContext_Query_session(ctx context.Context, fiel
 				return ec.fieldContext_SessionDetail_pendingApproval(ctx, field)
 			case "todoList":
 				return ec.fieldContext_SessionDetail_todoList(ctx, field)
+			case "artifactCount":
+				return ec.fieldContext_SessionDetail_artifactCount(ctx, field)
+			case "filesChanged":
+				return ec.fieldContext_SessionDetail_filesChanged(ctx, field)
 			case "worktreePath":
 				return ec.fieldContext_SessionDetail_worktreePath(ctx, field)
 			case "worktreeCleanup":
@@ -13645,6 +13665,64 @@ func (ec *executionContext) fieldContext_SessionDetail_todoList(_ context.Contex
 				return ec.fieldContext_TodoList_items(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TodoList", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_artifactCount(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_artifactCount,
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_artifactCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SessionDetail_filesChanged(ctx context.Context, field graphql.CollectedField, obj *model.SessionDetail) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionDetail_filesChanged,
+		func(ctx context.Context) (any, error) {
+			return obj.FilesChanged, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionDetail_filesChanged(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionDetail",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -25261,6 +25339,16 @@ func (ec *executionContext) _SessionDetail(ctx context.Context, sel ast.Selectio
 			out.Values[i] = ec._SessionDetail_pendingApproval(ctx, field, obj)
 		case "todoList":
 			out.Values[i] = ec._SessionDetail_todoList(ctx, field, obj)
+		case "artifactCount":
+			out.Values[i] = ec._SessionDetail_artifactCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filesChanged":
+			out.Values[i] = ec._SessionDetail_filesChanged(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "worktreePath":
 			out.Values[i] = ec._SessionDetail_worktreePath(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
