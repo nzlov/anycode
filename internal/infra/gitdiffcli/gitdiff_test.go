@@ -437,6 +437,66 @@ func TestChangedFilesAndFileDiff(t *testing.T) {
 	}
 }
 
+func TestChangedFilesPreservesNonASCIIAndSpecialPaths(t *testing.T) {
+	ctx := context.Background()
+	repo := initRepo(t)
+	trackedPath := "docs/requirements/src/架构/接口与数据模型.md"
+	oldPath := "资料/旧名称.md"
+	newPath := "资料/新名称.md"
+	untrackedPath := "资料/未跟踪\t文件.md"
+	writeFile(t, repo, trackedPath, "before\n")
+	writeFile(t, repo, oldPath, "rename\n")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "initial")
+
+	writeFile(t, repo, trackedPath, "after\n")
+	if err := os.Rename(filepath.Join(repo, oldPath), filepath.Join(repo, newPath)); err != nil {
+		t.Fatalf("rename file: %v", err)
+	}
+	runGit(t, repo, "add", "-A")
+	writeFile(t, repo, untrackedPath, "first\nsecond\n")
+
+	client := New("")
+	files, err := client.ChangedFiles(ctx, gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"})
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("ChangedFiles() len = %d, files = %#v", len(files), files)
+	}
+	if tracked := findFile(files, trackedPath); tracked.Path != trackedPath || tracked.Status != "modified" || tracked.Additions != 1 || tracked.Deletions != 1 {
+		t.Fatalf("tracked file = %#v", tracked)
+	}
+	if renamed := findFile(files, newPath); renamed.Path != newPath || renamed.Status != "renamed" {
+		t.Fatalf("renamed file = %#v", renamed)
+	}
+	if untracked := findFile(files, untrackedPath); untracked.Path != untrackedPath || untracked.Status != "added" || untracked.Additions != 2 {
+		t.Fatalf("untracked file = %#v", untracked)
+	}
+
+	trackedDiff, err := client.FileDiff(ctx, gitdiff.FileDiffInput{
+		DiffInput: gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"},
+		FilePath:  trackedPath,
+	})
+	if err != nil {
+		t.Fatalf("FileDiff(tracked) error = %v", err)
+	}
+	if trackedDiff.File.Path != trackedPath || len(trackedDiff.Hunks) != 1 {
+		t.Fatalf("FileDiff(tracked) = %#v", trackedDiff)
+	}
+
+	untrackedDiff, err := client.FileDiff(ctx, gitdiff.FileDiffInput{
+		DiffInput: gitdiff.DiffInput{WorktreePath: repo, BaseRef: "HEAD"},
+		FilePath:  untrackedPath,
+	})
+	if err != nil {
+		t.Fatalf("FileDiff(untracked) error = %v", err)
+	}
+	if untrackedDiff.File.Path != untrackedPath || len(untrackedDiff.Hunks) != 1 {
+		t.Fatalf("FileDiff(untracked) = %#v", untrackedDiff)
+	}
+}
+
 func TestFileDiffDefaultsToTenContextLines(t *testing.T) {
 	ctx := context.Background()
 	repo := initRepo(t)

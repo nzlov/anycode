@@ -228,13 +228,13 @@ func (c *Client) ChangedFiles(ctx context.Context, input gitdiff.DiffInput) ([]g
 	if err != nil {
 		return nil, err
 	}
-	nameStatusArgs := append([]string{"diff", "--name-status"}, refs...)
+	nameStatusArgs := append([]string{"diff", "--name-status", "-z"}, refs...)
 	nameStatusArgs = append(nameStatusArgs, "--")
 	nameStatus, err := c.run(ctx, input.WorktreePath, nameStatusArgs...)
 	if err != nil {
 		return nil, err
 	}
-	numstatArgs := append([]string{"diff", "--numstat"}, refs...)
+	numstatArgs := append([]string{"diff", "--numstat", "-z"}, refs...)
 	numstatArgs = append(numstatArgs, "--")
 	numstat, err := c.run(ctx, input.WorktreePath, numstatArgs...)
 	if err != nil {
@@ -488,13 +488,12 @@ func (c *Client) fileStats(ctx context.Context, input gitdiff.DiffInput, filePat
 }
 
 func (c *Client) untrackedFiles(ctx context.Context, path string) ([]gitdiff.DiffFile, error) {
-	out, err := c.run(ctx, path, "ls-files", "--others", "--exclude-standard")
+	out, err := c.run(ctx, path, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
 		return nil, err
 	}
 	files := []gitdiff.DiffFile{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		name := strings.TrimSpace(line)
+	for _, name := range strings.Split(out, "\x00") {
 		if name == "" {
 			continue
 		}
@@ -599,15 +598,24 @@ type lineCount struct {
 
 func parseNumstat(out string) map[string]lineCount {
 	counts := make(map[string]lineCount)
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) == "" {
+	records := strings.Split(out, "\x00")
+	for i := 0; i < len(records); i++ {
+		fields := strings.SplitN(records[i], "\t", 3)
+		if len(fields) != 3 {
 			continue
 		}
-		fields := strings.Split(line, "\t")
-		if len(fields) < 3 {
+		path := fields[2]
+		if path == "" {
+			if i+2 >= len(records) {
+				continue
+			}
+			path = records[i+2]
+			i += 2
+		}
+		if path == "" {
 			continue
 		}
-		counts[normalizeDiffPath(fields[len(fields)-1])] = lineCount{
+		counts[path] = lineCount{
 			additions: parseCount(fields[0]),
 			deletions: parseCount(fields[1]),
 		}
@@ -617,17 +625,31 @@ func parseNumstat(out string) map[string]lineCount {
 
 func parseNameStatus(out string) []gitdiff.DiffFile {
 	files := []gitdiff.DiffFile{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if strings.TrimSpace(line) == "" {
+	fields := strings.Split(out, "\x00")
+	for i := 0; i < len(fields); {
+		status := fields[i]
+		i++
+		if status == "" {
 			continue
 		}
-		fields := strings.Split(line, "\t")
-		if len(fields) < 2 {
+		if i >= len(fields) {
+			break
+		}
+		path := fields[i]
+		i++
+		if strings.HasPrefix(status, "R") || strings.HasPrefix(status, "C") {
+			if i >= len(fields) {
+				break
+			}
+			path = fields[i]
+			i++
+		}
+		if path == "" {
 			continue
 		}
 		files = append(files, gitdiff.DiffFile{
-			Path:   normalizeDiffPath(fields[len(fields)-1]),
-			Status: statusName(fields[0]),
+			Path:   path,
+			Status: statusName(status),
 		})
 	}
 	return files
@@ -821,10 +843,6 @@ func parseCount(value string) int {
 		return 0
 	}
 	return n
-}
-
-func normalizeDiffPath(path string) string {
-	return strings.TrimSpace(strings.Trim(path, "\""))
 }
 
 func normalizedBaseRef(baseRef string) string {
