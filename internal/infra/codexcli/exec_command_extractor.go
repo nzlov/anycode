@@ -46,6 +46,40 @@ func extractExecToolName(source string) string {
 	return calls[0].name
 }
 
+func extractCommandTransportExecutionID(source string) string {
+	// GLUE: Outer exec JavaScript is the only place transport IDs exist until rollouts expose a parent command correlation.
+	calls, ok := parseExecToolCalls(source)
+	if !ok {
+		return ""
+	}
+	for _, call := range calls {
+		if !isCommandTransportTool(call.name) || call.call == nil || len(call.call.ArgumentList) != 1 {
+			continue
+		}
+		object, ok := call.call.ArgumentList[0].(*ast.ObjectLiteral)
+		if !ok {
+			continue
+		}
+		for _, property := range object.Value {
+			keyed, ok := property.(*ast.PropertyKeyed)
+			if !ok || keyed.Computed || keyed.Kind != ast.PropertyKindValue {
+				continue
+			}
+			key, ok := staticPropertyName(keyed.Key)
+			if !ok || key != "cell_id" && key != "session_id" {
+				continue
+			}
+			switch value := keyed.Value.(type) {
+			case *ast.StringLiteral:
+				return value.Value.String()
+			case *ast.NumberLiteral:
+				return value.Literal
+			}
+		}
+	}
+	return ""
+}
+
 func extractUpdatePlanInvocation(source string) (map[string]any, bool) {
 	calls, ok := parseExecToolCalls(source)
 	if !ok {
