@@ -13,31 +13,43 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 - Manage multiple projects and sessions in one workspace, with a consolidated view of runtime status, priority, TODOs, and code changes.
 - Create an isolated worktree from a selected branch for each Git project session, reducing interference between concurrent tasks.
 - Use either a session mode for direct interaction with Codex or a workflow mode with conditions, retries, approvals, and merge nodes.
-- Let Codex request additional decisions through `answer_user`, while workflows can also pause for manual approval.
+- Let Codex request additional decisions through the App Server's dynamic `questions` tool, while workflows can also pause for manual approval.
 - Follow text, reasoning, commands, tool calls, and file changes in real time on the session timeline, and review them after execution completes.
 
 ## Features
 
 ### Projects and sessions
 
-- Add projects from directories accessible to the server and detect their Git repositories and branches.
-- View session status, base and working branches, the current workflow node, priority, and recent activity on each card.
-- Configure the Codex model, reasoning effort, and filesystem permissions, and continue an existing Codex session with follow-up requests.
-- Control queued execution through a global concurrency limit and per-session priority.
+- Add projects from directories accessible to the server, with automatic detection of Git repositories and available branches.
+- Choose the base branch, run mode, Codex model, reasoning effort, and filesystem permissions when creating a session. Git projects can use an isolated worktree for each session.
+- Use cards to see runtime status, base and working branches, the current workflow node, priority, token usage, and recent activity, then continue the same Codex session with follow-up requests.
+- Control the execution queue with a global concurrency limit and per-session priority.
+
+### Horizontal workspace
+
+- Switch the desktop overview between a compact card view and a horizontal view, and filter sessions by project to focus the workspace.
+- Expand the full details of multiple active sessions side by side, so you can follow timelines and take action without repeatedly changing pages.
+- Scroll horizontally and resize each session column independently. Column-width preferences are retained in the current browser.
+
+### Dynamic appearance
+
+- Use the automatically refreshed Bing daily image, an uploaded JPEG/PNG wallpaper, or a traditional Chinese solid-color theme as the application background.
+- Extract a source color from Bing and custom wallpapers automatically, then generate complete light and dark palettes with a selectable Material 3 color scheme.
+- Adjust the background mask independently to preserve the wallpaper while keeping content readable.
 
 ### Workflows and human intervention
 
-- Configure project workflows composed of Codex, expression, manual approval, merge, and close nodes.
-- Apply conditional branches and retries based on node results, pausing for user action when required.
-- Answer Codex questions in one place or review workflow results alongside the current diff.
+- Build visual project workflows from Codex, expression, manual approval, merge, and close nodes.
+- Apply conditional branches and retries based on node results, pausing when a decision or approval is required.
+- Answer Codex questions in one place. During manual approval, review node output, diffs, and artifacts together.
 
 ### Git, files, and artifacts
 
-- Inspect individual or aggregate diffs, expand surrounding context, and review session commit history.
-- Upload attachments as Codex input and reuse them in later follow-up requests.
-- Archive artifacts and preview supported images, PDFs, audio, video, and text. Other files can be downloaded or referenced in the current follow-up prompt.
+- Inspect individual or complete diffs, expand surrounding context as needed, and review session commit history.
+- Upload attachments as Codex input, then reference attachments or session artifacts in later follow-up requests.
+- Archive and preview image, PDF, audio, video, and text artifacts in the browser. Other formats can be downloaded directly.
 - Closing a card removes mutable output and archived artifacts while retaining deletion audit records. Artifact references in prompts do not copy files.
-- After a card is closed, AnyCode asynchronously cleans up worktrees that it has confirmed it created and registered. Retriable cleanup failures can be triggered again from the session details.
+- After a card is closed, asynchronously clean up worktrees confirmed as created and registered by AnyCode. Failed cleanup tasks can be retried from the session details.
 
 ## Quick start
 
