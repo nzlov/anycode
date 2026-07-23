@@ -29,11 +29,7 @@
       @pointercancel="endResize"
       @keydown.left.prevent="resizeBy(-keyboardStep)"
       @keydown.right.prevent="resizeBy(keyboardStep)"
-    >
-      <span class="overview-horizontal-session-resizer__handle">
-        <q-icon name="drag_indicator" size="18px" />
-      </span>
-    </div>
+    ></div>
   </div>
 </template>
 
@@ -123,11 +119,8 @@ function setWidth(value: number) {
   z-index: 2;
   top: 0;
   right: 0;
-  display: flex;
-  width: 16px;
+  width: 8px;
   height: 100%;
-  align-items: center;
-  justify-content: center;
   outline: 0;
   cursor: col-resize;
   touch-action: none;
@@ -139,35 +132,15 @@ function setWidth(value: number) {
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 1px;
+  width: 2px;
   content: '';
-  background: var(--ac-border);
+  background: transparent;
   transform: translateX(-50%);
 }
 
-.overview-horizontal-session-resizer__handle {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 12px;
-  height: 48px;
-  align-items: center;
-  justify-content: center;
-  color: var(--ac-text-muted);
-  background: var(--ac-surface-raised);
-  border: 1px solid var(--ac-border);
-  border-radius: 4px;
-}
-
-.overview-horizontal-session-resizer:hover .overview-horizontal-session-resizer__handle,
-.overview-horizontal-session-resizer--active .overview-horizontal-session-resizer__handle,
-.overview-horizontal-session-resizer:focus-visible .overview-horizontal-session-resizer__handle {
-  color: var(--q-primary);
-  border-color: var(--q-primary);
-  background: var(--ac-surface-muted);
-}
-
-.overview-horizontal-session-resizer:focus-visible .overview-horizontal-session-resizer__handle {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 28%, transparent);
+.overview-horizontal-session-resizer:hover::before,
+.overview-horizontal-session-resizer--active::before,
+.overview-horizontal-session-resizer:focus-visible::before {
+  background: var(--q-primary);
 }
 </style>
