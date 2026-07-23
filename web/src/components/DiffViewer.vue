@@ -29,7 +29,7 @@
             <span>{{ file.path }}</span>
           </slot>
         </div>
-        <div class="row items-center q-gutter-sm" @click.stop @keydown.stop>
+        <div class="diff-file-meta row items-center q-gutter-sm" @click.stop @keydown.stop>
           <q-badge outline color="positive" :label="`+${file.additions}`" />
           <q-badge outline color="negative" :label="`-${file.deletions}`" />
           <q-badge outline :color="fileColor(file.status)" :label="file.status" />
@@ -161,6 +161,7 @@ function lineClass(kind: DiffLineKind) {
 }
 
 .diff-file-card {
+  container-type: inline-size;
   min-width: 0;
   overflow: visible;
   background: var(--ac-surface);
@@ -266,15 +267,19 @@ function lineClass(kind: DiffLineKind) {
   color: var(--ac-diff-hunk-text);
 }
 
-@media (max-width: 720px) {
+@container (max-width: 840px) {
   .diff-file-header {
     flex-wrap: wrap;
   }
 
-  .diff-file-header > .row {
+  .diff-file-meta {
+    flex: 0 0 100%;
+    justify-content: flex-end;
     margin-left: auto;
   }
+}
 
+@media (max-width: 720px) {
   .diff-line {
     grid-template-columns: 44px 44px minmax(max-content, 1fr);
     font-size: 11px;
