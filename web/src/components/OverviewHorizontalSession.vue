@@ -102,6 +102,7 @@ function setWidth(value: number) {
 
 <style scoped>
 .overview-horizontal-session-track {
+  position: relative;
   display: flex;
   height: 100%;
   min-height: 0;
@@ -118,16 +119,19 @@ function setWidth(value: number) {
 }
 
 .overview-horizontal-session-resizer {
-  position: relative;
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
   display: flex;
   width: 16px;
   height: 100%;
-  flex: 0 0 16px;
   align-items: center;
   justify-content: center;
   outline: 0;
   cursor: col-resize;
   touch-action: none;
+  transform: translateX(50%);
 }
 
 .overview-horizontal-session-resizer::before {
