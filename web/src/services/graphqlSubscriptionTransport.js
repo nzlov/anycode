@@ -134,6 +134,7 @@ export function createGraphQLSubscriptionTransport({
           operationName: operation.operationName,
         },
       });
+      operation.onStart?.();
     }
 
     function closeIfIdle() {

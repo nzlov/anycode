@@ -603,6 +603,7 @@ let cardClickSuppressionTimer: ReturnType<typeof setTimeout> | null = null;
 
 const { start: startOverviewLiveUpdates, stop: stopOverviewLiveUpdates } = useSessionUpdates({
   onData: handleSessionUpdate,
+  onReconnect: () => void loadOverviewSessions(),
 });
 
 interface ApprovalContext {

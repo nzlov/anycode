@@ -9,6 +9,7 @@ import { subscribeSessionUpdates, type SessionUpdateEvent } from '@/services/ses
 
 interface SessionUpdateHandlers {
   onData: (update: SessionUpdateEvent) => void;
+  onReconnect?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -35,11 +36,15 @@ export function useSessionUpdates(handlers: SessionUpdateHandlers) {
     }
   }
 
-  function open() {
+  function open(reconnecting = false) {
     if (stopped) return;
     const currentGeneration = ++generation;
     subscription?.unsubscribe();
     subscription = subscribeSessionUpdates({
+      onStart: () => {
+        if (currentGeneration !== generation || stopped) return;
+        if (reconnecting) handlers.onReconnect?.();
+      },
       onData: (update) => {
         if (currentGeneration === generation) handlers.onData(update);
       },
@@ -62,7 +67,7 @@ export function useSessionUpdates(handlers: SessionUpdateHandlers) {
     if (stopped || reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      open();
+      open(true);
     }, 1500);
   }
 

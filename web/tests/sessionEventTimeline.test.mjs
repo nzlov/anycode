@@ -5,6 +5,7 @@ import {
   appendLiveEvent,
   createKeyedLatestRequestTracker,
   createLatestRequestTracker,
+  mergeRefreshedEvents,
   prependOlderEvents,
   shouldReconnectSubscription,
 } from '../src/services/sessionEventTimeline.js';
@@ -29,6 +30,20 @@ test('appendLiveEvent ignores duplicate history replay events', () => {
   assert.deepEqual(
     appendLiveEvent(events, older).map((event) => event.id),
     ['event-2', 'event-3', 'event-1'],
+  );
+});
+
+test('mergeRefreshedEvents keeps loaded history and orders recovered events by order key', () => {
+  const recovered = {
+    id: 'event-4',
+    orderKey: '04',
+  };
+
+  const next = mergeRefreshedEvents([older, newest], [middle, newest, recovered]);
+
+  assert.deepEqual(
+    next.map((event) => event.id),
+    ['event-1', 'event-2', 'event-3', 'event-4'],
   );
 });
 

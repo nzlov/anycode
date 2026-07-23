@@ -8,6 +8,10 @@ export function prependOlderEvents(
   events: TranscriptEvent[],
   olderEvents: TranscriptEvent[],
 ): TranscriptEvent[];
+export function mergeRefreshedEvents(
+  events: TranscriptEvent[],
+  refreshedEvents: TranscriptEvent[],
+): TranscriptEvent[];
 export function shouldReconnectSubscription(
   close: {
     acknowledged: boolean;

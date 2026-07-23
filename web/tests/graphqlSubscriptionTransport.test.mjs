@@ -58,6 +58,31 @@ test('multiple subscriptions share one websocket and route messages by operation
   assert.equal(socket.closed, true);
 });
 
+test('subscription start is reported only after the connection is acknowledged', () => {
+  const socket = new FakeSocket();
+  const starts = [];
+  const transport = createGraphQLSubscriptionTransport({
+    createSocket: () => socket,
+    connectionInitPayload: () => ({}),
+  });
+
+  transport.subscribe({
+    query: 'subscription First { first }',
+    onStart: () => starts.push('first'),
+  });
+  socket.open();
+  assert.deepEqual(starts, []);
+
+  socket.message({ type: 'connection_ack' });
+  assert.deepEqual(starts, ['first']);
+
+  transport.subscribe({
+    query: 'subscription Second { second }',
+    onStart: () => starts.push('second'),
+  });
+  assert.deepEqual(starts, ['first', 'second']);
+});
+
 test('connection close reports acknowledgement state to every active operation', () => {
   const socket = new FakeSocket();
   const closes = [];

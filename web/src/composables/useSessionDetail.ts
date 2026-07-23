@@ -40,6 +40,7 @@ import {
 import {
   appendLiveEvent,
   createLatestRequestTracker,
+  mergeRefreshedEvents,
   prependOlderEvents,
   shouldReconnectSubscription,
 } from '@/services/sessionEventTimeline';
@@ -86,10 +87,10 @@ export function useSessionDetail(sessionId: string) {
     },
   });
 
-  async function loadSessionDetail() {
+  async function loadSessionDetail(options: { mergeEvents?: boolean; background?: boolean } = {}) {
     const detailRequest = detailRequests.next();
     const sessionRequest = sessionRequests.next();
-    loading.value = true;
+    if (!options.background) loading.value = true;
     error.value = '';
     try {
       const [sessionResult, eventResult] = await Promise.allSettled([
@@ -109,8 +110,16 @@ export function useSessionDetail(sessionId: string) {
       }
       if (detailRequests.isCurrent(detailRequest)) {
         if (eventResult.status === 'fulfilled') {
-          events.value = eventResult.value.items;
-          eventsPageInfo.value = eventResult.value.pageInfo;
+          if (options.mergeEvents) {
+            events.value = mergeRefreshedEvents(events.value, eventResult.value.items);
+          } else {
+            events.value = eventResult.value.items;
+          }
+          const currentCursor = eventsPageInfo.value.nextCursor;
+          eventsPageInfo.value =
+            options.mergeEvents && currentCursor
+              ? { ...eventResult.value.pageInfo, nextCursor: currentCursor }
+              : eventResult.value.pageInfo;
           nodeUsage.value = eventResult.value.nodeUsage;
         } else {
           error.value =
@@ -118,7 +127,7 @@ export function useSessionDetail(sessionId: string) {
         }
       }
     } finally {
-      if (detailRequests.isCurrent(detailRequest)) {
+      if (!options.background && detailRequests.isCurrent(detailRequest)) {
         loading.value = false;
       }
     }
@@ -362,11 +371,15 @@ export function useSessionDetail(sessionId: string) {
     }
   }
 
-  function openSessionEvents() {
+  function openSessionEvents(refreshOnStart = false) {
     if (liveStopped) return;
     const generation = ++subscriptionGeneration;
     sessionEventSubscription?.unsubscribe();
     sessionEventSubscription = subscribeSessionEvents(sessionId, {
+      onStart: () => {
+        if (!refreshOnStart || generation !== subscriptionGeneration || liveStopped) return;
+        void loadSessionDetail({ mergeEvents: true, background: true });
+      },
       onData: (event) => {
         if (generation === subscriptionGeneration) {
           events.value = appendLiveEvent(events.value, event);
@@ -389,7 +402,7 @@ export function useSessionDetail(sessionId: string) {
     if (liveStopped || reconnectTimer) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
-      openSessionEvents();
+      openSessionEvents(true);
     }, 1500);
   }
 

@@ -25,6 +25,15 @@ export function prependOlderEvents(events, olderEvents) {
   return [...older, ...next];
 }
 
+export function mergeRefreshedEvents(events, refreshedEvents) {
+  let next = events;
+  for (const event of refreshedEvents) {
+    next = appendLiveEvent(next, event);
+  }
+  if (next === events) return events;
+  return [...next].sort((left, right) => left.orderKey.localeCompare(right.orderKey));
+}
+
 function mergeTimelineEvent(existing, incoming) {
   if (!existing?.group || !incoming?.group) {
     return mergeLiveEvent(existing, incoming);

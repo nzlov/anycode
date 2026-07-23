@@ -247,16 +247,20 @@ test('session detail uses one transcript subscription and one global update subs
   assert.equal((composableSource.match(/useSessionUpdates\(\{/g) ?? []).length, 1);
 });
 
-test('session subscriptions do not wait for readiness or reload on reconnect', () => {
+test('session subscriptions refresh current state and merge the latest transcript after reconnect', () => {
   const composableSource = readFileSync(
     new URL('../src/composables/useSessionDetail.ts', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(
+  assert.match(
     composableSource,
-    /ready|waitWithTimeout|refreshAfterReconnect|reconnectFromSnapshot/,
+    /function openSessionEvents\(refreshOnStart = false\)[\s\S]*onStart: \(\) => \{[\s\S]*loadSessionDetail\(\{ mergeEvents: true, background: true \}\)/,
   );
-  assert.match(composableSource, /reconnectTimer = setTimeout\([\s\S]*openSessionEvents\(\)/);
+  assert.match(composableSource, /reconnectTimer = setTimeout\([\s\S]*openSessionEvents\(true\)/);
+  assert.match(
+    composableSource,
+    /events\.value = mergeRefreshedEvents\(events\.value, eventResult\.value\.items\)/,
+  );
 });
 
 test('session detail never drops distinct transcript events by content or timestamp', () => {
@@ -587,11 +591,13 @@ test('the list has no subscription and pages share the global update lifecycle',
 
   assert.doesNotMatch(sessionsPageSource, /subscribe|startLiveUpdates|stopLiveUpdates/);
   assert.match(overviewSource, /useSessionUpdates\(\{\s*onData: handleSessionUpdate/s);
+  assert.match(overviewSource, /onReconnect: \(\) => void loadOverviewSessions\(\)/);
   assert.equal((overviewSource.match(/useSessionUpdates\(\{/g) ?? []).length, 1);
   assert.match(
     updateComposableSource,
     /shouldReconnectSubscription\(close, \(\) =>\s*verifyGraphQLAccessKey\(getGraphQLAccessKey\(\)\)/,
   );
+  assert.match(updateComposableSource, /if \(reconnecting\) handlers\.onReconnect\?\.\(\)/);
   assert.match(sessionsServiceSource, /sessionUpdates \{[\s\S]*eventType[\s\S]*sessionId/);
   assert.doesNotMatch(sessionsServiceSource, /sessionCardUpdates|onSubscribed|ready/);
 });

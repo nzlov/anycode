@@ -633,6 +633,7 @@ export async function getSessionCard(
 
 export function subscribeSessionUpdates(handlers: {
   onData: (update: SessionUpdateEvent) => void;
+  onStart?: () => void;
   onError?: (error: Error) => void;
   onClose?: (close: GraphQLSubscriptionClose) => void;
 }) {
@@ -689,6 +690,9 @@ export function subscribeSessionUpdates(handlers: {
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
   }
+  if (handlers.onStart) {
+    Object.assign(options, { onStart: handlers.onStart });
+  }
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });
   }
@@ -699,6 +703,7 @@ export function subscribeSessionEvents(
   sessionId: string,
   handlers: {
     onData: (event: TranscriptEvent) => void;
+    onStart?: () => void;
     onError?: (error: Error) => void;
     onClose?: (close: GraphQLSubscriptionClose) => void;
   },
@@ -717,6 +722,9 @@ export function subscribeSessionEvents(
   };
   if (handlers.onError) {
     Object.assign(options, { onError: handlers.onError });
+  }
+  if (handlers.onStart) {
+    Object.assign(options, { onStart: handlers.onStart });
   }
   if (handlers.onClose) {
     Object.assign(options, { onClose: handlers.onClose });

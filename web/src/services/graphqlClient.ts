@@ -35,6 +35,7 @@ interface GraphQLSubscriptionOptions<
   TVariables extends Record<string, unknown> = Record<string, unknown>,
 > extends GraphQLRequest<TVariables> {
   onData: (data: TData) => void;
+  onStart?: () => void;
   onError?: (error: Error) => void;
   onClose?: (close: GraphQLSubscriptionClose) => void;
 }
@@ -201,6 +202,7 @@ export function graphqlSubscribe<
   variables,
   operationName,
   onData,
+  onStart,
   onError,
   onClose,
 }: GraphQLSubscriptionOptions<TData, TVariables>) {
@@ -221,6 +223,7 @@ export function graphqlSubscribe<
   };
   if (variables !== undefined) operation.variables = variables;
   if (operationName !== undefined) operation.operationName = operationName;
+  if (onStart !== undefined) operation.onStart = onStart;
   if (onClose !== undefined) operation.onClose = onClose;
   return getSubscriptionTransport().subscribe(operation);
 }
