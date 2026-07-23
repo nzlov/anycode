@@ -189,7 +189,7 @@
               >
                 <q-tooltip>打开会话详情</q-tooltip>
               </q-btn>
-              <span>{{ filePathWithoutPrefix(file.path) }}</span>
+              <span class="file-path">{{ filePathWithoutPrefix(file.path) }}</span>
             </template>
           </template>
         </DiffViewer>
@@ -662,6 +662,7 @@ onUnmounted(() => {
 }
 
 .file-path {
+  min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
