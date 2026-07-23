@@ -44,6 +44,9 @@ func TestThreadParamsExposeWritableArtifactDirectory(t *testing.T) {
 	}
 
 	readOnly := appServerThreadParams("/workspace", "/outputs/session-1", "", "", "read-only", false)
+	if readOnly["serviceTier"] != "default" {
+		t.Fatalf("read-only thread params = %#v", readOnly)
+	}
 	readOnlyConfig := readOnly["config"].(map[string]any)
 	if _, exists := readOnlyConfig["sandbox_workspace_write"]; exists {
 		t.Fatalf("read-only config has writable roots: %#v", readOnlyConfig)
@@ -132,9 +135,10 @@ cat >/dev/null
 		Method string `json:"method"`
 		Params struct {
 			HistoryMode string `json:"historyMode"`
+			ServiceTier string `json:"serviceTier"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(content, &startEnvelope) != nil || startEnvelope.Method != "thread/start" || startEnvelope.Params.HistoryMode != "paginated" {
+	if json.Unmarshal(content, &startEnvelope) != nil || startEnvelope.Method != "thread/start" || startEnvelope.Params.HistoryMode != "paginated" || startEnvelope.Params.ServiceTier != "default" {
 		t.Fatalf("start request = %s", content)
 	}
 	events, err := client.Events(context.Background(), handle)
@@ -345,12 +349,13 @@ cat >/dev/null
 		Method string `json:"method"`
 		Params struct {
 			DeveloperInstructions string `json:"developerInstructions"`
+			ServiceTier           string `json:"serviceTier"`
 			DynamicTools          []struct {
 				Name string `json:"name"`
 			} `json:"dynamicTools"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(content, &request) != nil || request.Method != "thread/resume" || request.Params.DeveloperInstructions != "AnyCode rules" || len(request.Params.DynamicTools) != 2 || request.Params.DynamicTools[0].Name != "questions" || request.Params.DynamicTools[1].Name != "publish_artifact" {
+	if json.Unmarshal(content, &request) != nil || request.Method != "thread/resume" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.ServiceTier != "default" || len(request.Params.DynamicTools) != 2 || request.Params.DynamicTools[0].Name != "questions" || request.Params.DynamicTools[1].Name != "publish_artifact" {
 		t.Fatalf("resume request = %s", content)
 	}
 }

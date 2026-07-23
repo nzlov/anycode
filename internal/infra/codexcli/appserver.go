@@ -138,6 +138,8 @@ func appServerThreadParams(workdir string, artifactDir string, developerInstruct
 	}
 	if fastMode {
 		params["serviceTier"] = "priority"
+	} else {
+		params["serviceTier"] = "default"
 	}
 	if permissionMode != "" {
 		params["sandbox"] = permissionMode
