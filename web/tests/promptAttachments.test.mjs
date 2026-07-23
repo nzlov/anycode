@@ -87,7 +87,7 @@ test('image attachments use viewport-relative previews without scrolling', () =>
 
   assert.match(
     composerSource,
-    /<div\s+v-if="isImageFile\(file\)"\s+class="attachment-image-item">[\s\S]*?<button[\s\S]*?class="attachment-image-trigger"/,
+    /<div\s+v-if="isImageFile\(file\)"\s+class="attachment-image-item">[\s\S]*?class="attachment-image-preview"[\s\S]*?<button[\s\S]*?class="attachment-image-trigger"/,
   );
   assert.doesNotMatch(composerSource, /<q-chip\s+v-if="isImageFile\(file\)"/);
   assert.match(
@@ -106,15 +106,19 @@ test('image attachments use viewport-relative previews without scrolling', () =>
   assert.match(composerSource, /URL\.revokeObjectURL\(url\)/);
   assert.match(
     stylesSource,
-    /\.attachment-image-item\s*\{[^}]*position:\s*relative[^}]*width:\s*min\(16vw,\s*10vh\)[^}]*flex-direction:\s*column/s,
+    /\.attachment-image-item\s*\{[^}]*width:\s*fit-content[^}]*max-width:\s*min\(16vw,\s*10vh\)[^}]*flex-direction:\s*column/s,
   );
   assert.match(
     stylesSource,
-    /\.attachment-image-trigger\s*\{[^}]*width:\s*100%[^}]*padding:\s*0[^}]*border:\s*0[^}]*background:\s*transparent/s,
+    /\.attachment-image-preview\s*\{[^}]*position:\s*relative[^}]*width:\s*fit-content[^}]*max-width:\s*100%/s,
   );
   assert.match(
     stylesSource,
-    /\.attachment-thumbnail\s*\{[^}]*width:\s*100%[^}]*height:\s*auto[^}]*object-fit:\s*contain/s,
+    /\.attachment-image-trigger\s*\{[^}]*width:\s*fit-content[^}]*max-width:\s*100%[^}]*padding:\s*0[^}]*border:\s*0[^}]*background:\s*transparent/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.attachment-thumbnail\s*\{[^}]*width:\s*auto[^}]*max-width:\s*100%[^}]*height:\s*auto[^}]*max-height:\s*min\(16vw,\s*10vh\)[^}]*object-fit:\s*contain/s,
   );
   assert.match(
     stylesSource,

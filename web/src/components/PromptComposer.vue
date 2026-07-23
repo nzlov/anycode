@@ -37,41 +37,43 @@
       <div v-if="attachmentCount > 0" class="attachment-list">
         <template v-for="file in files" :key="`${file.name}-${file.size}-${file.lastModified}`">
           <div v-if="isImageFile(file)" class="attachment-image-item">
-            <button
-              type="button"
-              class="attachment-image-trigger"
-              :disabled="disabled"
-              :aria-label="`预览图片 ${file.name}`"
-              @click="openPreview(file)"
-            >
-              <img :src="fileThumbnailUrl(file)" alt="" class="attachment-thumbnail" />
-              <q-tooltip
-                v-if="!previewOpen"
-                anchor="top middle"
-                self="bottom middle"
-                :offset="[0, 8]"
-                :delay="200"
-                class="attachment-image-tooltip"
+            <div class="attachment-image-preview">
+              <button
+                type="button"
+                class="attachment-image-trigger"
+                :disabled="disabled"
+                :aria-label="`预览图片 ${file.name}`"
+                @click="openPreview(file)"
               >
-                <img
-                  :src="fileThumbnailUrl(file)"
-                  :alt="file.name"
-                  class="attachment-hover-preview"
-                />
-              </q-tooltip>
-            </button>
-            <q-btn
-              flat
-              round
-              dense
-              icon="close"
-              class="attachment-image-remove"
-              :disable="disabled"
-              :aria-label="`移除图片 ${file.name}`"
-              @click.stop="removeFile(file)"
-            >
-              <q-tooltip>移除图片</q-tooltip>
-            </q-btn>
+                <img :src="fileThumbnailUrl(file)" alt="" class="attachment-thumbnail" />
+                <q-tooltip
+                  v-if="!previewOpen"
+                  anchor="top middle"
+                  self="bottom middle"
+                  :offset="[0, 8]"
+                  :delay="200"
+                  class="attachment-image-tooltip"
+                >
+                  <img
+                    :src="fileThumbnailUrl(file)"
+                    :alt="file.name"
+                    class="attachment-hover-preview"
+                  />
+                </q-tooltip>
+              </button>
+              <q-btn
+                flat
+                round
+                dense
+                icon="close"
+                class="attachment-image-remove"
+                :disable="disabled"
+                :aria-label="`移除图片 ${file.name}`"
+                @click.stop="removeFile(file)"
+              >
+                <q-tooltip>移除图片</q-tooltip>
+              </q-btn>
+            </div>
             <span class="attachment-image-name ellipsis" :title="file.name">{{ file.name }}</span>
           </div>
           <q-chip

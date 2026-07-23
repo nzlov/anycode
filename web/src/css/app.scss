@@ -1419,18 +1419,25 @@ body.desktop
 }
 
 .attachment-image-item {
-  position: relative;
   display: flex;
-  width: min(16vw, 10vh);
+  width: fit-content;
+  max-width: min(16vw, 10vh);
   min-width: 0;
   flex-direction: column;
   align-items: center;
   gap: 4px;
 }
 
+.attachment-image-preview {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+
 .attachment-image-trigger {
   display: block;
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -1451,8 +1458,10 @@ body.desktop
 
 .attachment-thumbnail {
   display: block;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   height: auto;
+  max-height: min(16vw, 10vh);
   object-fit: contain;
 }
 
