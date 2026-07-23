@@ -6410,7 +6410,7 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 	if err := s.cancelPendingQuestions(ctx, session.ID, "session closed"); err != nil {
 		return DTO{}, releaseClose(err)
 	}
-	if strings.TrimSpace(session.BaseBranch) != "" {
+	if strings.TrimSpace(session.BaseBranch) != "" && session.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
 		headCommit, headErr := s.captureSessionWorktreeHead(ctx, session)
 		if headErr != nil {
 			closeErr := apperror.Wrap(headErr, apperror.CodeCloseFailed, apperror.CategoryInfraError, "capture session worktree head failed").WithDetails(map[string]any{

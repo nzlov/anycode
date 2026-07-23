@@ -6186,6 +6186,36 @@ func TestCloseSessionClosesWhenMissingWorktreeHasNoBaseCommit(t *testing.T) {
 	}
 }
 
+func TestCloseSessionSkipsHeadCaptureForCleanedWorktree(t *testing.T) {
+	ctx := context.Background()
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Status:         domain.StatusStopped,
+		BaseBranch:     "main",
+		WorktreePath:   "/data/worktrees/project-1/session-1",
+		WorktreeBranch: "session-1",
+		WorktreeCleanup: domain.WorktreeCleanup{
+			Status: domain.WorktreeCleanupCleaned,
+		},
+	}
+	worktrees := newFakeWorktreeManager()
+	worktrees.headCommitErr = errors.New("worktree and branch no longer exist")
+	service := New(repo, nil, WithWorktrees(worktrees))
+
+	got, err := service.CloseSession(ctx, CloseSessionInput{SessionID: "session-1"})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.Status != domain.StatusClosed || got.WorktreeCleanup.Status != domain.WorktreeCleanupCleaned {
+		t.Fatalf("CloseSession() = %#v", got)
+	}
+	if worktrees.headCommitPath != "" || worktrees.headCommitRef != "" {
+		t.Fatalf("HeadCommit() = path %q ref %q", worktrees.headCommitPath, worktrees.headCommitRef)
+	}
+}
+
 func TestCloseSessionDoesNotRunFailingWorktreeRemoval(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
