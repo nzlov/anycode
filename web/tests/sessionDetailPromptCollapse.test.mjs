@@ -51,6 +51,7 @@ test('expanding the session detail prompt focuses the input at the end', () => {
 });
 
 test('successful prompt submission clears the draft and collapses the composer', () => {
+  assert.match(detailSource, /<CodexPromptComposer\s+v-else[\s\S]*@submit="sendAppend"/);
   assert.match(
     detailSource,
     /await appendDescription\([\s\S]*appendArtifacts\.value = \[\];\s*appendMentions\.value = \[\];\s*composerCollapsed\.value = true/,

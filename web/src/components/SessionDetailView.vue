@@ -121,6 +121,7 @@
             :disabled="!session || appendUploading || appending || stopping || isClosed"
             :completion-session-id="sessionId"
             :completion-has-thread="Boolean(session?.codexSessionId)"
+            @submit="sendAppend"
           >
             <template #actions>
               <q-btn
