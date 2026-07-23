@@ -28,6 +28,11 @@ test('route pages render their titles and actions into the application toolbar',
   assert.match(sessionsSource, /<PageToolbar title="会话表格"/);
   assert.match(sessionsSource, /class="sessions-toolbar__search"/);
   assert.match(sessionsSource, /class="sessions-toolbar__status"/);
+  assert.match(
+    sessionsSource,
+    /<PageToolbar[\s\S]*class="sessions-toolbar__search"[\s\S]*class="sessions-toolbar__age"[\s\S]*aria-label="清理筛选出的会话"[\s\S]*<\/PageToolbar>/,
+  );
+  assert.doesNotMatch(sessionsSource, /<template #top>/);
   assert.match(commitHistorySource, /<PageToolbar title="提交记录"/);
   assert.match(workflowSource, /<PageToolbar title="流程配置"/);
 
@@ -67,6 +72,10 @@ test('page toolbar layout remains single-line and shrinkable on narrow screens',
   assert.match(
     stylesSource,
     /\.page-toolbar__actions\s*{[^}]*min-width:\s*0[^}]*overflow:\s*hidden/s,
+  );
+  assert.match(
+    stylesSource,
+    /\.sessions-toolbar\s*{[^}]*min-width:\s*0[^}]*overflow-x:\s*auto/s,
   );
   assert.match(
     stylesSource,

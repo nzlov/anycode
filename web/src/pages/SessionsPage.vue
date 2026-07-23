@@ -1,29 +1,54 @@
 <template>
   <q-page class="page-shell">
     <PageToolbar title="会话表格" compact-title-on-mobile>
-      <q-input
-        v-model="filter"
-        dense
-        outlined
-        debounce="200"
-        class="sessions-toolbar__search"
-        placeholder="搜索需求、项目或分支"
-        aria-label="搜索会话"
-      >
-        <template #prepend>
-          <q-icon name="search" />
-        </template>
-      </q-input>
-      <q-select
-        v-model="status"
-        dense
-        outlined
-        emit-value
-        map-options
-        class="sessions-toolbar__status"
-        :options="statusOptions"
-        aria-label="按状态筛选会话"
-      />
+      <div class="sessions-toolbar">
+        <q-input
+          v-model="filter"
+          dense
+          outlined
+          debounce="200"
+          class="sessions-toolbar__search"
+          placeholder="搜索需求、项目或分支"
+          aria-label="搜索会话"
+        >
+          <template #prepend>
+            <q-icon name="search" />
+          </template>
+        </q-input>
+        <q-select
+          v-model="status"
+          dense
+          outlined
+          emit-value
+          map-options
+          class="sessions-toolbar__status"
+          :options="statusOptions"
+          aria-label="按状态筛选会话"
+        />
+        <q-select
+          v-model="olderThanDays"
+          dense
+          outlined
+          emit-value
+          map-options
+          class="sessions-toolbar__age"
+          :options="ageOptions"
+          aria-label="按更新时间筛选会话"
+        />
+        <q-btn
+          outline
+          no-caps
+          icon="delete_sweep"
+          color="negative"
+          label="清理"
+          aria-label="清理筛选出的会话"
+          :disable="!canCleanup"
+          :loading="cleaning"
+          @click="confirmCleanup"
+        >
+          <q-tooltip>{{ cleanupTooltip }}</q-tooltip>
+        </q-btn>
+      </div>
     </PageToolbar>
 
     <q-card flat bordered class="table-card">
@@ -41,34 +66,6 @@
         class="session-table"
         @request="onTableRequest"
       >
-        <template #top>
-          <div class="session-table__toolbar">
-            <q-select
-              v-model="olderThanDays"
-              dense
-              outlined
-              emit-value
-              map-options
-              class="sessions-toolbar__age"
-              :options="ageOptions"
-              aria-label="按更新时间筛选会话"
-            />
-            <q-btn
-              outline
-              no-caps
-              icon="delete_sweep"
-              color="negative"
-              label="清理"
-              aria-label="清理筛选出的会话"
-              :disable="!canCleanup"
-              :loading="cleaning"
-              @click="confirmCleanup"
-            >
-              <q-tooltip>{{ cleanupTooltip }}</q-tooltip>
-            </q-btn>
-          </div>
-        </template>
-
         <template #body-cell-title="props">
           <q-td :props="props">
             <router-link class="table-link" :to="`/sessions/${props.row.id}`">

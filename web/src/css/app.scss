@@ -155,6 +155,21 @@ a {
   overflow: hidden;
 }
 
+.sessions-toolbar {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.sessions-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
 .sessions-toolbar__search {
   width: min(420px, 40vw);
   min-width: 96px;
@@ -168,18 +183,13 @@ a {
   flex: 0 1 140px;
 }
 
-.session-table__toolbar {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 .sessions-toolbar__age {
   width: 132px;
   min-width: 112px;
+}
+
+.sessions-toolbar > .q-btn {
+  flex: 0 0 auto;
 }
 
 .workflow-toolbar-actions {
