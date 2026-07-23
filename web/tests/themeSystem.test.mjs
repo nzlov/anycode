@@ -240,6 +240,9 @@ test('global appearance persists all background modes and applies them immediate
   assert.match(appearanceRuntimeSource, /activateSolidBackground\(theme\.color\)/);
   assert.match(appearanceRuntimeSource, /activateUploadedBackground/);
   assert.match(appearanceRuntimeSource, /activateBingBackground/);
+  assert.match(appearanceRuntimeSource, /activateNasaBackground/);
+  assert.match(appearanceSettingsSource, /label: 'NASA'.*value: 'nasa'/);
+  assert.match(dailyBackgroundSource, /\/api\/appearance\/nasa-wallpaper/);
   assert.match(
     dailyBackgroundSource,
     /activateSolidBackground[\s\S]*createMaterialPalettes\(sourceColor, 'tonal_spot'\)/,

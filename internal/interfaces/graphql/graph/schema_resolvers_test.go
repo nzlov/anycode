@@ -210,7 +210,7 @@ func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
 func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 	settings := &fakeSettingUseCase{
 		appearanceResult: settingapp.AppearanceSettingsDTO{
-			BackgroundType:       settingdomain.BackgroundTypeBing,
+			BackgroundType:       settingdomain.BackgroundTypeNASA,
 			SolidTheme:           settingdomain.SolidThemeVermilion,
 			BackgroundMask:       20,
 			WallpaperColorScheme: settingdomain.WallpaperColorSchemeRainbow,
@@ -222,7 +222,7 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppearanceSettings() error = %v", err)
 	}
-	if got.BackgroundType != model.AppearanceBackgroundTypeBing || got.SolidTheme != model.AppearanceSolidThemeVermilion || got.BackgroundMask != 20 || got.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
+	if got.BackgroundType != model.AppearanceBackgroundTypeNASA || got.SolidTheme != model.AppearanceSolidThemeVermilion || got.BackgroundMask != 20 || got.WallpaperColorScheme != model.WallpaperColorSchemeRainbow {
 		t.Fatalf("AppearanceSettings() = %#v", got)
 	}
 

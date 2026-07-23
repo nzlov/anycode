@@ -1,6 +1,7 @@
 import type { AppearanceSettings } from '@/services/appearanceSettings';
 import {
   activateBingBackground,
+  activateNasaBackground,
   activateSolidBackground,
   activateUploadedBackground,
   setBackgroundMask,
@@ -16,6 +17,10 @@ export function applyAppearanceSettings(settings: AppearanceSettings) {
   }
   if (settings.backgroundType === 'image') {
     void activateUploadedBackground(settings.wallpaperId, settings.wallpaperColorScheme);
+    return;
+  }
+  if (settings.backgroundType === 'nasa') {
+    void activateNasaBackground(settings.wallpaperColorScheme);
     return;
   }
   activateBingBackground(settings.wallpaperColorScheme);

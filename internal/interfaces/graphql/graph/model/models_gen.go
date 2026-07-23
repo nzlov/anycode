@@ -852,17 +852,19 @@ const (
 	AppearanceBackgroundTypeSolid AppearanceBackgroundType = "SOLID"
 	AppearanceBackgroundTypeImage AppearanceBackgroundType = "IMAGE"
 	AppearanceBackgroundTypeBing  AppearanceBackgroundType = "BING"
+	AppearanceBackgroundTypeNASA  AppearanceBackgroundType = "NASA"
 )
 
 var AllAppearanceBackgroundType = []AppearanceBackgroundType{
 	AppearanceBackgroundTypeSolid,
 	AppearanceBackgroundTypeImage,
 	AppearanceBackgroundTypeBing,
+	AppearanceBackgroundTypeNASA,
 }
 
 func (e AppearanceBackgroundType) IsValid() bool {
 	switch e {
-	case AppearanceBackgroundTypeSolid, AppearanceBackgroundTypeImage, AppearanceBackgroundTypeBing:
+	case AppearanceBackgroundTypeSolid, AppearanceBackgroundTypeImage, AppearanceBackgroundTypeBing, AppearanceBackgroundTypeNASA:
 		return true
 	}
 	return false

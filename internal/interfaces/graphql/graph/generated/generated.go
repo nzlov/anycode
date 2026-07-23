@@ -3762,6 +3762,7 @@ enum AppearanceBackgroundType {
   SOLID
   IMAGE
   BING
+  NASA
 }
 
 enum AppearanceSolidTheme {

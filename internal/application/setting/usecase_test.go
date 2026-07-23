@@ -55,6 +55,15 @@ func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
 	if err != nil || got.BackgroundType != domain.BackgroundTypeSolid || got.SolidTheme != domain.SolidThemeAzure || got.BackgroundMask != 35 || got.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow || repo.configuration.WallpaperColorScheme != domain.WallpaperColorSchemeRainbow {
 		t.Fatalf("UpdateAppearanceSettings() = %#v, %v; stored %#v", got, err, repo.configuration)
 	}
+	got, err = service.UpdateAppearanceSettings(context.Background(), UpdateAppearanceSettingsInput{
+		BackgroundType:       domain.BackgroundTypeNASA,
+		SolidTheme:           domain.SolidThemeAzure,
+		BackgroundMask:       35,
+		WallpaperColorScheme: domain.WallpaperColorSchemeRainbow,
+	})
+	if err != nil || got.BackgroundType != domain.BackgroundTypeNASA || repo.configuration.BackgroundType != domain.BackgroundTypeNASA {
+		t.Fatalf("UpdateAppearanceSettings(NASA) = %#v, %v; stored %#v", got, err, repo.configuration)
+	}
 	_, err = service.UpdateAppearanceSettings(context.Background(), UpdateAppearanceSettingsInput{
 		BackgroundType:       domain.BackgroundTypeSolid,
 		SolidTheme:           domain.SolidThemeAzure,
@@ -66,7 +75,7 @@ func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
 func TestUploadAppearanceWallpaperStoresImageAndSelectsIt(t *testing.T) {
 	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
 	wallpapers := &fakeWallpaperStore{files: map[string][]byte{}}
-	service := New(repo, wallpapers)
+	service := New(repo, WithWallpaperStore(wallpapers))
 	imageData := testPNG(t)
 
 	got, err := service.UploadAppearanceWallpaper(context.Background(), UploadAppearanceWallpaperInput{
@@ -95,7 +104,7 @@ func TestUploadAppearanceWallpaperStoresImageAndSelectsIt(t *testing.T) {
 }
 
 func TestUploadAppearanceWallpaperRejectsNonImage(t *testing.T) {
-	service := New(&fakeRepository{configuration: domain.DefaultSystemConfiguration()}, &fakeWallpaperStore{})
+	service := New(&fakeRepository{configuration: domain.DefaultSystemConfiguration()}, WithWallpaperStore(&fakeWallpaperStore{}))
 	data := []byte("not an image")
 	_, err := service.UploadAppearanceWallpaper(context.Background(), UploadAppearanceWallpaperInput{
 		Filename: "note.txt",
@@ -103,6 +112,19 @@ func TestUploadAppearanceWallpaperRejectsNonImage(t *testing.T) {
 		Reader:   bytes.NewReader(data),
 	})
 	assertAppError(t, err, apperror.CodeValidationFailed)
+}
+
+func TestOpenNASAWallpaperStreamsSourceImage(t *testing.T) {
+	service := New(&fakeRepository{}, WithNASAWallpaperSource(fakeNASAWallpaperSource{}))
+	stream, err := service.OpenNASAWallpaper(context.Background())
+	if err != nil {
+		t.Fatalf("OpenNASAWallpaper() error = %v", err)
+	}
+	defer stream.Reader.Close()
+	data, err := io.ReadAll(stream.Reader)
+	if err != nil || stream.MimeType != "image/jpeg" || string(data) != "nasa" {
+		t.Fatalf("NASA wallpaper = type:%q data:%q error:%v", stream.MimeType, data, err)
+	}
 }
 
 func TestDeleteQuickCommandUsesID(t *testing.T) {
@@ -176,6 +198,15 @@ type fakeRepository struct {
 
 type fakeWallpaperStore struct {
 	files map[string][]byte
+}
+
+type fakeNASAWallpaperSource struct{}
+
+func (fakeNASAWallpaperSource) Open(context.Context) (domain.RemoteWallpaper, error) {
+	return domain.RemoteWallpaper{
+		MimeType: "image/jpeg",
+		Reader:   io.NopCloser(bytes.NewReader([]byte("nasa"))),
+	}, nil
 }
 
 func (s *fakeWallpaperStore) SaveWallpaper(_ context.Context, id string, reader io.Reader) error {

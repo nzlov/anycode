@@ -2,7 +2,7 @@ import { graphqlFetch, graphqlMultipartFetch } from '@/services/graphqlClient';
 import { isWallpaperColorScheme, type WallpaperColorScheme } from '@/theme/dailyBackgroundModel';
 import { isSolidTheme, type AppearanceSolidTheme } from '@/theme/solidThemes';
 
-export type AppearanceBackgroundType = 'solid' | 'image' | 'bing';
+export type AppearanceBackgroundType = 'solid' | 'image' | 'bing' | 'nasa';
 export type { AppearanceSolidTheme } from '@/theme/solidThemes';
 
 export interface AppearanceSettings {
@@ -18,6 +18,7 @@ export const backgroundTypeOptions = [
   { label: '纯色', value: 'solid' as const, icon: 'format_color_fill' },
   { label: '图片', value: 'image' as const, icon: 'image' },
   { label: 'Bing', value: 'bing' as const, icon: 'auto_awesome' },
+  { label: 'NASA', value: 'nasa' as const, icon: 'rocket_launch' },
 ];
 
 export const wallpaperColorSchemeOptions: Array<{
@@ -136,5 +137,5 @@ function normalizeAppearanceSettings(settings: RawAppearanceSettings): Appearanc
 }
 
 function isBackgroundType(value: string): value is AppearanceBackgroundType {
-  return value === 'solid' || value === 'image' || value === 'bing';
+  return value === 'solid' || value === 'image' || value === 'bing' || value === 'nasa';
 }

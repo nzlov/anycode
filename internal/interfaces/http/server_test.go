@@ -128,6 +128,29 @@ func TestAppearanceWallpaperRequiresBearerAndStreamsConfiguredImage(t *testing.T
 	}
 }
 
+func TestNASAWallpaperRequiresBearerAndStreamsImage(t *testing.T) {
+	settings := &fakeAppearanceSettingsUseCase{content: []byte("nasa")}
+	handler := NewHandler(
+		config.Config{AccessKey: "secret"},
+		WithGraphQLUseCases(graph.UseCases{Settings: settings}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/appearance/nasa-wallpaper", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("NASA wallpaper without bearer status = %d", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/appearance/nasa-wallpaper", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "nasa" || rec.Header().Get("Content-Type") != "image/jpeg" {
+		t.Fatalf("NASA wallpaper response = status:%d type:%q body:%q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
+	}
+}
+
 func TestGraphQLWebSocketHandshakeUsesConnectionInitAuth(t *testing.T) {
 	called := false
 	handler := NewHandler(
@@ -584,6 +607,14 @@ func (u *fakeAppearanceSettingsUseCase) OpenAppearanceWallpaper(_ context.Contex
 	return settingapp.WallpaperStream{
 		Filename: "background.png",
 		MimeType: "image/png",
+		Reader:   io.NopCloser(bytes.NewReader(u.content)),
+	}, nil
+}
+
+func (u *fakeAppearanceSettingsUseCase) OpenNASAWallpaper(context.Context) (settingapp.WallpaperStream, error) {
+	return settingapp.WallpaperStream{
+		Filename: "nasa-image-of-the-day",
+		MimeType: "image/jpeg",
 		Reader:   io.NopCloser(bytes.NewReader(u.content)),
 	}, nil
 }

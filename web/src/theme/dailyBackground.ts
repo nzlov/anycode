@@ -19,7 +19,7 @@ const metadataEndpoint = 'https://bing.ee123.net/img/?size=UHD&imgtype=jpg&type=
 const imageEndpoint = 'https://bing.ee123.net/img/4k';
 const attributionSource = 'https://bing.ee123.net/' as const;
 
-type BackgroundSource = 'solid' | 'image' | 'bing';
+type BackgroundSource = 'solid' | 'image' | 'bing' | 'nasa';
 
 let activeSource: BackgroundSource | null = null;
 let activeRecord: DailyBackgroundRecord | null = null;
@@ -51,29 +51,16 @@ export function activateSolidBackground(sourceColor: string) {
 
 export async function activateUploadedBackground(id: string, scheme: WallpaperColorScheme) {
   if (!id || !isWallpaperColorScheme(scheme)) return;
-  activeSource = 'image';
-  activeScheme = scheme;
-  const version = ++requestVersion;
-  try {
-    const response = await fetch(`/api/appearance/wallpapers/${encodeURIComponent(id)}`, {
-      cache: 'no-cache',
-      headers: authorizationHeaders(),
-    });
-    const mimeType = response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
-    if (!response.ok || !['image/jpeg', 'image/png'].includes(mimeType)) {
-      throw new Error(`uploaded wallpaper returned ${response.status} ${mimeType}`);
-    }
-    const bytes = await response.arrayBuffer();
-    const sourceColor = await extractImageSourceColor(bytes, mimeType);
-    if (activeSource !== 'image' || version !== requestVersion) return;
-    const objectURL = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
-    releaseUploadedObjectURL();
-    uploadedObjectURL = objectURL;
-    applyPalettes(createMaterialPalettes(sourceColor, scheme));
-    applyBackground({ image: `url(${JSON.stringify(objectURL)})` });
-  } catch {
-    // The previous complete background remains visible when the upload cannot be loaded.
-  }
+  await activateFetchedBackground(
+    'image',
+    `/api/appearance/wallpapers/${encodeURIComponent(id)}`,
+    scheme,
+  );
+}
+
+export async function activateNasaBackground(scheme: WallpaperColorScheme) {
+  if (!isWallpaperColorScheme(scheme)) return;
+  await activateFetchedBackground('nasa', '/api/appearance/nasa-wallpaper', scheme);
 }
 
 export function setWallpaperColorScheme(scheme: WallpaperColorScheme) {
@@ -240,6 +227,37 @@ function releaseUploadedObjectURL() {
   if (!uploadedObjectURL) return;
   URL.revokeObjectURL(uploadedObjectURL);
   uploadedObjectURL = '';
+}
+
+async function activateFetchedBackground(
+  source: 'image' | 'nasa',
+  endpoint: string,
+  scheme: WallpaperColorScheme,
+) {
+  activeSource = source;
+  activeScheme = scheme;
+  const version = ++requestVersion;
+  try {
+    const response = await fetch(endpoint, {
+      cache: 'no-cache',
+      headers: authorizationHeaders(),
+    });
+    const mimeType =
+      response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (!response.ok || !['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+      throw new Error(`${source} wallpaper returned ${response.status} ${mimeType}`);
+    }
+    const bytes = await response.arrayBuffer();
+    const sourceColor = await extractImageSourceColor(bytes, mimeType);
+    if (activeSource !== source || version !== requestVersion) return;
+    const objectURL = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+    releaseUploadedObjectURL();
+    uploadedObjectURL = objectURL;
+    applyPalettes(createMaterialPalettes(sourceColor, scheme));
+    applyBackground({ image: `url(${JSON.stringify(objectURL)})` });
+  } catch {
+    // The previous complete background remains visible when the image cannot be loaded.
+  }
 }
 
 function authorizationHeaders() {

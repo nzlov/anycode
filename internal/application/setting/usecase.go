@@ -24,6 +24,7 @@ type UseCase interface {
 	UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error)
 	UploadAppearanceWallpaper(ctx context.Context, input UploadAppearanceWallpaperInput) (AppearanceSettingsDTO, error)
 	OpenAppearanceWallpaper(ctx context.Context, id string) (WallpaperStream, error)
+	OpenNASAWallpaper(ctx context.Context) (WallpaperStream, error)
 	ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error)
 	CreateQuickCommand(ctx context.Context, input CreateQuickCommandInput) (QuickCommandDTO, error)
 	DeleteQuickCommand(ctx context.Context, input DeleteQuickCommandInput) error
@@ -79,9 +80,12 @@ type QuickCommandDTO struct {
 type Service struct {
 	repo       domain.Repository
 	wallpapers domain.WallpaperStore
+	nasa       domain.NASAWallpaperSource
 	now        func() time.Time
 	generateID func() (domain.QuickCommandID, error)
 }
+
+type Option func(*Service)
 
 const (
 	defaultPageSize  = 20
@@ -89,17 +93,28 @@ const (
 	maxWallpaperSize = 20 << 20
 )
 
-func New(repo domain.Repository, wallpapers ...domain.WallpaperStore) *Service {
-	var wallpaperStore domain.WallpaperStore
-	if len(wallpapers) > 0 {
-		wallpaperStore = wallpapers[0]
+func WithWallpaperStore(store domain.WallpaperStore) Option {
+	return func(service *Service) {
+		service.wallpapers = store
 	}
-	return &Service{
+}
+
+func WithNASAWallpaperSource(source domain.NASAWallpaperSource) Option {
+	return func(service *Service) {
+		service.nasa = source
+	}
+}
+
+func New(repo domain.Repository, options ...Option) *Service {
+	service := &Service{
 		repo:       repo,
-		wallpapers: wallpaperStore,
 		now:        time.Now,
 		generateID: generateID,
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error) {
@@ -215,6 +230,17 @@ func (s *Service) OpenAppearanceWallpaper(ctx context.Context, id string) (Wallp
 		return WallpaperStream{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryInfraError, "wallpaper not found")
 	}
 	return WallpaperStream{Filename: configuration.WallpaperFilename, MimeType: configuration.WallpaperMimeType, Reader: reader}, nil
+}
+
+func (s *Service) OpenNASAWallpaper(ctx context.Context) (WallpaperStream, error) {
+	if s == nil || s.nasa == nil {
+		return WallpaperStream{}, errors.New("setting usecase: NASA wallpaper service unavailable")
+	}
+	wallpaper, err := s.nasa.Open(ctx)
+	if err != nil {
+		return WallpaperStream{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "load NASA wallpaper failed").WithRetryable(true)
+	}
+	return WallpaperStream{Filename: "nasa-image-of-the-day", MimeType: wallpaper.MimeType, Reader: wallpaper.Reader}, nil
 }
 
 func validationError(field string, message string) error {

@@ -92,6 +92,9 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.Handle("GET /api/appearance/wallpapers/{id}", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		serveAppearanceWallpaper(w, r, opts.settings)
 	})))
+	mux.Handle("GET /api/appearance/nasa-wallpaper", bearerAuth(cfg.AccessKey, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serveNASAWallpaper(w, r, opts.settings)
+	})))
 	if opts.playground {
 		mux.Handle("GET /playground", bearerAuth(cfg.AccessKey, http.HandlerFunc(playgroundHandler)))
 	}
@@ -114,6 +117,28 @@ func serveAppearanceWallpaper(w http.ResponseWriter, r *http.Request, settings s
 	w.Header().Set("Content-Type", stream.MimeType)
 	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": stream.Filename}))
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = io.Copy(w, stream.Reader)
+}
+
+func serveNASAWallpaper(w http.ResponseWriter, r *http.Request, settings settingapp.UseCase) {
+	if settings == nil {
+		writeApplicationError(w, http.StatusServiceUnavailable, apperror.New(apperror.CodeInternal, apperror.CategoryInfraError, "appearance service unavailable").WithRetryable(true))
+		return
+	}
+	stream, err := settings.OpenNASAWallpaper(r.Context())
+	if err != nil {
+		appErr, ok := apperror.From(err)
+		if !ok {
+			appErr = apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "load NASA wallpaper failed").WithRetryable(true)
+		}
+		writeApplicationError(w, http.StatusBadGateway, appErr)
+		return
+	}
+	defer stream.Reader.Close()
+	w.Header().Set("Content-Type", stream.MimeType)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": stream.Filename}))
+	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = io.Copy(w, stream.Reader)
 }

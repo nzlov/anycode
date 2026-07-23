@@ -35,11 +35,12 @@ const (
 	BackgroundTypeSolid BackgroundType = "solid"
 	BackgroundTypeImage BackgroundType = "image"
 	BackgroundTypeBing  BackgroundType = "bing"
+	BackgroundTypeNASA  BackgroundType = "nasa"
 )
 
 func (backgroundType BackgroundType) Valid() bool {
 	switch backgroundType {
-	case BackgroundTypeSolid, BackgroundTypeImage, BackgroundTypeBing:
+	case BackgroundTypeSolid, BackgroundTypeImage, BackgroundTypeBing, BackgroundTypeNASA:
 		return true
 	default:
 		return false
@@ -137,4 +138,13 @@ type WallpaperStore interface {
 	SaveWallpaper(ctx context.Context, id string, reader io.Reader) error
 	OpenWallpaper(ctx context.Context, id string) (io.ReadCloser, error)
 	DeleteWallpaper(ctx context.Context, id string) error
+}
+
+type RemoteWallpaper struct {
+	MimeType string
+	Reader   io.ReadCloser
+}
+
+type NASAWallpaperSource interface {
+	Open(ctx context.Context) (RemoteWallpaper, error)
 }

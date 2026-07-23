@@ -32,6 +32,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/fsbrowser"
 	"github.com/nzlov/anycode/internal/infra/gitcli"
 	"github.com/nzlov/anycode/internal/infra/gitdiffcli"
+	"github.com/nzlov/anycode/internal/infra/nasawallpaper"
 	"github.com/nzlov/anycode/internal/infra/shellinit"
 	webpushinfra "github.com/nzlov/anycode/internal/infra/webpush"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
@@ -208,7 +209,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Questions:        questionService,
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
-		Settings:         settingapp.New(store.Settings(), files),
+		Settings:         settingapp.New(store.Settings(), settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New())),
 		CodexModels:      capabilities.Models,
 	}
 	return &wiredApplication{useCases: useCases, codex: codex}, nil
