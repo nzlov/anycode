@@ -137,7 +137,6 @@ func (r *Runtime) Start(ctx context.Context, input domain.StartInput) (domain.Tu
 		"tunnel",
 		"--url", r.proxyURL,
 		"--http-host-header", routeHost,
-		"--logformat", "json",
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = replaceEnv(os.Environ(), "HOME", r.runtimeHome)

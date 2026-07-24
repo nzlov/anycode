@@ -4,10 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	domain "github.com/nzlov/anycode/internal/domain/tunnel"
 )
@@ -15,6 +20,66 @@ import (
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
+
+func TestStartUsesSupportedCloudflaredArguments(t *testing.T) {
+	origin, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer origin.Close()
+
+	tempDir := t.TempDir()
+	argsPath := filepath.Join(tempDir, "args")
+	binPath := filepath.Join(tempDir, "cloudflared")
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' \"$@\" > \"$ANYCODE_TEST_CLOUDFLARED_ARGS\"\n" +
+		"printf '%s\\n' 'https://argument-test.trycloudflare.com'\n" +
+		"trap 'exit 0' TERM INT\n" +
+		"while :; do sleep 1; done\n"
+	if err := os.WriteFile(binPath, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANYCODE_TEST_CLOUDFLARED_ARGS", argsPath)
+
+	runtime, err := New(binPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := runtime.CloseAll(ctx); err != nil {
+			t.Errorf("close runtime: %v", err)
+		}
+	})
+
+	started, err := runtime.Start(context.Background(), domain.StartInput{
+		Tunnel: domain.Tunnel{
+			ID: "tunnel-1", SessionID: "session-1",
+			Port: origin.Addr().(*net.TCPAddr).Port,
+		},
+		Auth: "secret-token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started.URL != "https://argument-test.trycloudflare.com" {
+		t.Fatalf("url = %q", started.URL)
+	}
+	rawArgs, err := os.ReadFile(argsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Fields(string(rawArgs))
+	want := []string{
+		"tunnel",
+		"--url", runtime.proxyURL,
+		"--http-host-header", "tunnel-1.internal",
+	}
+	if !slices.Equal(args, want) {
+		t.Fatalf("arguments = %#v, want %#v", args, want)
+	}
+}
 
 func TestAuthQuerySetsCookieAndRedirectsWithoutToken(t *testing.T) {
 	runtime, item := testRuntime("secret-token")
