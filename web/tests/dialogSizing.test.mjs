@@ -96,6 +96,8 @@ test('long content dialogs keep one explicit scrolling content area', () => {
   assert.match(stylesSource, /\.quick-command-list\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(questionsSource, /\.questions-dialog__body\s*{[^}]*overflow:\s*hidden/s);
   assert.match(stylesSource, /\.forward-approval-dialog__panel\s*{[^}]*overflow:\s*auto/s);
+  assert.match(stylesSource, /\.directory-dialog__body\s*{[^}]*overflow:\s*hidden/s);
+  assert.match(stylesSource, /\.directory-list\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(diffWorkspaceSource, /\.diff-files\s*{[^}]*overflow-y:\s*auto/s);
   assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);
 });
