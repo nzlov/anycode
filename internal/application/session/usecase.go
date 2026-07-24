@@ -1063,7 +1063,7 @@ func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domai
 		}
 		return s.queueInterruptedSessionResume(ctx, session, interruptedRun)
 	case domain.StatusWaitingUser:
-		return s.recoverInternalWaitingUserSession(ctx, session, interruptedRun)
+		return s.recoverWaitingUserSession(ctx, session, interruptedRun)
 	}
 	return nil
 }
@@ -1168,21 +1168,13 @@ func (s *Service) recoveryCodexOptions(ctx context.Context, session domain.Sessi
 	return options, nil
 }
 
-func (s *Service) recoverInternalWaitingUserSession(ctx context.Context, session domain.Session, run *processdomain.Run) error {
+func (s *Service) recoverWaitingUserSession(ctx context.Context, session domain.Session, run *processdomain.Run) error {
 	request, ok, err := s.latestQuestionRequest(ctx, session.ID)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "questions_recovery_missing", "interrupted waiting-user session has no recoverable question request")
-	}
-	if !isInternalQuestionRequest(request) {
-		if s.questions != nil {
-			if err := s.questions.CancelPendingRequestsBySession(ctx, questiondomain.SessionID(session.ID), "codex app-server restarted"); err != nil {
-				return err
-			}
-		}
-		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "app_server_restarted_during_questions", "the active questions call ended when Codex app-server restarted")
 	}
 	if request.Status == questiondomain.RequestPending {
 		if run == nil && session.Status == domain.StatusWaitingUser {
@@ -1196,6 +1188,9 @@ func (s *Service) recoverInternalWaitingUserSession(ctx context.Context, session
 			"requestId": string(request.ID),
 			"reason":    "service_restarted",
 		})
+	}
+	if !isInternalQuestionRequest(request) {
+		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "questions_recovery_missing", "interrupted agent question is no longer pending")
 	}
 	if request.Status != questiondomain.RequestAnswered {
 		return s.persistInterruptedRecoveryFailureWithRun(ctx, session, run, "questions_recovery_missing", "interrupted question request is no longer recoverable")
@@ -3023,7 +3018,15 @@ func (s *Service) submitAgentQuestionRequest(ctx context.Context, input question
 			return err
 		}
 		if origin.Status != processdomain.StatusWaitingUser {
-			return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "questions turn is no longer waiting")
+			if origin.Status != processdomain.StatusExited {
+				return apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "questions turn is no longer waiting")
+			}
+			publishedEvents, err = s.queueQuestionAnswerResumeInTx(ctx, tx, persisted, origin)
+			if err != nil {
+				return err
+			}
+			result = persisted
+			return nil
 		}
 		if err := tx.Processes().MarkRunning(ctx, origin.ID, origin.CodexSessionID); err != nil {
 			return err
@@ -3069,6 +3072,88 @@ func (s *Service) submitAgentQuestionRequest(ctx context.Context, input question
 		s.publishSessionEvent(ctx, event)
 	}
 	return questionRequestDTO(result), nil
+}
+
+func (s *Service) queueQuestionAnswerResumeInTx(ctx context.Context, tx port.Tx, request questiondomain.Request, origin processdomain.Run) ([]eventdomain.DomainEvent, error) {
+	if strings.TrimSpace(origin.CodexSessionID) == "" {
+		return nil, apperror.New(apperror.CodeResumeFailed, apperror.CategoryCodexError, "origin process has no Codex session id").WithRetryable(true)
+	}
+	session, err := tx.Sessions().Find(ctx, domain.ID(request.SessionID))
+	if err != nil {
+		return nil, err
+	}
+	options := codexStartOptions{
+		resumeCodexSessionID: origin.CodexSessionID,
+		resumeOfProcessRunID: origin.ID,
+		sessionID:            domain.ID(request.SessionID),
+		nodeRunID:            origin.NodeRunID,
+		prompt:               questionAnswerResumePrompt(request),
+	}
+	queued, queuedEvent, hasQueuedEvent, err := s.prepareQueuedSession(session, options, domain.QueuePriorityHigh, domain.QueueKindResume)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Sessions().Save(ctx, queued); err != nil {
+		return nil, err
+	}
+	events := make([]eventdomain.DomainEvent, 0, 4)
+	if hasQueuedEvent {
+		events = append(events, queuedEvent)
+	}
+	answerEvents, err := s.newSessionEvents(queued, statusUpdateInputs(
+		sessionEventInput{eventType: "question.answered", payload: map[string]any{
+			"requestId": string(request.ID), "processRunId": string(origin.ID),
+		}},
+		sessionEventInput{eventType: "session.answer_resume_queued", payload: map[string]any{
+			"requestId": string(request.ID), "originProcessRunId": string(origin.ID),
+		}},
+	))
+	if err != nil {
+		return nil, err
+	}
+	events = append(events, answerEvents...)
+	for _, event := range events {
+		if err := tx.Events().Append(ctx, event); err != nil {
+			return nil, err
+		}
+	}
+	return events, nil
+}
+
+func questionAnswerResumePrompt(request questiondomain.Request) string {
+	type answerItem struct {
+		QuestionID       string         `json:"questionId"`
+		Body             string         `json:"body,omitempty"`
+		SelectedOptionID string         `json:"selectedOptionId,omitempty"`
+		SelectedLabel    string         `json:"selectedLabel,omitempty"`
+		CustomAnswer     string         `json:"customAnswer,omitempty"`
+		Payload          map[string]any `json:"payload,omitempty"`
+	}
+	payload := struct {
+		RequestID string       `json:"requestId"`
+		Answers   []answerItem `json:"answers"`
+	}{RequestID: string(request.ID), Answers: make([]answerItem, 0, len(request.Questions))}
+	for _, question := range request.Questions {
+		item := answerItem{
+			QuestionID:   string(question.ID),
+			Body:         question.Body,
+			CustomAnswer: question.CustomAnswer,
+			Payload:      question.Answer,
+		}
+		if question.SelectedOptionID != nil {
+			item.SelectedOptionID = string(*question.SelectedOptionID)
+			for _, option := range question.Options {
+				if option.ID == *question.SelectedOptionID {
+					item.SelectedLabel = option.Label
+					break
+				}
+			}
+		}
+		payload.Answers = append(payload.Answers, item)
+	}
+	encoded, _ := json.Marshal(payload)
+	// GLUE: the original App Server request has ended, so persisted question-domain answers cross back into the resumed Codex turn here; remove when App Server supports durable tool-call continuation.
+	return "Continue the expired questions call using the user's persisted answers below. Do not ask this question request again.\n\n" + string(encoded)
 }
 
 type codexStartOptions struct {
@@ -4746,6 +4831,25 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 		return domain.Session{}, false, fmt.Errorf("find active process after exit: %w", err)
 	}
 	processEvent := sessionEventInput{eventType: "process.exited", payload: processExitPayload(handle.ProcessRunID, exitResult)}
+	if current.Status == domain.StatusWaitingUser {
+		request, pending, err := s.pendingAgentQuestionForProcess(ctx, handle.ProcessRunID)
+		if err != nil {
+			return domain.Session{}, false, err
+		}
+		if pending {
+			inputs := []sessionEventInput{
+				processEvent,
+				{eventType: "process.suspended_for_user", payload: map[string]any{
+					"processRunId": string(handle.ProcessRunID),
+					"requestId":    string(request.ID),
+				}},
+			}
+			if err := s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, false, inputs, promptAppendSettlementComplete); err != nil {
+				return domain.Session{}, false, err
+			}
+			return current, false, nil
+		}
+	}
 	if ok && active.ID != handle.ProcessRunID {
 		return domain.Session{}, false, s.markProcessExitedWithSessionEvents(ctx, handle.ProcessRunID, exitResult, current, false, []sessionEventInput{processEvent})
 	}
@@ -4844,6 +4948,20 @@ func (s *Service) persistCodexProcessExit(ctx context.Context, session domain.Se
 	default:
 		return domain.Session{}, false, s.markProcessExitedWithSessionEventsAndSettlement(ctx, handle.ProcessRunID, exitResult, current, false, inputs, promptAppendSettlementForExitedSession(current.Status))
 	}
+}
+
+func (s *Service) pendingAgentQuestionForProcess(ctx context.Context, runID processdomain.RunID) (questiondomain.Request, bool, error) {
+	if s.uow == nil {
+		return questiondomain.Request{}, false, nil
+	}
+	var request questiondomain.Request
+	var found bool
+	err := s.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		var err error
+		request, found, err = tx.Questions().FindPendingRequestByOriginProcessRun(ctx, questiondomain.ProcessRunID(runID))
+		return err
+	})
+	return request, found, err
 }
 
 func promptAppendSettlementForExitedSession(status domain.Status) promptAppendSettlement {

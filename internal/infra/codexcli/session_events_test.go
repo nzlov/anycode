@@ -169,3 +169,28 @@ func TestCommandProjectorHidesWaitProgressAndEmitsResultOnlyTerminal(t *testing.
 		t.Fatalf("terminal duration = content:%v command:%v", terminal.DurationMS, command.DurationMS)
 	}
 }
+
+func TestProjectorMergesQuestionsDynamicToolCompletion(t *testing.T) {
+	projector := newCodexTranscriptProjector()
+	lines := []string{
+		`{"timestamp":"2026-07-24T11:53:14Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"outer-call","name":"exec","input":"const answer = await tools.questions({questions:[{body:\"Continue?\",options:[{id:\"yes\",label:\"Yes\",payload:{attempt:2,note:null}}]}]}); text(answer);"}}`,
+		`{"timestamp":"2026-07-24T11:53:25Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"outer-call","output":"Script running with cell ID 19\nWall time 11.0 seconds\nOutput:\n"}}`,
+		`{"timestamp":"2026-07-24T11:54:24Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"DynamicToolCall","id":"question-request","tool":"questions","arguments":{"questions":[{"body":"Continue?","options":[{"id":"yes","label":"Yes","payload":{"attempt":2,"note":null}}]}]},"status":"completed","content_items":[{"type":"inputText","text":"{\"answers\":[{\"questionId\":\"question-request:0\",\"selectedOptionId\":\"yes\"}],\"requestId\":\"question-request\"}"}],"success":true}}}`,
+	}
+
+	var got []codexLogEvent
+	for index, line := range lines {
+		got = append(got, projector.project(parseSessionLogLine([]byte(line), "/workspace", "rollout.jsonl", int64(index)))...)
+	}
+	if len(got) != 3 {
+		t.Fatalf("projected events = %#v, want questions start, transport output, and completion", got)
+	}
+	completed := got[2]
+	if completed.CorrelationID != "outer-call" || completed.Phase != process.CodexPhaseCompleted {
+		t.Fatalf("questions completion = %#v", completed)
+	}
+	tool, ok := completed.Content.(process.CodexToolContent)
+	if !ok || tool.QualifiedName != "questions" || tool.Input.Text == "" || tool.Output.Text == "" {
+		t.Fatalf("questions completion content = %#v", completed.Content)
+	}
+}

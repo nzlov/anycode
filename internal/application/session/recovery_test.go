@@ -245,6 +245,83 @@ func TestRecoverInterruptedSessionCompletesPreparedCloseWithPendingQuestion(t *t
 	}
 }
 
+func TestRecoverInterruptedAgentQuestionKeepsPendingRequestAnswerable(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+
+	now := time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC)
+	session := domain.Session{
+		ID: "session-1", ProjectID: "project-1", Mode: domain.ModeChat, Status: domain.StatusWaitingUser,
+		CodexSessionID: "codex-session-1", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	run := processdomain.Run{
+		ID: "process-run-1", SessionID: "session-1", Status: processdomain.StatusWaitingUser,
+		CodexSessionID: "codex-session-1", StartedAt: now,
+	}
+	if err := store.Processes().CreateRun(ctx, run); err != nil {
+		t.Fatalf("create process run: %v", err)
+	}
+	originID := questiondomain.ProcessRunID(run.ID)
+	request := questiondomain.Request{
+		ID: "request-1", SessionID: "session-1", OriginProcessRunID: &originID,
+		Status: questiondomain.RequestPending, CreatedAt: now,
+		Questions: []questiondomain.Question{{
+			ID: "request-1:0", RequestID: "request-1", Body: "Continue?", Type: "choice", Status: string(questiondomain.RequestPending),
+		}},
+	}
+	if err := store.Questions().CreateRequest(ctx, request); err != nil {
+		t.Fatalf("create question request: %v", err)
+	}
+	service := New(
+		store.Sessions(),
+		newFakeProjectRepository("project-1"),
+		WithProcesses(store.Processes(), &fakeCodexProcess{}),
+		WithEvents(store.Events()),
+		WithUnitOfWork(store),
+		WithQuestions(questionapp.New(store.Questions())),
+	)
+	service.now = func() time.Time { return now.Add(time.Minute) }
+
+	count, err := service.RecoverInterruptedSessions(ctx)
+	if err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("RecoverInterruptedSessions() = %d, want 1", count)
+	}
+	gotSession, err := store.Sessions().Find(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	if gotSession.Status != domain.StatusWaitingUser {
+		t.Fatalf("recovered session status = %q", gotSession.Status)
+	}
+	gotRun, err := store.Processes().FindRun(ctx, run.ID)
+	if err != nil {
+		t.Fatalf("find process run: %v", err)
+	}
+	if gotRun.Status != processdomain.StatusExited {
+		t.Fatalf("recovered process status = %q", gotRun.Status)
+	}
+	gotRequest, err := store.Questions().FindRequest(ctx, request.ID)
+	if err != nil {
+		t.Fatalf("find question request: %v", err)
+	}
+	if gotRequest.Status != questiondomain.RequestPending {
+		t.Fatalf("recovered question status = %q", gotRequest.Status)
+	}
+}
+
 func processNodeRunID(value string) *processdomain.NodeRunID {
 	id := processdomain.NodeRunID(value)
 	return &id

@@ -160,6 +160,43 @@ test('completed without a loaded start remains visible', () => {
   assert.equal(items[0].content.output.text, 'output');
 });
 
+test('questions completion updates its outer exec timeline item', () => {
+  const items = reduceTranscriptEvents([
+    {
+      id: 'questions-transport',
+      orderKey: '01',
+      correlationId: 'outer-call',
+      phase: 'started',
+      occurredAt: '2026-07-24T11:53:14Z',
+      content: {
+        __typename: 'TranscriptToolContent',
+        qualifiedName: 'tools.questions',
+        category: 'custom',
+        input: { format: 'plain', text: 'await tools.questions({ questions: [] })' },
+        output: { format: 'plain', text: '' },
+        images: [],
+      },
+    },
+    {
+      ...toolResult('questions-completed', '02', 'outer-call', '{"requestId":"request-1"}'),
+      content: {
+        __typename: 'TranscriptToolContent',
+        qualifiedName: 'questions',
+        category: 'custom',
+        input: { format: 'json', text: '{"questions":[]}' },
+        output: { format: 'json', text: '{"requestId":"request-1"}' },
+        images: [],
+      },
+    },
+  ]);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, 'outer-call');
+  assert.equal(items[0].phase, 'completed');
+  assert.equal(items[0].content.qualifiedName, 'questions');
+  assert.equal(items[0].content.output.text, '{"requestId":"request-1"}');
+});
+
 test('loading an older start later anchors the merged item at the start', () => {
   const completed = commandEvent('complete-a', '03', 'call-a', 'completed', {
     commands: [

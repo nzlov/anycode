@@ -283,16 +283,19 @@ func finalizeCodexEvents(events []codexLogEvent, sourceID string, offset int64) 
 }
 
 type codexTranscriptProjector struct {
-	commands        map[string]*projectedCommandState
-	patches         map[string]projectedPatchState
-	commandCells    map[string]string
-	transportCalls  map[string]string
-	tools           map[string]process.CodexToolContent
-	recentCanonical []transcriptCanonicalMessage
-	pendingMessages []pendingTranscriptMessage
-	bufferedEvents  []codexLogEvent
-	visibility      standardTranscriptVisibility
-	lastOccurred    time.Time
+	commands       map[string]*projectedCommandState
+	patches        map[string]projectedPatchState
+	commandCells   map[string]string
+	transportCalls map[string]string
+	tools          map[string]process.CodexToolContent
+	// GLUE: Rollouts give outer exec and inner questions calls different IDs; remove this alias when nested dynamic calls expose their transport call ID.
+	pendingQuestionSignature   string
+	pendingQuestionCorrelation string
+	recentCanonical            []transcriptCanonicalMessage
+	pendingMessages            []pendingTranscriptMessage
+	bufferedEvents             []codexLogEvent
+	visibility                 standardTranscriptVisibility
+	lastOccurred               time.Time
 }
 
 type projectedCommandState struct {
@@ -350,6 +353,7 @@ func (p *codexTranscriptProjector) projectEvents(events []codexLogEvent, histori
 	for index := range events {
 		event := &events[index]
 		p.fillOccurredAt(event)
+		p.correlateNestedTool(event)
 		if !p.mergeInvocationState(event) {
 			continue
 		}
@@ -396,6 +400,41 @@ func (p *codexTranscriptProjector) projectEvents(events []codexLogEvent, histori
 		projected = append(projected, p.queueVisibleEvent(*event, historical)...)
 	}
 	return projected
+}
+
+func (p *codexTranscriptProjector) correlateNestedTool(event *codexLogEvent) {
+	if event == nil || event.CorrelationID == "" {
+		return
+	}
+	tool, ok := event.Content.(process.CodexToolContent)
+	if !ok {
+		return
+	}
+	if event.Phase == process.CodexPhaseStarted {
+		arguments, ok := extractExecToolArgument(tool.Input.Text, "tools.questions")
+		if !ok {
+			return
+		}
+		if encoded, err := json.Marshal(arguments); err == nil {
+			p.pendingQuestionSignature = string(encoded)
+			p.pendingQuestionCorrelation = event.CorrelationID
+		}
+		return
+	}
+	if tool.QualifiedName != "questions" || !isTerminalCodexPhase(event.Phase) {
+		return
+	}
+	var arguments any
+	if json.Unmarshal([]byte(tool.Input.Text), &arguments) != nil {
+		return
+	}
+	encoded, err := json.Marshal(arguments)
+	if err != nil || string(encoded) != p.pendingQuestionSignature {
+		return
+	}
+	event.CorrelationID = p.pendingQuestionCorrelation
+	p.pendingQuestionSignature = ""
+	p.pendingQuestionCorrelation = ""
 }
 
 func (p *codexTranscriptProjector) fillOccurredAt(event *codexLogEvent) {
@@ -1501,7 +1540,26 @@ func codexEventsFromEventMessage(timestamp string, payload map[string]any, creat
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
 		}}
-	case "user_message", "context_compacted", "web_search_end", "item_started", "item_completed":
+	case "item_completed":
+		item := mapValue(payload["item"])
+		if stringValue(item, "type") != "DynamicToolCall" || stringValue(item, "tool") != "questions" {
+			return nil
+		}
+		status := stringValue(item, "status")
+		if success, ok := item["success"].(bool); ok && !success {
+			status = "failed"
+		}
+		normalized := normalizedItem("custom_tool_call", status)
+		normalized["qualifiedName"] = "questions"
+		normalized["input"] = jsonText(item["arguments"])
+		normalized["output"] = textFromValue(firstValue(item["content_items"], item["contentItems"]))
+		return []codexLogEvent{{
+			EventID:   eventID(timestamp, "item.completed", stringValue(item, "id")),
+			Type:      "item.completed",
+			Payload:   itemEventPayload(item, normalized),
+			CreatedAt: createdAt,
+		}}
+	case "user_message", "context_compacted", "web_search_end", "item_started":
 		// Richer canonical records are emitted as response_item or compacted entries.
 		return nil
 	case "task_started":

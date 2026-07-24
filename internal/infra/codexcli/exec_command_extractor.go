@@ -93,6 +93,20 @@ func extractExecTransportID(source string) string {
 	return ""
 }
 
+func extractExecToolArgument(source string, name string) (any, bool) {
+	calls, ok := parseExecToolCalls(source)
+	if !ok {
+		return nil, false
+	}
+	for _, call := range calls {
+		if call.name != name || call.call == nil || len(call.call.ArgumentList) != 1 {
+			continue
+		}
+		return staticPlanValue(call.call.ArgumentList[0])
+	}
+	return nil, false
+}
+
 func extractUpdatePlanInvocation(source string) (map[string]any, bool) {
 	calls, ok := parseExecToolCalls(source)
 	if !ok {
@@ -118,6 +132,10 @@ func staticPlanValue(expression ast.Expression) (any, bool) {
 		return value.Value.String(), true
 	case *ast.BooleanLiteral:
 		return value.Value, true
+	case *ast.NumberLiteral:
+		return value.Value, true
+	case *ast.NullLiteral:
+		return nil, true
 	case *ast.ArrayLiteral:
 		items := make([]any, 0, len(value.Value))
 		for _, item := range value.Value {

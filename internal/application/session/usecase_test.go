@@ -1982,6 +1982,145 @@ func TestHandleQuestionRequestAnsweredDoesNotMarkNormalAnswerRunning(t *testing.
 	}
 }
 
+func TestAgentQuestionProcessExitKeepsWaitingAndQueuesAnsweredResume(t *testing.T) {
+	ctx := context.Background()
+	store, err := entstore.Open(ctx, entstore.OpenOptions{DatabaseURL: filepath.Join(t.TempDir(), "anycode.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate store: %v", err)
+	}
+	now := time.Date(2026, 7, 24, 9, 0, 0, 0, time.UTC)
+	session := domain.Session{
+		ID:             "session-1",
+		ProjectID:      "project-1",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusWaitingUser,
+		CodexSessionID: "codex-session-1",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := store.Sessions().Save(ctx, session); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+	run := processdomain.Run{
+		ID:             "process-run-1",
+		SessionID:      "session-1",
+		Status:         processdomain.StatusWaitingUser,
+		CodexSessionID: "codex-session-1",
+		StartedAt:      now,
+	}
+	if err := store.Processes().CreateRun(ctx, run); err != nil {
+		t.Fatalf("create process run: %v", err)
+	}
+	originID := questiondomain.ProcessRunID("process-run-1")
+	request := questiondomain.Request{
+		ID:                 "request-1",
+		SessionID:          "session-1",
+		OriginProcessRunID: &originID,
+		Status:             questiondomain.RequestPending,
+		CreatedAt:          now,
+		Questions: []questiondomain.Question{{
+			ID:        "request-1:0",
+			RequestID: "request-1",
+			Body:      "Continue?",
+			Status:    string(questiondomain.RequestPending),
+			Options: []questiondomain.Option{{
+				ID:    "continue",
+				Label: "Continue",
+			}},
+		}},
+	}
+	if err := store.Questions().CreateRequest(ctx, request); err != nil {
+		t.Fatalf("create question request: %v", err)
+	}
+	service := New(
+		store.Sessions(),
+		newFakeProjectRepository("project-1"),
+		WithProcesses(store.Processes(), &fakeCodexProcess{}),
+		WithQuestions(questionapp.New(store.Questions())),
+		WithEvents(store.Events()),
+		WithUnitOfWork(store),
+	)
+	nextID := 0
+	service.generateID = func() (domain.ID, error) {
+		nextID++
+		return domain.ID(fmt.Sprintf("event-%d", nextID)), nil
+	}
+
+	_, shouldContinue, err := service.persistCodexProcessExit(
+		ctx,
+		session,
+		processdomain.CodexHandle{ProcessRunID: "process-run-1"},
+		codexStartOptions{},
+		processdomain.ExitResult{FailureReason: "questions wait timed out", FinishedAt: time.Unix(100, 0).UTC()},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("persistCodexProcessExit() error = %v", err)
+	}
+	if shouldContinue {
+		t.Fatal("persistCodexProcessExit() shouldContinue = true")
+	}
+	gotSession, err := store.Sessions().Find(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("find session after timeout: %v", err)
+	}
+	if got := gotSession.Status; got != domain.StatusWaitingUser {
+		t.Fatalf("session status after question timeout = %q", got)
+	}
+	gotRequest, err := store.Questions().FindRequest(ctx, request.ID)
+	if err != nil {
+		t.Fatalf("find question after timeout: %v", err)
+	}
+	if got := gotRequest.Status; got != questiondomain.RequestPending {
+		t.Fatalf("question status after timeout = %q", got)
+	}
+
+	optionID := questiondomain.OptionID("continue")
+	answered, err := service.SubmitQuestionRequest(ctx, questionapp.SubmitRequestInput{
+		RequestID: "request-1",
+		Answers: []questiondomain.Answer{{
+			QuestionID:       "request-1:0",
+			SelectedOptionID: &optionID,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SubmitQuestionRequest() error = %v", err)
+	}
+	if answered.Status != questiondomain.RequestAnswered {
+		t.Fatalf("answered request status = %q", answered.Status)
+	}
+	queued, err := store.Sessions().Find(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("find queued session: %v", err)
+	}
+	if queued.Status != domain.StatusQueued || queued.Queue.Kind != domain.QueueKindResume {
+		t.Fatalf("queued session = %#v", queued)
+	}
+	if queued.Queue.ResumeCodexSessionID != "codex-session-1" || queued.Queue.ResumeOfProcessRunID != "process-run-1" {
+		t.Fatalf("answer resume queue = %#v", queued.Queue)
+	}
+	if !strings.Contains(queued.Queue.Prompt, `"requestId":"request-1"`) || !strings.Contains(queued.Queue.Prompt, `"selectedLabel":"Continue"`) {
+		t.Fatalf("answer resume prompt = %q", queued.Queue.Prompt)
+	}
+	sessionID := eventdomain.SessionID(session.ID)
+	events, err := store.Events().List(ctx, eventdomain.Scope{SessionID: &sessionID})
+	if err != nil {
+		t.Fatalf("list session events: %v", err)
+	}
+	requireSessionEventTypes(t, events,
+		"process.exited",
+		"process.suspended_for_user",
+		"session.queued",
+		"question.answered",
+		"session.answer_resume_queued",
+		sessionStatusUpdatedEvent,
+	)
+}
+
 func TestHandleQuestionRequestAnsweredFailsMergeNode(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
