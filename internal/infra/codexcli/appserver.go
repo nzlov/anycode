@@ -211,11 +211,14 @@ func anyCodeDynamicTools() []map[string]any {
 			"type": "function", "name": "tunnel_create",
 			"description": "Create an authenticated temporary Cloudflare Quick Tunnel for an HTTP test program already listening on a localhost port.",
 			"inputSchema": map[string]any{
-				"type": "object", "additionalProperties": false, "required": []string{"port"},
-				"properties": map[string]any{"port": map[string]any{
-					"type": "integer", "minimum": 1024, "maximum": 65535,
-					"description": "Local HTTP port on 127.0.0.1. The test program must already be listening.",
-				}},
+				"type": "object", "additionalProperties": false, "required": []string{"name", "port"},
+				"properties": map[string]any{
+					"name": map[string]any{"type": "string", "description": "Human-readable tunnel name shown in AnyCode."},
+					"port": map[string]any{
+						"type": "integer", "minimum": 1024, "maximum": 65535,
+						"description": "Local HTTP port on 127.0.0.1. The test program must already be listening.",
+					},
+				},
 			},
 		},
 		{

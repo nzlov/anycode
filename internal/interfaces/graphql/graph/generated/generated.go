@@ -599,6 +599,7 @@ type ComplexityRoot struct {
 		CreatedAt func(childComplexity int) int
 		Hostname  func(childComplexity int) int
 		ID        func(childComplexity int) int
+		Name      func(childComplexity int) int
 		Port      func(childComplexity int) int
 		SessionID func(childComplexity int) int
 		Status    func(childComplexity int) int
@@ -3301,6 +3302,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Tunnel.ID(childComplexity), true
+	case "Tunnel.name":
+		if e.ComplexityRoot.Tunnel.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.Name(childComplexity), true
 	case "Tunnel.port":
 		if e.ComplexityRoot.Tunnel.Port == nil {
 			break
@@ -3859,6 +3866,7 @@ type Mutation {
 type Tunnel {
   id: ID!
   sessionId: ID!
+  name: String!
   port: Int!
   hostname: String!
   url: String!
@@ -11335,6 +11343,8 @@ func (ec *executionContext) fieldContext_Query_tunnels(_ context.Context, field 
 				return ec.fieldContext_Tunnel_id(ctx, field)
 			case "sessionId":
 				return ec.fieldContext_Tunnel_sessionId(ctx, field)
+			case "name":
+				return ec.fieldContext_Tunnel_name(ctx, field)
 			case "port":
 				return ec.fieldContext_Tunnel_port(ctx, field)
 			case "hostname":
@@ -18386,6 +18396,35 @@ func (ec *executionContext) fieldContext_Tunnel_sessionId(_ context.Context, fie
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_name(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -27775,6 +27814,11 @@ func (ec *executionContext) _Tunnel(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "sessionId":
 			out.Values[i] = ec._Tunnel_sessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._Tunnel_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

@@ -254,35 +254,6 @@
                       <q-item-label>{{ session?.worktreeBranch || '-' }}</q-item-label>
                     </q-item-section>
                   </q-item>
-                  <q-item v-if="worktreeCleanup && worktreeCleanup.status !== 'not_applicable'">
-                    <q-item-section>
-                      <q-item-label caption>工作树清理</q-item-label>
-                      <q-item-label>
-                        <q-badge
-                          outline
-                          :color="worktreeCleanupColor(worktreeCleanup.status)"
-                          :label="worktreeCleanupLabel(worktreeCleanup.status)"
-                        />
-                      </q-item-label>
-                      <q-item-label v-if="worktreeCleanup.error" caption class="text-negative">
-                        {{ worktreeCleanup.error.message }}
-                      </q-item-label>
-                    </q-item-section>
-                    <q-item-section v-if="canRetryWorktreeCleanup" side>
-                      <q-btn
-                        flat
-                        round
-                        dense
-                        icon="refresh"
-                        color="primary"
-                        aria-label="重试工作树清理"
-                        :loading="retryingWorktreeCleanup"
-                        @click="retryCurrentWorktreeCleanup"
-                      >
-                        <q-tooltip>重试工作树清理</q-tooltip>
-                      </q-btn>
-                    </q-item-section>
-                  </q-item>
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>更新时间</q-item-label>
@@ -309,30 +280,10 @@
                       <q-item-label>{{ session?.node ?? '-' }}</q-item-label>
                     </q-item-section>
                   </q-item>
-                  <q-item>
-                    <q-item-section>
-                      <q-item-label caption>状态</q-item-label>
-                      <q-item-label>
-                        <q-badge
-                          v-if="session"
-                          outline
-                          :color="statusColor(session.status)"
-                          :label="statusLabel(session.status)"
-                        />
-                        <template v-else>-</template>
-                      </q-item-label>
-                    </q-item-section>
-                  </q-item>
                   <q-item v-if="session?.closeReason">
                     <q-item-section>
                       <q-item-label caption>关闭原因</q-item-label>
                       <q-item-label>{{ closeReasonLabel(session.closeReason) }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                  <q-item>
-                    <q-item-section>
-                      <q-item-label caption>权限</q-item-label>
-                      <q-item-label>{{ session?.config.permissionMode || '-' }}</q-item-label>
                     </q-item-section>
                   </q-item>
                   <q-item v-if="latestTokenUsage">
@@ -374,6 +325,24 @@
                           节点 {{ item.nodeRunId }} {{ formatTokenCount(item.usage.totalTokens) }}
                         </span>
                       </q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>隧道</q-item-label>
+                      <q-item-label v-if="sessionTunnels.length" class="session-tunnel-list">
+                        <a
+                          v-for="tunnel in sessionTunnels"
+                          :key="tunnel.id"
+                          :href="tunnel.accessUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <q-icon name="lan" />
+                          <span>{{ tunnel.name }}</span>
+                        </a>
+                      </q-item-label>
+                      <q-item-label v-else>-</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
@@ -628,6 +597,7 @@ import type {
 } from '@/services/sessions';
 import type { TranscriptItem } from '@/services/sessionTimeline';
 import type { TranscriptTokenUsage } from '@/services/sessionTimeline';
+import { listTunnels, type Tunnel } from '@/services/tunnels';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
 
 const emit = defineEmits<{
@@ -759,7 +729,6 @@ const {
   stopping,
   closing,
   retryingInitialization,
-  retryingWorktreeCleanup,
   updatingConfig,
   questionsLoading,
   questionsSubmitting,
@@ -773,7 +742,6 @@ const {
   stopSession,
   closeSession: closeSessionRequest,
   retryInitialization,
-  retryWorktreeCleanup,
   updateConfig,
   loadPendingQuestions,
   loadOlderEvents,
@@ -918,10 +886,6 @@ const canClose = computed(() => session.value?.availableActions.includes('close'
 const canRetryInitialization = computed(
   () => session.value?.availableActions.includes('retry_initialization') ?? false,
 );
-const worktreeCleanup = computed(() => session.value?.worktreeCleanup ?? null);
-const canRetryWorktreeCleanup = computed(
-  () => session.value?.availableActions.includes('retry_worktree_cleanup') ?? false,
-);
 const canCancelQueue = computed(
   () => session.value?.status === 'queued' && session.value.availableActions.includes('stop'),
 );
@@ -961,6 +925,12 @@ const canSavePromptAppendEdit = computed(() => {
 const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
 const artifactRefreshKey = computed(() => String(artifactUpdateVersion.value));
 const latestTokenUsage = computed(() => tokenUsage.value);
+const sessionTunnels = ref<Tunnel[]>([]);
+const latestTunnelEventId = computed(() => {
+  const event = events.value.at(-1);
+  if (event?.content.__typename !== 'TranscriptToolContent' || event.phase !== 'completed') return '';
+  return ['tunnel_create', 'tunnel_close'].includes(event.content.qualifiedName) ? event.id : '';
+});
 const contextUsagePercent = (usage: TranscriptTokenUsage) => {
   if (!usage.contextWindow) return '-';
   return `${Math.min(100, Math.round((usage.currentInputTokens / usage.contextWindow) * 100))}%`;
@@ -1084,24 +1054,6 @@ function closeReasonLabel(value: string) {
     workflow_closed: '流程关闭',
   };
   return labels[value] ?? value;
-}
-
-function worktreeCleanupLabel(status: string) {
-  const labels: Record<string, string> = {
-    provisioning: '创建中',
-    active: '使用中',
-    pending: '等待清理',
-    failed: '清理失败',
-    cleaned: '已清理',
-  };
-  return labels[status] ?? status;
-}
-
-function worktreeCleanupColor(status: string) {
-  if (status === 'failed') return 'negative';
-  if (status === 'pending' || status === 'provisioning') return 'warning';
-  if (status === 'cleaned') return 'positive';
-  return 'primary';
 }
 
 function notifyError(err: unknown, fallback: string) {
@@ -1269,15 +1221,6 @@ async function retryCurrentInitialization() {
   }
 }
 
-async function retryCurrentWorktreeCleanup() {
-  if (!canRetryWorktreeCleanup.value) return;
-  try {
-    await retryWorktreeCleanup();
-  } catch (err) {
-    notifyError(err, '重试工作树清理失败');
-  }
-}
-
 async function submitAnswers(requestId: string, answers: QuestionAnswerInput[]) {
   await submitPendingAnswers(requestId, answers);
 }
@@ -1297,6 +1240,19 @@ watch(
   },
   { flush: 'pre' },
 );
+
+watch(latestTunnelEventId, (eventId) => {
+  if (eventId) void refreshSessionTunnels();
+});
+
+async function refreshSessionTunnels() {
+  try {
+    const tunnels = await listTunnels();
+    if (mounted) sessionTunnels.value = tunnels.filter((tunnel) => tunnel.sessionId === sessionId);
+  } catch {
+    // Keep the last successful query result until another tunnel event retries it.
+  }
+}
 
 watch(
   session,
@@ -1326,6 +1282,7 @@ async function initializeSessionDetail() {
   await Promise.all([loadSessionDetail(), loadPendingQuestions()]);
   if (!mounted) return;
   startLiveUpdates();
+  void refreshSessionTunnels();
   await nextTick();
   const body = streamBodyRef.value;
   if (!body) return;
@@ -1595,6 +1552,25 @@ async function scrollEventsToBottom() {
   gap: 4px 12px;
   color: var(--ac-text);
   font-size: 12px;
+}
+
+.session-tunnel-list {
+  display: grid;
+  gap: 6px;
+}
+
+.session-tunnel-list a {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  color: var(--q-primary);
+  text-decoration: none;
+}
+
+.session-tunnel-list a:hover,
+.session-tunnel-list a:focus-visible {
+  text-decoration: underline;
 }
 
 .right-panel,

@@ -88,6 +88,7 @@ type Mutation {
 type Tunnel {
   id: ID!
   sessionId: ID!
+  name: String!
   port: Int!
   hostname: String!
   url: String!

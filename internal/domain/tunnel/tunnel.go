@@ -18,6 +18,7 @@ const (
 type Tunnel struct {
 	ID        ID
 	SessionID SessionID
+	Name      string
 	Port      int
 	Hostname  string
 	URL       string

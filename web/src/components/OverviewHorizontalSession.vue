@@ -8,12 +8,14 @@
       <OverviewHorizontalSessionDesktop
         v-if="card.mode === 'terminal' || sessionLayout === 'desktop'"
         :card="card"
+        :tunnels="tunnels"
         :priority-loading="priorityLoading"
         @set-priority="emit('set-priority', $event)"
       />
       <OverviewHorizontalSessionMobile
         v-else
         :card="card"
+        :tunnels="tunnels"
         :priority-loading="priorityLoading"
         @set-priority="emit('set-priority', $event)"
       />
@@ -46,9 +48,11 @@ import { computed, ref } from 'vue';
 import OverviewHorizontalSessionDesktop from '@/components/OverviewHorizontalSessionDesktop.vue';
 import OverviewHorizontalSessionMobile from '@/components/OverviewHorizontalSessionMobile.vue';
 import type { SessionCard, SessionPriority } from '@/services/sessions';
+import type { Tunnel } from '@/services/tunnels';
 
 const props = defineProps<{
   card: SessionCard;
+  tunnels: Tunnel[];
   width: number;
   minWidth: number;
   priorityLoading?: boolean;

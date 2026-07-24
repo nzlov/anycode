@@ -84,17 +84,20 @@ func (s *Service) createTunnel(ctx context.Context, call processdomain.DynamicTo
 		return processdomain.DynamicToolResult{}, errors.New("tunnel service is unavailable")
 	}
 	var input struct {
-		Port int `json:"port"`
+		Name string `json:"name"`
+		Port int    `json:"port"`
 	}
 	if err := json.Unmarshal(call.Arguments, &input); err != nil {
 		return processdomain.DynamicToolResult{}, fmt.Errorf("decode tunnel_create arguments: %w", err)
 	}
-	created, err := s.tunnels.Create(ctx, tunnelapp.CreateInput{SessionID: tunneldomain.SessionID(call.SessionID), Port: input.Port})
+	created, err := s.tunnels.Create(ctx, tunnelapp.CreateInput{
+		SessionID: tunneldomain.SessionID(call.SessionID), Name: input.Name, Port: input.Port,
+	})
 	if err != nil {
 		return processdomain.DynamicToolResult{}, err
 	}
 	payload, err := json.Marshal(map[string]any{
-		"id": created.Tunnel.ID, "url": created.AccessURL, "publicUrl": created.Tunnel.URL,
+		"id": created.Tunnel.ID, "name": created.Tunnel.Name, "url": created.AccessURL, "publicUrl": created.Tunnel.URL,
 		"hostname": created.Tunnel.Hostname, "port": created.Tunnel.Port, "status": created.Tunnel.Status,
 	})
 	if err != nil {
@@ -117,7 +120,7 @@ func (s *Service) listTunnels(ctx context.Context, call processdomain.DynamicToo
 			continue
 		}
 		result = append(result, map[string]any{
-			"id": item.ID, "url": item.AccessURL, "publicUrl": item.URL, "hostname": item.Hostname,
+			"id": item.ID, "name": item.Name, "url": item.AccessURL, "publicUrl": item.URL, "hostname": item.Hostname,
 			"port": item.Port, "status": item.Status, "createdAt": item.CreatedAt,
 		})
 	}

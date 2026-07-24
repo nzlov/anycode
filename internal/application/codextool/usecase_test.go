@@ -121,7 +121,7 @@ func TestTunnelToolsUseCallingSessionOwnership(t *testing.T) {
 	tunnels := &fakeTunnels{
 		created: tunnelapp.CreateResult{
 			Tunnel: tunnelapp.DTO{
-				ID: "tunnel-1", SessionID: "session-1", Port: 4173,
+				ID: "tunnel-1", SessionID: "session-1", Name: "Vite preview", Port: 4173,
 				Hostname: "example.trycloudflare.com", URL: "https://example.trycloudflare.com",
 				AccessURL: "https://example.trycloudflare.com/?anycode_auth=secret-token",
 				Status:    tunneldomain.StatusRunning,
@@ -132,16 +132,19 @@ func TestTunnelToolsUseCallingSessionOwnership(t *testing.T) {
 	service := New(nil, nil, WithTunnels(tunnels))
 
 	created, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
-		SessionID: "session-1", Tool: tunnelCreateTool, Arguments: json.RawMessage(`{"port":4173}`),
+		SessionID: "session-1", Tool: tunnelCreateTool, Arguments: json.RawMessage(`{"name":"Vite preview","port":4173}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tunnels.createInput.SessionID != "session-1" || tunnels.createInput.Port != 4173 {
+	if tunnels.createInput.SessionID != "session-1" || tunnels.createInput.Name != "Vite preview" || tunnels.createInput.Port != 4173 {
 		t.Fatalf("create input = %#v", tunnels.createInput)
 	}
 	if !strings.Contains(created.Content[0].Text, `"url":"https://example.trycloudflare.com/?anycode_auth=secret-token"`) {
 		t.Fatalf("create result = %#v", created)
+	}
+	if !strings.Contains(created.Content[0].Text, `"name":"Vite preview"`) {
+		t.Fatalf("create result name = %#v", created)
 	}
 
 	if _, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{

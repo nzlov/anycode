@@ -846,7 +846,7 @@ func (r *queryResolver) Tunnels(ctx context.Context) ([]*model.Tunnel, error) {
 	result := make([]*model.Tunnel, 0, len(items))
 	for _, item := range items {
 		result = append(result, &model.Tunnel{
-			ID: string(item.ID), SessionID: string(item.SessionID), Port: item.Port,
+			ID: string(item.ID), SessionID: string(item.SessionID), Name: item.Name, Port: item.Port,
 			Hostname: item.Hostname, URL: item.URL, AccessURL: item.AccessURL,
 			Status: string(item.Status), CreatedAt: item.CreatedAt,
 		})

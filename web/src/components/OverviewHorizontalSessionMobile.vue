@@ -21,6 +21,7 @@
         </div>
       </div>
       <div class="overview-horizontal-session-mobile__actions">
+        <SessionTunnelButton :tunnels="tunnels" />
         <SessionTerminalButton :source-session-id="card.id" />
         <q-btn
           flat
@@ -47,6 +48,7 @@
 import SessionDetailView from '@/components/SessionDetailView.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
+import SessionTunnelButton from '@/components/SessionTunnelButton.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
 import {
@@ -54,9 +56,11 @@ import {
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
 import type { SessionCard, SessionPriority } from '@/services/sessions';
+import type { Tunnel } from '@/services/tunnels';
 
 defineProps<{
   card: SessionCard;
+  tunnels: Tunnel[];
   priorityLoading?: boolean;
 }>();
 

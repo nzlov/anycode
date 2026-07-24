@@ -3,6 +3,7 @@ import { graphqlFetch } from '@/services/graphqlClient';
 export interface Tunnel {
   id: string;
   sessionId: string;
+  name: string;
   port: number;
   hostname: string;
   url: string;
@@ -18,6 +19,7 @@ export async function listTunnels() {
         tunnels {
           id
           sessionId
+          name
           port
           hostname
           url

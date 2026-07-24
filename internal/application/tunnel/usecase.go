@@ -25,6 +25,7 @@ type UseCase interface {
 
 type CreateInput struct {
 	SessionID domain.SessionID
+	Name      string
 	Port      int
 }
 
@@ -37,6 +38,7 @@ type CreateResult struct {
 type DTO struct {
 	ID        domain.ID
 	SessionID domain.SessionID
+	Name      string
 	Port      int
 	Hostname  string
 	URL       string
@@ -84,6 +86,10 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreateResult, 
 	if input.SessionID == "" {
 		return CreateResult{}, errors.New("tunnel session id is required")
 	}
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return CreateResult{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "tunnel name is required")
+	}
 	if input.Port < 1024 || input.Port > 65535 {
 		return CreateResult{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "tunnel port must be between 1024 and 65535")
 	}
@@ -103,6 +109,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreateResult, 
 		Tunnel: domain.Tunnel{
 			ID:        domain.ID("tunnel-" + strings.ToLower(id)),
 			SessionID: input.SessionID,
+			Name:      name,
 			Port:      input.Port,
 			Status:    domain.StatusStarting,
 			CreatedAt: now,
@@ -183,7 +190,7 @@ func (s *Service) CloseAll(ctx context.Context) error {
 
 func toDTO(item domain.Tunnel) DTO {
 	return DTO{
-		ID: item.ID, SessionID: item.SessionID, Port: item.Port, Hostname: item.Hostname,
+		ID: item.ID, SessionID: item.SessionID, Name: item.Name, Port: item.Port, Hostname: item.Hostname,
 		URL: item.URL, AccessURL: item.AccessURL, Status: item.Status, CreatedAt: item.CreatedAt,
 	}
 }

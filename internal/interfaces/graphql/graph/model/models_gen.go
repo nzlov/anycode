@@ -704,6 +704,7 @@ type TranscriptUsageAttribution struct {
 type Tunnel struct {
 	ID        string    `json:"id"`
 	SessionID string    `json:"sessionId"`
+	Name      string    `json:"name"`
 	Port      int       `json:"port"`
 	Hostname  string    `json:"hostname"`
 	URL       string    `json:"url"`

@@ -44,7 +44,7 @@ func TestCreateReturnsAnyCodeAuthURL(t *testing.T) {
 	}
 	service.now = func() time.Time { return time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC) }
 
-	result, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Port: 4173})
+	result, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Name: "Vite preview", Port: 4173})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +53,9 @@ func TestCreateReturnsAnyCodeAuthURL(t *testing.T) {
 	}
 	if runtime.started.Auth != "secret-token" {
 		t.Fatal("runtime did not receive the auth token")
+	}
+	if result.Tunnel.Name != "Vite preview" || runtime.started.Tunnel.Name != "Vite preview" {
+		t.Fatalf("tunnel name = %q", result.Tunnel.Name)
 	}
 	if strings.Contains(result.Tunnel.URL, "secret-token") || result.Tunnel.AccessURL != result.AccessURL {
 		t.Fatal("public URL or access URL is incorrect")
@@ -73,7 +76,14 @@ func TestCloseOwnedRejectsAnotherSession(t *testing.T) {
 
 func TestCreateRejectsReservedPort(t *testing.T) {
 	service := New(&runtimeStub{}, WithReservedPorts(8080))
-	if _, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Port: 8080}); err == nil {
+	if _, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Name: "app", Port: 8080}); err == nil {
 		t.Fatal("expected reserved port validation error")
+	}
+}
+
+func TestCreateRequiresName(t *testing.T) {
+	service := New(&runtimeStub{})
+	if _, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Port: 4173}); err == nil {
+		t.Fatal("expected tunnel name validation error")
 	}
 }

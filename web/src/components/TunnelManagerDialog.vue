@@ -38,42 +38,59 @@
       </q-card-section>
 
       <q-card-section class="tunnel-manager__content">
-        <q-list v-if="tunnels.length" bordered separator class="tunnel-list">
-          <q-item v-for="tunnel in tunnels" :key="tunnel.id" class="tunnel-list__item">
-            <q-item-section avatar top>
-              <q-icon name="lan" color="primary" size="24px" />
-            </q-item-section>
-            <q-item-section class="tunnel-list__main">
-              <q-item-label class="row items-center q-gutter-sm">
-                <span class="text-weight-medium">端口 {{ tunnel.port }}</span>
-                <q-badge outline color="positive" :label="statusLabel(tunnel.status)" />
-              </q-item-label>
-              <q-item-label caption class="tunnel-list__url">
-                <a :href="tunnel.accessUrl" target="_blank" rel="noopener noreferrer">
+        <div v-if="tunnels.length" class="tunnel-groups">
+          <q-list
+            v-for="group in tunnelGroups"
+            :key="group.sessionId"
+            bordered
+            separator
+            class="tunnel-list"
+          >
+            <q-item-label header class="tunnel-list__header">
+              <span>{{ group.title }}</span>
+              <span class="text-caption">{{ group.sessionId }}</span>
+            </q-item-label>
+            <q-item v-for="tunnel in group.tunnels" :key="tunnel.id" class="tunnel-list__item">
+              <q-item-section avatar top>
+                <q-icon name="lan" color="primary" size="24px" />
+              </q-item-section>
+              <q-item-section class="tunnel-list__main">
+                <q-item-label class="row items-center q-gutter-sm">
+                  <a
+                    class="tunnel-list__name text-weight-medium"
+                    :href="tunnel.accessUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ tunnel.name }}
+                  </a>
+                  <q-badge outline color="positive" :label="statusLabel(tunnel.status)" />
+                </q-item-label>
+                <q-item-label caption>端口 {{ tunnel.port }}</q-item-label>
+                <q-item-label caption class="tunnel-list__url">
                   {{ tunnel.accessUrl }}
-                </a>
-              </q-item-label>
-              <q-item-label caption lines="1">会话 {{ tunnel.sessionId }}</q-item-label>
-              <q-item-label caption>{{ formatCreatedAt(tunnel.createdAt) }}</q-item-label>
-            </q-item-section>
-            <q-item-section side top>
-              <q-btn
-                flat
-                round
-                dense
-                class="app-icon-btn"
-                color="negative"
-                icon="close"
-                :aria-label="`关闭端口 ${tunnel.port} 的隧道`"
-                :loading="closingId === tunnel.id"
-                :disable="Boolean(closingId)"
-                @click="confirmClose(tunnel)"
-              >
-                <q-tooltip>关闭隧道</q-tooltip>
-              </q-btn>
-            </q-item-section>
-          </q-item>
-        </q-list>
+                </q-item-label>
+                <q-item-label caption>{{ formatCreatedAt(tunnel.createdAt) }}</q-item-label>
+              </q-item-section>
+              <q-item-section side top>
+                <q-btn
+                  flat
+                  round
+                  dense
+                  class="app-icon-btn"
+                  color="negative"
+                  icon="close"
+                  :aria-label="`关闭隧道 ${tunnel.name}`"
+                  :loading="closingId === tunnel.id"
+                  :disable="Boolean(closingId)"
+                  @click="confirmClose(tunnel)"
+                >
+                  <q-tooltip>关闭隧道</q-tooltip>
+                </q-btn>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </div>
 
         <div v-else-if="!loading && !error" class="tunnel-manager__empty">
           <q-icon name="lan" size="40px" />
@@ -98,7 +115,7 @@
           </q-card-section>
           <q-separator />
           <q-card-section>
-            确认关闭端口 {{ selectedTunnel?.port }} 的隧道？外部地址将立即失效。
+            确认关闭隧道“{{ selectedTunnel?.name }}”？外部地址将立即失效。
           </q-card-section>
           <q-card-actions align="right">
             <q-btn v-close-popup flat label="取消" color="primary" no-caps />
@@ -119,9 +136,10 @@
 
 <script setup lang="ts">
 import { QDialog } from 'quasar';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { closeTunnel as closeTunnelRequest, listTunnels, type Tunnel } from '@/services/tunnels';
+import { getSessionCard } from '@/services/sessions';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -138,6 +156,20 @@ const error = ref('');
 const closingId = ref('');
 const closeDialogOpen = ref(false);
 const selectedTunnel = ref<Tunnel | null>(null);
+const sessionTitles = ref<Record<string, string>>({});
+const tunnelGroups = computed(() => {
+  const groups = new Map<string, Tunnel[]>();
+  for (const tunnel of tunnels.value) {
+    const items = groups.get(tunnel.sessionId) ?? [];
+    items.push(tunnel);
+    groups.set(tunnel.sessionId, items);
+  }
+  return [...groups].map(([sessionId, items]) => ({
+    sessionId,
+    title: sessionTitles.value[sessionId] || `会话 ${sessionId}`,
+    tunnels: items,
+  }));
+});
 
 watch(
   () => props.page || props.modelValue,
@@ -152,11 +184,24 @@ async function refresh() {
   error.value = '';
   try {
     tunnels.value = await listTunnels();
+    await loadSessionTitles(tunnels.value);
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载隧道失败';
   } finally {
     loading.value = false;
   }
+}
+
+async function loadSessionTitles(items: Tunnel[]) {
+  const sessionIds = [...new Set(items.map((tunnel) => tunnel.sessionId))];
+  const cards = await Promise.allSettled(
+    sessionIds.map((sessionId) => getSessionCard(sessionId, { notify: false })),
+  );
+  sessionTitles.value = Object.fromEntries(
+    cards.flatMap((result) =>
+      result.status === 'fulfilled' ? [[result.value.id, result.value.title]] : [],
+    ),
+  );
 }
 
 function close() {
@@ -225,6 +270,18 @@ function formatCreatedAt(value: string) {
   align-items: flex-start;
 }
 
+.tunnel-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.tunnel-list__header {
+  display: grid;
+  gap: 2px;
+  color: var(--ac-text);
+  font-weight: 600;
+}
+
 .tunnel-list__main {
   min-width: 0;
 }
@@ -233,7 +290,7 @@ function formatCreatedAt(value: string) {
   overflow-wrap: anywhere;
 }
 
-.tunnel-list__url a {
+.tunnel-list__name {
   color: var(--q-primary);
 }
 

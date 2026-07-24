@@ -600,6 +600,22 @@ func TestQuestionsDynamicToolDescriptionMatchesOptionalOptions(t *testing.T) {
 	}
 }
 
+func TestTunnelCreateDynamicToolRequiresName(t *testing.T) {
+	tools := anyCodeDynamicTools()
+	if len(tools) < 3 {
+		t.Fatal("tunnel_create dynamic tool is missing")
+	}
+	inputSchema := tools[2]["inputSchema"].(map[string]any)
+	required := inputSchema["required"].([]string)
+	properties := inputSchema["properties"].(map[string]any)
+	if len(required) != 2 || required[0] != "name" || required[1] != "port" {
+		t.Fatalf("tunnel_create required fields = %#v", required)
+	}
+	if _, exists := properties["name"]; !exists {
+		t.Fatalf("tunnel_create name property is missing: %#v", properties)
+	}
+}
+
 func TestProbeUsesAppServerCatalog(t *testing.T) {
 	bin := fakeCodex(t, `#!/bin/sh
 IFS= read -r request

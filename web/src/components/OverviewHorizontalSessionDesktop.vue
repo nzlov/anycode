@@ -13,6 +13,7 @@
         </div>
       </div>
       <div class="overview-horizontal-session-desktop__actions">
+        <SessionTunnelButton :tunnels="tunnels" />
         <SessionPriorityControl
           :priority="card.priority"
           :loading="priorityLoading"
@@ -101,6 +102,7 @@ import { computed, ref } from 'vue';
 import SessionDetailView from '@/components/SessionDetailView.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
+import SessionTunnelButton from '@/components/SessionTunnelButton.vue';
 import TerminalView from '@/components/TerminalView.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
@@ -115,9 +117,11 @@ import {
   type SessionCard,
   type SessionPriority,
 } from '@/services/sessions';
+import type { Tunnel } from '@/services/tunnels';
 
 const props = defineProps<{
   card: SessionCard;
+  tunnels: Tunnel[];
   priorityLoading?: boolean;
 }>();
 

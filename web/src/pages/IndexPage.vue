@@ -48,6 +48,7 @@
           v-for="card in horizontalCards"
           :key="card.id"
           :card="card"
+          :tunnels="tunnelsForSession(card.id)"
           :width="sessionColumnWidth(card.id)"
           :min-width="minSessionColumnWidth"
           :priority-loading="activePrioritySessionId === card.id"
@@ -138,6 +139,8 @@
 
             <div class="overview-card-footer">
               <div class="overview-card-secondary-actions" @contextmenu.stop @touchstart.stop>
+                <SessionTunnelButton :tunnels="tunnelsForSession(card.id)" show-count />
+
                 <q-btn
                   v-if="card.todoList"
                   flat
@@ -464,6 +467,7 @@ import PageToolbar from '@/components/PageToolbar.vue';
 import ProjectVisibilityFilters from '@/components/ProjectVisibilityFilters.vue';
 import SessionCardContextMenu from '@/components/SessionCardContextMenu.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
+import SessionTunnelButton from '@/components/SessionTunnelButton.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
@@ -506,6 +510,7 @@ import {
   type SessionUpdateEvent,
 } from '@/services/sessions';
 import { isPendingApprovalReviewable } from '@/services/workflowApprovalReview';
+import { listTunnels, type Tunnel } from '@/services/tunnels';
 
 const route = useRoute();
 const router = useRouter();
@@ -515,6 +520,7 @@ const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
 const horizontalWidthStorageKey = 'anycode.overview.horizontal-widths.v1';
 const minSessionColumnWidth = 320;
 const todoMenuHideDelay = 120;
+const tunnelRefreshInterval = 5000;
 const { overviewViewMode } = useOverviewViewMode();
 const isDesktopOverview = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const isHorizontalView = computed(
@@ -548,6 +554,7 @@ const {
 const { projects, loadProjects } = useProjects();
 
 const hiddenProjectIds = ref(readHiddenProjectIds());
+const tunnels = ref<Tunnel[]>([]);
 const overviewCardGroups = computed(() => createOverviewCardGroups(latestRows.value, []));
 const latestCards = computed(() => overviewCardGroups.value.latestCards);
 const projectChips = computed(() => {
@@ -625,6 +632,7 @@ const diffDialogTarget = computed<DiffWorkspaceTarget>(() => ({
   sessionId: diffDialogSessionId.value,
 }));
 let todoMenuHideTimer: ReturnType<typeof setTimeout> | null = null;
+let tunnelRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const cardRefreshRequests = createKeyedLatestRequestTracker();
 let overviewMounted = false;
 // GLUE: suppress Quasar's synthetic post-long-press click; remove when QMenu consumes it upstream.
@@ -643,12 +651,15 @@ interface ApprovalContext {
 
 onMounted(() => {
   overviewMounted = true;
+  tunnelRefreshTimer = setInterval(() => void refreshTunnels(), tunnelRefreshInterval);
   void startOverview();
 });
 
 onUnmounted(() => {
   overviewMounted = false;
   cardRefreshRequests.clear();
+  if (tunnelRefreshTimer) clearInterval(tunnelRefreshTimer);
+  tunnelRefreshTimer = null;
   clearTodoMenuHideTimer();
   clearCardClickSuppression();
   stopOverviewLiveUpdates();
@@ -669,7 +680,9 @@ watch(questionsDialog, (open) => {
 });
 
 async function startOverview() {
+  const tunnelsRequest = refreshTunnels();
   await loadProjects();
+  await tunnelsRequest;
   pruneHiddenProjectIds();
   await loadOverviewSessions();
   if (!overviewMounted) return;
@@ -678,6 +691,18 @@ async function startOverview() {
 
 async function loadOverviewSessions() {
   await loadLatestSessions();
+}
+
+async function refreshTunnels() {
+  try {
+    tunnels.value = await listTunnels();
+  } catch {
+    // Keep the last successful query result until the next refresh.
+  }
+}
+
+function tunnelsForSession(sessionId: string) {
+  return tunnels.value.filter((tunnel) => tunnel.sessionId === sessionId);
 }
 
 function readHiddenProjectIds() {
