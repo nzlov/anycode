@@ -695,6 +695,17 @@ type TranscriptUsageAttribution struct {
 	Usage        *TranscriptTokenUsage `json:"usage"`
 }
 
+type Tunnel struct {
+	ID        string    `json:"id"`
+	SessionID string    `json:"sessionId"`
+	Port      int       `json:"port"`
+	Hostname  string    `json:"hostname"`
+	URL       string    `json:"url"`
+	AccessURL string    `json:"accessUrl"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
 type UpdateAppearanceSettingsInput struct {
 	BackgroundType       AppearanceBackgroundType `json:"backgroundType"`
 	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`

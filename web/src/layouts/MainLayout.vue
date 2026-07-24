@@ -36,6 +36,18 @@
           <q-tooltip>历史卡片</q-tooltip>
         </q-btn>
         <q-btn
+          v-if="$route.name === 'overview'"
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="lan"
+          aria-label="隧道"
+          @click="openTunnels"
+        >
+          <q-tooltip>隧道</q-tooltip>
+        </q-btn>
+        <q-btn
           v-if="$route.name === 'overview' && $q.screen.width >= overviewDesktopMinWidth"
           flat
           round
@@ -110,6 +122,7 @@
       v-if="applicationReady && !$q.screen.lt.sm"
       v-model="settingsDialogOpen"
     />
+    <TunnelManagerDialog v-if="applicationReady && !$q.screen.lt.sm" v-model="tunnelDialogOpen" />
 
     <q-dialog v-if="applicationReady" v-model="logoutDialogOpen">
       <q-card class="confirm-dialog">
@@ -155,6 +168,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import GlobalSettingsDialog from '@/components/GlobalSettingsDialog.vue';
 import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
+import TunnelManagerDialog from '@/components/TunnelManagerDialog.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
 import { useThemeMode } from '@/composables/useThemeMode';
@@ -164,6 +178,7 @@ import { disablePushNotifications } from '@/services/pushNotifications';
 const $q = useQuasar();
 const overviewDesktopMinWidth = 700;
 const settingsDialogOpen = ref(false);
+const tunnelDialogOpen = ref(false);
 const logoutDialogOpen = ref(false);
 const { themeMode, themeModes } = useThemeMode();
 const { overviewViewMode } = useOverviewViewMode();
@@ -245,6 +260,14 @@ function openSettings() {
     return;
   }
   settingsDialogOpen.value = true;
+}
+
+function openTunnels() {
+  if ($q.screen.lt.sm) {
+    void router.push({ name: 'tunnels' });
+    return;
+  }
+  tunnelDialogOpen.value = true;
 }
 
 async function logout() {

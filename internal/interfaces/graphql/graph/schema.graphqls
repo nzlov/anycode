@@ -26,6 +26,7 @@ type Query {
   pendingQuestionRequests(sessionId: ID!): [QuestionRequest!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
+  tunnels: [Tunnel!]!
 }
 
 type CodexSlashCommand {
@@ -80,6 +81,18 @@ type Mutation {
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
   submitQuestionRequest(input: SubmitQuestionRequestInput!): QuestionRequest!
+  closeTunnel(id: ID!): Boolean!
+}
+
+type Tunnel {
+  id: ID!
+  sessionId: ID!
+  port: Int!
+  hostname: String!
+  url: String!
+  accessUrl: String!
+  status: String!
+  createdAt: Time!
 }
 
 type Subscription {

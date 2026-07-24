@@ -9,6 +9,7 @@ const routes: RouteRecordRaw[] = [
       { path: '', name: 'overview', component: () => import('@/pages/IndexPage.vue') },
       { path: 'new', name: 'new-session', component: () => import('@/pages/NewSessionPage.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/pages/SettingsPage.vue') },
+      { path: 'tunnels', name: 'tunnels', component: () => import('@/pages/TunnelsPage.vue') },
       {
         path: 'projects/new',
         name: 'project-create',

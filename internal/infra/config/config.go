@@ -12,6 +12,7 @@ type Config struct {
 	HTTPAddr                string
 	DataDir                 string
 	CodexBin                string
+	CloudflaredBin          string
 	AgentMaxConcurrent      int
 	TursoDatabaseURL        string
 	TursoAuthToken          string
@@ -46,6 +47,7 @@ func LoadFromEnv() (Config, error) {
 		HTTPAddr:                envOrDefault("ANYCODE_HTTP_ADDR", ":8080"),
 		DataDir:                 envOrDefault("ANYCODE_DATA_DIR", "./data"),
 		CodexBin:                envOrDefault("CODEX_BIN", "codex"),
+		CloudflaredBin:          envOrDefault("CLOUDFLARED_BIN", "cloudflared"),
 		AgentMaxConcurrent:      envIntOrDefault("ANYCODE_AGENT_MAX_CONCURRENT", 1),
 		TursoDatabaseURL:        os.Getenv("TURSO_DATABASE_URL"),
 		TursoAuthToken:          os.Getenv("TURSO_AUTH_TOKEN"),

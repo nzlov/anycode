@@ -356,7 +356,7 @@ cat >/dev/null
 			} `json:"dynamicTools"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(content, &request) != nil || request.Method != "thread/resume" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.ServiceTier != "default" || len(request.Params.DynamicTools) != 2 || request.Params.DynamicTools[0].Name != "questions" || request.Params.DynamicTools[1].Name != "publish_artifact" {
+	if json.Unmarshal(content, &request) != nil || request.Method != "thread/resume" || request.Params.DeveloperInstructions != "AnyCode rules" || request.Params.ServiceTier != "default" || len(request.Params.DynamicTools) != 5 || request.Params.DynamicTools[0].Name != "questions" || request.Params.DynamicTools[1].Name != "publish_artifact" || request.Params.DynamicTools[2].Name != "tunnel_create" || request.Params.DynamicTools[3].Name != "tunnel_list" || request.Params.DynamicTools[4].Name != "tunnel_close" {
 		t.Fatalf("resume request = %s", content)
 	}
 }

@@ -9,9 +9,11 @@ import (
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	tunneldomain "github.com/nzlov/anycode/internal/domain/tunnel"
 )
 
 func TestQuestionsUsesCallIDAndReturnsAnswers(t *testing.T) {
@@ -115,6 +117,43 @@ func TestDynamicToolRejectsUnknownToolAndParentPath(t *testing.T) {
 	}
 }
 
+func TestTunnelToolsUseCallingSessionOwnership(t *testing.T) {
+	tunnels := &fakeTunnels{
+		created: tunnelapp.CreateResult{
+			Tunnel: tunnelapp.DTO{
+				ID: "tunnel-1", SessionID: "session-1", Port: 4173,
+				Hostname: "example.trycloudflare.com", URL: "https://example.trycloudflare.com",
+				AccessURL: "https://example.trycloudflare.com/?anycode_auth=secret-token",
+				Status:    tunneldomain.StatusRunning,
+			},
+			AccessURL: "https://example.trycloudflare.com/?anycode_auth=secret-token",
+		},
+	}
+	service := New(nil, nil, WithTunnels(tunnels))
+
+	created, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
+		SessionID: "session-1", Tool: tunnelCreateTool, Arguments: json.RawMessage(`{"port":4173}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tunnels.createInput.SessionID != "session-1" || tunnels.createInput.Port != 4173 {
+		t.Fatalf("create input = %#v", tunnels.createInput)
+	}
+	if !strings.Contains(created.Content[0].Text, `"url":"https://example.trycloudflare.com/?anycode_auth=secret-token"`) {
+		t.Fatalf("create result = %#v", created)
+	}
+
+	if _, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
+		SessionID: "session-1", Tool: tunnelCloseTool, Arguments: json.RawMessage(`{"id":"tunnel-1"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if tunnels.closeSession != "session-1" || tunnels.closeID != "tunnel-1" {
+		t.Fatalf("close ownership = session %q id %q", tunnels.closeSession, tunnels.closeID)
+	}
+}
+
 type fakeSessions struct {
 	input  sessionapp.RequestQuestionsInput
 	result questionapp.RequestDTO
@@ -141,4 +180,25 @@ func (f *fakeArtifacts) Publish(_ context.Context, input artifactapp.PublishInpu
 
 func (f *fakeArtifacts) ReadToolContent(context.Context, sessiondomain.SessionFileID) (artifactapp.ToolContent, bool, error) {
 	return f.content, f.hasContent, f.err
+}
+
+type fakeTunnels struct {
+	createInput  tunnelapp.CreateInput
+	created      tunnelapp.CreateResult
+	items        []tunnelapp.DTO
+	closeSession tunneldomain.SessionID
+	closeID      tunneldomain.ID
+}
+
+func (f *fakeTunnels) Create(_ context.Context, input tunnelapp.CreateInput) (tunnelapp.CreateResult, error) {
+	f.createInput = input
+	return f.created, nil
+}
+
+func (f *fakeTunnels) List(context.Context) ([]tunnelapp.DTO, error) { return f.items, nil }
+
+func (f *fakeTunnels) CloseOwned(_ context.Context, sessionID tunneldomain.SessionID, id tunneldomain.ID) error {
+	f.closeSession = sessionID
+	f.closeID = id
+	return nil
 }

@@ -161,6 +161,7 @@ type ComplexityRoot struct {
 		AppendPrompt                func(childComplexity int, input model.AppendPromptInput) int
 		CleanupSessions             func(childComplexity int, input model.CleanupSessionsInput) int
 		CloseSession                func(childComplexity int, input model.CloseSessionInput) int
+		CloseTunnel                 func(childComplexity int, id string) int
 		CreateProject               func(childComplexity int, input model.CreateProjectInput) int
 		CreateQuickCommand          func(childComplexity int, input model.CreateQuickCommandInput) int
 		CreateSession               func(childComplexity int, input model.CreateSessionInput) int
@@ -258,6 +259,7 @@ type ComplexityRoot struct {
 		SessionFiles            func(childComplexity int, input model.ListSessionFilesInput) int
 		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
 		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
+		Tunnels                 func(childComplexity int) int
 		WebPushConfig           func(childComplexity int) int
 		WorkflowDefinition      func(childComplexity int, id string) int
 	}
@@ -585,6 +587,17 @@ type ComplexityRoot struct {
 		Usage        func(childComplexity int) int
 	}
 
+	Tunnel struct {
+		AccessURL func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+		Hostname  func(childComplexity int) int
+		ID        func(childComplexity int) int
+		Port      func(childComplexity int) int
+		SessionID func(childComplexity int) int
+		Status    func(childComplexity int) int
+		URL       func(childComplexity int) int
+	}
+
 	WebPushConfig struct {
 		Enabled   func(childComplexity int) int
 		ProxyURL  func(childComplexity int) int
@@ -701,6 +714,7 @@ type MutationResolver interface {
 	ActivateWorkflowDefinition(ctx context.Context, id string) (bool, error)
 	SubmitWorkflowApproval(ctx context.Context, input model.SubmitWorkflowApprovalInput) (*model.WorkflowRun, error)
 	SubmitQuestionRequest(ctx context.Context, input model.SubmitQuestionRequestInput) (*model.QuestionRequest, error)
+	CloseTunnel(ctx context.Context, id string) (bool, error)
 }
 type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
@@ -724,6 +738,7 @@ type QueryResolver interface {
 	PendingQuestionRequests(ctx context.Context, sessionID string) ([]*model.QuestionRequest, error)
 	SessionFiles(ctx context.Context, input model.ListSessionFilesInput) ([]*model.SessionFile, error)
 	ResolveSessionArtifacts(ctx context.Context, input model.ResolveSessionArtifactsInput) ([]*model.ResolvedSessionArtifact, error)
+	Tunnels(ctx context.Context) ([]*model.Tunnel, error)
 }
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context, sessionID string) (<-chan *model.TranscriptEvent, error)
@@ -1196,6 +1211,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.CloseSession(childComplexity, args["input"].(model.CloseSessionInput)), true
+	case "Mutation.closeTunnel":
+		if e.ComplexityRoot.Mutation.CloseTunnel == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_closeTunnel_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.CloseTunnel(childComplexity, args["id"].(string)), true
 	case "Mutation.createProject":
 		if e.ComplexityRoot.Mutation.CreateProject == nil {
 			break
@@ -1875,6 +1901,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Sessions(childComplexity, args["input"].(*model.ListSessionsInput)), true
+	case "Query.tunnels":
+		if e.ComplexityRoot.Query.Tunnels == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.Tunnels(childComplexity), true
 	case "Query.webPushConfig":
 		if e.ComplexityRoot.Query.WebPushConfig == nil {
 			break
@@ -3207,6 +3239,55 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TranscriptUsageAttribution.Usage(childComplexity), true
 
+	case "Tunnel.accessUrl":
+		if e.ComplexityRoot.Tunnel.AccessURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.AccessURL(childComplexity), true
+	case "Tunnel.createdAt":
+		if e.ComplexityRoot.Tunnel.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.CreatedAt(childComplexity), true
+	case "Tunnel.hostname":
+		if e.ComplexityRoot.Tunnel.Hostname == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.Hostname(childComplexity), true
+	case "Tunnel.id":
+		if e.ComplexityRoot.Tunnel.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.ID(childComplexity), true
+	case "Tunnel.port":
+		if e.ComplexityRoot.Tunnel.Port == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.Port(childComplexity), true
+	case "Tunnel.sessionId":
+		if e.ComplexityRoot.Tunnel.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.SessionID(childComplexity), true
+	case "Tunnel.status":
+		if e.ComplexityRoot.Tunnel.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.Status(childComplexity), true
+	case "Tunnel.url":
+		if e.ComplexityRoot.Tunnel.URL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Tunnel.URL(childComplexity), true
+
 	case "WebPushConfig.enabled":
 		if e.ComplexityRoot.WebPushConfig.Enabled == nil {
 			break
@@ -3678,6 +3759,7 @@ type Query {
   pendingQuestionRequests(sessionId: ID!): [QuestionRequest!]!
   sessionFiles(input: ListSessionFilesInput!): [SessionFile!]!
   resolveSessionArtifacts(input: ResolveSessionArtifactsInput!): [ResolvedSessionArtifact!]!
+  tunnels: [Tunnel!]!
 }
 
 type CodexSlashCommand {
@@ -3732,6 +3814,18 @@ type Mutation {
   activateWorkflowDefinition(id: ID!): Boolean!
   submitWorkflowApproval(input: SubmitWorkflowApprovalInput!): WorkflowRun!
   submitQuestionRequest(input: SubmitQuestionRequestInput!): QuestionRequest!
+  closeTunnel(id: ID!): Boolean!
+}
+
+type Tunnel {
+  id: ID!
+  sessionId: ID!
+  port: Int!
+  hostname: String!
+  url: String!
+  accessUrl: String!
+  status: String!
+  createdAt: Time!
 }
 
 type Subscription {
@@ -4632,6 +4726,17 @@ func (ec *executionContext) field_Mutation_closeSession_args(ctx context.Context
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_closeTunnel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -9014,6 +9119,47 @@ func (ec *executionContext) fieldContext_Mutation_submitQuestionRequest(ctx cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_closeTunnel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_closeTunnel,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().CloseTunnel(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_closeTunnel(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_closeTunnel_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PageInfo_page(ctx context.Context, field graphql.CollectedField, obj *model.PageInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11024,6 +11170,53 @@ func (ec *executionContext) fieldContext_Query_resolveSessionArtifacts(ctx conte
 	if fc.Args, err = ec.field_Query_resolveSessionArtifacts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_tunnels(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_tunnels,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().Tunnels(ctx)
+		},
+		nil,
+		ec.marshalNTunnel2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnelᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_tunnels(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Tunnel_id(ctx, field)
+			case "sessionId":
+				return ec.fieldContext_Tunnel_sessionId(ctx, field)
+			case "port":
+				return ec.fieldContext_Tunnel_port(ctx, field)
+			case "hostname":
+				return ec.fieldContext_Tunnel_hostname(ctx, field)
+			case "url":
+				return ec.fieldContext_Tunnel_url(ctx, field)
+			case "accessUrl":
+				return ec.fieldContext_Tunnel_accessUrl(ctx, field)
+			case "status":
+				return ec.fieldContext_Tunnel_status(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Tunnel_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Tunnel", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -17912,6 +18105,238 @@ func (ec *executionContext) fieldContext_TranscriptUsageAttribution_usage(_ cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Tunnel_id(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_sessionId(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_port(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_port,
+		func(ctx context.Context) (any, error) {
+			return obj.Port, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_port(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_hostname(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_hostname,
+		func(ctx context.Context) (any, error) {
+			return obj.Hostname, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_hostname(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_url(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_url,
+		func(ctx context.Context) (any, error) {
+			return obj.URL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_accessUrl(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_accessUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.AccessURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_accessUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_status(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Tunnel_createdAt(ctx context.Context, field graphql.CollectedField, obj *model.Tunnel) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Tunnel_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNTime2timeᚐTime,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Tunnel_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Tunnel",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WebPushConfig_enabled(ctx context.Context, field graphql.CollectedField, obj *model.WebPushConfig) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23947,6 +24372,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "closeTunnel":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_closeTunnel(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -24776,6 +25208,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_resolveSessionArtifacts(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "tunnels":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_tunnels(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -26996,6 +27450,80 @@ func (ec *executionContext) _TranscriptUsageAttribution(ctx context.Context, sel
 			out.Values[i] = ec._TranscriptUsageAttribution_nodeRunId(ctx, field, obj)
 		case "usage":
 			out.Values[i] = ec._TranscriptUsageAttribution_usage(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var tunnelImplementors = []string{"Tunnel"}
+
+func (ec *executionContext) _Tunnel(ctx context.Context, sel ast.SelectionSet, obj *model.Tunnel) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, tunnelImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Tunnel")
+		case "id":
+			out.Values[i] = ec._Tunnel_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sessionId":
+			out.Values[i] = ec._Tunnel_sessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "port":
+			out.Values[i] = ec._Tunnel_port(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hostname":
+			out.Values[i] = ec._Tunnel_hostname(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "url":
+			out.Values[i] = ec._Tunnel_url(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "accessUrl":
+			out.Values[i] = ec._Tunnel_accessUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._Tunnel_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._Tunnel_createdAt(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -29308,6 +29836,32 @@ func (ec *executionContext) marshalNTranscriptUsageAttribution2ᚖgithubᚗcom�
 		return graphql.Null
 	}
 	return ec._TranscriptUsageAttribution(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTunnel2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnelᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.Tunnel) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNTunnel2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnel(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNTunnel2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnel(ctx context.Context, sel ast.SelectionSet, v *model.Tunnel) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Tunnel(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput(ctx context.Context, v any) (model.UpdateAppearanceSettingsInput, error) {

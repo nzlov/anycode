@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
@@ -22,9 +24,11 @@ import (
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
+	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
+	"github.com/nzlov/anycode/internal/infra/cloudflared"
 	"github.com/nzlov/anycode/internal/infra/codexcli"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/infra/entstore"
@@ -156,6 +160,13 @@ func (a *wiredApplication) Close() {
 	if closer, ok := a.useCases.Sessions.(interface{ Close() }); ok {
 		closer.Close()
 	}
+	if closer, ok := a.useCases.Tunnels.(interface{ CloseAll(context.Context) error }); ok {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := closer.CloseAll(cleanupCtx); err != nil {
+			log.Printf("close tunnels: %s", err.Error())
+		}
+	}
 	if a.codex != nil {
 		if err := a.codex.Close(); err != nil {
 			log.Printf("close codex app-server: %s", err.Error())
@@ -187,12 +198,19 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	workflowService := workflowapp.New(store.Workflows(), workflowapp.WithUnitOfWork(store), workflowapp.WithEvents(events), workflowapp.WithEventPublisher(eventService))
 	gitdiffClient := gitdiffcli.New("")
 	diffService := diffapp.New(store.Sessions(), store.Projects(), gitdiffClient)
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
-	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts))
+	tunnelRuntime, err := cloudflared.New(cfg.CloudflaredBin)
+	if err != nil {
+		_ = codex.Close()
+		return nil, fmt.Errorf("initialize tunnel runtime: %w", err)
+	}
+	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)))
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
+	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService)))
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
 	notificationService := notificationapp.New(store.Notifications(), events, store.Sessions(), store.Projects(), pushClient, pushClient, principal.KeyHash)
 	if err := notificationService.Initialize(context.Background()); err != nil {
+		_ = tunnelRuntime.CloseAll(context.Background())
 		_ = codex.Close()
 		return nil, fmt.Errorf("initialize web push notifications: %w", err)
 	}
@@ -210,9 +228,20 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
 		Settings:         settingapp.New(store.Settings(), settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New())),
+		Tunnels:          tunnelService,
 		CodexModels:      capabilities.Models,
 	}
 	return &wiredApplication{useCases: useCases, codex: codex}, nil
+}
+
+func httpPort(addr string) int {
+	trimmed := strings.TrimSpace(addr)
+	if _, port, err := net.SplitHostPort(trimmed); err == nil {
+		value, _ := strconv.Atoi(port)
+		return value
+	}
+	value, _ := strconv.Atoi(strings.TrimPrefix(trimmed, ":"))
+	return value
 }
 
 func runNotificationDispatcher(ctx context.Context, service *notificationapp.Service) {

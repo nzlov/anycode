@@ -5285,6 +5285,22 @@ func TestCloseSessionMarksClosedAndDefaultsReason(t *testing.T) {
 	}
 }
 
+func TestCloseSessionClosesOwnedTunnels(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["session-1"] = domain.Session{
+		ID: "session-1", ProjectID: "project-1", Status: domain.StatusCreated,
+	}
+	tunnels := &fakeTunnelCleaner{}
+	service := New(repo, newFakeProjectRepository("project-1"), WithTunnels(tunnels))
+
+	if _, err := service.CloseSession(context.Background(), CloseSessionInput{SessionID: "session-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if tunnels.sessionID != "session-1" {
+		t.Fatalf("closed tunnel session = %q", tunnels.sessionID)
+	}
+}
+
 func TestCloseSessionQuarantinesAndDeletesArtifactOutput(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -13043,6 +13059,15 @@ func eventContent[T processdomain.CodexEventContent](t *testing.T, event process
 
 type fakeProjectRepository struct {
 	projects map[projectdomain.ID]projectdomain.Project
+}
+
+type fakeTunnelCleaner struct {
+	sessionID domain.ID
+}
+
+func (f *fakeTunnelCleaner) CloseTunnelsForSession(_ context.Context, sessionID domain.ID) error {
+	f.sessionID = sessionID
+	return nil
 }
 
 func newFakeProjectRepository(ids ...projectdomain.ID) *fakeProjectRepository {

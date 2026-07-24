@@ -10,6 +10,7 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 	t.Setenv("ANYCODE_HTTP_ADDR", "")
 	t.Setenv("ANYCODE_DATA_DIR", "")
 	t.Setenv("CODEX_BIN", "")
+	t.Setenv("CLOUDFLARED_BIN", "")
 	t.Setenv("ANYCODE_AGENT_MAX_CONCURRENT", "")
 
 	got, err := LoadFromEnv()
@@ -27,6 +28,9 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 	}
 	if got.CodexBin != "codex" {
 		t.Fatalf("CodexBin = %q", got.CodexBin)
+	}
+	if got.CloudflaredBin != "cloudflared" {
+		t.Fatalf("CloudflaredBin = %q", got.CloudflaredBin)
 	}
 	if got.AgentMaxConcurrent != 1 {
 		t.Fatalf("AgentMaxConcurrent = %d", got.AgentMaxConcurrent)

@@ -23,6 +23,7 @@ import (
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
+	tunneldomain "github.com/nzlov/anycode/internal/domain/tunnel"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
@@ -487,6 +488,17 @@ func (r *mutationResolver) SubmitQuestionRequest(ctx context.Context, input mode
 	return mapQuestionRequest(dto), nil
 }
 
+// CloseTunnel is the resolver for the closeTunnel field.
+func (r *mutationResolver) CloseTunnel(ctx context.Context, id string) (bool, error) {
+	if r.UseCases.Tunnels == nil {
+		return false, missingUseCase("tunnels")
+	}
+	if err := r.UseCases.Tunnels.Close(ctx, tunneldomain.ID(id)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // CodexModelOptions is the resolver for the codexModelOptions field.
 func (r *queryResolver) CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error) {
 	return mapCodexModelOptions(r.UseCases.CodexModels), nil
@@ -808,6 +820,26 @@ func (r *queryResolver) ResolveSessionArtifacts(ctx context.Context, input model
 		resolved = append(resolved, &model.ResolvedSessionArtifact{LogicalPath: file.LogicalPath, File: mapSessionFile(file)})
 	}
 	return resolved, nil
+}
+
+// Tunnels is the resolver for the tunnels field.
+func (r *queryResolver) Tunnels(ctx context.Context) ([]*model.Tunnel, error) {
+	if r.UseCases.Tunnels == nil {
+		return nil, missingUseCase("tunnels")
+	}
+	items, err := r.UseCases.Tunnels.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*model.Tunnel, 0, len(items))
+	for _, item := range items {
+		result = append(result, &model.Tunnel{
+			ID: string(item.ID), SessionID: string(item.SessionID), Port: item.Port,
+			Hostname: item.Hostname, URL: item.URL, AccessURL: item.AccessURL,
+			Status: string(item.Status), CreatedAt: item.CreatedAt,
+		})
+	}
+	return result, nil
 }
 
 // SessionEvents is the resolver for the sessionEvents field.

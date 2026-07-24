@@ -12,14 +12,19 @@ import (
 	artifactapp "github.com/nzlov/anycode/internal/application/artifact"
 	questionapp "github.com/nzlov/anycode/internal/application/question"
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	tunneldomain "github.com/nzlov/anycode/internal/domain/tunnel"
 )
 
 const (
 	questionsTool       = "questions"
 	publishArtifactTool = "publish_artifact"
+	tunnelCreateTool    = "tunnel_create"
+	tunnelListTool      = "tunnel_list"
+	tunnelCloseTool     = "tunnel_close"
 )
 
 type SessionUseCase interface {
@@ -31,13 +36,30 @@ type ArtifactUseCase interface {
 	ReadToolContent(ctx context.Context, id sessiondomain.SessionFileID) (artifactapp.ToolContent, bool, error)
 }
 
+type TunnelUseCase interface {
+	Create(ctx context.Context, input tunnelapp.CreateInput) (tunnelapp.CreateResult, error)
+	List(ctx context.Context) ([]tunnelapp.DTO, error)
+	CloseOwned(ctx context.Context, sessionID tunneldomain.SessionID, id tunneldomain.ID) error
+}
+
 type Service struct {
 	sessions  SessionUseCase
 	artifacts ArtifactUseCase
+	tunnels   TunnelUseCase
 }
 
-func New(sessions SessionUseCase, artifacts ArtifactUseCase) *Service {
-	return &Service{sessions: sessions, artifacts: artifacts}
+type Option func(*Service)
+
+func WithTunnels(tunnels TunnelUseCase) Option {
+	return func(s *Service) { s.tunnels = tunnels }
+}
+
+func New(sessions SessionUseCase, artifacts ArtifactUseCase, options ...Option) *Service {
+	service := &Service{sessions: sessions, artifacts: artifacts}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (s *Service) HandleDynamicTool(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
@@ -46,9 +68,85 @@ func (s *Service) HandleDynamicTool(ctx context.Context, call processdomain.Dyna
 		return s.questions(ctx, call)
 	case publishArtifactTool:
 		return s.publishArtifact(ctx, call)
+	case tunnelCreateTool:
+		return s.createTunnel(ctx, call)
+	case tunnelListTool:
+		return s.listTunnels(ctx, call)
+	case tunnelCloseTool:
+		return s.closeTunnel(ctx, call)
 	default:
 		return processdomain.DynamicToolResult{}, fmt.Errorf("unknown dynamic tool %q", call.Tool)
 	}
+}
+
+func (s *Service) createTunnel(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
+	if s == nil || s.tunnels == nil {
+		return processdomain.DynamicToolResult{}, errors.New("tunnel service is unavailable")
+	}
+	var input struct {
+		Port int `json:"port"`
+	}
+	if err := json.Unmarshal(call.Arguments, &input); err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("decode tunnel_create arguments: %w", err)
+	}
+	created, err := s.tunnels.Create(ctx, tunnelapp.CreateInput{SessionID: tunneldomain.SessionID(call.SessionID), Port: input.Port})
+	if err != nil {
+		return processdomain.DynamicToolResult{}, err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"id": created.Tunnel.ID, "url": created.AccessURL, "publicUrl": created.Tunnel.URL,
+		"hostname": created.Tunnel.Hostname, "port": created.Tunnel.Port, "status": created.Tunnel.Status,
+	})
+	if err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("encode tunnel_create result: %w", err)
+	}
+	return textResult(payload), nil
+}
+
+func (s *Service) listTunnels(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
+	if s == nil || s.tunnels == nil {
+		return processdomain.DynamicToolResult{}, errors.New("tunnel service is unavailable")
+	}
+	items, err := s.tunnels.List(ctx)
+	if err != nil {
+		return processdomain.DynamicToolResult{}, err
+	}
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		if item.SessionID != tunneldomain.SessionID(call.SessionID) {
+			continue
+		}
+		result = append(result, map[string]any{
+			"id": item.ID, "url": item.AccessURL, "publicUrl": item.URL, "hostname": item.Hostname,
+			"port": item.Port, "status": item.Status, "createdAt": item.CreatedAt,
+		})
+	}
+	payload, err := json.Marshal(map[string]any{"tunnels": result})
+	if err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("encode tunnel_list result: %w", err)
+	}
+	return textResult(payload), nil
+}
+
+func (s *Service) closeTunnel(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {
+	if s == nil || s.tunnels == nil {
+		return processdomain.DynamicToolResult{}, errors.New("tunnel service is unavailable")
+	}
+	var input struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(call.Arguments, &input); err != nil {
+		return processdomain.DynamicToolResult{}, fmt.Errorf("decode tunnel_close arguments: %w", err)
+	}
+	id := tunneldomain.ID(strings.TrimSpace(input.ID))
+	if id == "" {
+		return processdomain.DynamicToolResult{}, errors.New("tunnel id is required")
+	}
+	if err := s.tunnels.CloseOwned(ctx, tunneldomain.SessionID(call.SessionID), id); err != nil {
+		return processdomain.DynamicToolResult{}, err
+	}
+	payload, _ := json.Marshal(map[string]any{"id": id, "closed": true})
+	return textResult(payload), nil
 }
 
 func (s *Service) questions(ctx context.Context, call processdomain.DynamicToolCall) (processdomain.DynamicToolResult, error) {

@@ -44,7 +44,7 @@ WORKDIR /app
 COPY --from=build /out/anycode /usr/local/bin/anycode
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN pacman -Syu --noconfirm --needed base-devel ca-certificates git bash nvm wget ripgrep p7zip openssh mdbook less \
-  go chromium ttf-dejavu wqy-microhei catatonit \
+  go chromium cloudflared ttf-dejavu wqy-microhei catatonit \
   && pacman -Scc --noconfirm \
   && . /usr/share/nvm/init-nvm.sh \
   && nvm install node \

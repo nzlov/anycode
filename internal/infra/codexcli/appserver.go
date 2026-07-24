@@ -207,6 +207,30 @@ func anyCodeDynamicTools() []map[string]any {
 				"properties": map[string]any{"path": map[string]any{"type": "string", "description": "Path relative to ANYCODE_ARTIFACT_DIR."}},
 			},
 		},
+		{
+			"type": "function", "name": "tunnel_create",
+			"description": "Create an authenticated temporary Cloudflare Quick Tunnel for an HTTP test program already listening on a localhost port.",
+			"inputSchema": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"port"},
+				"properties": map[string]any{"port": map[string]any{
+					"type": "integer", "minimum": 1024, "maximum": 65535,
+					"description": "Local HTTP port on 127.0.0.1. The test program must already be listening.",
+				}},
+			},
+		},
+		{
+			"type": "function", "name": "tunnel_list",
+			"description": "List active temporary tunnels created for this AnyCode session.",
+			"inputSchema": map[string]any{"type": "object", "additionalProperties": false},
+		},
+		{
+			"type": "function", "name": "tunnel_close",
+			"description": "Close a temporary tunnel created for this AnyCode session.",
+			"inputSchema": map[string]any{
+				"type": "object", "additionalProperties": false, "required": []string{"id"},
+				"properties": map[string]any{"id": map[string]any{"type": "string", "description": "Tunnel ID returned by tunnel_create or tunnel_list."}},
+			},
+		},
 	}
 }
 

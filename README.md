@@ -14,6 +14,7 @@
 - Git 项目的会话可基于指定分支创建独立 worktree，减少并行任务互相干扰。
 - 同时支持直接与 Codex 交互的会话模式，以及包含条件、重试、审批和合并节点的流程模式。
 - Codex 可以通过 App Server 动态工具 `questions` 请求用户补充决策；工作流也可以暂停并等待人工审批。
+- Codex 可以为容器内测试程序创建带鉴权的 Cloudflare 临时隧道，并由会话或管理界面查看和关闭。
 - 会话时间线实时展示文本、推理、命令、工具调用和文件变更，执行完成后仍可回看。
 
 ## 主要功能
@@ -139,6 +140,7 @@ curl --fail http://127.0.0.1:8080/healthz
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | 容器内数据库、附件、产物以及 AnyCode 创建的 worktree 目录。通常无需修改。 |
 | `ANYCODE_WORKSPACES_DIR` | `./workspaces` | 挂载到容器 `/workspaces` 的宿主机项目目录。 |
 | `ANYCODE_AGENT_MAX_CONCURRENT` | `1` | 同时运行的 Codex agent 上限；超出上限的会话进入队列。 |
+| `CLOUDFLARED_BIN` | `cloudflared` | Cloudflare 临时隧道客户端命令；官方镜像已内置。 |
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | 本地 Turso/libSQL 数据库路径，也可改为 `libsql://` 云数据库地址。 |
 | `TURSO_AUTH_TOKEN` | 空 | 使用远程 Turso 数据库时的认证 token。 |
 

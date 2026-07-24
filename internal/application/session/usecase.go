@@ -309,6 +309,7 @@ type Service struct {
 	publisher               eventdomain.Publisher
 	codexPublisher          codexEventPublisher
 	questions               questionCoordinator
+	tunnels                 tunnelCleaner
 	now                     func() time.Time
 	generateID              func() (domain.ID, error)
 	maxConcurrentAgents     int
@@ -326,6 +327,10 @@ type Service struct {
 type questionCoordinator interface {
 	CreateRequest(ctx context.Context, input questionapp.CreateRequestInput) (questionapp.RequestDTO, error)
 	CancelPendingRequestsBySession(ctx context.Context, sessionID questiondomain.SessionID, reason string) error
+}
+
+type tunnelCleaner interface {
+	CloseTunnelsForSession(ctx context.Context, sessionID domain.ID) error
 }
 
 type codexEventPublisher interface {
@@ -434,6 +439,12 @@ func WithEventPublisher(publisher eventdomain.Publisher) Option {
 func WithQuestions(questions questionCoordinator) Option {
 	return func(s *Service) {
 		s.questions = questions
+	}
+}
+
+func WithTunnels(tunnels tunnelCleaner) Option {
+	return func(s *Service) {
+		s.tunnels = tunnels
 	}
 }
 
@@ -2252,6 +2263,13 @@ func (s *Service) StopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		cleanupCtx, cancel := processCleanupContext(ctx)
 		defer cancel()
 		dto, err = s.waitForStopCompletion(cleanupCtx, id)
+	}
+	if err == nil && (dto.Status == domain.StatusStopped || dto.Status == domain.StatusClosed) && s.tunnels != nil {
+		cleanupCtx, cancel := processCleanupContext(ctx)
+		defer cancel()
+		if cleanupErr := s.tunnels.CloseTunnelsForSession(cleanupCtx, id); cleanupErr != nil {
+			err = fmt.Errorf("close session tunnels: %w", cleanupErr)
+		}
 	}
 	return dto, err
 }
@@ -6340,6 +6358,14 @@ func (s *Service) CloseSession(ctx context.Context, input CloseSessionInput) (DT
 			continue
 		}
 		if !errors.Is(err, errCloseRequiresStop) {
+			if err == nil && dto.Status == domain.StatusClosed && s.tunnels != nil {
+				cleanupCtx, cancel := processCleanupContext(ctx)
+				cleanupErr := s.tunnels.CloseTunnelsForSession(cleanupCtx, input.SessionID)
+				cancel()
+				if cleanupErr != nil {
+					return dto, fmt.Errorf("close session tunnels: %w", cleanupErr)
+				}
+			}
 			return dto, err
 		}
 		if _, err := s.StopSession(ctx, input.SessionID); err != nil {
