@@ -102,10 +102,14 @@ test('long content dialogs keep one explicit scrolling content area', () => {
   assert.match(diffWorkspaceSource, /container-type:\s*inline-size/);
 });
 
-test('questions dialog removes its shared height cap and uses compact content spacing', () => {
+test('questions dialog caps its height at 90% of the viewport and uses compact content spacing', () => {
   assert.match(
     questionsSource,
-    /\.questions-dialog\.app-content-dialog\s*{[^}]*max-height:\s*none\s*!important/s,
+    /\.questions-dialog\.app-content-dialog\s*{[^}]*max-height:\s*90dvh\s*!important/s,
+  );
+  assert.match(
+    questionsPanelSource,
+    /\.questions-panel > \.q-tab-panels\s*{[^}]*overflow-y:\s*auto/s,
   );
   assert.match(questionsPanelSource, /\.q-tab-panel\s*{[^}]*padding:\s*16px/s);
   assert.match(

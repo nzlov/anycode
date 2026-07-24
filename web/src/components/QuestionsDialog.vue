@@ -78,7 +78,7 @@ watch(
 }
 
 .questions-dialog.app-content-dialog {
-  max-height: none !important;
+  max-height: 90dvh !important;
 }
 
 .questions-dialog__tabs {
