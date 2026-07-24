@@ -2,17 +2,58 @@
   <div class="terminal-view">
     <div ref="terminalHost" class="terminal-view__host" aria-label="Terminal 终端" />
     <div v-if="$q.screen.lt.sm" class="terminal-view__mobile-keys" aria-label="终端辅助按键">
-      <q-btn dense flat no-caps label="Esc" @click="sendKey('\u001b')" />
-      <q-btn dense flat no-caps label="Tab" @click="sendKey('\t')" />
-      <q-btn dense flat no-caps label="Ctrl-C" @click="sendKey('\u0003')" />
-      <q-btn dense flat icon="keyboard_arrow_up" aria-label="向上" @click="sendKey('\u001b[A')" />
-      <q-btn dense flat icon="keyboard_arrow_down" aria-label="向下" @click="sendKey('\u001b[B')" />
-      <q-btn dense flat icon="keyboard_arrow_left" aria-label="向左" @click="sendKey('\u001b[D')" />
+      <q-btn dense flat no-caps label="Esc" :disable="!interactive" @click="sendKey('\u001b')" />
+      <q-btn dense flat no-caps label="Tab" :disable="!interactive" @click="sendKey('\t')" />
+      <q-btn
+        dense
+        flat
+        no-caps
+        label="Ctrl"
+        :disable="!interactive"
+        :class="{ 'terminal-view__modifier--pressed': isModifierPressed('ctrl') }"
+        :aria-pressed="isModifierPressed('ctrl')"
+        @click="toggleModifier('ctrl')"
+      />
+      <q-btn
+        dense
+        flat
+        no-caps
+        label="Alt"
+        :disable="!interactive"
+        :class="{ 'terminal-view__modifier--pressed': isModifierPressed('alt') }"
+        :aria-pressed="isModifierPressed('alt')"
+        @click="toggleModifier('alt')"
+      />
+      <q-btn
+        dense
+        flat
+        icon="keyboard_arrow_up"
+        aria-label="向上"
+        :disable="!interactive"
+        @click="sendKey('\u001b[A')"
+      />
+      <q-btn
+        dense
+        flat
+        icon="keyboard_arrow_down"
+        aria-label="向下"
+        :disable="!interactive"
+        @click="sendKey('\u001b[B')"
+      />
+      <q-btn
+        dense
+        flat
+        icon="keyboard_arrow_left"
+        aria-label="向左"
+        :disable="!interactive"
+        @click="sendKey('\u001b[D')"
+      />
       <q-btn
         dense
         flat
         icon="keyboard_arrow_right"
         aria-label="向右"
+        :disable="!interactive"
         @click="sendKey('\u001b[C')"
       />
     </div>
@@ -45,6 +86,8 @@ const terminalHost = ref<HTMLElement | null>(null);
 const connected = ref(false);
 const hasConnected = ref(false);
 const ended = ref(false);
+type TerminalModifier = 'ctrl' | 'alt';
+const pressedModifiers = ref<Set<TerminalModifier>>(new Set());
 const connectionMessage = computed(() =>
   hasConnected.value ? '连接已断开，正在重连…' : '正在连接 Terminal…',
 );
@@ -53,6 +96,7 @@ let fitAddon: FitAddon | null = null;
 let connection: TerminalSocket | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let themeObserver: MutationObserver | null = null;
+let touchScrollY: number | null = null;
 let outputQueue: Uint8Array[] = [];
 let outputQueueBytes = 0;
 let writingOutput = false;
@@ -72,6 +116,10 @@ onMounted(async () => {
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(terminalHost.value);
+  terminalHost.value.addEventListener('touchstart', handleTouchStart, { passive: true });
+  terminalHost.value.addEventListener('touchmove', handleTouchMove, { passive: false });
+  terminalHost.value.addEventListener('touchend', handleTouchEnd, { passive: true });
+  terminalHost.value.addEventListener('touchcancel', handleTouchEnd, { passive: true });
   resizeObserver = new ResizeObserver(fitTerminal);
   resizeObserver.observe(terminalHost.value);
   themeObserver = new MutationObserver(() => {
@@ -113,12 +161,16 @@ onMounted(async () => {
     },
   });
   terminal.onData((data) => {
-    if (props.interactive) connection?.send(data);
+    sendInput(data);
   });
   fitTerminal();
 });
 
 onBeforeUnmount(() => {
+  terminalHost.value?.removeEventListener('touchstart', handleTouchStart);
+  terminalHost.value?.removeEventListener('touchmove', handleTouchMove);
+  terminalHost.value?.removeEventListener('touchend', handleTouchEnd);
+  terminalHost.value?.removeEventListener('touchcancel', handleTouchEnd);
   connection?.disconnect();
   resizeObserver?.disconnect();
   themeObserver?.disconnect();
@@ -132,8 +184,66 @@ function fitTerminal() {
 }
 
 function sendKey(data: string) {
-  connection?.send(data);
+  sendInput(data);
   terminal?.focus();
+}
+
+function sendInput(data: string) {
+  if (!props.interactive) return;
+  let input = data;
+  if (isModifierPressed('ctrl')) input = controlSequence(input);
+  if (isModifierPressed('alt')) input = `\u001b${input}`;
+  connection?.send(input);
+  pressedModifiers.value = new Set();
+}
+
+function toggleModifier(modifier: TerminalModifier) {
+  const next = new Set(pressedModifiers.value);
+  if (next.has(modifier)) next.delete(modifier);
+  else next.add(modifier);
+  pressedModifiers.value = next;
+  terminal?.focus();
+}
+
+function isModifierPressed(modifier: TerminalModifier) {
+  return pressedModifiers.value.has(modifier);
+}
+
+function controlSequence(data: string) {
+  if (data.length !== 1) return data;
+  const upper = data.toUpperCase();
+  if (upper >= 'A' && upper <= 'Z') return String.fromCharCode(upper.charCodeAt(0) - 64);
+  const controls: Record<string, string> = {
+    ' ': '\u0000',
+    '@': '\u0000',
+    '[': '\u001b',
+    '\\': '\u001c',
+    ']': '\u001d',
+    '^': '\u001e',
+    _: '\u001f',
+    '?': '\u007f',
+  };
+  return controls[data] ?? data;
+}
+
+function handleTouchStart(event: TouchEvent) {
+  touchScrollY = event.touches.length === 1 ? event.touches[0]?.clientY ?? null : null;
+}
+
+function handleTouchMove(event: TouchEvent) {
+  if (!terminal || touchScrollY === null || event.touches.length !== 1) return;
+  const currentY = event.touches[0]?.clientY;
+  if (currentY === undefined) return;
+  const lineHeight = Math.max(1, (terminalHost.value?.clientHeight ?? 0) / terminal.rows);
+  const lines = Math.trunc((touchScrollY - currentY) / lineHeight);
+  if (lines === 0) return;
+  terminal.scrollLines(lines);
+  touchScrollY -= lines * lineHeight;
+  event.preventDefault();
+}
+
+function handleTouchEnd() {
+  touchScrollY = null;
 }
 
 function drainOutputQueue() {
@@ -177,6 +287,7 @@ function terminalTheme() {
   min-height: 0;
   flex: 1 1 auto;
   padding: 8px;
+  touch-action: none;
 }
 
 .terminal-view__mobile-keys {
@@ -185,6 +296,17 @@ function terminalTheme() {
   overflow-x: auto;
   border-top: 1px solid var(--ac-border);
   background: var(--ac-surface-raised);
+}
+
+.terminal-view__mobile-keys > :deep(.q-btn) {
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+.terminal-view__modifier--pressed {
+  color: var(--q-primary);
+  background: color-mix(in srgb, var(--q-primary) 16%, transparent);
 }
 
 .terminal-view__connection {

@@ -28,16 +28,26 @@ test('terminal socket authenticates in-band and reconnects without putting crede
   assert.match(source, /Math\.min\(500 \* 2 \*\*/);
 });
 
-test('terminal view covers resize, processed-output acknowledgement, and mobile control keys', async () => {
-  const source = await read('src/components/TerminalView.vue');
+test('terminal view covers resize, output acknowledgement, touch scrolling, and mobile keys', async () => {
+  const [source, sessionView] = await Promise.all([
+    read('src/components/TerminalView.vue'),
+    read('src/components/TerminalSessionView.vue'),
+  ]);
   assert.match(source, /new ResizeObserver\(fitTerminal\)/);
   assert.match(source, /terminal\.onData/);
   assert.match(source, /interactive\?: boolean/);
   assert.match(source, /maxOutputQueueBytes = 2 << 20/);
   assert.match(source, /terminal\.write\(chunk, \(\) =>/);
   assert.match(source, /connection\?\.acknowledge\(chunk\.byteLength\)/);
-  assert.match(source, /Ctrl-C/);
+  assert.match(source, /addEventListener\('touchmove', handleTouchMove, \{ passive: false \}\)/);
+  assert.match(source, /terminal\.scrollLines\(lines\)/);
+  assert.match(source, /label="Ctrl"[\s\S]*:aria-pressed="isModifierPressed\('ctrl'\)"/);
+  assert.match(source, /pressedModifiers\.value = new Set\(\)/);
   assert.match(source, /sendKey\('\\u001b\[A'\)/);
+  assert.match(sessionView, /aria-label="Terminal 状态控制"/);
+  assert.match(sessionView, /class="terminal-session-mobile-actions"[\s\S]*label="停止"/);
+  assert.match(sessionView, /height:\s*calc\(100dvh - 50px\)/);
+  assert.match(sessionView, /\.terminal-session-card\s*\{[^}]*min-height:\s*0/s);
 });
 
 test('session detail and overview render terminal-specific surfaces', async () => {

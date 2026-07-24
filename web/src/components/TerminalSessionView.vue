@@ -8,7 +8,7 @@
         :label="statusLabel(session.status)"
       />
       <q-btn
-        v-if="canStop"
+        v-if="!$q.screen.lt.sm && canStop"
         flat
         round
         dense
@@ -21,7 +21,7 @@
         <q-tooltip>停止 Terminal</q-tooltip>
       </q-btn>
       <q-btn
-        v-if="canStart"
+        v-if="!$q.screen.lt.sm && canStart"
         flat
         round
         dense
@@ -34,7 +34,7 @@
         <q-tooltip>启动 Terminal</q-tooltip>
       </q-btn>
       <q-btn
-        v-if="canClose"
+        v-if="!$q.screen.lt.sm && canClose"
         flat
         round
         dense
@@ -73,6 +73,42 @@
           icon="play_arrow"
           label="启动 Terminal"
           @click="start"
+        />
+      </div>
+      <div
+        v-if="$q.screen.lt.sm && session && session.status !== 'closed'"
+        class="terminal-session-mobile-actions"
+        aria-label="Terminal 状态控制"
+      >
+        <q-btn
+          v-if="canStop"
+          flat
+          no-caps
+          color="negative"
+          icon="stop"
+          label="停止"
+          :loading="action === 'stop'"
+          @click="stop"
+        />
+        <q-btn
+          v-if="canStart"
+          flat
+          no-caps
+          color="positive"
+          icon="play_arrow"
+          label="启动"
+          :loading="action === 'start'"
+          @click="start"
+        />
+        <q-btn
+          v-if="canClose"
+          flat
+          no-caps
+          color="negative"
+          icon="close"
+          label="关闭卡片"
+          :loading="action === 'close'"
+          @click="close"
         />
       </div>
     </q-card>
@@ -163,16 +199,40 @@ function handleExit() {
 
 <style scoped>
 .terminal-session-page {
+  box-sizing: border-box;
   display: flex;
-  min-height: calc(100vh - 50px);
+  height: calc(100dvh - 50px);
+  min-height: 0 !important;
   flex-direction: column;
 }
 
 .terminal-session-card {
   display: flex;
-  min-height: 420px;
+  min-height: 0;
   flex: 1 1 auto;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.terminal-session-card :deep(.terminal-view) {
+  min-height: 0;
+}
+
+.terminal-session-mobile-actions {
+  display: flex;
+  min-height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 2px max(8px, env(safe-area-inset-right))
+    calc(2px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  border-top: 1px solid var(--ac-border);
+  background: var(--ac-surface-raised);
+}
+
+.terminal-session-mobile-actions > :deep(.q-btn) {
+  min-height: 44px;
 }
 
 .terminal-session-state {
