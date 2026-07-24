@@ -74,8 +74,7 @@ test('session detail and overview render terminal-specific surfaces', async () =
   );
   assert.match(desktop, /aria-label="停止 Terminal"/);
   assert.match(desktop, /stopSession\(props\.card\.id\)/);
-  assert.match(desktop, /aria-label="关闭 Terminal 卡片"/);
-  assert.match(desktop, /closeSession\(props\.card\.id\)/);
+  assert.match(desktop, /aria-label="关闭卡片"/);
   assert.match(desktop, /executeSession\(props\.card\.id\)/);
   assert.match(desktop, /:interactive="card\.status === 'running'"/);
   assert.match(desktop, /<SessionTerminalButton[\s\S]*:source-session-id="card\.id"/);
@@ -85,7 +84,18 @@ test('session detail and overview render terminal-specific surfaces', async () =
     /<SessionTerminalButton[\s\S]*full-width[\s\S]*<q-btn[\s\S]*label="关闭卡片"/,
   );
   assert.match(terminalButton, /openSessionTerminal\(props\.sourceSessionId\)/);
+  assert.match(terminalButton, /emit\('opened', terminal\.id\)/);
+  assert.match(terminalButton, /if \(props\.stayOnPage\) return/);
   assert.match(terminalButton, /name: 'session-detail'/);
+  assert.match(
+    desktop,
+    /<SessionTerminalButton[\s\S]*stay-on-page[\s\S]*@opened="emit\('terminal-opened', \$event\)"/,
+  );
+  assert.match(
+    mobile,
+    /<SessionTerminalButton[\s\S]*stay-on-page[\s\S]*@opened="emit\('terminal-opened', \$event\)"/,
+  );
+  assert.match(overview, /@terminal-opened="refreshOverviewCard"/);
   assert.doesNotMatch(horizontal, /@contextmenu(?:\.|=)/);
   assert.match(sessions, /openSessionTerminal\(sessionId: \$sessionId\)/);
   assert.match(overview, /card\.terminalSummary\?\.currentDirectory/);
@@ -93,10 +103,7 @@ test('session detail and overview render terminal-specific surfaces', async () =
   assert.match(sessions, /terminalSummary \{\s*currentDirectory\s*commands\s*\}/);
   assert.match(horizontal, /card\.mode === 'terminal' \|\| sessionLayout === 'desktop'/);
   assert.match(overview, /:style-fn="isHorizontalView \? horizontalPageStyle : undefined"/);
-  assert.match(
-	styles,
-	/\.page-shell\.workbench-page--horizontal\s*{[^}]*overflow:\s*hidden/s,
-  );
+  assert.match(styles, /\.page-shell\.workbench-page--horizontal\s*{[^}]*overflow:\s*hidden/s);
 });
 
 async function read(path) {

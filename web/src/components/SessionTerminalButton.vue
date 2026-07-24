@@ -27,9 +27,13 @@ const props = withDefaults(
   defineProps<{
     sourceSessionId: string;
     fullWidth?: boolean;
+    stayOnPage?: boolean;
   }>(),
-  { fullWidth: false },
+  { fullWidth: false, stayOnPage: false },
 );
+const emit = defineEmits<{
+  opened: [sessionId: string];
+}>();
 const router = useRouter();
 const opening = ref(false);
 
@@ -38,6 +42,8 @@ async function open() {
   opening.value = true;
   try {
     const terminal = await openSessionTerminal(props.sourceSessionId);
+    emit('opened', terminal.id);
+    if (props.stayOnPage) return;
     await router.push({ name: 'session-detail', params: { id: terminal.id } });
   } finally {
     opening.value = false;

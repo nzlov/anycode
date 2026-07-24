@@ -52,8 +52,11 @@
           :width="sessionColumnWidth(card.id)"
           :min-width="minSessionColumnWidth"
           :priority-loading="activePrioritySessionId === card.id"
+          :close-loading="activeCloseSessionId === card.id"
           @update:width="setSessionColumnWidth(card.id, $event)"
           @set-priority="setCardPriority(card, $event)"
+          @terminal-opened="refreshOverviewCard"
+          @close="closeCard(card)"
         />
       </div>
     </section>

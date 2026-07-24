@@ -192,6 +192,21 @@ test('horizontal headers expose live card metadata and priority controls in both
   assert.match(indexSource, /if \(update\.priority\)[\s\S]*priority: update\.priority/);
 });
 
+test('horizontal headers put terminal actions after details and close every card last', () => {
+  for (const source of [desktopSessionSource, mobileSessionSource]) {
+    assert.match(
+      source,
+      /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
+    );
+  }
+  assert.match(
+    desktopSessionSource,
+    /aria-label="打开会话详情"[\s\S]*aria-label="停止 Terminal"[\s\S]*aria-label="启动 Terminal"[\s\S]*aria-label="关闭卡片"/,
+  );
+  assert.match(indexSource, /:close-loading="activeCloseSessionId === card\.id"/);
+  assert.match(indexSource, /@close="closeCard\(card\)"/);
+});
+
 test('horizontal sessions omit the card context menu while retaining header priority controls', () => {
   assert.doesNotMatch(horizontalSessionSource, /<SessionCardContextMenu/);
   assert.match(horizontalSessionSource, /@set-priority="emit\('set-priority', \$event\)"/);

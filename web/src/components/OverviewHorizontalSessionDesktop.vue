@@ -27,6 +27,23 @@
           class="lane-mode-chip"
           :label="modeBadgeLabel(card.mode)"
         />
+        <SessionTerminalButton
+          v-if="card.mode !== 'terminal'"
+          :source-session-id="card.id"
+          stay-on-page
+          @opened="emit('terminal-opened', $event)"
+        />
+        <q-btn
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="open_in_new"
+          aria-label="打开会话详情"
+          :to="{ name: 'session-detail', params: { id: card.id } }"
+        >
+          <q-tooltip>打开会话详情</q-tooltip>
+        </q-btn>
         <q-btn
           v-if="canStopTerminal"
           flat
@@ -54,29 +71,17 @@
           <q-tooltip>启动 Terminal</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="canCloseTerminal"
+          v-if="canClose"
           flat
           dense
           class="lane-icon-btn app-icon-btn"
           color="negative"
           icon="close"
-          aria-label="关闭 Terminal 卡片"
-          :loading="terminalAction === 'close'"
-          @click="closeTerminal"
+          aria-label="关闭卡片"
+          :loading="closeLoading"
+          @click="emit('close')"
         >
-          <q-tooltip>关闭 Terminal 卡片</q-tooltip>
-        </q-btn>
-        <SessionTerminalButton v-if="card.mode !== 'terminal'" :source-session-id="card.id" />
-        <q-btn
-          flat
-          round
-          dense
-          class="app-icon-btn"
-          icon="open_in_new"
-          aria-label="打开会话详情"
-          :to="{ name: 'session-detail', params: { id: card.id } }"
-        >
-          <q-tooltip>打开会话详情</q-tooltip>
+          <q-tooltip>关闭卡片</q-tooltip>
         </q-btn>
       </div>
     </header>
@@ -111,7 +116,6 @@ import {
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
 import {
-  closeSession,
   executeSession,
   stopSession,
   type SessionCard,
@@ -123,22 +127,23 @@ const props = defineProps<{
   card: SessionCard;
   tunnels: Tunnel[];
   priorityLoading?: boolean;
+  closeLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
+  'terminal-opened': [sessionId: string];
+  close: [];
 }>();
 
-const terminalAction = ref<'start' | 'stop' | 'close' | ''>('');
+const terminalAction = ref<'start' | 'stop' | ''>('');
 const canStopTerminal = computed(
   () => props.card.mode === 'terminal' && props.card.availableActions.includes('stop'),
 );
 const canStartTerminal = computed(
   () => props.card.mode === 'terminal' && props.card.availableActions.includes('execute'),
 );
-const canCloseTerminal = computed(
-  () => props.card.mode === 'terminal' && props.card.availableActions.includes('close'),
-);
+const canClose = computed(() => props.card.availableActions.includes('close'));
 
 async function startTerminal() {
   if (!canStartTerminal.value || terminalAction.value) return;
@@ -155,16 +160,6 @@ async function stopTerminal() {
   terminalAction.value = 'stop';
   try {
     await stopSession(props.card.id);
-  } finally {
-    terminalAction.value = '';
-  }
-}
-
-async function closeTerminal() {
-  if (!canCloseTerminal.value || terminalAction.value) return;
-  terminalAction.value = 'close';
-  try {
-    await closeSession(props.card.id);
   } finally {
     terminalAction.value = '';
   }

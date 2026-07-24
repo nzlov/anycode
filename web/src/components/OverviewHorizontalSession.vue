@@ -10,14 +10,20 @@
         :card="card"
         :tunnels="tunnels"
         :priority-loading="priorityLoading"
+        :close-loading="closeLoading"
         @set-priority="emit('set-priority', $event)"
+        @terminal-opened="emit('terminal-opened', $event)"
+        @close="emit('close')"
       />
       <OverviewHorizontalSessionMobile
         v-else
         :card="card"
         :tunnels="tunnels"
         :priority-loading="priorityLoading"
+        :close-loading="closeLoading"
         @set-priority="emit('set-priority', $event)"
+        @terminal-opened="emit('terminal-opened', $event)"
+        @close="emit('close')"
       />
     </div>
 
@@ -56,11 +62,14 @@ const props = defineProps<{
   width: number;
   minWidth: number;
   priorityLoading?: boolean;
+  closeLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:width': [width: number];
   'set-priority': [priority: SessionPriority];
+  'terminal-opened': [sessionId: string];
+  close: [];
 }>();
 
 const desktopSessionMinWidth = 1024;

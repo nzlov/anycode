@@ -22,7 +22,11 @@
       </div>
       <div class="overview-horizontal-session-mobile__actions">
         <SessionTunnelButton :tunnels="tunnels" />
-        <SessionTerminalButton :source-session-id="card.id" />
+        <SessionTerminalButton
+          :source-session-id="card.id"
+          stay-on-page
+          @opened="emit('terminal-opened', $event)"
+        />
         <q-btn
           flat
           round
@@ -33,6 +37,19 @@
           :to="{ name: 'session-detail', params: { id: card.id } }"
         >
           <q-tooltip>打开会话详情</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="card.availableActions.includes('close')"
+          flat
+          dense
+          class="lane-icon-btn app-icon-btn"
+          color="negative"
+          icon="close"
+          aria-label="关闭卡片"
+          :loading="closeLoading"
+          @click="emit('close')"
+        >
+          <q-tooltip>关闭卡片</q-tooltip>
         </q-btn>
       </div>
     </header>
@@ -62,10 +79,13 @@ defineProps<{
   card: SessionCard;
   tunnels: Tunnel[];
   priorityLoading?: boolean;
+  closeLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
+  'terminal-opened': [sessionId: string];
+  close: [];
 }>();
 </script>
 
