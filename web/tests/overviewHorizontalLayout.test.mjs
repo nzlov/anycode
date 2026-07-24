@@ -90,7 +90,7 @@ test('horizontal overview renders one independently resized component per visibl
     horizontalSessionSource,
     /\.overview-horizontal-session-resizer\s*\{[^}]*width:\s*12px[^}]*flex:\s*0 0 12px[^}]*background:\s*transparent/s,
   );
-  assert.match(
+  assert.doesNotMatch(
     horizontalSessionSource,
     /\.overview-horizontal-session-track:last-child \.overview-horizontal-session-resizer\s*{[^}]*display:\s*none/s,
   );

@@ -146,10 +146,6 @@ function setWidth(value: number) {
   touch-action: none;
 }
 
-.overview-horizontal-session-track:last-child .overview-horizontal-session-resizer {
-  display: none;
-}
-
 .overview-horizontal-session-resizer:hover,
 .overview-horizontal-session-resizer--active,
 .overview-horizontal-session-resizer:focus-visible {
