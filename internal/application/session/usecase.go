@@ -4116,11 +4116,13 @@ func joinPromptParts(parts ...string) string {
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
 const anyCodePromptGuidance = "AnyCode 提供 `questions` App Server 动态工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `questions` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `questions`。\n\nAnyCode 卡片的 TODO List 仅来自 Codex 的结构化计划事件。处理包含多个可执行步骤的任务时，必须调用 `update_plan` 创建计划，并在步骤状态变化后持续调用 `update_plan` 更新状态；不要只在回复中输出 Markdown checklist。单步骤任务或纯问答无需创建计划。"
+// GLUE: App Server dynamic tools run inside exec; remove this timeout guidance when exec can inherit a tool-specific wait window.
+const questionsWaitPromptGuidance = "调用 `questions` 时，承载调用的 `exec` 源码首行必须设置 `// @exec: {\"yield_time_ms\": 300000}`，并等待 `tools.questions(...)` 返回。五分钟内收到答案后，必须读取答案并继续本轮工作，不得重复输出“请选择”或提前发送 final。若五分钟后 `exec` 返回 `Script running with cell ID ...`，不要调用 `wait` 延长本轮，也不要重复提问；结束当前 Codex 运行，让 AnyCode 保留待回答请求，并在用户回答后通过持久化恢复继续。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 const artifactPromptGuidance = "本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。"
 
 func anyCodeDeveloperInstructions(session domain.Session, artifactDir string) string {
-	parts := []string{anyCodePromptGuidance}
+	parts := []string{anyCodePromptGuidance, questionsWaitPromptGuidance}
 	if strings.TrimSpace(session.BaseBranch) != "" {
 		parts = append(parts, managedWorktreePromptGuidance)
 	}

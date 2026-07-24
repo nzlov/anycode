@@ -7118,6 +7118,12 @@ func TestStartSessionDeveloperInstructionsMentionQuestions(t *testing.T) {
 	if !strings.Contains(instructions, "不要使用 `request_user_input`") {
 		t.Fatalf("developer instructions should reject request_user_input for AnyCode questions: %q", instructions)
 	}
+	if !strings.Contains(instructions, `// @exec: {"yield_time_ms": 300000}`) {
+		t.Fatalf("developer instructions missing five-minute questions wait: %q", instructions)
+	}
+	if !strings.Contains(instructions, "必须读取答案并继续本轮工作") || !strings.Contains(instructions, "不要调用 `wait` 延长本轮") {
+		t.Fatalf("developer instructions missing questions continuation boundary: %q", instructions)
+	}
 	if !strings.Contains(instructions, "`update_plan`") {
 		t.Fatalf("developer instructions missing structured TODO tool guidance: %q", instructions)
 	}

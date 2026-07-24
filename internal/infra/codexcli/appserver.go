@@ -191,7 +191,7 @@ func anyCodeDynamicTools() []map[string]any {
 	return []map[string]any{
 		{
 			"type": "function", "name": "questions",
-			"description": "Ask the user one or more questions and wait for their answers. Each question requires a body; options are optional.",
+			"description": "Ask the user one or more questions and wait for their answers. Keep the containing exec call open for 300000 ms so answers received within five minutes continue the current Codex run; later answers resume through durable storage. Each question requires a body; options are optional.",
 			"inputSchema": map[string]any{
 				"type": "object", "additionalProperties": false, "required": []string{"questions"},
 				"properties": map[string]any{"questions": map[string]any{
