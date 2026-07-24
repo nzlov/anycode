@@ -60,9 +60,15 @@ test('new session mobile entry uses a page and keeps one scrolling body', () => 
   );
 });
 
-test('questions mobile entry opens session detail without maximizing the desktop dialog', () => {
+test('questions mobile entry opens the questions dialog in place', () => {
+  const openQuestionsDialog = indexSource.slice(
+    indexSource.indexOf('async function openQuestionsDialog'),
+    indexSource.indexOf('async function submitAnswers'),
+  );
+
   assert.doesNotMatch(questionsSource, /:maximized=/);
-  assert.match(indexSource, /openQuestionsDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-detail'/);
+  assert.doesNotMatch(openQuestionsDialog, /\$q\.screen\.lt\.sm|router\.push|session-detail/);
+  assert.match(openQuestionsDialog, /questionsDialog\.value = true/);
   assert.match(questionsSource, /class="questions-dialog app-content-dialog"/);
   assert.match(
     smallStyles,

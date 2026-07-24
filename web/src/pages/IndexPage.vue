@@ -1054,10 +1054,6 @@ async function closeCard(card: SessionCard) {
 }
 
 async function openQuestionsDialog(sessionId: string) {
-  if ($q.screen.lt.sm) {
-    await router.push({ name: 'session-detail', params: { id: sessionId } });
-    return;
-  }
   const requestGeneration = ++questionRequestGeneration;
   activeQuestionSessionId.value = sessionId;
   pendingQuestionRequests.value = [];
