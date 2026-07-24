@@ -63,6 +63,7 @@ type appServerRun struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	events     chan process.CodexEvent
+	eventsMu   sync.RWMutex
 	sequence   atomic.Int64
 	turnMu     sync.RWMutex
 	turnID     string
@@ -411,6 +412,13 @@ func (r *appServerRuntime) claimEvents(runID process.RunID) (<-chan process.Code
 }
 
 func (r *appServerRun) emit(event process.CodexEvent) {
+	r.eventsMu.RLock()
+	defer r.eventsMu.RUnlock()
+	select {
+	case <-r.closed:
+		return
+	default:
+	}
 	event.SessionID = r.sessionID
 	event.ProcessRunID = r.handle.ProcessRunID
 	event.CodexSessionID = r.handle.CodexSessionID
@@ -433,7 +441,9 @@ func (r *appServerRun) close() {
 	r.closeOnce.Do(func() {
 		r.cancel()
 		close(r.closed)
+		r.eventsMu.Lock()
 		close(r.events)
+		r.eventsMu.Unlock()
 	})
 }
 

@@ -444,6 +444,22 @@ func TestCompactionNotificationDoesNotCompleteRun(t *testing.T) {
 	runtime.removeRoute(route)
 }
 
+func TestAppServerRunDropsEventsAfterClose(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	route := &appServerRun{
+		handle: process.CodexHandle{ProcessRunID: "run-1", CodexSessionID: "thread-1"}, sessionID: "session-1",
+		ctx: ctx, cancel: cancel, events: make(chan process.CodexEvent, 1), closed: make(chan struct{}), finished: make(chan process.ExitResult, 1),
+	}
+	route.close()
+
+	for range 100 {
+		route.emit(process.CodexEvent{Type: process.CodexEventStatus})
+	}
+	if _, ok := <-route.events; ok {
+		t.Fatal("event was emitted after the route closed")
+	}
+}
+
 func TestHistoryPageUsesSessionFile(t *testing.T) {
 	codexHome := t.TempDir()
 	writeSessionLog(t, codexHome, "thread-1", `
