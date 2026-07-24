@@ -22,139 +22,136 @@
     >
       <template #before>
         <section class="event-panel">
-        <q-card flat bordered class="stream-card">
-          <q-inner-loading :showing="loading">
-            <q-spinner color="primary" size="32px" />
-          </q-inner-loading>
-
-          <div ref="streamBodyRef" class="stream-card__body" @scroll="onEventScroll">
-            <div v-if="loadingOlderEvents" class="event-loading-more">
-              <q-spinner color="primary" size="18px" />
-              <span>正在加载更早事件</span>
-            </div>
-            <q-card-section v-if="!loading && streamEntries.length === 0" class="text-muted">
-              暂无会话事件
-            </q-card-section>
-
-            <div class="event-list">
-              <div
-                v-for="event in streamEntries"
-                :key="event.id"
-                class="event-list__item"
-                :data-timeline-id="event.id"
-              >
-                <SessionEventMessage
-                  :event="event"
-                  :known-user-prompts="knownUserPrompts"
-                />
-              </div>
-            </div>
-          </div>
-        </q-card>
-
-        <div
-          v-if="!isClosed"
-          class="detail-composer"
-          :class="{
-            'detail-composer--collapsed':
-              composerCollapsed && !isWaitingForAnswer && !isWaitingForApproval,
-          }"
-        >
-          <q-banner v-if="detailError" rounded class="detail-error-banner">
-            <template #avatar>
-              <q-icon name="error_outline" />
-            </template>
-            {{ detailError }}
-          </q-banner>
-          <q-card v-if="isWaitingForAnswer" flat bordered class="detail-answer-card">
-            <q-card-section class="detail-answer-card__header">
-              <div>
-                <div class="text-subtitle2 text-weight-bold">待回答问题</div>
-                <div class="text-caption text-muted">
-                  回答后当前会话继续执行，输入框会恢复为追加描述。
-                </div>
-              </div>
-              <q-badge rounded color="warning" class="app-on-warning" label="待回答" />
-            </q-card-section>
-            <q-separator />
-            <QuestionsPanel
-              :requests="pendingQuestionRequests"
-              :loading="questionsLoading"
-              :submitting="questionsSubmitting"
-              @submit="submitAnswers"
-            />
-          </q-card>
-          <div v-else-if="isWaitingForApproval" class="detail-approval-review">
-            <div class="detail-approval-review__result">
-              <WorkflowResultReview
-                :phase="session?.pendingApproval?.phase ?? null"
-                :result="session?.pendingApproval?.result ?? null"
-              />
-            </div>
-            <WorkflowApprovalPanel
-              v-if="!approvalLoading"
-              :key="approvalPanelKey"
-              :context-available="isPendingApprovalReviewable(session?.pendingApproval)"
-              :submitting="approvalSubmitting"
-              @submit="submitApproval"
-            />
-            <q-inner-loading :showing="approvalLoading">
+          <q-card flat bordered class="stream-card">
+            <q-inner-loading :showing="loading">
               <q-spinner color="primary" size="32px" />
             </q-inner-loading>
-          </div>
-          <CodexPromptComposer
-            v-else
-            v-model:prompt="appendText"
-            v-model:files="appendFiles"
-            v-model:artifacts="appendArtifacts"
-            v-model:mentions="appendMentions"
-            v-model:model="composerModel"
-            v-model:effort="composerEffort"
-            v-model:permission="composerPermission"
-            v-model:fast="composerFast"
-            v-model:collapsed="composerCollapsed"
-            compact
-            collapsible
-            :show-badge="false"
-            title="追加描述"
-            placeholder="追加描述，发送给当前会话"
-            :disabled="!session || appendUploading || appending || stopping || isClosed"
-            :completion-session-id="sessionId"
-            :completion-has-thread="Boolean(session?.codexSessionId)"
-            @submit="sendAppend"
+
+            <div ref="streamBodyRef" class="stream-card__body" @scroll="onEventScroll">
+              <div v-if="loadingOlderEvents" class="event-loading-more">
+                <q-spinner color="primary" size="18px" />
+                <span>正在加载更早事件</span>
+              </div>
+              <q-card-section v-if="!loading && streamEntries.length === 0" class="text-muted">
+                暂无会话事件
+              </q-card-section>
+
+              <div class="event-list">
+                <div
+                  v-for="event in streamEntries"
+                  :key="event.id"
+                  class="event-list__item"
+                  :data-timeline-id="event.id"
+                >
+                  <SessionEventMessage :event="event" :known-user-prompts="knownUserPrompts" />
+                </div>
+              </div>
+            </div>
+          </q-card>
+
+          <div
+            v-if="!isClosed"
+            class="detail-composer"
+            :class="{
+              'detail-composer--collapsed':
+                composerCollapsed && !isWaitingForAnswer && !isWaitingForApproval,
+            }"
           >
-            <template #actions>
-              <q-btn
-                v-if="canCancelQueue"
-                flat
-                class="app-icon-btn"
-                color="negative"
-                icon="cancel"
-                aria-label="取消排队"
-                :loading="stopping"
-                :disable="appending || executing || stopping || updatingConfig"
-                @click="stopSession"
-              >
-                <q-tooltip>取消排队</q-tooltip>
-              </q-btn>
-              <q-btn
-                v-if="composerAction"
-                unelevated
-                class="detail-composer__primary-btn app-icon-btn"
-                :class="{ 'app-on-primary': composerAction.color === 'primary' }"
-                :color="composerAction.color"
-                :icon="composerAction.icon"
-                :aria-label="composerAction.tooltip"
-                :loading="composerAction.loading"
-                :disable="composerAction.disabled"
-                @click="composerAction.run"
-              >
-                <q-tooltip>{{ composerAction.tooltip }}</q-tooltip>
-              </q-btn>
-            </template>
-          </CodexPromptComposer>
-        </div>
-      </section>
+            <q-banner v-if="detailError" rounded class="detail-error-banner">
+              <template #avatar>
+                <q-icon name="error_outline" />
+              </template>
+              {{ detailError }}
+            </q-banner>
+            <q-card v-if="isWaitingForAnswer" flat bordered class="detail-answer-card">
+              <q-card-section class="detail-answer-card__header">
+                <div>
+                  <div class="text-subtitle2 text-weight-bold">待回答问题</div>
+                  <div class="text-caption text-muted">
+                    回答后当前会话继续执行，输入框会恢复为追加描述。
+                  </div>
+                </div>
+                <q-badge rounded color="warning" class="app-on-warning" label="待回答" />
+              </q-card-section>
+              <q-separator />
+              <QuestionsPanel
+                :requests="pendingQuestionRequests"
+                :loading="questionsLoading"
+                :submitting="questionsSubmitting"
+                @submit="submitAnswers"
+              />
+            </q-card>
+            <div v-else-if="isWaitingForApproval" class="detail-approval-review">
+              <div class="detail-approval-review__result">
+                <WorkflowResultReview
+                  :phase="session?.pendingApproval?.phase ?? null"
+                  :result="session?.pendingApproval?.result ?? null"
+                />
+              </div>
+              <WorkflowApprovalPanel
+                v-if="!approvalLoading"
+                :key="approvalPanelKey"
+                :context-available="isPendingApprovalReviewable(session?.pendingApproval)"
+                :submitting="approvalSubmitting"
+                @submit="submitApproval"
+              />
+              <q-inner-loading :showing="approvalLoading">
+                <q-spinner color="primary" size="32px" />
+              </q-inner-loading>
+            </div>
+            <CodexPromptComposer
+              v-else
+              v-model:prompt="appendText"
+              v-model:files="appendFiles"
+              v-model:artifacts="appendArtifacts"
+              v-model:mentions="appendMentions"
+              v-model:model="composerModel"
+              v-model:effort="composerEffort"
+              v-model:permission="composerPermission"
+              v-model:fast="composerFast"
+              v-model:collapsed="composerCollapsed"
+              compact
+              collapsible
+              :show-badge="false"
+              title="追加描述"
+              placeholder="追加描述，发送给当前会话"
+              :disabled="!session || appendUploading || appending || stopping || isClosed"
+              :completion-session-id="sessionId"
+              :completion-has-thread="Boolean(session?.codexSessionId)"
+              @submit="sendAppend"
+            >
+              <template #actions>
+                <q-btn
+                  v-if="canCancelQueue"
+                  flat
+                  class="app-icon-btn"
+                  color="negative"
+                  icon="cancel"
+                  aria-label="取消排队"
+                  :loading="stopping"
+                  :disable="appending || executing || stopping || updatingConfig"
+                  @click="stopSession"
+                >
+                  <q-tooltip>取消排队</q-tooltip>
+                </q-btn>
+                <q-btn
+                  v-if="composerAction"
+                  unelevated
+                  class="detail-composer__primary-btn app-icon-btn"
+                  :class="{ 'app-on-primary': composerAction.color === 'primary' }"
+                  :color="composerAction.color"
+                  :icon="composerAction.icon"
+                  :aria-label="composerAction.tooltip"
+                  :loading="composerAction.loading"
+                  :disable="composerAction.disabled"
+                  @click="composerAction.run"
+                >
+                  <q-tooltip>{{ composerAction.tooltip }}</q-tooltip>
+                </q-btn>
+              </template>
+            </CodexPromptComposer>
+          </div>
+        </section>
       </template>
 
       <template #separator>
@@ -177,305 +174,312 @@
 
       <template #after>
         <aside class="right-panel">
-        <q-card flat bordered class="right-panel-card">
-          <q-tabs
-            v-if="!isMobileLayout"
-            v-model="rightPanelTab"
-            class="detail-desktop-tabs"
-            dense
-            align="justify"
-            narrow-indicator
-          >
-            <q-tab name="info" icon="info" label="会话信息" />
-            <q-tab name="changes" icon="difference" label="当前变更">
-              <q-badge
-                v-if="session && session.filesChanged > 0"
-                floating
-                color="primary"
-                :label="String(session.filesChanged)"
-              />
-            </q-tab>
-            <q-tab name="artifacts" icon="inventory_2" label="临时文件">
-              <q-badge
-                v-if="session && session.artifactCount > 0"
-                floating
-                color="primary"
-                :label="String(session.artifactCount)"
-              />
-            </q-tab>
-          </q-tabs>
-          <q-separator v-if="!isMobileLayout" />
-          <q-tab-panels v-model="rightPanelTab" animated>
-            <q-tab-panel name="info">
-              <div v-if="session?.mode === 'workflow'" class="workflow-progress">
-                <div class="workflow-progress__header">
-                  <div>
-                    <div class="text-subtitle2 text-weight-bold">流程进度</div>
-                    <div class="text-caption text-muted">{{ workflowProgressLabel }}</div>
-                  </div>
-                  <q-badge
-                    outline
-                    :color="statusColor(session.status)"
-                    :label="statusLabel(session.status)"
-                  />
-                </div>
-                <q-linear-progress
-                  rounded
-                  size="8px"
-                  :indeterminate="workflowProgressIndeterminate"
-                  :value="workflowProgressValue"
-                  :color="statusColor(session.status)"
+          <q-card flat bordered class="right-panel-card">
+            <q-tabs
+              v-if="!isMobileLayout"
+              v-model="rightPanelTab"
+              class="detail-desktop-tabs"
+              dense
+              align="justify"
+              narrow-indicator
+            >
+              <q-tab name="info" icon="info" label="会话信息" />
+              <q-tab name="changes" icon="difference" label="当前变更">
+                <q-badge
+                  v-if="session && session.filesChanged > 0"
+                  floating
+                  color="primary"
+                  :label="String(session.filesChanged)"
                 />
-                <div class="workflow-progress__node">
-                  <q-icon name="account_tree" color="primary" />
-                  <span>{{ session.node }}</span>
+              </q-tab>
+              <q-tab name="artifacts" icon="inventory_2" label="临时文件">
+                <q-badge
+                  v-if="session && session.artifactCount > 0"
+                  floating
+                  color="primary"
+                  :label="String(session.artifactCount)"
+                />
+              </q-tab>
+            </q-tabs>
+            <q-separator v-if="!isMobileLayout" />
+            <q-tab-panels v-model="rightPanelTab" animated>
+              <q-tab-panel name="info">
+                <div v-if="session?.mode === 'workflow'" class="workflow-progress">
+                  <div class="workflow-progress__header">
+                    <div>
+                      <div class="text-subtitle2 text-weight-bold">流程进度</div>
+                      <div class="text-caption text-muted">{{ workflowProgressLabel }}</div>
+                    </div>
+                    <q-badge
+                      outline
+                      :color="statusColor(session.status)"
+                      :label="statusLabel(session.status)"
+                    />
+                  </div>
+                  <q-linear-progress
+                    rounded
+                    size="8px"
+                    :indeterminate="workflowProgressIndeterminate"
+                    :value="workflowProgressValue"
+                    :color="statusColor(session.status)"
+                  />
+                  <div class="workflow-progress__node">
+                    <q-icon name="account_tree" color="primary" />
+                    <span>{{ session.node }}</span>
+                  </div>
                 </div>
-              </div>
 
-              <q-list separator>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>标题</q-item-label>
-                    <q-item-label>{{ session?.title ?? '会话详情' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>项目</q-item-label>
-                    <q-item-label>{{ session?.projectName ?? '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>分支</q-item-label>
-                    <q-item-label>{{ session?.branch ?? '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>工作分支</q-item-label>
-                    <q-item-label>{{ session?.worktreeBranch || '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item v-if="worktreeCleanup && worktreeCleanup.status !== 'not_applicable'">
-                  <q-item-section>
-                    <q-item-label caption>工作树清理</q-item-label>
-                    <q-item-label>
-                      <q-badge
-                        outline
-                        :color="worktreeCleanupColor(worktreeCleanup.status)"
-                        :label="worktreeCleanupLabel(worktreeCleanup.status)"
-                      />
-                    </q-item-label>
-                    <q-item-label v-if="worktreeCleanup.error" caption class="text-negative">
-                      {{ worktreeCleanup.error.message }}
-                    </q-item-label>
-                  </q-item-section>
-                  <q-item-section v-if="canRetryWorktreeCleanup" side>
-                    <q-btn
-                      flat
-                      round
-                      dense
-                      icon="refresh"
-                      color="primary"
-                      aria-label="重试工作树清理"
-                      :loading="retryingWorktreeCleanup"
-                      @click="retryCurrentWorktreeCleanup"
-                    >
-                      <q-tooltip>重试工作树清理</q-tooltip>
-                    </q-btn>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>更新时间</q-item-label>
-                    <q-item-label>{{ session?.updatedAt ?? '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>模式</q-item-label>
-                    <q-item-label>{{ session ? modeLabel(session.mode) : '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>优先级</q-item-label>
-                    <q-item-label>{{
-                      session ? priorityLabel(session.priority) : '-'
-                    }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item v-if="session?.mode === 'workflow'">
-                  <q-item-section>
-                    <q-item-label caption>当前节点</q-item-label>
-                    <q-item-label>{{ session?.node ?? '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>状态</q-item-label>
-                    <q-item-label>
-                      <q-badge
-                        v-if="session"
-                        outline
-                        :color="statusColor(session.status)"
-                        :label="statusLabel(session.status)"
-                      />
-                      <template v-else>-</template>
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item v-if="session?.closeReason">
-                  <q-item-section>
-                    <q-item-label caption>关闭原因</q-item-label>
-                    <q-item-label>{{ closeReasonLabel(session.closeReason) }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item>
-                  <q-item-section>
-                    <q-item-label caption>权限</q-item-label>
-                    <q-item-label>{{ session?.config.permissionMode || '-' }}</q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item v-if="latestTokenUsage">
-                  <q-item-section>
-                    <q-item-label caption>Token 用量</q-item-label>
-                    <q-item-label class="token-usage-summary">
-                      <span
-                        >本轮输入 {{ formatTokenCount(latestTokenUsage.currentInputTokens) }}</span
-                      >
-                      <span v-if="latestTokenUsage.contextWindow">
-                        上下文占用 {{ contextUsagePercent(latestTokenUsage) }}
-                      </span>
-                      <span
-                        >本轮缓存
-                        {{ formatTokenCount(latestTokenUsage.currentCachedInputTokens) }}</span
-                      >
-                      <span>累计输入 {{ formatTokenCount(latestTokenUsage.inputTokens) }}</span>
-                      <span
-                        >累计缓存 {{ formatTokenCount(latestTokenUsage.cachedInputTokens) }}</span
-                      >
-                      <span>累计输出 {{ formatTokenCount(latestTokenUsage.outputTokens) }}</span>
-                      <span v-if="latestTokenUsage.contextWindow">
-                        窗口 {{ formatTokenCount(latestTokenUsage.contextWindow) }}
-                      </span>
-                      <span v-if="latestTokenUsage.compactionCount">
-                        压缩 {{ latestTokenUsage.compactionCount }} 次
-                      </span>
-                    </q-item-label>
-                    <q-item-label
-                      v-if="session?.mode === 'workflow' && nodeUsage.length"
-                      caption
-                      class="token-usage-summary"
-                    >
-                      <span
-                        v-for="item in nodeUsage"
-                        :key="`${item.nodeRunId ?? ''}:${item.processRunId ?? ''}`"
-                      >
-                        节点 {{ item.nodeRunId }} {{ formatTokenCount(item.usage.totalTokens) }}
-                      </span>
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
-
-              <q-btn
-                class="full-width q-mt-md app-command-btn"
-                outline
-                color="negative"
-                icon="close"
-                label="关闭卡片"
-                no-caps
-                :loading="closing"
-                :disable="!canClose || isClosed || loading || closing"
-                @click="closeCurrentSession"
-              />
-
-              <q-separator spaced />
-
-              <div class="append-history">
-                <div class="append-history__title">追加描述</div>
-                <q-list v-if="session?.promptAppends.length" bordered separator>
-                  <q-item
-                    v-for="item in session.promptAppends"
-                    :key="item.id"
-                    clickable
-                    v-ripple
-                    aria-label="编辑追加提示"
-                    @click="openPromptAppendEditor(item)"
-                  >
+                <q-list separator>
+                  <q-item>
                     <q-item-section>
-                      <q-item-label class="append-history__body">{{ item.body }}</q-item-label>
-                      <div v-if="item.attachments.length" class="append-history__attachments">
-                        <q-chip
-                          v-for="attachment in item.attachments"
-                          :key="attachment.id"
-                          dense
-                          square
-                          outline
-                          icon="attach_file"
-                          color="primary"
-                          text-color="primary"
-                          :label="attachment.filename"
-                        />
-                      </div>
-                      <div v-if="item.artifacts.length" class="append-history__attachments">
-                        <q-chip
-                          v-for="artifact in item.artifacts"
-                          :key="artifact.id"
-                          dense
-                          square
-                          outline
-                          icon="link"
-                          color="primary"
-                          text-color="primary"
-                          :label="artifact.logicalPath || artifact.filename"
-                        />
-                      </div>
-                      <q-item-label caption>{{ item.time }}</q-item-label>
+                      <q-item-label caption>标题</q-item-label>
+                      <q-item-label>{{ session?.title ?? '会话详情' }}</q-item-label>
                     </q-item-section>
-                    <q-item-section side>
-                      <q-icon name="edit" class="text-muted" />
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>项目</q-item-label>
+                      <q-item-label>{{ session?.projectName ?? '-' }}</q-item-label>
                     </q-item-section>
-                    <q-tooltip>编辑追加提示</q-tooltip>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>分支</q-item-label>
+                      <q-item-label>{{ session?.branch ?? '-' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>工作分支</q-item-label>
+                      <q-item-label>{{ session?.worktreeBranch || '-' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item v-if="worktreeCleanup && worktreeCleanup.status !== 'not_applicable'">
+                    <q-item-section>
+                      <q-item-label caption>工作树清理</q-item-label>
+                      <q-item-label>
+                        <q-badge
+                          outline
+                          :color="worktreeCleanupColor(worktreeCleanup.status)"
+                          :label="worktreeCleanupLabel(worktreeCleanup.status)"
+                        />
+                      </q-item-label>
+                      <q-item-label v-if="worktreeCleanup.error" caption class="text-negative">
+                        {{ worktreeCleanup.error.message }}
+                      </q-item-label>
+                    </q-item-section>
+                    <q-item-section v-if="canRetryWorktreeCleanup" side>
+                      <q-btn
+                        flat
+                        round
+                        dense
+                        icon="refresh"
+                        color="primary"
+                        aria-label="重试工作树清理"
+                        :loading="retryingWorktreeCleanup"
+                        @click="retryCurrentWorktreeCleanup"
+                      >
+                        <q-tooltip>重试工作树清理</q-tooltip>
+                      </q-btn>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>更新时间</q-item-label>
+                      <q-item-label>{{ session?.updatedAt ?? '-' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>模式</q-item-label>
+                      <q-item-label>{{ session ? modeLabel(session.mode) : '-' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>优先级</q-item-label>
+                      <q-item-label>{{
+                        session ? priorityLabel(session.priority) : '-'
+                      }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item v-if="session?.mode === 'workflow'">
+                    <q-item-section>
+                      <q-item-label caption>当前节点</q-item-label>
+                      <q-item-label>{{ session?.node ?? '-' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>状态</q-item-label>
+                      <q-item-label>
+                        <q-badge
+                          v-if="session"
+                          outline
+                          :color="statusColor(session.status)"
+                          :label="statusLabel(session.status)"
+                        />
+                        <template v-else>-</template>
+                      </q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item v-if="session?.closeReason">
+                    <q-item-section>
+                      <q-item-label caption>关闭原因</q-item-label>
+                      <q-item-label>{{ closeReasonLabel(session.closeReason) }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item>
+                    <q-item-section>
+                      <q-item-label caption>权限</q-item-label>
+                      <q-item-label>{{ session?.config.permissionMode || '-' }}</q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item v-if="latestTokenUsage">
+                    <q-item-section>
+                      <q-item-label caption>Token 用量</q-item-label>
+                      <q-item-label class="token-usage-summary">
+                        <span
+                          >本轮输入
+                          {{ formatTokenCount(latestTokenUsage.currentInputTokens) }}</span
+                        >
+                        <span v-if="latestTokenUsage.contextWindow">
+                          上下文占用 {{ contextUsagePercent(latestTokenUsage) }}
+                        </span>
+                        <span
+                          >本轮缓存
+                          {{ formatTokenCount(latestTokenUsage.currentCachedInputTokens) }}</span
+                        >
+                        <span>累计输入 {{ formatTokenCount(latestTokenUsage.inputTokens) }}</span>
+                        <span
+                          >累计缓存 {{ formatTokenCount(latestTokenUsage.cachedInputTokens) }}</span
+                        >
+                        <span>累计输出 {{ formatTokenCount(latestTokenUsage.outputTokens) }}</span>
+                        <span v-if="latestTokenUsage.contextWindow">
+                          窗口 {{ formatTokenCount(latestTokenUsage.contextWindow) }}
+                        </span>
+                        <span v-if="latestTokenUsage.compactionCount">
+                          压缩 {{ latestTokenUsage.compactionCount }} 次
+                        </span>
+                      </q-item-label>
+                      <q-item-label
+                        v-if="session?.mode === 'workflow' && nodeUsage.length"
+                        caption
+                        class="token-usage-summary"
+                      >
+                        <span
+                          v-for="item in nodeUsage"
+                          :key="`${item.nodeRunId ?? ''}:${item.processRunId ?? ''}`"
+                        >
+                          节点 {{ item.nodeRunId }} {{ formatTokenCount(item.usage.totalTokens) }}
+                        </span>
+                      </q-item-label>
+                    </q-item-section>
                   </q-item>
                 </q-list>
-                <div v-else class="append-history__empty">暂无追加描述</div>
-              </div>
-            </q-tab-panel>
 
-            <q-tab-panel name="changes" class="detail-diff-panel">
-              <q-btn
-                class="full-width q-mb-md app-command-btn"
-                outline
-                color="primary"
-                icon="open_in_new"
-                label="完整 Diff"
-                no-caps
-                :to="allDiffRoute"
-              />
-              <DiffWorkspace
-                v-model="detailDiffWorkspaceState"
-                :target="detailDiffTarget"
-                :show-file-navigation="false"
-                lazy-file-details
-                :refresh-key="diffUpdateVersion"
-              />
-            </q-tab-panel>
+                <SessionTerminalButton
+                  v-if="session && !isClosed"
+                  :source-session-id="sessionId"
+                  full-width
+                />
 
-            <q-tab-panel name="artifacts">
-              <SessionArtifactsPanel
-                :session-id="sessionId"
-                :refresh-key="artifactRefreshKey"
-                allow-reference
-                @reference-artifact="referenceArtifact"
-                @artifact-deleted="handleArtifactDeleted"
-              />
-            </q-tab-panel>
-          </q-tab-panels>
-        </q-card>
-      </aside>
+                <q-btn
+                  class="full-width q-mt-md app-command-btn"
+                  outline
+                  color="negative"
+                  icon="close"
+                  label="关闭卡片"
+                  no-caps
+                  :loading="closing"
+                  :disable="!canClose || isClosed || loading || closing"
+                  @click="closeCurrentSession"
+                />
+
+                <q-separator spaced />
+
+                <div class="append-history">
+                  <div class="append-history__title">追加描述</div>
+                  <q-list v-if="session?.promptAppends.length" bordered separator>
+                    <q-item
+                      v-for="item in session.promptAppends"
+                      :key="item.id"
+                      clickable
+                      v-ripple
+                      aria-label="编辑追加提示"
+                      @click="openPromptAppendEditor(item)"
+                    >
+                      <q-item-section>
+                        <q-item-label class="append-history__body">{{ item.body }}</q-item-label>
+                        <div v-if="item.attachments.length" class="append-history__attachments">
+                          <q-chip
+                            v-for="attachment in item.attachments"
+                            :key="attachment.id"
+                            dense
+                            square
+                            outline
+                            icon="attach_file"
+                            color="primary"
+                            text-color="primary"
+                            :label="attachment.filename"
+                          />
+                        </div>
+                        <div v-if="item.artifacts.length" class="append-history__attachments">
+                          <q-chip
+                            v-for="artifact in item.artifacts"
+                            :key="artifact.id"
+                            dense
+                            square
+                            outline
+                            icon="link"
+                            color="primary"
+                            text-color="primary"
+                            :label="artifact.logicalPath || artifact.filename"
+                          />
+                        </div>
+                        <q-item-label caption>{{ item.time }}</q-item-label>
+                      </q-item-section>
+                      <q-item-section side>
+                        <q-icon name="edit" class="text-muted" />
+                      </q-item-section>
+                      <q-tooltip>编辑追加提示</q-tooltip>
+                    </q-item>
+                  </q-list>
+                  <div v-else class="append-history__empty">暂无追加描述</div>
+                </div>
+              </q-tab-panel>
+
+              <q-tab-panel name="changes" class="detail-diff-panel">
+                <q-btn
+                  class="full-width q-mb-md app-command-btn"
+                  outline
+                  color="primary"
+                  icon="open_in_new"
+                  label="完整 Diff"
+                  no-caps
+                  :to="allDiffRoute"
+                />
+                <DiffWorkspace
+                  v-model="detailDiffWorkspaceState"
+                  :target="detailDiffTarget"
+                  :show-file-navigation="false"
+                  lazy-file-details
+                  :refresh-key="diffUpdateVersion"
+                />
+              </q-tab-panel>
+
+              <q-tab-panel name="artifacts">
+                <SessionArtifactsPanel
+                  :session-id="sessionId"
+                  :refresh-key="artifactRefreshKey"
+                  allow-reference
+                  @reference-artifact="referenceArtifact"
+                  @artifact-deleted="handleArtifactDeleted"
+                />
+              </q-tab-panel>
+            </q-tab-panels>
+          </q-card>
+        </aside>
       </template>
 
       <q-resize-observer @resize="onDetailSplitterResize" />
@@ -508,10 +512,7 @@
       </q-tab>
     </q-tabs>
 
-    <q-dialog
-      v-model="promptEditDialogOpen"
-      :persistent="promptEditSaving"
-    >
+    <q-dialog v-model="promptEditDialogOpen" :persistent="promptEditSaving">
       <PromptAppendEditPanel
         v-model:body="promptEditBody"
         :target="promptEditTarget"
@@ -523,14 +524,13 @@
       />
     </q-dialog>
 
-    <q-dialog
-      v-model="eventResourceDialogOpen"
-      @hide="clearEventResource"
-    >
+    <q-dialog v-model="eventResourceDialogOpen" @hide="clearEventResource">
       <q-card class="event-resource-dialog app-content-dialog" aria-label="事件文件">
         <q-card-section class="event-resource-dialog__header">
           <div class="event-resource-dialog__title">
-            <q-icon :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)" />
+            <q-icon
+              :name="eventResourceKind === 'diff' ? 'difference' : fileIcon(eventResourceFile)"
+            />
             <div class="event-resource-dialog__title-content">
               <span>{{ eventResourceTitle }}</span>
               <div
@@ -593,6 +593,7 @@ import PromptAppendEditPanel from '@/components/PromptAppendEditPanel.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
 import { normalizePermissionMode } from '@/components/promptOptions';

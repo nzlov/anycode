@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
+	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	"github.com/nzlov/anycode/internal/infra/cloudflared"
 	"github.com/nzlov/anycode/internal/infra/codexcli"
 	"github.com/nzlov/anycode/internal/infra/config"
@@ -37,6 +39,7 @@ import (
 	"github.com/nzlov/anycode/internal/infra/gitcli"
 	"github.com/nzlov/anycode/internal/infra/gitdiffcli"
 	"github.com/nzlov/anycode/internal/infra/nasawallpaper"
+	"github.com/nzlov/anycode/internal/infra/ptyruntime"
 	"github.com/nzlov/anycode/internal/infra/shellinit"
 	webpushinfra "github.com/nzlov/anycode/internal/infra/webpush"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
@@ -95,7 +98,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithPlayground()),
+		Handler:           httpinterface.NewHandler(cfg, httpinterface.WithGraphQLUseCases(useCases), httpinterface.WithAttachmentUseCase(useCases.Attachments), httpinterface.WithTerminalRuntime(application.terminal), httpinterface.WithPlayground()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -151,6 +154,7 @@ func runArtifactReconciliation(ctx context.Context, artifacts artifactRecoveryUs
 type wiredApplication struct {
 	useCases graph.UseCases
 	codex    *codexcli.Client
+	terminal terminaldomain.Runtime
 }
 
 func (a *wiredApplication) Close() {
@@ -204,7 +208,8 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		return nil, fmt.Errorf("initialize tunnel runtime: %w", err)
 	}
 	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)))
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
+	terminalRuntime := ptyruntime.New(ptyruntime.WithHistoryDir(filepath.Join(cfg.DataDir, "terminals")))
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
 	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService)))
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
@@ -231,7 +236,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Tunnels:          tunnelService,
 		CodexModels:      capabilities.Models,
 	}
-	return &wiredApplication{useCases: useCases, codex: codex}, nil
+	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime}, nil
 }
 
 func httpPort(addr string) int {

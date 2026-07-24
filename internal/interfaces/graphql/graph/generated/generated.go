@@ -170,6 +170,7 @@ type ComplexityRoot struct {
 		DeleteSessionFile           func(childComplexity int, id string) int
 		DeleteStagedAttachment      func(childComplexity int, id string) int
 		ExecuteSession              func(childComplexity int, id string, force *bool) int
+		OpenSessionTerminal         func(childComplexity int, sessionID string) int
 		RegisterPushSubscription    func(childComplexity int, input model.RegisterPushSubscriptionInput) int
 		RemoveProject               func(childComplexity int, id string) int
 		ResumeSession               func(childComplexity int, id string, force *bool) int
@@ -357,6 +358,7 @@ type ComplexityRoot struct {
 		Requirement        func(childComplexity int) int
 		RequirementSummary func(childComplexity int) int
 		Status             func(childComplexity int) int
+		TerminalSummary    func(childComplexity int) int
 		TodoList           func(childComplexity int) int
 		UpdatedAt          func(childComplexity int) int
 		Usage              func(childComplexity int) int
@@ -461,6 +463,11 @@ type ComplexityRoot struct {
 	Subscription struct {
 		SessionEvents  func(childComplexity int, sessionID string) int
 		SessionUpdates func(childComplexity int) int
+	}
+
+	TerminalSummary struct {
+		Commands         func(childComplexity int) int
+		CurrentDirectory func(childComplexity int) int
 	}
 
 	TodoItem struct {
@@ -694,6 +701,7 @@ type MutationResolver interface {
 	RemoveProject(ctx context.Context, id string) (bool, error)
 	SetDefaultWorkflow(ctx context.Context, input model.SetDefaultWorkflowInput) (*model.Project, error)
 	CreateSession(ctx context.Context, input model.CreateSessionInput) (*model.Session, error)
+	OpenSessionTerminal(ctx context.Context, sessionID string) (*model.Session, error)
 	SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error)
 	UpdateSessionConfig(ctx context.Context, input model.UpdateSessionConfigInput) (*model.Session, error)
 	ExecuteSession(ctx context.Context, id string, force *bool) (*model.Session, error)
@@ -1310,6 +1318,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ExecuteSession(childComplexity, args["id"].(string), args["force"].(*bool)), true
+	case "Mutation.openSessionTerminal":
+		if e.ComplexityRoot.Mutation.OpenSessionTerminal == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_openSessionTerminal_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.OpenSessionTerminal(childComplexity, args["sessionId"].(string)), true
 	case "Mutation.registerPushSubscription":
 		if e.ComplexityRoot.Mutation.RegisterPushSubscription == nil {
 			break
@@ -2324,6 +2343,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.SessionCard.Status(childComplexity), true
+	case "SessionCard.terminalSummary":
+		if e.ComplexityRoot.SessionCard.TerminalSummary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.SessionCard.TerminalSummary(childComplexity), true
 	case "SessionCard.todoList":
 		if e.ComplexityRoot.SessionCard.TodoList == nil {
 			break
@@ -2800,6 +2825,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionUpdates(childComplexity), true
+
+	case "TerminalSummary.commands":
+		if e.ComplexityRoot.TerminalSummary.Commands == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TerminalSummary.Commands(childComplexity), true
+	case "TerminalSummary.currentDirectory":
+		if e.ComplexityRoot.TerminalSummary.CurrentDirectory == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TerminalSummary.CurrentDirectory(childComplexity), true
 
 	case "TodoItem.completed":
 		if e.ComplexityRoot.TodoItem.Completed == nil {
@@ -3794,6 +3832,7 @@ type Mutation {
   removeProject(id: ID!): Boolean!
   setDefaultWorkflow(input: SetDefaultWorkflowInput!): Project!
   createSession(input: CreateSessionInput!): Session!
+  openSessionTerminal(sessionId: ID!): Session!
   setSessionPriority(input: SetSessionPriorityInput!): Session!
   updateSessionConfig(input: UpdateSessionConfigInput!): Session!
   executeSession(id: ID!, force: Boolean): Session!
@@ -4006,6 +4045,7 @@ type SessionCard {
   baseBranch: String!
   worktreeBranch: String!
   currentNodeTitle: String!
+  terminalSummary: TerminalSummary
   todoList: TodoList
   artifactCount: Int!
   filesChanged: Int!
@@ -4015,6 +4055,11 @@ type SessionCard {
   lastRunAt: Time
   createdAt: Time!
   updatedAt: Time!
+}
+
+type TerminalSummary {
+  currentDirectory: String!
+  commands: [String!]!
 }
 
 type SessionCardPage {
@@ -4830,6 +4875,17 @@ func (ec *executionContext) field_Mutation_executeSession_args(ctx context.Conte
 		return nil, err
 	}
 	args["force"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_openSessionTerminal_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
 	return args, nil
 }
 
@@ -7919,6 +7975,81 @@ func (ec *executionContext) fieldContext_Mutation_createSession(ctx context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_openSessionTerminal(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_openSessionTerminal,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().OpenSessionTerminal(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNSession2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_openSessionTerminal(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Session_id(ctx, field)
+			case "projectId":
+				return ec.fieldContext_Session_projectId(ctx, field)
+			case "requirement":
+				return ec.fieldContext_Session_requirement(ctx, field)
+			case "mode":
+				return ec.fieldContext_Session_mode(ctx, field)
+			case "status":
+				return ec.fieldContext_Session_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Session_priority(ctx, field)
+			case "baseBranch":
+				return ec.fieldContext_Session_baseBranch(ctx, field)
+			case "worktreeBranch":
+				return ec.fieldContext_Session_worktreeBranch(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Session_worktreePath(ctx, field)
+			case "worktreeCleanup":
+				return ec.fieldContext_Session_worktreeCleanup(ctx, field)
+			case "codexSessionId":
+				return ec.fieldContext_Session_codexSessionId(ctx, field)
+			case "config":
+				return ec.fieldContext_Session_config(ctx, field)
+			case "availableActions":
+				return ec.fieldContext_Session_availableActions(ctx, field)
+			case "lastRunAt":
+				return ec.fieldContext_Session_lastRunAt(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Session_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Session_updatedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Session", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_openSessionTerminal_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_setSessionPriority(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10558,6 +10689,8 @@ func (ec *executionContext) fieldContext_Query_sessionCard(ctx context.Context, 
 				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
+			case "terminalSummary":
+				return ec.fieldContext_SessionCard_terminalSummary(ctx, field)
 			case "todoList":
 				return ec.fieldContext_SessionCard_todoList(ctx, field)
 			case "artifactCount":
@@ -13167,6 +13300,41 @@ func (ec *executionContext) fieldContext_SessionCard_currentNodeTitle(_ context.
 	return fc, nil
 }
 
+func (ec *executionContext) _SessionCard_terminalSummary(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SessionCard_terminalSummary,
+		func(ctx context.Context) (any, error) {
+			return obj.TerminalSummary, nil
+		},
+		nil,
+		ec.marshalOTerminalSummary2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTerminalSummary,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_SessionCard_terminalSummary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SessionCard",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "currentDirectory":
+				return ec.fieldContext_TerminalSummary_currentDirectory(ctx, field)
+			case "commands":
+				return ec.fieldContext_TerminalSummary_commands(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TerminalSummary", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SessionCard_todoList(ctx context.Context, field graphql.CollectedField, obj *model.SessionCard) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13526,6 +13694,8 @@ func (ec *executionContext) fieldContext_SessionCardPage_items(_ context.Context
 				return ec.fieldContext_SessionCard_worktreeBranch(ctx, field)
 			case "currentNodeTitle":
 				return ec.fieldContext_SessionCard_currentNodeTitle(ctx, field)
+			case "terminalSummary":
+				return ec.fieldContext_SessionCard_terminalSummary(ctx, field)
 			case "todoList":
 				return ec.fieldContext_SessionCard_todoList(ctx, field)
 			case "artifactCount":
@@ -15896,6 +16066,64 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdates(_ context.C
 				return ec.fieldContext_SessionUpdateEvent_updatedAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SessionUpdateEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TerminalSummary_currentDirectory(ctx context.Context, field graphql.CollectedField, obj *model.TerminalSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TerminalSummary_currentDirectory,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentDirectory, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TerminalSummary_currentDirectory(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TerminalSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TerminalSummary_commands(ctx context.Context, field graphql.CollectedField, obj *model.TerminalSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TerminalSummary_commands,
+		func(ctx context.Context) (any, error) {
+			return obj.Commands, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TerminalSummary_commands(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TerminalSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -24232,6 +24460,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "openSessionTerminal":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_openSessionTerminal(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "setSessionPriority":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setSessionPriority(ctx, field)
@@ -25884,6 +26119,8 @@ func (ec *executionContext) _SessionCard(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "terminalSummary":
+			out.Values[i] = ec._SessionCard_terminalSummary(ctx, field, obj)
 		case "todoList":
 			out.Values[i] = ec._SessionCard_todoList(ctx, field, obj)
 		case "artifactCount":
@@ -26536,6 +26773,50 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
+}
+
+var terminalSummaryImplementors = []string{"TerminalSummary"}
+
+func (ec *executionContext) _TerminalSummary(ctx context.Context, sel ast.SelectionSet, obj *model.TerminalSummary) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, terminalSummaryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TerminalSummary")
+		case "currentDirectory":
+			out.Values[i] = ec._TerminalSummary_currentDirectory(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "commands":
+			out.Values[i] = ec._TerminalSummary_commands(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
 }
 
 var todoItemImplementors = []string{"TodoItem"}
@@ -30560,6 +30841,13 @@ func (ec *executionContext) marshalOString2ᚖstring(ctx context.Context, sel as
 	_ = ctx
 	res := graphql.MarshalString(*v)
 	return res
+}
+
+func (ec *executionContext) marshalOTerminalSummary2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTerminalSummary(ctx context.Context, sel ast.SelectionSet, v *model.TerminalSummary) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TerminalSummary(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOTime2ᚖtimeᚐTime(ctx context.Context, v any) (*time.Time, error) {

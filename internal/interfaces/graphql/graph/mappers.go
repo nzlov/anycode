@@ -173,6 +173,7 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		BaseBranch:         dto.BaseBranch,
 		WorktreeBranch:     dto.WorktreeBranch,
 		CurrentNodeTitle:   dto.CurrentNodeTitle,
+		TerminalSummary:    mapTerminalSummary(dto.TerminalSummary),
 		TodoList:           mapTodoList(dto.TodoList),
 		ArtifactCount:      dto.ArtifactCount,
 		FilesChanged:       dto.FilesChanged,
@@ -182,6 +183,16 @@ func mapSessionCard(dto sessionapp.CardDTO) *model.SessionCard {
 		LastRunAt:          dto.LastRunAt,
 		CreatedAt:          dto.CreatedAt,
 		UpdatedAt:          dto.UpdatedAt,
+	}
+}
+
+func mapTerminalSummary(dto *sessionapp.TerminalSummaryDTO) *model.TerminalSummary {
+	if dto == nil {
+		return nil
+	}
+	return &model.TerminalSummary{
+		CurrentDirectory: dto.CurrentDirectory,
+		Commands:         append([]string(nil), dto.Commands...),
 	}
 }
 

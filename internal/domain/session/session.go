@@ -72,6 +72,7 @@ type Mode string
 const (
 	ModeWorkflow Mode = "workflow"
 	ModeChat     Mode = "chat"
+	ModeTerminal Mode = "terminal"
 )
 
 type Status string
@@ -406,7 +407,7 @@ func closeReasonsEqual(left *CloseReason, right *CloseReason) bool {
 
 var allowedStatusTransitions = map[Status][]Status{
 	StatusCreated:         {StatusQueued, StatusStarting, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
-	StatusInitializing:    {StatusQueued, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
+	StatusInitializing:    {StatusQueued, StatusStarting, StatusWaitingApproval, StatusStopping, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},
 	StatusQueued:          {StatusStarting, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusClosed},
 	StatusStarting:        {StatusQueued, StatusRunning, StatusWaitingUser, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusClosed},
 	StatusRunning:         {StatusQueued, StatusWaitingUser, StatusWaitingApproval, StatusStopping, StatusStopped, StatusResumeFailed, StatusFailed, StatusBlocked, StatusCompleted, StatusClosed},

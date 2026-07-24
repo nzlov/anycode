@@ -24,6 +24,7 @@ import (
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
+	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore"
 	"github.com/nzlov/anycode/internal/infra/filestore"
@@ -125,6 +126,178 @@ func TestCreateSessionDefaultsModeAndSavesRequestedConfig(t *testing.T) {
 	}
 	if saved.LastRunAt == nil || saved.CodexSessionID != "" || saved.WorktreePath != "" {
 		t.Fatalf("CreateSession() should queue without starting codex: %#v", saved)
+	}
+}
+
+func TestCreateTerminalSessionStartsRuntimeWithoutCodexQueue(t *testing.T) {
+	repo := newFakeRepository()
+	projects := newFakeProjectRepository("project-1")
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:                  "project-1",
+		Name:                "project-1",
+		Path:                projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit:               true,
+		WorktreeInitCommand: "echo should-not-run",
+	}
+	runtime := newFakeTerminalRuntime()
+	runtime.summary = terminaldomain.Summary{
+		CurrentDirectory: "~",
+		Commands:         []string{"pwd", "ls", "git status", "go test ./..."},
+	}
+	worktrees := newFakeWorktreeManager()
+	initializer := &fakeWorktreeInitializer{}
+	service := New(repo, projects, WithTerminalRuntime(runtime), WithWorktrees(worktrees), WithWorktreeInitializer(initializer))
+	t.Cleanup(service.Close)
+	service.generateID = func() (domain.ID, error) { return "terminal-session-1", nil }
+
+	got, err := service.CreateSession(context.Background(), CreateSessionInput{
+		ProjectID:   "project-1",
+		Requirement: "Terminal",
+		Mode:        domain.ModeTerminal,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	if got.Mode != domain.ModeTerminal || got.Status != domain.StatusRunning {
+		t.Fatalf("CreateSession() mode/status = %q/%q", got.Mode, got.Status)
+	}
+	if runtime.startInput.SessionID != "terminal-session-1" || runtime.startInput.Workdir != "" {
+		t.Fatalf("terminal start input = %#v", runtime.startInput)
+	}
+	saved := repo.sessions["terminal-session-1"]
+	if saved.Status != domain.StatusRunning || saved.Queue.Kind != "" || saved.WorktreePath != "" || saved.BaseBranch != "" || saved.WorktreeCleanup.Status != domain.WorktreeCleanupNotApplicable {
+		t.Fatalf("saved terminal session = %#v", saved)
+	}
+	if worktrees.createCalled || initializer.called {
+		t.Fatalf("terminal unexpectedly initialized a worktree: create=%v init=%v", worktrees.createCalled, initializer.called)
+	}
+	card, err := service.GetSessionCard(context.Background(), "terminal-session-1")
+	if err != nil {
+		t.Fatalf("GetSessionCard() error = %v", err)
+	}
+	if card.TerminalSummary == nil || card.TerminalSummary.CurrentDirectory != "~" || !slices.Equal(card.TerminalSummary.Commands, []string{"ls", "git status", "go test ./..."}) {
+		t.Fatalf("TerminalSummary = %#v", card.TerminalSummary)
+	}
+}
+
+func TestOpenTerminalUsesSourceSessionWorktreeWithoutCreatingAnotherWorktree(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["source-session"] = domain.Session{
+		ID:             "source-session",
+		ProjectID:      "project-1",
+		Requirement:    "implement feature",
+		Mode:           domain.ModeChat,
+		Status:         domain.StatusRunning,
+		BaseBranch:     "main",
+		WorktreePath:   "/workspace/source-session",
+		WorktreeBranch: "source-session",
+		WorktreeCleanup: domain.WorktreeCleanup{
+			Status: domain.WorktreeCleanupActive,
+		},
+	}
+	projects := newFakeProjectRepository("project-1")
+	projects.projects["project-1"] = projectdomain.Project{
+		ID:    "project-1",
+		Name:  "project-1",
+		Path:  projectdomain.ProjectPath{Value: "/workspace/project-1"},
+		IsGit: true,
+	}
+	runtime := newFakeTerminalRuntime()
+	worktrees := newFakeWorktreeManager()
+	initializer := &fakeWorktreeInitializer{}
+	service := New(repo, projects, WithTerminalRuntime(runtime), WithWorktrees(worktrees), WithWorktreeInitializer(initializer))
+	t.Cleanup(service.Close)
+	service.generateID = func() (domain.ID, error) { return "terminal-for-source", nil }
+
+	got, err := service.OpenTerminal(context.Background(), "source-session")
+	if err != nil {
+		t.Fatalf("OpenTerminal() error = %v", err)
+	}
+	if got.ID != "terminal-for-source" || got.Mode != domain.ModeTerminal || got.Status != domain.StatusRunning {
+		t.Fatalf("OpenTerminal() = %#v", got)
+	}
+	if runtime.startInput.SessionID != "terminal-for-source" || runtime.startInput.Workdir != "/workspace/source-session" {
+		t.Fatalf("terminal start input = %#v", runtime.startInput)
+	}
+	saved := repo.sessions["terminal-for-source"]
+	if saved.WorktreePath != "/workspace/source-session" || saved.WorktreeCleanup.Status != domain.WorktreeCleanupNotApplicable {
+		t.Fatalf("saved terminal session = %#v", saved)
+	}
+	if worktrees.createCalled || initializer.called {
+		t.Fatalf("terminal unexpectedly initialized a worktree: create=%v init=%v", worktrees.createCalled, initializer.called)
+	}
+}
+
+func TestStopTerminalSessionStopsRuntime(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["terminal-session-1"] = domain.Session{
+		ID:           "terminal-session-1",
+		ProjectID:    "project-1",
+		Mode:         domain.ModeTerminal,
+		Status:       domain.StatusRunning,
+		WorktreePath: "/workspace/project-1",
+	}
+	runtime := newFakeTerminalRuntime()
+	service := New(repo, newFakeProjectRepository("project-1"), WithTerminalRuntime(runtime))
+	t.Cleanup(service.Close)
+
+	got, err := service.StopSession(context.Background(), "terminal-session-1")
+	if err != nil {
+		t.Fatalf("StopSession() error = %v", err)
+	}
+	if got.Status != domain.StatusStopped || runtime.stoppedSessionID != "terminal-session-1" {
+		t.Fatalf("StopSession() status/runtime = %q/%q", got.Status, runtime.stoppedSessionID)
+	}
+}
+
+func TestCloseRunningTerminalStopsRuntimeBeforeClosingCard(t *testing.T) {
+	repo := newFakeRepository()
+	repo.sessions["terminal-session-1"] = domain.Session{
+		ID:           "terminal-session-1",
+		ProjectID:    "project-1",
+		Mode:         domain.ModeTerminal,
+		Status:       domain.StatusRunning,
+		WorktreePath: "/workspace/project-1",
+	}
+	runtime := newFakeTerminalRuntime()
+	service := New(repo, newFakeProjectRepository("project-1"), WithTerminalRuntime(runtime))
+	t.Cleanup(service.Close)
+
+	got, err := service.CloseSession(context.Background(), CloseSessionInput{
+		SessionID: "terminal-session-1",
+		Reason:    domain.CloseReasonUserClosed,
+	})
+	if err != nil {
+		t.Fatalf("CloseSession() error = %v", err)
+	}
+	if got.Status != domain.StatusClosed || runtime.stoppedSessionID != "terminal-session-1" {
+		t.Fatalf("CloseSession() status/runtime = %q/%q", got.Status, runtime.stoppedSessionID)
+	}
+}
+
+func TestRecoverInterruptedTerminalMarksSessionStoppedWithoutRestartingShell(t *testing.T) {
+	repo := newFakeRepository()
+	interrupted := domain.Session{
+		ID:        "terminal-session-1",
+		ProjectID: "project-1",
+		Mode:      domain.ModeTerminal,
+		Status:    domain.StatusRunning,
+	}
+	repo.sessions["terminal-session-1"] = interrupted
+	repo.listSessions = []domain.Session{interrupted}
+	runtime := newFakeTerminalRuntime()
+	service := New(repo, newFakeProjectRepository("project-1"), WithTerminalRuntime(runtime))
+	t.Cleanup(service.Close)
+
+	count, err := service.RecoverInterruptedSessions(context.Background())
+	if err != nil {
+		t.Fatalf("RecoverInterruptedSessions() error = %v", err)
+	}
+	if count != 1 || repo.sessions["terminal-session-1"].Status != domain.StatusStopped {
+		t.Fatalf("recovered count/status = %d/%q", count, repo.sessions["terminal-session-1"].Status)
+	}
+	if runtime.startInput.SessionID != "" {
+		t.Fatalf("terminal runtime unexpectedly restarted: %#v", runtime.startInput)
 	}
 }
 
@@ -12568,6 +12741,51 @@ type fakeCodexProcess struct {
 	eventStreams    []<-chan processdomain.CodexEvent
 	deletedThreads  []string
 	deleteThreadErr error
+}
+
+type fakeTerminalRuntime struct {
+	startInput       terminaldomain.StartInput
+	startErr         error
+	exit             chan terminaldomain.ExitResult
+	stoppedSessionID terminaldomain.SessionID
+	summary          terminaldomain.Summary
+}
+
+func newFakeTerminalRuntime() *fakeTerminalRuntime {
+	return &fakeTerminalRuntime{exit: make(chan terminaldomain.ExitResult, 1)}
+}
+
+func (r *fakeTerminalRuntime) Start(_ context.Context, input terminaldomain.StartInput) (terminaldomain.Handle, error) {
+	r.startInput = input
+	if r.startErr != nil {
+		return terminaldomain.Handle{}, r.startErr
+	}
+	return terminaldomain.Handle{RunID: "terminal-run-1", Exit: r.exit}, nil
+}
+
+func (r *fakeTerminalRuntime) Write(terminaldomain.SessionID, []byte) error { return nil }
+
+func (r *fakeTerminalRuntime) Resize(terminaldomain.SessionID, uint16, uint16) error { return nil }
+
+func (r *fakeTerminalRuntime) Stop(_ context.Context, sessionID terminaldomain.SessionID) error {
+	r.stoppedSessionID = sessionID
+	return nil
+}
+
+func (r *fakeTerminalRuntime) Subscribe(terminaldomain.SessionID) (terminaldomain.OutputSubscription, error) {
+	return terminaldomain.OutputSubscription{}, nil
+}
+
+func (r *fakeTerminalRuntime) Summary(terminaldomain.SessionID) (terminaldomain.Summary, error) {
+	return r.summary, nil
+}
+
+func (r *fakeTerminalRuntime) Close() error {
+	select {
+	case r.exit <- terminaldomain.ExitResult{RunID: "terminal-run-1"}:
+	default:
+	}
+	return nil
 }
 
 func (p *fakeCodexProcess) Probe(context.Context) (processdomain.CodexCapabilities, error) {

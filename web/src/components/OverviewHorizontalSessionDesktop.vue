@@ -20,7 +20,52 @@
           @change="emit('set-priority', $event)"
         />
         <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
-        <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
+        <q-badge
+          v-if="card.mode !== 'terminal'"
+          rounded
+          class="lane-mode-chip"
+          :label="modeBadgeLabel(card.mode)"
+        />
+        <q-btn
+          v-if="canStopTerminal"
+          flat
+          dense
+          class="lane-icon-btn app-icon-btn"
+          color="negative"
+          icon="stop"
+          aria-label="停止 Terminal"
+          :loading="terminalAction === 'stop'"
+          @click="stopTerminal"
+        >
+          <q-tooltip>停止 Terminal</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="canStartTerminal"
+          flat
+          dense
+          class="lane-icon-btn app-icon-btn"
+          color="primary"
+          icon="play_arrow"
+          aria-label="启动 Terminal"
+          :loading="terminalAction === 'start'"
+          @click="startTerminal"
+        >
+          <q-tooltip>启动 Terminal</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="canCloseTerminal"
+          flat
+          dense
+          class="lane-icon-btn app-icon-btn"
+          color="negative"
+          icon="close"
+          aria-label="关闭 Terminal 卡片"
+          :loading="terminalAction === 'close'"
+          @click="closeTerminal"
+        >
+          <q-tooltip>关闭 Terminal 卡片</q-tooltip>
+        </q-btn>
+        <SessionTerminalButton v-if="card.mode !== 'terminal'" :source-session-id="card.id" />
         <q-btn
           flat
           round
@@ -34,7 +79,15 @@
         </q-btn>
       </div>
     </header>
+    <TerminalView
+      v-if="card.mode === 'terminal'"
+      :key="`${card.id}:${card.status === 'running' ? 'running' : 'stopped'}`"
+      class="overview-horizontal-session-desktop__detail"
+      :session-id="card.id"
+      :interactive="card.status === 'running'"
+    />
     <SessionDetailView
+      v-else
       class="overview-horizontal-session-desktop__detail"
       :session-id="card.id"
       layout="desktop"
@@ -43,17 +96,27 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue';
+
 import SessionDetailView from '@/components/SessionDetailView.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
+import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
+import TerminalView from '@/components/TerminalView.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
 } from '@/services/sessionStatusPresentation';
-import type { SessionCard, SessionPriority } from '@/services/sessions';
+import {
+  closeSession,
+  executeSession,
+  stopSession,
+  type SessionCard,
+  type SessionPriority,
+} from '@/services/sessions';
 
-defineProps<{
+const props = defineProps<{
   card: SessionCard;
   priorityLoading?: boolean;
 }>();
@@ -62,6 +125,46 @@ const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
 }>();
 
+const terminalAction = ref<'start' | 'stop' | 'close' | ''>('');
+const canStopTerminal = computed(
+  () => props.card.mode === 'terminal' && props.card.availableActions.includes('stop'),
+);
+const canStartTerminal = computed(
+  () => props.card.mode === 'terminal' && props.card.availableActions.includes('execute'),
+);
+const canCloseTerminal = computed(
+  () => props.card.mode === 'terminal' && props.card.availableActions.includes('close'),
+);
+
+async function startTerminal() {
+  if (!canStartTerminal.value || terminalAction.value) return;
+  terminalAction.value = 'start';
+  try {
+    await executeSession(props.card.id);
+  } finally {
+    terminalAction.value = '';
+  }
+}
+
+async function stopTerminal() {
+  if (!canStopTerminal.value || terminalAction.value) return;
+  terminalAction.value = 'stop';
+  try {
+    await stopSession(props.card.id);
+  } finally {
+    terminalAction.value = '';
+  }
+}
+
+async function closeTerminal() {
+  if (!canCloseTerminal.value || terminalAction.value) return;
+  terminalAction.value = 'close';
+  try {
+    await closeSession(props.card.id);
+  } finally {
+    terminalAction.value = '';
+  }
+}
 </script>
 
 <style scoped>

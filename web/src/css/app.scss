@@ -462,6 +462,41 @@ a {
   padding: 18px;
 }
 
+.overview-terminal-card__body {
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  background: var(--ac-surface);
+}
+
+.overview-terminal-card__directory {
+  overflow: hidden;
+  color: var(--ac-text);
+  font-family: 'JetBrains Mono', SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-terminal-card__commands {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 6px;
+}
+
+.overview-terminal-card__commands code {
+  overflow: hidden;
+  color: var(--ac-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-terminal-card__empty {
+  color: var(--ac-text-muted);
+  font-size: 12px;
+}
+
 .overview-card-menu {
   min-width: 180px;
 }

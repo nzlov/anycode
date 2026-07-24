@@ -23,6 +23,7 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
+	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	"github.com/nzlov/anycode/internal/infra/config"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/generated"
@@ -38,6 +39,7 @@ type handlerOptions struct {
 	settings        settingapp.UseCase
 	artifacts       artifactapp.UseCase
 	sessions        sessionapp.UseCase
+	terminal        terminaldomain.Runtime
 	accessKey       string
 	playground      bool
 	previewMaxBytes int64
@@ -72,6 +74,12 @@ func WithAttachmentUseCase(useCase attachmentapp.UseCase) HandlerOption {
 	}
 }
 
+func WithTerminalRuntime(runtime terminaldomain.Runtime) HandlerOption {
+	return func(opts *handlerOptions) {
+		opts.terminal = runtime
+	}
+}
+
 func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	opts := handlerOptions{
 		graphqlHandler:  http.HandlerFunc(graphqlNotConfigured),
@@ -86,6 +94,7 @@ func NewHandler(cfg config.Config, options ...HandlerOption) http.Handler {
 	mux.HandleFunc("GET /healthz", healthz)
 	mux.Handle("GET /api/healthz", bearerAuth(cfg.AccessKey, http.HandlerFunc(healthz)))
 	mux.Handle("/graphql", graphqlAuth(cfg.AccessKey, withPrincipal(cfg.AccessKey, opts.graphqlHandler)))
+	mux.Handle("GET /api/terminals/{id}/ws", newTerminalWebSocketHandler(opts.sessions, opts.terminal, cfg.AccessKey))
 	attachmentHandler := newAttachmentHandler(opts.attachments, opts.previewMaxBytes)
 	mux.Handle("GET /files/{id}/preview", bearerAuth(cfg.AccessKey, attachmentHandler.preview()))
 	mux.Handle("GET /files/{id}/download", bearerAuth(cfg.AccessKey, attachmentHandler.download()))

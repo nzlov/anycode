@@ -214,6 +214,18 @@ func (r *mutationResolver) CreateSession(ctx context.Context, input model.Create
 	return mapSession(dto), nil
 }
 
+// OpenSessionTerminal is the resolver for the openSessionTerminal field.
+func (r *mutationResolver) OpenSessionTerminal(ctx context.Context, sessionID string) (*model.Session, error) {
+	if r.UseCases.Sessions == nil {
+		return nil, missingUseCase("sessions")
+	}
+	dto, err := r.UseCases.Sessions.OpenTerminal(ctx, sessiondomain.ID(sessionID))
+	if err != nil {
+		return nil, err
+	}
+	return mapSession(dto), nil
+}
+
 // SetSessionPriority is the resolver for the setSessionPriority field.
 func (r *mutationResolver) SetSessionPriority(ctx context.Context, input model.SetSessionPriorityInput) (*model.Session, error) {
 	if r.UseCases.Sessions == nil {

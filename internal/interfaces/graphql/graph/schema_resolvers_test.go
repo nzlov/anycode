@@ -893,6 +893,30 @@ func TestMutationCreateSessionPreservesNullableFastMode(t *testing.T) {
 	}
 }
 
+func TestMutationOpenSessionTerminalForwardsSourceSessionID(t *testing.T) {
+	now := time.Unix(33, 0).UTC()
+	sessions := &fakeSessionUseCase{
+		openTerminalResult: sessionapp.DTO{
+			ID:          "terminal-1",
+			ProjectID:   "project-1",
+			Requirement: "Terminal",
+			Mode:        sessiondomain.ModeTerminal,
+			Status:      sessiondomain.StatusRunning,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		},
+	}
+	resolver := NewResolver(UseCases{Sessions: sessions}).Mutation()
+
+	got, err := resolver.OpenSessionTerminal(context.Background(), "source-session")
+	if err != nil {
+		t.Fatalf("OpenSessionTerminal() error = %v", err)
+	}
+	if sessions.gotOpenTerminalID != "source-session" || got.ID != "terminal-1" {
+		t.Fatalf("OpenSessionTerminal() input/result = %q/%#v", sessions.gotOpenTerminalID, got)
+	}
+}
+
 func TestMutationAppendPromptForwardsFileIDs(t *testing.T) {
 	sessions := &fakeSessionUseCase{
 		appendResult: sessionapp.PromptAppendDTO{
@@ -1349,6 +1373,8 @@ type fakeSessionUseCase struct {
 	getResult                 sessionapp.DetailDTO
 	gotCreate                 sessionapp.CreateSessionInput
 	createResult              sessionapp.DTO
+	gotOpenTerminalID         sessiondomain.ID
+	openTerminalResult        sessionapp.DTO
 	gotResumeID               sessiondomain.ID
 	resumeResult              sessionapp.DTO
 	gotExecuteID              sessiondomain.ID
@@ -1383,6 +1409,11 @@ func (f *fakeSessionUseCase) CleanupSessions(_ context.Context, input sessionapp
 func (f *fakeSessionUseCase) CreateSession(_ context.Context, input sessionapp.CreateSessionInput) (sessionapp.DTO, error) {
 	f.gotCreate = input
 	return f.createResult, f.err
+}
+
+func (f *fakeSessionUseCase) OpenTerminal(_ context.Context, sourceSessionID sessiondomain.ID) (sessionapp.DTO, error) {
+	f.gotOpenTerminalID = sourceSessionID
+	return f.openTerminalResult, f.err
 }
 
 func (f *fakeSessionUseCase) SubmitQuestionRequest(_ context.Context, input questionapp.SubmitRequestInput) (questionapp.RequestDTO, error) {

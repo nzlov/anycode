@@ -28,11 +28,13 @@ import (
 	projectdomain "github.com/nzlov/anycode/internal/domain/project"
 	questiondomain "github.com/nzlov/anycode/internal/domain/question"
 	domain "github.com/nzlov/anycode/internal/domain/session"
+	terminaldomain "github.com/nzlov/anycode/internal/domain/terminal"
 	workflowdomain "github.com/nzlov/anycode/internal/domain/workflow"
 )
 
 type UseCase interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) (DTO, error)
+	OpenTerminal(ctx context.Context, sourceSessionID domain.ID) (DTO, error)
 	RecoverInitializingSessions(ctx context.Context) (int, error)
 	RecoverInterruptedSessions(ctx context.Context) (int, error)
 	ExecuteSession(ctx context.Context, id domain.ID) (DTO, error)
@@ -81,6 +83,7 @@ type CreateSessionInput struct {
 	Priority            domain.Priority
 	StagedAttachmentIDs []domain.StagedAttachmentID
 	Mentions            []domain.PromptMention
+	terminalWorkdir     string
 }
 
 type StartSessionOptions struct {
@@ -193,9 +196,15 @@ type CardDTO struct {
 	ProjectName        string
 	RequirementSummary string
 	CurrentNodeTitle   string
+	TerminalSummary    *TerminalSummaryDTO
 	TodoList           domain.TodoList
 	Attachments        []domain.SessionAttachment
 	AvailableActions   []string
+}
+
+type TerminalSummaryDTO struct {
+	CurrentDirectory string
+	Commands         []string
 }
 
 type CardStatusDTO struct {
@@ -300,6 +309,7 @@ type Service struct {
 	diffCounter             sessionDiffCounter
 	processes               processdomain.Repository
 	codex                   processdomain.CodexProcess
+	terminal                terminaldomain.Runtime
 	codexSessionCleaner     processdomain.CodexSessionCleaner
 	historyPurger           port.SessionHistoryPurger
 	processConsumers        sync.Map
@@ -315,6 +325,7 @@ type Service struct {
 	maxConcurrentAgents     int
 	initializationScheduler func(*Service, domain.ID, bool)
 	initializationWG        sync.WaitGroup
+	terminalWG              sync.WaitGroup
 	queueDrainScheduler     func(*Service)
 	processExitDelay        func(int) time.Duration
 	lifecycleCtx            context.Context
@@ -415,6 +426,12 @@ func WithProcesses(repo processdomain.Repository, codex processdomain.CodexProce
 	}
 }
 
+func WithTerminalRuntime(runtime terminaldomain.Runtime) Option {
+	return func(s *Service) {
+		s.terminal = runtime
+	}
+}
+
 func WithSessionHistoryPurger(purger port.SessionHistoryPurger) Option {
 	return func(s *Service) {
 		s.historyPurger = purger
@@ -509,8 +526,17 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 }
 
 func (s *Service) Close() {
-	if s != nil && s.lifecycleCancel != nil {
+	if s == nil {
+		return
+	}
+	if s.terminal != nil {
+		if err := s.terminal.Close(); err != nil {
+			log.Printf("close terminal runtime: %v", err)
+		}
+	}
+	if s.lifecycleCancel != nil {
 		s.lifecycleCancel()
+		s.terminalWG.Wait()
 		s.initializationWG.Wait()
 		s.cleanupWG.Wait()
 	}
@@ -964,6 +990,16 @@ func (s *Service) recoverInterruptedSession(ctx context.Context, sessionID domai
 	}
 	if !isInterruptedRecoveryStatus(session) {
 		return nil
+	}
+	if session.Mode == domain.ModeTerminal {
+		previousStatus := session.Status
+		if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+			return err
+		}
+		return s.saveSessionWithStatusUpdate(ctx, session, "session.stopped", map[string]any{
+			"reason":         "service_restarted",
+			"previousStatus": string(previousStatus),
+		})
 	}
 	var currentActive processdomain.Run
 	hasCurrentActive := false
@@ -1560,7 +1596,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	if mode == "" {
 		mode = domain.ModeChat
 	}
-	if mode != domain.ModeChat && mode != domain.ModeWorkflow {
+	if mode != domain.ModeChat && mode != domain.ModeWorkflow && mode != domain.ModeTerminal {
 		return DTO{}, fmt.Errorf("unsupported session mode %q", mode)
 	}
 	fastMode := input.Config.FastMode != nil && *input.Config.FastMode
@@ -1588,7 +1624,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	now := s.now()
 	baseBranch := ""
 	worktreeOwnershipToken := ""
-	if project.IsGit {
+	if project.IsGit && mode != domain.ModeTerminal {
 		baseBranch = strings.TrimSpace(input.BaseBranch)
 		if baseBranch == "" {
 			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "base branch is required for git project").WithDetails(map[string]any{
@@ -1606,7 +1642,9 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 
 	createWithID := func(ctx context.Context, id domain.ID) (DTO, error) {
 		worktreePath := project.Path.Value
-		if project.IsGit {
+		if mode == domain.ModeTerminal {
+			worktreePath = strings.TrimSpace(input.terminalWorkdir)
+		} else if project.IsGit {
 			worktreePath = s.worktrees.PathForSession(input.ProjectID, id)
 		}
 		session := domain.Session{
@@ -1626,7 +1664,7 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
-		if project.IsGit {
+		if project.IsGit && mode != domain.ModeTerminal {
 			if err := session.BeginWorktreeProvisioning(worktreePath, worktreeBranchName(id), worktreeOwnershipToken, now); err != nil {
 				return DTO{}, err
 			}
@@ -1672,6 +1710,35 @@ func (s *Service) CreateSession(ctx context.Context, input CreateSessionInput) (
 	return DTO{}, fmt.Errorf("create session: exhausted %d session id attempts", maxSessionIDAttempts)
 }
 
+func (s *Service) OpenTerminal(ctx context.Context, sourceSessionID domain.ID) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("session usecase: nil service")
+	}
+	source, err := s.repo.Find(ctx, sourceSessionID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find source session: %w", err)
+	}
+	if source.Mode == domain.ModeTerminal {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "source session is already a terminal")
+	}
+	if source.Status == domain.StatusClosed {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "closed session workdir is unavailable")
+	}
+	workdir, err := s.sessionWorkdir(ctx, source)
+	if err != nil {
+		return DTO{}, err
+	}
+	if workdir == "" || !filepath.IsAbs(workdir) {
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "source session workdir is unavailable")
+	}
+	return s.CreateSession(ctx, CreateSessionInput{
+		ProjectID:       source.ProjectID,
+		Requirement:     "Terminal",
+		Mode:            domain.ModeTerminal,
+		terminalWorkdir: workdir,
+	})
+}
+
 func (s *Service) RecoverInitializingSessions(ctx context.Context) (int, error) {
 	if s == nil || s.repo == nil {
 		return 0, nil
@@ -1711,7 +1778,7 @@ func (s *Service) initializeSession(ctx context.Context, id domain.ID, recovery 
 		if err != nil {
 			return s.failSessionInitialization(ctx, session, fmt.Errorf("find initialization project: %w", err), "project_lookup_failed")
 		}
-		if project.IsGit {
+		if project.IsGit && session.Mode != domain.ModeTerminal {
 			if err := s.provisionSessionWorktree(ctx, &session, project, recovery); err != nil {
 				return s.failSessionInitialization(ctx, session, err, "worktree_initialization_failed")
 			}
@@ -1733,7 +1800,9 @@ func (s *Service) initializeSession(ctx context.Context, id domain.ID, recovery 
 				return s.failSessionInitialization(ctx, session, fmt.Errorf("save initialized session worktree: %w", err), "worktree_active_save_failed")
 			}
 		}
-		if session.Mode == domain.ModeWorkflow {
+		if session.Mode == domain.ModeTerminal {
+			dto, err = s.startTerminalSession(ctx, session)
+		} else if session.Mode == domain.ModeWorkflow {
 			if project.DefaultWorkflowID == nil || strings.TrimSpace(string(*project.DefaultWorkflowID)) == "" {
 				return s.failSessionInitialization(ctx, session, errors.New("project default workflow is required for workflow mode"), "workflow_missing")
 			}
@@ -1964,6 +2033,16 @@ func (s *Service) startLoadedSession(ctx context.Context, session domain.Session
 	if err := requireActiveWorktree(session); err != nil {
 		return DTO{}, err
 	}
+	if session.Mode == domain.ModeTerminal {
+		switch session.Status {
+		case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping:
+			return toDTO(session), nil
+		case domain.StatusCreated, domain.StatusStopped, domain.StatusFailed, domain.StatusCompleted:
+			return s.startTerminalSession(ctx, session)
+		default:
+			return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "terminal session cannot start from current status").WithDetails(map[string]any{"status": string(session.Status)})
+		}
+	}
 	if session.Status == domain.StatusResumeFailed {
 		if err := s.settleInterruptedRunBeforeRecoveryAction(ctx, session); err != nil {
 			return DTO{}, err
@@ -2013,6 +2092,94 @@ func (s *Service) startLoadedSession(ctx context.Context, session domain.Session
 		return s.startCodex(ctx, session, options, true)
 	}
 	return s.enqueueCodex(ctx, session, options, queuePriorityForSession(session))
+}
+
+func (s *Service) startTerminalSession(ctx context.Context, session domain.Session) (DTO, error) {
+	if s.terminal == nil {
+		return DTO{}, errors.New("terminal runtime is not wired")
+	}
+	previousStatus := session.Status
+	if err := transitionSession(&session, domain.StatusStarting, s.now()); err != nil {
+		return DTO{}, err
+	}
+	if err := s.saveSessionWithStatusUpdate(ctx, session, "session.starting", map[string]any{"runtime": "terminal"}); err != nil {
+		return DTO{}, err
+	}
+	handle, err := s.terminal.Start(ctx, terminaldomain.StartInput{
+		SessionID: terminaldomain.SessionID(session.ID),
+		Workdir:   session.WorktreePath,
+		Cols:      120,
+		Rows:      32,
+	})
+	if err != nil {
+		if previousStatus == domain.StatusInitializing {
+			return DTO{}, err
+		}
+		if transitionErr := transitionSession(&session, domain.StatusFailed, s.now()); transitionErr != nil {
+			return DTO{}, errors.Join(err, transitionErr)
+		}
+		if saveErr := s.saveSessionWithStatusUpdate(ctx, session, "session.failed", map[string]any{
+			"runtime": "terminal",
+			"reason":  err.Error(),
+		}); saveErr != nil {
+			return DTO{}, errors.Join(err, saveErr)
+		}
+		return DTO{}, err
+	}
+	if err := transitionSession(&session, domain.StatusRunning, s.now()); err != nil {
+		_ = s.terminal.Stop(context.Background(), terminaldomain.SessionID(session.ID))
+		return DTO{}, err
+	}
+	if err := s.saveSessionWithStatusUpdate(ctx, session, "session.running", map[string]any{
+		"runtime":       "terminal",
+		"terminalRunId": string(handle.RunID),
+	}); err != nil {
+		_ = s.terminal.Stop(context.Background(), terminaldomain.SessionID(session.ID))
+		return DTO{}, err
+	}
+	s.consumeTerminalExit(session.ID, handle)
+	return toDTO(session), nil
+}
+
+func (s *Service) consumeTerminalExit(sessionID domain.ID, handle terminaldomain.Handle) {
+	s.terminalWG.Add(1)
+	go func() {
+		defer s.terminalWG.Done()
+		var result terminaldomain.ExitResult
+		select {
+		case value, ok := <-handle.Exit:
+			if !ok {
+				return
+			}
+			result = value
+		case <-s.lifecycleCtx.Done():
+			return
+		}
+		if err := s.withSessionLock(context.Background(), sessionID, func(ctx context.Context) error {
+			session, err := s.repo.Find(ctx, sessionID)
+			if err != nil || session.Mode != domain.ModeTerminal {
+				return err
+			}
+			switch session.Status {
+			case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping:
+			default:
+				return nil
+			}
+			if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+				return err
+			}
+			payload := map[string]any{"runtime": "terminal", "terminalRunId": string(result.RunID)}
+			if result.ExitCode != nil {
+				payload["exitCode"] = *result.ExitCode
+			}
+			if result.Err != nil {
+				payload["reason"] = result.Err.Error()
+			}
+			return s.saveSessionWithStatusUpdate(ctx, session, "session.stopped", payload)
+		}); err != nil {
+			log.Printf("settle terminal exit: session=%s run=%s error=%v", sessionID, handle.RunID, err)
+		}
+	}()
 }
 
 func (s *Service) rerunWorkflowCurrentNode(ctx context.Context, session domain.Session) (DTO, error) {
@@ -2320,6 +2487,9 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 	if session.Status == domain.StatusClosed {
 		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
 	}
+	if session.Mode == domain.ModeTerminal {
+		return s.stopTerminalSession(ctx, session)
+	}
 	if s.processes == nil || s.codex == nil {
 		if session.Status == domain.StatusStopped {
 			cleanupCtx, cancel := processCleanupContext(ctx)
@@ -2404,6 +2574,43 @@ func (s *Service) stopSession(ctx context.Context, id domain.ID) (DTO, error) {
 		return DTO{}, err
 	}
 	s.scheduleQueueDrain()
+	return toDTO(session), nil
+}
+
+func (s *Service) stopTerminalSession(ctx context.Context, session domain.Session) (DTO, error) {
+	if session.Status == domain.StatusStopped {
+		return toDTO(session), nil
+	}
+	switch session.Status {
+	case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping:
+	default:
+		return DTO{}, apperror.New(apperror.CodeValidationFailed, apperror.CategoryValidationError, "terminal session cannot stop from current status").WithDetails(map[string]any{"status": string(session.Status)})
+	}
+	if s.terminal == nil {
+		return DTO{}, errors.New("terminal runtime is not wired")
+	}
+	if session.Status != domain.StatusStopping {
+		if err := transitionSession(&session, domain.StatusStopping, s.now()); err != nil {
+			return DTO{}, err
+		}
+		if err := s.saveSessionWithStatusUpdate(ctx, session, "session.stopping", map[string]any{"runtime": "terminal"}); err != nil {
+			return DTO{}, err
+		}
+	}
+	cleanupCtx, cancel := processCleanupContext(ctx)
+	defer cancel()
+	if err := s.terminal.Stop(cleanupCtx, terminaldomain.SessionID(session.ID)); err != nil {
+		return DTO{}, err
+	}
+	if err := transitionSession(&session, domain.StatusStopped, s.now()); err != nil {
+		return DTO{}, err
+	}
+	if err := s.saveSessionWithStatusUpdate(cleanupCtx, session, "session.stopped", map[string]any{
+		"runtime": "terminal",
+		"reason":  "user_stopped",
+	}); err != nil {
+		return DTO{}, err
+	}
 	return toDTO(session), nil
 }
 
@@ -3171,7 +3378,7 @@ func (s *Service) markWorkflowResumeFailed(ctx context.Context, session domain.S
 }
 
 func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session domain.Session, options codexStartOptions, maxActive int) (DTO, error) {
-	workdir, err := s.codexWorkdir(ctx, session)
+	workdir, err := s.sessionWorkdir(ctx, session)
 	if err != nil {
 		return DTO{}, err
 	}
@@ -3185,7 +3392,7 @@ func (s *Service) startCodexWithWorkdirReservation(ctx context.Context, session 
 	return dto, err
 }
 
-func (s *Service) codexWorkdir(ctx context.Context, session domain.Session) (string, error) {
+func (s *Service) sessionWorkdir(ctx context.Context, session domain.Session) (string, error) {
 	if err := requireActiveWorktree(session); err != nil {
 		return "", err
 	}
@@ -6395,6 +6602,12 @@ func (s *Service) closeSession(ctx context.Context, input CloseSessionInput) (DT
 		}
 		return toDTO(session), nil
 	}
+	if session.Mode == domain.ModeTerminal {
+		switch session.Status {
+		case domain.StatusStarting, domain.StatusRunning, domain.StatusStopping:
+			return DTO{}, errCloseRequiresStop
+		}
+	}
 	prepared, err := s.prepareSessionClose(ctx, session, reason)
 	if err != nil {
 		return DTO{}, err
@@ -7485,6 +7698,7 @@ func (s *Service) GetSessionCard(ctx context.Context, id domain.ID) (CardDTO, er
 	}
 	card := toCardDTO(session, attachments, currentNodeTitle)
 	card.ProjectName = project.Name
+	card.TerminalSummary = s.terminalSummary(session)
 	return card, nil
 }
 
@@ -7556,6 +7770,7 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		}
 		item := toCardDTO(session, attachments, currentNodeTitle)
 		item.ProjectName = projectName
+		item.TerminalSummary = s.terminalSummary(session)
 		items = append(items, item)
 	}
 	return port.Page[CardDTO]{
@@ -7564,6 +7779,24 @@ func (s *Service) ListSessions(ctx context.Context, input ListSessionsInput) (po
 		PageSize: query.PageSize,
 		Total:    total,
 	}, nil
+}
+
+func (s *Service) terminalSummary(session domain.Session) *TerminalSummaryDTO {
+	if session.Mode != domain.ModeTerminal || s.terminal == nil {
+		return nil
+	}
+	summary, err := s.terminal.Summary(terminaldomain.SessionID(session.ID))
+	if err != nil {
+		return nil
+	}
+	commands := summary.Commands
+	if len(commands) > 3 {
+		commands = commands[len(commands)-3:]
+	}
+	return &TerminalSummaryDTO{
+		CurrentDirectory: summary.CurrentDirectory,
+		Commands:         append([]string(nil), commands...),
+	}
 }
 
 func (s *Service) CleanupSessions(ctx context.Context, input CleanupSessionsInput) (int, error) {

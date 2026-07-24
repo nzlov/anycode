@@ -412,7 +412,7 @@ async function createSession(requestedMode: 'workflow' | 'chat') {
       input.stagedAttachmentIds = stagedAttachmentIds;
     }
     const sessionId = await createSessionRequest(input);
-    rememberLaunchMode(input.mode);
+    rememberLaunchMode(input.mode === 'workflow' ? 'workflow' : 'chat');
     files.value = [];
     prompt.value = '';
     mentions.value = [];

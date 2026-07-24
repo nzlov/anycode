@@ -405,6 +405,7 @@ type SessionCard struct {
 	BaseBranch         string                `json:"baseBranch"`
 	WorktreeBranch     string                `json:"worktreeBranch"`
 	CurrentNodeTitle   string                `json:"currentNodeTitle"`
+	TerminalSummary    *TerminalSummary      `json:"terminalSummary,omitempty"`
 	TodoList           *TodoList             `json:"todoList,omitempty"`
 	ArtifactCount      int                   `json:"artifactCount"`
 	FilesChanged       int                   `json:"filesChanged"`
@@ -555,6 +556,11 @@ type SubmitWorkflowApprovalInput struct {
 }
 
 type Subscription struct {
+}
+
+type TerminalSummary struct {
+	CurrentDirectory string   `json:"currentDirectory"`
+	Commands         []string `json:"commands"`
 }
 
 type TodoItem struct {

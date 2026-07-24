@@ -6,6 +6,7 @@ require (
 	entgo.io/ent v0.14.6
 	github.com/99designs/gqlgen v0.17.89
 	github.com/SherClockHolmes/webpush-go v1.4.0
+	github.com/creack/pty v1.1.24
 	github.com/dop251/goja v0.0.0-20260701091749-b07b74453ea9
 	github.com/expr-lang/expr v1.17.8
 	github.com/gorilla/websocket v1.5.0

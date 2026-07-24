@@ -15,6 +15,19 @@
           @toggle="toggleProjectVisibility"
         />
       </div>
+      <q-btn
+        flat
+        round
+        dense
+        class="app-icon-btn"
+        icon="terminal"
+        aria-label="新建 Terminal"
+        :loading="terminalCreating"
+        :disable="projects.length === 0"
+        @click="createTerminalCard"
+      >
+        <q-tooltip>新建 Terminal</q-tooltip>
+      </q-btn>
     </PageToolbar>
 
     <ProjectVisibilityFilters
@@ -38,10 +51,8 @@
           :width="sessionColumnWidth(card.id)"
           :min-width="minSessionColumnWidth"
           :priority-loading="activePrioritySessionId === card.id"
-          :close-loading="activeCloseSessionId === card.id"
           @update:width="setSessionColumnWidth(card.id, $event)"
           @set-priority="setCardPriority(card, $event)"
-          @close="closeCard(card)"
         />
       </div>
     </section>
@@ -63,7 +74,24 @@
           @keyup.enter.self="openSessionCard(card.id)"
           @keyup.space.self.prevent="openSessionCard(card.id)"
         >
-          <q-card-section class="overview-session-card__body">
+          <q-card-section
+            v-if="card.mode === 'terminal'"
+            class="overview-session-card__body overview-terminal-card__body"
+          >
+            <div class="overview-terminal-card__directory">
+              {{ card.terminalSummary?.currentDirectory || '~' }}
+            </div>
+            <div
+              v-if="card.terminalSummary?.commands.length"
+              class="overview-terminal-card__commands"
+            >
+              <code v-for="(command, index) in card.terminalSummary.commands" :key="index">
+                $ {{ command }}
+              </code>
+            </div>
+            <div v-else class="overview-terminal-card__empty">尚未执行命令</div>
+          </q-card-section>
+          <q-card-section v-else class="overview-session-card__body">
             <div class="overview-card-chips">
               <SessionPriorityControl
                 :priority="card.priority"
@@ -460,6 +488,7 @@ import {
 } from '@/services/sessionStatusPresentation';
 import {
   closeSession,
+  createSession,
   executeSession,
   getPendingQuestionRequests,
   getSession,
@@ -498,6 +527,7 @@ function horizontalPageStyle(offset: number, height: number) {
 }
 
 const newSessionOpen = ref(false);
+const terminalCreating = ref(false);
 const projectScopeId = computed(() => {
   const value = route.query.projectId;
   return typeof value === 'string' ? value : '';
@@ -743,6 +773,26 @@ function openNewSession() {
   newSessionOpen.value = true;
 }
 
+async function createTerminalCard() {
+  if (terminalCreating.value) return;
+  const project =
+    projects.value.find((item) => item.id === projectScopeId.value) ?? projects.value[0];
+  if (!project) return;
+  terminalCreating.value = true;
+  try {
+    const session = await createSession({
+      projectId: project.id,
+      requirement: 'Terminal',
+      mode: 'terminal',
+    });
+    await refreshOverviewCard(session.id);
+  } catch {
+    // graphqlFetch already presents the request error.
+  } finally {
+    terminalCreating.value = false;
+  }
+}
+
 function handleSessionUpdate(update: SessionUpdateEvent) {
   const index = latestRows.value.findIndex((card) => card.id === update.sessionId);
   if (index < 0) return;
@@ -824,6 +874,7 @@ function replaceOverviewCard(card: SessionCard) {
 }
 
 function overviewCardClass(card: SessionCard) {
+  if (card.mode === 'terminal') return 'overview-session-card--terminal';
   return `overview-session-card--${card.status}`;
 }
 

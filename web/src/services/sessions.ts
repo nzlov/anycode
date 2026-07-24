@@ -15,7 +15,7 @@ import {
 } from '@/services/sessionTimeline';
 import { normalizeWorkflowNodeResult } from '@/services/workflowApprovalReview';
 
-export type SessionMode = 'workflow' | 'chat';
+export type SessionMode = 'workflow' | 'chat' | 'terminal';
 export type SessionStatus =
   | 'created'
   | 'initializing'
@@ -68,6 +68,12 @@ export interface SessionCard {
   filesChanged: number;
   usage?: TranscriptTokenUsage | null;
   availableActions: string[];
+  terminalSummary?: TerminalSummary | null;
+}
+
+export interface TerminalSummary {
+  currentDirectory: string;
+  commands: string[];
 }
 
 export interface PendingApproval {
@@ -262,6 +268,7 @@ interface GraphQLSessionCard {
   baseBranch: string;
   worktreeBranch: string;
   currentNodeTitle: string;
+  terminalSummary?: TerminalSummary | null;
   todoList?: GraphQLSessionTodoList | null;
   artifactCount: number;
   filesChanged: number;
@@ -424,6 +431,10 @@ const sessionCardFields = `
   baseBranch
   worktreeBranch
   currentNodeTitle
+  terminalSummary {
+    currentDirectory
+    commands
+  }
   todoList {
     completed
     total
@@ -735,18 +746,18 @@ export function subscribeSessionEvents(
 }
 
 export async function appendPrompt(
-	sessionId: string,
-	body: string,
-	stagedAttachmentIds?: string[],
-	artifactIds?: string[],
-	mentions?: PromptMention[],
+  sessionId: string,
+  body: string,
+  stagedAttachmentIds?: string[],
+  artifactIds?: string[],
+  mentions?: PromptMention[],
 ) {
   const input: {
     sessionId: string;
     body: string;
     stagedAttachmentIds?: string[];
-		artifactIds?: string[];
-		mentions?: PromptMention[];
+    artifactIds?: string[];
+    mentions?: PromptMention[];
   } = {
     sessionId,
     body,
@@ -754,8 +765,8 @@ export async function appendPrompt(
   if (stagedAttachmentIds && stagedAttachmentIds.length > 0) {
     input.stagedAttachmentIds = stagedAttachmentIds;
   }
-	if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
-	if (mentions && mentions.length > 0) input.mentions = mentions;
+  if (artifactIds && artifactIds.length > 0) input.artifactIds = artifactIds;
+  if (mentions && mentions.length > 0) input.mentions = mentions;
   return graphqlFetch<
     { appendPrompt: GraphQLPromptAppend },
     {
@@ -763,8 +774,8 @@ export async function appendPrompt(
         sessionId: string;
         body: string;
         stagedAttachmentIds?: string[];
-			artifactIds?: string[];
-			mentions?: PromptMention[];
+        artifactIds?: string[];
+        mentions?: PromptMention[];
       };
     }
   >({
@@ -1033,12 +1044,26 @@ export async function createSession(input: CreateSessionInput) {
   return normalizeSession(data.createSession);
 }
 
+export async function openSessionTerminal(sourceSessionId: string) {
+  const data = await graphqlFetch<{ openSessionTerminal: GraphQLSession }, { sessionId: string }>({
+    query: `
+      mutation OpenSessionTerminal($sessionId: ID!) {
+        openSessionTerminal(sessionId: $sessionId) {
+          ${sessionFields}
+        }
+      }
+    `,
+    variables: { sessionId: sourceSessionId },
+  });
+  return normalizeSession(data.openSessionTerminal);
+}
+
 function normalizeQuestionRequest(request: GraphQLQuestionRequest): QuestionRequest {
-	return {
-		id: request.id,
-		sessionId: request.sessionId,
-		status: request.status,
-		questions: request.questions.map((question) => ({
+  return {
+    id: request.id,
+    sessionId: request.sessionId,
+    status: request.status,
+    questions: request.questions.map((question) => ({
       ...question,
       options: question.options.map((option) => ({
         ...option,
@@ -1139,6 +1164,7 @@ function normalizeSessionCard(session: GraphQLSessionCard): SessionCard {
     filesChanged: Math.max(0, session.filesChanged),
     usage: session.usage ?? null,
     availableActions: normalizeAvailableActions(session.availableActions),
+    terminalSummary: session.terminalSummary ?? null,
   };
 }
 
@@ -1226,12 +1252,14 @@ function normalizeSession(session: GraphQLSession): SessionCard {
 }
 
 function normalizeMode(mode: string): SessionMode {
-  return mode === 'chat' ? 'chat' : 'workflow';
+  if (mode === 'chat' || mode === 'terminal') return mode;
+  return 'workflow';
 }
 
 function normalizeStatus(status: string): SessionStatus {
   const statuses = new Set<SessionStatus>([
     'created',
+    'initializing',
     'queued',
     'starting',
     'running',

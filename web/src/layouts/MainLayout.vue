@@ -104,7 +104,10 @@
 
     <q-page-container
       v-if="applicationReady"
-      :class="{ 'page-container--detail': $route.name === 'session-detail' }"
+      :class="{
+        'page-container--detail': $route.name === 'session-detail',
+        'page-container--horizontal': isOverviewHorizontalView,
+      }"
     >
       <router-view
         :key="$route.fullPath"

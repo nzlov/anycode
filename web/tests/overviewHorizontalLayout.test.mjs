@@ -16,7 +16,6 @@ const viewModeSource = readSource('../src/composables/useOverviewViewMode.ts');
 const horizontalSessionSource = readSource('../src/components/OverviewHorizontalSession.vue');
 const desktopSessionSource = readSource('../src/components/OverviewHorizontalSessionDesktop.vue');
 const mobileSessionSource = readSource('../src/components/OverviewHorizontalSessionMobile.vue');
-const contextMenuSource = readSource('../src/components/SessionCardContextMenu.vue');
 const priorityControlSource = readSource('../src/components/SessionPriorityControl.vue');
 const detailViewSource = readSource('../src/components/SessionDetailView.vue');
 const detailPageSource = readSource('../src/pages/SessionDetailPage.vue');
@@ -113,10 +112,7 @@ test('horizontal overview renders one independently resized component per visibl
 });
 
 test('horizontal overview uses the Quasar layout offset without creating page-level overflow', () => {
-  assert.match(
-    indexSource,
-    /:style-fn="isHorizontalView \? horizontalPageStyle : undefined"/,
-  );
+  assert.match(indexSource, /:style-fn="isHorizontalView \? horizontalPageStyle : undefined"/);
   assert.match(
     indexSource,
     /function horizontalPageStyle\(offset: number, height: number\)\s*{\s*return { height: `\$\{Math\.max\(0, height - offset\)\}px` };/,
@@ -167,14 +163,17 @@ test('horizontal session columns keep identity order when live updates change re
   );
 });
 
-test('single horizontal session selects dedicated mobile and desktop components by column width', () => {
+test('horizontal sessions switch layouts by width without remounting terminal sessions', () => {
   assert.match(horizontalSessionSource, /const desktopSessionMinWidth = 1024/);
   assert.match(
     horizontalSessionSource,
     /props\.width >= desktopSessionMinWidth \? 'desktop' : 'mobile'/,
   );
-  assert.match(horizontalSessionSource, /<OverviewHorizontalSessionMobile[\s\S]*v-if=/);
-  assert.match(horizontalSessionSource, /<OverviewHorizontalSessionDesktop[\s\S]*v-else/);
+  assert.match(
+    horizontalSessionSource,
+    /<OverviewHorizontalSessionDesktop[\s\S]*v-if="card\.mode === 'terminal' \|\| sessionLayout === 'desktop'"/,
+  );
+  assert.match(horizontalSessionSource, /<OverviewHorizontalSessionMobile[\s\S]*v-else/);
   assert.match(mobileSessionSource, /<SessionDetailView[\s\S]*layout="mobile"/);
   assert.match(desktopSessionSource, /<SessionDetailView[\s\S]*layout="desktop"/);
 });
@@ -193,14 +192,10 @@ test('horizontal headers expose live card metadata and priority controls in both
   assert.match(indexSource, /if \(update\.priority\)[\s\S]*priority: update\.priority/);
 });
 
-test('horizontal sessions share the card context menu actions', () => {
-  assert.match(horizontalSessionSource, /<SessionCardContextMenu/);
+test('horizontal sessions omit the card context menu while retaining header priority controls', () => {
+  assert.doesNotMatch(horizontalSessionSource, /<SessionCardContextMenu/);
   assert.match(horizontalSessionSource, /@set-priority="emit\('set-priority', \$event\)"/);
-  assert.match(horizontalSessionSource, /@close="emit\('close'\)"/);
-  assert.match(contextMenuSource, /<q-menu\s+context-menu/);
-  assert.match(contextMenuSource, /在新标签页中打开/);
-  assert.match(contextMenuSource, /@click\.stop="emit\('set-priority', priority\)"/);
-  assert.match(contextMenuSource, /@click\.stop="emit\('close'\)"/);
+  assert.match(indexSource, /<SessionCardContextMenu[\s\S]*:card="card"/);
 });
 
 test('horizontal sessions render the complete reusable detail surface', () => {
@@ -260,5 +255,8 @@ test('successful desktop creation refreshes the new session in the mounted overv
     /const sessionId = await createSessionRequest\(input\);[\s\S]*?emit\('created', sessionId\)/,
   );
   assert.match(indexSource, /@created="refreshOverviewCard"/);
-  assert.doesNotMatch(newSessionSource + indexSource, /anycode:session-created|handleSessionCreated/);
+  assert.doesNotMatch(
+    newSessionSource + indexSource,
+    /anycode:session-created|handleSessionCreated/,
+  );
 });

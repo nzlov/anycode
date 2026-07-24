@@ -20,17 +20,20 @@
           <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
         </div>
       </div>
-      <q-btn
-        flat
-        round
-        dense
-        class="app-icon-btn"
-        icon="open_in_new"
-        aria-label="打开会话详情"
-        :to="{ name: 'session-detail', params: { id: card.id } }"
-      >
-        <q-tooltip>打开会话详情</q-tooltip>
-      </q-btn>
+      <div class="overview-horizontal-session-mobile__actions">
+        <SessionTerminalButton :source-session-id="card.id" />
+        <q-btn
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="open_in_new"
+          aria-label="打开会话详情"
+          :to="{ name: 'session-detail', params: { id: card.id } }"
+        >
+          <q-tooltip>打开会话详情</q-tooltip>
+        </q-btn>
+      </div>
     </header>
     <SessionDetailView
       class="overview-horizontal-session-mobile__detail"
@@ -43,6 +46,7 @@
 <script setup lang="ts">
 import SessionDetailView from '@/components/SessionDetailView.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
+import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
 import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
 import {
@@ -59,7 +63,6 @@ defineProps<{
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
 }>();
-
 </script>
 
 <style scoped>
@@ -91,6 +94,12 @@ const emit = defineEmits<{
   display: grid;
   min-width: 0;
   gap: 4px;
+}
+
+.overview-horizontal-session-mobile__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
 }
 
 .overview-horizontal-session-mobile__badges {

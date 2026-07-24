@@ -43,7 +43,7 @@ test('successful launches remember the mode without project availability changin
   );
   assert.match(
     dialogSource,
-    /await createSessionRequest\(input\);[\s\S]*rememberLaunchMode\(input\.mode\)/,
+    /await createSessionRequest\(input\);[\s\S]*rememberLaunchMode\(input\.mode === 'workflow' \? 'workflow' : 'chat'\)/,
   );
 
   const availabilityBody = dialogSource.match(
