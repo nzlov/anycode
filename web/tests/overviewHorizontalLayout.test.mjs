@@ -89,23 +89,19 @@ test('horizontal overview renders one independently resized component per visibl
   assert.doesNotMatch(horizontalSessionSource, /maxWidth|aria-valuemax/);
   assert.match(
     horizontalSessionSource,
-    /\.overview-horizontal-session-resizer\s*{[^}]*position:\s*absolute[^}]*right:\s*0[^}]*transform:\s*translateX\(50%\)/s,
-  );
-  assert.match(
-    horizontalSessionSource,
-    /\.overview-horizontal-session-resizer\s*{[^}]*width:\s*8px[^}]*cursor:\s*col-resize/s,
+    /\.overview-horizontal-session-resizer\s*{[^}]*position:\s*absolute[^}]*right:\s*-24px[^}]*width:\s*24px/s,
   );
   assert.doesNotMatch(
     horizontalSessionSource,
     /overview-horizontal-session-resizer__handle|drag_indicator/,
   );
-  assert.doesNotMatch(
+  assert.match(
     horizontalSessionSource,
-    /\.overview-horizontal-session-resizer\s*{[^}]*flex:\s*0\s+0\s+16px/s,
+    /\.overview-horizontal-session-track:last-child \.overview-horizontal-session-resizer\s*{[^}]*display:\s*none/s,
   );
   assert.match(stylesSource, /\.overview-horizontal-section\s*{[^}]*overflow-x:\s*auto/s);
   assert.match(stylesSource, /\.overview-horizontal-track\s*{[^}]*width:\s*max-content/s);
-  assert.match(stylesSource, /\.overview-horizontal-track\s*{[^}]*gap:\s*5px/s);
+  assert.match(stylesSource, /\.overview-horizontal-track\s*{[^}]*gap:\s*24px/s);
 });
 
 test('horizontal overview uses the Quasar layout offset without creating page-level overflow', () => {

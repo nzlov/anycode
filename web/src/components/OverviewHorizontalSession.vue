@@ -137,13 +137,12 @@ function setWidth(value: number) {
   position: absolute;
   z-index: 2;
   top: 0;
-  right: 0;
-  width: 8px;
+  right: -24px;
+  width: 24px;
   height: 100%;
   outline: 0;
   cursor: col-resize;
   touch-action: none;
-  transform: translateX(50%);
 }
 
 .overview-horizontal-session-resizer::before {
@@ -155,6 +154,10 @@ function setWidth(value: number) {
   content: '';
   background: transparent;
   transform: translateX(-50%);
+}
+
+.overview-horizontal-session-track:last-child .overview-horizontal-session-resizer {
+  display: none;
 }
 
 .overview-horizontal-session-resizer:hover::before,
