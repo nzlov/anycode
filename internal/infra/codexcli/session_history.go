@@ -62,7 +62,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 	if limit > maxHistoryPageLimit {
 		limit = maxHistoryPageLimit
 	}
-	lines, _, err := readSessionLinesBackward(ctx, file, beforeOffset, limit+historyProjectionWindow)
+	lines, endOffset, err := readSessionLinesBackward(ctx, file, beforeOffset, limit+historyProjectionWindow)
 	if err != nil {
 		return process.CodexHistoryPage{}, err
 	}
@@ -78,7 +78,11 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 	sourceID := filepath.Base(path)
 	projector := newCodexTranscriptProjector()
 	events := make([]process.CodexEvent, 0, limit)
-	for _, line := range lines {
+	for _, line := range lines[:pageStart] {
+		projector.prime(parseSessionLogLine(line.raw, sessionCWD, sourceID, line.offset))
+	}
+	projector.resetCommandState()
+	for _, line := range lines[pageStart:] {
 		for _, rawEvent := range projector.project(parseSessionLogLine(line.raw, sessionCWD, sourceID, line.offset)) {
 			if rawEvent.SourceOffset < startOffset || rawEvent.Type == "thread.started" {
 				continue
@@ -88,8 +92,20 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 			events = append(events, event)
 		}
 	}
+	owners := projector.activeCommandIDs()
+	if len(owners) > 0 {
+		completed, forwardErr := projectCommandResultsForward(ctx, file, endOffset, sessionCWD, sourceID, projector, owners)
+		if forwardErr != nil {
+			return process.CodexHistoryPage{}, forwardErr
+		}
+		for _, rawEvent := range completed {
+			event := canonicalCodexEvent(rawEvent)
+			event.CodexSessionID = threadID
+			events = append(events, event)
+		}
+	}
 	for _, rawEvent := range projector.flushPending() {
-		if rawEvent.SourceOffset < startOffset || rawEvent.Type == "thread.started" {
+		if rawEvent.SourceOffset < startOffset || rawEvent.SourceOffset >= endOffset || rawEvent.Type == "thread.started" {
 			continue
 		}
 		event := canonicalCodexEvent(rawEvent)
@@ -101,6 +117,66 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 		nextCursor = strconv.FormatInt(startOffset, 10)
 	}
 	return process.CodexHistoryPage{Events: events, NextCursor: nextCursor}, nil
+}
+
+func projectCommandResultsForward(
+	ctx context.Context,
+	file *os.File,
+	startOffset int64,
+	sessionCWD string,
+	sourceID string,
+	projector *codexTranscriptProjector,
+	owners map[string]struct{},
+) ([]codexLogEvent, error) {
+	if _, err := file.Seek(startOffset, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek codex command results: %w", err)
+	}
+	reader := bufio.NewReader(file)
+	offset := startOffset
+	results := make([]codexLogEvent, 0, len(owners))
+	for ownedCommandsOpen(projector, owners) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		line, readErr := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			raw := bytes.TrimRight(line, "\r\n")
+			if cwd := sessionCWDFromMeta(raw); cwd != "" {
+				sessionCWD = cwd
+			}
+			for _, event := range projector.project(parseSessionLogLine(raw, sessionCWD, sourceID, offset)) {
+				if _, owned := owners[event.CorrelationID]; owned && isTerminalCodexPhase(event.Phase) {
+					results = append(results, event)
+				}
+			}
+			for index := len(projector.bufferedEvents) - 1; index >= 0; index-- {
+				event := projector.bufferedEvents[index]
+				if _, owned := owners[event.CorrelationID]; !owned || !isTerminalCodexPhase(event.Phase) {
+					continue
+				}
+				results = append(results, event)
+				projector.removeBufferedEvent(event.EventID)
+			}
+			offset += int64(len(line))
+		}
+		if readErr == nil {
+			continue
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		return nil, fmt.Errorf("read codex command results: %w", readErr)
+	}
+	return results, nil
+}
+
+func ownedCommandsOpen(projector *codexTranscriptProjector, owners map[string]struct{}) bool {
+	for id := range owners {
+		if _, open := projector.commands[id]; open {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *appServerRuntime) followSessionLog(route *appServerRun, path string, startOffset int64) {

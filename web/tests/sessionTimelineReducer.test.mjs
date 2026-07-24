@@ -208,6 +208,45 @@ test('typed command completion keeps exit metadata and terminal phase', () => {
   assert.equal(items[0].content.durationMs, 125);
 });
 
+test('result-only command completion preserves the started input', () => {
+  const items = reduceTranscriptEvents([
+    commandEvent('start-a', '01', 'call-a', 'started', {
+      kind: 'exec',
+      commands: [commandInvocation('go test ./...', '/workspace')],
+    }),
+    commandEvent('complete-a', '02', 'call-a', 'completed', {
+      kind: 'exec',
+      commands: [
+        commandInvocation('', '', {
+          hasOutput: true,
+          output: 'passed',
+          exitCode: 0,
+          durationMs: 125,
+        }),
+      ],
+      durationMs: 125,
+    }),
+  ]);
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].content.commands[0].command, 'go test ./...');
+  assert.equal(items[0].content.commands[0].workdir, '/workspace');
+  assert.equal(items[0].content.commands[0].output, 'passed');
+  assert.equal(items[0].content.durationMs, 125);
+});
+
+test('orphan result-only command events are discarded', () => {
+  const items = reduceTranscriptEvents([
+    commandEvent('complete-a', '02', 'call-a', 'completed', {
+      kind: 'exec',
+      commands: [commandInvocation('', '', { hasOutput: true, output: 'orphan' })],
+      durationMs: 125,
+    }),
+  ]);
+
+  assert.deepEqual(items, []);
+});
+
 test('standalone events never merge even when their content is identical', () => {
   const items = reduceTranscriptEvents([
     messageEvent('message-a', '01', 'same'),

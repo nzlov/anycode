@@ -282,15 +282,21 @@ func finalizeCodexEvents(events []codexLogEvent, sourceID string, offset int64) 
 }
 
 type codexTranscriptProjector struct {
-	commands          map[string]process.CodexCommandContent
-	executionCommands map[string]string
-	transportCommands map[string]string
-	tools             map[string]process.CodexToolContent
-	recentCanonical   []transcriptCanonicalMessage
-	pendingMessages   []pendingTranscriptMessage
-	bufferedEvents    []codexLogEvent
-	visibility        standardTranscriptVisibility
-	lastOccurred      time.Time
+	commands        map[string]*projectedCommandState
+	commandCells    map[string]string
+	transportCalls  map[string]string
+	tools           map[string]process.CodexToolContent
+	recentCanonical []transcriptCanonicalMessage
+	pendingMessages []pendingTranscriptMessage
+	bufferedEvents  []codexLogEvent
+	visibility      standardTranscriptVisibility
+	lastOccurred    time.Time
+}
+
+type projectedCommandState struct {
+	input     process.CodexCommandContent
+	results   []process.CodexCommandInvocation
+	startedAt time.Time
 }
 
 const transcriptMessageMirrorWindow = 100 * time.Millisecond
@@ -309,11 +315,11 @@ type pendingTranscriptMessage struct {
 
 func newCodexTranscriptProjector() *codexTranscriptProjector {
 	return &codexTranscriptProjector{
-		commands:          map[string]process.CodexCommandContent{},
-		executionCommands: map[string]string{},
-		transportCommands: map[string]string{},
-		tools:             map[string]process.CodexToolContent{},
-		visibility:        newStandardTranscriptVisibility(),
+		commands:       map[string]*projectedCommandState{},
+		commandCells:   map[string]string{},
+		transportCalls: map[string]string{},
+		tools:          map[string]process.CodexToolContent{},
+		visibility:     newStandardTranscriptVisibility(),
 	}
 }
 
@@ -336,7 +342,9 @@ func (p *codexTranscriptProjector) projectEvents(events []codexLogEvent, histori
 	for index := range events {
 		event := &events[index]
 		p.fillOccurredAt(event)
-		p.mergeCommandState(event)
+		if !p.mergeCommandState(event) {
+			continue
+		}
 		p.pruneCanonicalMessages(event.CreatedAt)
 		projected = append(projected, p.expirePendingMessages(event.CreatedAt)...)
 		visible := p.visibility.visible(*event)
@@ -393,94 +401,38 @@ func (p *codexTranscriptProjector) fillOccurredAt(event *codexLogEvent) {
 	p.lastOccurred = event.CreatedAt
 }
 
-func (p *codexTranscriptProjector) mergeCommandState(event *codexLogEvent) {
+func (p *codexTranscriptProjector) mergeCommandState(event *codexLogEvent) bool {
 	if event.CorrelationID == "" {
-		return
-	}
-	normalized := mapValue(event.Payload["normalizedItem"])
-	sourceCorrelationID := event.CorrelationID
-	transportCorrelationID, continuingTransport := p.transportCommands[sourceCorrelationID]
-	// GLUE: Relate transport calls back to the command until Codex emits their parent correlation directly.
-	if executionID := stringValue(normalized, "transportExecutionId"); executionID != "" {
-		if correlationID := p.executionCommands[executionID]; correlationID != "" {
-			transportCorrelationID = correlationID
-			p.transportCommands[sourceCorrelationID] = correlationID
-			event.CorrelationID = correlationID
-			if command, exists := p.commands[correlationID]; exists {
-				event.Content = cloneCommandContent(command)
-				event.Phase = process.CodexPhaseProgress
-			}
-		}
-	} else if continuingTransport {
-		event.CorrelationID = transportCorrelationID
+		return true
 	}
 	if command, ok := event.Content.(process.CodexCommandContent); ok {
-		if previous, exists := p.commands[event.CorrelationID]; exists && len(command.Commands) == 0 {
-			command.Commands = append([]process.CodexCommandInvocation(nil), previous.Commands...)
-		}
 		event.Content = command
-		if event.Phase == process.CodexPhaseStarted || event.Phase == process.CodexPhaseProgress {
-			p.commands[event.CorrelationID] = cloneCommandContent(command)
-		} else {
-			delete(p.commands, event.CorrelationID)
+		if event.Phase == process.CodexPhaseStarted {
+			p.commands[event.CorrelationID] = &projectedCommandState{
+				input: cloneCommandContent(command), results: make([]process.CodexCommandInvocation, len(command.Commands)), startedAt: event.CreatedAt,
+			}
 		}
-		p.trackCommandExecution(event, normalized)
-		return
+		return true
 	}
 	if tool, ok := event.Content.(process.CodexToolContent); ok {
 		if command, exists := p.commands[event.CorrelationID]; exists {
-			command = cloneCommandContent(command)
-			item := mapValue(event.Payload["item"])
-			durationMS := intPointer(normalized["durationMs"], item["duration_ms"], item["durationMs"])
-			if continuingTransport {
-				command.DurationMS = addDuration(command.DurationMS, durationMS)
-			} else {
-				command.DurationMS = durationMS
-			}
-			results := commandOutputsFromValue(normalized["commandOutputs"])
-			if len(results) == len(command.Commands) {
-				for index := range command.Commands {
-					if continuingTransport {
-						appendCommandOutput(&command.Commands[index], results[index])
-					} else {
-						applyCommandOutput(&command.Commands[index], results[index])
-					}
+			return p.applyCommandToolResult(event, event.CorrelationID, command, tool)
+		}
+		if commandID, transport := p.transportCalls[event.CorrelationID]; transport {
+			command := p.commands[commandID]
+			if command == nil {
+				if isTerminalCodexPhase(event.Phase) {
+					delete(p.transportCalls, event.CorrelationID)
 				}
-				if len(command.Commands) == 1 {
-					if command.Commands[0].ExitCode == nil {
-						command.Commands[0].ExitCode = intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"])
-					}
-					if command.Commands[0].DurationMS == nil {
-						command.Commands[0].DurationMS = command.DurationMS
-					}
-				}
-			} else if len(command.Commands) == 1 {
-				result := customCommandOutput{
-					output:     normalizeANSIText(tool.Output.Text),
-					exitCode:   intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"]),
-					durationMS: durationMS,
-				}
-				if continuingTransport {
-					appendCommandOutput(&command.Commands[0], result)
-				} else {
-					applyCommandOutput(&command.Commands[0], result)
-				}
-				command.Commands[0].DurationMS = command.DurationMS
+				return false
 			}
-			if commandInvocationFailed(command.Commands) && event.Phase == process.CodexPhaseCompleted {
-				event.Phase = process.CodexPhaseFailed
-			}
-			event.Content = command
-			if isTerminalCodexPhase(event.Phase) {
-				delete(p.commands, event.CorrelationID)
-			} else {
-				p.commands[event.CorrelationID] = cloneCommandContent(command)
-			}
-			p.trackCommandExecution(event, normalized)
-			if continuingTransport && event.Type == "item.completed" {
-				delete(p.transportCommands, sourceCorrelationID)
-			}
-			return
+			return p.applyCommandToolResult(event, commandID, command, tool)
+		}
+		if isCommandTransportName(tool.QualifiedName) && event.Phase == process.CodexPhaseStarted {
+			cellID := commandTransportID(tool.Input.Text)
+			// GLUE: wait calls use a new call ID; retain the owning command until Codex exposes one execution ID across exec and wait.
+			p.transportCalls[event.CorrelationID] = p.commandCells[cellID]
+			return false
 		}
 		if previous, exists := p.tools[event.CorrelationID]; exists {
 			if tool.QualifiedName == "" {
@@ -503,25 +455,82 @@ func (p *codexTranscriptProjector) mergeCommandState(event *codexLogEvent) {
 			p.tools[event.CorrelationID] = tool
 		}
 	}
+	return true
 }
 
-func (p *codexTranscriptProjector) trackCommandExecution(event *codexLogEvent, normalized map[string]any) {
-	if executionID := stringValue(normalized, "executionId"); executionID != "" && !isTerminalCodexPhase(event.Phase) {
-		p.executionCommands[executionID] = event.CorrelationID
+func (p *codexTranscriptProjector) applyCommandToolResult(event *codexLogEvent, commandID string, command *projectedCommandState, tool process.CodexToolContent) bool {
+	item := mapValue(event.Payload["item"])
+	normalized := mapValue(event.Payload["normalizedItem"])
+	if cellID := firstString(normalized["transportId"]); cellID != "" {
+		p.commandCells[cellID] = commandID
+	}
+	outputs := commandOutputsFromValue(normalized["commandOutputs"])
+	if len(outputs) == len(command.results) {
+		for index := range command.results {
+			appendCommandOutput(&command.results[index], outputs[index])
+		}
+	} else if len(command.results) == 1 {
+		appendCommandOutput(&command.results[0], customCommandOutput{
+			output: tool.Output.Text, exitCode: intPointer(normalized["exitCode"], item["exit_code"], item["exitCode"]),
+		})
 	}
 	if !isTerminalCodexPhase(event.Phase) {
-		return
+		return false
 	}
-	for executionID, correlationID := range p.executionCommands {
-		if correlationID == event.CorrelationID {
-			delete(p.executionCommands, executionID)
+	durationMS := 0
+	if !command.startedAt.IsZero() && !event.CreatedAt.Before(command.startedAt) {
+		durationMS = int(event.CreatedAt.Sub(command.startedAt) / time.Millisecond)
+	}
+	results := append([]process.CodexCommandInvocation(nil), command.results...)
+	for index := range results {
+		results[index].HasOutput = true
+		results[index].DurationMS = intPointer(durationMS)
+	}
+	content := process.CodexCommandContent{Kind: command.input.Kind, Commands: results, DurationMS: intPointer(durationMS)}
+	if commandInvocationFailed(content.Commands) && event.Phase == process.CodexPhaseCompleted {
+		event.Phase = process.CodexPhaseFailed
+	}
+	event.CorrelationID = commandID
+	event.Content = content
+	delete(p.commands, commandID)
+	for callID, owner := range p.transportCalls {
+		if owner == commandID {
+			delete(p.transportCalls, callID)
 		}
 	}
+	for cellID, owner := range p.commandCells {
+		if owner == commandID {
+			delete(p.commandCells, cellID)
+		}
+	}
+	return true
 }
 
 func cloneCommandContent(command process.CodexCommandContent) process.CodexCommandContent {
 	command.Commands = append([]process.CodexCommandInvocation(nil), command.Commands...)
 	return command
+}
+
+func appendCommandOutput(command *process.CodexCommandInvocation, output customCommandOutput) {
+	command.HasOutput = command.HasOutput || output.output != "" || output.exitCode != nil
+	command.Output += normalizeANSIText(output.output)
+	if output.exitCode != nil {
+		command.ExitCode = output.exitCode
+	}
+}
+
+func (p *codexTranscriptProjector) activeCommandIDs() map[string]struct{} {
+	result := make(map[string]struct{}, len(p.commands))
+	for id := range p.commands {
+		result[id] = struct{}{}
+	}
+	return result
+}
+
+func (p *codexTranscriptProjector) resetCommandState() {
+	p.commands = map[string]*projectedCommandState{}
+	p.commandCells = map[string]string{}
+	p.transportCalls = map[string]string{}
 }
 
 func (p *codexTranscriptProjector) flushExpiredPending(now time.Time) []codexLogEvent {
@@ -1182,23 +1191,16 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 	case "function_call":
 		callID := stringValue(payload, "call_id")
 		command := commandFromFunctionArguments(payload)
-		qualifiedName := qualifiedToolName(payload)
 		itemType := "tool_call"
 		if command.Command != "" {
 			itemType = "command_execution"
 		}
 		normalized := normalizedItem(itemType, "in_progress")
-		normalized["qualifiedName"] = qualifiedName
+		normalized["qualifiedName"] = qualifiedToolName(payload)
 		normalized["input"] = stringOrJSON(payload["arguments"])
 		normalized["command"] = command.Command
 		if command.Command != "" {
 			normalized["commands"] = commandInvocationValues([]process.CodexCommandInvocation{command})
-		}
-		if isCommandTransportTool(qualifiedName) {
-			var arguments map[string]any
-			if json.Unmarshal([]byte(stringValue(payload, "arguments")), &arguments) == nil {
-				normalized["transportExecutionId"] = scalarString(arguments["cell_id"], arguments["cellId"], arguments["session_id"], arguments["sessionId"])
-			}
 		}
 		return []codexLogEvent{{
 			EventID:   eventID(timestamp, "item.started", callID),
@@ -1209,26 +1211,26 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 	case "function_call_output":
 		callID := stringValue(payload, "call_id")
 		result := normalizeCustomToolOutput(payload["output"])
-		status := stringValue(payload, "status")
-		if status == "" {
-			status = result.status
+		normalized := normalizedItem("tool_result", firstString(result.status, stringValue(payload, "status")))
+		if normalized["status"] == "" {
+			normalized["status"] = "completed"
 		}
-		if status == "" {
-			status = "completed"
-		}
-		normalized := normalizedItem("tool_result", status)
 		normalized["output"] = result.output
 		if len(result.commandOutputs) > 0 {
 			normalized["commandOutputs"] = commandOutputValues(result.commandOutputs)
 		}
-		if exitCode := intPointer(payload["exit_code"], payload["exitCode"], result.exitCode); exitCode != nil {
-			normalized["exitCode"] = *exitCode
+		if result.exitCode != nil {
+			normalized["exitCode"] = *result.exitCode
+		} else {
+			normalized["exitCode"] = firstValue(payload["exit_code"], payload["exitCode"])
 		}
-		if durationMS := intPointer(payload["duration_ms"], payload["durationMs"], result.durationMS); durationMS != nil {
-			normalized["durationMs"] = *durationMS
+		if result.durationMS != nil {
+			normalized["durationMs"] = *result.durationMS
+		} else {
+			normalized["durationMs"] = firstValue(payload["duration_ms"], payload["durationMs"])
 		}
-		if result.executionID != "" {
-			normalized["executionId"] = result.executionID
+		if result.transportID != "" {
+			normalized["transportId"] = result.transportID
 		}
 		return []codexLogEvent{{
 			EventID:   eventID(timestamp, "item.completed", callID),
@@ -1243,7 +1245,7 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		itemType := "custom_tool_call"
 		commands, extracted := extractExecCommandInvocations(input)
 		nestedName := extractExecToolName(input)
-		if name == "exec" && (extracted || isCommandTransportTool(nestedName)) {
+		if name == "exec" && extracted {
 			itemType = "command_execution"
 			if len(commands) == 0 {
 				commands = []process.CodexCommandInvocation{{Command: nestedName}}
@@ -1255,9 +1257,6 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		if itemType == "command_execution" {
 			normalized["commandKind"] = string(process.CodexCommandExec)
 			normalized["commands"] = commandInvocationValues(commands)
-			if executionID := extractCommandTransportExecutionID(input); executionID != "" {
-				normalized["transportExecutionId"] = executionID
-			}
 		}
 		toolEvent := codexLogEvent{
 			EventID:   eventID(timestamp, "item.started", callID),
@@ -1292,8 +1291,8 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		if result.durationMS != nil {
 			normalized["durationMs"] = *result.durationMS
 		}
-		if result.executionID != "" {
-			normalized["executionId"] = result.executionID
+		if result.transportID != "" {
+			normalized["transportId"] = result.transportID
 		}
 		if result.status != "" {
 			normalized["status"] = result.status
@@ -1609,7 +1608,7 @@ type customToolOutput struct {
 	exitCode       *int
 	durationMS     *int
 	status         string
-	executionID    string
+	transportID    string
 	commandOutputs []customCommandOutput
 }
 
@@ -1624,10 +1623,10 @@ func normalizeCustomToolOutput(value any) customToolOutput {
 	items, ok := value.([]any)
 	if !ok {
 		text := textFromValue(value)
-		part, matched := parseScriptSummary(text)
-		if !matched {
-			part, _ = unwrapCustomToolEnvelope(text)
+		if status, durationMS, transportID, matched := parseScriptSummary(text); matched {
+			return customToolOutput{status: status, durationMS: durationMS, transportID: transportID}
 		}
+		part, _ := unwrapCustomToolEnvelope(text)
 		part.commandOutputs = []customCommandOutput{{output: part.output, exitCode: part.exitCode, durationMS: part.durationMS, status: part.status}}
 		return part
 	}
@@ -1637,14 +1636,10 @@ func normalizeCustomToolOutput(value any) customToolOutput {
 	for index, item := range items {
 		text := textFromValue(item)
 		if index == 0 {
-			if summary, matched := parseScriptSummary(text); matched {
-				result.status = summary.status
-				result.durationMS = summary.durationMS
-				result.executionID = summary.executionID
-				if summary.output != "" {
-					plainOutputs = append(plainOutputs, customCommandOutput{output: summary.output, durationMS: summary.durationMS, status: summary.status})
-					parts = append(parts, summary.output)
-				}
+			if status, durationMS, transportID, matched := parseScriptSummary(text); matched {
+				result.status = status
+				result.durationMS = durationMS
+				result.transportID = transportID
 				continue
 			}
 		}
@@ -1654,14 +1649,14 @@ func normalizeCustomToolOutput(value any) customToolOutput {
 		}
 		if structured {
 			result.commandOutputs = append(result.commandOutputs, commandOutput)
+			if part.transportID != "" {
+				result.transportID = part.transportID
+			}
 		} else {
 			plainOutputs = append(plainOutputs, commandOutput)
 		}
 		if part.output != "" {
 			parts = append(parts, part.output)
-		}
-		if part.executionID != "" {
-			result.executionID = part.executionID
 		}
 	}
 	if len(result.commandOutputs) == 0 {
@@ -1724,40 +1719,6 @@ func commandOutputsFromValue(value any) []customCommandOutput {
 	return outputs
 }
 
-func applyCommandOutput(command *process.CodexCommandInvocation, output customCommandOutput) {
-	command.HasOutput = true
-	command.Output = normalizeANSIText(output.output)
-	command.ExitCode = output.exitCode
-	command.DurationMS = output.durationMS
-}
-
-func appendCommandOutput(command *process.CodexCommandInvocation, output customCommandOutput) {
-	text := normalizeANSIText(output.output)
-	if text != "" {
-		if command.Output == "" {
-			command.Output = text
-		} else {
-			command.Output += text
-		}
-	}
-	command.HasOutput = command.HasOutput || text != "" || output.exitCode != nil || output.durationMS != nil
-	if output.exitCode != nil {
-		command.ExitCode = output.exitCode
-	}
-	command.DurationMS = addDuration(command.DurationMS, output.durationMS)
-}
-
-func addDuration(current *int, additional *int) *int {
-	if current == nil {
-		return intPointer(additional)
-	}
-	if additional == nil {
-		return intPointer(current)
-	}
-	total := *current + *additional
-	return &total
-}
-
 func commandInvocationFailed(commands []process.CodexCommandInvocation) bool {
 	for _, command := range commands {
 		if command.ExitCode != nil && *command.ExitCode != 0 {
@@ -1767,36 +1728,40 @@ func commandInvocationFailed(commands []process.CodexCommandInvocation) bool {
 	return false
 }
 
-func parseScriptSummary(value string) (customToolOutput, bool) {
+func parseScriptSummary(value string) (string, *int, string, bool) {
 	lines := strings.Split(value, "\n")
-	if len(lines) < 3 || lines[2] != "Output:" {
-		return customToolOutput{}, false
+	if len(lines) < 4 || lines[2] != "Output:" {
+		return "", nil, "", false
+	}
+	for _, line := range lines[3:] {
+		if line != "" {
+			return "", nil, "", false
+		}
 	}
 	status := ""
-	executionID := ""
+	transportID := ""
 	switch {
 	case lines[0] == "Script completed":
 		status = "completed"
 	case strings.HasPrefix(lines[0], "Script running with cell ID "):
 		status = "running"
-		executionID = strings.TrimSpace(strings.TrimPrefix(lines[0], "Script running with cell ID "))
+		transportID = strings.TrimSpace(strings.TrimPrefix(lines[0], "Script running with cell ID "))
 	case lines[0] == "Script failed":
 		status = "failed"
 	default:
-		return customToolOutput{}, false
+		return "", nil, "", false
 	}
 	const wallTimePrefix = "Wall time "
 	const wallTimeSuffix = " seconds"
 	if !strings.HasPrefix(lines[1], wallTimePrefix) || !strings.HasSuffix(lines[1], wallTimeSuffix) {
-		return customToolOutput{}, false
+		return "", nil, "", false
 	}
 	seconds, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimPrefix(lines[1], wallTimePrefix), wallTimeSuffix), 64)
 	if err != nil || seconds < 0 {
-		return customToolOutput{}, false
+		return "", nil, "", false
 	}
 	durationMS := int(seconds*1000 + 0.5)
-	output := strings.TrimPrefix(strings.Join(lines[3:], "\n"), "\n")
-	return customToolOutput{output: output, durationMS: &durationMS, status: status, executionID: executionID}, true
+	return status, &durationMS, transportID, true
 }
 
 func unwrapCustomToolEnvelope(value string) (customToolOutput, bool) {
@@ -1820,7 +1785,7 @@ func unwrapCustomToolEnvelope(value string) (customToolOutput, bool) {
 	output := envelope["output"].(string)
 	result.output = output
 	result.exitCode = intPointer(envelope["exit_code"], envelope["exitCode"])
-	result.executionID = scalarString(envelope["cell_id"], envelope["cellId"], envelope["session_id"], envelope["sessionId"])
+	result.transportID = transportValue(envelope["session_id"], envelope["sessionId"], envelope["cell_id"], envelope["cellId"])
 	if seconds, ok := envelope["wall_time_seconds"].(float64); ok && seconds >= 0 {
 		durationMS := int(seconds*1000 + 0.5)
 		result.durationMS = &durationMS
@@ -1829,24 +1794,6 @@ func unwrapCustomToolEnvelope(value string) (customToolOutput, bool) {
 		result.status = "running"
 	}
 	return result, true
-}
-
-func scalarString(values ...any) string {
-	for _, value := range values {
-		switch typed := value.(type) {
-		case string:
-			if typed != "" {
-				return typed
-			}
-		case int:
-			return strconv.Itoa(typed)
-		case int64:
-			return strconv.FormatInt(typed, 10)
-		case float64:
-			return strconv.FormatFloat(typed, 'f', -1, 64)
-		}
-	}
-	return ""
 }
 
 func customToolEnvelopeCandidates(value string) []string {
@@ -1866,8 +1813,45 @@ func customToolEnvelopeCandidates(value string) []string {
 }
 
 func isCommandTransportTool(name string) bool {
+	switch name {
+	case "tools.write_stdin", "tools.wait":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCommandTransportName(name string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(name))
-	return normalized == "wait" || normalized == "write_stdin" || strings.HasSuffix(normalized, ".wait") || strings.HasSuffix(normalized, ".write_stdin")
+	return normalized == "wait" || normalized == "write_stdin" || isCommandTransportTool(normalized)
+}
+
+func commandTransportID(input string) string {
+	var arguments map[string]any
+	if json.Unmarshal([]byte(input), &arguments) == nil {
+		if id := transportValue(arguments["cell_id"], arguments["cellId"], arguments["session_id"], arguments["sessionId"]); id != "" {
+			return id
+		}
+	}
+	return extractExecTransportID(input)
+}
+
+func transportValue(values ...any) string {
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+			if result := strings.TrimSpace(typed); result != "" {
+				return result
+			}
+		case int:
+			return strconv.Itoa(typed)
+		case int64:
+			return strconv.FormatInt(typed, 10)
+		case float64:
+			return strconv.FormatInt(int64(typed), 10)
+		}
+	}
+	return ""
 }
 
 func fileChangesFromPatch(payload map[string]any, sessionCWD string) []any {

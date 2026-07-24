@@ -11,6 +11,7 @@ export function reduceTranscriptEvents(events) {
 
     const existing = correlated.get(event.correlationId);
     if (!existing) {
+      if (isResultOnlyCommandEvent(event)) continue;
       const item = toTranscriptItem(event, event.correlationId);
       correlated.set(event.correlationId, item);
       items.push(item);
@@ -43,12 +44,15 @@ function mergeTranscriptContent(current, incoming) {
     if (incoming.__typename === 'TranscriptCommandContent') {
       return {
         ...mergeDefined(current, incoming),
-        commands: incoming.commands?.length ? incoming.commands : current.commands,
+        commands: mergeCommandResults(current.commands, incoming.commands),
       };
     }
   }
 
-  if (current.__typename === 'TranscriptToolContent' && incoming.__typename === 'TranscriptToolContent') {
+  if (
+    current.__typename === 'TranscriptToolContent' &&
+    incoming.__typename === 'TranscriptToolContent'
+  ) {
     return {
       ...current,
       qualifiedName: incoming.qualifiedName || current.qualifiedName,
@@ -61,6 +65,31 @@ function mergeTranscriptContent(current, incoming) {
 
   if (current.__typename === incoming.__typename) return mergeDefined(current, incoming);
   return current;
+}
+
+function mergeCommandResults(current = [], incoming = []) {
+  if (current.length === 0) return incoming;
+  if (incoming.length === 0) return current;
+  return current.map((command, index) => {
+    const result = incoming[index];
+    if (!result) return command;
+    return {
+      ...command,
+      ...result,
+      command: result.command || command.command,
+      workdir: result.workdir || command.workdir,
+      hasOutput: command.hasOutput || result.hasOutput,
+    };
+  });
+}
+
+function isResultOnlyCommandEvent(event) {
+  return (
+    event.content?.__typename === 'TranscriptCommandContent' &&
+    event.phase !== 'started' &&
+    event.content.commands?.length > 0 &&
+    event.content.commands.every((command) => !command.command)
+  );
 }
 
 function mergeDefined(current, incoming) {

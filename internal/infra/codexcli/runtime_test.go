@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -468,6 +469,76 @@ func TestHistoryPageUsesSessionFile(t *testing.T) {
 	message, ok := page.Events[4].Content.(process.CodexMessageContent)
 	if !ok || message.Role != "assistant" || message.Text != "done" {
 		t.Fatalf("agent event = %#v", page.Events[4])
+	}
+}
+
+func TestHistoryPageResolvesWaitsForwardOnlyForPageCommands(t *testing.T) {
+	codexHome := t.TempDir()
+	execStart := `{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"exec-1","name":"exec","input":"const r = await tools.exec_command({\"cmd\":\"go test ./...\",\"workdir\":\"/workspace\",\"yield_time_ms\":1000}); text(r);"}}`
+	execRunning := `{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"exec-1","output":[{"type":"input_text","text":"Script running with cell ID 37\nWall time 1.0 seconds\nOutput:\n"},{"type":"input_text","text":"{\"chunk_id\":\"one\",\"session_id\":37,\"wall_time_seconds\":1,\"output\":\"first\"}"}]}}`
+	var body strings.Builder
+	body.WriteString(execStart)
+	body.WriteByte('\n')
+	body.WriteString(execRunning)
+	body.WriteByte('\n')
+	for index := 0; index < 140; index++ {
+		body.WriteString(`{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"reasoning","id":"filler-`)
+		body.WriteString(strconv.Itoa(index))
+		body.WriteString(`","summary":[{"type":"summary_text","text":"filler"}]}}`)
+		body.WriteByte('\n')
+	}
+	body.WriteString(`{"timestamp":"2026-07-22T00:00:03Z","type":"response_item","payload":{"type":"function_call","name":"wait","arguments":"{\"cell_id\":\"37\"}","call_id":"wait-1"}}`)
+	body.WriteByte('\n')
+	body.WriteString(`{"timestamp":"2026-07-22T00:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"wait-1","output":[{"type":"input_text","text":"Script completed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"{\"chunk_id\":\"two\",\"wall_time_seconds\":0,\"exit_code\":0,\"output\":\"second\"}"}]}}`)
+	writeSessionLog(t, codexHome, "thread-wait", body.String())
+
+	client := New("codex", WithCodexHome(codexHome))
+	latest, err := client.HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-wait", Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(latest.Events) != 0 {
+		t.Fatalf("wait-only page events = %#v, want none", latest.Events)
+	}
+
+	path, err := sessionLogByID(codexHome, "thread-wait")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fillerOffset := strings.Index(string(content), `{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"reasoning","id":"filler-0"`)
+	if fillerOffset < 0 {
+		t.Fatal("filler offset not found")
+	}
+	page, err := client.HistoryPage(context.Background(), process.CodexHistoryPageInput{
+		ThreadID: "thread-wait", Cursor: strconv.Itoa(fillerOffset), Limit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 || page.Events[0].Phase != process.CodexPhaseStarted || page.Events[1].Phase != process.CodexPhaseCompleted {
+		t.Fatalf("exec page events = %#v", page.Events)
+	}
+	terminal, ok := page.Events[1].Content.(process.CodexCommandContent)
+	if !ok || len(terminal.Commands) != 1 || terminal.Commands[0].Command != "" || terminal.Commands[0].Output != "firstsecond" || terminal.DurationMS == nil || *terminal.DurationMS != 3000 {
+		t.Fatalf("terminal history event = %#v", page.Events[1])
+	}
+
+	writeSessionLog(t, codexHome, "thread-near-wait", strings.Join([]string{
+		execStart,
+		execRunning,
+		`{"timestamp":"2026-07-22T00:00:03Z","type":"response_item","payload":{"type":"function_call","name":"wait","arguments":"{\"cell_id\":\"37\"}","call_id":"wait-1"}}`,
+		`{"timestamp":"2026-07-22T00:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"wait-1","output":[{"type":"input_text","text":"Script completed\nWall time 0.0 seconds\nOutput:\n"},{"type":"input_text","text":"{\"chunk_id\":\"two\",\"wall_time_seconds\":0,\"exit_code\":0,\"output\":\"second\"}"}]}}`,
+	}, "\n"))
+	nearWait, err := client.HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-near-wait", Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nearWait.Events) != 0 {
+		t.Fatalf("wait-only page used preceding exec context: %#v", nearWait.Events)
 	}
 }
 
