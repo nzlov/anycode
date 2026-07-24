@@ -1,10 +1,128 @@
 package codexcli
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/nzlov/anycode/internal/domain/process"
 )
+
+func TestProjectorConvertsSuccessfulExecApplyPatchToFileChanges(t *testing.T) {
+	quotedPatch := "*** Begin Patch\n*** Update File: /workspace/project/main.go\n@@ -1 +1 @@\n-old\n+new\n*** End Patch"
+	quotedPatchJSON, err := json.Marshal(quotedPatch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name        string
+		source      string
+		result      string
+		wantKind    string
+		wantPath    string
+		wantMove    string
+		wantFailure bool
+	}{
+		{
+			name:     "quoted string update",
+			source:   "const patch = " + string(quotedPatchJSON) + ";\ntext(await tools.apply_patch(patch));",
+			result:   "Script completed\nWall time 0.1 seconds\nOutput:\n",
+			wantKind: "modified",
+			wantPath: "main.go",
+		},
+		{
+			name: "raw template rename",
+			source: "const patch = String.raw`*** Begin Patch\n" +
+				"*** Update File: /workspace/project/old.go\n" +
+				"*** Move to: /workspace/project/new.go\n" +
+				"@@ -1 +1 @@\n-old\n+new\n*** End Patch`;\n" +
+				"text(await tools.apply_patch(patch));",
+			result:   "Script completed\nWall time 0.1 seconds\nOutput:\n",
+			wantKind: "renamed",
+			wantPath: "old.go",
+			wantMove: "new.go",
+		},
+		{
+			name: "failed patch remains exec tool",
+			source: "const patch = String.raw`*** Begin Patch\n" +
+				"*** Delete File: /workspace/project/main.go\n*** End Patch`;\n" +
+				"text(await tools.apply_patch(patch));",
+			result:      "Script failed\nWall time 0.1 seconds\nOutput:\n",
+			wantFailure: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			projector := newCodexTranscriptProjector()
+			lines := []map[string]any{
+				{
+					"timestamp": "2026-07-24T00:00:01Z",
+					"type":      "response_item",
+					"payload": map[string]any{
+						"type": "custom_tool_call", "call_id": "patch-1", "name": "exec", "input": test.source,
+					},
+				},
+				{
+					"timestamp": "2026-07-24T00:00:02Z",
+					"type":      "response_item",
+					"payload": map[string]any{
+						"type": "custom_tool_call_output", "call_id": "patch-1",
+						"output": []any{
+							map[string]any{"type": "input_text", "text": test.result},
+							map[string]any{"type": "input_text", "text": "{}"},
+						},
+					},
+				},
+			}
+			var projected []codexLogEvent
+			for index, line := range lines {
+				raw, err := json.Marshal(line)
+				if err != nil {
+					t.Fatal(err)
+				}
+				projected = append(projected, projector.project(parseSessionLogLine(raw, "/workspace/project", "rollout.jsonl", int64(index)))...)
+			}
+			if len(projected) != 1 {
+				t.Fatalf("projected events = %#v, want one terminal event", projected)
+			}
+			if test.wantFailure {
+				tool, ok := projected[0].Content.(process.CodexToolContent)
+				if !ok || projected[0].Phase != process.CodexPhaseFailed || tool.QualifiedName != "exec" || tool.Input.Text != test.source {
+					t.Fatalf("failed patch event = %#v", projected[0])
+				}
+				return
+			}
+			content, ok := projected[0].Content.(process.CodexFileChangeContent)
+			if !ok || projected[0].Phase != process.CodexPhaseStandalone || len(content.Changes) != 1 {
+				t.Fatalf("file change event = %#v", projected[0])
+			}
+			change := content.Changes[0]
+			if change.Kind != test.wantKind || change.Path != test.wantPath || change.MovePath != test.wantMove || change.UnifiedDiff == "" {
+				t.Fatalf("file change = %#v", change)
+			}
+		})
+	}
+}
+
+func TestExtractExecApplyPatchHandlesMultipleWorkspaceFiles(t *testing.T) {
+	source := "text(await tools.apply_patch(String.raw`*** Begin Patch\n" +
+		"*** Add File: /workspace/project/new.go\n+package sample\n" +
+		"*** Delete File: /workspace/project/old.go\n*** End Patch`));"
+	changes, ok := extractExecApplyPatch(source, "/workspace/project")
+	if !ok || len(changes) != 2 {
+		t.Fatalf("changes = %#v, want added and deleted files", changes)
+	}
+	if changes[0].Kind != "added" || changes[0].Path != "new.go" || changes[1].Kind != "deleted" || changes[1].Path != "old.go" {
+		t.Fatalf("changes = %#v", changes)
+	}
+}
+
+func TestExtractExecApplyPatchRejectsPathsOutsideWorkspace(t *testing.T) {
+	source := "text(await tools.apply_patch(String.raw`*** Begin Patch\n" +
+		"*** Add File: /outputs/session-1/report.txt\n+report\n*** End Patch`));"
+	if changes, ok := extractExecApplyPatch(source, "/workspace/project"); ok || len(changes) != 0 {
+		t.Fatalf("external changes = %#v, want no transcript file paths", changes)
+	}
+}
 
 func TestParseSessionLogLineFiltersCanonicalItemLifecycleMirrors(t *testing.T) {
 	tests := []string{

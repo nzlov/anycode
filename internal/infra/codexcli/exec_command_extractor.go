@@ -1,8 +1,10 @@
 package codexcli
 
 import (
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/dop251/goja/ast"
 	"github.com/dop251/goja/parser"
@@ -14,6 +16,11 @@ const execWrapperPrefix = "async function __anycode_exec__(){\n"
 type execToolCall struct {
 	name string
 	call *ast.CallExpression
+}
+
+type parsedExecSource struct {
+	calls    []execToolCall
+	bindings map[string][]ast.Expression
 }
 
 // GLUE: Codex rollout files persist command calls inside outer exec JavaScript; remove this parser when rollouts expose structured command items.
@@ -36,6 +43,24 @@ func extractExecCommandInvocations(source string) ([]process.CodexCommandInvocat
 		commands = append(commands, command)
 	}
 	return commands, found
+}
+
+func extractExecApplyPatch(source string, sessionCWD string) ([]process.CodexFileChange, bool) {
+	parsed, ok := parseExecSource(source)
+	if !ok {
+		return nil, false
+	}
+	for _, call := range parsed.calls {
+		if call.name != "tools.apply_patch" || call.call == nil || len(call.call.ArgumentList) != 1 {
+			continue
+		}
+		patch, ok := staticExecString(call.call.ArgumentList[0], parsed.bindings, map[string]struct{}{})
+		if !ok {
+			return nil, false
+		}
+		return fileChangesFromApplyPatch(patch, sessionCWD)
+	}
+	return nil, false
 }
 
 func extractExecToolName(source string) string {
@@ -126,6 +151,14 @@ func staticPlanValue(expression ast.Expression) (any, bool) {
 }
 
 func parseExecToolCalls(source string) ([]execToolCall, bool) {
+	parsed, ok := parseExecSource(source)
+	if !ok {
+		return nil, false
+	}
+	return parsed.calls, true
+}
+
+func parseExecSource(source string) (parsedExecSource, bool) {
 	program, err := parser.ParseFile(
 		nil,
 		"",
@@ -134,10 +167,10 @@ func parseExecToolCalls(source string) ([]execToolCall, bool) {
 		parser.WithDisableSourceMaps,
 	)
 	if err != nil {
-		return nil, false
+		return parsedExecSource{}, false
 	}
 
-	callNodes := collectCallExpressions(program)
+	callNodes, bindings := collectExecNodes(program)
 	calls := make([]execToolCall, 0, len(callNodes))
 	for _, call := range callNodes {
 		dot, ok := call.Callee.(*ast.DotExpression)
@@ -156,11 +189,21 @@ func parseExecToolCalls(source string) ([]execToolCall, bool) {
 	sort.Slice(calls, func(i, j int) bool {
 		return calls[i].call.Idx0() < calls[j].call.Idx0()
 	})
-	return calls, true
+	staticBindings := make(map[string][]ast.Expression)
+	for _, binding := range bindings {
+		identifier, ok := binding.Target.(*ast.Identifier)
+		if !ok || binding.Initializer == nil {
+			continue
+		}
+		name := identifier.Name.String()
+		staticBindings[name] = append(staticBindings[name], binding.Initializer)
+	}
+	return parsedExecSource{calls: calls, bindings: staticBindings}, true
 }
 
-func collectCallExpressions(root ast.Node) []*ast.CallExpression {
+func collectExecNodes(root ast.Node) ([]*ast.CallExpression, []*ast.Binding) {
 	calls := make([]*ast.CallExpression, 0, 1)
+	bindings := make([]*ast.Binding, 0, 1)
 	seen := make(map[uintptr]struct{})
 	var walk func(reflect.Value)
 	walk = func(value reflect.Value) {
@@ -186,6 +229,9 @@ func collectCallExpressions(root ast.Node) []*ast.CallExpression {
 			if call, ok := value.Interface().(*ast.CallExpression); ok {
 				calls = append(calls, call)
 			}
+			if binding, ok := value.Interface().(*ast.Binding); ok {
+				bindings = append(bindings, binding)
+			}
 			walk(value.Elem())
 		case reflect.Struct:
 			if value.Type().PkgPath() != reflect.TypeOf(ast.Identifier{}).PkgPath() {
@@ -204,7 +250,126 @@ func collectCallExpressions(root ast.Node) []*ast.CallExpression {
 		}
 	}
 	walk(reflect.ValueOf(root))
-	return calls
+	return calls, bindings
+}
+
+func staticExecString(expression ast.Expression, bindings map[string][]ast.Expression, resolving map[string]struct{}) (string, bool) {
+	switch value := expression.(type) {
+	case *ast.StringLiteral:
+		return value.Value.String(), true
+	case *ast.TemplateLiteral:
+		if len(value.Expressions) != 0 || (value.Tag != nil && !isStringRawTag(value.Tag)) {
+			return "", false
+		}
+		var result strings.Builder
+		for _, element := range value.Elements {
+			if value.Tag == nil {
+				result.WriteString(element.Parsed.String())
+			} else {
+				result.WriteString(element.Literal)
+			}
+		}
+		return result.String(), true
+	case *ast.Identifier:
+		name := value.Name.String()
+		initializers := bindings[name]
+		if len(initializers) != 1 {
+			return "", false
+		}
+		if _, cyclic := resolving[name]; cyclic {
+			return "", false
+		}
+		resolving[name] = struct{}{}
+		result, ok := staticExecString(initializers[0], bindings, resolving)
+		delete(resolving, name)
+		return result, ok
+	default:
+		return "", false
+	}
+}
+
+func isStringRawTag(expression ast.Expression) bool {
+	dot, ok := expression.(*ast.DotExpression)
+	if !ok || dot.Identifier.Name.String() != "raw" {
+		return false
+	}
+	receiver, ok := dot.Left.(*ast.Identifier)
+	return ok && receiver.Name.String() == "String"
+}
+
+func fileChangesFromApplyPatch(patch string, sessionCWD string) ([]process.CodexFileChange, bool) {
+	lines := strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n")
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "*** Begin Patch" {
+		return nil, false
+	}
+	changes := make([]process.CodexFileChange, 0, 1)
+	var current *process.CodexFileChange
+	var diff []string
+	flush := func() {
+		if current == nil {
+			return
+		}
+		current.UnifiedDiff = strings.TrimSuffix(strings.Join(diff, "\n"), "\n")
+		changes = append(changes, *current)
+		current = nil
+		diff = nil
+	}
+	for _, line := range lines[1:] {
+		kind, path, header := applyPatchFileHeader(line)
+		if header {
+			flush()
+			path, ok := normalizeApplyPatchPath(path, sessionCWD)
+			if !ok {
+				return nil, false
+			}
+			current = &process.CodexFileChange{Kind: kind, Path: path}
+			continue
+		}
+		if strings.HasPrefix(line, "*** Move to: ") {
+			if current == nil || current.Kind != "modified" {
+				return nil, false
+			}
+			current.Kind = "renamed"
+			movePath, ok := normalizeApplyPatchPath(strings.TrimPrefix(line, "*** Move to: "), sessionCWD)
+			if !ok {
+				return nil, false
+			}
+			current.MovePath = movePath
+			continue
+		}
+		if strings.TrimSpace(line) == "*** End Patch" {
+			flush()
+			return changes, len(changes) > 0
+		}
+		if current != nil {
+			diff = append(diff, line)
+		}
+	}
+	return nil, false
+}
+
+func normalizeApplyPatchPath(path string, sessionCWD string) (string, bool) {
+	path = normalizePatchPath(path, sessionCWD)
+	if path == "" || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
+		return "", false
+	}
+	return path, true
+}
+
+func applyPatchFileHeader(line string) (string, string, bool) {
+	for _, header := range []struct {
+		prefix string
+		kind   string
+	}{
+		{prefix: "*** Update File: ", kind: "modified"},
+		{prefix: "*** Add File: ", kind: "added"},
+		{prefix: "*** Delete File: ", kind: "deleted"},
+	} {
+		if strings.HasPrefix(line, header.prefix) {
+			return header.kind, strings.TrimSpace(strings.TrimPrefix(line, header.prefix)), true
+		}
+	}
+	return "", "", false
 }
 
 func commandFromExecToolCall(call *ast.CallExpression) (process.CodexCommandInvocation, bool) {

@@ -155,6 +155,7 @@ type codexLogEvent struct {
 	Type          string
 	Payload       map[string]any
 	PlanUpdate    *process.PlanUpdate
+	FileChanges   []process.CodexFileChange
 	CorrelationID string
 	Phase         process.CodexPhase
 	Content       process.CodexEventContent
@@ -226,7 +227,7 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 		if hadEncryptedContent && stringValue(payload, "type") == "reasoning" && reasoningText(payload) == "" {
 			return nil
 		}
-		events = codexEventsFromResponseItem(record.Timestamp, payload, createdAt)
+		events = codexEventsFromResponseItem(record.Timestamp, payload, createdAt, sessionCWD)
 	case "event_msg":
 		events = codexEventsFromEventMessage(record.Timestamp, payload, createdAt, sessionCWD)
 	case "agent_message":
@@ -283,6 +284,7 @@ func finalizeCodexEvents(events []codexLogEvent, sourceID string, offset int64) 
 
 type codexTranscriptProjector struct {
 	commands        map[string]*projectedCommandState
+	patches         map[string]projectedPatchState
 	commandCells    map[string]string
 	transportCalls  map[string]string
 	tools           map[string]process.CodexToolContent
@@ -297,6 +299,11 @@ type projectedCommandState struct {
 	input     process.CodexCommandContent
 	results   []process.CodexCommandInvocation
 	startedAt time.Time
+}
+
+type projectedPatchState struct {
+	tool    process.CodexToolContent
+	changes []process.CodexFileChange
 }
 
 const transcriptMessageMirrorWindow = 100 * time.Millisecond
@@ -316,6 +323,7 @@ type pendingTranscriptMessage struct {
 func newCodexTranscriptProjector() *codexTranscriptProjector {
 	return &codexTranscriptProjector{
 		commands:       map[string]*projectedCommandState{},
+		patches:        map[string]projectedPatchState{},
 		commandCells:   map[string]string{},
 		transportCalls: map[string]string{},
 		tools:          map[string]process.CodexToolContent{},
@@ -342,7 +350,7 @@ func (p *codexTranscriptProjector) projectEvents(events []codexLogEvent, histori
 	for index := range events {
 		event := &events[index]
 		p.fillOccurredAt(event)
-		if !p.mergeCommandState(event) {
+		if !p.mergeInvocationState(event) {
 			continue
 		}
 		p.pruneCanonicalMessages(event.CreatedAt)
@@ -401,9 +409,22 @@ func (p *codexTranscriptProjector) fillOccurredAt(event *codexLogEvent) {
 	p.lastOccurred = event.CreatedAt
 }
 
-func (p *codexTranscriptProjector) mergeCommandState(event *codexLogEvent) bool {
+func (p *codexTranscriptProjector) mergeInvocationState(event *codexLogEvent) bool {
 	if event.CorrelationID == "" {
 		return true
+	}
+	if patch, exists := p.patches[event.CorrelationID]; exists {
+		return p.applyPatchToolResult(event, patch)
+	}
+	if len(event.FileChanges) > 0 && event.Phase == process.CodexPhaseStarted {
+		tool, ok := event.Content.(process.CodexToolContent)
+		if !ok {
+			return true
+		}
+		p.patches[event.CorrelationID] = projectedPatchState{
+			tool: tool, changes: append([]process.CodexFileChange(nil), event.FileChanges...),
+		}
+		return false
 	}
 	if command, ok := event.Content.(process.CodexCommandContent); ok {
 		event.Content = command
@@ -435,18 +456,7 @@ func (p *codexTranscriptProjector) mergeCommandState(event *codexLogEvent) bool 
 			return false
 		}
 		if previous, exists := p.tools[event.CorrelationID]; exists {
-			if tool.QualifiedName == "" {
-				tool.QualifiedName = previous.QualifiedName
-			}
-			if tool.Category == "" || tool.Category == "generic" {
-				tool.Category = previous.Category
-			}
-			if tool.Input.Text == "" {
-				tool.Input = previous.Input
-			}
-			if len(tool.Images) == 0 {
-				tool.Images = previous.Images
-			}
+			tool = mergeToolContent(previous, tool)
 		}
 		event.Content = tool
 		if isTerminalCodexPhase(event.Phase) {
@@ -456,6 +466,42 @@ func (p *codexTranscriptProjector) mergeCommandState(event *codexLogEvent) bool 
 		}
 	}
 	return true
+}
+
+func (p *codexTranscriptProjector) applyPatchToolResult(event *codexLogEvent, patch projectedPatchState) bool {
+	tool, ok := event.Content.(process.CodexToolContent)
+	if !ok {
+		return true
+	}
+	if !isTerminalCodexPhase(event.Phase) {
+		return false
+	}
+	delete(p.patches, event.CorrelationID)
+	if event.Phase == process.CodexPhaseCompleted {
+		event.Phase = process.CodexPhaseStandalone
+		event.Content = process.CodexFileChangeContent{Changes: patch.changes}
+		return true
+	}
+	tool = mergeToolContent(patch.tool, tool)
+	tool.QualifiedName = "exec"
+	event.Content = tool
+	return true
+}
+
+func mergeToolContent(previous process.CodexToolContent, current process.CodexToolContent) process.CodexToolContent {
+	if current.QualifiedName == "" {
+		current.QualifiedName = previous.QualifiedName
+	}
+	if current.Category == "" || current.Category == "generic" {
+		current.Category = previous.Category
+	}
+	if current.Input.Text == "" {
+		current.Input = previous.Input
+	}
+	if len(current.Images) == 0 {
+		current.Images = previous.Images
+	}
+	return current
 }
 
 func (p *codexTranscriptProjector) applyCommandToolResult(event *codexLogEvent, commandID string, command *projectedCommandState, tool process.CodexToolContent) bool {
@@ -1185,7 +1231,7 @@ func parseSessionTimestamp(value string) time.Time {
 	return parsed
 }
 
-func codexEventsFromResponseItem(timestamp string, payload map[string]any, createdAt time.Time) []codexLogEvent {
+func codexEventsFromResponseItem(timestamp string, payload map[string]any, createdAt time.Time, sessionCWD string) []codexLogEvent {
 	itemType := stringValue(payload, "type")
 	switch itemType {
 	case "function_call":
@@ -1244,6 +1290,7 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 		input := stringOrJSON(payload["input"])
 		itemType := "custom_tool_call"
 		commands, extracted := extractExecCommandInvocations(input)
+		fileChanges, extractedPatch := extractExecApplyPatch(input, sessionCWD)
 		nestedName := extractExecToolName(input)
 		if name == "exec" && extracted {
 			itemType = "command_execution"
@@ -1263,6 +1310,10 @@ func codexEventsFromResponseItem(timestamp string, payload map[string]any, creat
 			Type:      "item.started",
 			Payload:   itemEventPayload(payload, normalized),
 			CreatedAt: createdAt,
+		}
+		if name == "exec" && !extracted && extractedPatch {
+			// GLUE: Current rollouts nest apply_patch inside the outer exec JavaScript without a structured file event.
+			toolEvent.FileChanges = fileChanges
 		}
 		if arguments, ok := extractUpdatePlanInvocation(input); ok {
 			if update, ok := planUpdateFromPayload(arguments); ok {
