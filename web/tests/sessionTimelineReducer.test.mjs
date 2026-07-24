@@ -175,6 +175,7 @@ test('loading an older start later anchors the merged item at the start', () => 
   assert.equal(items.length, 1);
   assert.equal(items[0].id, 'call-a');
   assert.equal(items[0].orderKey, '01');
+  assert.equal(items[0].phase, 'completed');
   assert.deepEqual(items[0].content.commands, [
     commandInvocation('go test ./...', '/workspace', { hasOutput: true, output: 'output' }),
   ]);

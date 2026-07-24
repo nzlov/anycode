@@ -103,11 +103,10 @@ mkdir -p "$CODEX_HOME/sessions/2026/07/22"
 printf '%s\n' '{"timestamp":"2026-07-22T00:00:00Z","type":"session_meta","payload":{"id":"thread-1","cwd":"/workspace"}}' > "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 IFS= read -r request
 printf '%s\n' '{"id":3,"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}'
+printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-1","name":"questions","input":"{\"questions\":[{\"body\":\"Continue?\"}]}"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 printf '%s\n' '{"id":90,"method":"item/tool/call","params":{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","tool":"questions","arguments":{"questions":[{"body":"Continue?"}]}}}'
 IFS= read -r response
 printf '%s\n' "$response" > "$APP_SERVER_RESPONSES"
-printf '%s\n' '{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-1","name":"questions","input":"{\"questions\":[{\"body\":\"Continue?\"}]}"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
-printf '%s\n' '{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-1","output":[{"type":"input_text","text":"{\"answer\":\"yes\"}"}]}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 printf '%s\n' '{"timestamp":"2026-07-22T00:00:03Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-1"}}' >> "$CODEX_HOME/sessions/2026/07/22/rollout-thread-1.jsonl"
 printf '%s\n' '{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"ignored","type":"agentMessage","text":"not from transcript"}}'
 printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed","items":[],"completedAt":1784678400}}}'
@@ -153,7 +152,14 @@ cat >/dev/null
 	if len(got) != 4 || got[0].Type != process.CodexEventTool || got[1].Type != process.CodexEventTool || got[2].Type != process.CodexEventStatus || got[3].Type != process.CodexEventProcessExit {
 		t.Fatalf("events = %#v", got)
 	}
-	if got[0].Phase != process.CodexPhaseStarted || got[1].Phase != process.CodexPhaseCompleted {
+	phases := map[process.CodexPhase]bool{}
+	for _, event := range got[:2] {
+		if event.CorrelationID != "call-1" {
+			t.Fatalf("tool event = %#v", event)
+		}
+		phases[event.Phase] = true
+	}
+	if !phases[process.CodexPhaseStarted] || !phases[process.CodexPhaseCompleted] {
 		t.Fatalf("tool lifecycle = %#v", got[:2])
 	}
 	call := <-handler.calls

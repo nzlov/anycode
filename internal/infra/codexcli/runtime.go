@@ -261,7 +261,25 @@ func (r *appServerRuntime) handleServerRequest(envelope appServerEnvelope) {
 	if err != nil {
 		result = process.DynamicToolResult{Success: false, Content: []process.DynamicToolContent{{Type: "inputText", Text: err.Error()}}}
 	}
-	_ = r.write(map[string]any{"id": envelope.ID, "result": dynamicToolResponse(result)})
+	response := dynamicToolResponse(result)
+	if err := r.write(map[string]any{"id": envelope.ID, "result": response}); err != nil {
+		return
+	}
+	phase := process.CodexPhaseCompleted
+	if !result.Success {
+		phase = process.CodexPhaseFailed
+	}
+	// GLUE: Codex does not always persist a dynamic tool terminal record promptly; remove this event once rollout output is guaranteed.
+	route.emit(process.CodexEvent{
+		EventID: "dynamic-tool:" + params.TurnID + ":" + params.CallID, Type: process.CodexEventTool,
+		CorrelationID: params.CallID, TurnID: params.TurnID, Phase: phase,
+		Content: process.CodexToolContent{
+			QualifiedName: params.Tool, Category: "dynamic",
+			Input:  process.CodexStructuredText{Format: process.CodexTextJSON, Text: string(params.Arguments)},
+			Output: process.CodexStructuredText{Format: process.CodexTextJSON, Text: jsonText(response["contentItems"])},
+		},
+		CreatedAt: time.Now(),
+	})
 }
 
 func dynamicToolFailure(message string) map[string]any {
