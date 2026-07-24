@@ -134,35 +134,22 @@ function setWidth(value: number) {
 }
 
 .overview-horizontal-session-resizer {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  right: -24px;
-  width: 24px;
+  width: 12px;
   height: 100%;
+  flex: 0 0 12px;
   outline: 0;
+  background: transparent;
   cursor: col-resize;
   touch-action: none;
-}
-
-.overview-horizontal-session-resizer::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  content: '';
-  background: transparent;
-  transform: translateX(-50%);
 }
 
 .overview-horizontal-session-track:last-child .overview-horizontal-session-resizer {
   display: none;
 }
 
-.overview-horizontal-session-resizer:hover::before,
-.overview-horizontal-session-resizer--active::before,
-.overview-horizontal-session-resizer:focus-visible::before {
+.overview-horizontal-session-resizer:hover,
+.overview-horizontal-session-resizer--active,
+.overview-horizontal-session-resizer:focus-visible {
   background: var(--q-primary);
 }
 </style>
