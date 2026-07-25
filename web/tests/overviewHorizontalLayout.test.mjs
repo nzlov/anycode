@@ -236,21 +236,18 @@ test('horizontal sessions render the complete reusable detail surface', () => {
   assert.match(detailViewSource, /class="append-history"/);
 });
 
-test('embedded horizontal mobile sessions switch changes and artifacts in place', () => {
+test('mobile session details switch changes and artifacts in place', () => {
   assert.match(mobileSessionSource, /<SessionDetailView[\s\S]*layout="mobile"/);
   assert.match(
     detailViewSource,
-    /<q-route-tab[\s\S]*v-if="props\.page"[\s\S]*:to="mobileDiffRoute"[\s\S]*name="changes"/,
-  );
-  assert.match(detailViewSource, /<q-tab v-else name="changes" icon="difference" label="变更"/);
-  assert.match(
-    detailViewSource,
-    /<q-route-tab[\s\S]*v-if="props\.page"[\s\S]*:to="allArtifactsRoute"[\s\S]*name="artifacts"/,
+    /<q-tab name="changes" icon="difference" label="变更"/,
   );
   assert.match(
     detailViewSource,
-    /<q-tab v-else name="artifacts" icon="inventory_2" label="临时文件"/,
+    /<q-tab name="artifacts" icon="inventory_2" label="临时文件"/,
   );
+  assert.doesNotMatch(detailViewSource, /<q-route-tab/);
+  assert.doesNotMatch(detailViewSource, /mobileDiffRoute|allArtifactsRoute/);
 });
 
 test('detail tabs show persisted counts and apply websocket count updates', () => {
@@ -262,9 +259,9 @@ test('detail tabs show persisted counts and apply websocket count updates', () =
     sessionsSource,
     /artifactCount: Math\.max\(0, session\.artifactCount\)[\s\S]*filesChanged: Math\.max\(0, session\.filesChanged\)/,
   );
-  assert.equal((detailViewSource.match(/session\.filesChanged > 0/g) ?? []).length, 3);
-  assert.equal((detailViewSource.match(/session\.artifactCount > 0/g) ?? []).length, 3);
-  assert.equal((detailViewSource.match(/floating\s+color="primary"/g) ?? []).length, 6);
+  assert.equal((detailViewSource.match(/session\.filesChanged > 0/g) ?? []).length, 2);
+  assert.equal((detailViewSource.match(/session\.artifactCount > 0/g) ?? []).length, 2);
+  assert.equal((detailViewSource.match(/floating\s+color="primary"/g) ?? []).length, 4);
   assert.match(
     detailComposableSource,
     /typeof update\.filesChanged === 'number'[\s\S]*filesChanged: update\.filesChanged/,

@@ -463,21 +463,7 @@
     >
       <q-tab name="session" icon="forum" label="会话" />
       <q-tab name="info" icon="info" label="信息" />
-      <q-route-tab
-        v-if="props.page"
-        :to="mobileDiffRoute"
-        name="changes"
-        icon="difference"
-        label="变更"
-      >
-        <q-badge
-          v-if="session && session.filesChanged > 0"
-          floating
-          color="primary"
-          :label="String(session.filesChanged)"
-        />
-      </q-route-tab>
-      <q-tab v-else name="changes" icon="difference" label="变更">
+      <q-tab name="changes" icon="difference" label="变更">
         <q-badge
           v-if="session && session.filesChanged > 0"
           floating
@@ -485,21 +471,7 @@
           :label="String(session.filesChanged)"
         />
       </q-tab>
-      <q-route-tab
-        v-if="props.page"
-        :to="allArtifactsRoute"
-        name="artifacts"
-        icon="inventory_2"
-        label="临时文件"
-      >
-        <q-badge
-          v-if="session && session.artifactCount > 0"
-          floating
-          color="primary"
-          :label="String(session.artifactCount)"
-        />
-      </q-route-tab>
-      <q-tab v-else name="artifacts" icon="inventory_2" label="临时文件">
+      <q-tab name="artifacts" icon="inventory_2" label="临时文件">
         <q-badge
           v-if="session && session.artifactCount > 0"
           floating
@@ -1070,15 +1042,6 @@ const allDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId, mode: 'all' },
 }));
-const mobileDiffRoute = computed(() => ({
-  path: '/diff',
-  query: { sessionId, mode: 'single' },
-}));
-const allArtifactsRoute = computed(() => ({
-  name: 'session-artifacts',
-  params: { id: sessionId },
-}));
-
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
 }

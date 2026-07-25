@@ -30,7 +30,7 @@ test('every persisted mobile content surface has a direct route', () => {
   }
 });
 
-test('mobile entry handlers navigate while desktop dialog state remains available', () => {
+test('standalone mobile entries navigate while session detail resources switch in place', () => {
   assert.match(
     overview,
     /function openNewSession[\s\S]*\$q\.screen\.lt\.sm[\s\S]*newSessionOpen\.value = true/,
@@ -58,18 +58,9 @@ test('mobile entry handlers navigate while desktop dialog state remains availabl
     artifacts,
     /function openPreview[\s\S]*\$q\.screen\.lt\.md[\s\S]*name: 'session-artifact'/,
   );
-  assert.match(
-    detail,
-    /<q-route-tab[\s\S]*v-if="props\.page"[\s\S]*:to="mobileDiffRoute"[\s\S]*name="changes"/,
-  );
-  assert.match(
-    detail,
-    /const mobileDiffRoute = computed[\s\S]*query: \{ sessionId, mode: 'single' \}/,
-  );
-  assert.match(
-    detail,
-    /<q-route-tab[\s\S]*v-if="props\.page"[\s\S]*:to="allArtifactsRoute"[\s\S]*name="artifacts"/,
-  );
+  assert.match(detail, /<q-tab name="changes" icon="difference" label="变更"/);
+  assert.match(detail, /<q-tab name="artifacts" icon="inventory_2" label="临时文件"/);
+  assert.doesNotMatch(detail, /<q-route-tab|mobileDiffRoute|allArtifactsRoute/);
   assert.match(
     layout,
     /v-if="isContentRoute"[\s\S]*aria-label="返回上一页"[\s\S]*@click="goBackFromContent"/,
