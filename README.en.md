@@ -14,6 +14,7 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 - Create an isolated worktree from a selected branch for each Git project session, reducing interference between concurrent tasks.
 - Use either a session mode for direct interaction with Codex or a workflow mode with conditions, retries, approvals, and merge nodes.
 - Let Codex request additional decisions through the App Server's dynamic `questions` tool, while workflows can also pause for manual approval.
+- Let Codex create authenticated Cloudflare quick tunnels for test programs running in the container, manage them from the session or tunnel panel, and see the live running count on the overview.
 - Follow text, reasoning, commands, tool calls, and file changes in real time on the session timeline, and review them after execution completes.
 
 ## Features
@@ -21,15 +22,21 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 ### Projects and sessions
 
 - Add projects from directories accessible to the server, with automatic detection of Git repositories and available branches.
+- Add or remove projects from a dedicated project management page, then open project settings or workflow configuration from the same place.
 - Choose the base branch, run mode, Codex model, reasoning effort, and filesystem permissions when creating a session. Git projects can use an isolated worktree for each session.
 - Use cards to see runtime status, base and working branches, the current workflow node, priority, token usage, and recent activity, then continue the same Codex session with follow-up requests.
-- Configure the global concurrency limit under General settings and control the execution queue with per-session priority.
+- Under General settings, configure the global concurrency limit and the extra absolute paths that agents may write in workspace-write mode, then control the execution queue with per-session priority.
 
 ### Horizontal workspace
 
 - Switch the desktop overview between a compact card view and a horizontal view, and filter sessions by project to focus the workspace.
 - Expand the full details of multiple active sessions side by side, so you can follow timelines and take action without repeatedly changing pages.
 - Scroll horizontally and resize each session column independently. Column-width preferences are retained in the current browser.
+
+### Interaction and shortcuts
+
+- Add, edit, and delete quick commands in global settings, then insert frequently used content while composing a request.
+- Show rotating thinking phrases on running cards and at the bottom of the event stream, or turn them off and choose a different tone.
 
 ### Dynamic appearance
 
@@ -138,6 +145,7 @@ Use [`.env.example`](.env.example) and [`compose.yml`](compose.yml) as the sourc
 | `ANYCODE_HOST_DATA_DIR` | `./data` | Host directory mounted at `/home/anycode` in the container to persist AnyCode data and Codex credentials. |
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | Container directory for the database, attachments, artifacts, and worktrees created by AnyCode. This usually does not need to be changed. |
 | `ANYCODE_WORKSPACES_DIR` | `./workspaces` | Host project directory mounted at `/workspaces` in the container. |
+| `CLOUDFLARED_BIN` | `cloudflared` | Cloudflare quick-tunnel client command. It is included in the official image. |
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | Local Turso/libSQL database path. This can also be a `libsql://` cloud database URL. |
 | `TURSO_AUTH_TOKEN` | Empty | Authentication token for a remote Turso database. |
 
