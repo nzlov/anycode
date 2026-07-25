@@ -39,16 +39,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue';
 
-import { fetchSessionFile, type SessionFile } from '@/services/sessionFiles';
+import { fetchSessionFile, type SessionFilePreviewData } from '@/services/sessionFiles';
 
-const props = defineProps<{ file: SessionFile | null }>();
+const props = defineProps<{ file: SessionFilePreviewData | null }>();
 const loading = ref(false);
 const error = ref('');
 const objectURL = ref('');
 const text = ref('');
 let controller: AbortController | null = null;
 
-async function load(file: SessionFile | null) {
+async function load(file: SessionFilePreviewData | null) {
   clear();
   if (!file || file.previewKind === 'none') return;
   if (file.previewKind === 'text' && file.size > 1 << 20) {

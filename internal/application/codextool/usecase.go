@@ -33,6 +33,7 @@ type SessionUseCase interface {
 
 type ArtifactUseCase interface {
 	Publish(ctx context.Context, input artifactapp.PublishInput) (sessiondomain.SessionFile, error)
+	ResolveIDs(ctx context.Context, sessionID sessiondomain.ID, ids []sessiondomain.SessionFileID) ([]sessiondomain.SessionFile, error)
 	ReadToolContent(ctx context.Context, id sessiondomain.SessionFileID) (artifactapp.ToolContent, bool, error)
 }
 
@@ -163,7 +164,7 @@ func (s *Service) questions(ctx context.Context, call processdomain.DynamicToolC
 	if err := json.Unmarshal(call.Arguments, &input); err != nil {
 		return processdomain.DynamicToolResult{}, fmt.Errorf("decode questions arguments: %w", err)
 	}
-	questions, err := buildQuestions(input.Questions)
+	questions, err := s.buildQuestions(ctx, sessiondomain.ID(call.SessionID), input.Questions)
 	if err != nil {
 		return processdomain.DynamicToolResult{}, err
 	}
@@ -238,6 +239,7 @@ type questionsInput struct {
 type questionInput struct {
 	Body    string        `json:"body"`
 	Type    string        `json:"type"`
+	Files   []string      `json:"files"`
 	Options []optionInput `json:"options"`
 }
 
@@ -248,7 +250,7 @@ type optionInput struct {
 	Payload     map[string]any `json:"payload"`
 }
 
-func buildQuestions(inputs []questionInput) ([]questiondomain.Question, error) {
+func (s *Service) buildQuestions(ctx context.Context, sessionID sessiondomain.ID, inputs []questionInput) ([]questiondomain.Question, error) {
 	if len(inputs) == 0 {
 		return nil, errors.New("questions are required")
 	}
@@ -261,6 +263,10 @@ func buildQuestions(inputs []questionInput) ([]questiondomain.Question, error) {
 		questionType := strings.TrimSpace(input.Type)
 		if questionType == "" {
 			questionType = "choice"
+		}
+		files, err := s.resolveQuestionFiles(ctx, sessionID, input.Files)
+		if err != nil {
+			return nil, err
 		}
 		options := make([]questiondomain.Option, 0, len(input.Options))
 		for _, inputOption := range input.Options {
@@ -279,10 +285,35 @@ func buildQuestions(inputs []questionInput) ([]questiondomain.Question, error) {
 			})
 		}
 		questions = append(questions, questiondomain.Question{
-			Body: body, Type: questionType, Options: options, Status: string(questiondomain.RequestPending),
+			Body: body, Type: questionType, Files: files, Options: options, Status: string(questiondomain.RequestPending),
 		})
 	}
 	return questions, nil
+}
+
+func (s *Service) resolveQuestionFiles(ctx context.Context, sessionID sessiondomain.ID, ids []string) ([]questiondomain.File, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if s.artifacts == nil {
+		return nil, errors.New("artifact service is unavailable")
+	}
+	artifactIDs := make([]sessiondomain.SessionFileID, len(ids))
+	for i, id := range ids {
+		artifactIDs[i] = sessiondomain.SessionFileID(strings.TrimSpace(id))
+	}
+	artifacts, err := s.artifacts.ResolveIDs(ctx, sessionID, artifactIDs)
+	if err != nil {
+		return nil, fmt.Errorf("resolve question files: %w", err)
+	}
+	files := make([]questiondomain.File, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		files = append(files, questiondomain.File{
+			ID: string(artifact.ID), Filename: artifact.Filename, MimeType: artifact.MimeType,
+			Size: artifact.Size, PreviewKind: string(artifact.PreviewKind),
+		})
+	}
+	return files, nil
 }
 
 func questionResult(request questionapp.RequestDTO) map[string]any {

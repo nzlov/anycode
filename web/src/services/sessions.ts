@@ -4,7 +4,7 @@ import {
   type GraphQLSubscriptionClose,
 } from '@/services/graphqlClient';
 import { sessionStatusLabel } from '@/services/sessionStatusPresentation';
-import type { SessionFile } from '@/services/sessionFiles';
+import type { SessionFile, SessionFilePreviewData } from '@/services/sessionFiles';
 import {
   normalizeTranscriptEvent,
   transcriptEventFields,
@@ -156,11 +156,16 @@ export interface AgentQuestion {
   requestId: string;
   body: string;
   type: string;
+  files: QuestionFile[];
   options: QuestionOption[];
   selectedOptionId?: string | null;
   customAnswer: string;
   answer: Record<string, unknown>;
   status: string;
+}
+
+export interface QuestionFile extends SessionFilePreviewData {
+  mimeType: string;
 }
 
 export interface QuestionRequest {
@@ -569,6 +574,9 @@ const questionRequestFields = `
     requestId
     body
     type
+    files {
+      id filename mimeType size previewKind previewUrl downloadUrl
+    }
     options {
       id
       label
@@ -1065,6 +1073,7 @@ function normalizeQuestionRequest(request: GraphQLQuestionRequest): QuestionRequ
     status: request.status,
     questions: request.questions.map((question) => ({
       ...question,
+      files: question.files ?? [],
       options: question.options.map((option) => ({
         ...option,
         payload: option.payload ?? {},

@@ -851,6 +851,19 @@ func questionOptionIDPtr(value *string) *questiondomain.OptionID {
 }
 
 func mapQuestion(question questiondomain.Question) *model.Question {
+	files := make([]*model.QuestionFile, 0, len(question.Files))
+	for _, file := range question.Files {
+		downloadURL := "/files/" + file.ID + "/download"
+		var previewURL *string
+		if file.PreviewKind != "none" {
+			value := "/files/" + file.ID + "/preview"
+			previewURL = &value
+		}
+		files = append(files, &model.QuestionFile{
+			ID: file.ID, Filename: file.Filename, MimeType: file.MimeType, Size: file.Size,
+			PreviewKind: file.PreviewKind, PreviewURL: previewURL, DownloadURL: downloadURL,
+		})
+	}
 	options := make([]*model.QuestionOption, 0, len(question.Options))
 	for _, option := range question.Options {
 		options = append(options, &model.QuestionOption{
@@ -865,6 +878,7 @@ func mapQuestion(question questiondomain.Question) *model.Question {
 		RequestID:        string(question.RequestID),
 		Body:             question.Body,
 		Type:             question.Type,
+		Files:            files,
 		Options:          options,
 		SelectedOptionID: stringPtr(question.SelectedOptionID),
 		CustomAnswer:     question.CustomAnswer,

@@ -34,6 +34,41 @@
         <q-tab-panel v-for="question in questions" :key="question.id" :name="question.id">
           <q-card flat bordered class="question-card">
             <div class="question-body">{{ question.body }}</div>
+            <div v-if="question.files.length" class="question-files" aria-label="问题文件">
+              <button
+                v-for="file in question.files"
+                :key="file.id"
+                type="button"
+                class="question-file"
+                :aria-label="`预览文件 ${file.filename}`"
+                @click="openFilePreview(file)"
+              >
+                <SessionFilePreview
+                  v-if="file.previewKind === 'image'"
+                  :file="file"
+                  class="question-file-thumbnail"
+                />
+                <q-icon v-else :name="fileIcon(file)" size="18px" />
+                <span class="ellipsis">{{ file.filename }}</span>
+                <q-tooltip
+                  v-if="!$q.platform.is.mobile && !filePreviewOpen"
+                  anchor="top middle"
+                  self="bottom middle"
+                  :offset="[0, 8]"
+                  :delay="200"
+                  class="question-file-tooltip"
+                  @show="hoveredFileId = file.id"
+                  @hide="hoveredFileId = ''"
+                >
+                  <div class="question-file-tooltip__title ellipsis">{{ file.filename }}</div>
+                  <SessionFilePreview
+                    v-if="hoveredFileId === file.id"
+                    :file="file"
+                    class="question-file-hover-preview"
+                  />
+                </q-tooltip>
+              </button>
+            </div>
           </q-card>
 
           <div class="text-body2 text-weight-bold q-mb-xs">选择答案</div>
@@ -100,13 +135,41 @@
         @click="submit"
       />
     </q-card-actions>
+
+    <q-dialog v-model="filePreviewOpen" @hide="closeFilePreview">
+      <q-card class="question-file-preview-dialog app-content-dialog">
+        <q-card-section class="question-file-preview-dialog__header">
+          <div class="question-file-preview-dialog__title ellipsis">
+            {{ selectedFile?.filename || '文件预览' }}
+          </div>
+          <q-btn
+            flat
+            round
+            dense
+            icon="close"
+            aria-label="关闭文件预览"
+            @click="closeFilePreview"
+          >
+            <q-tooltip v-if="!$q.platform.is.mobile">关闭</q-tooltip>
+          </q-btn>
+        </q-card-section>
+        <q-separator />
+        <SessionFilePreview :file="selectedFile" />
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { AgentQuestion, QuestionAnswerInput, QuestionRequest } from '@/services/sessions';
+import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import type {
+  AgentQuestion,
+  QuestionAnswerInput,
+  QuestionFile,
+  QuestionRequest,
+} from '@/services/sessions';
 
 const props = defineProps<{
   requests: QuestionRequest[];
@@ -125,6 +188,9 @@ interface DraftAnswer {
 
 const activeQuestionId = ref('');
 const drafts = ref<Record<string, DraftAnswer>>({});
+const filePreviewOpen = ref(false);
+const selectedFile = ref<QuestionFile | null>(null);
+const hoveredFileId = ref('');
 const currentRequest = computed(
   () => props.requests.find((request) => request.status === 'pending') ?? null,
 );
@@ -176,6 +242,24 @@ function hasValidDraft(question: AgentQuestion): boolean {
   if (!draft?.choice) return false;
   if (draft.choice === '__custom__') return draft.customAnswer.trim().length > 0;
   return question.options.some((option) => option.id === draft.choice);
+}
+
+function fileIcon(file: QuestionFile) {
+  if (file.previewKind === 'image') return 'image';
+  if (file.previewKind === 'video') return 'movie';
+  if (file.previewKind === 'audio') return 'audio_file';
+  if (file.previewKind === 'pdf') return 'picture_as_pdf';
+  return 'description';
+}
+
+function openFilePreview(file: QuestionFile) {
+  selectedFile.value = file;
+  filePreviewOpen.value = true;
+}
+
+function closeFilePreview() {
+  filePreviewOpen.value = false;
+  selectedFile.value = null;
 }
 
 function submit() {
@@ -271,6 +355,95 @@ function submit() {
   white-space: pre-wrap;
 }
 
+.question-files {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.question-file {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 180px;
+  height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--ac-status-warning-border);
+  border-radius: var(--ac-radius);
+  color: var(--ac-status-warning-text);
+  background: var(--ac-surface);
+  cursor: pointer;
+}
+
+.question-file-thumbnail {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.question-file-thumbnail :deep(.q-spinner),
+.question-file-thumbnail :deep(.session-file-preview__error) {
+  display: none;
+}
+
+.question-file-thumbnail :deep(.session-file-preview__image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.question-file:focus-visible {
+  outline: 2px solid var(--q-primary);
+  outline-offset: 1px;
+}
+
+.question-file-tooltip__title {
+  max-width: 240px;
+  margin-bottom: 4px;
+}
+
+.question-file-hover-preview {
+  width: 240px;
+  height: 160px;
+  min-height: 0;
+  border-radius: var(--ac-radius);
+  overflow: hidden;
+}
+
+.question-file-hover-preview :deep(.session-file-preview__image),
+.question-file-hover-preview :deep(.session-file-preview__media) {
+  max-height: 160px;
+}
+
+.question-file-hover-preview :deep(.session-file-preview__frame) {
+  min-height: 160px;
+}
+
+.question-file-preview-dialog__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.question-file-preview-dialog__title {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-weight: 700;
+}
+
+@media (hover: hover) {
+  .question-file:hover {
+    border-color: var(--q-primary);
+  }
+}
+
 .option-list {
   display: grid;
   gap: 6px;
@@ -302,6 +475,20 @@ function submit() {
 
   .questions-panel__actions {
     padding: 8px 12px 10px;
+  }
+
+  .question-file {
+    max-width: 144px;
+  }
+
+  .question-file-preview-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .question-file-preview-dialog__header .q-btn {
+    display: inline-flex;
+    flex: 0 0 auto;
   }
 }
 </style>

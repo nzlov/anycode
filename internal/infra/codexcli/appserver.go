@@ -185,6 +185,10 @@ func anyCodeDynamicTools() []map[string]any {
 		"type": "object", "additionalProperties": false, "required": []string{"body"},
 		"properties": map[string]any{
 			"body": map[string]any{"type": "string"}, "type": map[string]any{"type": "string"},
+			"files": map[string]any{
+				"type": "array", "maxItems": 100, "items": map[string]any{"type": "string"},
+				"description": "Optional published file IDs returned by publish_artifact. Files are shown below this question.",
+			},
 			"options": map[string]any{"type": "array", "items": optionSchema},
 		},
 	}

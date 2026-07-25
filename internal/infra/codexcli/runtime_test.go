@@ -620,6 +620,10 @@ func TestQuestionsDynamicToolDescriptionMatchesOptionalOptions(t *testing.T) {
 	if _, exists := properties["title"]; exists {
 		t.Fatalf("question schema still exposes title: %#v", properties)
 	}
+	files, exists := properties["files"].(map[string]any)
+	if !exists || files["type"] != "array" || files["description"] == "" {
+		t.Fatalf("question files schema = %#v", properties["files"])
+	}
 }
 
 func TestTunnelCreateDynamicToolRequiresName(t *testing.T) {

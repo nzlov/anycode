@@ -19,6 +19,10 @@ export interface SessionFile {
 }
 
 export type SessionFileAccess = Pick<SessionFile, 'filename' | 'previewUrl' | 'downloadUrl'>;
+export type SessionFilePreviewData = Pick<
+  SessionFile,
+  'id' | 'filename' | 'size' | 'previewKind' | 'previewUrl' | 'downloadUrl'
+>;
 
 export interface ListSessionFilesInput {
   sessionId: string;

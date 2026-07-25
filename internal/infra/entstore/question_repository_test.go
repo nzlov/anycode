@@ -40,6 +40,9 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 				Body:      "Which path should the workflow take?",
 				Type:      "choice",
 				Status:    string(question.RequestPending),
+				Files: []question.File{{
+					ID: "artifact-1", Filename: "style.png", MimeType: "image/png", Size: 42, PreviewKind: "image",
+				}},
 				Options: []question.Option{
 					{
 						ID:          optionID,
@@ -69,6 +72,9 @@ func TestQuestionRepositoryCreatesFindsSubmitsAndCancels(t *testing.T) {
 	}
 	if len(found.Questions) != 1 || found.Questions[0].ID != "question-1" || len(found.Questions[0].Options) != 1 {
 		t.Fatalf("found questions mismatch: %#v", found.Questions)
+	}
+	if len(found.Questions[0].Files) != 1 || found.Questions[0].Files[0].Filename != "style.png" {
+		t.Fatalf("found question files mismatch: %#v", found.Questions[0].Files)
 	}
 	if found.Questions[0].Options[0].Payload["next"] != "continue" {
 		t.Fatalf("found option payload mismatch: %#v", found.Questions[0].Options[0].Payload)

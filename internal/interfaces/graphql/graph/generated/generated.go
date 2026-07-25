@@ -269,12 +269,23 @@ type ComplexityRoot struct {
 		Answer           func(childComplexity int) int
 		Body             func(childComplexity int) int
 		CustomAnswer     func(childComplexity int) int
+		Files            func(childComplexity int) int
 		ID               func(childComplexity int) int
 		Options          func(childComplexity int) int
 		RequestID        func(childComplexity int) int
 		SelectedOptionID func(childComplexity int) int
 		Status           func(childComplexity int) int
 		Type             func(childComplexity int) int
+	}
+
+	QuestionFile struct {
+		DownloadURL func(childComplexity int) int
+		Filename    func(childComplexity int) int
+		ID          func(childComplexity int) int
+		MimeType    func(childComplexity int) int
+		PreviewKind func(childComplexity int) int
+		PreviewURL  func(childComplexity int) int
+		Size        func(childComplexity int) int
 	}
 
 	QuestionOption struct {
@@ -1963,6 +1974,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Question.CustomAnswer(childComplexity), true
+	case "Question.files":
+		if e.ComplexityRoot.Question.Files == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Question.Files(childComplexity), true
 	case "Question.id":
 		if e.ComplexityRoot.Question.ID == nil {
 			break
@@ -1999,6 +2016,49 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Question.Type(childComplexity), true
+
+	case "QuestionFile.downloadUrl":
+		if e.ComplexityRoot.QuestionFile.DownloadURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.DownloadURL(childComplexity), true
+	case "QuestionFile.filename":
+		if e.ComplexityRoot.QuestionFile.Filename == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.Filename(childComplexity), true
+	case "QuestionFile.id":
+		if e.ComplexityRoot.QuestionFile.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.ID(childComplexity), true
+	case "QuestionFile.mimeType":
+		if e.ComplexityRoot.QuestionFile.MimeType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.MimeType(childComplexity), true
+	case "QuestionFile.previewKind":
+		if e.ComplexityRoot.QuestionFile.PreviewKind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.PreviewKind(childComplexity), true
+	case "QuestionFile.previewUrl":
+		if e.ComplexityRoot.QuestionFile.PreviewURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.PreviewURL(childComplexity), true
+	case "QuestionFile.size":
+		if e.ComplexityRoot.QuestionFile.Size == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QuestionFile.Size(childComplexity), true
 
 	case "QuestionOption.description":
 		if e.ComplexityRoot.QuestionOption.Description == nil {
@@ -4515,11 +4575,22 @@ type Question {
   requestId: ID!
   body: String!
   type: String!
+  files: [QuestionFile!]!
   options: [QuestionOption!]!
   selectedOptionId: ID
   customAnswer: String!
   answer: JSON!
   status: String!
+}
+
+type QuestionFile {
+  id: ID!
+  filename: String!
+  mimeType: String!
+  size: Int64!
+  previewKind: String!
+  previewUrl: String
+  downloadUrl: String!
 }
 
 type QuestionOption {
@@ -11588,6 +11659,51 @@ func (ec *executionContext) fieldContext_Question_type(_ context.Context, field 
 	return fc, nil
 }
 
+func (ec *executionContext) _Question_files(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Question_files,
+		func(ctx context.Context) (any, error) {
+			return obj.Files, nil
+		},
+		nil,
+		ec.marshalNQuestionFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionFileᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Question_files(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Question",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_QuestionFile_id(ctx, field)
+			case "filename":
+				return ec.fieldContext_QuestionFile_filename(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_QuestionFile_mimeType(ctx, field)
+			case "size":
+				return ec.fieldContext_QuestionFile_size(ctx, field)
+			case "previewKind":
+				return ec.fieldContext_QuestionFile_previewKind(ctx, field)
+			case "previewUrl":
+				return ec.fieldContext_QuestionFile_previewUrl(ctx, field)
+			case "downloadUrl":
+				return ec.fieldContext_QuestionFile_downloadUrl(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuestionFile", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Question_options(ctx context.Context, field graphql.CollectedField, obj *model.Question) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -11733,6 +11849,209 @@ func (ec *executionContext) _Question_status(ctx context.Context, field graphql.
 func (ec *executionContext) fieldContext_Question_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Question",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_id(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_filename(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_filename,
+		func(ctx context.Context) (any, error) {
+			return obj.Filename, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_filename(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_mimeType(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_mimeType,
+		func(ctx context.Context) (any, error) {
+			return obj.MimeType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_mimeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_size(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_size,
+		func(ctx context.Context) (any, error) {
+			return obj.Size, nil
+		},
+		nil,
+		ec.marshalNInt642int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_size(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int64 does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_previewKind(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_previewKind,
+		func(ctx context.Context) (any, error) {
+			return obj.PreviewKind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_previewKind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_previewUrl(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_previewUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.PreviewURL, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_previewUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QuestionFile_downloadUrl(ctx context.Context, field graphql.CollectedField, obj *model.QuestionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QuestionFile_downloadUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.DownloadURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QuestionFile_downloadUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QuestionFile",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -11978,6 +12297,8 @@ func (ec *executionContext) fieldContext_QuestionRequest_questions(_ context.Con
 				return ec.fieldContext_Question_body(ctx, field)
 			case "type":
 				return ec.fieldContext_Question_type(ctx, field)
+			case "files":
+				return ec.fieldContext_Question_files(ctx, field)
 			case "options":
 				return ec.fieldContext_Question_options(ctx, field)
 			case "selectedOptionId":
@@ -25578,6 +25899,11 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "files":
+			out.Values[i] = ec._Question_files(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "options":
 			out.Values[i] = ec._Question_options(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -25597,6 +25923,72 @@ func (ec *executionContext) _Question(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "status":
 			out.Values[i] = ec._Question_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var questionFileImplementors = []string{"QuestionFile"}
+
+func (ec *executionContext) _QuestionFile(ctx context.Context, sel ast.SelectionSet, obj *model.QuestionFile) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, questionFileImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("QuestionFile")
+		case "id":
+			out.Values[i] = ec._QuestionFile_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "filename":
+			out.Values[i] = ec._QuestionFile_filename(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mimeType":
+			out.Values[i] = ec._QuestionFile_mimeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "size":
+			out.Values[i] = ec._QuestionFile_size(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "previewKind":
+			out.Values[i] = ec._QuestionFile_previewKind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "previewUrl":
+			out.Values[i] = ec._QuestionFile_previewUrl(ctx, field, obj)
+		case "downloadUrl":
+			out.Values[i] = ec._QuestionFile_downloadUrl(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -29513,6 +29905,32 @@ func (ec *executionContext) unmarshalNQuestionAnswerInput2ᚕᚖgithubᚗcomᚋn
 func (ec *executionContext) unmarshalNQuestionAnswerInput2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionAnswerInput(ctx context.Context, v any) (*model.QuestionAnswerInput, error) {
 	res, err := ec.unmarshalInputQuestionAnswerInput(ctx, v)
 	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNQuestionFile2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionFileᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuestionFile) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNQuestionFile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionFile(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNQuestionFile2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionFile(ctx context.Context, sel ast.SelectionSet, v *model.QuestionFile) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._QuestionFile(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNQuestionOption2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuestionOptionᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.QuestionOption) graphql.Marshaler {

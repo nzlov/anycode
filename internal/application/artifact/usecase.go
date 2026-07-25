@@ -26,6 +26,7 @@ type UseCase interface {
 	Publish(ctx context.Context, input PublishInput) (session.SessionFile, error)
 	List(ctx context.Context, query session.ArtifactQuery) ([]session.SessionFile, error)
 	Resolve(ctx context.Context, sessionID session.ID, logicalPaths []string) ([]session.SessionFile, error)
+	ResolveIDs(ctx context.Context, sessionID session.ID, ids []session.SessionFileID) ([]session.SessionFile, error)
 	ReadToolContent(ctx context.Context, id session.SessionFileID) (ToolContent, bool, error)
 	ReconcileQuarantines(ctx context.Context) (int, error)
 	ReconcileOutputs(ctx context.Context) (int, error)
@@ -169,6 +170,38 @@ func (s *Service) Resolve(ctx context.Context, sessionID session.ID, logicalPath
 		normalized = append(normalized, value)
 	}
 	return s.store.ResolveArtifacts(ctx, sessionID, normalized)
+}
+
+func (s *Service) ResolveIDs(ctx context.Context, sessionID session.ID, ids []session.SessionFileID) ([]session.SessionFile, error) {
+	if s == nil || s.store == nil {
+		return nil, errors.New("artifact usecase is not configured")
+	}
+	if sessionID == "" {
+		return nil, errors.New("session id is required")
+	}
+	if len(ids) > MaxResolveArtifactPaths {
+		return nil, fmt.Errorf("artifact reference count exceeds %d", MaxResolveArtifactPaths)
+	}
+	artifacts := make([]session.SessionFile, 0, len(ids))
+	seen := make(map[session.SessionFileID]struct{}, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			return nil, errors.New("artifact id is required")
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		artifact, err := s.store.FindArtifact(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if artifact.SessionID != sessionID {
+			return nil, session.ErrSessionFileNotFound
+		}
+		seen[id] = struct{}{}
+		artifacts = append(artifacts, artifact)
+	}
+	return artifacts, nil
 }
 
 func (s *Service) ReadToolContent(ctx context.Context, id session.SessionFileID) (ToolContent, bool, error) {

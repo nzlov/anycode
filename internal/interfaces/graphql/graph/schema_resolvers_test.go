@@ -633,6 +633,7 @@ func TestQueryPendingQuestionRequestsForwardsUseCase(t *testing.T) {
 					{
 						ID:      "question-1",
 						Body:    "Choose",
+						Files:   []questiondomain.File{{ID: "artifact-1", Filename: "style.png", MimeType: "image/png", Size: 42, PreviewKind: "image"}},
 						Options: []questiondomain.Option{{ID: "option-1", Label: "Continue"}},
 					},
 				},
@@ -653,6 +654,9 @@ func TestQueryPendingQuestionRequestsForwardsUseCase(t *testing.T) {
 	}
 	if got[0].Questions[0].Answer == nil || got[0].Questions[0].Options[0].Payload == nil {
 		t.Fatalf("pending question JSON maps should be non-nil: %#v", got[0].Questions[0])
+	}
+	if len(got[0].Questions[0].Files) != 1 || got[0].Questions[0].Files[0].PreviewURL == nil || *got[0].Questions[0].Files[0].PreviewURL != "/files/artifact-1/preview" {
+		t.Fatalf("pending question files = %#v", got[0].Questions[0].Files)
 	}
 }
 

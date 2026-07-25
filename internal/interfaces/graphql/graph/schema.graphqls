@@ -737,11 +737,22 @@ type Question {
   requestId: ID!
   body: String!
   type: String!
+  files: [QuestionFile!]!
   options: [QuestionOption!]!
   selectedOptionId: ID
   customAnswer: String!
   answer: JSON!
   status: String!
+}
+
+type QuestionFile {
+  id: ID!
+  filename: String!
+  mimeType: String!
+  size: Int64!
+  previewKind: String!
+  previewUrl: String
+  downloadUrl: String!
 }
 
 type QuestionOption {

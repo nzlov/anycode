@@ -98,6 +98,31 @@ func TestResolveArtifactsNormalizesAndBoundsLogicalPaths(t *testing.T) {
 	}
 }
 
+func TestResolveArtifactIDsRequiresCallingSessionOwnership(t *testing.T) {
+	ctx := context.Background()
+	files := filestore.New(t.TempDir())
+	root, err := files.EnsureArtifactDir(ctx, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "style.png"), []byte("image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service := New(files)
+	published, err := service.Publish(ctx, PublishInput{SessionID: "session-1", Path: "style.png"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := service.ResolveIDs(ctx, "session-1", []session.SessionFileID{published.ID, published.ID})
+	if err != nil || len(resolved) != 1 || resolved[0].ID != published.ID {
+		t.Fatalf("resolved artifacts = %#v, %v", resolved, err)
+	}
+	if _, err := service.ResolveIDs(ctx, "session-2", []session.SessionFileID{published.ID}); !errors.Is(err, session.ErrSessionFileNotFound) {
+		t.Fatalf("cross-session resolve error = %v", err)
+	}
+}
+
 func TestPublishRejectsSessionQuotaOverflow(t *testing.T) {
 	ctx := context.Background()
 	files := filestore.New(t.TempDir())

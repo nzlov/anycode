@@ -59,6 +59,32 @@ func TestQuestionsUsesCallIDAndReturnsAnswers(t *testing.T) {
 	}
 }
 
+func TestQuestionsResolvesOptionalFilesForEachQuestion(t *testing.T) {
+	artifacts := &fakeArtifacts{resolved: []sessiondomain.SessionFile{{
+		ID: "artifact-1", SessionID: "session-1", Filename: "style.png", MimeType: "image/png",
+		Size: 42, PreviewKind: sessiondomain.PreviewKindImage,
+	}}}
+	sessions := &fakeSessions{result: questionapp.RequestDTO{
+		ID: "call-1", SessionID: "session-1", Status: questiondomain.RequestAnswered,
+	}}
+	service := New(sessions, artifacts)
+
+	_, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
+		CallID: "call-1", SessionID: "session-1", Tool: questionsTool,
+		Arguments: json.RawMessage(`{"questions":[{"body":"Use this style?","files":["artifact-1"]}]}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifacts.resolveSessionID != "session-1" || len(artifacts.resolveIDs) != 1 || artifacts.resolveIDs[0] != "artifact-1" {
+		t.Fatalf("resolve input = session %q ids %#v", artifacts.resolveSessionID, artifacts.resolveIDs)
+	}
+	files := sessions.input.Questions[0].Files
+	if len(files) != 1 || files[0].ID != "artifact-1" || files[0].Filename != "style.png" || files[0].PreviewKind != "image" {
+		t.Fatalf("question files = %#v", files)
+	}
+}
+
 func TestQuestionsRejectsMissingQuestions(t *testing.T) {
 	service := New(&fakeSessions{}, nil)
 	_, err := service.HandleDynamicTool(context.Background(), processdomain.DynamicToolCall{
@@ -169,11 +195,20 @@ func (f *fakeSessions) RequestQuestions(_ context.Context, input sessionapp.Requ
 }
 
 type fakeArtifacts struct {
-	input      artifactapp.PublishInput
-	artifact   sessiondomain.SessionFile
-	content    artifactapp.ToolContent
-	hasContent bool
-	err        error
+	input            artifactapp.PublishInput
+	artifact         sessiondomain.SessionFile
+	resolved         []sessiondomain.SessionFile
+	resolveSessionID sessiondomain.ID
+	resolveIDs       []sessiondomain.SessionFileID
+	content          artifactapp.ToolContent
+	hasContent       bool
+	err              error
+}
+
+func (f *fakeArtifacts) ResolveIDs(_ context.Context, sessionID sessiondomain.ID, ids []sessiondomain.SessionFileID) ([]sessiondomain.SessionFile, error) {
+	f.resolveSessionID = sessionID
+	f.resolveIDs = ids
+	return f.resolved, f.err
 }
 
 func (f *fakeArtifacts) Publish(_ context.Context, input artifactapp.PublishInput) (sessiondomain.SessionFile, error) {

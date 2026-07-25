@@ -34,12 +34,22 @@ type Question struct {
 	RequestID        RequestID
 	Body             string
 	Type             string
+	Files            []File
 	Options          []Option
 	Metadata         map[string]any
 	SelectedOptionID *OptionID
 	CustomAnswer     string
 	Answer           map[string]any
 	Status           string
+}
+
+// File is an immutable reference to a published card file attached to a question.
+type File struct {
+	ID          string
+	Filename    string
+	MimeType    string
+	Size        int64
+	PreviewKind string
 }
 
 type Option struct {

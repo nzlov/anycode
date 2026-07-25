@@ -294,6 +294,7 @@ type Question struct {
 	RequestID        string            `json:"requestId"`
 	Body             string            `json:"body"`
 	Type             string            `json:"type"`
+	Files            []*QuestionFile   `json:"files"`
 	Options          []*QuestionOption `json:"options"`
 	SelectedOptionID *string           `json:"selectedOptionId,omitempty"`
 	CustomAnswer     string            `json:"customAnswer"`
@@ -306,6 +307,16 @@ type QuestionAnswerInput struct {
 	SelectedOptionID *string        `json:"selectedOptionId,omitempty"`
 	CustomAnswer     *string        `json:"customAnswer,omitempty"`
 	Payload          map[string]any `json:"payload,omitempty"`
+}
+
+type QuestionFile struct {
+	ID          string  `json:"id"`
+	Filename    string  `json:"filename"`
+	MimeType    string  `json:"mimeType"`
+	Size        int64   `json:"size"`
+	PreviewKind string  `json:"previewKind"`
+	PreviewURL  *string `json:"previewUrl,omitempty"`
+	DownloadURL string  `json:"downloadUrl"`
 }
 
 type QuestionOption struct {
