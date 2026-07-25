@@ -167,7 +167,7 @@ test('horizontal sessions switch layouts by width without remounting terminal se
   assert.match(horizontalSessionSource, /const desktopSessionMinWidth = 1024/);
   assert.match(
     horizontalSessionSource,
-    /props\.width >= desktopSessionMinWidth \? 'desktop' : 'mobile'/,
+    /displayWidth\.value >= desktopSessionMinWidth \? 'desktop' : 'mobile'/,
   );
   assert.match(
     horizontalSessionSource,
@@ -176,6 +176,17 @@ test('horizontal sessions switch layouts by width without remounting terminal se
   assert.match(horizontalSessionSource, /<OverviewHorizontalSessionMobile[\s\S]*v-else/);
   assert.match(mobileSessionSource, /<SessionDetailView[\s\S]*layout="mobile"/);
   assert.match(desktopSessionSource, /<SessionDetailView[\s\S]*layout="desktop"/);
+});
+
+test('horizontal terminal resize previews locally and fits once after dragging', () => {
+  assert.match(horizontalSessionSource, /:style="\{ width: `\$\{displayWidth\}px` \}"/);
+  assert.match(horizontalSessionSource, /if \(!resizing\.value\) emit\('update:width', width\)/);
+  assert.match(
+    horizontalSessionSource,
+    /resizing\.value = false;[\s\S]*emit\('update:width', displayWidth\.value\)/,
+  );
+  assert.match(horizontalSessionSource, /:terminal-resize-paused="resizing"/);
+  assert.match(desktopSessionSource, /:resize-paused="terminalResizePaused"/);
 });
 
 test('horizontal headers expose live card metadata and priority controls in both widths', () => {

@@ -64,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
@@ -72,9 +72,13 @@ import '@xterm/xterm/css/xterm.css';
 
 import { connectTerminal, type TerminalSocket } from '@/services/terminalSocket';
 
-const props = withDefaults(defineProps<{ sessionId: string; interactive?: boolean }>(), {
-  interactive: true,
-});
+const props = withDefaults(
+  defineProps<{ sessionId: string; interactive?: boolean; resizePaused?: boolean }>(),
+  {
+    interactive: true,
+    resizePaused: false,
+  },
+);
 const emit = defineEmits<{
   ready: [];
   exit: [];
@@ -95,12 +99,20 @@ let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let connection: TerminalSocket | null = null;
 let resizeObserver: ResizeObserver | null = null;
+let resizePending = false;
 let themeObserver: MutationObserver | null = null;
 let touchScrollY: number | null = null;
 let outputQueue: Uint8Array[] = [];
 let outputQueueBytes = 0;
 let writingOutput = false;
 const maxOutputQueueBytes = 2 << 20;
+
+watch(
+  () => props.resizePaused,
+  (paused) => {
+    if (!paused && resizePending) void nextTick(fitTerminal);
+  },
+);
 
 onMounted(async () => {
   await nextTick();
@@ -180,7 +192,12 @@ onBeforeUnmount(() => {
 });
 
 function fitTerminal() {
+  if (props.resizePaused) {
+    resizePending = true;
+    return;
+  }
   if (!terminal || !fitAddon || !terminalHost.value || terminalHost.value.clientWidth === 0) return;
+  resizePending = false;
   fitAddon.fit();
   if (props.interactive) connection?.resize(terminal.cols, terminal.rows);
 }

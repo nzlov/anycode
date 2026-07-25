@@ -34,6 +34,8 @@ test('terminal view covers resize, output acknowledgement, touch scrolling, and 
     read('src/components/TerminalSessionView.vue'),
   ]);
   assert.match(source, /new ResizeObserver\(fitTerminal\)/);
+  assert.match(source, /if \(props\.resizePaused\) \{\s*resizePending = true;\s*return;/);
+  assert.match(source, /if \(!paused && resizePending\) void nextTick\(fitTerminal\)/);
   assert.match(source, /terminal\.onData/);
   assert.match(source, /interactive\?: boolean/);
   assert.match(source, /maxOutputQueueBytes = 2 << 20/);

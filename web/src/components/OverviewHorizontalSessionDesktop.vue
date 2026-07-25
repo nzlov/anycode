@@ -91,6 +91,7 @@
       class="overview-horizontal-session-desktop__detail"
       :session-id="card.id"
       :interactive="card.status === 'running'"
+      :resize-paused="terminalResizePaused"
     />
     <SessionDetailView
       v-else
@@ -128,6 +129,7 @@ const props = defineProps<{
   tunnels: Tunnel[];
   priorityLoading?: boolean;
   closeLoading?: boolean;
+  terminalResizePaused?: boolean;
 }>();
 
 const emit = defineEmits<{

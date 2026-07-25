@@ -3,7 +3,7 @@
     <div
       class="overview-horizontal-session"
       :class="`overview-horizontal-session--${sessionLayout}`"
-      :style="{ width: `${width}px` }"
+      :style="{ width: `${displayWidth}px` }"
     >
       <OverviewHorizontalSessionDesktop
         v-if="card.mode === 'terminal' || sessionLayout === 'desktop'"
@@ -11,6 +11,7 @@
         :tunnels="tunnels"
         :priority-loading="priorityLoading"
         :close-loading="closeLoading"
+        :terminal-resize-paused="resizing"
         @set-priority="emit('set-priority', $event)"
         @terminal-opened="emit('terminal-opened', $event)"
         @close="emit('close')"
@@ -36,8 +37,8 @@
       aria-label="调整会话列宽"
       aria-orientation="vertical"
       :aria-valuemin="minWidth"
-      :aria-valuenow="width"
-      :aria-valuetext="`会话列 ${width} 像素`"
+      :aria-valuenow="displayWidth"
+      :aria-valuetext="`会话列 ${displayWidth} 像素`"
       @pointerdown="beginResize"
       @pointermove="continueResize"
       @pointerup="endResize"
@@ -49,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import OverviewHorizontalSessionDesktop from '@/components/OverviewHorizontalSessionDesktop.vue';
 import OverviewHorizontalSessionMobile from '@/components/OverviewHorizontalSessionMobile.vue';
@@ -76,19 +77,27 @@ const desktopSessionMinWidth = 1024;
 const keyboardStep = 16;
 const resizeHandleRef = ref<HTMLElement | null>(null);
 const resizing = ref(false);
+const displayWidth = ref(props.width);
 let resizePointerId = -1;
 let resizeStartX = 0;
 let resizeStartWidth = 0;
 
 const sessionLayout = computed(() =>
-  props.width >= desktopSessionMinWidth ? 'desktop' : 'mobile',
+  displayWidth.value >= desktopSessionMinWidth ? 'desktop' : 'mobile',
+);
+
+watch(
+  () => props.width,
+  (width) => {
+    if (!resizing.value) displayWidth.value = width;
+  },
 );
 
 function beginResize(event: PointerEvent) {
   if (event.button !== 0) return;
   resizePointerId = event.pointerId;
   resizeStartX = event.clientX;
-  resizeStartWidth = props.width;
+  resizeStartWidth = displayWidth.value;
   resizing.value = true;
   resizeHandleRef.value?.setPointerCapture(event.pointerId);
   event.preventDefault();
@@ -106,6 +115,7 @@ function endResize(event: PointerEvent) {
   }
   resizing.value = false;
   resizePointerId = -1;
+  emit('update:width', displayWidth.value);
 }
 
 function resizeBy(delta: number) {
@@ -114,7 +124,9 @@ function resizeBy(delta: number) {
 
 function setWidth(value: number) {
   if (!Number.isFinite(value)) return;
-  emit('update:width', Math.max(props.minWidth, Math.round(value)));
+  const width = Math.max(props.minWidth, Math.round(value));
+  displayWidth.value = width;
+  if (!resizing.value) emit('update:width', width);
 }
 </script>
 
