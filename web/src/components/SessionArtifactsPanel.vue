@@ -162,9 +162,19 @@
       </q-card>
     </div>
 
-    <q-dialog v-model="previewOpen" @hide="handlePreviewDialogHide">
-      <q-card class="artifact-preview-dialog app-content-dialog">
-        <q-card-section class="artifact-preview-header">
+    <q-dialog
+      v-model="previewOpen"
+      :maximized="$q.screen.lt.md"
+      @hide="handlePreviewDialogHide"
+    >
+      <q-card
+        class="artifact-preview-dialog"
+        :class="{
+          'app-content-dialog': !$q.screen.lt.md,
+          'artifact-preview-dialog--mobile': $q.screen.lt.md,
+        }"
+      >
+        <q-card-section v-if="!$q.screen.lt.md" class="artifact-preview-header">
           <div class="artifact-preview-title">
             <q-icon v-if="selected" :name="fileIcon(selected)" />
             <span>{{ selected?.logicalPath || selected?.filename || '文件预览' }}</span>
@@ -186,8 +196,17 @@
             </q-btn>
           </div>
         </q-card-section>
-        <q-separator />
-        <SessionFilePreview :file="selected" />
+        <q-separator v-if="!$q.screen.lt.md" />
+        <SessionFilePreview :file="selected" :zoomable="$q.screen.lt.md" />
+        <q-btn
+          v-if="$q.screen.lt.md"
+          v-close-popup
+          round
+          dense
+          class="artifact-preview-dialog__close"
+          icon="close"
+          aria-label="关闭"
+        />
       </q-card>
     </q-dialog>
   </section>
@@ -196,7 +215,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Dialog, Notify, useQuasar } from 'quasar';
-import { useRouter } from 'vue-router';
 
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
 import {
@@ -223,7 +241,6 @@ const emit = defineEmits<{
   referenceArtifact: [file: SessionFile];
 }>();
 const $q = useQuasar();
-const router = useRouter();
 const files = ref<SessionFile[]>([]);
 const panelElement = ref<HTMLElement | null>(null);
 const loading = ref(false);
@@ -297,13 +314,6 @@ async function refresh() {
 }
 
 function openPreview(file: SessionFile) {
-  if ($q.screen.lt.md) {
-    void router.push({
-      name: 'session-artifact',
-      params: { id: props.sessionId, fileId: file.id },
-    });
-    return;
-  }
   selected.value = file;
   if (!inlinePreviewActive.value) previewOpen.value = true;
 }
@@ -541,9 +551,38 @@ onBeforeUnmount(() => {
 }
 
 .artifact-preview-dialog {
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.artifact-preview-dialog--mobile {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+.artifact-preview-dialog--mobile :deep(.session-file-preview) {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.artifact-preview-dialog--mobile :deep(.session-file-preview__image),
+.artifact-preview-dialog--mobile :deep(.session-file-preview__media) {
+  max-height: 100%;
+}
+
+.artifact-preview-dialog__close {
+  position: absolute;
+  z-index: 1;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  color: var(--ac-text);
+  background: color-mix(in srgb, var(--ac-surface) 88%, transparent);
+  box-shadow: var(--ac-shadow-card);
 }
 
 .artifact-inline-preview {

@@ -86,6 +86,21 @@ test('authenticated previews revoke blob URLs and keep bounded text fully scroll
   assert.match(preview, /file\?\.previewKind === 'text'/);
 });
 
+test('mobile artifact previews are titleless full-screen dialogs with pinch-zoom media', () => {
+  assert.match(panel, /:maximized="\$q\.screen\.lt\.md"/);
+  assert.match(panel, /v-if="!\$q\.screen\.lt\.md" class="artifact-preview-header"/);
+  assert.match(panel, /<SessionFilePreview :file="selected" :zoomable="\$q\.screen\.lt\.md"/);
+  assert.match(panel, /artifact-preview-dialog__close/);
+  assert.match(
+    panel,
+    /\.artifact-preview-dialog--mobile\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*border-radius:\s*0/s,
+  );
+  assert.match(preview, /zoomable\?: boolean/);
+  assert.match(preview, /@pointerdown="startZoom"/);
+  assert.match(preview, /Math\.min\(4, Math\.max\(1,/);
+  assert.match(preview, /\.session-file-preview__zoom-surface--enabled\s*\{[^}]*touch-action:\s*none/s);
+});
+
 test('artifact panel enables one-item inline previews only for wide opted-in containers', () => {
   assert.match(panel, /inlinePreview\?: boolean/);
   assert.match(panel, /const inlinePreviewMinWidth = 1024/);

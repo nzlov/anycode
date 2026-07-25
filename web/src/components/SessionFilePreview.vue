@@ -2,24 +2,44 @@
   <div class="session-file-preview">
     <q-spinner v-if="loading" color="primary" size="32px" />
     <q-banner v-else-if="error" dense class="session-file-preview__error">{{ error }}</q-banner>
-    <img
+    <div
       v-else-if="file?.previewKind === 'image' && objectURL"
-      :src="objectURL"
-      :alt="file.filename"
-      class="session-file-preview__image"
-    />
+      class="session-file-preview__zoom-surface"
+      :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
+      @pointerdown="startZoom"
+      @pointermove="moveZoom"
+      @pointerup="endZoom"
+      @pointercancel="endZoom"
+    >
+      <img
+        :src="objectURL"
+        :alt="file.filename"
+        class="session-file-preview__image"
+        :style="mediaTransform"
+      />
+    </div>
     <iframe
       v-else-if="file?.previewKind === 'pdf' && objectURL"
       :src="objectURL"
       class="session-file-preview__frame"
       title="PDF 预览"
     />
-    <video
+    <div
       v-else-if="file?.previewKind === 'video' && objectURL"
-      :src="objectURL"
-      class="session-file-preview__media"
-      controls
-    />
+      class="session-file-preview__zoom-surface"
+      :class="{ 'session-file-preview__zoom-surface--enabled': zoomable }"
+      @pointerdown="startZoom"
+      @pointermove="moveZoom"
+      @pointerup="endZoom"
+      @pointercancel="endZoom"
+    >
+      <video
+        :src="objectURL"
+        class="session-file-preview__media"
+        :style="mediaTransform"
+        controls
+      />
+    </div>
     <audio
       v-else-if="file?.previewKind === 'audio' && objectURL"
       :src="objectURL"
@@ -37,16 +57,26 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
 import { fetchSessionFile, type SessionFilePreviewData } from '@/services/sessionFiles';
 
-const props = defineProps<{ file: SessionFilePreviewData | null }>();
+const props = withDefaults(
+  defineProps<{ file: SessionFilePreviewData | null; zoomable?: boolean }>(),
+  { zoomable: false },
+);
 const loading = ref(false);
 const error = ref('');
 const objectURL = ref('');
 const text = ref('');
+const scale = ref(1);
+const pointers = new Map<number, { x: number; y: number }>();
+let pinchStartDistance = 0;
+let pinchStartScale = 1;
 let controller: AbortController | null = null;
+const mediaTransform = computed(() =>
+  props.zoomable ? { transform: `scale(${scale.value})` } : undefined,
+);
 
 async function load(file: SessionFilePreviewData | null) {
   clear();
@@ -87,6 +117,42 @@ function clear() {
   objectURL.value = '';
   text.value = '';
   error.value = '';
+  resetZoom();
+}
+
+function startZoom(event: PointerEvent) {
+  if (!props.zoomable || event.pointerType !== 'touch') return;
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (pointers.size === 2) {
+    pinchStartDistance = pointerDistance();
+    pinchStartScale = scale.value;
+  }
+}
+
+function moveZoom(event: PointerEvent) {
+  if (!props.zoomable || !pointers.has(event.pointerId)) return;
+  pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (pointers.size !== 2 || pinchStartDistance === 0) return;
+  scale.value = Math.min(4, Math.max(1, pinchStartScale * (pointerDistance() / pinchStartDistance)));
+}
+
+function endZoom(event: PointerEvent) {
+  pointers.delete(event.pointerId);
+  pinchStartDistance = 0;
+  pinchStartScale = scale.value;
+}
+
+function pointerDistance() {
+  const [first, second] = [...pointers.values()];
+  if (!first || !second) return 0;
+  return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
+function resetZoom() {
+  pointers.clear();
+  pinchStartDistance = 0;
+  pinchStartScale = 1;
+  scale.value = 1;
 }
 
 function errorMessage(err: unknown, fallback: string) {
@@ -131,6 +197,19 @@ onBeforeUnmount(clear);
   max-width: 100%;
   max-height: 72vh;
   object-fit: contain;
+  transform-origin: center;
+}
+
+.session-file-preview__zoom-surface {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  overflow: hidden;
+}
+
+.session-file-preview__zoom-surface--enabled {
+  touch-action: none;
 }
 
 .session-file-preview__frame {
