@@ -532,6 +532,12 @@ type SessionStatusUpdate struct {
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
+type SessionTranscriptEventInput struct {
+	SessionID  string `json:"sessionId"`
+	EventID    string `json:"eventId"`
+	ByteOffset int64  `json:"byteOffset"`
+}
+
 type SessionUpdateEvent struct {
 	EventType        string                `json:"eventType"`
 	SessionID        string                `json:"sessionId"`
@@ -606,14 +612,20 @@ type TranscriptCommandInvocation struct {
 	DurationMs *int   `json:"durationMs,omitempty"`
 }
 
+type TranscriptContentReference struct {
+	ByteOffset int64 `json:"byteOffset"`
+	ByteLength int64 `json:"byteLength"`
+}
+
 type TranscriptEvent struct {
-	ID            string                `json:"id"`
-	OrderKey      string                `json:"orderKey"`
-	CorrelationID *string               `json:"correlationId,omitempty"`
-	Phase         TranscriptEventPhase  `json:"phase"`
-	OccurredAt    time.Time             `json:"occurredAt"`
-	Content       TranscriptContent     `json:"content"`
-	Group         *TranscriptEventGroup `json:"group,omitempty"`
+	ID            string                      `json:"id"`
+	OrderKey      string                      `json:"orderKey"`
+	CorrelationID *string                     `json:"correlationId,omitempty"`
+	Phase         TranscriptEventPhase        `json:"phase"`
+	OccurredAt    time.Time                   `json:"occurredAt"`
+	Content       TranscriptContent           `json:"content"`
+	Deferred      *TranscriptContentReference `json:"deferred,omitempty"`
+	Group         *TranscriptEventGroup       `json:"group,omitempty"`
 }
 
 type TranscriptEventGroup struct {

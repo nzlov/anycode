@@ -55,6 +55,14 @@ type CodexEvent struct {
 	Content        CodexEventContent
 	Sequence       int64
 	CreatedAt      time.Time
+	SourceOffset   int64
+	SourceLength   int64
+	Deferred       *CodexContentReference
+}
+
+type CodexContentReference struct {
+	ByteOffset int64
+	ByteLength int64
 }
 
 type CodexEventType string
@@ -106,6 +114,12 @@ type CodexHistoryPageInput struct {
 type CodexHistoryPage struct {
 	Events     []CodexEvent
 	NextCursor string
+}
+
+type CodexHistoryEventInput struct {
+	ThreadID   string
+	EventID    string
+	ByteOffset int64
 }
 
 type ExitResult struct {
@@ -251,6 +265,7 @@ type CodexSessionCleaner interface {
 
 type CodexHistory interface {
 	HistoryPage(ctx context.Context, input CodexHistoryPageInput) (CodexHistoryPage, error)
+	HistoryEvent(ctx context.Context, input CodexHistoryEventInput) (CodexEvent, error)
 }
 
 type DynamicToolCall struct {

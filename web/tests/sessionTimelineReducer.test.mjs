@@ -127,6 +127,23 @@ test('exec completion keeps each returned output with its command', () => {
   assert.deepEqual(items[0].sourceEventIds, ['start-exec', 'complete-exec']);
 });
 
+test('merged completion preserves the event id that owns deferred content', () => {
+  const completed = commandEvent('complete-large', '02', 'call-large', 'completed', {
+    commands: [commandInvocation('large', '', { hasOutput: true })],
+  });
+  completed.deferred = { byteOffset: 336, byteLength: 1052834 };
+
+  const items = reduceTranscriptEvents([
+    commandEvent('start-large', '01', 'call-large', 'started', {
+      commands: [commandInvocation('large')],
+    }),
+    completed,
+  ]);
+
+  assert.deepEqual(items[0].deferred, { byteOffset: 336, byteLength: 1052834 });
+  assert.equal(items[0].deferredEventId, 'complete-large');
+});
+
 test('interleaved operations merge only by correlation id', () => {
   const items = reduceTranscriptEvents([
     commandEvent('start-a', '01', 'call-a', 'started', {

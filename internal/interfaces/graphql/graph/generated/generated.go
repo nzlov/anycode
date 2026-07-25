@@ -265,6 +265,7 @@ type ComplexityRoot struct {
 		SessionDiff             func(childComplexity int, input model.SessionDiffInput) int
 		SessionFiles            func(childComplexity int, input model.ListSessionFilesInput) int
 		SessionTranscript       func(childComplexity int, input model.ListTranscriptEventsInput) int
+		SessionTranscriptEvent  func(childComplexity int, input model.SessionTranscriptEventInput) int
 		Sessions                func(childComplexity int, input *model.ListSessionsInput) int
 		Tunnels                 func(childComplexity int) int
 		WebPushConfig           func(childComplexity int) int
@@ -513,9 +514,15 @@ type ComplexityRoot struct {
 		Workdir    func(childComplexity int) int
 	}
 
+	TranscriptContentReference struct {
+		ByteLength func(childComplexity int) int
+		ByteOffset func(childComplexity int) int
+	}
+
 	TranscriptEvent struct {
 		Content       func(childComplexity int) int
 		CorrelationID func(childComplexity int) int
+		Deferred      func(childComplexity int) int
 		Group         func(childComplexity int) int
 		ID            func(childComplexity int) int
 		OccurredAt    func(childComplexity int) int
@@ -758,6 +765,7 @@ type QueryResolver interface {
 	SessionCard(ctx context.Context, id string) (*model.SessionCard, error)
 	Session(ctx context.Context, id string) (*model.SessionDetail, error)
 	SessionTranscript(ctx context.Context, input model.ListTranscriptEventsInput) (*model.TranscriptPage, error)
+	SessionTranscriptEvent(ctx context.Context, input model.SessionTranscriptEventInput) (*model.TranscriptEvent, error)
 	SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error)
 	BranchDiff(ctx context.Context, input model.BranchDiffInput) (*model.SessionDiff, error)
 	SessionCommitHistory(ctx context.Context, input model.SessionCommitHistoryInput) (*model.SessionCommitHistory, error)
@@ -1953,6 +1961,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.SessionTranscript(childComplexity, args["input"].(model.ListTranscriptEventsInput)), true
+	case "Query.sessionTranscriptEvent":
+		if e.ComplexityRoot.Query.SessionTranscriptEvent == nil {
+			break
+		}
+
+		args, err := ec.field_Query_sessionTranscriptEvent_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.SessionTranscriptEvent(childComplexity, args["input"].(model.SessionTranscriptEventInput)), true
 	case "Query.sessions":
 		if e.ComplexityRoot.Query.Sessions == nil {
 			break
@@ -3020,6 +3039,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.TranscriptCommandInvocation.Workdir(childComplexity), true
 
+	case "TranscriptContentReference.byteLength":
+		if e.ComplexityRoot.TranscriptContentReference.ByteLength == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptContentReference.ByteLength(childComplexity), true
+	case "TranscriptContentReference.byteOffset":
+		if e.ComplexityRoot.TranscriptContentReference.ByteOffset == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptContentReference.ByteOffset(childComplexity), true
+
 	case "TranscriptEvent.content":
 		if e.ComplexityRoot.TranscriptEvent.Content == nil {
 			break
@@ -3032,6 +3064,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.TranscriptEvent.CorrelationID(childComplexity), true
+	case "TranscriptEvent.deferred":
+		if e.ComplexityRoot.TranscriptEvent.Deferred == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TranscriptEvent.Deferred(childComplexity), true
 	case "TranscriptEvent.group":
 		if e.ComplexityRoot.TranscriptEvent.Group == nil {
 			break
@@ -3762,6 +3800,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSessionCommitHistoryInput,
 		ec.unmarshalInputSessionConfigInput,
 		ec.unmarshalInputSessionDiffInput,
+		ec.unmarshalInputSessionTranscriptEventInput,
 		ec.unmarshalInputSetDefaultWorkflowInput,
 		ec.unmarshalInputSetSessionPriorityInput,
 		ec.unmarshalInputSubmitQuestionRequestInput,
@@ -3890,6 +3929,7 @@ type Query {
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
+  sessionTranscriptEvent(input: SessionTranscriptEventInput!): TranscriptEvent!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
@@ -4332,7 +4372,19 @@ type TranscriptEvent {
   phase: TranscriptEventPhase!
   occurredAt: Time!
   content: TranscriptContent!
+  deferred: TranscriptContentReference
   group: TranscriptEventGroup
+}
+
+input SessionTranscriptEventInput {
+  sessionId: ID!
+  eventId: ID!
+  byteOffset: Int64!
+}
+
+type TranscriptContentReference {
+  byteOffset: Int64!
+  byteLength: Int64!
 }
 
 type TranscriptEventGroup {
@@ -5393,6 +5445,17 @@ func (ec *executionContext) field_Query_sessionFiles_args(ctx context.Context, r
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNListSessionFilesInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐListSessionFilesInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_sessionTranscriptEvent_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNSessionTranscriptEventInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTranscriptEventInput)
 	if err != nil {
 		return nil, err
 	}
@@ -11117,6 +11180,65 @@ func (ec *executionContext) fieldContext_Query_sessionTranscript(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_sessionTranscriptEvent(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_sessionTranscriptEvent,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().SessionTranscriptEvent(ctx, fc.Args["input"].(model.SessionTranscriptEventInput))
+		},
+		nil,
+		ec.marshalNTranscriptEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_sessionTranscriptEvent(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_TranscriptEvent_id(ctx, field)
+			case "orderKey":
+				return ec.fieldContext_TranscriptEvent_orderKey(ctx, field)
+			case "correlationId":
+				return ec.fieldContext_TranscriptEvent_correlationId(ctx, field)
+			case "phase":
+				return ec.fieldContext_TranscriptEvent_phase(ctx, field)
+			case "occurredAt":
+				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
+			case "content":
+				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "deferred":
+				return ec.fieldContext_TranscriptEvent_deferred(ctx, field)
+			case "group":
+				return ec.fieldContext_TranscriptEvent_group(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_sessionTranscriptEvent_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_sessionDiff(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -16486,6 +16608,8 @@ func (ec *executionContext) fieldContext_Subscription_sessionEvents(ctx context.
 				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
 			case "content":
 				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "deferred":
+				return ec.fieldContext_TranscriptEvent_deferred(ctx, field)
 			case "group":
 				return ec.fieldContext_TranscriptEvent_group(ctx, field)
 			}
@@ -17047,6 +17171,64 @@ func (ec *executionContext) fieldContext_TranscriptCommandInvocation_durationMs(
 	return fc, nil
 }
 
+func (ec *executionContext) _TranscriptContentReference_byteOffset(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptContentReference) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptContentReference_byteOffset,
+		func(ctx context.Context) (any, error) {
+			return obj.ByteOffset, nil
+		},
+		nil,
+		ec.marshalNInt642int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptContentReference_byteOffset(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptContentReference",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int64 does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TranscriptContentReference_byteLength(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptContentReference) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptContentReference_byteLength,
+		func(ctx context.Context) (any, error) {
+			return obj.ByteLength, nil
+		},
+		nil,
+		ec.marshalNInt642int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptContentReference_byteLength(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptContentReference",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int64 does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TranscriptEvent_id(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17221,6 +17403,41 @@ func (ec *executionContext) fieldContext_TranscriptEvent_content(_ context.Conte
 	return fc, nil
 }
 
+func (ec *executionContext) _TranscriptEvent_deferred(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TranscriptEvent_deferred,
+		func(ctx context.Context) (any, error) {
+			return obj.Deferred, nil
+		},
+		nil,
+		ec.marshalOTranscriptContentReference2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptContentReference,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TranscriptEvent_deferred(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TranscriptEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "byteOffset":
+				return ec.fieldContext_TranscriptContentReference_byteOffset(ctx, field)
+			case "byteLength":
+				return ec.fieldContext_TranscriptContentReference_byteLength(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TranscriptContentReference", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TranscriptEvent_group(ctx context.Context, field graphql.CollectedField, obj *model.TranscriptEvent) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -17383,6 +17600,8 @@ func (ec *executionContext) fieldContext_TranscriptEventGroup_members(_ context.
 				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
 			case "content":
 				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "deferred":
+				return ec.fieldContext_TranscriptEvent_deferred(ctx, field)
 			case "group":
 				return ec.fieldContext_TranscriptEvent_group(ctx, field)
 			}
@@ -17763,6 +17982,8 @@ func (ec *executionContext) fieldContext_TranscriptPage_events(_ context.Context
 				return ec.fieldContext_TranscriptEvent_occurredAt(ctx, field)
 			case "content":
 				return ec.fieldContext_TranscriptEvent_content(ctx, field)
+			case "deferred":
+				return ec.fieldContext_TranscriptEvent_deferred(ctx, field)
 			case "group":
 				return ec.fieldContext_TranscriptEvent_group(ctx, field)
 			}
@@ -23209,6 +23430,50 @@ func (ec *executionContext) unmarshalInputSessionDiffInput(ctx context.Context, 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputSessionTranscriptEventInput(ctx context.Context, obj any) (model.SessionTranscriptEventInput, error) {
+	var it model.SessionTranscriptEventInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "eventId", "byteOffset"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "eventId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("eventId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.EventID = data
+		case "byteOffset":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("byteOffset"))
+			data, err := ec.unmarshalNInt642int64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ByteOffset = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputSetDefaultWorkflowInput(ctx context.Context, obj any) (model.SetDefaultWorkflowInput, error) {
 	var it model.SetDefaultWorkflowInput
 	if obj == nil {
@@ -25901,6 +26166,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "sessionTranscriptEvent":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_sessionTranscriptEvent(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "sessionDiff":
 			field := field
 
@@ -27706,6 +27993,50 @@ func (ec *executionContext) _TranscriptCommandInvocation(ctx context.Context, se
 	return out
 }
 
+var transcriptContentReferenceImplementors = []string{"TranscriptContentReference"}
+
+func (ec *executionContext) _TranscriptContentReference(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptContentReference) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, transcriptContentReferenceImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TranscriptContentReference")
+		case "byteOffset":
+			out.Values[i] = ec._TranscriptContentReference_byteOffset(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "byteLength":
+			out.Values[i] = ec._TranscriptContentReference_byteLength(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var transcriptEventImplementors = []string{"TranscriptEvent"}
 
 func (ec *executionContext) _TranscriptEvent(ctx context.Context, sel ast.SelectionSet, obj *model.TranscriptEvent) graphql.Marshaler {
@@ -27744,6 +28075,8 @@ func (ec *executionContext) _TranscriptEvent(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "deferred":
+			out.Values[i] = ec._TranscriptEvent_deferred(ctx, field, obj)
 		case "group":
 			out.Values[i] = ec._TranscriptEvent_group(ctx, field, obj)
 		default:
@@ -30534,6 +30867,11 @@ func (ec *executionContext) marshalNSessionFile2ᚖgithubᚗcomᚋnzlovᚋanycod
 	return ec._SessionFile(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNSessionTranscriptEventInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionTranscriptEventInput(ctx context.Context, v any) (model.SessionTranscriptEventInput, error) {
+	res, err := ec.unmarshalInputSessionTranscriptEventInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalNSessionUpdateEvent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐSessionUpdateEvent(ctx context.Context, sel ast.SelectionSet, v model.SessionUpdateEvent) graphql.Marshaler {
 	return ec._SessionUpdateEvent(ctx, sel, &v)
 }
@@ -31613,6 +31951,13 @@ func (ec *executionContext) marshalOTodoList2ᚖgithubᚗcomᚋnzlovᚋanycode�
 		return graphql.Null
 	}
 	return ec._TodoList(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOTranscriptContentReference2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptContentReference(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptContentReference) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._TranscriptContentReference(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalOTranscriptEventGroup2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTranscriptEventGroup(ctx context.Context, sel ast.SelectionSet, v *model.TranscriptEventGroup) graphql.Marshaler {

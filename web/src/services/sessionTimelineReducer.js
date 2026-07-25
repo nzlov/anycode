@@ -21,6 +21,8 @@ export function reduceTranscriptEvents(events) {
     existing.content = mergeTranscriptContent(existing.content, event.content);
     existing.phase = event.phase;
     existing.sourceEventIds.push(event.id);
+    existing.deferred = event.deferred ?? null;
+    existing.deferredEventId = event.deferred ? event.id : undefined;
     if (event.phase === 'started' && event.orderKey < existing.orderKey) {
       existing.orderKey = event.orderKey;
       existing.occurredAt = event.occurredAt;
@@ -36,6 +38,7 @@ function toTranscriptItem(event, id = event.id) {
     id,
     content: cloneContent(event.content),
     sourceEventIds: [event.id],
+    deferredEventId: event.deferred ? event.id : undefined,
   };
 }
 

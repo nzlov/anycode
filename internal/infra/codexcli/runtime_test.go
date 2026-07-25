@@ -494,6 +494,76 @@ func TestHistoryPageUsesSessionFile(t *testing.T) {
 	}
 }
 
+func TestHistoryPageDefersLargeOutputAndLoadsItByOffset(t *testing.T) {
+	codexHome := t.TempDir()
+	largeOutput := strings.Repeat("x", process.MaxInlineTranscriptBytes+1)
+	body := strings.Join([]string{
+		`{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"command-large","name":"exec","input":"const result = await tools.exec_command({\"cmd\":\"large\"}); text(result);"}}`,
+		`{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"command-large","output":"` + largeOutput + `"}}`,
+	}, "\n")
+	writeSessionLog(t, codexHome, "thread-large", body)
+
+	client := New("codex", WithCodexHome(codexHome))
+	page, err := client.HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-large", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 2 {
+		t.Fatalf("events = %#v", page.Events)
+	}
+	terminal, ok := page.Events[1].Content.(process.CodexCommandContent)
+	if !ok || len(terminal.Commands) != 1 || terminal.Commands[0].Output != "" {
+		t.Fatalf("deferred command = %#v", page.Events[1])
+	}
+	if page.Events[1].Deferred == nil || page.Events[1].Deferred.ByteOffset <= 0 || page.Events[1].Deferred.ByteLength <= int64(len(largeOutput)) {
+		t.Fatalf("deferred reference = %#v", page.Events[1].Deferred)
+	}
+
+	loaded, err := client.HistoryEvent(context.Background(), process.CodexHistoryEventInput{
+		ThreadID: "thread-large", EventID: page.Events[1].EventID, ByteOffset: page.Events[1].Deferred.ByteOffset,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedCommand, ok := loaded.Content.(process.CodexCommandContent)
+	if !ok || len(loadedCommand.Commands) != 1 {
+		t.Fatalf("loaded command type=%T commands=%d", loaded.Content, len(loadedCommand.Commands))
+	}
+	if loadedCommand.Commands[0].Output != largeOutput || loaded.Deferred != nil {
+		t.Fatalf("loaded output_bytes=%d deferred=%#v", len(loadedCommand.Commands[0].Output), loaded.Deferred)
+	}
+}
+
+func TestHistoryPageFiltersEscapedInlineDataBeforeDeferring(t *testing.T) {
+	codexHome := t.TempDir()
+	imagePayload := `{"content":[{"type":"image","data":"data:image/png;base64,` + strings.Repeat("c2VjcmV0", 140000) + `"}]}`
+	escapedBytes, err := json.Marshal(map[string]any{"output": imagePayload})
+	if err != nil {
+		t.Fatal(err)
+	}
+	escaped := string(escapedBytes)
+	body := strings.Join([]string{
+		`{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"tool-image","name":"example","input":"{}"}}`,
+		`{"timestamp":"2026-07-22T00:00:02Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"tool-image","output":` + strconv.Quote(escaped) + `}}`,
+	}, "\n")
+	writeSessionLog(t, codexHome, "thread-image", body)
+
+	page, err := New("codex", WithCodexHome(codexHome)).HistoryPage(context.Background(), process.CodexHistoryPageInput{ThreadID: "thread-image", Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool, ok := page.Events[1].Content.(process.CodexToolContent)
+	if !ok {
+		t.Fatalf("tool event = %#v", page.Events[1])
+	}
+	if strings.Contains(tool.Output.Text, "data:image") || strings.Contains(tool.Output.Text, "c2VjcmV0") {
+		t.Fatalf("escaped inline data leaked: %q", tool.Output.Text[:min(len(tool.Output.Text), 200)])
+	}
+	if page.Events[1].Deferred != nil {
+		t.Fatalf("filtered artifact data should not be deferred: %#v", page.Events[1].Deferred)
+	}
+}
+
 func TestHistoryPageResolvesWaitsForwardOnlyForPageCommands(t *testing.T) {
 	codexHome := t.TempDir()
 	execStart := `{"timestamp":"2026-07-22T00:00:01Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"exec-1","name":"exec","input":"const r = await tools.exec_command({\"cmd\":\"go test ./...\",\"workdir\":\"/workspace\",\"yield_time_ms\":1000}); text(r);"}}`

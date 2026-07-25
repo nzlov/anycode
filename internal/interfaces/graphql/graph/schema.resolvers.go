@@ -723,6 +723,20 @@ func (r *queryResolver) SessionTranscript(ctx context.Context, input model.ListT
 	return mapTranscriptPage(dto), nil
 }
 
+// SessionTranscriptEvent is the resolver for the sessionTranscriptEvent field.
+func (r *queryResolver) SessionTranscriptEvent(ctx context.Context, input model.SessionTranscriptEventInput) (*model.TranscriptEvent, error) {
+	if r.UseCases.Timeline == nil {
+		return nil, missingUseCase("timeline")
+	}
+	dto, err := r.UseCases.Timeline.GetSessionEvent(ctx, timelineapp.GetSessionEventInput{
+		SessionID: sessiondomain.ID(input.SessionID), EventID: input.EventID, ByteOffset: input.ByteOffset,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapTranscriptEvent(dto), nil
+}
+
 // SessionDiff is the resolver for the sessionDiff field.
 func (r *queryResolver) SessionDiff(ctx context.Context, input model.SessionDiffInput) (*model.SessionDiff, error) {
 	if r.UseCases.Diff == nil {

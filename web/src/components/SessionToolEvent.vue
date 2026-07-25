@@ -4,12 +4,15 @@
       type="button"
       class="tool-event__header"
       :aria-expanded="expanded"
-      @click="expanded = !expanded"
+      @click="toggleExpanded"
     >
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="build" size="16px" />
       <span>{{ displayTitle }}</span>
-      <q-spinner v-if="event.phase === 'started' || event.phase === 'progress'" size="14px" />
+      <q-spinner
+        v-if="loading || event.phase === 'started' || event.phase === 'progress'"
+        size="14px"
+      />
       <q-icon
         v-else
         :name="timelinePhaseIcon(event.phase)"
@@ -22,6 +25,7 @@
     </button>
     <template v-if="expanded">
       <div class="tool-event__content">
+        <q-banner v-if="error" dense class="text-negative">{{ error }}</q-banner>
         <section v-if="content.input.text" class="tool-event__section">
           <div class="tool-event__label">输入</div>
           <StructuredContent :content="content.input" />
@@ -41,6 +45,7 @@ import { computed, ref } from 'vue';
 
 import SessionEventImages from '@/components/SessionEventImages.vue';
 import StructuredContent from '@/components/StructuredContent.vue';
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type { TranscriptItem, TranscriptToolContent } from '@/services/sessionTimeline';
 import {
   timelinePhaseColor,
@@ -54,8 +59,19 @@ const props = defineProps<{
   event: TranscriptItem & { content: TranscriptToolContent };
 }>();
 const expanded = ref(false);
-const content = computed(() => props.event.content);
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptToolContent);
 const displayTitle = computed(() => toolLabel(content.value));
+
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) void load();
+}
 </script>
 
 <style scoped>

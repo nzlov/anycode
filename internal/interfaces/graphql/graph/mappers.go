@@ -382,6 +382,7 @@ func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 		Phase:         mapTranscriptPhase(dto.Phase),
 		OccurredAt:    createdAt,
 		Content:       mapTranscriptContent(dto.Content),
+		Deferred:      mapTranscriptContentReference(dto.Deferred),
 	}
 	if dto.Group != nil {
 		members := make([]*model.TranscriptEvent, 0, len(dto.Group.Members))
@@ -393,6 +394,13 @@ func mapTranscriptEvent(dto timelineapp.DTO) *model.TranscriptEvent {
 		}
 	}
 	return event
+}
+
+func mapTranscriptContentReference(value *processdomain.CodexContentReference) *model.TranscriptContentReference {
+	if value == nil {
+		return nil
+	}
+	return &model.TranscriptContentReference{ByteOffset: value.ByteOffset, ByteLength: value.ByteLength}
 }
 
 func mapSessionUpdateEvent(dto sessioneventapp.UpdateDTO) *model.SessionUpdateEvent {

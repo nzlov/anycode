@@ -14,13 +14,15 @@
         size="sm"
         icon="code"
         :aria-label="expanded ? '收起事件详情' : '查看事件详情'"
-        @click="expanded = !expanded"
+        @click="toggleExpanded"
       >
         <q-tooltip>{{ expanded ? '收起详情' : '查看详情' }}</q-tooltip>
       </q-btn>
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </div>
-    <StructuredContent v-if="expanded" :content="detailsContent" />
+    <q-banner v-if="expanded && error" dense class="text-negative">{{ error }}</q-banner>
+    <q-spinner v-if="expanded && loading" class="status-event__loading" size="16px" />
+    <StructuredContent v-if="expanded && !loading" :content="detailsContent" />
   </article>
 </template>
 
@@ -28,6 +30,7 @@
 import { computed, ref } from 'vue';
 
 import StructuredContent from '@/components/StructuredContent.vue';
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type {
   TranscriptStatusContent,
   TranscriptStructuredText,
@@ -43,13 +46,26 @@ import {
 const props = defineProps<{
   event: TranscriptItem & { content: TranscriptStatusContent };
 }>();
-const content = computed(() => props.event.content);
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptStatusContent);
 const expanded = ref(false);
-const hasDetails = computed(() => Object.keys(content.value.details).length > 0);
+const hasDetails = computed(
+  () => Boolean(props.event.deferred) || Object.keys(content.value.details).length > 0,
+);
 const detailsContent = computed<TranscriptStructuredText>(() => ({
   format: 'json',
   text: JSON.stringify(content.value.details),
 }));
+
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) void load();
+}
 </script>
 
 <style scoped>

@@ -15,6 +15,7 @@ type DTO struct {
 	CorrelationID string
 	Phase         processdomain.CodexPhase
 	Content       processdomain.CodexEventContent
+	Deferred      *processdomain.CodexContentReference
 	OccurredAt    string
 	Causality     eventdomain.Causality
 	Group         *GroupDTO

@@ -15,6 +15,7 @@ import (
 
 type UseCase interface {
 	ListSessionEvents(ctx context.Context, input ListSessionEventsInput) (Page, error)
+	GetSessionEvent(ctx context.Context, input GetSessionEventInput) (DTO, error)
 	SessionEvents(ctx context.Context, input SessionEventsInput) (<-chan DTO, error)
 }
 
@@ -29,12 +30,19 @@ type SessionEventsInput struct {
 	SessionID sessiondomain.ID
 }
 
+type GetSessionEventInput struct {
+	SessionID  sessiondomain.ID
+	EventID    string
+	ByteOffset int64
+}
+
 type SessionRepository interface {
 	Find(ctx context.Context, id sessiondomain.ID) (sessiondomain.Session, error)
 }
 
 type CodexHistory interface {
 	HistoryPage(ctx context.Context, input processdomain.CodexHistoryPageInput) (processdomain.CodexHistoryPage, error)
+	HistoryEvent(ctx context.Context, input processdomain.CodexHistoryEventInput) (processdomain.CodexEvent, error)
 }
 
 type LiveEventSource interface {
@@ -108,6 +116,36 @@ func (s *Service) ListSessionEvents(ctx context.Context, input ListSessionEvents
 		NextCursor: page.NextCursor,
 		Usage:      tokenUsageFromSession(current.Usage),
 	}, nil
+}
+
+func (s *Service) GetSessionEvent(ctx context.Context, input GetSessionEventInput) (DTO, error) {
+	if s == nil {
+		return DTO{}, errors.New("timeline usecase: nil service")
+	}
+	if input.SessionID == "" || strings.TrimSpace(input.EventID) == "" || input.ByteOffset < 0 {
+		return DTO{}, errors.New("session transcript event reference is invalid")
+	}
+	current, err := s.sessions.Find(ctx, input.SessionID)
+	if err != nil {
+		return DTO{}, fmt.Errorf("find session for transcript event: %w", err)
+	}
+	threadID := strings.TrimSpace(current.CodexSessionID)
+	prefix := "codex:" + threadID + ":"
+	if threadID == "" || s.codex == nil || !strings.HasPrefix(input.EventID, prefix) {
+		return DTO{}, errors.New("session transcript event reference does not belong to the session")
+	}
+	event, err := s.codex.HistoryEvent(ctx, processdomain.CodexHistoryEventInput{
+		ThreadID: threadID, EventID: strings.TrimPrefix(input.EventID, prefix), ByteOffset: input.ByteOffset,
+	})
+	if err != nil {
+		return DTO{}, fmt.Errorf("load codex transcript event: %w", err)
+	}
+	event.CodexSessionID = threadID
+	item, ok := fromCodexEvent(event)
+	if !ok || string(item.ID) != input.EventID {
+		return DTO{}, errors.New("session transcript event reference does not match the source record")
+	}
+	return item, nil
 }
 
 func (s *Service) listStoredSessionEvents(ctx context.Context, current sessiondomain.Session, input ListSessionEventsInput, limit int) (Page, error) {
@@ -282,6 +320,7 @@ func fromCodexEvent(event processdomain.CodexEvent) (DTO, bool) {
 		CorrelationID: canonicalCorrelationID(event.CodexSessionID, event.CorrelationID),
 		Phase:         normalizedPhase(event.Phase),
 		Content:       event.Content,
+		Deferred:      event.Deferred,
 		OccurredAt:    event.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}, true
 }

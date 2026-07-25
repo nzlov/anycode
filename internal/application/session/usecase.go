@@ -4251,6 +4251,7 @@ func (s *Service) consumeCodexEvents(handle processdomain.CodexHandle, session d
 				continue
 			}
 			extraEvents := s.archiveCodexEventImages(context.Background(), session, handle, &event)
+			event = processdomain.PrepareCodexEventForTranscript(event, true)
 			s.publishCodexRuntimeEvent(event)
 			if persistenceFailure != nil {
 				continue
@@ -4625,9 +4626,6 @@ func sanitizeCodexArtifactOutput(output processdomain.CodexStructuredText, artif
 		if source := strings.TrimSpace(artifact.Source); source != "" {
 			output.Text = strings.ReplaceAll(output.Text, source, "[artifact source omitted]")
 		}
-	}
-	if len(output.Text) > maxPersistedCodexStringBytes {
-		output.Text = "[omitted large value]"
 	}
 	return output
 }
@@ -6642,8 +6640,6 @@ func copyPayload(input map[string]any) map[string]any {
 	return payload
 }
 
-const maxPersistedCodexStringBytes = 1 << 20
-
 func sanitizeCodexPayloadValue(value any, artifactContext bool) any {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -6664,9 +6660,6 @@ func sanitizeCodexPayloadValue(value any, artifactContext bool) any {
 		}
 		return result
 	case string:
-		if len(typed) > maxPersistedCodexStringBytes {
-			return "[omitted large value]"
-		}
 		return typed
 	default:
 		return value

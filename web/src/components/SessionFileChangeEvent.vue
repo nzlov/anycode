@@ -4,14 +4,16 @@
       type="button"
       class="session-file-change__header"
       :aria-expanded="expanded"
-      @click="expanded = !expanded"
+      @click="toggleExpanded"
     >
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="edit_note" size="16px" />
       <span>{{ fileChangeLabel(content.changes) }}</span>
+      <q-spinner v-if="loading" size="14px" />
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
     <div v-if="expanded" class="session-file-change__body">
+      <q-banner v-if="error" dense class="text-negative">{{ error }}</q-banner>
       <DiffViewer v-if="diffFileChanges.length" :file-diffs="diffFileChanges" />
       <div v-if="plainFileChanges.length" class="session-file-change__list">
         <div
@@ -38,6 +40,7 @@
 import { computed, ref } from 'vue';
 
 import DiffViewer from '@/components/DiffViewer.vue';
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import { fileDiffFromUnifiedDiff } from '@/services/sessionFileChangeDiff';
 import type {
   TranscriptFileChangeContent,
@@ -55,7 +58,13 @@ const props = defineProps<{
 }>();
 
 const expanded = ref(false);
-const content = computed(() => props.event.content);
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptFileChangeContent);
 const fileChangePresentations = computed(() =>
   content.value.changes.map((change) => ({
     change,
@@ -76,6 +85,11 @@ function diffStatus(kind: TranscriptFileChange['kind']) {
   if (kind === 'deleted') return 'deleted';
   if (kind === 'renamed') return 'renamed';
   return 'modified';
+}
+
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) void load();
 }
 </script>
 

@@ -1,18 +1,21 @@
 <template>
   <article class="unknown-event">
-    <button type="button" class="unknown-event__header" @click="expanded = !expanded">
+    <button type="button" class="unknown-event__header" @click="toggleExpanded">
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="data_object" size="16px" />
       <span>{{ event.content.rawType || '未知事件' }}</span>
+      <q-spinner v-if="loading" size="14px" />
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
-    <pre v-if="expanded">{{ formattedPayload }}</pre>
+    <q-banner v-if="expanded && error" dense class="text-negative">{{ error }}</q-banner>
+    <pre v-if="expanded && !loading">{{ formattedPayload }}</pre>
   </article>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type { TranscriptItem, TranscriptUnknownContent } from '@/services/sessionTimeline';
 import { timelineTime } from '@/services/sessionTimelinePresentation';
 
@@ -20,7 +23,19 @@ const props = defineProps<{
   event: TranscriptItem & { content: TranscriptUnknownContent };
 }>();
 const expanded = ref(false);
-const formattedPayload = computed(() => JSON.stringify(props.event.content.payload, null, 2));
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptUnknownContent);
+const formattedPayload = computed(() => JSON.stringify(content.value.payload, null, 2));
+
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) void load();
+}
 </script>
 
 <style scoped>

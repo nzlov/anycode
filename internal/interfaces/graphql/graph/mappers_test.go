@@ -6,10 +6,21 @@ import (
 	"time"
 
 	sessionapp "github.com/nzlov/anycode/internal/application/session"
+	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
+
+func TestMapTranscriptEventPreservesDeferredReference(t *testing.T) {
+	mapped := mapTranscriptEvent(timelineapp.DTO{
+		ID: "event-1", Content: processdomain.CodexReasoningContent{},
+		Deferred: &processdomain.CodexContentReference{ByteOffset: 42, ByteLength: 2048},
+	})
+	if mapped.Deferred == nil || mapped.Deferred.ByteOffset != 42 || mapped.Deferred.ByteLength != 2048 {
+		t.Fatalf("deferred reference = %#v", mapped.Deferred)
+	}
+}
 
 func TestMapTranscriptCommandContentPreservesInvocations(t *testing.T) {
 	mapped, ok := mapTranscriptContent(processdomain.CodexCommandContent{

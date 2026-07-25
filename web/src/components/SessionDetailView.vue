@@ -576,6 +576,7 @@ import {
   parseSessionEventResourceReference,
   provideSessionEventResourceOpener,
 } from '@/services/sessionEventResources';
+import { provideSessionTranscriptEventLoader } from '@/services/sessionTranscriptContent';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
@@ -752,6 +753,7 @@ const {
 } = useSessionDetail(sessionId);
 
 provideSessionEventResourceOpener(openSessionEventResource);
+provideSessionTranscriptEventLoader(sessionId);
 
 function openSessionEventResource(reference: string, label = '') {
   const parsed = parseSessionEventResourceReference(reference, sessionId);

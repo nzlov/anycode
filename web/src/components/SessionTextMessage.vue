@@ -1,6 +1,17 @@
 <template>
   <article class="text-message" :class="`text-message--${content.role}`">
     <div class="text-message__main">
+      <button
+        v-if="event.deferred && resolvedEvent.deferred"
+        type="button"
+        class="text-message__fold-toggle"
+        @click="load"
+      >
+        <q-spinner v-if="loading" size="14px" />
+        <q-icon v-else name="chevron_right" size="18px" />
+        <span>展开大型消息（{{ formatBytes(event.deferred.byteLength) }}）</span>
+      </button>
+      <q-banner v-if="error" dense class="text-negative">{{ error }}</q-banner>
       <MarkdownContent
         v-if="presentation.text && content.format === 'markdown'"
         :text="presentation.text"
@@ -36,6 +47,7 @@ import { computed, ref } from 'vue';
 
 import MarkdownContent from '@/components/MarkdownContent.vue';
 import SessionEventImages from '@/components/SessionEventImages.vue';
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type { TranscriptMessageContent, TranscriptItem } from '@/services/sessionTimeline';
 import { sessionTextPresentation, timelineTime } from '@/services/sessionTimelinePresentation';
 
@@ -43,11 +55,23 @@ const props = defineProps<{
   event: TranscriptItem & { content: TranscriptMessageContent };
   knownUserPrompts: readonly string[];
 }>();
-const content = computed(() => props.event.content);
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptMessageContent);
 const presentation = computed(() =>
   sessionTextPresentation(content.value.role, content.value.text, props.knownUserPrompts),
 );
 const expanded = ref(false);
+
+function formatBytes(value: number) {
+  return value >= 1024 * 1024
+    ? `${(value / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.ceil(value / 1024))} KB`;
+}
 </script>
 
 <style scoped>

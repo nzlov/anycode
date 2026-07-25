@@ -160,6 +160,7 @@ type codexLogEvent struct {
 	Phase         process.CodexPhase
 	Content       process.CodexEventContent
 	SourceOffset  int64
+	SourceLength  int64
 	SourceIndex   int
 	CreatedAt     time.Time
 }
@@ -193,6 +194,7 @@ func canonicalCodexEvent(event codexLogEvent) process.CodexEvent {
 	return process.CodexEvent{
 		EventID: eventID, Type: eventType, CorrelationID: event.CorrelationID,
 		Phase: event.Phase, Content: content, CreatedAt: event.CreatedAt,
+		SourceOffset: event.SourceOffset, SourceLength: event.SourceLength,
 	}
 }
 
@@ -207,7 +209,7 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 			EventID: sourceEventID("invalid_json", sourceID, offset),
 			Type:    "invalid_json",
 			Payload: map[string]any{"error": err.Error(), "byteCount": len(raw)},
-		}}, sourceID, offset)
+		}}, sourceID, offset, int64(len(raw)))
 	}
 	payload := payloadOrEmpty(record.Payload)
 	_, hadEncryptedContent := payload["encrypted_content"]
@@ -267,15 +269,16 @@ func parseSessionLogLine(raw []byte, sessionCWD string, sourceID string, offset 
 			CreatedAt: createdAt,
 		}}
 	}
-	return finalizeCodexEvents(events, sourceID, offset)
+	return finalizeCodexEvents(events, sourceID, offset, int64(len(raw)))
 }
 
-func finalizeCodexEvents(events []codexLogEvent, sourceID string, offset int64) []codexLogEvent {
+func finalizeCodexEvents(events []codexLogEvent, sourceID string, offset int64, sourceLength int64) []codexLogEvent {
 	for index := range events {
 		if events[index].EventID == "" {
 			events[index].EventID = sourceEventID(events[index].Type, sourceID, offset)
 		}
 		events[index].SourceOffset = offset
+		events[index].SourceLength = sourceLength
 		events[index].SourceIndex = index
 		applyCodexSemantic(&events[index])
 	}

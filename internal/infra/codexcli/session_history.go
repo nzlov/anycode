@@ -87,7 +87,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 			if rawEvent.SourceOffset < startOffset || rawEvent.Type == "thread.started" {
 				continue
 			}
-			event := canonicalCodexEvent(rawEvent)
+			event := process.PrepareCodexEventForTranscript(canonicalCodexEvent(rawEvent), true)
 			event.CodexSessionID = threadID
 			events = append(events, event)
 		}
@@ -99,7 +99,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 			return process.CodexHistoryPage{}, forwardErr
 		}
 		for _, rawEvent := range completed {
-			event := canonicalCodexEvent(rawEvent)
+			event := process.PrepareCodexEventForTranscript(canonicalCodexEvent(rawEvent), true)
 			event.CodexSessionID = threadID
 			events = append(events, event)
 		}
@@ -108,7 +108,7 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 		if rawEvent.SourceOffset < startOffset || rawEvent.SourceOffset >= endOffset || rawEvent.Type == "thread.started" {
 			continue
 		}
-		event := canonicalCodexEvent(rawEvent)
+		event := process.PrepareCodexEventForTranscript(canonicalCodexEvent(rawEvent), true)
 		event.CodexSessionID = threadID
 		events = append(events, event)
 	}
@@ -117,6 +117,80 @@ func (c *Client) HistoryPage(ctx context.Context, input process.CodexHistoryPage
 		nextCursor = strconv.FormatInt(startOffset, 10)
 	}
 	return process.CodexHistoryPage{Events: events, NextCursor: nextCursor}, nil
+}
+
+func (c *Client) HistoryEvent(ctx context.Context, input process.CodexHistoryEventInput) (process.CodexEvent, error) {
+	threadID := strings.TrimSpace(input.ThreadID)
+	eventID := strings.TrimSpace(input.EventID)
+	if threadID == "" || eventID == "" || input.ByteOffset < 0 {
+		return process.CodexEvent{}, errors.New("codex history event reference is invalid")
+	}
+	path, err := sessionLogByID(c.CodexHome(), threadID)
+	if err != nil {
+		return process.CodexEvent{}, err
+	}
+	if path == "" {
+		return process.CodexEvent{}, process.ErrThreadUnavailable
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return process.CodexEvent{}, fmt.Errorf("open codex session log: %w", err)
+	}
+	defer file.Close()
+
+	line, err := readSessionLineAt(file, input.ByteOffset)
+	if err != nil {
+		return process.CodexEvent{}, err
+	}
+	contextLines, _, err := readSessionLinesBackward(ctx, file, input.ByteOffset, historyProjectionWindow)
+	if err != nil {
+		return process.CodexEvent{}, err
+	}
+	sessionCWD := sessionLogCWD(path)
+	sourceID := filepath.Base(path)
+	projector := newCodexTranscriptProjector()
+	for _, contextLine := range contextLines {
+		projector.prime(parseSessionLogLine(contextLine.raw, sessionCWD, sourceID, contextLine.offset))
+	}
+	projected := projector.project(parseSessionLogLine(line.raw, sessionCWD, sourceID, line.offset))
+	projected = append(projected, projector.flushPending()...)
+	for _, rawEvent := range projected {
+		if rawEvent.EventID != eventID {
+			continue
+		}
+		event := canonicalCodexEvent(rawEvent)
+		event.CodexSessionID = threadID
+		return process.PrepareCodexEventForTranscript(event, false), nil
+	}
+	return process.CodexEvent{}, errors.New("codex history event reference does not match the source record")
+}
+
+func readSessionLineAt(file *os.File, offset int64) (sessionLogLine, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return sessionLogLine{}, fmt.Errorf("read codex session log metadata: %w", err)
+	}
+	if offset < 0 || offset >= info.Size() {
+		return sessionLogLine{}, errors.New("codex history event offset is outside the session log")
+	}
+	if offset > 0 {
+		var previous [1]byte
+		if _, err := file.ReadAt(previous[:], offset-1); err != nil || previous[0] != '\n' {
+			return sessionLogLine{}, errors.New("codex history event offset is not a record boundary")
+		}
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return sessionLogLine{}, fmt.Errorf("seek codex history event: %w", err)
+	}
+	raw, readErr := bufio.NewReader(file).ReadBytes('\n')
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return sessionLogLine{}, fmt.Errorf("read codex history event: %w", readErr)
+	}
+	raw = bytes.TrimRight(raw, "\r\n")
+	if len(raw) == 0 || !json.Valid(raw) {
+		return sessionLogLine{}, errors.New("codex history event record is invalid")
+	}
+	return sessionLogLine{offset: offset, raw: raw}, nil
 }
 
 func projectCommandResultsForward(

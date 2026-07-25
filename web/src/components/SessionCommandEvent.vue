@@ -5,7 +5,7 @@
       class="command-event__header"
       :aria-expanded="canExpand ? expanded : undefined"
       :disabled="!canExpand"
-      @click="canExpand && (expanded = !expanded)"
+      @click="canExpand && toggleExpanded()"
     >
       <q-icon v-if="canExpand" :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <span v-else class="command-event__toggle-placeholder" aria-hidden="true" />
@@ -18,7 +18,10 @@
         :label="`exit ${singleExitCode}`"
       />
       <small v-if="duration">{{ duration }}</small>
-      <q-spinner v-if="event.phase === 'started' || event.phase === 'progress'" size="14px" />
+      <q-spinner
+        v-if="loading || event.phase === 'started' || event.phase === 'progress'"
+        size="14px"
+      />
       <q-icon
         v-else
         :name="timelinePhaseIcon(event.phase)"
@@ -30,6 +33,7 @@
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
     <div v-if="expanded && canExpand" class="command-event__body">
+      <q-banner v-if="error" dense class="text-negative">{{ error }}</q-banner>
       <section
         v-for="(command, index) in content.commands"
         :key="index"
@@ -67,6 +71,7 @@
 import { computed, ref } from 'vue';
 
 import StaticAnsiOutput from '@/components/StaticAnsiOutput.vue';
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type { TranscriptCommandContent, TranscriptItem } from '@/services/sessionTimeline';
 import {
   formatDuration,
@@ -81,13 +86,24 @@ const props = defineProps<{
 }>();
 
 const expanded = ref(false);
-const content = computed(() => props.event.content);
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptCommandContent);
 const title = computed(() => (content.value.kind === 'exec' ? 'Exec' : 'Shell'));
 const singleExitCode = computed(() =>
   content.value.commands.length === 1 ? (content.value.commands[0]?.exitCode ?? null) : null,
 );
 const canExpand = computed(() => content.value.commands.length > 0);
 const duration = computed(() => formatDuration(content.value.durationMs));
+
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) void load();
+}
 </script>
 
 <style scoped>

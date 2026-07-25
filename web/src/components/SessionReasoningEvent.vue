@@ -1,26 +1,41 @@
 <template>
   <article class="reasoning-event">
-    <button type="button" class="reasoning-event__header" @click="expanded = !expanded">
+    <button type="button" class="reasoning-event__header" @click="toggleExpanded">
       <q-icon :name="expanded ? 'expand_more' : 'chevron_right'" size="18px" />
       <q-icon name="psychology" size="16px" />
       <span>思考过程</span>
+      <q-spinner v-if="loading" size="14px" />
       <time>{{ timelineTime(event.occurredAt) }}</time>
     </button>
-    <MarkdownContent v-if="expanded" class="reasoning-event__body" :text="event.content.text" />
+    <q-banner v-if="expanded && error" dense class="text-negative">{{ error }}</q-banner>
+    <MarkdownContent v-if="expanded" class="reasoning-event__body" :text="content.text" />
   </article>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 import MarkdownContent from '@/components/MarkdownContent.vue';
+import { useDeferredTranscriptEvent } from '@/composables/useDeferredTranscriptEvent';
 import type { TranscriptReasoningContent, TranscriptItem } from '@/services/sessionTimeline';
 import { timelineTime } from '@/services/sessionTimelinePresentation';
 
-defineProps<{
+const props = defineProps<{
   event: TranscriptItem & { content: TranscriptReasoningContent };
 }>();
 const expanded = ref(false);
+const {
+  event: resolvedEvent,
+  loading,
+  error,
+  load,
+} = useDeferredTranscriptEvent(() => props.event);
+const content = computed(() => resolvedEvent.value.content as TranscriptReasoningContent);
+
+function toggleExpanded() {
+  expanded.value = !expanded.value;
+  if (expanded.value) void load();
+}
 </script>
 
 <style scoped>

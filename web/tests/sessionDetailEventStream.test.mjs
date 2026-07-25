@@ -475,7 +475,7 @@ test('terminal phases and status details remain visible', () => {
   assert.match(presentationSource, /failed: \{ icon: 'error_outline', color: 'negative'/);
   assert.match(presentationSource, /cancelled: \{ icon: 'cancel', color: 'grey-7'/);
   assert.match(statusSource, /Object\.keys\(content\.value\.details\)/);
-  assert.match(statusSource, /<StructuredContent v-if="expanded" :content="detailsContent"/);
+  assert.match(statusSource, /<StructuredContent v-if="expanded && !loading" :content="detailsContent"/);
   assert.match(statusSource, /status-event--error/);
 });
 

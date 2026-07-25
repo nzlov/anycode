@@ -19,6 +19,7 @@ type Query {
   sessionCard(id: ID!): SessionCard!
   session(id: ID!): SessionDetail!
   sessionTranscript(input: ListTranscriptEventsInput!): TranscriptPage!
+  sessionTranscriptEvent(input: SessionTranscriptEventInput!): TranscriptEvent!
   sessionDiff(input: SessionDiffInput!): SessionDiff!
   branchDiff(input: BranchDiffInput!): SessionDiff!
   sessionCommitHistory(input: SessionCommitHistoryInput!): SessionCommitHistory!
@@ -461,7 +462,19 @@ type TranscriptEvent {
   phase: TranscriptEventPhase!
   occurredAt: Time!
   content: TranscriptContent!
+  deferred: TranscriptContentReference
   group: TranscriptEventGroup
+}
+
+input SessionTranscriptEventInput {
+  sessionId: ID!
+  eventId: ID!
+  byteOffset: Int64!
+}
+
+type TranscriptContentReference {
+  byteOffset: Int64!
+  byteLength: Int64!
 }
 
 type TranscriptEventGroup {

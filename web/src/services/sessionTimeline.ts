@@ -17,6 +17,11 @@ export interface TranscriptStructuredText {
   text: string;
 }
 
+export interface TranscriptContentReference {
+  byteOffset: number;
+  byteLength: number;
+}
+
 export interface TranscriptMessageContent {
   __typename: 'TranscriptMessageContent';
   role: string;
@@ -97,6 +102,7 @@ export interface TranscriptEvent {
   phase: TranscriptPhase;
   occurredAt: string;
   content: TranscriptContent;
+  deferred?: TranscriptContentReference | null;
   group?: TranscriptEventGroup | null;
 }
 
@@ -109,6 +115,7 @@ export interface TranscriptEventGroup {
 
 export interface TranscriptItem extends TranscriptEvent {
   sourceEventIds: string[];
+  deferredEventId?: string;
 }
 
 export interface TranscriptTokenUsage {
@@ -172,6 +179,7 @@ const transcriptEventBaseFields = `
   phase
   occurredAt
   content { ${transcriptContentFields} }
+  deferred { byteOffset byteLength }
 `;
 
 export const transcriptEventFields = `
@@ -237,6 +245,25 @@ export async function getSessionTranscriptPage(
     nodeUsage: data.sessionTranscript.nodeUsage,
     pageInfo: data.sessionTranscript.pageInfo,
   };
+}
+
+export async function getSessionTranscriptEvent(
+  sessionId: string,
+  eventId: string,
+  byteOffset: number,
+) {
+  const data = await graphqlFetch<
+    { sessionTranscriptEvent: GraphQLTranscriptEvent },
+    { input: { sessionId: string; eventId: string; byteOffset: number } }
+  >({
+    query: `
+			query SessionTranscriptEvent($input: SessionTranscriptEventInput!) {
+				sessionTranscriptEvent(input: $input) { ${transcriptEventBaseFields} }
+			}
+		`,
+    variables: { input: { sessionId, eventId, byteOffset } },
+  });
+  return normalizeTranscriptEvent(data.sessionTranscriptEvent);
 }
 
 export function normalizeTranscriptEvent(event: GraphQLTranscriptEvent): TranscriptEvent {

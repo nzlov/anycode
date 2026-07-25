@@ -142,6 +142,31 @@ func TestListSessionEventsReturnsAppServerHistoryFailure(t *testing.T) {
 	}
 }
 
+func TestGetSessionEventLoadsCurrentThreadOffsetAndVerifiesEvent(t *testing.T) {
+	sessions := &fakeSessionRepository{session: sessiondomain.Session{ID: "session-1", CodexSessionID: "thread-1"}}
+	codex := &fakeCodexHistory{event: processdomain.CodexEvent{
+		EventID: "event-1", CodexSessionID: "thread-1", Type: processdomain.CodexEventTool,
+		Content: processdomain.CodexToolContent{QualifiedName: "exec", Output: processdomain.CodexStructuredText{Text: "loaded"}},
+	}}
+	service := New(&fakeLiveSource{}, sessions, codex)
+
+	event, err := service.GetSessionEvent(context.Background(), GetSessionEventInput{
+		SessionID: "session-1", EventID: "codex:thread-1:event-1", ByteOffset: 42,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.ID != "codex:thread-1:event-1" || codex.eventInput.ThreadID != "thread-1" || codex.eventInput.ByteOffset != 42 {
+		t.Fatalf("event = %#v, input = %#v", event, codex.eventInput)
+	}
+
+	if _, err := service.GetSessionEvent(context.Background(), GetSessionEventInput{
+		SessionID: "session-1", EventID: "codex:thread-1:other", ByteOffset: 42,
+	}); err == nil {
+		t.Fatal("expected mismatched event id to fail")
+	}
+}
+
 func TestSessionEventsForwardsLiveCodexEvents(t *testing.T) {
 	live := &fakeLiveSource{events: make(chan processdomain.CodexEvent, 1)}
 	service := New(live, &fakeSessionRepository{}, nil)
@@ -175,14 +200,21 @@ func (r *fakeSessionRepository) Find(context.Context, sessiondomain.ID) (session
 }
 
 type fakeCodexHistory struct {
-	input processdomain.CodexHistoryPageInput
-	page  processdomain.CodexHistoryPage
-	err   error
+	input      processdomain.CodexHistoryPageInput
+	page       processdomain.CodexHistoryPage
+	eventInput processdomain.CodexHistoryEventInput
+	event      processdomain.CodexEvent
+	err        error
 }
 
 func (h *fakeCodexHistory) HistoryPage(_ context.Context, input processdomain.CodexHistoryPageInput) (processdomain.CodexHistoryPage, error) {
 	h.input = input
 	return h.page, h.err
+}
+
+func (h *fakeCodexHistory) HistoryEvent(_ context.Context, input processdomain.CodexHistoryEventInput) (processdomain.CodexEvent, error) {
+	h.eventInput = input
+	return h.event, h.err
 }
 
 type fakeLiveSource struct {

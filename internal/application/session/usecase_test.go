@@ -52,7 +52,7 @@ func TestSanitizeCodexPayloadValueRemovesRawArtifactSources(t *testing.T) {
 				map[string]any{"type": "resource", "resource": map[string]any{"blob": "secret-blob", "uri": "file:///private/report.pdf", "mimeType": "application/pdf"}},
 			},
 		},
-		"large": strings.Repeat("x", maxPersistedCodexStringBytes+1),
+		"large": strings.Repeat("x", processdomain.MaxInlineTranscriptBytes+1),
 	}, false).(map[string]any)
 	item := payload["item"].(map[string]any)
 	content := item["content"].([]any)
@@ -64,8 +64,8 @@ func TestSanitizeCodexPayloadValueRemovesRawArtifactSources(t *testing.T) {
 	if resource["blob"] != nil || resource["uri"] != nil || resource["mimeType"] != "application/pdf" {
 		t.Fatalf("sanitized resource payload = %#v", resource)
 	}
-	if payload["large"] != "[omitted large value]" {
-		t.Fatalf("sanitized large payload = %#v", payload["large"])
+	if payload["large"] == "[omitted large value]" {
+		t.Fatalf("large payload was discarded before deferred transcript handling")
 	}
 }
 

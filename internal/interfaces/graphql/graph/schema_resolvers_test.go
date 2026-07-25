@@ -636,6 +636,22 @@ func TestQuerySessionTranscriptForwardsBeforeCursorAndLimit(t *testing.T) {
 	}
 }
 
+func TestQuerySessionTranscriptEventForwardsDeferredReference(t *testing.T) {
+	timeline := &fakeTimelineUseCase{sessionEvent: timelineapp.DTO{
+		ID: "codex:thread-1:event-1", Content: processdomain.CodexToolContent{QualifiedName: "exec"},
+	}}
+	got, err := NewResolver(UseCases{Timeline: timeline}).Query().SessionTranscriptEvent(context.Background(), model.SessionTranscriptEventInput{
+		SessionID: "session-1", EventID: "codex:thread-1:event-1", ByteOffset: 42,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := timelineapp.GetSessionEventInput{SessionID: "session-1", EventID: "codex:thread-1:event-1", ByteOffset: 42}
+	if !reflect.DeepEqual(timeline.gotGetSessionEventInput, want) || got.ID != "codex:thread-1:event-1" {
+		t.Fatalf("input = %#v, event = %#v", timeline.gotGetSessionEventInput, got)
+	}
+}
+
 func TestQueryPendingQuestionRequestsForwardsUseCase(t *testing.T) {
 	questions := &fakeQuestionUseCase{
 		pending: []questionapp.RequestDTO{
@@ -1200,7 +1216,9 @@ type fakeDiffUseCase struct {
 type fakeTimelineUseCase struct {
 	timelineapp.UseCase
 	sessionEvents             <-chan timelineapp.DTO
+	sessionEvent              timelineapp.DTO
 	gotListSessionEventsInput timelineapp.ListSessionEventsInput
+	gotGetSessionEventInput   timelineapp.GetSessionEventInput
 	gotSessionEventsInput     timelineapp.SessionEventsInput
 }
 
@@ -1340,6 +1358,11 @@ func (f *fakeProjectUseCase) BrowseDirectory(_ context.Context, input projectapp
 func (f *fakeTimelineUseCase) ListSessionEvents(_ context.Context, input timelineapp.ListSessionEventsInput) (timelineapp.Page, error) {
 	f.gotListSessionEventsInput = input
 	return timelineapp.Page{}, nil
+}
+
+func (f *fakeTimelineUseCase) GetSessionEvent(_ context.Context, input timelineapp.GetSessionEventInput) (timelineapp.DTO, error) {
+	f.gotGetSessionEventInput = input
+	return f.sessionEvent, nil
 }
 
 func (f *fakeTimelineUseCase) SessionEvents(_ context.Context, input timelineapp.SessionEventsInput) (<-chan timelineapp.DTO, error) {
