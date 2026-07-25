@@ -3,7 +3,19 @@
     <q-header v-if="applicationReady" bordered class="app-header">
       <q-toolbar class="app-toolbar">
         <q-btn
-          v-if="$route.name !== 'overview'"
+          v-if="isContentRoute"
+          flat
+          round
+          dense
+          class="app-icon-btn"
+          icon="arrow_back"
+          aria-label="返回上一页"
+          @click="goBackFromContent"
+        >
+          <q-tooltip>返回</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-else-if="$route.name !== 'overview'"
           flat
           round
           dense
@@ -198,6 +210,9 @@ const applicationReady = computed(
     !checkingProjects.value &&
     (!initialProjectRequired.value || route.name === 'project-create'),
 );
+const isContentRoute = computed(() =>
+  ['diff', 'session-artifacts', 'session-artifact'].includes(String(route.name ?? '')),
+);
 const isOverviewHorizontalView = computed(
   () =>
     route.name === 'overview' &&
@@ -255,6 +270,23 @@ function toggleOverviewView() {
     query.view = 'horizontal';
   }
   void router.replace({ name: 'overview', query });
+}
+
+function goBackFromContent() {
+  if (typeof window.history.state?.back === 'string' && window.history.state.back) {
+    router.back();
+    return;
+  }
+  if (route.name === 'session-artifact') {
+    void router.replace({ name: 'session-artifacts', params: { id: route.params.id } });
+    return;
+  }
+  const sessionId = route.name === 'session-artifacts' ? route.params.id : route.query.sessionId;
+  if (sessionId) {
+    void router.replace({ name: 'session-detail', params: { id: String(sessionId) } });
+    return;
+  }
+  void router.replace({ name: 'overview' });
 }
 
 function openSettings() {

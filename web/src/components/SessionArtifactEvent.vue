@@ -124,7 +124,7 @@ async function download() {
 async function openPreview() {
   const fileId = payloadString('id');
   const sessionId = String(route.params.id ?? '');
-  if ($q.screen.lt.sm && fileId && sessionId) {
+  if ($q.screen.lt.md && fileId && sessionId) {
     await router.push({ name: 'session-artifact', params: { id: sessionId, fileId } });
     return;
   }

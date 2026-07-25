@@ -359,10 +359,7 @@ test('all current diff surfaces reuse one workspace without triggering card navi
     overviewSource,
     /<q-dialog v-model="diffDialog" @hide="handleDiffDialogClosed"/,
   );
-  assert.match(
-    overviewSource,
-    /openDiffDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*path: '\/diff'/,
-  );
+  assert.match(overviewSource, /openDiffDialog[\s\S]*!isDesktopOverview\.value[\s\S]*path: '\/diff'/);
   assert.match(overviewSource, /<DiffWorkspace[\s\S]*:target="diffDialogTarget"/);
   assert.match(overviewSource, /v-model="diffDialogWorkspaceState"/);
   assert.match(overviewSource, /aria-label="打开完整 Diff 页面"/);
@@ -455,7 +452,7 @@ test('overview cards open the full artifact panel from a subscribed count', () =
   );
   assert.match(
     overviewSource,
-    /openArtifactDialog[\s\S]*\$q\.screen\.lt\.sm[\s\S]*name: 'session-artifacts'/,
+    /openArtifactDialog[\s\S]*!isDesktopOverview\.value[\s\S]*name: 'session-artifacts'/,
   );
   assert.match(stylesSource, /\.overview-artifact-dialog__body\s*{[^}]*overflow:\s*auto/s);
 });

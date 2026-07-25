@@ -1206,7 +1206,7 @@ function isCurrentApprovalContext(requestGeneration: number, sessionId: string) 
 }
 
 function openDiffDialog(card: SessionCard) {
-  if ($q.screen.lt.sm) {
+  if (!isDesktopOverview.value) {
     void router.push({ path: '/diff', query: { sessionId: card.id, mode: 'all' } });
     return;
   }
@@ -1224,7 +1224,7 @@ function handleDiffDialogClosed() {
 }
 
 function openArtifactDialog(card: SessionCard) {
-  if ($q.screen.lt.sm) {
+  if (!isDesktopOverview.value) {
     void router.push({ name: 'session-artifacts', params: { id: card.id } });
     return;
   }

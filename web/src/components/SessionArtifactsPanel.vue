@@ -297,7 +297,7 @@ async function refresh() {
 }
 
 function openPreview(file: SessionFile) {
-  if ($q.screen.lt.sm) {
+  if ($q.screen.lt.md) {
     void router.push({
       name: 'session-artifact',
       params: { id: props.sessionId, fileId: file.id },

@@ -463,22 +463,22 @@
     >
       <q-tab name="session" icon="forum" label="会话" />
       <q-tab name="info" icon="info" label="信息" />
-      <q-tab name="changes" icon="difference" label="变更">
+      <q-route-tab :to="allDiffRoute" name="changes" icon="difference" label="变更">
         <q-badge
           v-if="session && session.filesChanged > 0"
           floating
           color="primary"
           :label="String(session.filesChanged)"
         />
-      </q-tab>
-      <q-tab name="artifacts" icon="inventory_2" label="临时文件">
+      </q-route-tab>
+      <q-route-tab :to="allArtifactsRoute" name="artifacts" icon="inventory_2" label="临时文件">
         <q-badge
           v-if="session && session.artifactCount > 0"
           floating
           color="primary"
           :label="String(session.artifactCount)"
         />
-      </q-tab>
+      </q-route-tab>
     </q-tabs>
 
     <q-dialog v-model="promptEditDialogOpen" :persistent="promptEditSaving">
@@ -807,7 +807,7 @@ async function resolveSessionEventResource(
 }
 
 function openEventDiff(file: DiffFile) {
-  if ($q.screen.lt.sm) {
+  if (isMobileLayout.value) {
     void router.push({
       path: '/diff',
       query: { sessionId, mode: 'single', filePath: file.path },
@@ -822,7 +822,7 @@ function openEventDiff(file: DiffFile) {
 }
 
 function focusEventArtifact(file: SessionFile) {
-  if ($q.screen.lt.sm) {
+  if (isMobileLayout.value) {
     void router.push({
       name: 'session-artifact',
       params: { id: sessionId, fileId: file.id },
@@ -1041,6 +1041,10 @@ const workflowProgressLabel = computed(() => {
 const allDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId, mode: 'all' },
+}));
+const allArtifactsRoute = computed(() => ({
+  name: 'session-artifacts',
+  params: { id: sessionId },
 }));
 
 function modeLabel(mode: SessionMode) {

@@ -17,6 +17,7 @@ const promptPage = readSource('../src/pages/PromptAppendEditPage.vue');
 
 test('every persisted mobile content surface has a direct route', () => {
   for (const routeName of [
+    'diff',
     'new-session',
     'settings',
     'project-create',
@@ -34,10 +35,25 @@ test('mobile entry handlers navigate while desktop dialog state remains availabl
   assert.match(layout, /function openSettings[\s\S]*\$q\.screen\.lt\.sm[\s\S]*settingsDialogOpen\.value = true/);
   assert.match(settings, /function openProjectDirectory[\s\S]*name: 'project-create'/);
   assert.match(settings, /function openProjectSettings[\s\S]*name: 'project-settings'/);
-  assert.match(overview, /function openDiffDialog[\s\S]*name|path: '\/diff'/);
-  assert.match(overview, /function openArtifactDialog[\s\S]*name: 'session-artifacts'/);
+  assert.match(
+    overview,
+    /function openDiffDialog[\s\S]*!isDesktopOverview\.value[\s\S]*path: '\/diff'/,
+  );
+  assert.match(
+    overview,
+    /function openArtifactDialog[\s\S]*!isDesktopOverview\.value[\s\S]*name: 'session-artifacts'/,
+  );
   assert.match(detail, /function openPromptAppendEditor[\s\S]*name: 'prompt-append-edit'/);
-  assert.match(artifacts, /function openPreview[\s\S]*name: 'session-artifact'/);
+  assert.match(
+    artifacts,
+    /function openPreview[\s\S]*\$q\.screen\.lt\.md[\s\S]*name: 'session-artifact'/,
+  );
+  assert.match(detail, /<q-route-tab :to="allDiffRoute"[\s\S]*name="changes"/);
+  assert.match(detail, /<q-route-tab[\s\S]*:to="allArtifactsRoute"[\s\S]*name="artifacts"/);
+  assert.match(
+    layout,
+    /v-if="isContentRoute"[\s\S]*aria-label="返回上一页"[\s\S]*@click="goBackFromContent"/,
+  );
 });
 
 test('prompt edit page and desktop dialog share one content component', () => {
