@@ -179,6 +179,7 @@ func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
 			Page: 2, PageSize: 20, Total: 22,
 		},
 		createResult: settingapp.QuickCommandDTO{ID: "command-3", Content: "总结变更", CreatedAt: now.Add(2 * time.Second)},
+		updateResult: settingapp.QuickCommandDTO{ID: "command-1", Content: "更新指令", CreatedAt: now},
 	}
 	resolver := NewResolver(UseCases{Settings: settings})
 
@@ -197,6 +198,13 @@ func TestQuickCommandResolversForwardSettingsUseCase(t *testing.T) {
 	}
 	if settings.createInput.Content != "总结变更" || created.ID != "command-3" {
 		t.Fatalf("create input=%#v result=%#v", settings.createInput, created)
+	}
+	updated, err := resolver.Mutation().UpdateQuickCommand(context.Background(), model.UpdateQuickCommandInput{ID: "command-1", Content: "更新指令"})
+	if err != nil {
+		t.Fatalf("UpdateQuickCommand() error = %v", err)
+	}
+	if settings.updateInput.ID != "command-1" || settings.updateInput.Content != "更新指令" || updated.Content != "更新指令" {
+		t.Fatalf("update input=%#v result=%#v", settings.updateInput, updated)
 	}
 	deleted, err := resolver.Mutation().DeleteQuickCommand(context.Background(), "command-1")
 	if err != nil {
@@ -1265,6 +1273,8 @@ type fakeSettingUseCase struct {
 	listResult       port.Page[settingapp.QuickCommandDTO]
 	createInput      settingapp.CreateQuickCommandInput
 	createResult     settingapp.QuickCommandDTO
+	updateInput      settingapp.UpdateQuickCommandInput
+	updateResult     settingapp.QuickCommandDTO
 	deleteInput      settingapp.DeleteQuickCommandInput
 }
 
@@ -1322,6 +1332,11 @@ func (f *fakeSettingUseCase) ListQuickCommands(_ context.Context, input settinga
 func (f *fakeSettingUseCase) CreateQuickCommand(_ context.Context, input settingapp.CreateQuickCommandInput) (settingapp.QuickCommandDTO, error) {
 	f.createInput = input
 	return f.createResult, nil
+}
+
+func (f *fakeSettingUseCase) UpdateQuickCommand(_ context.Context, input settingapp.UpdateQuickCommandInput) (settingapp.QuickCommandDTO, error) {
+	f.updateInput = input
+	return f.updateResult, nil
 }
 
 func (f *fakeSettingUseCase) DeleteQuickCommand(_ context.Context, input settingapp.DeleteQuickCommandInput) error {

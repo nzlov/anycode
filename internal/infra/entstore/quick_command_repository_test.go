@@ -46,6 +46,13 @@ func TestQuickCommandRepositoryPersistsDuplicatesAndDeletesByID(t *testing.T) {
 	if len(page.Items) != 1 || page.Items[0].ID != "command-1" || page.Total != 2 {
 		t.Fatalf("second page = %#v", page)
 	}
+	updated, err := repo.Update(ctx, "command-1", "总结变更")
+	if err != nil {
+		t.Fatalf("update command: %v", err)
+	}
+	if updated.ID != "command-1" || updated.Content != "总结变更" || !updated.CreatedAt.Equal(createdAt) {
+		t.Fatalf("updated command = %#v", updated)
+	}
 	page, err = repo.List(ctx, setting.QuickCommandQuery{Page: 99, PageSize: 1})
 	if err != nil {
 		t.Fatalf("list out-of-range page: %v", err)
@@ -65,6 +72,9 @@ func TestQuickCommandRepositoryPersistsDuplicatesAndDeletesByID(t *testing.T) {
 	}
 	if err := repo.Delete(ctx, "missing"); !errors.Is(err, setting.ErrQuickCommandNotFound) {
 		t.Fatalf("delete missing error = %v", err)
+	}
+	if _, err := repo.Update(ctx, "missing", "检查测试"); !errors.Is(err, setting.ErrQuickCommandNotFound) {
+		t.Fatalf("update missing error = %v", err)
 	}
 }
 

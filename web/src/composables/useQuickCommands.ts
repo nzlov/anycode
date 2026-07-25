@@ -10,6 +10,7 @@ import {
   deleteQuickCommand as removeQuickCommand,
   listQuickCommands,
   type QuickCommand,
+  updateQuickCommand,
 } from '@/services/quickCommands';
 
 export function useQuickCommands() {
@@ -115,6 +116,25 @@ export function useQuickCommands() {
     await finishMutation();
   }
 
+  async function editQuickCommand(id: string, content: string) {
+    quickCommandsError.value = '';
+    beginMutation();
+    let command: QuickCommand;
+    try {
+      command = await updateQuickCommand(id, content);
+    } catch (error) {
+      const message = errorMessage(error, '修改快捷指令失败');
+      await finishMutation(message);
+      throw error;
+    }
+    quickCommands.value = quickCommands.value.map((item) =>
+      item.id === command.id ? command : item,
+    );
+    markRefreshNeeded(quickCommandsPageInfo.value.page);
+    await finishMutation();
+    return command;
+  }
+
   function beginMutation() {
     mutationVersion += 1;
     quickCommandsMutating.value += 1;
@@ -142,6 +162,7 @@ export function useQuickCommands() {
     quickCommandsPageInfo,
     loadQuickCommands,
     addQuickCommand,
+    editQuickCommand,
     deleteQuickCommand,
   };
 }

@@ -30,6 +30,21 @@ func (r *SettingRepository) Create(ctx context.Context, command setting.QuickCom
 	return nil
 }
 
+func (r *SettingRepository) Update(ctx context.Context, id setting.QuickCommandID, content string) (setting.QuickCommand, error) {
+	row, err := r.client.QuickCommand.UpdateOneID(string(id)).SetContent(content).Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return setting.QuickCommand{}, setting.ErrQuickCommandNotFound
+		}
+		return setting.QuickCommand{}, fmt.Errorf("update quick command: %w", err)
+	}
+	return setting.QuickCommand{
+		ID:        setting.QuickCommandID(row.ID),
+		Content:   row.Content,
+		CreatedAt: row.CreatedAt,
+	}, nil
+}
+
 func (r *SettingRepository) List(ctx context.Context, query setting.QuickCommandQuery) (setting.QuickCommandPage, error) {
 	query = normalizeQuickCommandQuery(query)
 	total, err := r.client.QuickCommand.Query().Count(ctx)

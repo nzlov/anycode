@@ -38,6 +38,20 @@ func TestCreateQuickCommandAllowsDuplicateContent(t *testing.T) {
 	}
 }
 
+func TestUpdateQuickCommandTrimsContentAndPreservesIdentity(t *testing.T) {
+	createdAt := time.Unix(10, 0).UTC()
+	repo := &fakeRepository{commands: []domain.QuickCommand{{ID: "command-1", Content: "检查测试", CreatedAt: createdAt}}}
+	service := New(repo)
+
+	updated, err := service.UpdateQuickCommand(context.Background(), UpdateQuickCommandInput{ID: "command-1", Content: "  总结变更  "})
+	if err != nil {
+		t.Fatalf("UpdateQuickCommand() error = %v", err)
+	}
+	if updated.ID != "command-1" || updated.Content != "总结变更" || !updated.CreatedAt.Equal(createdAt) {
+		t.Fatalf("UpdateQuickCommand() = %#v", updated)
+	}
+}
+
 func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
 	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
 	service := New(repo)
@@ -188,6 +202,10 @@ func TestQuickCommandValidationErrorsAreStructured(t *testing.T) {
 
 	_, err := service.CreateQuickCommand(context.Background(), CreateQuickCommandInput{Content: "   "})
 	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.UpdateQuickCommand(context.Background(), UpdateQuickCommandInput{Content: "检查测试"})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.UpdateQuickCommand(context.Background(), UpdateQuickCommandInput{ID: "command-1", Content: "   "})
+	assertAppError(t, err, apperror.CodeValidationFailed)
 	err = service.DeleteQuickCommand(context.Background(), DeleteQuickCommandInput{})
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
@@ -197,6 +215,14 @@ func TestDeleteQuickCommandMapsNotFound(t *testing.T) {
 	service := New(repo)
 
 	err := service.DeleteQuickCommand(context.Background(), DeleteQuickCommandInput{ID: "missing"})
+	assertAppError(t, err, apperror.CodeNotFound)
+}
+
+func TestUpdateQuickCommandMapsNotFound(t *testing.T) {
+	repo := &fakeRepository{updateErr: domain.ErrQuickCommandNotFound}
+	service := New(repo)
+
+	_, err := service.UpdateQuickCommand(context.Background(), UpdateQuickCommandInput{ID: "missing", Content: "检查测试"})
 	assertAppError(t, err, apperror.CodeNotFound)
 }
 
@@ -212,6 +238,7 @@ type fakeRepository struct {
 	commands      []domain.QuickCommand
 	page          domain.QuickCommandPage
 	listQuery     domain.QuickCommandQuery
+	updateErr     error
 	deleteErr     error
 	configuration domain.SystemConfiguration
 }
@@ -281,6 +308,19 @@ func (r *fakeRepository) UpdateAgentMaxConcurrent(_ context.Context, max int) er
 func (r *fakeRepository) Create(_ context.Context, command domain.QuickCommand) error {
 	r.commands = append(r.commands, command)
 	return nil
+}
+
+func (r *fakeRepository) Update(_ context.Context, id domain.QuickCommandID, content string) (domain.QuickCommand, error) {
+	if r.updateErr != nil {
+		return domain.QuickCommand{}, r.updateErr
+	}
+	for index, command := range r.commands {
+		if command.ID == id {
+			r.commands[index].Content = content
+			return r.commands[index], nil
+		}
+	}
+	return domain.QuickCommand{}, domain.ErrQuickCommandNotFound
 }
 
 func (r *fakeRepository) List(_ context.Context, query domain.QuickCommandQuery) (domain.QuickCommandPage, error) {

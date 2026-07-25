@@ -762,6 +762,11 @@ type UpdatePromptAppendInput struct {
 	Body           string `json:"body"`
 }
 
+type UpdateQuickCommandInput struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
 type UpdateSessionConfigInput struct {
 	SessionID string              `json:"sessionId"`
 	Config    *SessionConfigInput `json:"config"`

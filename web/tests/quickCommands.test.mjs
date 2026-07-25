@@ -62,7 +62,7 @@ test('global settings load quick commands only while the quick command section i
   assert.match(settingsSource, /activeSection\.value === 'quick_commands'/);
 });
 
-test('global settings expose quick command navigation, add FAB, and item deletion', () => {
+test('global settings expose quick command navigation, add FAB, item editing, and deletion', () => {
   const layoutSource = readSource('../src/layouts/MainLayout.vue');
   const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
 
@@ -71,6 +71,8 @@ test('global settings expose quick command navigation, add FAB, and item deletio
   assert.match(settingsSource, /class="global-settings-grid"/);
   assert.match(settingsSource, /快捷指令/);
   assert.match(settingsSource, /\bfab\b/);
+  assert.match(settingsSource, /icon="edit_outline"/);
+  assert.match(settingsSource, /startEdit\(command\)/);
   assert.match(settingsSource, /icon="delete_outline"/);
 });
 
@@ -101,11 +103,13 @@ test('shared Codex prompt composer owns the quick reply menu for both prompt sur
   assert.match(composerSource, /command\.content/);
   assert.match(composableSource, /listQuickCommands/);
   assert.match(composableSource, /createQuickCommand/);
+  assert.match(composableSource, /updateQuickCommand/);
   assert.match(composableSource, /removeQuickCommand/);
   assert.doesNotMatch(composableSource, /localStorage|normalizeQuickCommands|已存在/);
   assert.match(serviceSource, /query QuickCommands/);
   assert.match(serviceSource, /pageInfo/);
   assert.match(serviceSource, /mutation CreateQuickCommand/);
+  assert.match(serviceSource, /mutation UpdateQuickCommand/);
   assert.match(serviceSource, /mutation DeleteQuickCommand/);
   assert.match(composableSource, /quickCommandsError/);
   assert.match(composableSource, /mutationVersion/);

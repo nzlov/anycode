@@ -129,6 +129,21 @@ func (r *mutationResolver) CreateQuickCommand(ctx context.Context, input model.C
 	return mapQuickCommand(dto), nil
 }
 
+// UpdateQuickCommand is the resolver for the updateQuickCommand field.
+func (r *mutationResolver) UpdateQuickCommand(ctx context.Context, input model.UpdateQuickCommandInput) (*model.QuickCommand, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.UpdateQuickCommand(ctx, settingapp.UpdateQuickCommandInput{
+		ID:      settingdomain.QuickCommandID(input.ID),
+		Content: input.Content,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return mapQuickCommand(dto), nil
+}
+
 // DeleteQuickCommand is the resolver for the deleteQuickCommand field.
 func (r *mutationResolver) DeleteQuickCommand(ctx context.Context, id string) (bool, error) {
 	if r.UseCases.Settings == nil {

@@ -58,6 +58,7 @@ type Mutation {
   registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
   unregisterPushSubscription(id: ID!): Boolean!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
+  updateQuickCommand(input: UpdateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
@@ -199,6 +200,11 @@ input ListQuickCommandsInput {
 }
 
 input CreateQuickCommandInput {
+  content: String!
+}
+
+input UpdateQuickCommandInput {
+  id: ID!
   content: String!
 }
 

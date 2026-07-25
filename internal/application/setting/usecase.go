@@ -29,6 +29,7 @@ type UseCase interface {
 	OpenNASAWallpaper(ctx context.Context) (WallpaperStream, error)
 	ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error)
 	CreateQuickCommand(ctx context.Context, input CreateQuickCommandInput) (QuickCommandDTO, error)
+	UpdateQuickCommand(ctx context.Context, input UpdateQuickCommandInput) (QuickCommandDTO, error)
 	DeleteQuickCommand(ctx context.Context, input DeleteQuickCommandInput) error
 }
 
@@ -74,6 +75,11 @@ type ListQuickCommandsInput struct {
 }
 
 type CreateQuickCommandInput struct {
+	Content string
+}
+
+type UpdateQuickCommandInput struct {
+	ID      domain.QuickCommandID
 	Content string
 }
 
@@ -347,6 +353,28 @@ func (s *Service) CreateQuickCommand(ctx context.Context, input CreateQuickComma
 	}
 	if err := s.repo.Create(ctx, command); err != nil {
 		return QuickCommandDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "create quick command failed").WithRetryable(true)
+	}
+	return toDTO(command), nil
+}
+
+func (s *Service) UpdateQuickCommand(ctx context.Context, input UpdateQuickCommandInput) (QuickCommandDTO, error) {
+	if s == nil || s.repo == nil {
+		return QuickCommandDTO{}, errors.New("setting usecase: nil service")
+	}
+	if input.ID == "" {
+		return QuickCommandDTO{}, validationError("id", "quick command id is required")
+	}
+	content := strings.TrimSpace(input.Content)
+	if content == "" {
+		return QuickCommandDTO{}, validationError("content", "quick command content is required")
+	}
+	command, err := s.repo.Update(ctx, input.ID, content)
+	if err != nil {
+		if errors.Is(err, domain.ErrQuickCommandNotFound) {
+			return QuickCommandDTO{}, apperror.Wrap(err, apperror.CodeNotFound, apperror.CategoryValidationError, "quick command not found").
+				WithDetails(map[string]any{"quickCommandId": string(input.ID)})
+		}
+		return QuickCommandDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update quick command failed").WithRetryable(true)
 	}
 	return toDTO(command), nil
 }

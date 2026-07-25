@@ -193,6 +193,7 @@ type ComplexityRoot struct {
 		UpdateGeneralSettings       func(childComplexity int, input model.UpdateGeneralSettingsInput) int
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
+		UpdateQuickCommand          func(childComplexity int, input model.UpdateQuickCommandInput) int
 		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
 		UpdateWebPushProxy          func(childComplexity int, proxyURL string) int
 		UploadAppearanceWallpaper   func(childComplexity int, file graphql.Upload) int
@@ -721,6 +722,7 @@ type MutationResolver interface {
 	RegisterPushSubscription(ctx context.Context, input model.RegisterPushSubscriptionInput) (*model.PushSubscriptionRegistration, error)
 	UnregisterPushSubscription(ctx context.Context, id string) (bool, error)
 	CreateQuickCommand(ctx context.Context, input model.CreateQuickCommandInput) (*model.QuickCommand, error)
+	UpdateQuickCommand(ctx context.Context, input model.UpdateQuickCommandInput) (*model.QuickCommand, error)
 	DeleteQuickCommand(ctx context.Context, id string) (bool, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (*model.Project, error)
 	UpdateProjectSettings(ctx context.Context, input model.UpdateProjectSettingsInput) (*model.Project, error)
@@ -1562,6 +1564,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdatePromptAppend(childComplexity, args["input"].(model.UpdatePromptAppendInput)), true
+	case "Mutation.updateQuickCommand":
+		if e.ComplexityRoot.Mutation.UpdateQuickCommand == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateQuickCommand_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateQuickCommand(childComplexity, args["input"].(model.UpdateQuickCommandInput)), true
 	case "Mutation.updateSessionConfig":
 		if e.ComplexityRoot.Mutation.UpdateSessionConfig == nil {
 			break
@@ -3809,6 +3822,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputUpdateGeneralSettingsInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
 		ec.unmarshalInputUpdatePromptAppendInput,
+		ec.unmarshalInputUpdateQuickCommandInput,
 		ec.unmarshalInputUpdateSessionConfigInput,
 		ec.unmarshalInputWorkflowConditionInput,
 		ec.unmarshalInputWorkflowEdgeInput,
@@ -3968,6 +3982,7 @@ type Mutation {
   registerPushSubscription(input: RegisterPushSubscriptionInput!): PushSubscriptionRegistration!
   unregisterPushSubscription(id: ID!): Boolean!
   createQuickCommand(input: CreateQuickCommandInput!): QuickCommand!
+  updateQuickCommand(input: UpdateQuickCommandInput!): QuickCommand!
   deleteQuickCommand(id: ID!): Boolean!
   createProject(input: CreateProjectInput!): Project!
   updateProjectSettings(input: UpdateProjectSettingsInput!): Project!
@@ -4109,6 +4124,11 @@ input ListQuickCommandsInput {
 }
 
 input CreateQuickCommandInput {
+  content: String!
+}
+
+input UpdateQuickCommandInput {
+  id: ID!
   content: String!
 }
 
@@ -5264,6 +5284,17 @@ func (ec *executionContext) field_Mutation_updatePromptAppend_args(ctx context.C
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdatePromptAppendInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdatePromptAppendInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateQuickCommand_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateQuickCommandInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateQuickCommandInput)
 	if err != nil {
 		return nil, err
 	}
@@ -7899,6 +7930,55 @@ func (ec *executionContext) fieldContext_Mutation_createQuickCommand(ctx context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_createQuickCommand_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateQuickCommand(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateQuickCommand,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateQuickCommand(ctx, fc.Args["input"].(model.UpdateQuickCommandInput))
+		},
+		nil,
+		ec.marshalNQuickCommand2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐQuickCommand,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateQuickCommand(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_QuickCommand_id(ctx, field)
+			case "content":
+				return ec.fieldContext_QuickCommand_content(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_QuickCommand_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type QuickCommand", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateQuickCommand_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -23798,6 +23878,43 @@ func (ec *executionContext) unmarshalInputUpdatePromptAppendInput(ctx context.Co
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateQuickCommandInput(ctx context.Context, obj any) (model.UpdateQuickCommandInput, error) {
+	var it model.UpdateQuickCommandInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"id", "content"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "id":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ID = data
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateSessionConfigInput(ctx context.Context, obj any) (model.UpdateSessionConfigInput, error) {
 	var it model.UpdateSessionConfigInput
 	if obj == nil {
@@ -25276,6 +25393,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		case "createQuickCommand":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_createQuickCommand(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "updateQuickCommand":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateQuickCommand(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -31235,6 +31359,11 @@ func (ec *executionContext) unmarshalNUpdateProjectSettingsInput2githubᚗcomᚋ
 
 func (ec *executionContext) unmarshalNUpdatePromptAppendInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdatePromptAppendInput(ctx context.Context, v any) (model.UpdatePromptAppendInput, error) {
 	res, err := ec.unmarshalInputUpdatePromptAppendInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateQuickCommandInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateQuickCommandInput(ctx context.Context, v any) (model.UpdateQuickCommandInput, error) {
+	res, err := ec.unmarshalInputUpdateQuickCommandInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

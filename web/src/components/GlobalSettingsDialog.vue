@@ -517,13 +517,13 @@
           </q-banner>
 
           <q-slide-transition>
-            <div v-if="adding" class="quick-command-editor">
+            <div v-if="adding || editingCommandId" class="quick-command-editor">
               <q-input
                 ref="commandInputRef"
                 v-model="draftCommand"
                 outlined
                 autogrow
-                label="快捷指令"
+                :label="editingCommandId ? '修改快捷指令' : '快捷指令'"
                 :disable="saving"
                 @keyup.ctrl.enter="saveCommand"
               />
@@ -533,9 +533,9 @@
                   round
                   class="app-icon-btn"
                   icon="close"
-                  aria-label="取消新增"
+                  :aria-label="editingCommandId ? '取消修改' : '取消新增'"
                   :disable="saving"
-                  @click="cancelAdd"
+                  @click="cancelEditor"
                 >
                   <q-tooltip>取消</q-tooltip>
                 </q-btn>
@@ -545,7 +545,7 @@
                   color="primary"
                   class="app-icon-btn app-on-primary"
                   icon="check"
-                  aria-label="保存快捷指令"
+                  :aria-label="editingCommandId ? '保存快捷指令修改' : '保存快捷指令'"
                   :loading="saving"
                   :disable="saving || !draftCommand.trim()"
                   @click="saveCommand"
@@ -571,20 +571,34 @@
                 <q-item-label class="quick-command-text">{{ command.content }}</q-item-label>
               </q-item-section>
               <q-item-section side>
-                <q-btn
-                  flat
-                  round
-                  dense
-                  class="app-icon-btn"
-                  color="negative"
-                  icon="delete_outline"
-                  :aria-label="`删除快捷指令：${command.content}`"
-                  :loading="deletingCommandIds.includes(command.id)"
-                  :disable="quickCommandsLoading || quickCommandsMutating > 0"
-                  @click="removeCommand(command.id)"
-                >
-                  <q-tooltip>删除</q-tooltip>
-                </q-btn>
+                <div class="row no-wrap q-gutter-xs">
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    class="app-icon-btn"
+                    icon="edit_outline"
+                    :aria-label="`修改快捷指令：${command.content}`"
+                    :disable="quickCommandsLoading || quickCommandsMutating > 0 || saving"
+                    @click="startEdit(command)"
+                  >
+                    <q-tooltip>修改</q-tooltip>
+                  </q-btn>
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    class="app-icon-btn"
+                    color="negative"
+                    icon="delete_outline"
+                    :aria-label="`删除快捷指令：${command.content}`"
+                    :loading="deletingCommandIds.includes(command.id)"
+                    :disable="quickCommandsLoading || quickCommandsMutating > 0 || saving"
+                    @click="removeCommand(command.id)"
+                  >
+                    <q-tooltip>删除</q-tooltip>
+                  </q-btn>
+                </div>
               </q-item-section>
             </q-item>
           </q-list>
@@ -608,7 +622,9 @@
             class="global-settings-add-fab app-on-primary"
             icon="add"
             aria-label="新增快捷指令"
-            :disable="adding || quickCommandsLoading || quickCommandsMutating > 0"
+            :disable="
+              adding || !!editingCommandId || quickCommandsLoading || quickCommandsMutating > 0
+            "
             @click="startAdd"
           >
             <q-tooltip>新增快捷指令</q-tooltip>
@@ -736,9 +752,11 @@ const {
   quickCommandsPageInfo,
   loadQuickCommands,
   addQuickCommand,
+  editQuickCommand,
   deleteQuickCommand,
 } = useQuickCommands();
 const adding = ref(false);
+const editingCommandId = ref('');
 const draftCommand = ref('');
 const saving = ref(false);
 const deletingCommandIds = ref<string[]>([]);
@@ -1011,12 +1029,21 @@ function close() {
 }
 
 function startAdd() {
+  editingCommandId.value = '';
   adding.value = true;
   void nextTick(() => commandInputRef.value?.focus());
 }
 
-function cancelAdd() {
+function startEdit(command: { id: string; content: string }) {
   adding.value = false;
+  editingCommandId.value = command.id;
+  draftCommand.value = command.content;
+  void nextTick(() => commandInputRef.value?.focus());
+}
+
+function cancelEditor() {
+  adding.value = false;
+  editingCommandId.value = '';
   draftCommand.value = '';
 }
 
@@ -1024,8 +1051,12 @@ async function saveCommand() {
   if (!draftCommand.value.trim()) return;
   saving.value = true;
   try {
-    await addQuickCommand(draftCommand.value);
-    cancelAdd();
+    if (editingCommandId.value) {
+      await editQuickCommand(editingCommandId.value, draftCommand.value);
+    } else {
+      await addQuickCommand(draftCommand.value);
+    }
+    cancelEditor();
   } catch {
     return;
   } finally {

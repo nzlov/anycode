@@ -130,6 +130,7 @@ var ErrQuickCommandNotFound = errors.New("quick command not found")
 
 type Repository interface {
 	Create(ctx context.Context, command QuickCommand) error
+	Update(ctx context.Context, id QuickCommandID, content string) (QuickCommand, error)
 	List(ctx context.Context, query QuickCommandQuery) (QuickCommandPage, error)
 	Delete(ctx context.Context, id QuickCommandID) error
 	GetSystemConfiguration(ctx context.Context) (SystemConfiguration, error)

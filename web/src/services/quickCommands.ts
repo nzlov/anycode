@@ -64,6 +64,23 @@ export async function createQuickCommand(content: string) {
   return data.createQuickCommand;
 }
 
+export async function updateQuickCommand(id: string, content: string) {
+  const data = await graphqlFetch<
+    { updateQuickCommand: QuickCommand },
+    { input: { id: string; content: string } }
+  >({
+    query: `
+      mutation UpdateQuickCommand($input: UpdateQuickCommandInput!) {
+        updateQuickCommand(input: $input) {
+          ${quickCommandFields}
+        }
+      }
+    `,
+    variables: { input: { id, content } },
+  });
+  return data.updateQuickCommand;
+}
+
 export async function deleteQuickCommand(id: string) {
   const data = await graphqlFetch<{ deleteQuickCommand: boolean }, { id: string }>({
     query: `
