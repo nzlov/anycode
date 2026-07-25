@@ -1,18 +1,17 @@
 <template>
-  <article class="overview-horizontal-session-desktop" :aria-label="`${card.title} 会话详情`">
-    <header class="overview-horizontal-session-desktop__header">
-      <div class="overview-horizontal-session-desktop__identity">
-        <div class="overview-horizontal-session-desktop__title" :title="card.title">
+  <article class="overview-horizontal-terminal" :aria-label="`${card.title} Terminal 详情`">
+    <header class="overview-horizontal-terminal__header">
+      <div class="overview-horizontal-terminal__identity">
+        <div class="overview-horizontal-terminal__title" :title="card.title">
           {{ card.title }}
         </div>
-        <div class="overview-horizontal-session-desktop__meta">
+        <div class="overview-horizontal-terminal__meta">
           <span :title="card.projectName">{{ card.projectName }}</span>
           <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
           <span :title="card.branch">{{ card.branch }}</span>
-          <span v-if="card.mode === 'workflow'" :title="card.node">{{ card.node }}</span>
         </div>
       </div>
-      <div class="overview-horizontal-session-desktop__actions">
+      <div class="overview-horizontal-terminal__actions">
         <SessionTunnelButton :tunnels="tunnels" />
         <SessionPriorityControl
           :priority="card.priority"
@@ -21,18 +20,6 @@
           @change="emit('set-priority', $event)"
         />
         <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
-        <q-badge
-          v-if="card.mode !== 'terminal'"
-          rounded
-          class="lane-mode-chip"
-          :label="modeBadgeLabel(card.mode)"
-        />
-        <SessionTerminalButton
-          v-if="card.mode !== 'terminal'"
-          :source-session-id="card.id"
-          stay-on-page
-          @opened="emit('terminal-opened', $event)"
-        />
         <q-btn
           flat
           round
@@ -86,18 +73,11 @@
       </div>
     </header>
     <TerminalView
-      v-if="card.mode === 'terminal'"
       :key="`${card.id}:${card.status === 'running' ? 'running' : 'stopped'}`"
-      class="overview-horizontal-session-desktop__detail"
+      class="overview-horizontal-terminal__detail"
       :session-id="card.id"
       :interactive="card.status === 'running'"
       :resize-paused="terminalResizePaused"
-    />
-    <SessionDetailView
-      v-else
-      class="overview-horizontal-session-desktop__detail"
-      :session-id="card.id"
-      layout="desktop"
     />
   </article>
 </template>
@@ -105,13 +85,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 
-import SessionDetailView from '@/components/SessionDetailView.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
-import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import SessionTunnelButton from '@/components/SessionTunnelButton.vue';
 import TerminalView from '@/components/TerminalView.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';
-import { sessionModeBadgeLabel as modeBadgeLabel } from '@/services/sessionModePresentation';
 import {
   sessionStatusColor as statusColor,
   sessionStatusLabel as statusLabel,
@@ -134,7 +111,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'set-priority': [priority: SessionPriority];
-  'terminal-opened': [sessionId: string];
   close: [];
 }>();
 
@@ -169,7 +145,7 @@ async function stopTerminal() {
 </script>
 
 <style scoped>
-.overview-horizontal-session-desktop {
+.overview-horizontal-terminal {
   display: flex;
   height: 100%;
   min-height: 0;
@@ -180,7 +156,7 @@ async function stopTerminal() {
   border-radius: 4px;
 }
 
-.overview-horizontal-session-desktop__header {
+.overview-horizontal-terminal__header {
   display: flex;
   min-width: 0;
   min-height: 72px;
@@ -193,13 +169,13 @@ async function stopTerminal() {
   background: var(--ac-surface-raised);
 }
 
-.overview-horizontal-session-desktop__identity {
+.overview-horizontal-terminal__identity {
   display: grid;
   min-width: 0;
   gap: 6px;
 }
 
-.overview-horizontal-session-desktop__title {
+.overview-horizontal-terminal__title {
   overflow: hidden;
   color: var(--ac-text);
   font-size: 16px;
@@ -208,31 +184,31 @@ async function stopTerminal() {
   white-space: nowrap;
 }
 
-.overview-horizontal-session-desktop__meta,
-.overview-horizontal-session-desktop__actions {
+.overview-horizontal-terminal__meta,
+.overview-horizontal-terminal__actions {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
 }
 
-.overview-horizontal-session-desktop__meta {
+.overview-horizontal-terminal__meta {
   color: var(--ac-text-muted);
   font-size: 12px;
 }
 
-.overview-horizontal-session-desktop__meta span {
+.overview-horizontal-terminal__meta span {
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.overview-horizontal-session-desktop__actions {
+.overview-horizontal-terminal__actions {
   flex: 0 0 auto;
 }
 
-.overview-horizontal-session-desktop__detail {
+.overview-horizontal-terminal__detail {
   min-height: 0;
   flex: 1 1 auto;
 }

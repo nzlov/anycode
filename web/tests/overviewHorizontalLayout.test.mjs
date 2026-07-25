@@ -14,8 +14,8 @@ const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const indexSource = readSource('../src/pages/IndexPage.vue');
 const viewModeSource = readSource('../src/composables/useOverviewViewMode.ts');
 const horizontalSessionSource = readSource('../src/components/OverviewHorizontalSession.vue');
-const desktopSessionSource = readSource('../src/components/OverviewHorizontalSessionDesktop.vue');
-const mobileSessionSource = readSource('../src/components/OverviewHorizontalSessionMobile.vue');
+const conversationSource = readSource('../src/components/OverviewHorizontalConversation.vue');
+const terminalSource = readSource('../src/components/OverviewHorizontalTerminal.vue');
 const priorityControlSource = readSource('../src/components/SessionPriorityControl.vue');
 const detailViewSource = readSource('../src/components/SessionDetailView.vue');
 const detailPageSource = readSource('../src/pages/SessionDetailPage.vue');
@@ -163,7 +163,7 @@ test('horizontal session columns keep identity order when live updates change re
   );
 });
 
-test('horizontal sessions switch layouts by width without remounting terminal sessions', () => {
+test('horizontal sessions switch one conversation component layout by width and keep terminals separate', () => {
   assert.match(horizontalSessionSource, /const desktopSessionMinWidth = 1024/);
   assert.match(
     horizontalSessionSource,
@@ -171,11 +171,14 @@ test('horizontal sessions switch layouts by width without remounting terminal se
   );
   assert.match(
     horizontalSessionSource,
-    /<OverviewHorizontalSessionDesktop[\s\S]*v-if="card\.mode === 'terminal' \|\| sessionLayout === 'desktop'"/,
+    /<OverviewHorizontalTerminal[\s\S]*v-if="card\.mode === 'terminal'"/,
   );
-  assert.match(horizontalSessionSource, /<OverviewHorizontalSessionMobile[\s\S]*v-else/);
-  assert.match(mobileSessionSource, /<SessionDetailView[\s\S]*layout="mobile"/);
-  assert.match(desktopSessionSource, /<SessionDetailView[\s\S]*layout="desktop"/);
+  assert.match(horizontalSessionSource, /<OverviewHorizontalConversation[\s\S]*v-else/);
+  assert.match(horizontalSessionSource, /:layout="sessionLayout"/);
+  assert.doesNotMatch(horizontalSessionSource, /sessionLayout === 'desktop'/);
+  assert.match(conversationSource, /<SessionDetailView[\s\S]*:layout="layout"/);
+  assert.doesNotMatch(terminalSource, /SessionDetailView/);
+  assert.match(terminalSource, /<TerminalView/);
 });
 
 test('horizontal terminal resize previews locally and fits once after dragging', () => {
@@ -186,11 +189,11 @@ test('horizontal terminal resize previews locally and fits once after dragging',
     /resizing\.value = false;[\s\S]*emit\('update:width', displayWidth\.value\)/,
   );
   assert.match(horizontalSessionSource, /:terminal-resize-paused="resizing"/);
-  assert.match(desktopSessionSource, /:resize-paused="terminalResizePaused"/);
+  assert.match(terminalSource, /:resize-paused="terminalResizePaused"/);
 });
 
-test('horizontal headers expose live card metadata and priority controls in both widths', () => {
-  for (const source of [desktopSessionSource, mobileSessionSource]) {
+test('horizontal headers expose live card metadata and priority controls for conversations and terminals', () => {
+  for (const source of [conversationSource, terminalSource]) {
     assert.match(source, /<SessionPriorityControl/);
     assert.match(source, /:priority="card\.priority"/);
     assert.match(source, /@change="emit\('set-priority', \$event\)"/);
@@ -204,14 +207,14 @@ test('horizontal headers expose live card metadata and priority controls in both
 });
 
 test('horizontal headers put terminal actions after details and close every card last', () => {
-  for (const source of [desktopSessionSource, mobileSessionSource]) {
+  for (const source of [conversationSource, terminalSource]) {
     assert.match(
       source,
       /aria-label="关闭卡片"[\s\S]*<q-tooltip>关闭卡片<\/q-tooltip>[\s\S]*<\/q-btn>\s*<\/div>\s*<\/header>/,
     );
   }
   assert.match(
-    desktopSessionSource,
+    terminalSource,
     /aria-label="打开会话详情"[\s\S]*aria-label="停止 Terminal"[\s\S]*aria-label="启动 Terminal"[\s\S]*aria-label="关闭卡片"/,
   );
   assert.match(indexSource, /:close-loading="activeCloseSessionId === card\.id"/);
@@ -237,15 +240,9 @@ test('horizontal sessions render the complete reusable detail surface', () => {
 });
 
 test('mobile session details switch changes and artifacts in place', () => {
-  assert.match(mobileSessionSource, /<SessionDetailView[\s\S]*layout="mobile"/);
-  assert.match(
-    detailViewSource,
-    /<q-tab name="changes" icon="difference" label="变更"/,
-  );
-  assert.match(
-    detailViewSource,
-    /<q-tab name="artifacts" icon="inventory_2" label="临时文件"/,
-  );
+  assert.match(conversationSource, /<SessionDetailView[\s\S]*:layout="layout"/);
+  assert.match(detailViewSource, /<q-tab name="changes" icon="difference" label="变更"/);
+  assert.match(detailViewSource, /<q-tab name="artifacts" icon="inventory_2" label="临时文件"/);
   assert.doesNotMatch(detailViewSource, /<q-route-tab/);
   assert.doesNotMatch(detailViewSource, /mobileDiffRoute|allArtifactsRoute/);
 });
@@ -273,8 +270,7 @@ test('detail tabs show persisted counts and apply websocket count updates', () =
 });
 
 test('horizontal mode keeps one existing detail subscription per session', () => {
-  assert.match(mobileSessionSource, /:session-id="card\.id"/);
-  assert.match(desktopSessionSource, /:session-id="card\.id"/);
+  assert.match(conversationSource, /:session-id="card\.id"/);
   assert.match(detailViewSource, /useSessionDetail\(sessionId\)/);
   assert.match(detailComposableSource, /subscribeSessionEvents\(sessionId/);
   assert.match(schemaSource, /sessionEvents\(sessionId: ID!\): TranscriptEvent!/);

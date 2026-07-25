@@ -5,21 +5,21 @@
       :class="`overview-horizontal-session--${sessionLayout}`"
       :style="{ width: `${displayWidth}px` }"
     >
-      <OverviewHorizontalSessionDesktop
-        v-if="card.mode === 'terminal' || sessionLayout === 'desktop'"
+      <OverviewHorizontalTerminal
+        v-if="card.mode === 'terminal'"
         :card="card"
         :tunnels="tunnels"
         :priority-loading="priorityLoading"
         :close-loading="closeLoading"
         :terminal-resize-paused="resizing"
         @set-priority="emit('set-priority', $event)"
-        @terminal-opened="emit('terminal-opened', $event)"
         @close="emit('close')"
       />
-      <OverviewHorizontalSessionMobile
+      <OverviewHorizontalConversation
         v-else
         :card="card"
         :tunnels="tunnels"
+        :layout="sessionLayout"
         :priority-loading="priorityLoading"
         :close-loading="closeLoading"
         @set-priority="emit('set-priority', $event)"
@@ -52,8 +52,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import OverviewHorizontalSessionDesktop from '@/components/OverviewHorizontalSessionDesktop.vue';
-import OverviewHorizontalSessionMobile from '@/components/OverviewHorizontalSessionMobile.vue';
+import OverviewHorizontalConversation from '@/components/OverviewHorizontalConversation.vue';
+import OverviewHorizontalTerminal from '@/components/OverviewHorizontalTerminal.vue';
 import type { SessionCard, SessionPriority } from '@/services/sessions';
 import type { Tunnel } from '@/services/tunnels';
 

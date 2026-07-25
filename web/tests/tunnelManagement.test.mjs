@@ -13,8 +13,8 @@ const service = readSource('../src/services/tunnels.ts');
 const button = readSource('../src/components/SessionTunnelButton.vue');
 const index = readSource('../src/pages/IndexPage.vue');
 const horizontal = readSource('../src/components/OverviewHorizontalSession.vue');
-const horizontalDesktop = readSource('../src/components/OverviewHorizontalSessionDesktop.vue');
-const horizontalMobile = readSource('../src/components/OverviewHorizontalSessionMobile.vue');
+const horizontalConversation = readSource('../src/components/OverviewHorizontalConversation.vue');
+const horizontalTerminal = readSource('../src/components/OverviewHorizontalTerminal.vue');
 const detail = readSource('../src/components/SessionDetailView.vue');
 
 test('tunnel entry follows history and uses page navigation only on mobile', () => {
@@ -48,12 +48,15 @@ test('session tunnel entry opens one tunnel directly and offers named choices fo
 
   assert.match(index, /<SessionTunnelButton :tunnels="tunnelsForSession\(card\.id\)" show-count/);
   assert.match(horizontal, /:tunnels="tunnels"/);
-  assert.match(horizontalDesktop, /<SessionTunnelButton :tunnels="tunnels"/);
-  assert.match(horizontalMobile, /<SessionTunnelButton :tunnels="tunnels"/);
+  assert.match(horizontalConversation, /<SessionTunnelButton :tunnels="tunnels"/);
+  assert.match(horizontalTerminal, /<SessionTunnelButton :tunnels="tunnels"/);
 });
 
 test('session information shows named tunnels below token usage and removes obsolete blocks', () => {
-  assert.match(detail, /<q-item-label caption>Token 用量<\/q-item-label>[\s\S]*<q-item-label caption>隧道<\/q-item-label>/);
+  assert.match(
+    detail,
+    /<q-item-label caption>Token 用量<\/q-item-label>[\s\S]*<q-item-label caption>隧道<\/q-item-label>/,
+  );
   assert.match(detail, /v-for="tunnel in sessionTunnels"[\s\S]*\{\{ tunnel\.name \}\}/);
   assert.doesNotMatch(detail, /<q-item-label caption>工作树清理<\/q-item-label>/);
   assert.doesNotMatch(detail, /<q-item-label caption>状态<\/q-item-label>/);

@@ -1,26 +1,34 @@
 <template>
-  <article class="overview-horizontal-session-mobile" :aria-label="`${card.title} 会话详情`">
-    <header class="overview-horizontal-session-mobile__header">
-      <div class="overview-horizontal-session-mobile__heading">
-        <div class="overview-horizontal-session-mobile__badges">
-          <SessionPriorityControl
-            :priority="card.priority"
-            :loading="priorityLoading"
-            :disabled="card.status === 'closed'"
-            @change="emit('set-priority', $event)"
-          />
-          <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
-          <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
-        </div>
-        <div class="overview-horizontal-session-mobile__title" :title="card.title">
+  <article
+    class="overview-horizontal-conversation"
+    :class="`overview-horizontal-conversation--${layout}`"
+    :aria-label="`${card.title} 会话详情`"
+  >
+    <header class="overview-horizontal-conversation__header">
+      <div class="overview-horizontal-conversation__identity">
+        <div class="overview-horizontal-conversation__title" :title="card.title">
           {{ card.title }}
         </div>
-        <div class="overview-horizontal-session-mobile__project">
+        <div class="overview-horizontal-conversation__meta">
           <span :title="card.projectName">{{ card.projectName }}</span>
           <TokenUsageDisplay v-if="card.usage" :usage="card.usage" />
+          <span v-if="layout === 'desktop'" :title="card.branch">{{ card.branch }}</span>
+          <span v-if="layout === 'desktop' && card.mode === 'workflow'" :title="card.node">
+            {{ card.node }}
+          </span>
         </div>
       </div>
-      <div class="overview-horizontal-session-mobile__actions">
+      <div class="overview-horizontal-conversation__badges">
+        <SessionPriorityControl
+          :priority="card.priority"
+          :loading="priorityLoading"
+          :disabled="card.status === 'closed'"
+          @change="emit('set-priority', $event)"
+        />
+        <q-badge outline :color="statusColor(card.status)" :label="statusLabel(card.status)" />
+        <q-badge rounded class="lane-mode-chip" :label="modeBadgeLabel(card.mode)" />
+      </div>
+      <div class="overview-horizontal-conversation__actions">
         <SessionTunnelButton :tunnels="tunnels" />
         <SessionTerminalButton
           :source-session-id="card.id"
@@ -54,9 +62,9 @@
       </div>
     </header>
     <SessionDetailView
-      class="overview-horizontal-session-mobile__detail"
+      class="overview-horizontal-conversation__detail"
       :session-id="card.id"
-      layout="mobile"
+      :layout="layout"
     />
   </article>
 </template>
@@ -78,6 +86,7 @@ import type { Tunnel } from '@/services/tunnels';
 defineProps<{
   card: SessionCard;
   tunnels: Tunnel[];
+  layout: 'mobile' | 'desktop';
   priorityLoading?: boolean;
   closeLoading?: boolean;
 }>();
@@ -90,7 +99,7 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-.overview-horizontal-session-mobile {
+.overview-horizontal-conversation {
   display: flex;
   height: 100%;
   min-height: 0;
@@ -101,68 +110,92 @@ const emit = defineEmits<{
   border-radius: 4px;
 }
 
-.overview-horizontal-session-mobile__header {
-  display: flex;
+.overview-horizontal-conversation__header {
+  display: grid;
   min-width: 0;
   min-height: 72px;
   flex: 0 0 auto;
-  align-items: flex-start;
-  justify-content: space-between;
   gap: 8px;
-  padding: 8px 6px 8px 10px;
   border-bottom: 1px solid var(--ac-border);
   background: var(--ac-surface-raised);
 }
 
-.overview-horizontal-session-mobile__heading {
+.overview-horizontal-conversation--mobile .overview-horizontal-conversation__header {
+  grid-template-areas:
+    'badges actions'
+    'identity actions';
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  padding: 8px 6px 8px 10px;
+}
+
+.overview-horizontal-conversation--desktop .overview-horizontal-conversation__header {
+  grid-template-areas: 'identity badges actions';
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 10px 10px 14px;
+}
+
+.overview-horizontal-conversation__identity {
   display: grid;
   min-width: 0;
+  grid-area: identity;
   gap: 4px;
 }
 
-.overview-horizontal-session-mobile__actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-}
-
-.overview-horizontal-session-mobile__badges {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
+.overview-horizontal-conversation--desktop .overview-horizontal-conversation__identity {
   gap: 6px;
 }
 
-.overview-horizontal-session-mobile__title,
-.overview-horizontal-session-mobile__project {
+.overview-horizontal-conversation__title,
+.overview-horizontal-conversation__meta > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.overview-horizontal-session-mobile__title {
+.overview-horizontal-conversation__title {
   color: var(--ac-text);
   font-size: 14px;
   font-weight: 700;
 }
 
-.overview-horizontal-session-mobile__project {
+.overview-horizontal-conversation--desktop .overview-horizontal-conversation__title {
+  font-size: 16px;
+}
+
+.overview-horizontal-conversation__meta,
+.overview-horizontal-conversation__badges,
+.overview-horizontal-conversation__actions {
   display: flex;
+  min-width: 0;
   align-items: center;
+}
+
+.overview-horizontal-conversation__meta {
   gap: 8px;
   color: var(--ac-text-muted);
   font-size: 12px;
 }
 
-.overview-horizontal-session-mobile__project > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.overview-horizontal-conversation__meta > span {
+  max-width: 180px;
 }
 
-.overview-horizontal-session-mobile__detail {
+.overview-horizontal-conversation__badges {
+  flex-wrap: wrap;
+  grid-area: badges;
+  gap: 6px;
+}
+
+.overview-horizontal-conversation__actions {
+  flex: 0 0 auto;
+  grid-area: actions;
+}
+
+.overview-horizontal-conversation__detail {
   min-height: 0;
   flex: 1 1 auto;
 }
