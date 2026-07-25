@@ -162,11 +162,13 @@ function lineClass(kind: DiffLineKind) {
 
 .diff-file-card {
   container-type: inline-size;
+  content-visibility: auto;
   min-width: 0;
   overflow: visible;
   background: var(--ac-surface);
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
+  contain-intrinsic-size: auto 240px;
 }
 
 .diff-file-card--headerless {

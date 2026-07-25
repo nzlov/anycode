@@ -21,14 +21,21 @@
           @update:model-value="setMode"
         />
         <q-space />
+        <q-badge
+          v-if="progressiveAllFiles && allFilePaths.length > 0"
+          outline
+          color="primary"
+          :label="`已加载 ${visibleDiffs.length}/${allFilePaths.length}`"
+        />
         <template v-if="workspaceMode === 'all'">
           <q-btn
+            v-if="allFilesLoading !== 'lazy'"
             flat
             round
             dense
             icon="unfold_more"
             aria-label="展开全部文件"
-            :disable="loading || allFilePaths.length === 0 || !hasCollapsedFile"
+            :disable="loading || loadingAllFiles || allFilePaths.length === 0 || !hasCollapsedFile"
             @click="expandAllFiles"
           >
             <q-tooltip>展开全部文件</q-tooltip>
@@ -39,7 +46,7 @@
             dense
             icon="unfold_less"
             aria-label="折叠全部文件"
-            :disable="loading || allFilePaths.length === 0 || allFilesCollapsed"
+            :disable="loading || loadingAllFiles || allFilePaths.length === 0 || allFilesCollapsed"
             @click="collapseAllFiles"
           >
             <q-tooltip>折叠全部文件</q-tooltip>
@@ -52,7 +59,7 @@
           dense
           icon="refresh"
           aria-label="刷新 Diff"
-          :loading="loading"
+          :loading="loading || loadingAllFiles"
           @click="loadDiff"
         >
           <q-tooltip>刷新 Diff</q-tooltip>
@@ -72,7 +79,7 @@
           no-caps
           icon="refresh"
           label="重试"
-          :loading="loading"
+          :loading="loading || loadingAllFiles"
           @click="loadDiff"
         />
       </template>
@@ -199,13 +206,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
 
 import DiffViewer from '@/components/DiffViewer.vue';
 import {
   getBranchAllDiff,
+  getBranchDiffFiles,
   getBranchSingleDiff,
   getSessionAllDiff,
   getSessionDiffFiles,
@@ -238,7 +246,7 @@ const props = withDefaults(
     showFileNavigation?: boolean;
     showFileHeaders?: boolean;
     showRefresh?: boolean;
-    lazyFileDetails?: boolean;
+    allFilesLoading?: 'eager' | 'lazy' | 'progressive';
     refreshKey?: string | number;
     toolbarTarget?: string;
     toolbarTitle?: string;
@@ -247,7 +255,7 @@ const props = withDefaults(
     showFileNavigation: true,
     showFileHeaders: true,
     showRefresh: true,
-    lazyFileDetails: false,
+    allFilesLoading: 'eager',
   },
 );
 
@@ -259,12 +267,14 @@ const $q = useQuasar();
 const router = useRouter();
 const diff = ref<SessionDiff | null>(null);
 const loading = ref(false);
+const loadingAllFiles = ref(false);
 const error = ref('');
 const sessionPrefixMap = ref<Record<string, string>>({});
 const diffContext = ref(initialDiffContext());
 const requestGeneration = ref(0);
 const fileLoadingPaths = ref<string[]>([]);
 let skipRequestSignature = '';
+const progressiveBatchSize = 2;
 
 const targetKey = computed(() =>
   props.target.kind === 'session'
@@ -287,8 +297,12 @@ const modeOptions = computed(() => [
     'aria-label': '全部 Diff',
   },
 ]);
+const allFilesLoading = computed(() => props.allFilesLoading);
 const metadataFirst = computed(
-  () => props.lazyFileDetails && props.target.kind === 'session' && workspaceMode.value === 'all',
+  () => allFilesLoading.value !== 'eager' && workspaceMode.value === 'all',
+);
+const progressiveAllFiles = computed(
+  () => allFilesLoading.value === 'progressive' && workspaceMode.value === 'all',
 );
 const visibleDiffs = computed<FileDiff[]>(() => {
   if (!diff.value?.available) return [];
@@ -346,6 +360,8 @@ function requestSignature(state = props.modelValue) {
 async function loadDiff() {
   const generation = ++requestGeneration.value;
   loading.value = true;
+  loadingAllFiles.value = false;
+  fileLoadingPaths.value = [];
   error.value = '';
   try {
     const input = {
@@ -356,10 +372,7 @@ async function loadDiff() {
         ? { filePath: props.modelValue.filePath }
         : {}),
     };
-    const nextDiff =
-      metadataFirst.value && props.target.kind === 'session'
-        ? await getSessionDiffFiles({ sessionId: props.target.sessionId })
-        : await requestDiff(input);
+    const nextDiff = metadataFirst.value ? await requestDiffFiles() : await requestDiff(input);
     if (generation !== requestGeneration.value) return;
     diff.value = nextDiff;
     if (metadataFirst.value) {
@@ -368,7 +381,12 @@ async function loadDiff() {
         'all',
         nextDiff.files.map((file) => file.path),
       );
-      fileLoadingPaths.value = [];
+      if (progressiveAllFiles.value) {
+        void loadProgressiveAllDiff(
+          nextDiff.files.map((file) => file.path),
+          generation,
+        );
+      }
     }
     const normalizedState: DiffWorkspaceState = {
       ...props.modelValue,
@@ -412,6 +430,32 @@ function requestDiff(input: {
     : getSessionSingleDiff(sessionInput);
 }
 
+function requestDiffFiles() {
+  if (props.target.kind === 'session') {
+    return getSessionDiffFiles({ sessionId: props.target.sessionId });
+  }
+  return getBranchDiffFiles({
+    projectId: props.target.projectId,
+    branch: props.target.branch,
+  });
+}
+
+function requestSingleFileDiff(filePath: string) {
+  const context = {
+    mode: 'single' as const,
+    filePath,
+    contextBefore: diffContext.value.before,
+    contextAfter: diffContext.value.after,
+  };
+  return props.target.kind === 'session'
+    ? getSessionSingleDiff({ ...context, sessionId: props.target.sessionId })
+    : getBranchSingleDiff({
+        ...context,
+        projectId: props.target.projectId,
+        branch: props.target.branch,
+      });
+}
+
 function expandDiff(filePath: string, direction: 'before' | 'after') {
   diffContext.value = expandDiffContext(diffContext.value, direction);
   if (metadataFirst.value) {
@@ -430,8 +474,15 @@ async function toggleFileCollapsed(filePath: string) {
 }
 
 function expandAllFiles() {
-  if (metadataFirst.value) {
-    void loadAllDiff();
+  if (progressiveAllFiles.value) {
+    const loadedPaths = new Set(diff.value?.allDiff.map((item) => item.file.path) ?? []);
+    const unloadedPaths = allFilePaths.value.filter((path) => !loadedPaths.has(path));
+    collapseState.value = expandDiffFiles(collapseState.value, workspaceMode.value, [
+      ...loadedPaths,
+    ]);
+    if (unloadedPaths.length > 0) {
+      void loadProgressiveAllDiff(unloadedPaths, requestGeneration.value);
+    }
     return;
   }
   collapseState.value = expandDiffFiles(
@@ -442,25 +493,14 @@ function expandAllFiles() {
 }
 
 async function loadFileDiff(filePath: string) {
-  if (props.target.kind !== 'session' || fileLoadingPaths.value.includes(filePath)) return false;
+  if (fileLoadingPaths.value.includes(filePath)) return false;
   const generation = requestGeneration.value;
   fileLoadingPaths.value = [...fileLoadingPaths.value, filePath];
   error.value = '';
   try {
-    const nextDiff = await getSessionSingleDiff({
-      sessionId: props.target.sessionId,
-      mode: 'single',
-      filePath,
-      contextBefore: diffContext.value.before,
-      contextAfter: diffContext.value.after,
-    });
+    const nextDiff = await requestSingleFileDiff(filePath);
     if (generation !== requestGeneration.value || !nextDiff.fileDiff || !diff.value) return false;
-    const loadedDiffs = diff.value.allDiff.filter((item) => item.file.path !== filePath);
-    diff.value = {
-      ...diff.value,
-      fileDiff: nextDiff.fileDiff,
-      allDiff: [...loadedDiffs, nextDiff.fileDiff],
-    };
+    mergeFileDiffs([nextDiff.fileDiff]);
     return true;
   } catch (err) {
     if (generation === requestGeneration.value) {
@@ -472,28 +512,61 @@ async function loadFileDiff(filePath: string) {
   }
 }
 
-async function loadAllDiff() {
-  const generation = ++requestGeneration.value;
-  loading.value = true;
-  error.value = '';
+async function loadProgressiveAllDiff(filePaths: string[], generation: number) {
+  if (!progressiveAllFiles.value || generation !== requestGeneration.value) return;
+  loadingAllFiles.value = true;
+  let failed = false;
   try {
-    const nextDiff = await requestDiff({
-      mode: 'all',
-      contextBefore: diffContext.value.before,
-      contextAfter: diffContext.value.after,
-    });
-    if (generation !== requestGeneration.value) return;
-    diff.value = nextDiff;
-    collapseState.value = expandDiffFiles(
-      collapseState.value,
-      'all',
-      nextDiff.files.map((file) => file.path),
-    );
-  } catch (err) {
-    if (generation === requestGeneration.value) error.value = errorMessage(err, '读取 Diff 失败');
+    for (let index = 0; index < filePaths.length; index += progressiveBatchSize) {
+      if (!progressiveRequestActive(generation)) return;
+      const loadedPaths = new Set(diff.value?.allDiff.map((item) => item.file.path) ?? []);
+      const batch = filePaths
+        .slice(index, index + progressiveBatchSize)
+        .filter((path) => !loadedPaths.has(path) && !fileLoadingPaths.value.includes(path));
+      if (batch.length === 0) continue;
+      fileLoadingPaths.value = [...new Set([...fileLoadingPaths.value, ...batch])];
+      const results = await Promise.allSettled(batch.map(requestSingleFileDiff));
+      if (!progressiveRequestActive(generation)) return;
+      const loadedDiffs = results.flatMap((result) =>
+        result.status === 'fulfilled' && result.value.fileDiff ? [result.value.fileDiff] : [],
+      );
+      failed ||= loadedDiffs.length !== batch.length;
+      mergeFileDiffs(loadedDiffs);
+      collapseState.value = expandDiffFiles(
+        collapseState.value,
+        'all',
+        loadedDiffs.map((item) => item.file.path),
+      );
+      fileLoadingPaths.value = fileLoadingPaths.value.filter((path) => !batch.includes(path));
+      await yieldToRender();
+    }
+    if (failed && progressiveRequestActive(generation)) {
+      error.value = '部分文件变更读取失败，可点击对应文件重试';
+    }
   } finally {
-    if (generation === requestGeneration.value) loading.value = false;
+    if (generation === requestGeneration.value) {
+      loadingAllFiles.value = false;
+      fileLoadingPaths.value = [];
+    }
   }
+}
+
+function progressiveRequestActive(generation: number) {
+  return generation === requestGeneration.value && progressiveAllFiles.value;
+}
+
+function mergeFileDiffs(fileDiffs: FileDiff[]) {
+  if (!diff.value || fileDiffs.length === 0) return;
+  const paths = new Set(fileDiffs.map((item) => item.file.path));
+  diff.value = {
+    ...diff.value,
+    allDiff: [...diff.value.allDiff.filter((item) => !paths.has(item.file.path)), ...fileDiffs],
+  };
+}
+
+async function yieldToRender() {
+  await nextTick();
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 function collapseAllFiles() {
@@ -574,6 +647,7 @@ watch(
     collapseState.value = syncDiffCollapseTarget(collapseState.value, targetKey.value);
     diffContext.value = initialDiffContext();
     diff.value = null;
+    loadingAllFiles.value = false;
     error.value = '';
     sessionPrefixMap.value = {};
     fileLoadingPaths.value = [];

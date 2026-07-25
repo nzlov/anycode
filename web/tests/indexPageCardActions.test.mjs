@@ -333,6 +333,14 @@ test('all current diff surfaces reuse one workspace without triggering card navi
     new URL('../src/components/DiffWorkspace.vue', import.meta.url),
     'utf8',
   );
+  const viewerSource = readFileSync(
+    new URL('../src/components/DiffViewer.vue', import.meta.url),
+    'utf8',
+  );
+  const diffServiceSource = readFileSync(
+    new URL('../src/services/diff.ts', import.meta.url),
+    'utf8',
+  );
   const diffPageSource = readFileSync(
     new URL('../src/pages/DiffPage.vue', import.meta.url),
     'utf8',
@@ -355,11 +363,11 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(overviewSource, /@keyup\.enter\.stop/);
   assert.match(overviewSource, /@keyup\.space\.stop/);
   assert.doesNotMatch(overviewSource, /loadSummaries|syncPolling|visibilitychange/);
+  assert.match(overviewSource, /<q-dialog v-model="diffDialog" @hide="handleDiffDialogClosed"/);
   assert.match(
     overviewSource,
-    /<q-dialog v-model="diffDialog" @hide="handleDiffDialogClosed"/,
+    /openDiffDialog[\s\S]*!isDesktopOverview\.value[\s\S]*path: '\/diff'/,
   );
-  assert.match(overviewSource, /openDiffDialog[\s\S]*!isDesktopOverview\.value[\s\S]*path: '\/diff'/);
   assert.match(overviewSource, /<DiffWorkspace[\s\S]*:target="diffDialogTarget"/);
   assert.match(overviewSource, /v-model="diffDialogWorkspaceState"/);
   assert.match(overviewSource, /aria-label="打开完整 Diff 页面"/);
@@ -378,20 +386,35 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(workspaceSource, /getSessionDiffFiles/);
   assert.match(workspaceSource, /getSessionSingleDiff/);
   assert.match(workspaceSource, /getBranchAllDiff/);
+  assert.match(workspaceSource, /getBranchDiffFiles/);
   assert.match(
     workspaceSource,
-    /metadataFirst\.value[\s\S]*getSessionDiffFiles[\s\S]*initialDiffCollapseState\(targetKey\.value\)/,
+    /metadataFirst\.value[\s\S]*requestDiffFiles\(\)[\s\S]*initialDiffCollapseState\(targetKey\.value\)/,
   );
   assert.match(
     workspaceSource,
     /toggleFileCollapsed[\s\S]*await loadFileDiff\(filePath\)[\s\S]*toggleDiffFileCollapsed/,
   );
-  assert.match(workspaceSource, /expandAllFiles[\s\S]*void loadAllDiff\(\)/);
+  assert.match(
+    workspaceSource,
+    /v-if="allFilesLoading !== 'lazy'"[\s\S]*aria-label="展开全部文件"/,
+  );
+  assert.doesNotMatch(workspaceSource, /loadAllDiff/);
+  assert.match(workspaceSource, /const progressiveBatchSize = 2/);
+  assert.match(
+    workspaceSource,
+    /loadProgressiveAllDiff[\s\S]*Promise\.allSettled[\s\S]*mergeFileDiffs[\s\S]*yieldToRender/,
+  );
+  assert.match(workspaceSource, /nextTick\(\)[\s\S]*window\.requestAnimationFrame/);
+  assert.match(
+    workspaceSource,
+    /progressiveAllFiles && allFilePaths\.length > 0[\s\S]*已加载 \$\{visibleDiffs\.length\}/,
+  );
   assert.match(workspaceSource, /aria-label="展开全部文件"/);
   assert.match(workspaceSource, /aria-label="折叠全部文件"/);
   assert.match(workspaceSource, /GLUE: branch Diff paths encode their source session/);
   assert.doesNotMatch(workspaceSource, /sessionPrefixTargetKey/);
-  assert.match(diffPageSource, /<DiffWorkspace/);
+  assert.match(diffPageSource, /<DiffWorkspace[\s\S]*all-files-loading="progressive"/);
   assert.doesNotMatch(diffPageSource, /class="diff-layout"/);
   assert.doesNotMatch(diffPageSource, /<AppPagination|<DiffViewer/);
   assert.doesNotMatch(diffPageSource, /getSessionAllDiff|getBranchAllDiff/);
@@ -399,7 +422,12 @@ test('all current diff surfaces reuse one workspace without triggering card navi
   assert.match(questionsDialogSource, /<DiffWorkspace/);
   assert.match(detailSource, /<DiffWorkspace[\s\S]*:target="detailDiffTarget"/);
   assert.match(detailSource, /:show-file-navigation="false"/);
-  assert.match(detailSource, /lazy-file-details/);
+  assert.match(detailSource, /all-files-loading="lazy"/);
+  assert.match(
+    diffServiceSource,
+    /query BranchDiffFiles[\s\S]*files \{[\s\S]*additions[\s\S]*deletions/,
+  );
+  assert.match(viewerSource, /\.diff-file-card\s*\{[^}]*content-visibility:\s*auto/s);
   assert.doesNotMatch(
     detailSource,
     /<DiffViewer|getSessionFileDiff|getSessionSingleDiff|getSessionAllDiff/,

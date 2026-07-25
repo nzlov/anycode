@@ -12,6 +12,7 @@
       :target="target"
       toolbar-target="#app-page-toolbar"
       toolbar-title="当前分支变更"
+      all-files-loading="progressive"
     />
   </q-page>
 </template>

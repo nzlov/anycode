@@ -1207,7 +1207,7 @@ function isCurrentApprovalContext(requestGeneration: number, sessionId: string) 
 
 function openDiffDialog(card: SessionCard) {
   if (!isDesktopOverview.value) {
-    void router.push({ path: '/diff', query: { sessionId: card.id, mode: 'all' } });
+    void router.push({ path: '/diff', query: { sessionId: card.id, mode: 'single' } });
     return;
   }
   diffDialogSessionId.value = card.id;

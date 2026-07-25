@@ -155,6 +155,37 @@ export async function getSessionDiffFiles(input: { sessionId: string }): Promise
   return normalizeSessionDiff(data.sessionDiff);
 }
 
+export async function getBranchDiffFiles(input: {
+  projectId: string;
+  branch: string;
+}): Promise<SessionDiff> {
+  const data = await graphqlFetch<
+    { branchDiff: GraphQLSessionDiff },
+    { input: { projectId: string; branch: string; mode: 'all' } }
+  >({
+    query: `
+      query BranchDiffFiles($input: BranchDiffInput!) {
+        branchDiff(input: $input) {
+          mode
+          filePath
+          available
+          files {
+            path
+            status
+            additions
+            deletions
+          }
+        }
+      }
+    `,
+    variables: {
+      input: { projectId: input.projectId, branch: input.branch, mode: 'all' },
+    },
+  });
+
+  return normalizeSessionDiff(data.branchDiff);
+}
+
 export async function getSessionSingleDiff(input: GetSessionDiffInput): Promise<SessionDiff> {
   const variablesInput: {
     sessionId: string;
