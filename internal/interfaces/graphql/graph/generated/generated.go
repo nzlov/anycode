@@ -483,6 +483,7 @@ type ComplexityRoot struct {
 	Subscription struct {
 		SessionEvents  func(childComplexity int, sessionID string) int
 		SessionUpdates func(childComplexity int) int
+		TunnelUpdates  func(childComplexity int) int
 	}
 
 	TerminalSummary struct {
@@ -630,6 +631,11 @@ type ComplexityRoot struct {
 		SessionID func(childComplexity int) int
 		Status    func(childComplexity int) int
 		URL       func(childComplexity int) int
+	}
+
+	TunnelCountEvent struct {
+		EventType    func(childComplexity int) int
+		RunningCount func(childComplexity int) int
 	}
 
 	WebPushConfig struct {
@@ -782,6 +788,7 @@ type QueryResolver interface {
 type SubscriptionResolver interface {
 	SessionEvents(ctx context.Context, sessionID string) (<-chan *model.TranscriptEvent, error)
 	SessionUpdates(ctx context.Context) (<-chan *model.SessionUpdateEvent, error)
+	TunnelUpdates(ctx context.Context) (<-chan *model.TunnelCountEvent, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -2957,6 +2964,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.SessionUpdates(childComplexity), true
+	case "Subscription.tunnelUpdates":
+		if e.ComplexityRoot.Subscription.TunnelUpdates == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Subscription.TunnelUpdates(childComplexity), true
 
 	case "TerminalSummary.commands":
 		if e.ComplexityRoot.TerminalSummary.Commands == nil {
@@ -3482,6 +3495,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Tunnel.URL(childComplexity), true
+
+	case "TunnelCountEvent.eventType":
+		if e.ComplexityRoot.TunnelCountEvent.EventType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TunnelCountEvent.EventType(childComplexity), true
+	case "TunnelCountEvent.runningCount":
+		if e.ComplexityRoot.TunnelCountEvent.RunningCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.TunnelCountEvent.RunningCount(childComplexity), true
 
 	case "WebPushConfig.enabled":
 		if e.ComplexityRoot.WebPushConfig.Enabled == nil {
@@ -4035,6 +4061,12 @@ type Tunnel {
 type Subscription {
   sessionEvents(sessionId: ID!): TranscriptEvent!
   sessionUpdates: SessionUpdateEvent!
+  tunnelUpdates: TunnelCountEvent!
+}
+
+type TunnelCountEvent {
+  eventType: String!
+  runningCount: Int!
 }
 
 type PageInfo {
@@ -16809,6 +16841,41 @@ func (ec *executionContext) fieldContext_Subscription_sessionUpdates(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _Subscription_tunnelUpdates(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_tunnelUpdates,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Subscription().TunnelUpdates(ctx)
+		},
+		nil,
+		ec.marshalNTunnelCountEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnelCountEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_tunnelUpdates(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "eventType":
+				return ec.fieldContext_TunnelCountEvent_eventType(ctx, field)
+			case "runningCount":
+				return ec.fieldContext_TunnelCountEvent_runningCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TunnelCountEvent", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TerminalSummary_currentDirectory(ctx context.Context, field graphql.CollectedField, obj *model.TerminalSummary) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -19424,6 +19491,64 @@ func (ec *executionContext) fieldContext_Tunnel_createdAt(_ context.Context, fie
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Time does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TunnelCountEvent_eventType(ctx context.Context, field graphql.CollectedField, obj *model.TunnelCountEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TunnelCountEvent_eventType,
+		func(ctx context.Context) (any, error) {
+			return obj.EventType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TunnelCountEvent_eventType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TunnelCountEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TunnelCountEvent_runningCount(ctx context.Context, field graphql.CollectedField, obj *model.TunnelCountEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TunnelCountEvent_runningCount,
+		func(ctx context.Context) (any, error) {
+			return obj.RunningCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TunnelCountEvent_runningCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TunnelCountEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -27925,6 +28050,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_sessionEvents(ctx, fields[0])
 	case "sessionUpdates":
 		return ec._Subscription_sessionUpdates(ctx, fields[0])
+	case "tunnelUpdates":
+		return ec._Subscription_tunnelUpdates(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -29011,6 +29138,50 @@ func (ec *executionContext) _Tunnel(ctx context.Context, sel ast.SelectionSet, o
 			}
 		case "createdAt":
 			out.Values[i] = ec._Tunnel_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var tunnelCountEventImplementors = []string{"TunnelCountEvent"}
+
+func (ec *executionContext) _TunnelCountEvent(ctx context.Context, sel ast.SelectionSet, obj *model.TunnelCountEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, tunnelCountEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("TunnelCountEvent")
+		case "eventType":
+			out.Values[i] = ec._TunnelCountEvent_eventType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "runningCount":
+			out.Values[i] = ec._TunnelCountEvent_runningCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -31394,6 +31565,20 @@ func (ec *executionContext) marshalNTunnel2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋi
 		return graphql.Null
 	}
 	return ec._Tunnel(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNTunnelCountEvent2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnelCountEvent(ctx context.Context, sel ast.SelectionSet, v model.TunnelCountEvent) graphql.Marshaler {
+	return ec._TunnelCountEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNTunnelCountEvent2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐTunnelCountEvent(ctx context.Context, sel ast.SelectionSet, v *model.TunnelCountEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._TunnelCountEvent(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput(ctx context.Context, v any) (model.UpdateAppearanceSettingsInput, error) {

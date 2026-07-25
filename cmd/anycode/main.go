@@ -26,6 +26,7 @@ import (
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
 	tunnelapp "github.com/nzlov/anycode/internal/application/tunnel"
+	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
@@ -207,7 +208,7 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		_ = codex.Close()
 		return nil, fmt.Errorf("initialize tunnel runtime: %w", err)
 	}
-	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)))
+	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)), tunnelapp.WithEventPublisher(eventService))
 	terminalRuntime := ptyruntime.New(ptyruntime.WithHistoryDir(filepath.Join(cfg.DataDir, "terminals")))
 	settings := store.Settings()
 	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAgentWritableRootsProvider(settings), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
@@ -234,9 +235,10 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
 		// GLUE: a global concurrency increase wakes the session queue; remove when settings changes use a shared application event bus.
-		Settings:    settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain)),
-		Tunnels:     tunnelService,
-		CodexModels: capabilities.Models,
+		Settings:     settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain)),
+		Tunnels:      tunnelService,
+		TunnelEvents: tunneleventapp.New(eventService, tunnelService),
+		CodexModels:  capabilities.Models,
 	}
 	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime}, nil
 }

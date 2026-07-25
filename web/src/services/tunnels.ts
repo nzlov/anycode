@@ -1,4 +1,8 @@
-import { graphqlFetch } from '@/services/graphqlClient';
+import {
+  graphqlFetch,
+  graphqlSubscribe,
+  type GraphQLSubscriptionClose,
+} from '@/services/graphqlClient';
 
 export interface Tunnel {
   id: string;
@@ -10,6 +14,11 @@ export interface Tunnel {
   accessUrl: string;
   status: string;
   createdAt: string;
+}
+
+export interface TunnelCountUpdate {
+  eventType: string;
+  runningCount: number;
 }
 
 export async function listTunnels() {
@@ -45,4 +54,26 @@ export async function closeTunnel(id: string) {
     notify: false,
   });
   return data.closeTunnel;
+}
+
+export function subscribeTunnelUpdates(handlers: {
+  onData: (update: TunnelCountUpdate) => void;
+  onStart?: () => void;
+  onError?: (error: Error) => void;
+  onClose?: (close: GraphQLSubscriptionClose) => void;
+}) {
+  return graphqlSubscribe<{ tunnelUpdates: TunnelCountUpdate }>({
+    query: `
+      subscription TunnelUpdates {
+        tunnelUpdates {
+          eventType
+          runningCount
+        }
+      }
+    `,
+    onData: (data) => handlers.onData(data.tunnelUpdates),
+    ...(handlers.onStart ? { onStart: handlers.onStart } : {}),
+    ...(handlers.onError ? { onError: handlers.onError } : {}),
+    ...(handlers.onClose ? { onClose: handlers.onClose } : {}),
+  });
 }

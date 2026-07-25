@@ -12,6 +12,6 @@ import ProjectDirectoryDialog from '@/components/ProjectDirectoryDialog.vue';
 const router = useRouter();
 
 function close() {
-  void router.push({ name: 'overview' });
+  void router.push({ name: 'projects' });
 }
 </script>

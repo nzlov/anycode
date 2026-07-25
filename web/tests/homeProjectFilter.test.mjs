@@ -11,6 +11,7 @@ const indexSource = readSource('../src/pages/IndexPage.vue');
 const projectFiltersSource = readSource('../src/components/ProjectVisibilityFilters.vue');
 const toolbarSource = readSource('../src/components/PageToolbar.vue');
 const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+const projectsPageSource = readSource('../src/pages/ProjectsPage.vue');
 const directorySource = readSource('../src/components/ProjectDirectoryDialog.vue');
 const projectsComposableSource = readSource('../src/composables/useProjects.ts');
 const newSessionSource = readSource('../src/components/NewSessionDialog.vue');
@@ -90,7 +91,7 @@ test('project mutations invalidate older list snapshots and loading rows are not
   assert.match(projectsComposableSource, /const revision = mutationRevision/);
   assert.match(projectsComposableSource, /if \(revision !== mutationRevision\) return/);
   assert.equal((projectsComposableSource.match(/mutationRevision \+= 1/g) ?? []).length, 3);
-  assert.match(settingsSource, /:disable="projectsLoading \|\| removingProject"/);
+  assert.match(projectsPageSource, /:disable="loading \|\| removing"/);
 });
 
 test('removing the last project clears the persistent new-session selection', () => {
@@ -100,15 +101,14 @@ test('removing the last project clears the persistent new-session selection', ()
   );
 });
 
-test('global settings owns complete project management', () => {
-  assert.match(settingsSource, /name="projects"/);
-  assert.match(settingsSource, /<project-directory-dialog/);
-  assert.match(settingsSource, /<project-settings-dialog/);
-  assert.match(settingsSource, /openProjectOverview\(project\.id\)/);
-  assert.match(settingsSource, /openProjectSettings\(project\)/);
-  assert.match(settingsSource, /openWorkflowConfig\(project\.id\)/);
-  assert.match(settingsSource, /confirmRemoveProject\(project\.id, project\.name\)/);
-  assert.match(settingsSource, /aria-label="新增项目"/);
+test('project page owns complete project management outside global settings', () => {
+  assert.doesNotMatch(settingsSource, /name="projects"|项目操作/);
+  assert.match(projectsPageSource, /openProjectOverview\(project\.id\)/);
+  assert.match(projectsPageSource, /openProjectSettings\(project\)/);
+  assert.match(projectsPageSource, /openWorkflowConfig\(project\.id\)/);
+  assert.match(projectsPageSource, /confirmRemoveProject\(project\.id, project\.name\)/);
+  assert.match(projectsPageSource, /aria-label="新增项目"/);
+  assert.match(projectsPageSource, /fab/);
   assert.match(settingsSource, /class="global-settings-tabs lt-sm"/);
   assert.match(stylesSource, /\.global-settings-tabs/);
 });

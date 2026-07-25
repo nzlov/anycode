@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/nzlov/anycode/internal/application/apperror"
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	sessiondomain "github.com/nzlov/anycode/internal/domain/session"
 	domain "github.com/nzlov/anycode/internal/domain/tunnel"
 )
@@ -49,6 +51,7 @@ type DTO struct {
 
 type Service struct {
 	runtime       domain.Runtime
+	publisher     eventdomain.Publisher
 	now           func() time.Time
 	random        func(int) (string, error)
 	reservedPorts map[int]struct{}
@@ -64,6 +67,10 @@ func WithReservedPorts(ports ...int) Option {
 			}
 		}
 	}
+}
+
+func WithEventPublisher(publisher eventdomain.Publisher) Option {
+	return func(s *Service) { s.publisher = publisher }
 }
 
 func New(runtime domain.Runtime, options ...Option) *Service {
@@ -119,6 +126,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (CreateResult, 
 	if err != nil {
 		return CreateResult{}, err
 	}
+	s.publishRunningCount(ctx)
 	return CreateResult{
 		Tunnel:    toDTO(started),
 		Auth:      auth,
@@ -149,7 +157,9 @@ func (s *Service) Close(ctx context.Context, id domain.ID) error {
 	if id == "" {
 		return errors.New("tunnel id is required")
 	}
-	return s.runtime.Close(ctx, id)
+	err := s.runtime.Close(ctx, id)
+	s.publishRunningCount(ctx)
+	return err
 }
 
 func (s *Service) CloseOwned(ctx context.Context, sessionID domain.SessionID, id domain.ID) error {
@@ -173,7 +183,9 @@ func (s *Service) CloseSession(ctx context.Context, sessionID domain.SessionID) 
 	if s == nil || s.runtime == nil {
 		return nil
 	}
-	return s.runtime.CloseSession(ctx, sessionID)
+	err := s.runtime.CloseSession(ctx, sessionID)
+	s.publishRunningCount(ctx)
+	return err
 }
 
 // GLUE: Session lifecycle cleanup crosses the session/tunnel ID boundary; remove if cleanup moves to a shared application runner.
@@ -193,6 +205,29 @@ func toDTO(item domain.Tunnel) DTO {
 		ID: item.ID, SessionID: item.SessionID, Name: item.Name, Port: item.Port, Hostname: item.Hostname,
 		URL: item.URL, AccessURL: item.AccessURL, Status: item.Status, CreatedAt: item.CreatedAt,
 	}
+}
+
+func (s *Service) publishRunningCount(ctx context.Context) {
+	if s.publisher == nil {
+		return
+	}
+	items, err := s.runtime.List(ctx)
+	if err != nil {
+		return
+	}
+	count := 0
+	for _, item := range items {
+		if item.Status == domain.StatusRunning {
+			count++
+		}
+	}
+	now := s.now().UTC()
+	_ = s.publisher.PublishAfterCommit(ctx, eventdomain.DomainEvent{
+		ID:        eventdomain.ID("tunnel-count-" + strconv.FormatInt(now.UnixNano(), 10)),
+		Type:      "tunnel.count_updated",
+		Payload:   map[string]any{"runningCount": count},
+		CreatedAt: now,
+	})
 }
 
 func randomString(size int) (string, error) {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	eventdomain "github.com/nzlov/anycode/internal/domain/event"
 	domain "github.com/nzlov/anycode/internal/domain/tunnel"
 )
 
@@ -28,6 +29,12 @@ func (r *runtimeStub) Start(_ context.Context, input domain.StartInput) (domain.
 func (r *runtimeStub) List(context.Context) ([]domain.Tunnel, error) { return r.items, nil }
 func (r *runtimeStub) Close(_ context.Context, id domain.ID) error {
 	r.closed = append(r.closed, id)
+	for index, item := range r.items {
+		if item.ID == id {
+			r.items = append(r.items[:index], r.items[index+1:]...)
+			break
+		}
+	}
 	return nil
 }
 func (r *runtimeStub) CloseSession(context.Context, domain.SessionID) error { return nil }
@@ -62,6 +69,33 @@ func TestCreateReturnsAnyCodeAuthURL(t *testing.T) {
 	}
 }
 
+func TestCreateAndClosePublishRunningTunnelCount(t *testing.T) {
+	runtime := &runtimeStub{}
+	publisher := &eventPublisherStub{}
+	service := New(runtime, WithEventPublisher(publisher))
+	service.random = func(int) (string, error) { return "value", nil }
+	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
+
+	result, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Name: "preview", Port: 4173})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := publisher.events[len(publisher.events)-1].Payload["runningCount"]; got != 1 {
+		t.Fatalf("created tunnel count = %#v", got)
+	}
+	if err := service.Close(context.Background(), result.Tunnel.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := publisher.events[len(publisher.events)-1].Payload["runningCount"]; got != 0 {
+		t.Fatalf("closed tunnel count = %#v", got)
+	}
+	for _, event := range publisher.events {
+		if event.Type != "tunnel.count_updated" {
+			t.Fatalf("event type = %q", event.Type)
+		}
+	}
+}
+
 func TestCloseOwnedRejectsAnotherSession(t *testing.T) {
 	runtime := &runtimeStub{items: []domain.Tunnel{{ID: "tunnel-1", SessionID: "session-1"}}}
 	service := New(runtime)
@@ -86,4 +120,13 @@ func TestCreateRequiresName(t *testing.T) {
 	if _, err := service.Create(context.Background(), CreateInput{SessionID: "session-1", Port: 4173}); err == nil {
 		t.Fatal("expected tunnel name validation error")
 	}
+}
+
+type eventPublisherStub struct {
+	events []eventdomain.DomainEvent
+}
+
+func (p *eventPublisherStub) PublishAfterCommit(_ context.Context, event eventdomain.DomainEvent) error {
+	p.events = append(p.events, event)
+	return nil
 }

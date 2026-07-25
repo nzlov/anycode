@@ -972,6 +972,38 @@ func (r *subscriptionResolver) SessionUpdates(ctx context.Context) (<-chan *mode
 	return out, nil
 }
 
+// TunnelUpdates is the resolver for the tunnelUpdates field.
+func (r *subscriptionResolver) TunnelUpdates(ctx context.Context) (<-chan *model.TunnelCountEvent, error) {
+	if r.UseCases.TunnelEvents == nil {
+		return nil, missingUseCase("tunnel events")
+	}
+	source, err := r.UseCases.TunnelEvents.TunnelUpdates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *model.TunnelCountEvent)
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-source:
+				if !ok {
+					return
+				}
+				update := &model.TunnelCountEvent{EventType: event.Type, RunningCount: event.RunningCount}
+				select {
+				case <-ctx.Done():
+					return
+				case out <- update:
+				}
+			}
+		}
+	}()
+	return out, nil
+}
+
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
 

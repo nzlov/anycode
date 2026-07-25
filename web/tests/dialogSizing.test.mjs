@@ -21,6 +21,7 @@ const promptEditSource = readSource('../src/components/PromptAppendEditPanel.vue
 const layoutSource = readSource('../src/layouts/MainLayout.vue');
 const routesSource = readSource('../src/router/routes.ts');
 const settingsPageSource = readSource('../src/pages/SettingsPage.vue');
+const projectsPageSource = readSource('../src/pages/ProjectsPage.vue');
 const newSessionPageSource = readSource('../src/pages/NewSessionPage.vue');
 
 const contentDialogs = [
@@ -72,8 +73,8 @@ test('content dialogs keep shared cards while mobile entries use route pages', (
 
 test('compact confirmation dialogs do not use the content dialog contract', () => {
   assert.equal((layoutSource.match(/class="confirm-dialog"/g) ?? []).length, 1);
-  assert.equal((globalSettingsSource.match(/class="confirm-dialog"/g) ?? []).length, 1);
-  for (const source of [layoutSource, globalSettingsSource]) {
+  assert.equal((projectsPageSource.match(/class="confirm-dialog"/g) ?? []).length, 1);
+  for (const source of [layoutSource, projectsPageSource]) {
     assert.doesNotMatch(source, /class="[^"]*confirm-dialog[^"]*app-content-dialog/);
   }
 });

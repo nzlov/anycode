@@ -2335,6 +2335,14 @@ body.desktop
 }
 
 @media (max-width: 599.98px) {
+  .app-toolbar--overview {
+    gap: 0;
+  }
+
+  .app-toolbar--overview .page-toolbar__actions {
+    justify-content: flex-end;
+  }
+
   .overview-project-filters--mobile {
     flex: 0 0 auto;
     flex-wrap: wrap;

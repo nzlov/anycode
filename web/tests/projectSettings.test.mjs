@@ -11,9 +11,9 @@ test('project settings API preserves the worktree init command', () => {
   assert.doesNotMatch(source, /worktreeInitCommand:\s*input\.worktreeInitCommand\.trim/);
 });
 
-test('project menu opens settings before workflow configuration and removal', () => {
+test('project list page opens settings before workflow configuration and removal', () => {
   const source = readFileSync(
-    new URL('../src/components/GlobalSettingsDialog.vue', import.meta.url),
+    new URL('../src/pages/ProjectsPage.vue', import.meta.url),
     'utf8',
   );
   const settings = source.indexOf('<q-item-section>设置</q-item-section>');
@@ -22,7 +22,20 @@ test('project menu opens settings before workflow configuration and removal', ()
 
   assert.ok(settings >= 0 && settings < workflow && workflow < remove);
   assert.match(source, /openProjectSettings\(project\)/);
-  assert.match(source, /<project-settings-dialog/);
+  assert.match(source, /fab[\s\S]*aria-label="新增项目"/);
+});
+
+test('project management has its own toolbar route and is absent from global settings', () => {
+  const layout = readFileSync(new URL('../src/layouts/MainLayout.vue', import.meta.url), 'utf8');
+  const routes = readFileSync(new URL('../src/router/routes.ts', import.meta.url), 'utf8');
+  const settings = readFileSync(
+    new URL('../src/components/GlobalSettingsDialog.vue', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(layout, /aria-label="项目管理"[\s\S]*name: 'projects'/);
+  assert.match(routes, /path: 'projects',[\s\S]*name: 'projects'/);
+  assert.doesNotMatch(settings, /name="projects"|activeSection === 'projects'|项目操作/);
 });
 
 test('project settings dialog uses a multiline input and submits the raw value', () => {

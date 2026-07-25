@@ -1,7 +1,10 @@
 <template>
   <q-layout view="hHh lpR fFf" class="app-layout">
     <q-header v-if="applicationReady" bordered class="app-header">
-      <q-toolbar class="app-toolbar">
+      <q-toolbar
+        class="app-toolbar"
+        :class="{ 'app-toolbar--overview': $route.name === 'overview' }"
+      >
         <q-btn
           v-if="isContentRoute"
           flat
@@ -53,10 +56,23 @@
           round
           dense
           class="app-icon-btn"
+          icon="folder"
+          aria-label="项目管理"
+          :to="{ name: 'projects' }"
+        >
+          <q-tooltip>项目管理</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="$route.name === 'overview' && runningTunnelCount > 0"
+          flat
+          round
+          dense
+          class="app-icon-btn"
           icon="lan"
           aria-label="隧道"
           @click="openTunnels"
         >
+          <q-badge floating rounded color="negative">{{ runningTunnelCount }}</q-badge>
           <q-tooltip>隧道</q-tooltip>
         </q-btn>
         <q-btn
@@ -121,9 +137,11 @@
         'page-container--horizontal': isOverviewHorizontalView,
       }"
     >
+      <!-- GLUE: the overview owns tunnel details; only its count crosses into the layout toolbar. -->
       <router-view
         :key="$route.fullPath"
         @session-title="sessionTitle = $event"
+        @tunnel-count="runningTunnelCount = $event"
       />
     </q-page-container>
 
@@ -195,6 +213,7 @@ const overviewDesktopMinWidth = 700;
 const settingsDialogOpen = ref(false);
 const tunnelDialogOpen = ref(false);
 const logoutDialogOpen = ref(false);
+const runningTunnelCount = ref(0);
 const { themeMode, themeModes } = useThemeMode();
 const { overviewViewMode } = useOverviewViewMode();
 const route = useRoute();

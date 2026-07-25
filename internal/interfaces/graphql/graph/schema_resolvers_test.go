@@ -20,6 +20,7 @@ import (
 	sessioneventapp "github.com/nzlov/anycode/internal/application/sessionevent"
 	settingapp "github.com/nzlov/anycode/internal/application/setting"
 	timelineapp "github.com/nzlov/anycode/internal/application/timeline"
+	tunneleventapp "github.com/nzlov/anycode/internal/application/tunnelevent"
 	workflowapp "github.com/nzlov/anycode/internal/application/workflow"
 	authdomain "github.com/nzlov/anycode/internal/domain/auth"
 	processdomain "github.com/nzlov/anycode/internal/domain/process"
@@ -45,6 +46,21 @@ func TestQuerySessionFilesReturnsUnpaginatedFiles(t *testing.T) {
 	}
 	if len(files) != 1 || files[0].ID != "artifact-1" {
 		t.Fatalf("session files = %#v", files)
+	}
+}
+
+func TestSubscriptionTunnelUpdatesForwardsRunningCount(t *testing.T) {
+	source := make(chan tunneleventapp.DTO, 1)
+	updates, err := NewResolver(UseCases{
+		TunnelEvents: fakeTunnelEventUseCase{updates: source},
+	}).Subscription().TunnelUpdates(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source <- tunneleventapp.DTO{Type: tunneleventapp.TypeCountUpdated, RunningCount: 2}
+	update := <-updates
+	if update.EventType != tunneleventapp.TypeCountUpdated || update.RunningCount != 2 {
+		t.Fatalf("tunnel update = %#v", update)
 	}
 }
 
@@ -1559,4 +1575,12 @@ func (f *fakeSessionUseCase) RetrySessionInitialization(_ context.Context, id se
 
 func strPtr(value string) *string {
 	return &value
+}
+
+type fakeTunnelEventUseCase struct {
+	updates <-chan tunneleventapp.DTO
+}
+
+func (f fakeTunnelEventUseCase) TunnelUpdates(context.Context) (<-chan tunneleventapp.DTO, error) {
+	return f.updates, nil
 }

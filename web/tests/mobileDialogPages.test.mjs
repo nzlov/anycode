@@ -12,6 +12,7 @@ const overview = readSource('../src/pages/IndexPage.vue');
 const detail = readSource('../src/components/SessionDetailView.vue');
 const artifacts = readSource('../src/components/SessionArtifactsPanel.vue');
 const settings = readSource('../src/components/GlobalSettingsDialog.vue');
+const projects = readSource('../src/pages/ProjectsPage.vue');
 const promptPanel = readSource('../src/components/PromptAppendEditPanel.vue');
 const promptPage = readSource('../src/pages/PromptAppendEditPage.vue');
 
@@ -20,6 +21,7 @@ test('every persisted mobile content surface has a direct route', () => {
     'diff',
     'new-session',
     'settings',
+    'projects',
     'project-create',
     'project-settings',
     'session-artifacts',
@@ -39,8 +41,8 @@ test('standalone mobile entries navigate while artifact previews open in place',
     layout,
     /function openSettings[\s\S]*\$q\.screen\.lt\.sm[\s\S]*settingsDialogOpen\.value = true/,
   );
-  assert.match(settings, /function openProjectDirectory[\s\S]*name: 'project-create'/);
-  assert.match(settings, /function openProjectSettings[\s\S]*name: 'project-settings'/);
+  assert.match(projects, /:to="\{ name: 'project-create' \}"/);
+  assert.match(projects, /function openProjectSettings[\s\S]*name: 'project-settings'/);
   assert.match(
     overview,
     /function openDiffDialog[\s\S]*!isDesktopOverview\.value[\s\S]*path: '\/diff'/,

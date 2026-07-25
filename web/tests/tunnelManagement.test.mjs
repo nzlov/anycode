@@ -26,6 +26,19 @@ test('tunnel entry follows history and uses page navigation only on mobile', () 
   assert.match(routes, /path: 'tunnels', name: 'tunnels'/);
 });
 
+test('toolbar tunnel entry only appears for running tunnels and shows their count', () => {
+  assert.match(
+    layout,
+    /v-if="\$route\.name === 'overview' && runningTunnelCount > 0"[\s\S]*icon="lan"/,
+  );
+  assert.match(layout, /<q-badge[\s\S]*\{\{ runningTunnelCount \}\}/);
+  assert.match(layout, /@tunnel-count="runningTunnelCount = \$event"/);
+  assert.match(index, /emit\('tunnel-count', update\.runningCount\)/);
+  assert.match(index, /useTunnelUpdates/);
+  assert.doesNotMatch(index, /setInterval\([^)]*refreshTunnels/);
+  assert.match(service, /subscription TunnelUpdates/);
+});
+
 test('tunnel manager only lists and closes active tunnels', () => {
   assert.match(manager, /listTunnels\(\)/);
   assert.match(manager, /closeTunnelRequest\(tunnel\.id\)/);

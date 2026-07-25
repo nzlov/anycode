@@ -122,6 +122,15 @@ test('mobile command controls share a 44px touch contract', () => {
   );
 });
 
+test('mobile overview toolbar keeps terminal and history controls evenly spaced', () => {
+  assert.match(layoutSource, /class="app-toolbar"[\s\S]*:class="\{ 'app-toolbar--overview'/);
+  assert.match(smallStyles, /\.app-toolbar--overview\s*{[^}]*gap:\s*0/s);
+  assert.match(
+    smallStyles,
+    /\.app-toolbar--overview \.page-toolbar__actions\s*{[^}]*justify-content:\s*flex-end/s,
+  );
+});
+
 test('shared pages use compact desktop spacing and no mobile horizontal boundary', () => {
   assert.match(baseStyles, /\.page-shell\s*{[^}]*padding:\s*12px/s);
   assert.match(mobileStyles, /\.page-shell\s*{[^}]*padding:\s*16px 0/s);

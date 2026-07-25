@@ -741,6 +741,11 @@ type Tunnel struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type TunnelCountEvent struct {
+	EventType    string `json:"eventType"`
+	RunningCount int    `json:"runningCount"`
+}
+
 type UpdateAppearanceSettingsInput struct {
 	BackgroundType       AppearanceBackgroundType `json:"backgroundType"`
 	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`

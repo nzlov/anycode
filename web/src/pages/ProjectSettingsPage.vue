@@ -25,6 +25,6 @@ const project = computed(() => projects.value.find((item) => item.id === project
 onMounted(() => void loadProjects());
 
 function close() {
-  void router.push({ name: 'settings' });
+  void router.push({ name: 'projects' });
 }
 </script>

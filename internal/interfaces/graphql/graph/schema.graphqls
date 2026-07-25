@@ -104,6 +104,12 @@ type Tunnel {
 type Subscription {
   sessionEvents(sessionId: ID!): TranscriptEvent!
   sessionUpdates: SessionUpdateEvent!
+  tunnelUpdates: TunnelCountEvent!
+}
+
+type TunnelCountEvent {
+  eventType: String!
+  runningCount: Int!
 }
 
 type PageInfo {

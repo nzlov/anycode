@@ -478,6 +478,7 @@ import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import { useOverviewViewMode } from '@/composables/useOverviewViewMode';
 import { useProjects } from '@/composables/useProjects';
 import { useSessionUpdates } from '@/composables/useSessionUpdates';
+import { useTunnelUpdates } from '@/composables/useTunnelUpdates';
 import { useSessionsPage } from '@/composables/useSessionsPage';
 import { type DiffWorkspaceState, type DiffWorkspaceTarget } from '@/services/diff';
 import { createOverviewCardGroups } from '@/services/overviewCardGroups';
@@ -518,12 +519,12 @@ import { listTunnels, type Tunnel } from '@/services/tunnels';
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
+const emit = defineEmits<{ 'tunnel-count': [count: number] }>();
 const overviewDesktopMinWidth = 700;
 const hiddenProjectStorageKey = 'anycode.overview.hidden-projects.v1';
 const horizontalWidthStorageKey = 'anycode.overview.horizontal-widths.v1';
 const minSessionColumnWidth = 320;
 const todoMenuHideDelay = 120;
-const tunnelRefreshInterval = 5000;
 const { overviewViewMode } = useOverviewViewMode();
 const isDesktopOverview = computed(() => $q.screen.width >= overviewDesktopMinWidth);
 const isHorizontalView = computed(
@@ -635,7 +636,6 @@ const diffDialogTarget = computed<DiffWorkspaceTarget>(() => ({
   sessionId: diffDialogSessionId.value,
 }));
 let todoMenuHideTimer: ReturnType<typeof setTimeout> | null = null;
-let tunnelRefreshTimer: ReturnType<typeof setInterval> | null = null;
 const cardRefreshRequests = createKeyedLatestRequestTracker();
 let overviewMounted = false;
 // GLUE: suppress Quasar's synthetic post-long-press click; remove when QMenu consumes it upstream.
@@ -646,6 +646,8 @@ const { start: startOverviewLiveUpdates, stop: stopOverviewLiveUpdates } = useSe
   onData: handleSessionUpdate,
   onReconnect: () => void loadOverviewSessions(),
 });
+const { start: startTunnelUpdates, stop: stopTunnelUpdates } =
+  useTunnelUpdates(handleTunnelCountUpdate);
 
 interface ApprovalContext {
   sessionId: string;
@@ -654,18 +656,16 @@ interface ApprovalContext {
 
 onMounted(() => {
   overviewMounted = true;
-  tunnelRefreshTimer = setInterval(() => void refreshTunnels(), tunnelRefreshInterval);
   void startOverview();
 });
 
 onUnmounted(() => {
   overviewMounted = false;
   cardRefreshRequests.clear();
-  if (tunnelRefreshTimer) clearInterval(tunnelRefreshTimer);
-  tunnelRefreshTimer = null;
   clearTodoMenuHideTimer();
   clearCardClickSuppression();
   stopOverviewLiveUpdates();
+  stopTunnelUpdates();
 });
 
 watch(projectScopeId, (value) => {
@@ -683,13 +683,12 @@ watch(questionsDialog, (open) => {
 });
 
 async function startOverview() {
-  const tunnelsRequest = refreshTunnels();
   await loadProjects();
-  await tunnelsRequest;
   pruneHiddenProjectIds();
   await loadOverviewSessions();
   if (!overviewMounted) return;
   startOverviewLiveUpdates();
+  startTunnelUpdates();
 }
 
 async function loadOverviewSessions() {
@@ -702,6 +701,11 @@ async function refreshTunnels() {
   } catch {
     // Keep the last successful query result until the next refresh.
   }
+}
+
+function handleTunnelCountUpdate(update: { runningCount: number }) {
+  emit('tunnel-count', update.runningCount);
+  void refreshTunnels();
 }
 
 function tunnelsForSession(sessionId: string) {
