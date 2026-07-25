@@ -13,7 +13,6 @@ type Config struct {
 	DataDir                 string
 	CodexBin                string
 	CloudflaredBin          string
-	AgentMaxConcurrent      int
 	TursoDatabaseURL        string
 	TursoAuthToken          string
 	ArtifactMaxFileBytes    int64
@@ -48,7 +47,6 @@ func LoadFromEnv() (Config, error) {
 		DataDir:                 envOrDefault("ANYCODE_DATA_DIR", "./data"),
 		CodexBin:                envOrDefault("CODEX_BIN", "codex"),
 		CloudflaredBin:          envOrDefault("CLOUDFLARED_BIN", "cloudflared"),
-		AgentMaxConcurrent:      envIntOrDefault("ANYCODE_AGENT_MAX_CONCURRENT", 1),
 		TursoDatabaseURL:        os.Getenv("TURSO_DATABASE_URL"),
 		TursoAuthToken:          os.Getenv("TURSO_AUTH_TOKEN"),
 		ArtifactMaxFileBytes:    maxFile,
@@ -69,18 +67,6 @@ func envPositiveInt64OrDefault(key string, fallback int64) (int64, error) {
 		return 0, fmt.Errorf("%s must be a positive base-10 integer", key)
 	}
 	return parsed, nil
-}
-
-func envIntOrDefault(key string, fallback int) int {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
 }
 
 func envOrDefault(key string, fallback string) string {

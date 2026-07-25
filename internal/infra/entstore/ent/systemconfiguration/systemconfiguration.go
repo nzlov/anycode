@@ -13,6 +13,8 @@ const (
 	Label = "system_configuration"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldAgentMaxConcurrent holds the string denoting the agent_max_concurrent field in the database.
+	FieldAgentMaxConcurrent = "agent_max_concurrent"
 	// FieldWallpaperColorScheme holds the string denoting the wallpaper_color_scheme field in the database.
 	FieldWallpaperColorScheme = "wallpaper_color_scheme"
 	// FieldBackgroundType holds the string denoting the background_type field in the database.
@@ -36,6 +38,7 @@ const (
 // Columns holds all SQL columns for systemconfiguration fields.
 var Columns = []string{
 	FieldID,
+	FieldAgentMaxConcurrent,
 	FieldWallpaperColorScheme,
 	FieldBackgroundType,
 	FieldSolidTheme,
@@ -57,6 +60,8 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultAgentMaxConcurrent holds the default value on creation for the "agent_max_concurrent" field.
+	DefaultAgentMaxConcurrent int
 	// WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	WallpaperColorSchemeValidator func(string) error
 	// DefaultBackgroundType holds the default value on creation for the "background_type" field.
@@ -87,6 +92,11 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByAgentMaxConcurrent orders the results by the agent_max_concurrent field.
+func ByAgentMaxConcurrent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAgentMaxConcurrent, opts...).ToFunc()
 }
 
 // ByWallpaperColorScheme orders the results by the wallpaper_color_scheme field.

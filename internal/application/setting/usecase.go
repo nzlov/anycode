@@ -20,6 +20,8 @@ import (
 )
 
 type UseCase interface {
+	GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, error)
+	UpdateGeneralSettings(ctx context.Context, input UpdateGeneralSettingsInput) (GeneralSettingsDTO, error)
 	GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error)
 	UpdateAppearanceSettings(ctx context.Context, input UpdateAppearanceSettingsInput) (AppearanceSettingsDTO, error)
 	UploadAppearanceWallpaper(ctx context.Context, input UploadAppearanceWallpaperInput) (AppearanceSettingsDTO, error)
@@ -28,6 +30,14 @@ type UseCase interface {
 	ListQuickCommands(ctx context.Context, input ListQuickCommandsInput) (port.Page[QuickCommandDTO], error)
 	CreateQuickCommand(ctx context.Context, input CreateQuickCommandInput) (QuickCommandDTO, error)
 	DeleteQuickCommand(ctx context.Context, input DeleteQuickCommandInput) error
+}
+
+type UpdateGeneralSettingsInput struct {
+	AgentMaxConcurrent int
+}
+
+type GeneralSettingsDTO struct {
+	AgentMaxConcurrent int
 }
 
 type UpdateAppearanceSettingsInput struct {
@@ -78,11 +88,12 @@ type QuickCommandDTO struct {
 }
 
 type Service struct {
-	repo       domain.Repository
-	wallpapers domain.WallpaperStore
-	nasa       domain.NASAWallpaperSource
-	now        func() time.Time
-	generateID func() (domain.QuickCommandID, error)
+	repo                      domain.Repository
+	wallpapers                domain.WallpaperStore
+	nasa                      domain.NASAWallpaperSource
+	now                       func() time.Time
+	generateID                func() (domain.QuickCommandID, error)
+	onConcurrencyLimitChanged func()
 }
 
 type Option func(*Service)
@@ -105,6 +116,12 @@ func WithNASAWallpaperSource(source domain.NASAWallpaperSource) Option {
 	}
 }
 
+func WithConcurrencyLimitChanged(callback func()) Option {
+	return func(service *Service) {
+		service.onConcurrencyLimitChanged = callback
+	}
+}
+
 func New(repo domain.Repository, options ...Option) *Service {
 	service := &Service{
 		repo:       repo,
@@ -115,6 +132,36 @@ func New(repo domain.Repository, options ...Option) *Service {
 		option(service)
 	}
 	return service
+}
+
+func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, error) {
+	if s == nil || s.repo == nil {
+		return GeneralSettingsDTO{}, errors.New("setting usecase: nil service")
+	}
+	configuration, err := s.repo.GetSystemConfiguration(ctx)
+	if err != nil {
+		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "get general settings failed").WithRetryable(true)
+	}
+	if configuration.AgentMaxConcurrent <= 0 {
+		configuration.AgentMaxConcurrent = domain.DefaultSystemConfiguration().AgentMaxConcurrent
+	}
+	return GeneralSettingsDTO{AgentMaxConcurrent: configuration.AgentMaxConcurrent}, nil
+}
+
+func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneralSettingsInput) (GeneralSettingsDTO, error) {
+	if s == nil || s.repo == nil {
+		return GeneralSettingsDTO{}, errors.New("setting usecase: nil service")
+	}
+	if input.AgentMaxConcurrent <= 0 {
+		return GeneralSettingsDTO{}, validationError("agentMaxConcurrent", "agent concurrency limit must be positive")
+	}
+	if err := s.repo.UpdateAgentMaxConcurrent(ctx, input.AgentMaxConcurrent); err != nil {
+		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update general settings failed").WithRetryable(true)
+	}
+	if s.onConcurrencyLimitChanged != nil {
+		s.onConcurrencyLimitChanged()
+	}
+	return GeneralSettingsDTO{AgentMaxConcurrent: input.AgentMaxConcurrent}, nil
 }
 
 func (s *Service) GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error) {

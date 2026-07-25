@@ -72,6 +72,26 @@ func TestAppearanceSettingsDefaultUpdateAndValidation(t *testing.T) {
 	assertAppError(t, err, apperror.CodeValidationFailed)
 }
 
+func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
+	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
+	changed := 0
+	service := New(repo, WithConcurrencyLimitChanged(func() { changed++ }))
+
+	got, err := service.GetGeneralSettings(context.Background())
+	if err != nil || got.AgentMaxConcurrent != 2 {
+		t.Fatalf("GetGeneralSettings() = %#v, %v", got, err)
+	}
+	got, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 4})
+	if err != nil || got.AgentMaxConcurrent != 4 || repo.configuration.AgentMaxConcurrent != 4 || changed != 1 {
+		t.Fatalf("UpdateGeneralSettings() = %#v, %v; stored=%#v changed=%d", got, err, repo.configuration, changed)
+	}
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 0})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	if changed != 1 {
+		t.Fatalf("invalid update callback count = %d", changed)
+	}
+}
+
 func TestUploadAppearanceWallpaperStoresImageAndSelectsIt(t *testing.T) {
 	repo := &fakeRepository{configuration: domain.DefaultSystemConfiguration()}
 	wallpapers := &fakeWallpaperStore{files: map[string][]byte{}}
@@ -250,6 +270,11 @@ func (r *fakeRepository) GetSystemConfiguration(_ context.Context) (domain.Syste
 
 func (r *fakeRepository) SaveSystemConfiguration(_ context.Context, configuration domain.SystemConfiguration) error {
 	r.configuration = configuration
+	return nil
+}
+
+func (r *fakeRepository) UpdateAgentMaxConcurrent(_ context.Context, max int) error {
+	r.configuration.AgentMaxConcurrent = max
 	return nil
 }
 

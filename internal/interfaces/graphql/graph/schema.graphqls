@@ -8,6 +8,7 @@ type Query {
   codexModelOptions: [CodexModelOption!]!
   codexSlashCommands: [CodexSlashCommand!]!
   promptFileMatches(input: PromptFileMatchInput!): [PromptFileMatch!]!
+  generalSettings: GeneralSettings!
   appearanceSettings: AppearanceSettings!
   webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
@@ -49,6 +50,7 @@ input PromptFileMatchInput {
 }
 
 type Mutation {
+  updateGeneralSettings(input: UpdateGeneralSettingsInput!): GeneralSettings!
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
   uploadAppearanceWallpaper(file: Upload!): AppearanceSettings!
   updateWebPushProxy(proxyUrl: String!): WebPushConfig!
@@ -137,6 +139,14 @@ enum AppearanceSolidTheme {
   PURPLE
   PEACH
   INK
+}
+
+type GeneralSettings {
+  agentMaxConcurrent: Int!
+}
+
+input UpdateGeneralSettingsInput {
+  agentMaxConcurrent: Int!
 }
 
 type AppearanceSettings {

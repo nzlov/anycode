@@ -23,7 +23,7 @@ A web workspace for Codex agents that lets you manage projects, session cards, i
 - Add projects from directories accessible to the server, with automatic detection of Git repositories and available branches.
 - Choose the base branch, run mode, Codex model, reasoning effort, and filesystem permissions when creating a session. Git projects can use an isolated worktree for each session.
 - Use cards to see runtime status, base and working branches, the current workflow node, priority, token usage, and recent activity, then continue the same Codex session with follow-up requests.
-- Control the execution queue with a global concurrency limit and per-session priority.
+- Configure the global concurrency limit under General settings and control the execution queue with per-session priority.
 
 ### Horizontal workspace
 
@@ -138,7 +138,6 @@ Use [`.env.example`](.env.example) and [`compose.yml`](compose.yml) as the sourc
 | `ANYCODE_HOST_DATA_DIR` | `./data` | Host directory mounted at `/home/anycode` in the container to persist AnyCode data and Codex credentials. |
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | Container directory for the database, attachments, artifacts, and worktrees created by AnyCode. This usually does not need to be changed. |
 | `ANYCODE_WORKSPACES_DIR` | `./workspaces` | Host project directory mounted at `/workspaces` in the container. |
-| `ANYCODE_AGENT_MAX_CONCURRENT` | `1` | Maximum number of Codex agents that may run concurrently. Additional sessions are queued. |
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | Local Turso/libSQL database path. This can also be a `libsql://` cloud database URL. |
 | `TURSO_AUTH_TOKEN` | Empty | Authentication token for a remote Turso database. |
 

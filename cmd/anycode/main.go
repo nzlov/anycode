@@ -209,7 +209,8 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 	}
 	tunnelService := tunnelapp.New(tunnelRuntime, tunnelapp.WithReservedPorts(httpPort(cfg.HTTPAddr)))
 	terminalRuntime := ptyruntime.New(ptyruntime.WithHistoryDir(filepath.Join(cfg.DataDir, "terminals")))
-	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithMaxConcurrentAgents(cfg.AgentMaxConcurrent), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
+	settings := store.Settings()
+	sessionService := sessionapp.New(store.Sessions(), store.Projects(), sessionapp.WithAttachments(attachments, files), sessionapp.WithArtifactPublisher(artifacts), sessionapp.WithWorktrees(gitcli.NewWorktrees(cfg.DataDir)), sessionapp.WithWorktreeInitializer(shellinit.New()), sessionapp.WithWorkflows(workflowService), sessionapp.WithMergePort(gitdiffClient), sessionapp.WithDiffCounter(diffService), sessionapp.WithProcesses(processes, codex), sessionapp.WithTerminalRuntime(terminalRuntime), sessionapp.WithEvents(events), sessionapp.WithEventPublisher(eventService), sessionapp.WithQuestions(questionService), sessionapp.WithTunnels(tunnelService), sessionapp.WithUnitOfWork(store), sessionapp.WithSessionHistoryPurger(store), sessionapp.WithSessionLocker(sessionapp.NewMemorySessionLocker()), sessionapp.WithConcurrencyLimitProvider(settings), sessionapp.WithAutoSessionInitialization(), sessionapp.WithAutoQueueDrain())
 	codex.SetDynamicToolHandler(codextoolapp.New(sessionService, artifacts, codextoolapp.WithTunnels(tunnelService)))
 	pushClient := webpushinfra.New()
 	principal := authdomain.NewAccessPrincipal(cfg.AccessKey, "web_push")
@@ -232,9 +233,10 @@ func newApplication(store *entstore.Store, cfg config.Config) (*wiredApplication
 		Questions:        questionService,
 		Notifications:    notificationService,
 		PromptCompletion: promptcompletionapp.New(store.Projects(), store.Sessions(), codex),
-		Settings:         settingapp.New(store.Settings(), settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New())),
-		Tunnels:          tunnelService,
-		CodexModels:      capabilities.Models,
+		// GLUE: a global concurrency increase wakes the session queue; remove when settings changes use a shared application event bus.
+		Settings:    settingapp.New(settings, settingapp.WithWallpaperStore(files), settingapp.WithNASAWallpaperSource(nasawallpaper.New()), settingapp.WithConcurrencyLimitChanged(sessionService.ScheduleQueueDrain)),
+		Tunnels:     tunnelService,
+		CodexModels: capabilities.Models,
 	}
 	return &wiredApplication{useCases: useCases, codex: codex, terminal: terminalRuntime}, nil
 }

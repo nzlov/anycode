@@ -64,6 +64,11 @@ func IDContainsFold(id string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldContainsFold(FieldID, id))
 }
 
+// AgentMaxConcurrent applies equality check predicate on the "agent_max_concurrent" field. It's identical to AgentMaxConcurrentEQ.
+func AgentMaxConcurrent(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldAgentMaxConcurrent, v))
+}
+
 // WallpaperColorScheme applies equality check predicate on the "wallpaper_color_scheme" field. It's identical to WallpaperColorSchemeEQ.
 func WallpaperColorScheme(v string) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldWallpaperColorScheme, v))
@@ -102,6 +107,46 @@ func WallpaperMimeType(v string) predicate.SystemConfiguration {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.SystemConfiguration {
 	return predicate.SystemConfiguration(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// AgentMaxConcurrentEQ applies the EQ predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldEQ(FieldAgentMaxConcurrent, v))
+}
+
+// AgentMaxConcurrentNEQ applies the NEQ predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentNEQ(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNEQ(FieldAgentMaxConcurrent, v))
+}
+
+// AgentMaxConcurrentIn applies the In predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldIn(FieldAgentMaxConcurrent, vs...))
+}
+
+// AgentMaxConcurrentNotIn applies the NotIn predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentNotIn(vs ...int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldNotIn(FieldAgentMaxConcurrent, vs...))
+}
+
+// AgentMaxConcurrentGT applies the GT predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentGT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGT(FieldAgentMaxConcurrent, v))
+}
+
+// AgentMaxConcurrentGTE applies the GTE predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentGTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldGTE(FieldAgentMaxConcurrent, v))
+}
+
+// AgentMaxConcurrentLT applies the LT predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentLT(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLT(FieldAgentMaxConcurrent, v))
+}
+
+// AgentMaxConcurrentLTE applies the LTE predicate on the "agent_max_concurrent" field.
+func AgentMaxConcurrentLTE(v int) predicate.SystemConfiguration {
+	return predicate.SystemConfiguration(sql.FieldLTE(FieldAgentMaxConcurrent, v))
 }
 
 // WallpaperColorSchemeEQ applies the EQ predicate on the "wallpaper_color_scheme" field.

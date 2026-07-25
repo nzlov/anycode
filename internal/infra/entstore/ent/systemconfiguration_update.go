@@ -28,6 +28,27 @@ func (_u *SystemConfigurationUpdate) Where(ps ...predicate.SystemConfiguration) 
 	return _u
 }
 
+// SetAgentMaxConcurrent sets the "agent_max_concurrent" field.
+func (_u *SystemConfigurationUpdate) SetAgentMaxConcurrent(v int) *SystemConfigurationUpdate {
+	_u.mutation.ResetAgentMaxConcurrent()
+	_u.mutation.SetAgentMaxConcurrent(v)
+	return _u
+}
+
+// SetNillableAgentMaxConcurrent sets the "agent_max_concurrent" field if the given value is not nil.
+func (_u *SystemConfigurationUpdate) SetNillableAgentMaxConcurrent(v *int) *SystemConfigurationUpdate {
+	if v != nil {
+		_u.SetAgentMaxConcurrent(*v)
+	}
+	return _u
+}
+
+// AddAgentMaxConcurrent adds value to the "agent_max_concurrent" field.
+func (_u *SystemConfigurationUpdate) AddAgentMaxConcurrent(v int) *SystemConfigurationUpdate {
+	_u.mutation.AddAgentMaxConcurrent(v)
+	return _u
+}
+
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
 func (_u *SystemConfigurationUpdate) SetWallpaperColorScheme(v string) *SystemConfigurationUpdate {
 	_u.mutation.SetWallpaperColorScheme(v)
@@ -212,6 +233,12 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 			}
 		}
 	}
+	if value, ok := _u.mutation.AgentMaxConcurrent(); ok {
+		_spec.SetField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAgentMaxConcurrent(); ok {
+		_spec.AddField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)
 	}
@@ -257,6 +284,27 @@ type SystemConfigurationUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *SystemConfigurationMutation
+}
+
+// SetAgentMaxConcurrent sets the "agent_max_concurrent" field.
+func (_u *SystemConfigurationUpdateOne) SetAgentMaxConcurrent(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.ResetAgentMaxConcurrent()
+	_u.mutation.SetAgentMaxConcurrent(v)
+	return _u
+}
+
+// SetNillableAgentMaxConcurrent sets the "agent_max_concurrent" field if the given value is not nil.
+func (_u *SystemConfigurationUpdateOne) SetNillableAgentMaxConcurrent(v *int) *SystemConfigurationUpdateOne {
+	if v != nil {
+		_u.SetAgentMaxConcurrent(*v)
+	}
+	return _u
+}
+
+// AddAgentMaxConcurrent adds value to the "agent_max_concurrent" field.
+func (_u *SystemConfigurationUpdateOne) AddAgentMaxConcurrent(v int) *SystemConfigurationUpdateOne {
+	_u.mutation.AddAgentMaxConcurrent(v)
+	return _u
 }
 
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
@@ -472,6 +520,12 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.AgentMaxConcurrent(); ok {
+		_spec.SetField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedAgentMaxConcurrent(); ok {
+		_spec.AddField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)

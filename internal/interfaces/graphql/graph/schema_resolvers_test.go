@@ -240,6 +240,20 @@ func TestAppearanceSettingsResolversForwardSettingsUseCase(t *testing.T) {
 	}
 }
 
+func TestGeneralSettingsResolversForwardSettingsUseCase(t *testing.T) {
+	settings := &fakeSettingUseCase{generalResult: settingapp.GeneralSettingsDTO{AgentMaxConcurrent: 4}}
+	resolver := NewResolver(UseCases{Settings: settings})
+
+	got, err := resolver.Query().GeneralSettings(context.Background())
+	if err != nil || got.AgentMaxConcurrent != 4 {
+		t.Fatalf("GeneralSettings() = %#v, %v", got, err)
+	}
+	updated, err := resolver.Mutation().UpdateGeneralSettings(context.Background(), model.UpdateGeneralSettingsInput{AgentMaxConcurrent: 6})
+	if err != nil || settings.generalInput.AgentMaxConcurrent != 6 || updated.AgentMaxConcurrent != 4 {
+		t.Fatalf("UpdateGeneralSettings() = %#v, input=%#v, error=%v", updated, settings.generalInput, err)
+	}
+}
+
 func TestWebPushResolversForwardPrincipalAndSubscription(t *testing.T) {
 	notifications := &fakeNotificationUseCase{
 		config:       notificationapp.ConfigDTO{Enabled: true, PublicKey: "public", ProxyURL: "http://old-proxy.example:8080"},
@@ -1225,6 +1239,8 @@ func (f *fakeProjectUseCase) UpdateProjectSettings(_ context.Context, input proj
 
 type fakeSettingUseCase struct {
 	settingapp.UseCase
+	generalInput     settingapp.UpdateGeneralSettingsInput
+	generalResult    settingapp.GeneralSettingsDTO
 	appearanceInput  settingapp.UpdateAppearanceSettingsInput
 	appearanceResult settingapp.AppearanceSettingsDTO
 	listInput        settingapp.ListQuickCommandsInput
@@ -1232,6 +1248,15 @@ type fakeSettingUseCase struct {
 	createInput      settingapp.CreateQuickCommandInput
 	createResult     settingapp.QuickCommandDTO
 	deleteInput      settingapp.DeleteQuickCommandInput
+}
+
+func (f *fakeSettingUseCase) GetGeneralSettings(context.Context) (settingapp.GeneralSettingsDTO, error) {
+	return f.generalResult, nil
+}
+
+func (f *fakeSettingUseCase) UpdateGeneralSettings(_ context.Context, input settingapp.UpdateGeneralSettingsInput) (settingapp.GeneralSettingsDTO, error) {
+	f.generalInput = input
+	return f.generalResult, nil
 }
 
 type fakeNotificationUseCase struct {

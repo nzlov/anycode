@@ -174,6 +174,10 @@ type FileDiff struct {
 	Hunks []*DiffHunk `json:"hunks"`
 }
 
+type GeneralSettings struct {
+	AgentMaxConcurrent int `json:"agentMaxConcurrent"`
+}
+
 type GitBranch struct {
 	Name      string `json:"name"`
 	IsCurrent bool   `json:"isCurrent"`
@@ -729,6 +733,10 @@ type UpdateAppearanceSettingsInput struct {
 	SolidTheme           AppearanceSolidTheme     `json:"solidTheme"`
 	BackgroundMask       int                      `json:"backgroundMask"`
 	WallpaperColorScheme WallpaperColorScheme     `json:"wallpaperColorScheme"`
+}
+
+type UpdateGeneralSettingsInput struct {
+	AgentMaxConcurrent int `json:"agentMaxConcurrent"`
 }
 
 type UpdateProjectSettingsInput struct {

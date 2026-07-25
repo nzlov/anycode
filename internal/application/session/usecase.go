@@ -323,6 +323,7 @@ type Service struct {
 	now                     func() time.Time
 	generateID              func() (domain.ID, error)
 	maxConcurrentAgents     int
+	concurrencyLimits       concurrencyLimitProvider
 	initializationScheduler func(*Service, domain.ID, bool)
 	initializationWG        sync.WaitGroup
 	terminalWG              sync.WaitGroup
@@ -350,6 +351,10 @@ type codexEventPublisher interface {
 
 type sessionDiffCounter interface {
 	CountSessionChangedFiles(ctx context.Context, sessionID domain.ID) (int, error)
+}
+
+type concurrencyLimitProvider interface {
+	MaxConcurrentAgents(ctx context.Context) (int, error)
 }
 
 type questionRequestCoordinator interface {
@@ -483,6 +488,12 @@ func WithMaxConcurrentAgents(max int) Option {
 	}
 }
 
+func WithConcurrencyLimitProvider(provider concurrencyLimitProvider) Option {
+	return func(s *Service) {
+		s.concurrencyLimits = provider
+	}
+}
+
 func WithAutoQueueDrain() Option {
 	return func(s *Service) {
 		s.queueDrainScheduler = func(service *Service) {
@@ -512,7 +523,7 @@ func New(repo domain.Repository, projects projectdomain.Repository, options ...O
 		projects:            projects,
 		now:                 time.Now,
 		generateID:          generateID,
-		maxConcurrentAgents: 1,
+		maxConcurrentAgents: 2,
 		queueDrainScheduler: func(*Service) {},
 		processExitDelay:    processExitRetryDelay,
 		lifecycleCtx:        lifecycleCtx,
@@ -884,6 +895,26 @@ func (s *Service) scheduleQueueDrain() {
 		return
 	}
 	s.queueDrainScheduler(s)
+}
+
+// ScheduleQueueDrain wakes queued sessions after an application-level setting change.
+// GLUE: remove this entry point when setting changes are delivered through a shared application event bus.
+func (s *Service) ScheduleQueueDrain() {
+	s.scheduleQueueDrain()
+}
+
+func (s *Service) maxConcurrentAgentsFor(ctx context.Context) (int, error) {
+	if s.concurrencyLimits == nil {
+		return s.maxConcurrentAgents, nil
+	}
+	max, err := s.concurrencyLimits.MaxConcurrentAgents(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("get agent concurrency limit: %w", err)
+	}
+	if max <= 0 {
+		return 0, errors.New("agent concurrency limit must be positive")
+	}
+	return max, nil
 }
 
 const restartRecoveryPrompt = "Continue the interrupted task after the AnyCode service restart. Inspect the current state before changing files, preserve completed work, and continue from the same task."
@@ -3259,7 +3290,11 @@ func (s *Service) startCodex(ctx context.Context, session domain.Session, option
 	}
 	maxActive := 0
 	if !force {
-		maxActive = s.maxConcurrentAgents
+		var err error
+		maxActive, err = s.maxConcurrentAgentsFor(ctx)
+		if err != nil {
+			return DTO{}, err
+		}
 	}
 	dto, err := s.startCodexWithWorkdirReservation(ctx, session, options, maxActive)
 	var claimErr *executionClaimNotAcquiredError
@@ -3570,12 +3605,11 @@ func (s *Service) prepareQueuedSession(session domain.Session, options codexStar
 		return domain.Session{}, eventdomain.DomainEvent{}, false, fmt.Errorf("queue session %s: %w", session.ID, err)
 	}
 	event, hasEvent, err := s.newSessionEvent(session, "session.queued", map[string]any{
-		"priority":            string(session.Queue.Priority),
-		"sessionPriority":     string(normalizePriority(session.Priority)),
-		"queueKind":           string(session.Queue.Kind),
-		"sessionId":           string(session.ID),
-		"nodeRunId":           stringValuePtr(session.Queue.NodeRunID),
-		"maxConcurrentAgents": s.maxConcurrentAgents,
+		"priority":        string(session.Queue.Priority),
+		"sessionPriority": string(normalizePriority(session.Priority)),
+		"queueKind":       string(session.Queue.Kind),
+		"sessionId":       string(session.ID),
+		"nodeRunId":       stringValuePtr(session.Queue.NodeRunID),
 	})
 	if err != nil {
 		return domain.Session{}, eventdomain.DomainEvent{}, false, err
@@ -3626,7 +3660,11 @@ func (s *Service) drainQueuedSessions(ctx context.Context) (int, error) {
 			if s.codex == nil {
 				return ErrProcessLifecycleNotWired
 			}
-			if _, err := s.startCodexWithWorkdirReservation(ctx, current, codexStartOptionsFromQueue(current), s.maxConcurrentAgents); err != nil {
+			maxActive, err := s.maxConcurrentAgentsFor(ctx)
+			if err != nil {
+				return err
+			}
+			if _, err := s.startCodexWithWorkdirReservation(ctx, current, codexStartOptionsFromQueue(current), maxActive); err != nil {
 				var claimErr *executionClaimNotAcquiredError
 				if errors.As(err, &claimErr) {
 					if claimErr.result.Status == port.ExecutionAtCapacity {
@@ -4116,6 +4154,7 @@ func joinPromptParts(parts ...string) string {
 
 const rebuiltPromptNotice = "无法复用已有 Codex 会话，请基于以下上下文复查当前状态并继续处理。"
 const anyCodePromptGuidance = "AnyCode 提供 `questions` App Server 动态工具，可用于向用户提出选项问题。若需求、验收标准、执行取舍或下一步不确定，请使用 `questions` 咨询用户；如果上下文足够明确，请直接继续执行，不要无意义打断用户。`request_user_input` 不是 AnyCode 会话内的用户提问工具，可能只属于外层平台或特定计划模式；即使你在说明中看到它，也不要使用 `request_user_input` 来代替 AnyCode 的 `questions`。\n\nAnyCode 卡片的 TODO List 仅来自 Codex 的结构化计划事件。处理包含多个可执行步骤的任务时，必须调用 `update_plan` 创建计划，并在步骤状态变化后持续调用 `update_plan` 更新状态；不要只在回复中输出 Markdown checklist。单步骤任务或纯问答无需创建计划。"
+
 // GLUE: App Server dynamic tools run inside exec; remove this timeout guidance when exec can inherit a tool-specific wait window.
 const questionsWaitPromptGuidance = "调用 `questions` 时，承载调用的 `exec` 源码首行必须设置 `// @exec: {\"yield_time_ms\": 300000}`，并等待 `tools.questions(...)` 返回。五分钟内收到答案后，必须读取答案并继续本轮工作，不得重复输出“请选择”或提前发送 final。若五分钟后 `exec` 返回 `Script running with cell ID ...`，不要调用 `wait` 延长本轮，也不要重复提问；结束当前 Codex 运行，让 AnyCode 保留待回答请求，并在用户回答后通过持久化恢复继续。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"

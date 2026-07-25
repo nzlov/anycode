@@ -262,12 +262,12 @@ func (_q *SystemConfigurationQuery) Clone() *SystemConfigurationQuery {
 // Example:
 //
 //	var v []struct {
-//		WallpaperColorScheme string `json:"wallpaper_color_scheme,omitempty"`
+//		AgentMaxConcurrent int `json:"agent_max_concurrent,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.SystemConfiguration.Query().
-//		GroupBy(systemconfiguration.FieldWallpaperColorScheme).
+//		GroupBy(systemconfiguration.FieldAgentMaxConcurrent).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *SystemConfigurationQuery) GroupBy(field string, fields ...string) *SystemConfigurationGroupBy {
@@ -285,11 +285,11 @@ func (_q *SystemConfigurationQuery) GroupBy(field string, fields ...string) *Sys
 // Example:
 //
 //	var v []struct {
-//		WallpaperColorScheme string `json:"wallpaper_color_scheme,omitempty"`
+//		AgentMaxConcurrent int `json:"agent_max_concurrent,omitempty"`
 //	}
 //
 //	client.SystemConfiguration.Query().
-//		Select(systemconfiguration.FieldWallpaperColorScheme).
+//		Select(systemconfiguration.FieldAgentMaxConcurrent).
 //		Scan(ctx, &v)
 func (_q *SystemConfigurationQuery) Select(fields ...string) *SystemConfigurationSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

@@ -20,6 +20,20 @@ type SystemConfigurationCreate struct {
 	hooks    []Hook
 }
 
+// SetAgentMaxConcurrent sets the "agent_max_concurrent" field.
+func (_c *SystemConfigurationCreate) SetAgentMaxConcurrent(v int) *SystemConfigurationCreate {
+	_c.mutation.SetAgentMaxConcurrent(v)
+	return _c
+}
+
+// SetNillableAgentMaxConcurrent sets the "agent_max_concurrent" field if the given value is not nil.
+func (_c *SystemConfigurationCreate) SetNillableAgentMaxConcurrent(v *int) *SystemConfigurationCreate {
+	if v != nil {
+		_c.SetAgentMaxConcurrent(*v)
+	}
+	return _c
+}
+
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
 func (_c *SystemConfigurationCreate) SetWallpaperColorScheme(v string) *SystemConfigurationCreate {
 	_c.mutation.SetWallpaperColorScheme(v)
@@ -165,6 +179,10 @@ func (_c *SystemConfigurationCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *SystemConfigurationCreate) defaults() {
+	if _, ok := _c.mutation.AgentMaxConcurrent(); !ok {
+		v := systemconfiguration.DefaultAgentMaxConcurrent
+		_c.mutation.SetAgentMaxConcurrent(v)
+	}
 	if _, ok := _c.mutation.BackgroundType(); !ok {
 		v := systemconfiguration.DefaultBackgroundType
 		_c.mutation.SetBackgroundType(v)
@@ -197,6 +215,9 @@ func (_c *SystemConfigurationCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *SystemConfigurationCreate) check() error {
+	if _, ok := _c.mutation.AgentMaxConcurrent(); !ok {
+		return &ValidationError{Name: "agent_max_concurrent", err: errors.New(`ent: missing required field "SystemConfiguration.agent_max_concurrent"`)}
+	}
 	if _, ok := _c.mutation.WallpaperColorScheme(); !ok {
 		return &ValidationError{Name: "wallpaper_color_scheme", err: errors.New(`ent: missing required field "SystemConfiguration.wallpaper_color_scheme"`)}
 	}
@@ -270,6 +291,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if id, ok := _c.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = id
+	}
+	if value, ok := _c.mutation.AgentMaxConcurrent(); ok {
+		_spec.SetField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
+		_node.AgentMaxConcurrent = value
 	}
 	if value, ok := _c.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)

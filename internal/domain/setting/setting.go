@@ -106,6 +106,7 @@ func (scheme WallpaperColorScheme) Valid() bool {
 }
 
 type SystemConfiguration struct {
+	AgentMaxConcurrent   int
 	BackgroundType       BackgroundType
 	SolidTheme           SolidTheme
 	BackgroundMask       int
@@ -117,6 +118,7 @@ type SystemConfiguration struct {
 
 func DefaultSystemConfiguration() SystemConfiguration {
 	return SystemConfiguration{
+		AgentMaxConcurrent:   2,
 		BackgroundType:       BackgroundTypeBing,
 		SolidTheme:           SolidThemeVermilion,
 		BackgroundMask:       0,
@@ -132,6 +134,7 @@ type Repository interface {
 	Delete(ctx context.Context, id QuickCommandID) error
 	GetSystemConfiguration(ctx context.Context) (SystemConfiguration, error)
 	SaveSystemConfiguration(ctx context.Context, configuration SystemConfiguration) error
+	UpdateAgentMaxConcurrent(ctx context.Context, max int) error
 }
 
 type WallpaperStore interface {

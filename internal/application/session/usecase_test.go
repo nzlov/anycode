@@ -5276,6 +5276,21 @@ func TestQueuedResumeIncludesAppendsAddedWhileQueued(t *testing.T) {
 	}
 }
 
+func TestConcurrencyLimitProviderIsReadDynamically(t *testing.T) {
+	provider := &fakeConcurrencyLimitProvider{max: 2}
+	service := New(nil, nil, WithConcurrencyLimitProvider(provider))
+
+	got, err := service.maxConcurrentAgentsFor(context.Background())
+	if err != nil || got != 2 {
+		t.Fatalf("maxConcurrentAgentsFor() = %d, %v", got, err)
+	}
+	provider.max = 5
+	got, err = service.maxConcurrentAgentsFor(context.Background())
+	if err != nil || got != 5 || provider.calls != 2 {
+		t.Fatalf("dynamic maxConcurrentAgentsFor() = %d, %v; calls=%d", got, err, provider.calls)
+	}
+}
+
 func TestQueuedStartIncludesAppendsAddedWhileQueued(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -13422,6 +13437,16 @@ func eventContent[T processdomain.CodexEventContent](t *testing.T, event process
 
 type fakeProjectRepository struct {
 	projects map[projectdomain.ID]projectdomain.Project
+}
+
+type fakeConcurrencyLimitProvider struct {
+	max   int
+	calls int
+}
+
+func (f *fakeConcurrencyLimitProvider) MaxConcurrentAgents(context.Context) (int, error) {
+	f.calls++
+	return f.max, nil
 }
 
 type fakeTunnelCleaner struct {

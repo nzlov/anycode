@@ -24,7 +24,7 @@
 - 从服务端可访问的目录添加项目，自动检测 Git 仓库和可用分支。
 - 创建会话时选择基础分支、运行模式、Codex 模型、推理强度和文件系统权限；Git 项目可为会话创建隔离 worktree。
 - 通过卡片集中查看运行状态、基础分支、工作分支、当前流程节点、优先级、Token 用量和最近活动，并在同一 Codex 会话中持续追加需求。
-- 使用全局并发上限和会话优先级控制执行队列。
+- 在全局设置的“常规”分组配置并发上限，并结合会话优先级控制执行队列。
 
 ### 横向工作台
 
@@ -139,7 +139,6 @@ curl --fail http://127.0.0.1:8080/healthz
 | `ANYCODE_HOST_DATA_DIR` | `./data` | 挂载到容器 `/home/anycode` 的宿主机目录，用于持久化 AnyCode 数据和 Codex 凭据。 |
 | `ANYCODE_DATA_DIR` | `/home/anycode/.anycode` | 容器内数据库、附件、产物以及 AnyCode 创建的 worktree 目录。通常无需修改。 |
 | `ANYCODE_WORKSPACES_DIR` | `./workspaces` | 挂载到容器 `/workspaces` 的宿主机项目目录。 |
-| `ANYCODE_AGENT_MAX_CONCURRENT` | `1` | 同时运行的 Codex agent 上限；超出上限的会话进入队列。 |
 | `CLOUDFLARED_BIN` | `cloudflared` | Cloudflare 临时隧道客户端命令；官方镜像已内置。 |
 | `TURSO_DATABASE_URL` | `/home/anycode/.anycode/anycode.turso.db` | 本地 Turso/libSQL 数据库路径，也可改为 `libsql://` 云数据库地址。 |
 | `TURSO_AUTH_TOKEN` | 空 | 使用远程 Turso 数据库时的认证 token。 |

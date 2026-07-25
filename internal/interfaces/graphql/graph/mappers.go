@@ -54,6 +54,10 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 	}
 }
 
+func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSettings {
+	return &model.GeneralSettings{AgentMaxConcurrent: dto.AgentMaxConcurrent}
+}
+
 func mapAppearanceSettings(dto settingapp.AppearanceSettingsDTO) *model.AppearanceSettings {
 	return &model.AppearanceSettings{
 		BackgroundType:       model.AppearanceBackgroundType(strings.ToUpper(string(dto.BackgroundType))),

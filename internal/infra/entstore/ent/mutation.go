@@ -12995,22 +12995,24 @@ func (m *StagedAttachmentMutation) ResetEdge(name string) error {
 // SystemConfigurationMutation represents an operation that mutates the SystemConfiguration nodes in the graph.
 type SystemConfigurationMutation struct {
 	config
-	op                     Op
-	typ                    string
-	id                     *string
-	wallpaper_color_scheme *string
-	background_type        *string
-	solid_theme            *string
-	background_mask        *int
-	addbackground_mask     *int
-	wallpaper_id           *string
-	wallpaper_filename     *string
-	wallpaper_mime_type    *string
-	updated_at             *time.Time
-	clearedFields          map[string]struct{}
-	done                   bool
-	oldValue               func(context.Context) (*SystemConfiguration, error)
-	predicates             []predicate.SystemConfiguration
+	op                      Op
+	typ                     string
+	id                      *string
+	agent_max_concurrent    *int
+	addagent_max_concurrent *int
+	wallpaper_color_scheme  *string
+	background_type         *string
+	solid_theme             *string
+	background_mask         *int
+	addbackground_mask      *int
+	wallpaper_id            *string
+	wallpaper_filename      *string
+	wallpaper_mime_type     *string
+	updated_at              *time.Time
+	clearedFields           map[string]struct{}
+	done                    bool
+	oldValue                func(context.Context) (*SystemConfiguration, error)
+	predicates              []predicate.SystemConfiguration
 }
 
 var _ ent.Mutation = (*SystemConfigurationMutation)(nil)
@@ -13115,6 +13117,62 @@ func (m *SystemConfigurationMutation) IDs(ctx context.Context) ([]string, error)
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
+}
+
+// SetAgentMaxConcurrent sets the "agent_max_concurrent" field.
+func (m *SystemConfigurationMutation) SetAgentMaxConcurrent(i int) {
+	m.agent_max_concurrent = &i
+	m.addagent_max_concurrent = nil
+}
+
+// AgentMaxConcurrent returns the value of the "agent_max_concurrent" field in the mutation.
+func (m *SystemConfigurationMutation) AgentMaxConcurrent() (r int, exists bool) {
+	v := m.agent_max_concurrent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAgentMaxConcurrent returns the old "agent_max_concurrent" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldAgentMaxConcurrent(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAgentMaxConcurrent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAgentMaxConcurrent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAgentMaxConcurrent: %w", err)
+	}
+	return oldValue.AgentMaxConcurrent, nil
+}
+
+// AddAgentMaxConcurrent adds i to the "agent_max_concurrent" field.
+func (m *SystemConfigurationMutation) AddAgentMaxConcurrent(i int) {
+	if m.addagent_max_concurrent != nil {
+		*m.addagent_max_concurrent += i
+	} else {
+		m.addagent_max_concurrent = &i
+	}
+}
+
+// AddedAgentMaxConcurrent returns the value that was added to the "agent_max_concurrent" field in this mutation.
+func (m *SystemConfigurationMutation) AddedAgentMaxConcurrent() (r int, exists bool) {
+	v := m.addagent_max_concurrent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAgentMaxConcurrent resets all changes to the "agent_max_concurrent" field.
+func (m *SystemConfigurationMutation) ResetAgentMaxConcurrent() {
+	m.agent_max_concurrent = nil
+	m.addagent_max_concurrent = nil
 }
 
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
@@ -13459,7 +13517,10 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
+	if m.agent_max_concurrent != nil {
+		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
+	}
 	if m.wallpaper_color_scheme != nil {
 		fields = append(fields, systemconfiguration.FieldWallpaperColorScheme)
 	}
@@ -13492,6 +13553,8 @@ func (m *SystemConfigurationMutation) Fields() []string {
 // schema.
 func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 	switch name {
+	case systemconfiguration.FieldAgentMaxConcurrent:
+		return m.AgentMaxConcurrent()
 	case systemconfiguration.FieldWallpaperColorScheme:
 		return m.WallpaperColorScheme()
 	case systemconfiguration.FieldBackgroundType:
@@ -13517,6 +13580,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
+	case systemconfiguration.FieldAgentMaxConcurrent:
+		return m.OldAgentMaxConcurrent(ctx)
 	case systemconfiguration.FieldWallpaperColorScheme:
 		return m.OldWallpaperColorScheme(ctx)
 	case systemconfiguration.FieldBackgroundType:
@@ -13542,6 +13607,13 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 // type.
 func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case systemconfiguration.FieldAgentMaxConcurrent:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAgentMaxConcurrent(v)
+		return nil
 	case systemconfiguration.FieldWallpaperColorScheme:
 		v, ok := value.(string)
 		if !ok {
@@ -13606,6 +13678,9 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 // this mutation.
 func (m *SystemConfigurationMutation) AddedFields() []string {
 	var fields []string
+	if m.addagent_max_concurrent != nil {
+		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
+	}
 	if m.addbackground_mask != nil {
 		fields = append(fields, systemconfiguration.FieldBackgroundMask)
 	}
@@ -13617,6 +13692,8 @@ func (m *SystemConfigurationMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *SystemConfigurationMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case systemconfiguration.FieldAgentMaxConcurrent:
+		return m.AddedAgentMaxConcurrent()
 	case systemconfiguration.FieldBackgroundMask:
 		return m.AddedBackgroundMask()
 	}
@@ -13628,6 +13705,13 @@ func (m *SystemConfigurationMutation) AddedField(name string) (ent.Value, bool) 
 // type.
 func (m *SystemConfigurationMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case systemconfiguration.FieldAgentMaxConcurrent:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAgentMaxConcurrent(v)
+		return nil
 	case systemconfiguration.FieldBackgroundMask:
 		v, ok := value.(int)
 		if !ok {
@@ -13662,6 +13746,9 @@ func (m *SystemConfigurationMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *SystemConfigurationMutation) ResetField(name string) error {
 	switch name {
+	case systemconfiguration.FieldAgentMaxConcurrent:
+		m.ResetAgentMaxConcurrent()
+		return nil
 	case systemconfiguration.FieldWallpaperColorScheme:
 		m.ResetWallpaperColorScheme()
 		return nil

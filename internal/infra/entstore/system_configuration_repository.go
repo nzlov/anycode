@@ -19,6 +19,7 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 		return setting.SystemConfiguration{}, fmt.Errorf("get system configuration: %w", err)
 	}
 	return setting.SystemConfiguration{
+		AgentMaxConcurrent:   row.AgentMaxConcurrent,
 		BackgroundType:       setting.BackgroundType(row.BackgroundType),
 		SolidTheme:           setting.SolidTheme(row.SolidTheme),
 		BackgroundMask:       row.BackgroundMask,
@@ -31,6 +32,7 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 
 func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configuration setting.SystemConfiguration) error {
 	_, err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).
+		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
 		SetBackgroundType(string(configuration.BackgroundType)).
 		SetSolidTheme(string(configuration.SolidTheme)).
 		SetBackgroundMask(configuration.BackgroundMask).
@@ -47,6 +49,7 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 	}
 	if _, err := r.client.SystemConfiguration.Create().
 		SetID(globalSystemConfigurationID).
+		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
 		SetBackgroundType(string(configuration.BackgroundType)).
 		SetSolidTheme(string(configuration.SolidTheme)).
 		SetBackgroundMask(configuration.BackgroundMask).
@@ -58,4 +61,25 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 		return fmt.Errorf("create system configuration: %w", err)
 	}
 	return nil
+}
+
+func (r *SettingRepository) MaxConcurrentAgents(ctx context.Context) (int, error) {
+	configuration, err := r.GetSystemConfiguration(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return configuration.AgentMaxConcurrent, nil
+}
+
+func (r *SettingRepository) UpdateAgentMaxConcurrent(ctx context.Context, max int) error {
+	if err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).
+		SetAgentMaxConcurrent(max).
+		Exec(ctx); err == nil {
+		return nil
+	} else if !ent.IsNotFound(err) {
+		return fmt.Errorf("update agent concurrency limit: %w", err)
+	}
+	configuration := setting.DefaultSystemConfiguration()
+	configuration.AgentMaxConcurrent = max
+	return r.SaveSystemConfiguration(ctx, configuration)
 }

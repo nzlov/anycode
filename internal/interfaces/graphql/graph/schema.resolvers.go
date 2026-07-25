@@ -29,6 +29,18 @@ import (
 	"github.com/nzlov/anycode/internal/interfaces/graphql/graph/model"
 )
 
+// UpdateGeneralSettings is the resolver for the updateGeneralSettings field.
+func (r *mutationResolver) UpdateGeneralSettings(ctx context.Context, input model.UpdateGeneralSettingsInput) (*model.GeneralSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.UpdateGeneralSettings(ctx, settingapp.UpdateGeneralSettingsInput{AgentMaxConcurrent: input.AgentMaxConcurrent})
+	if err != nil {
+		return nil, err
+	}
+	return mapGeneralSettings(dto), nil
+}
+
 // UpdateAppearanceSettings is the resolver for the updateAppearanceSettings field.
 func (r *mutationResolver) UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error) {
 	if r.UseCases.Settings == nil {
@@ -560,6 +572,18 @@ func (r *queryResolver) PromptFileMatches(ctx context.Context, input model.Promp
 		})
 	}
 	return result, nil
+}
+
+// AppearanceSettings is the resolver for the appearanceSettings field.
+func (r *queryResolver) GeneralSettings(ctx context.Context) (*model.GeneralSettings, error) {
+	if r.UseCases.Settings == nil {
+		return nil, missingUseCase("settings")
+	}
+	dto, err := r.UseCases.Settings.GetGeneralSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapGeneralSettings(dto), nil
 }
 
 // AppearanceSettings is the resolver for the appearanceSettings field.

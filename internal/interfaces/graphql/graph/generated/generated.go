@@ -139,6 +139,10 @@ type ComplexityRoot struct {
 		Hunks func(childComplexity int) int
 	}
 
+	GeneralSettings struct {
+		AgentMaxConcurrent func(childComplexity int) int
+	}
+
 	GitBranch struct {
 		IsCurrent func(childComplexity int) int
 		Name      func(childComplexity int) int
@@ -186,6 +190,7 @@ type ComplexityRoot struct {
 		SubmitWorkflowApproval      func(childComplexity int, input model.SubmitWorkflowApprovalInput) int
 		UnregisterPushSubscription  func(childComplexity int, id string) int
 		UpdateAppearanceSettings    func(childComplexity int, input model.UpdateAppearanceSettingsInput) int
+		UpdateGeneralSettings       func(childComplexity int, input model.UpdateGeneralSettingsInput) int
 		UpdateProjectSettings       func(childComplexity int, input model.UpdateProjectSettingsInput) int
 		UpdatePromptAppend          func(childComplexity int, input model.UpdatePromptAppendInput) int
 		UpdateSessionConfig         func(childComplexity int, input model.UpdateSessionConfigInput) int
@@ -246,6 +251,7 @@ type ComplexityRoot struct {
 		BrowseDirectory         func(childComplexity int, input model.BrowseDirectoryInput) int
 		CodexModelOptions       func(childComplexity int) int
 		CodexSlashCommands      func(childComplexity int) int
+		GeneralSettings         func(childComplexity int) int
 		PendingQuestionRequests func(childComplexity int, sessionID string) int
 		ProjectGitState         func(childComplexity int, projectID string, refresh bool) int
 		Projects                func(childComplexity int) int
@@ -701,6 +707,7 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
+	UpdateGeneralSettings(ctx context.Context, input model.UpdateGeneralSettingsInput) (*model.GeneralSettings, error)
 	UpdateAppearanceSettings(ctx context.Context, input model.UpdateAppearanceSettingsInput) (*model.AppearanceSettings, error)
 	UploadAppearanceWallpaper(ctx context.Context, file graphql.Upload) (*model.AppearanceSettings, error)
 	UpdateWebPushProxy(ctx context.Context, proxyURL string) (*model.WebPushConfig, error)
@@ -740,6 +747,7 @@ type QueryResolver interface {
 	CodexModelOptions(ctx context.Context) ([]*model.CodexModelOption, error)
 	CodexSlashCommands(ctx context.Context) ([]*model.CodexSlashCommand, error)
 	PromptFileMatches(ctx context.Context, input model.PromptFileMatchInput) ([]*model.PromptFileMatch, error)
+	GeneralSettings(ctx context.Context) (*model.GeneralSettings, error)
 	AppearanceSettings(ctx context.Context) (*model.AppearanceSettings, error)
 	WebPushConfig(ctx context.Context) (*model.WebPushConfig, error)
 	QuickCommands(ctx context.Context, input *model.ListQuickCommandsInput) (*model.QuickCommandPage, error)
@@ -1136,6 +1144,13 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.FileDiff.Hunks(childComplexity), true
 
+	case "GeneralSettings.agentMaxConcurrent":
+		if e.ComplexityRoot.GeneralSettings.AgentMaxConcurrent == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.AgentMaxConcurrent(childComplexity), true
+
 	case "GitBranch.isCurrent":
 		if e.ComplexityRoot.GitBranch.IsCurrent == nil {
 			break
@@ -1506,6 +1521,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.UpdateAppearanceSettings(childComplexity, args["input"].(model.UpdateAppearanceSettingsInput)), true
+	case "Mutation.updateGeneralSettings":
+		if e.ComplexityRoot.Mutation.UpdateGeneralSettings == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_updateGeneralSettings_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.UpdateGeneralSettings(childComplexity, args["input"].(model.UpdateGeneralSettingsInput)), true
 	case "Mutation.updateProjectSettings":
 		if e.ComplexityRoot.Mutation.UpdateProjectSettings == nil {
 			break
@@ -1782,6 +1808,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.CodexSlashCommands(childComplexity), true
+	case "Query.generalSettings":
+		if e.ComplexityRoot.Query.GeneralSettings == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.GeneralSettings(childComplexity), true
 
 	case "Query.pendingQuestionRequests":
 		if e.ComplexityRoot.Query.PendingQuestionRequests == nil {
@@ -3735,6 +3767,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputSubmitQuestionRequestInput,
 		ec.unmarshalInputSubmitWorkflowApprovalInput,
 		ec.unmarshalInputUpdateAppearanceSettingsInput,
+		ec.unmarshalInputUpdateGeneralSettingsInput,
 		ec.unmarshalInputUpdateProjectSettingsInput,
 		ec.unmarshalInputUpdatePromptAppendInput,
 		ec.unmarshalInputUpdateSessionConfigInput,
@@ -3846,6 +3879,7 @@ type Query {
   codexModelOptions: [CodexModelOption!]!
   codexSlashCommands: [CodexSlashCommand!]!
   promptFileMatches(input: PromptFileMatchInput!): [PromptFileMatch!]!
+  generalSettings: GeneralSettings!
   appearanceSettings: AppearanceSettings!
   webPushConfig: WebPushConfig!
   quickCommands(input: ListQuickCommandsInput): QuickCommandPage!
@@ -3887,6 +3921,7 @@ input PromptFileMatchInput {
 }
 
 type Mutation {
+  updateGeneralSettings(input: UpdateGeneralSettingsInput!): GeneralSettings!
   updateAppearanceSettings(input: UpdateAppearanceSettingsInput!): AppearanceSettings!
   uploadAppearanceWallpaper(file: Upload!): AppearanceSettings!
   updateWebPushProxy(proxyUrl: String!): WebPushConfig!
@@ -3975,6 +4010,14 @@ enum AppearanceSolidTheme {
   PURPLE
   PEACH
   INK
+}
+
+type GeneralSettings {
+  agentMaxConcurrent: Int!
+}
+
+input UpdateGeneralSettingsInput {
+  agentMaxConcurrent: Int!
 }
 
 type AppearanceSettings {
@@ -5136,6 +5179,17 @@ func (ec *executionContext) field_Mutation_updateAppearanceSettings_args(ctx con
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_updateGeneralSettings_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateGeneralSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateGeneralSettingsInput)
 	if err != nil {
 		return nil, err
 	}
@@ -7182,6 +7236,35 @@ func (ec *executionContext) fieldContext_FileDiff_hunks(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _GeneralSettings_agentMaxConcurrent(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_agentMaxConcurrent,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentMaxConcurrent, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_agentMaxConcurrent(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GitBranch_name(ctx context.Context, field graphql.CollectedField, obj *model.GitBranch) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7416,6 +7499,51 @@ func (ec *executionContext) fieldContext_MergeConfig_strategy(_ context.Context,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_updateGeneralSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_updateGeneralSettings,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().UpdateGeneralSettings(ctx, fc.Args["input"].(model.UpdateGeneralSettingsInput))
+		},
+		nil,
+		ec.marshalNGeneralSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGeneralSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "agentMaxConcurrent":
+				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_updateGeneralSettings_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -10392,6 +10520,39 @@ func (ec *executionContext) fieldContext_Query_promptFileMatches(ctx context.Con
 	if fc.Args, err = ec.field_Query_promptFileMatches_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_generalSettings(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_generalSettings,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().GeneralSettings(ctx)
+		},
+		nil,
+		ec.marshalNGeneralSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGeneralSettings,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "agentMaxConcurrent":
+				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
+		},
 	}
 	return fc, nil
 }
@@ -23261,6 +23422,36 @@ func (ec *executionContext) unmarshalInputUpdateAppearanceSettingsInput(ctx cont
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context.Context, obj any) (model.UpdateGeneralSettingsInput, error) {
+	var it model.UpdateGeneralSettingsInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"agentMaxConcurrent"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "agentMaxConcurrent":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("agentMaxConcurrent"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AgentMaxConcurrent = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputUpdateProjectSettingsInput(ctx context.Context, obj any) (model.UpdateProjectSettingsInput, error) {
 	var it model.UpdateProjectSettingsInput
 	if obj == nil {
@@ -24575,6 +24766,45 @@ func (ec *executionContext) _FileDiff(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var generalSettingsImplementors = []string{"GeneralSettings"}
+
+func (ec *executionContext) _GeneralSettings(ctx context.Context, sel ast.SelectionSet, obj *model.GeneralSettings) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, generalSettingsImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("GeneralSettings")
+		case "agentMaxConcurrent":
+			out.Values[i] = ec._GeneralSettings_agentMaxConcurrent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var gitBranchImplementors = []string{"GitBranch"}
 
 func (ec *executionContext) _GitBranch(ctx context.Context, sel ast.SelectionSet, obj *model.GitBranch) graphql.Marshaler {
@@ -24736,6 +24966,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
+		case "updateGeneralSettings":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_updateGeneralSettings(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "updateAppearanceSettings":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_updateAppearanceSettings(ctx, field)
@@ -25410,6 +25647,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_promptFileMatches(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "generalSettings":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_generalSettings(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -29591,6 +29850,20 @@ func (ec *executionContext) marshalNFloat2float64(ctx context.Context, sel ast.S
 	return graphql.WrapContextMarshaler(ctx, res)
 }
 
+func (ec *executionContext) marshalNGeneralSettings2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGeneralSettings(ctx context.Context, sel ast.SelectionSet, v model.GeneralSettings) graphql.Marshaler {
+	return ec._GeneralSettings(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNGeneralSettings2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGeneralSettings(ctx context.Context, sel ast.SelectionSet, v *model.GeneralSettings) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._GeneralSettings(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNGitBranch2ᚕᚖgithubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐGitBranchᚄ(ctx context.Context, sel ast.SelectionSet, v []*model.GitBranch) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -30609,6 +30882,11 @@ func (ec *executionContext) marshalNTunnel2ᚖgithubᚗcomᚋnzlovᚋanycodeᚋi
 
 func (ec *executionContext) unmarshalNUpdateAppearanceSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateAppearanceSettingsInput(ctx context.Context, v any) (model.UpdateAppearanceSettingsInput, error) {
 	res, err := ec.unmarshalInputUpdateAppearanceSettingsInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNUpdateGeneralSettingsInput2githubᚗcomᚋnzlovᚋanycodeᚋinternalᚋinterfacesᚋgraphqlᚋgraphᚋmodelᚐUpdateGeneralSettingsInput(ctx context.Context, v any) (model.UpdateGeneralSettingsInput, error) {
+	res, err := ec.unmarshalInputUpdateGeneralSettingsInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

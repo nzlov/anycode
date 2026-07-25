@@ -16,6 +16,7 @@
       <q-separator />
 
       <q-tabs v-model="activeSection" dense align="left" no-caps class="global-settings-tabs lt-sm">
+        <q-tab name="general" icon="tune" label="常规" />
         <q-tab name="projects" icon="folder" label="项目" />
         <q-tab name="appearance" icon="palette" label="外观" />
         <q-tab name="notifications" icon="notifications" label="通知" />
@@ -25,6 +26,17 @@
       <div class="global-settings-grid">
         <nav class="global-settings-nav gt-xs" aria-label="全局设置分类">
           <q-list padding>
+            <q-item
+              clickable
+              :active="activeSection === 'general'"
+              active-class="global-settings-nav__active"
+              @click="activeSection = 'general'"
+            >
+              <q-item-section avatar>
+                <q-icon name="tune" />
+              </q-item-section>
+              <q-item-section>常规</q-item-section>
+            </q-item>
             <q-item
               clickable
               :active="activeSection === 'projects'"
@@ -72,7 +84,77 @@
           </q-list>
         </nav>
 
-        <section v-if="activeSection === 'projects'" class="global-settings-panel">
+        <section v-if="activeSection === 'general'" class="global-settings-panel">
+          <div class="global-settings-panel__header">
+            <div class="text-subtitle2 text-weight-bold">常规</div>
+          </div>
+
+          <q-banner v-if="generalError" dense class="quick-command-error">
+            <template #avatar>
+              <q-icon name="error_outline" color="negative" />
+            </template>
+            {{ generalError }}
+            <template #action>
+              <q-btn
+                flat
+                round
+                dense
+                class="app-icon-btn"
+                icon="refresh"
+                aria-label="重试加载常规设置"
+                @click="refreshGeneralSettings"
+              >
+                <q-tooltip>重试</q-tooltip>
+              </q-btn>
+            </template>
+          </q-banner>
+
+          <q-linear-progress v-if="generalLoading" indeterminate color="primary" />
+          <q-list bordered separator class="appearance-settings-list">
+            <q-item>
+              <q-item-section avatar>
+                <q-icon name="dynamic_feed" color="primary" />
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>Agent 并发数量</q-item-label>
+                <q-item-label caption>同时运行的 Codex agent 上限</q-item-label>
+              </q-item-section>
+              <q-item-section side class="appearance-settings-list__control">
+                <q-input
+                  v-model.number="general.agentMaxConcurrent"
+                  outlined
+                  dense
+                  type="number"
+                  min="1"
+                  step="1"
+                  hide-bottom-space
+                  aria-label="Agent 并发数量"
+                  :disable="generalLoading || generalSaving"
+                  :error="!generalSettingsValid"
+                  @keyup.enter="saveGeneralSettings"
+                >
+                  <template #append>
+                    <q-btn
+                      flat
+                      round
+                      dense
+                      class="app-icon-btn"
+                      icon="save"
+                      aria-label="保存 Agent 并发数量"
+                      :loading="generalSaving"
+                      :disable="!generalSettingsChanged || !generalSettingsValid"
+                      @click="saveGeneralSettings"
+                    >
+                      <q-tooltip>保存</q-tooltip>
+                    </q-btn>
+                  </template>
+                </q-input>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </section>
+
+        <section v-else-if="activeSection === 'projects'" class="global-settings-panel">
           <div class="global-settings-panel__header">
             <div class="text-subtitle2 text-weight-bold">项目</div>
           </div>
@@ -608,6 +690,11 @@ import {
 } from '@/services/appearanceSettings';
 import type { ProjectSummary } from '@/services/projects';
 import {
+  getGeneralSettings,
+  type GeneralSettings,
+  updateGeneralSettings,
+} from '@/services/generalSettings';
+import {
   disablePushNotifications,
   enablePushNotifications,
   getPushNotificationState,
@@ -630,9 +717,9 @@ const emit = defineEmits<{
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
-const activeSection = ref<'projects' | 'appearance' | 'notifications' | 'quick_commands'>(
-  'projects',
-);
+const activeSection = ref<
+  'general' | 'projects' | 'appearance' | 'notifications' | 'quick_commands'
+>('general');
 const directoryDialogOpen = ref(false);
 const projectSettingsOpen = ref(false);
 const settingsProject = ref<ProjectSummary | null>(null);
@@ -656,6 +743,17 @@ const draftCommand = ref('');
 const saving = ref(false);
 const deletingCommandIds = ref<string[]>([]);
 const commandInputRef = ref<{ focus: () => void } | null>(null);
+const general = ref<GeneralSettings>({ agentMaxConcurrent: 2 });
+const persistedGeneral = ref<GeneralSettings>({ agentMaxConcurrent: 2 });
+const generalLoading = ref(false);
+const generalSaving = ref(false);
+const generalError = ref('');
+const generalSettingsValid = computed(
+  () => Number.isInteger(general.value.agentMaxConcurrent) && general.value.agentMaxConcurrent > 0,
+);
+const generalSettingsChanged = computed(
+  () => general.value.agentMaxConcurrent !== persistedGeneral.value.agentMaxConcurrent,
+);
 const quickCommandPageMax = computed(() =>
   Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
 );
@@ -706,6 +804,34 @@ const notificationCaption = computed(() => {
   if (notificationState.value.permission === 'denied') return '权限已被浏览器阻止';
   return notificationState.value.enabled ? '已开启' : '未开启';
 });
+
+async function refreshGeneralSettings() {
+  generalLoading.value = true;
+  generalError.value = '';
+  try {
+    general.value = await getGeneralSettings();
+    persistedGeneral.value = { ...general.value };
+  } catch {
+    generalError.value = '无法加载常规设置';
+  } finally {
+    generalLoading.value = false;
+  }
+}
+
+async function saveGeneralSettings() {
+  if (!generalSettingsValid.value || !generalSettingsChanged.value) return;
+  generalSaving.value = true;
+  generalError.value = '';
+  try {
+    general.value = await updateGeneralSettings(general.value.agentMaxConcurrent);
+    persistedGeneral.value = { ...general.value };
+  } catch {
+    general.value = { ...persistedGeneral.value };
+    generalError.value = '无法保存常规设置';
+  } finally {
+    generalSaving.value = false;
+  }
+}
 
 async function refreshNotifications() {
   notificationLoading.value = true;
@@ -928,9 +1054,11 @@ function changeQuickCommandPage(page: number) {
 
 onMounted(() => {
   void loadProjects();
+  if (props.modelValue) void refreshGeneralSettings();
 });
 
 watch(activeSection, (section) => {
+  if (section === 'general' && props.modelValue) void refreshGeneralSettings();
   if (section === 'appearance' && props.modelValue) void refreshAppearance();
   if (section === 'notifications' && props.modelValue) void refreshNotifications();
   if (section !== 'quick_commands' || !props.modelValue) return;
@@ -942,6 +1070,7 @@ watch(
   (open) => {
     if (!open) return;
     void loadProjects();
+    if (activeSection.value === 'general') void refreshGeneralSettings();
     if (activeSection.value === 'appearance') void refreshAppearance();
     if (activeSection.value === 'notifications') void refreshNotifications();
     if (activeSection.value === 'quick_commands') refreshQuickCommands();

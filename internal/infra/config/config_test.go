@@ -11,7 +11,6 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 	t.Setenv("ANYCODE_DATA_DIR", "")
 	t.Setenv("CODEX_BIN", "")
 	t.Setenv("CLOUDFLARED_BIN", "")
-	t.Setenv("ANYCODE_AGENT_MAX_CONCURRENT", "")
 
 	got, err := LoadFromEnv()
 	if err != nil {
@@ -32,23 +31,8 @@ func TestLoadFromEnvReadsAccessKeyAndDefaults(t *testing.T) {
 	if got.CloudflaredBin != "cloudflared" {
 		t.Fatalf("CloudflaredBin = %q", got.CloudflaredBin)
 	}
-	if got.AgentMaxConcurrent != 1 {
-		t.Fatalf("AgentMaxConcurrent = %d", got.AgentMaxConcurrent)
-	}
 	if got.ArtifactMaxFileBytes != 512<<20 || got.ArtifactMaxSessionBytes != 10<<30 || got.ArtifactPreviewMaxBytes != 128<<20 {
 		t.Fatalf("artifact limits = %d/%d/%d", got.ArtifactMaxFileBytes, got.ArtifactMaxSessionBytes, got.ArtifactPreviewMaxBytes)
-	}
-}
-
-func TestLoadFromEnvReadsAgentMaxConcurrent(t *testing.T) {
-	t.Setenv("ANYCODE_AGENT_MAX_CONCURRENT", "3")
-
-	got, err := LoadFromEnv()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.AgentMaxConcurrent != 3 {
-		t.Fatalf("AgentMaxConcurrent = %d", got.AgentMaxConcurrent)
 	}
 }
 

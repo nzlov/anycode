@@ -458,6 +458,7 @@ var (
 	// SystemConfigurationsColumns holds the columns for the "system_configurations" table.
 	SystemConfigurationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
+		{Name: "agent_max_concurrent", Type: field.TypeInt, Default: 2},
 		{Name: "wallpaper_color_scheme", Type: field.TypeString},
 		{Name: "background_type", Type: field.TypeString, Default: "bing"},
 		{Name: "solid_theme", Type: field.TypeString, Default: "vermilion"},

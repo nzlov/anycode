@@ -14,6 +14,7 @@ type SystemConfiguration struct {
 func (SystemConfiguration) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Immutable(),
+		field.Int("agent_max_concurrent").Default(2),
 		field.String("wallpaper_color_scheme").NotEmpty(),
 		field.String("background_type").NotEmpty().Default("bing"),
 		field.String("solid_theme").NotEmpty().Default("vermilion"),

@@ -20,7 +20,6 @@ import (
 	"github.com/nzlov/anycode/internal/domain/project"
 	"github.com/nzlov/anycode/internal/domain/question"
 	"github.com/nzlov/anycode/internal/domain/session"
-	"github.com/nzlov/anycode/internal/domain/setting"
 	"github.com/nzlov/anycode/internal/domain/workflow"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent"
 	"github.com/tursodatabase/libsql-client-go/libsql"
@@ -493,7 +492,7 @@ func (s *Store) Questions() *QuestionRepository {
 	return NewQuestionRepository(s.client)
 }
 
-func (s *Store) Settings() setting.Repository {
+func (s *Store) Settings() *SettingRepository {
 	return NewSettingRepository(s.client)
 }
 

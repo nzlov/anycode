@@ -23,11 +23,12 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get default system configuration: %v", err)
 	}
-	if configuration.BackgroundType != setting.BackgroundTypeBing || configuration.SolidTheme != setting.SolidThemeVermilion || configuration.WallpaperColorScheme != setting.WallpaperColorSchemeContent {
+	if configuration.AgentMaxConcurrent != 2 || configuration.BackgroundType != setting.BackgroundTypeBing || configuration.SolidTheme != setting.SolidThemeVermilion || configuration.WallpaperColorScheme != setting.WallpaperColorSchemeContent {
 		t.Fatalf("default system configuration = %#v", configuration)
 	}
 
 	configuration.BackgroundType = setting.BackgroundTypeImage
+	configuration.AgentMaxConcurrent = 5
 	configuration.SolidTheme = setting.SolidThemeIndigo
 	configuration.BackgroundMask = 42
 	configuration.WallpaperColorScheme = setting.WallpaperColorSchemeRainbow
@@ -41,7 +42,18 @@ func TestSystemConfigurationRepositoryPersistsAppearanceSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get saved system configuration: %v", err)
 	}
-	if got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
+	if got.AgentMaxConcurrent != 5 || got.BackgroundType != setting.BackgroundTypeImage || got.SolidTheme != setting.SolidThemeIndigo || got.BackgroundMask != 42 || got.WallpaperColorScheme != setting.WallpaperColorSchemeRainbow || got.WallpaperID != "wallpaper-id" || got.WallpaperFilename != "山水.png" || got.WallpaperMimeType != "image/png" {
 		t.Fatalf("saved system configuration = %#v", got)
+	}
+	max, err := store.Settings().MaxConcurrentAgents(ctx)
+	if err != nil || max != 5 {
+		t.Fatalf("MaxConcurrentAgents() = %d, %v", max, err)
+	}
+	if err := store.Settings().UpdateAgentMaxConcurrent(ctx, 6); err != nil {
+		t.Fatalf("UpdateAgentMaxConcurrent() error = %v", err)
+	}
+	got, err = store.Settings().GetSystemConfiguration(ctx)
+	if err != nil || got.AgentMaxConcurrent != 6 || got.BackgroundType != setting.BackgroundTypeImage || got.WallpaperID != "wallpaper-id" {
+		t.Fatalf("configuration after focused concurrency update = %#v, %v", got, err)
 	}
 }
