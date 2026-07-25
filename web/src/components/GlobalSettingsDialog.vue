@@ -98,61 +98,104 @@
           </q-banner>
 
           <q-linear-progress v-if="generalLoading" indeterminate color="primary" />
-          <q-list bordered separator class="appearance-settings-list">
-            <q-item>
-              <q-item-section avatar>
-                <q-icon name="dynamic_feed" color="primary" />
-              </q-item-section>
-              <q-item-section>
-                <q-item-label>Agent 并发数量</q-item-label>
-                <q-item-label caption>同时运行的 Codex agent 上限</q-item-label>
-              </q-item-section>
-              <q-item-section side class="appearance-settings-list__control">
-                <q-input
-                  v-model.number="general.agentMaxConcurrent"
-                  outlined
-                  dense
-                  type="number"
-                  min="1"
-                  step="1"
-                  hide-bottom-space
-                  aria-label="Agent 并发数量"
-                  :disable="generalLoading || generalSaving"
-                  :error="!agentMaxConcurrentValid"
-                  @keyup.enter="saveGeneralSettings"
-                />
-              </q-item-section>
-            </q-item>
-            <q-item class="column items-stretch">
-              <q-item-section>
-                <q-item-label>Agent 目录白名单</q-item-label>
-                <q-item-label caption>每行一个绝对路径，仅对“工作区写入”模式生效</q-item-label>
-              </q-item-section>
-              <q-item-section class="q-mt-sm">
-                <q-input
-                  v-model="agentWritableRootsText"
-                  outlined
-                  dense
-                  type="textarea"
-                  autogrow
-                  aria-label="Agent 目录白名单"
-                  placeholder="/home/anycode/.cache/go-build"
-                  :disable="generalLoading || generalSaving"
-                  :error="!agentWritableRootsValid"
-                  error-message="每行必须是绝对路径"
-                />
-              </q-item-section>
-            </q-item>
-          </q-list>
-          <div class="row justify-end q-mt-md">
-            <q-btn
-              color="primary"
-              icon="save"
-              label="保存常规设置"
-              :loading="generalSaving"
-              :disable="!generalSettingsChanged || !generalSettingsValid"
-              @click="saveGeneralSettings"
-            />
+          <div class="general-settings-content">
+            <q-list bordered separator class="appearance-settings-list">
+              <q-item>
+                <q-item-section avatar>
+                  <q-icon name="dynamic_feed" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>Agent 并发数量</q-item-label>
+                  <q-item-label caption>同时运行的 Codex agent 上限</q-item-label>
+                </q-item-section>
+                <q-item-section side class="appearance-settings-list__control">
+                  <q-input
+                    v-model.number="general.agentMaxConcurrent"
+                    outlined
+                    dense
+                    type="number"
+                    min="1"
+                    step="1"
+                    hide-bottom-space
+                    aria-label="Agent 并发数量"
+                    :disable="generalLoading || generalSaving"
+                    :error="!agentMaxConcurrentValid"
+                    @keyup.enter="saveGeneralSettings"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-item class="column items-stretch">
+                <q-item-section>
+                  <q-item-label>Agent 目录白名单</q-item-label>
+                  <q-item-label caption>每行一个绝对路径，仅对“工作区写入”模式生效</q-item-label>
+                </q-item-section>
+                <q-item-section class="q-mt-sm">
+                  <q-input
+                    v-model="agentWritableRootsText"
+                    outlined
+                    dense
+                    type="textarea"
+                    autogrow
+                    aria-label="Agent 目录白名单"
+                    placeholder="/home/anycode/.cache/go-build"
+                    :disable="generalLoading || generalSaving"
+                    :error="!agentWritableRootsValid"
+                    error-message="每行必须是绝对路径"
+                  />
+                </q-item-section>
+              </q-item>
+            </q-list>
+
+            <div class="row justify-end">
+              <q-btn
+                color="primary"
+                icon="save"
+                label="保存常规设置"
+                :loading="generalSaving"
+                :disable="!generalSettingsChanged || !generalSettingsValid"
+                @click="saveGeneralSettings"
+              />
+            </div>
+
+            <q-card flat bordered class="general-thinking-settings">
+              <q-item>
+                <q-item-section avatar>
+                  <q-icon name="psychology" color="primary" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>思考展示</q-item-label>
+                  <q-item-label caption>在运行中卡片与事件流底部显示思考语句</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-toggle
+                    v-model="thinkingPhrasesEnabled"
+                    color="primary"
+                    aria-label="思考展示"
+                  />
+                </q-item-section>
+              </q-item>
+              <q-slide-transition>
+                <div v-if="thinkingPhrasesEnabled">
+                  <q-separator />
+                  <q-card-section class="general-thinking-settings__body">
+                    <div>
+                      <div class="text-body2">思考语句类型</div>
+                      <div class="text-caption text-muted">选择展示语句的语气</div>
+                    </div>
+                    <q-select
+                      v-model="thinkingPhraseStyle"
+                      outlined
+                      dense
+                      emit-value
+                      map-options
+                      options-dense
+                      :options="sessionThinkingPhraseStyleOptions"
+                      aria-label="思考语句类型"
+                    />
+                  </q-card-section>
+                </div>
+              </q-slide-transition>
+            </q-card>
           </div>
         </section>
 
@@ -559,6 +602,10 @@ import { QDialog } from 'quasar';
 import AppPagination from '@/components/AppPagination.vue';
 import { useQuickCommands } from '@/composables/useQuickCommands';
 import {
+  sessionThinkingPhraseStyleOptions,
+  useSessionThinkingPhrases,
+} from '@/composables/useSessionThinkingPhrases';
+import {
   backgroundTypeOptions,
   getAppearanceSettings,
   type AppearanceBackgroundType,
@@ -592,6 +639,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
 }>();
 
+const { thinkingPhrasesEnabled, thinkingPhraseStyle } = useSessionThinkingPhrases();
 const activeSection = ref<'general' | 'appearance' | 'notifications' | 'quick_commands'>('general');
 const {
   quickCommands,

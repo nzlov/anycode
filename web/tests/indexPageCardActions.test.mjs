@@ -102,6 +102,29 @@ test('overview cards render current nodes only in workflow mode', () => {
   );
 });
 
+test('running overview cards show a rotating thought above actions instead of recent update time', () => {
+  const source = readFileSync(new URL('../src/pages/IndexPage.vue', import.meta.url), 'utf8');
+  const thinkingSource = readFileSync(
+    new URL('../src/components/SessionThinkingPhrase.vue', import.meta.url),
+    'utf8',
+  );
+  const thinkingPreferencesSource = readFileSync(
+    new URL('../src/composables/useSessionThinkingPhrases.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(source, /最近操作/);
+  assert.match(
+    source,
+    /<SessionThinkingPhrase\s+v-if="card\.status === 'running'"[\s\S]*?:refresh-key="card\.updatedTime"[\s\S]*?<div class="overview-card-footer">/,
+  );
+  assert.equal((thinkingPreferencesSource.match(/^\s{4}'[^']+',$/gm) ?? []).length, 120);
+  assert.match(thinkingSource, /v-if="thinkingPhrasesEnabled"/);
+  assert.match(thinkingSource, /watch\(thinkingPhrasesEnabled/);
+  assert.match(thinkingSource, /if \(!thinkingPhrasesEnabled\.value\) return/);
+  assert.match(thinkingSource, /setInterval\(changePhrase, 5000\)/);
+});
+
 test('overview TODO headless scenario covers pointer, keyboard, and narrow-screen access', () => {
   const source = readFileSync(new URL('../../scripts/headless-e2e.mjs', import.meta.url), 'utf8');
 

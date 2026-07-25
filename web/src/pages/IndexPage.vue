@@ -130,15 +130,17 @@
                 <span class="overview-card-meta__label">当前节点</span>
                 <span>{{ card.node }}</span>
               </div>
-              <div>
-                <span class="overview-card-meta__label">最近操作</span>
-                <span>{{ card.updatedAt }}</span>
-              </div>
               <div v-if="card.usage">
                 <span class="overview-card-meta__label">Token 用量</span>
                 <TokenUsageDisplay :usage="card.usage" />
               </div>
             </div>
+
+            <SessionThinkingPhrase
+              v-if="card.status === 'running'"
+              class="overview-card-thinking"
+              :refresh-key="card.updatedTime"
+            />
 
             <div class="overview-card-footer">
               <div class="overview-card-secondary-actions" @contextmenu.stop @touchstart.stop>
@@ -470,6 +472,7 @@ import PageToolbar from '@/components/PageToolbar.vue';
 import ProjectVisibilityFilters from '@/components/ProjectVisibilityFilters.vue';
 import SessionCardContextMenu from '@/components/SessionCardContextMenu.vue';
 import SessionPriorityControl from '@/components/SessionPriorityControl.vue';
+import SessionThinkingPhrase from '@/components/SessionThinkingPhrase.vue';
 import SessionTunnelButton from '@/components/SessionTunnelButton.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import TokenUsageDisplay from '@/components/TokenUsageDisplay.vue';

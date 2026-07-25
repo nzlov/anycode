@@ -20,5 +20,14 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /Agent 目录白名单/);
   assert.match(settingsSource, /agentWritableRootsText/);
   assert.match(settingsSource, /每行必须是绝对路径/);
+  assert.match(settingsSource, /class="general-thinking-settings"/);
+  assert.match(settingsSource, /<q-toggle\s+v-model="thinkingPhrasesEnabled"/);
+  assert.match(
+    settingsSource,
+    /<q-slide-transition>[\s\S]*?v-if="thinkingPhrasesEnabled"[\s\S]*?思考语句类型/,
+  );
+  assert.match(settingsSource, /思考语句类型/);
+  assert.match(settingsSource, /v-model="thinkingPhraseStyle"/);
+  assert.match(settingsSource, /:options="sessionThinkingPhraseStyleOptions"/);
   assert.doesNotMatch(configSource, /ANYCODE_AGENT_MAX_CONCURRENT/);
 });

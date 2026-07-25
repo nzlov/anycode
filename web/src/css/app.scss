@@ -548,6 +548,10 @@ a {
   font-size: 11px;
 }
 
+.overview-card-thinking {
+  align-self: end;
+}
+
 .overview-card-footer {
   display: flex;
   min-height: 44px;
@@ -1236,6 +1240,32 @@ body.desktop
   overflow-y: auto;
   border-color: var(--ac-border);
   border-radius: var(--ac-radius);
+}
+
+.general-settings-content {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.general-settings-content .appearance-settings-list {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.general-thinking-settings {
+  border-color: var(--ac-border);
+  border-radius: var(--ac-radius);
+  background: var(--ac-surface);
+}
+
+.general-thinking-settings__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min(240px, 46%);
+  align-items: center;
+  gap: 16px;
 }
 
 .appearance-settings-list .q-item {
@@ -2432,6 +2462,11 @@ body.desktop
   .appearance-settings-list__control {
     width: 100%;
     padding-left: 44px;
+  }
+
+  .general-thinking-settings__body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
   }
 
   .traditional-theme-options {

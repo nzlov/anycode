@@ -355,6 +355,27 @@ test('subscription refresh does not force a scrolled transcript back to the bott
   );
 });
 
+test('running session detail keeps a rotating thought at the fixed bottom of the event stream', () => {
+  const pageSource = readFileSync(
+    new URL('../src/components/SessionDetailView.vue', import.meta.url),
+    'utf8',
+  );
+  const streamCardStart = pageSource.indexOf('<q-card flat bordered class="stream-card">');
+  const streamCard = pageSource.slice(
+    streamCardStart,
+    pageSource.indexOf('</q-card>', streamCardStart),
+  );
+
+  assert.match(
+    streamCard,
+    /<\/div>\s*<SessionThinkingPhrase\s+v-if="session\?\.status === 'running'"[\s\S]*?:refresh-key="latestStreamEvent"/,
+  );
+  assert.match(
+    pageSource,
+    /\.stream-card__thinking\s*{[^}]*flex:\s*0 0 auto[^}]*border-top:/s,
+  );
+});
+
 test('exec and shell events share a type-only header and group command input and output', () => {
   const componentSource = readFileSync(
     new URL('../src/components/SessionCommandEvent.vue', import.meta.url),

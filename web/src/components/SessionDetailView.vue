@@ -47,6 +47,11 @@
                 </div>
               </div>
             </div>
+            <SessionThinkingPhrase
+              v-if="session?.status === 'running'"
+              class="stream-card__thinking"
+              :refresh-key="latestStreamEvent"
+            />
           </q-card>
 
           <div
@@ -562,6 +567,7 @@ import PromptAppendEditPanel from '@/components/PromptAppendEditPanel.vue';
 import SessionEventMessage from '@/components/SessionEventMessage.vue';
 import SessionArtifactsPanel from '@/components/SessionArtifactsPanel.vue';
 import SessionFilePreview from '@/components/SessionFilePreview.vue';
+import SessionThinkingPhrase from '@/components/SessionThinkingPhrase.vue';
 import SessionTerminalButton from '@/components/SessionTerminalButton.vue';
 import WorkflowApprovalPanel from '@/components/WorkflowApprovalPanel.vue';
 import WorkflowResultReview from '@/components/WorkflowResultReview.vue';
@@ -925,6 +931,7 @@ const canSavePromptAppendEdit = computed(() => {
   return Boolean(target && body && body !== target.body.trim() && !promptEditSaving.value);
 });
 const streamEntries = computed<TranscriptItem[]>(() => reduceTranscriptEvents(events.value));
+const latestStreamEvent = computed(() => events.value.at(-1) ?? null);
 const artifactRefreshKey = computed(() => String(artifactUpdateVersion.value));
 const latestTokenUsage = computed(() => tokenUsage.value);
 const sessionTunnels = ref<Tunnel[]>([]);
@@ -1467,6 +1474,13 @@ async function scrollEventsToBottom() {
   overflow: auto;
   overscroll-behavior: contain;
   padding: 0 14px 14px;
+}
+
+.stream-card__thinking {
+  flex: 0 0 auto;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--ac-border);
+  background: var(--ac-surface-raised);
 }
 
 .event-loading-more {
