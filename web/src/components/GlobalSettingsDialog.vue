@@ -97,7 +97,7 @@
             </template>
           </q-banner>
 
-          <q-linear-progress v-if="generalLoading" indeterminate color="primary" />
+          <q-linear-progress v-if="generalLoading || generalSaving" indeterminate color="primary" />
           <div class="general-settings-content">
             <q-list bordered separator class="appearance-settings-list">
               <q-item>
@@ -120,7 +120,6 @@
                     aria-label="Agent 并发数量"
                     :disable="generalLoading || generalSaving"
                     :error="!agentMaxConcurrentValid"
-                    @keyup.enter="saveGeneralSettings"
                   />
                 </q-item-section>
               </q-item>
@@ -145,17 +144,6 @@
                 </q-item-section>
               </q-item>
             </q-list>
-
-            <div class="row justify-end">
-              <q-btn
-                color="primary"
-                icon="save"
-                label="保存常规设置"
-                :loading="generalSaving"
-                :disable="!generalSettingsChanged || !generalSettingsValid"
-                @click="saveGeneralSettings"
-              />
-            </div>
 
             <q-card flat bordered class="general-thinking-settings">
               <q-item>
@@ -596,7 +584,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { QDialog } from 'quasar';
 
 import AppPagination from '@/components/AppPagination.vue';
@@ -665,6 +653,8 @@ const agentWritableRootsText = ref('');
 const generalLoading = ref(false);
 const generalSaving = ref(false);
 const generalError = ref('');
+const generalSaveDebounceMs = 500;
+let generalSaveTimer: ReturnType<typeof setTimeout> | null = null;
 const parsedAgentWritableRoots = computed(() => [
   ...new Set(
     agentWritableRootsText.value
@@ -967,6 +957,18 @@ watch(activeSection, (section) => {
 });
 
 watch(
+  [() => general.value.agentMaxConcurrent, agentWritableRootsText],
+  () => {
+    if (generalSaveTimer !== null) clearTimeout(generalSaveTimer);
+    if (generalLoading.value || !generalSettingsChanged.value || !generalSettingsValid.value) return;
+    generalSaveTimer = setTimeout(() => {
+      generalSaveTimer = null;
+      void saveGeneralSettings();
+    }, generalSaveDebounceMs);
+  },
+);
+
+watch(
   () => props.modelValue,
   (open) => {
     if (!open) return;
@@ -976,4 +978,11 @@ watch(
     if (activeSection.value === 'quick_commands') refreshQuickCommands();
   },
 );
+
+onBeforeUnmount(() => {
+  if (generalSaveTimer === null) return;
+  clearTimeout(generalSaveTimer);
+  generalSaveTimer = null;
+  void saveGeneralSettings();
+});
 </script>

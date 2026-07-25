@@ -31,3 +31,15 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /:options="sessionThinkingPhraseStyleOptions"/);
   assert.doesNotMatch(configSource, /ANYCODE_AGENT_MAX_CONCURRENT/);
 });
+
+test('general settings save valid changes after a debounce without a separating save button', () => {
+  const settingsSource = readSource('../src/components/GlobalSettingsDialog.vue');
+
+  assert.doesNotMatch(settingsSource, /label="保存常规设置"/);
+  assert.match(settingsSource, /const generalSaveDebounceMs = 500/);
+  assert.match(
+    settingsSource,
+    /watch\(\s*\[\(\) => general\.value\.agentMaxConcurrent, agentWritableRootsText\][\s\S]*?generalSettingsValid\.value[\s\S]*?setTimeout\([\s\S]*?saveGeneralSettings\(\)/,
+  );
+  assert.match(settingsSource, /onBeforeUnmount\([\s\S]*?saveGeneralSettings\(\)/);
+});
