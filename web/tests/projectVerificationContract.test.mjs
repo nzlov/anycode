@@ -14,13 +14,6 @@ test('make verify is the documented full-project validation entry point', () => 
     .filter((line) => line.startsWith('\t'))
     .map((line) => line.slice(1));
 
-  assert.deepEqual(commands, [
-    'go test ./...',
-    'go vet ./...',
-    'node --test web/tests/*.test.mjs',
-    'npm --prefix web run build',
-    'npm --prefix web run typecheck',
-    'git diff --check',
-  ]);
+  assert.deepEqual(commands, ['@go run ./scripts/verify']);
   assert.match(agentInstructions, /常规收口统一运行 `make verify`/);
 });
