@@ -7,7 +7,8 @@ ANYCODE_DATA_DIR/attachments/outputs/<sessionID>/
 ```
 
 The directory is exposed to Codex as `ANYCODE_ARTIFACT_DIR`. App Server thread start and resume
-requests add it to `sandbox_workspace_write.writable_roots` when the card uses workspace-write.
+requests append the global Agent writable-directory allowlist and this directory to
+`sandbox_workspace_write.writable_roots` when the card uses workspace-write.
 Files in this directory do not appear in the card Git diff.
 
 Codex writes screenshots, generated images, PDF, audio, video, archives, and other user deliverables

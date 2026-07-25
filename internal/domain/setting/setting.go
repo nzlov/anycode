@@ -107,6 +107,7 @@ func (scheme WallpaperColorScheme) Valid() bool {
 
 type SystemConfiguration struct {
 	AgentMaxConcurrent   int
+	AgentWritableRoots   []string
 	BackgroundType       BackgroundType
 	SolidTheme           SolidTheme
 	BackgroundMask       int
@@ -135,7 +136,7 @@ type Repository interface {
 	Delete(ctx context.Context, id QuickCommandID) error
 	GetSystemConfiguration(ctx context.Context) (SystemConfiguration, error)
 	SaveSystemConfiguration(ctx context.Context, configuration SystemConfiguration) error
-	UpdateAgentMaxConcurrent(ctx context.Context, max int) error
+	UpdateGeneralSettings(ctx context.Context, max int, writableRoots []string) error
 }
 
 type WallpaperStore interface {

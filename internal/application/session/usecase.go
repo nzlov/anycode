@@ -324,6 +324,7 @@ type Service struct {
 	generateID              func() (domain.ID, error)
 	maxConcurrentAgents     int
 	concurrencyLimits       concurrencyLimitProvider
+	agentWritableRoots      agentWritableRootsProvider
 	initializationScheduler func(*Service, domain.ID, bool)
 	initializationWG        sync.WaitGroup
 	terminalWG              sync.WaitGroup
@@ -355,6 +356,10 @@ type sessionDiffCounter interface {
 
 type concurrencyLimitProvider interface {
 	MaxConcurrentAgents(ctx context.Context) (int, error)
+}
+
+type agentWritableRootsProvider interface {
+	AgentWritableRoots(ctx context.Context) ([]string, error)
 }
 
 type questionRequestCoordinator interface {
@@ -491,6 +496,12 @@ func WithMaxConcurrentAgents(max int) Option {
 func WithConcurrencyLimitProvider(provider concurrencyLimitProvider) Option {
 	return func(s *Service) {
 		s.concurrencyLimits = provider
+	}
+}
+
+func WithAgentWritableRootsProvider(provider agentWritableRootsProvider) Option {
+	return func(s *Service) {
+		s.agentWritableRoots = provider
 	}
 }
 
@@ -3860,9 +3871,13 @@ func transitionSessionToWaitingApproval(session *domain.Session, initialStart bo
 func (s *Service) startCodexProcess(ctx context.Context, session domain.Session, runID processdomain.RunID, options codexStartOptions, workdir string) (processdomain.CodexHandle, error) {
 	prompt := strings.TrimSpace(options.prompt)
 	prompt, action, actionArgument := codexAction(prompt)
+	permissionMode := strings.TrimSpace(session.Config.PermissionMode)
+	writableRoots, err := s.agentWritableRootsFor(ctx, permissionMode)
+	if err != nil {
+		return processdomain.CodexHandle{}, err
+	}
 	artifactDir := ""
 	if s.artifacts != nil {
-		var err error
 		artifactDir, err = s.artifacts.EnsureArtifactDir(ctx, session.ID)
 		if err != nil {
 			return processdomain.CodexHandle{}, fmt.Errorf("prepare artifact directory: %w", err)
@@ -3881,7 +3896,8 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 			DeveloperInstructions: anyCodeDeveloperInstructions(session, artifactDir),
 			Model:                 strings.TrimSpace(session.Config.CodexModel),
 			ReasoningEffort:       strings.TrimSpace(session.Config.ReasoningEffort),
-			PermissionMode:        strings.TrimSpace(session.Config.PermissionMode),
+			PermissionMode:        permissionMode,
+			WritableRoots:         writableRoots,
 			FastMode:              session.Config.FastMode,
 		})
 	}
@@ -3891,10 +3907,21 @@ func (s *Service) startCodexProcess(ctx context.Context, session domain.Session,
 	}
 	files = appendUniqueSessionFiles(files, options.promptFiles...)
 	mentions := appendUniquePromptMentions(append([]domain.PromptMention(nil), session.Mentions...), options.promptMentions...)
-	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument))
+	return s.codex.Start(ctx, newCodexStartInput(session, runID, workdir, artifactDir, prompt, files, mentions, action, actionArgument, writableRoots))
 }
 
-func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, files []domain.SessionFile, mentions []domain.PromptMention, action processdomain.CodexAction, actionArgument string) processdomain.CodexStartInput {
+func (s *Service) agentWritableRootsFor(ctx context.Context, permissionMode string) ([]string, error) {
+	if permissionMode != "workspace-write" || s.agentWritableRoots == nil {
+		return nil, nil
+	}
+	roots, err := s.agentWritableRoots.AgentWritableRoots(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get agent writable roots: %w", err)
+	}
+	return append([]string(nil), roots...), nil
+}
+
+func newCodexStartInput(session domain.Session, runID processdomain.RunID, workdir string, artifactDir string, prompt string, files []domain.SessionFile, mentions []domain.PromptMention, action processdomain.CodexAction, actionArgument string, writableRoots []string) processdomain.CodexStartInput {
 	if action != processdomain.CodexActionTurn && action != processdomain.CodexActionPlan {
 		prompt = ""
 	}
@@ -3910,6 +3937,7 @@ func newCodexStartInput(session domain.Session, runID processdomain.RunID, workd
 		Model:                 strings.TrimSpace(session.Config.CodexModel),
 		ReasoningEffort:       strings.TrimSpace(session.Config.ReasoningEffort),
 		PermissionMode:        strings.TrimSpace(session.Config.PermissionMode),
+		WritableRoots:         writableRoots,
 		FastMode:              session.Config.FastMode,
 	}
 }

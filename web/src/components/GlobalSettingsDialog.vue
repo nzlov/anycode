@@ -130,28 +130,42 @@
                   hide-bottom-space
                   aria-label="Agent 并发数量"
                   :disable="generalLoading || generalSaving"
-                  :error="!generalSettingsValid"
+                  :error="!agentMaxConcurrentValid"
                   @keyup.enter="saveGeneralSettings"
-                >
-                  <template #append>
-                    <q-btn
-                      flat
-                      round
-                      dense
-                      class="app-icon-btn"
-                      icon="save"
-                      aria-label="保存 Agent 并发数量"
-                      :loading="generalSaving"
-                      :disable="!generalSettingsChanged || !generalSettingsValid"
-                      @click="saveGeneralSettings"
-                    >
-                      <q-tooltip>保存</q-tooltip>
-                    </q-btn>
-                  </template>
-                </q-input>
+                />
+              </q-item-section>
+            </q-item>
+            <q-item class="column items-stretch">
+              <q-item-section>
+                <q-item-label>Agent 目录白名单</q-item-label>
+                <q-item-label caption>每行一个绝对路径，仅对“工作区写入”模式生效</q-item-label>
+              </q-item-section>
+              <q-item-section class="q-mt-sm">
+                <q-input
+                  v-model="agentWritableRootsText"
+                  outlined
+                  dense
+                  type="textarea"
+                  autogrow
+                  aria-label="Agent 目录白名单"
+                  placeholder="/home/anycode/.cache/go-build"
+                  :disable="generalLoading || generalSaving"
+                  :error="!agentWritableRootsValid"
+                  error-message="每行必须是绝对路径"
+                />
               </q-item-section>
             </q-item>
           </q-list>
+          <div class="row justify-end q-mt-md">
+            <q-btn
+              color="primary"
+              icon="save"
+              label="保存常规设置"
+              :loading="generalSaving"
+              :disable="!generalSettingsChanged || !generalSettingsValid"
+              @click="saveGeneralSettings"
+            />
+          </div>
         </section>
 
         <section v-else-if="activeSection === 'projects'" class="global-settings-panel">
@@ -761,16 +775,35 @@ const draftCommand = ref('');
 const saving = ref(false);
 const deletingCommandIds = ref<string[]>([]);
 const commandInputRef = ref<{ focus: () => void } | null>(null);
-const general = ref<GeneralSettings>({ agentMaxConcurrent: 2 });
-const persistedGeneral = ref<GeneralSettings>({ agentMaxConcurrent: 2 });
+const defaultGeneral: GeneralSettings = { agentMaxConcurrent: 2, agentWritableRoots: [] };
+const general = ref<GeneralSettings>({ ...defaultGeneral });
+const persistedGeneral = ref<GeneralSettings>({ ...defaultGeneral });
+const agentWritableRootsText = ref('');
 const generalLoading = ref(false);
 const generalSaving = ref(false);
 const generalError = ref('');
-const generalSettingsValid = computed(
+const parsedAgentWritableRoots = computed(() => [
+  ...new Set(
+    agentWritableRootsText.value
+      .split('\n')
+      .map((root) => root.trim())
+      .filter(Boolean),
+  ),
+]);
+const agentWritableRootsValid = computed(() =>
+  parsedAgentWritableRoots.value.every((root) => root.startsWith('/') && root !== '/'),
+);
+const agentMaxConcurrentValid = computed(
   () => Number.isInteger(general.value.agentMaxConcurrent) && general.value.agentMaxConcurrent > 0,
 );
+const generalSettingsValid = computed(
+  () => agentMaxConcurrentValid.value && agentWritableRootsValid.value,
+);
 const generalSettingsChanged = computed(
-  () => general.value.agentMaxConcurrent !== persistedGeneral.value.agentMaxConcurrent,
+  () =>
+    general.value.agentMaxConcurrent !== persistedGeneral.value.agentMaxConcurrent ||
+    JSON.stringify(parsedAgentWritableRoots.value) !==
+      JSON.stringify(persistedGeneral.value.agentWritableRoots),
 );
 const quickCommandPageMax = computed(() =>
   Math.max(1, Math.ceil(quickCommandsPageInfo.value.total / quickCommandsPageInfo.value.pageSize)),
@@ -829,6 +862,7 @@ async function refreshGeneralSettings() {
   try {
     general.value = await getGeneralSettings();
     persistedGeneral.value = { ...general.value };
+    agentWritableRootsText.value = general.value.agentWritableRoots.join('\n');
   } catch {
     generalError.value = '无法加载常规设置';
   } finally {
@@ -841,10 +875,15 @@ async function saveGeneralSettings() {
   generalSaving.value = true;
   generalError.value = '';
   try {
-    general.value = await updateGeneralSettings(general.value.agentMaxConcurrent);
+    general.value = await updateGeneralSettings({
+      agentMaxConcurrent: general.value.agentMaxConcurrent,
+      agentWritableRoots: parsedAgentWritableRoots.value,
+    });
     persistedGeneral.value = { ...general.value };
+    agentWritableRootsText.value = general.value.agentWritableRoots.join('\n');
   } catch {
     general.value = { ...persistedGeneral.value };
+    agentWritableRootsText.value = persistedGeneral.value.agentWritableRoots.join('\n');
     generalError.value = '无法保存常规设置';
   } finally {
     generalSaving.value = false;

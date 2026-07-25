@@ -5291,6 +5291,24 @@ func TestConcurrencyLimitProviderIsReadDynamically(t *testing.T) {
 	}
 }
 
+func TestAgentWritableRootsProviderIsReadDynamically(t *testing.T) {
+	provider := &fakeAgentWritableRootsProvider{roots: []string{"/cache/go-build"}}
+	service := New(nil, nil, WithAgentWritableRootsProvider(provider))
+
+	got, err := service.agentWritableRootsFor(context.Background(), "workspace-write")
+	if err != nil || !slices.Equal(got, provider.roots) || provider.calls != 1 {
+		t.Fatalf("agentWritableRootsFor() = %#v, %v; calls=%d", got, err, provider.calls)
+	}
+	provider.roots = []string{"/go"}
+	got, err = service.agentWritableRootsFor(context.Background(), "workspace-write")
+	if err != nil || !slices.Equal(got, provider.roots) || provider.calls != 2 {
+		t.Fatalf("dynamic agentWritableRootsFor() = %#v, %v; calls=%d", got, err, provider.calls)
+	}
+	if got, err = service.agentWritableRootsFor(context.Background(), "read-only"); err != nil || got != nil || provider.calls != 2 {
+		t.Fatalf("read-only agentWritableRootsFor() = %#v, %v; calls=%d", got, err, provider.calls)
+	}
+}
+
 func TestQueuedStartIncludesAppendsAddedWhileQueued(t *testing.T) {
 	ctx := context.Background()
 	repo := newFakeRepository()
@@ -7069,7 +7087,8 @@ func TestStartSessionCreatesRunningProcessFromAppServerHandle(t *testing.T) {
 	}
 	processes := newFakeProcessRepository()
 	codex := &fakeCodexProcess{startHandle: processdomain.CodexHandle{}}
-	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex))
+	writableRoots := &fakeAgentWritableRootsProvider{roots: []string{"/home/anycode/.cache/go-build", "/home/anycode/go"}}
+	service := New(repo, newFakeProjectRepository("project-1"), WithProcesses(processes, codex), WithAgentWritableRootsProvider(writableRoots))
 	service.now = func() time.Time { return time.Unix(40, 0).UTC() }
 	service.generateID = func() (domain.ID, error) { return "process-run-1", nil }
 
@@ -7088,6 +7107,9 @@ func TestStartSessionCreatesRunningProcessFromAppServerHandle(t *testing.T) {
 	}
 	if codex.startInput.ProcessRunID != "process-run-1" || codex.startInput.Workdir != "/workspace/session-1" || codexInputText(codex.startInput.Input) != "implement session" || !codex.startInput.FastMode {
 		t.Fatalf("codex start input = %#v", codex.startInput)
+	}
+	if !slices.Equal(codex.startInput.WritableRoots, writableRoots.roots) || writableRoots.calls != 1 {
+		t.Fatalf("codex writable roots = %#v, provider calls = %d", codex.startInput.WritableRoots, writableRoots.calls)
 	}
 	if codex.startInput.DeveloperInstructions != anyCodeDeveloperInstructions(repo.sessions["session-1"], codex.startInput.ArtifactDir) {
 		t.Fatalf("codex developer instructions = %q", codex.startInput.DeveloperInstructions)
@@ -13442,6 +13464,17 @@ type fakeProjectRepository struct {
 type fakeConcurrencyLimitProvider struct {
 	max   int
 	calls int
+}
+
+type fakeAgentWritableRootsProvider struct {
+	roots []string
+	err   error
+	calls int
+}
+
+func (f *fakeAgentWritableRootsProvider) AgentWritableRoots(context.Context) ([]string, error) {
+	f.calls++
+	return append([]string(nil), f.roots...), f.err
 }
 
 func (f *fakeConcurrencyLimitProvider) MaxConcurrentAgents(context.Context) (int, error) {

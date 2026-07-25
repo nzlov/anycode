@@ -175,7 +175,8 @@ type FileDiff struct {
 }
 
 type GeneralSettings struct {
-	AgentMaxConcurrent int `json:"agentMaxConcurrent"`
+	AgentMaxConcurrent int      `json:"agentMaxConcurrent"`
+	AgentWritableRoots []string `json:"agentWritableRoots"`
 }
 
 type GitBranch struct {
@@ -748,7 +749,8 @@ type UpdateAppearanceSettingsInput struct {
 }
 
 type UpdateGeneralSettingsInput struct {
-	AgentMaxConcurrent int `json:"agentMaxConcurrent"`
+	AgentMaxConcurrent int      `json:"agentMaxConcurrent"`
+	AgentWritableRoots []string `json:"agentWritableRoots"`
 }
 
 type UpdateProjectSettingsInput struct {

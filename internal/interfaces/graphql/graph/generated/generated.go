@@ -141,6 +141,7 @@ type ComplexityRoot struct {
 
 	GeneralSettings struct {
 		AgentMaxConcurrent func(childComplexity int) int
+		AgentWritableRoots func(childComplexity int) int
 	}
 
 	GitBranch struct {
@@ -1160,6 +1161,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.GeneralSettings.AgentMaxConcurrent(childComplexity), true
+	case "GeneralSettings.agentWritableRoots":
+		if e.ComplexityRoot.GeneralSettings.AgentWritableRoots == nil {
+			break
+		}
+
+		return e.ComplexityRoot.GeneralSettings.AgentWritableRoots(childComplexity), true
 
 	case "GitBranch.isCurrent":
 		if e.ComplexityRoot.GitBranch.IsCurrent == nil {
@@ -4069,10 +4076,12 @@ enum AppearanceSolidTheme {
 
 type GeneralSettings {
   agentMaxConcurrent: Int!
+  agentWritableRoots: [String!]!
 }
 
 input UpdateGeneralSettingsInput {
   agentMaxConcurrent: Int!
+  agentWritableRoots: [String!]!
 }
 
 type AppearanceSettings {
@@ -7359,6 +7368,35 @@ func (ec *executionContext) fieldContext_GeneralSettings_agentMaxConcurrent(_ co
 	return fc, nil
 }
 
+func (ec *executionContext) _GeneralSettings_agentWritableRoots(ctx context.Context, field graphql.CollectedField, obj *model.GeneralSettings) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_GeneralSettings_agentWritableRoots,
+		func(ctx context.Context) (any, error) {
+			return obj.AgentWritableRoots, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_GeneralSettings_agentWritableRoots(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "GeneralSettings",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GitBranch_name(ctx context.Context, field graphql.CollectedField, obj *model.GitBranch) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7624,6 +7662,8 @@ func (ec *executionContext) fieldContext_Mutation_updateGeneralSettings(ctx cont
 			switch field.Name {
 			case "agentMaxConcurrent":
 				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
+			case "agentWritableRoots":
+				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
 		},
@@ -10693,6 +10733,8 @@ func (ec *executionContext) fieldContext_Query_generalSettings(_ context.Context
 			switch field.Name {
 			case "agentMaxConcurrent":
 				return ec.fieldContext_GeneralSettings_agentMaxConcurrent(ctx, field)
+			case "agentWritableRoots":
+				return ec.fieldContext_GeneralSettings_agentWritableRoots(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type GeneralSettings", field.Name)
 		},
@@ -23778,7 +23820,7 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"agentMaxConcurrent"}
+	fieldsInOrder := [...]string{"agentMaxConcurrent", "agentWritableRoots"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -23792,6 +23834,13 @@ func (ec *executionContext) unmarshalInputUpdateGeneralSettingsInput(ctx context
 				return it, err
 			}
 			it.AgentMaxConcurrent = data
+		case "agentWritableRoots":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("agentWritableRoots"))
+			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AgentWritableRoots = data
 		}
 	}
 	return it, nil
@@ -25161,6 +25210,11 @@ func (ec *executionContext) _GeneralSettings(ctx context.Context, sel ast.Select
 			out.Values[i] = graphql.MarshalString("GeneralSettings")
 		case "agentMaxConcurrent":
 			out.Values[i] = ec._GeneralSettings_agentMaxConcurrent(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "agentWritableRoots":
+			out.Values[i] = ec._GeneralSettings_agentWritableRoots(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

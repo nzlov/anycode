@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/predicate"
 	"github.com/nzlov/anycode/internal/infra/entstore/ent/systemconfiguration"
@@ -46,6 +47,18 @@ func (_u *SystemConfigurationUpdate) SetNillableAgentMaxConcurrent(v *int) *Syst
 // AddAgentMaxConcurrent adds value to the "agent_max_concurrent" field.
 func (_u *SystemConfigurationUpdate) AddAgentMaxConcurrent(v int) *SystemConfigurationUpdate {
 	_u.mutation.AddAgentMaxConcurrent(v)
+	return _u
+}
+
+// SetAgentWritableRoots sets the "agent_writable_roots" field.
+func (_u *SystemConfigurationUpdate) SetAgentWritableRoots(v []string) *SystemConfigurationUpdate {
+	_u.mutation.SetAgentWritableRoots(v)
+	return _u
+}
+
+// AppendAgentWritableRoots appends value to the "agent_writable_roots" field.
+func (_u *SystemConfigurationUpdate) AppendAgentWritableRoots(v []string) *SystemConfigurationUpdate {
+	_u.mutation.AppendAgentWritableRoots(v)
 	return _u
 }
 
@@ -239,6 +252,14 @@ func (_u *SystemConfigurationUpdate) sqlSave(ctx context.Context) (_node int, er
 	if value, ok := _u.mutation.AddedAgentMaxConcurrent(); ok {
 		_spec.AddField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.AgentWritableRoots(); ok {
+		_spec.SetField(systemconfiguration.FieldAgentWritableRoots, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAgentWritableRoots(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, systemconfiguration.FieldAgentWritableRoots, value)
+		})
+	}
 	if value, ok := _u.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)
 	}
@@ -304,6 +325,18 @@ func (_u *SystemConfigurationUpdateOne) SetNillableAgentMaxConcurrent(v *int) *S
 // AddAgentMaxConcurrent adds value to the "agent_max_concurrent" field.
 func (_u *SystemConfigurationUpdateOne) AddAgentMaxConcurrent(v int) *SystemConfigurationUpdateOne {
 	_u.mutation.AddAgentMaxConcurrent(v)
+	return _u
+}
+
+// SetAgentWritableRoots sets the "agent_writable_roots" field.
+func (_u *SystemConfigurationUpdateOne) SetAgentWritableRoots(v []string) *SystemConfigurationUpdateOne {
+	_u.mutation.SetAgentWritableRoots(v)
+	return _u
+}
+
+// AppendAgentWritableRoots appends value to the "agent_writable_roots" field.
+func (_u *SystemConfigurationUpdateOne) AppendAgentWritableRoots(v []string) *SystemConfigurationUpdateOne {
+	_u.mutation.AppendAgentWritableRoots(v)
 	return _u
 }
 
@@ -526,6 +559,14 @@ func (_u *SystemConfigurationUpdateOne) sqlSave(ctx context.Context) (_node *Sys
 	}
 	if value, ok := _u.mutation.AddedAgentMaxConcurrent(); ok {
 		_spec.AddField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AgentWritableRoots(); ok {
+		_spec.SetField(systemconfiguration.FieldAgentWritableRoots, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedAgentWritableRoots(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, systemconfiguration.FieldAgentWritableRoots, value)
+		})
 	}
 	if value, ok := _u.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)

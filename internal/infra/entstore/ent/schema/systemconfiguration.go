@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/field"
 )
 
@@ -15,6 +16,9 @@ func (SystemConfiguration) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").Immutable(),
 		field.Int("agent_max_concurrent").Default(2),
+		field.JSON("agent_writable_roots", []string{}).
+			Default([]string{}).
+			Annotations(entsql.DefaultExpr("'[]'")),
 		field.String("wallpaper_color_scheme").NotEmpty(),
 		field.String("background_type").NotEmpty().Default("bing"),
 		field.String("solid_theme").NotEmpty().Default("vermilion"),

@@ -459,6 +459,7 @@ var (
 	SystemConfigurationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString},
 		{Name: "agent_max_concurrent", Type: field.TypeInt, Default: 2},
+		{Name: "agent_writable_roots", Type: field.TypeJSON, Default: schema.Expr("'[]'")},
 		{Name: "wallpaper_color_scheme", Type: field.TypeString},
 		{Name: "background_type", Type: field.TypeString, Default: "bing"},
 		{Name: "solid_theme", Type: field.TypeString, Default: "vermilion"},

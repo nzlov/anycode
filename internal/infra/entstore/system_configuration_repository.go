@@ -20,6 +20,7 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 	}
 	return setting.SystemConfiguration{
 		AgentMaxConcurrent:   row.AgentMaxConcurrent,
+		AgentWritableRoots:   append([]string(nil), row.AgentWritableRoots...),
 		BackgroundType:       setting.BackgroundType(row.BackgroundType),
 		SolidTheme:           setting.SolidTheme(row.SolidTheme),
 		BackgroundMask:       row.BackgroundMask,
@@ -33,6 +34,7 @@ func (r *SettingRepository) GetSystemConfiguration(ctx context.Context) (setting
 func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configuration setting.SystemConfiguration) error {
 	_, err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
+		SetAgentWritableRoots(configuration.AgentWritableRoots).
 		SetBackgroundType(string(configuration.BackgroundType)).
 		SetSolidTheme(string(configuration.SolidTheme)).
 		SetBackgroundMask(configuration.BackgroundMask).
@@ -50,6 +52,7 @@ func (r *SettingRepository) SaveSystemConfiguration(ctx context.Context, configu
 	if _, err := r.client.SystemConfiguration.Create().
 		SetID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(configuration.AgentMaxConcurrent).
+		SetAgentWritableRoots(configuration.AgentWritableRoots).
 		SetBackgroundType(string(configuration.BackgroundType)).
 		SetSolidTheme(string(configuration.SolidTheme)).
 		SetBackgroundMask(configuration.BackgroundMask).
@@ -71,9 +74,18 @@ func (r *SettingRepository) MaxConcurrentAgents(ctx context.Context) (int, error
 	return configuration.AgentMaxConcurrent, nil
 }
 
-func (r *SettingRepository) UpdateAgentMaxConcurrent(ctx context.Context, max int) error {
+func (r *SettingRepository) AgentWritableRoots(ctx context.Context) ([]string, error) {
+	configuration, err := r.GetSystemConfiguration(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), configuration.AgentWritableRoots...), nil
+}
+
+func (r *SettingRepository) UpdateGeneralSettings(ctx context.Context, max int, writableRoots []string) error {
 	if err := r.client.SystemConfiguration.UpdateOneID(globalSystemConfigurationID).
 		SetAgentMaxConcurrent(max).
+		SetAgentWritableRoots(writableRoots).
 		Exec(ctx); err == nil {
 		return nil
 	} else if !ent.IsNotFound(err) {
@@ -81,5 +93,6 @@ func (r *SettingRepository) UpdateAgentMaxConcurrent(ctx context.Context, max in
 	}
 	configuration := setting.DefaultSystemConfiguration()
 	configuration.AgentMaxConcurrent = max
+	configuration.AgentWritableRoots = append([]string(nil), writableRoots...)
 	return r.SaveSystemConfiguration(ctx, configuration)
 }

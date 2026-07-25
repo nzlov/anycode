@@ -2,13 +2,14 @@ import { graphqlFetch } from '@/services/graphqlClient';
 
 export interface GeneralSettings {
   agentMaxConcurrent: number;
+  agentWritableRoots: string[];
 }
 
 export async function getGeneralSettings() {
   const data = await graphqlFetch<{ generalSettings: GeneralSettings }>({
     query: `
       query GeneralSettings {
-        generalSettings { agentMaxConcurrent }
+        generalSettings { agentMaxConcurrent agentWritableRoots }
       }
     `,
     notify: false,
@@ -16,17 +17,17 @@ export async function getGeneralSettings() {
   return data.generalSettings;
 }
 
-export async function updateGeneralSettings(agentMaxConcurrent: number) {
+export async function updateGeneralSettings(settings: GeneralSettings) {
   const data = await graphqlFetch<
     { updateGeneralSettings: GeneralSettings },
     { input: GeneralSettings }
   >({
     query: `
       mutation UpdateGeneralSettings($input: UpdateGeneralSettingsInput!) {
-        updateGeneralSettings(input: $input) { agentMaxConcurrent }
+        updateGeneralSettings(input: $input) { agentMaxConcurrent agentWritableRoots }
       }
     `,
-    variables: { input: { agentMaxConcurrent } },
+    variables: { input: settings },
   });
   return data.updateGeneralSettings;
 }

@@ -552,40 +552,44 @@ func init() {
 	systemconfigurationDescAgentMaxConcurrent := systemconfigurationFields[1].Descriptor()
 	// systemconfiguration.DefaultAgentMaxConcurrent holds the default value on creation for the agent_max_concurrent field.
 	systemconfiguration.DefaultAgentMaxConcurrent = systemconfigurationDescAgentMaxConcurrent.Default.(int)
+	// systemconfigurationDescAgentWritableRoots is the schema descriptor for agent_writable_roots field.
+	systemconfigurationDescAgentWritableRoots := systemconfigurationFields[2].Descriptor()
+	// systemconfiguration.DefaultAgentWritableRoots holds the default value on creation for the agent_writable_roots field.
+	systemconfiguration.DefaultAgentWritableRoots = systemconfigurationDescAgentWritableRoots.Default.([]string)
 	// systemconfigurationDescWallpaperColorScheme is the schema descriptor for wallpaper_color_scheme field.
-	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[2].Descriptor()
+	systemconfigurationDescWallpaperColorScheme := systemconfigurationFields[3].Descriptor()
 	// systemconfiguration.WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	systemconfiguration.WallpaperColorSchemeValidator = systemconfigurationDescWallpaperColorScheme.Validators[0].(func(string) error)
 	// systemconfigurationDescBackgroundType is the schema descriptor for background_type field.
-	systemconfigurationDescBackgroundType := systemconfigurationFields[3].Descriptor()
+	systemconfigurationDescBackgroundType := systemconfigurationFields[4].Descriptor()
 	// systemconfiguration.DefaultBackgroundType holds the default value on creation for the background_type field.
 	systemconfiguration.DefaultBackgroundType = systemconfigurationDescBackgroundType.Default.(string)
 	// systemconfiguration.BackgroundTypeValidator is a validator for the "background_type" field. It is called by the builders before save.
 	systemconfiguration.BackgroundTypeValidator = systemconfigurationDescBackgroundType.Validators[0].(func(string) error)
 	// systemconfigurationDescSolidTheme is the schema descriptor for solid_theme field.
-	systemconfigurationDescSolidTheme := systemconfigurationFields[4].Descriptor()
+	systemconfigurationDescSolidTheme := systemconfigurationFields[5].Descriptor()
 	// systemconfiguration.DefaultSolidTheme holds the default value on creation for the solid_theme field.
 	systemconfiguration.DefaultSolidTheme = systemconfigurationDescSolidTheme.Default.(string)
 	// systemconfiguration.SolidThemeValidator is a validator for the "solid_theme" field. It is called by the builders before save.
 	systemconfiguration.SolidThemeValidator = systemconfigurationDescSolidTheme.Validators[0].(func(string) error)
 	// systemconfigurationDescBackgroundMask is the schema descriptor for background_mask field.
-	systemconfigurationDescBackgroundMask := systemconfigurationFields[5].Descriptor()
+	systemconfigurationDescBackgroundMask := systemconfigurationFields[6].Descriptor()
 	// systemconfiguration.DefaultBackgroundMask holds the default value on creation for the background_mask field.
 	systemconfiguration.DefaultBackgroundMask = systemconfigurationDescBackgroundMask.Default.(int)
 	// systemconfigurationDescWallpaperID is the schema descriptor for wallpaper_id field.
-	systemconfigurationDescWallpaperID := systemconfigurationFields[6].Descriptor()
+	systemconfigurationDescWallpaperID := systemconfigurationFields[7].Descriptor()
 	// systemconfiguration.DefaultWallpaperID holds the default value on creation for the wallpaper_id field.
 	systemconfiguration.DefaultWallpaperID = systemconfigurationDescWallpaperID.Default.(string)
 	// systemconfigurationDescWallpaperFilename is the schema descriptor for wallpaper_filename field.
-	systemconfigurationDescWallpaperFilename := systemconfigurationFields[7].Descriptor()
+	systemconfigurationDescWallpaperFilename := systemconfigurationFields[8].Descriptor()
 	// systemconfiguration.DefaultWallpaperFilename holds the default value on creation for the wallpaper_filename field.
 	systemconfiguration.DefaultWallpaperFilename = systemconfigurationDescWallpaperFilename.Default.(string)
 	// systemconfigurationDescWallpaperMimeType is the schema descriptor for wallpaper_mime_type field.
-	systemconfigurationDescWallpaperMimeType := systemconfigurationFields[8].Descriptor()
+	systemconfigurationDescWallpaperMimeType := systemconfigurationFields[9].Descriptor()
 	// systemconfiguration.DefaultWallpaperMimeType holds the default value on creation for the wallpaper_mime_type field.
 	systemconfiguration.DefaultWallpaperMimeType = systemconfigurationDescWallpaperMimeType.Default.(string)
 	// systemconfigurationDescUpdatedAt is the schema descriptor for updated_at field.
-	systemconfigurationDescUpdatedAt := systemconfigurationFields[9].Descriptor()
+	systemconfigurationDescUpdatedAt := systemconfigurationFields[10].Descriptor()
 	// systemconfiguration.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	systemconfiguration.DefaultUpdatedAt = systemconfigurationDescUpdatedAt.Default.(func() time.Time)
 	// systemconfiguration.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

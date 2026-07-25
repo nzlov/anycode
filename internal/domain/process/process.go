@@ -165,6 +165,7 @@ type CodexStartInput struct {
 	Model                 string
 	ReasoningEffort       string
 	PermissionMode        string
+	WritableRoots         []string
 	FastMode              bool
 }
 
@@ -181,6 +182,7 @@ type CodexResumeInput struct {
 	Model                 string
 	ReasoningEffort       string
 	PermissionMode        string
+	WritableRoots         []string
 	FastMode              bool
 }
 

@@ -55,7 +55,10 @@ func mapQuickCommand(dto settingapp.QuickCommandDTO) *model.QuickCommand {
 }
 
 func mapGeneralSettings(dto settingapp.GeneralSettingsDTO) *model.GeneralSettings {
-	return &model.GeneralSettings{AgentMaxConcurrent: dto.AgentMaxConcurrent}
+	return &model.GeneralSettings{
+		AgentMaxConcurrent: dto.AgentMaxConcurrent,
+		AgentWritableRoots: append([]string{}, dto.AgentWritableRoots...),
+	}
 }
 
 func mapAppearanceSettings(dto settingapp.AppearanceSettingsDTO) *model.AppearanceSettings {

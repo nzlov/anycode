@@ -24,14 +24,14 @@ func (c *Client) SlashCommands() []process.CodexSlashCommand {
 }
 
 func (c *Client) Start(ctx context.Context, input process.CodexStartInput) (process.CodexHandle, error) {
-	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, "", input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode)
 }
 
 func (c *Client) Resume(ctx context.Context, input process.CodexResumeInput) (process.CodexHandle, error) {
 	if strings.TrimSpace(input.CodexSessionID) == "" {
 		return process.CodexHandle{}, process.ErrThreadUnavailable
 	}
-	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.FastMode)
+	return c.start(ctx, input.ProcessRunID, input.SessionID, input.CodexSessionID, input.Workdir, input.ArtifactDir, input.Input, input.Action, input.ActionArgument, input.DeveloperInstructions, input.Model, input.ReasoningEffort, input.PermissionMode, input.WritableRoots, input.FastMode)
 }
 
 func (c *Client) start(
@@ -48,6 +48,7 @@ func (c *Client) start(
 	model string,
 	reasoningEffort string,
 	permissionMode string,
+	writableRoots []string,
 	fastMode bool,
 ) (process.CodexHandle, error) {
 	if runID == "" || sessionID == "" {
@@ -57,8 +58,9 @@ func (c *Client) start(
 	if err != nil {
 		return process.CodexHandle{}, err
 	}
+	workspaceWrite := newWorkspaceWriteSettings(permissionMode, writableRoots, artifactDir)
 	resuming := threadID != ""
-	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode)
+	params := appServerThreadParams(workdir, artifactDir, developerInstructions, model, permissionMode, fastMode, workspaceWrite)
 	params["dynamicTools"] = anyCodeDynamicTools()
 	if threadID == "" {
 		params["ephemeral"] = false
@@ -110,7 +112,7 @@ func (c *Client) start(
 	}
 	runtime.register(route)
 	go runtime.followSessionLog(route, transcriptPath, transcriptOffset)
-	turnID, active, err := runtime.startInput(ctx, threadID, workdir, artifactDir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode)
+	turnID, active, err := runtime.startInput(ctx, threadID, workdir, input, action, actionArgument, developerInstructions, model, reasoningEffort, permissionMode, workspaceWrite)
 	if err != nil {
 		runtime.removeRoute(route)
 		return process.CodexHandle{}, err
@@ -125,7 +127,31 @@ func (c *Client) start(
 	return handle, nil
 }
 
-func appServerThreadParams(workdir string, artifactDir string, developerInstructions string, model string, permissionMode string, fastMode bool) map[string]any {
+type workspaceWriteSettings struct {
+	WritableRoots []string `json:"writable_roots"`
+}
+
+func newWorkspaceWriteSettings(permissionMode string, configuredRoots []string, artifactDir string) *workspaceWriteSettings {
+	if strings.TrimSpace(permissionMode) != "workspace-write" {
+		return nil
+	}
+	settings := workspaceWriteSettings{WritableRoots: make([]string, 0, len(configuredRoots)+1)}
+	seen := make(map[string]struct{}, len(configuredRoots)+1)
+	for _, root := range append(append([]string(nil), configuredRoots...), artifactDir) {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		if _, exists := seen[root]; exists {
+			continue
+		}
+		seen[root] = struct{}{}
+		settings.WritableRoots = append(settings.WritableRoots, root)
+	}
+	return &settings
+}
+
+func appServerThreadParams(workdir string, artifactDir string, developerInstructions string, model string, permissionMode string, fastMode bool, workspaceWrite *workspaceWriteSettings) map[string]any {
 	params := map[string]any{}
 	if workdir != "" {
 		params["cwd"] = workdir
@@ -144,26 +170,28 @@ func appServerThreadParams(workdir string, artifactDir string, developerInstruct
 	if permissionMode != "" {
 		params["sandbox"] = permissionMode
 	}
+	config := map[string]any{}
 	if artifactDir != "" {
-		config := map[string]any{
-			"shell_environment_policy": map[string]any{"set": map[string]string{"ANYCODE_ARTIFACT_DIR": artifactDir}},
-		}
-		if permissionMode == "workspace-write" {
-			config["sandbox_workspace_write"] = map[string]any{"writable_roots": []string{artifactDir}}
-		}
+		config["shell_environment_policy"] = map[string]any{"set": map[string]string{"ANYCODE_ARTIFACT_DIR": artifactDir}}
+	}
+	if workspaceWrite != nil {
+		// GLUE: Thread config and turn policy are separate App Server fields; remove this duplicate mapping when one field can own both phases.
+		config["sandbox_workspace_write"] = workspaceWrite
+	}
+	if len(config) > 0 {
 		params["config"] = config
 	}
 	return params
 }
 
-func appServerSandboxPolicy(permissionMode string, artifactDir string) map[string]any {
+func appServerSandboxPolicy(permissionMode string, workspaceWrite *workspaceWriteSettings) map[string]any {
 	switch strings.TrimSpace(permissionMode) {
 	case "read-only":
 		return map[string]any{"type": "readOnly"}
 	case "workspace-write":
 		policy := map[string]any{"type": "workspaceWrite"}
-		if artifactDir = strings.TrimSpace(artifactDir); artifactDir != "" {
-			policy["writableRoots"] = []string{artifactDir}
+		if workspaceWrite != nil {
+			policy["writableRoots"] = workspaceWrite.WritableRoots
 		}
 		return policy
 	case "danger-full-access":
@@ -241,7 +269,7 @@ func anyCodeDynamicTools() []map[string]any {
 	}
 }
 
-func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, artifactDir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string) (string, bool, error) {
+func (r *appServerRuntime) startInput(ctx context.Context, threadID string, workdir string, input []process.CodexInputItem, action process.CodexAction, actionArgument string, developerInstructions string, model string, reasoningEffort string, permissionMode string, workspaceWrite *workspaceWriteSettings) (string, bool, error) {
 	switch action {
 	case process.CodexActionCompact:
 		if err := r.request(ctx, "thread/compact/start", map[string]any{"threadId": threadID}, nil); err != nil {
@@ -297,7 +325,7 @@ func (r *appServerRuntime) startInput(ctx context.Context, threadID string, work
 	if collaborationMode != nil {
 		params["collaborationMode"] = collaborationMode
 	}
-	if sandboxPolicy := appServerSandboxPolicy(permissionMode, artifactDir); sandboxPolicy != nil {
+	if sandboxPolicy := appServerSandboxPolicy(permissionMode, workspaceWrite); sandboxPolicy != nil {
 		params["sandboxPolicy"] = sandboxPolicy
 	}
 	var response struct {

@@ -16,5 +16,9 @@ test('global concurrency is database-backed and editable in general settings', (
   assert.match(settingsSource, /name="general"/);
   assert.match(settingsSource, /Agent 并发数量/);
   assert.match(settingsSource, /general\.agentMaxConcurrent/);
+  assert.match(serviceSource, /agentWritableRoots/);
+  assert.match(settingsSource, /Agent 目录白名单/);
+  assert.match(settingsSource, /agentWritableRootsText/);
+  assert.match(settingsSource, /每行必须是绝对路径/);
   assert.doesNotMatch(configSource, /ANYCODE_AGENT_MAX_CONCURRENT/);
 });

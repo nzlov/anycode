@@ -11,6 +11,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,10 +36,12 @@ type UseCase interface {
 
 type UpdateGeneralSettingsInput struct {
 	AgentMaxConcurrent int
+	AgentWritableRoots []string
 }
 
 type GeneralSettingsDTO struct {
 	AgentMaxConcurrent int
+	AgentWritableRoots []string
 }
 
 type UpdateAppearanceSettingsInput struct {
@@ -151,7 +154,10 @@ func (s *Service) GetGeneralSettings(ctx context.Context) (GeneralSettingsDTO, e
 	if configuration.AgentMaxConcurrent <= 0 {
 		configuration.AgentMaxConcurrent = domain.DefaultSystemConfiguration().AgentMaxConcurrent
 	}
-	return GeneralSettingsDTO{AgentMaxConcurrent: configuration.AgentMaxConcurrent}, nil
+	return GeneralSettingsDTO{
+		AgentMaxConcurrent: configuration.AgentMaxConcurrent,
+		AgentWritableRoots: append([]string{}, configuration.AgentWritableRoots...),
+	}, nil
 }
 
 func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneralSettingsInput) (GeneralSettingsDTO, error) {
@@ -161,13 +167,41 @@ func (s *Service) UpdateGeneralSettings(ctx context.Context, input UpdateGeneral
 	if input.AgentMaxConcurrent <= 0 {
 		return GeneralSettingsDTO{}, validationError("agentMaxConcurrent", "agent concurrency limit must be positive")
 	}
-	if err := s.repo.UpdateAgentMaxConcurrent(ctx, input.AgentMaxConcurrent); err != nil {
+	writableRoots, err := normalizeAgentWritableRoots(input.AgentWritableRoots)
+	if err != nil {
+		return GeneralSettingsDTO{}, err
+	}
+	if err := s.repo.UpdateGeneralSettings(ctx, input.AgentMaxConcurrent, writableRoots); err != nil {
 		return GeneralSettingsDTO{}, apperror.Wrap(err, apperror.CodeInternal, apperror.CategoryInfraError, "update general settings failed").WithRetryable(true)
 	}
 	if s.onConcurrencyLimitChanged != nil {
 		s.onConcurrencyLimitChanged()
 	}
-	return GeneralSettingsDTO{AgentMaxConcurrent: input.AgentMaxConcurrent}, nil
+	return GeneralSettingsDTO{AgentMaxConcurrent: input.AgentMaxConcurrent, AgentWritableRoots: writableRoots}, nil
+}
+
+func normalizeAgentWritableRoots(roots []string) ([]string, error) {
+	normalized := make([]string, 0, len(roots))
+	seen := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			continue
+		}
+		if !filepath.IsAbs(root) {
+			return nil, validationError("agentWritableRoots", "agent writable roots must be absolute paths")
+		}
+		root = filepath.Clean(root)
+		if root == string(filepath.Separator) {
+			return nil, validationError("agentWritableRoots", "the filesystem root cannot be an agent writable root")
+		}
+		if _, exists := seen[root]; exists {
+			continue
+		}
+		seen[root] = struct{}{}
+		normalized = append(normalized, root)
+	}
+	return normalized, nil
 }
 
 func (s *Service) GetAppearanceSettings(ctx context.Context) (AppearanceSettingsDTO, error) {

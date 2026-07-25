@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -24,7 +25,8 @@ func (h *testToolHandler) HandleDynamicTool(_ context.Context, call process.Dyna
 }
 
 func TestThreadParamsExposeWritableArtifactDirectory(t *testing.T) {
-	params := appServerThreadParams("/workspace", "/outputs/session-1", "AnyCode rules", "gpt-test", "workspace-write", true)
+	workspaceWrite := &workspaceWriteSettings{WritableRoots: []string{"/cache/go-build", "/go", "/outputs/session-1"}}
+	params := appServerThreadParams("/workspace", "/outputs/session-1", "AnyCode rules", "gpt-test", "workspace-write", true, workspaceWrite)
 	if _, exists := params["approvalPolicy"]; exists {
 		t.Fatalf("thread params override Codex approval policy: %#v", params)
 	}
@@ -36,15 +38,15 @@ func TestThreadParamsExposeWritableArtifactDirectory(t *testing.T) {
 	if environment["ANYCODE_ARTIFACT_DIR"] != "/outputs/session-1" {
 		t.Fatalf("shell environment = %#v", environment)
 	}
-	sandbox := config["sandbox_workspace_write"].(map[string]any)
-	if roots := sandbox["writable_roots"].([]string); len(roots) != 1 || roots[0] != "/outputs/session-1" {
+	sandbox := config["sandbox_workspace_write"].(*workspaceWriteSettings)
+	if roots := sandbox.WritableRoots; len(roots) != 3 || roots[0] != "/cache/go-build" || roots[1] != "/go" || roots[2] != "/outputs/session-1" {
 		t.Fatalf("writable roots = %#v", roots)
 	}
 	if params["developerInstructions"] != "AnyCode rules" || params["serviceTier"] != "priority" {
 		t.Fatalf("thread params = %#v", params)
 	}
 
-	readOnly := appServerThreadParams("/workspace", "/outputs/session-1", "", "", "read-only", false)
+	readOnly := appServerThreadParams("/workspace", "/outputs/session-1", "", "", "read-only", false, nil)
 	if readOnly["serviceTier"] != "default" {
 		t.Fatalf("read-only thread params = %#v", readOnly)
 	}
@@ -58,31 +60,46 @@ func TestSandboxPolicyFromPermissionMode(t *testing.T) {
 	tests := []struct {
 		name           string
 		permissionMode string
-		artifactDir    string
+		workspaceWrite *workspaceWriteSettings
 		wantType       string
-		wantRoot       string
+		wantRoots      []string
 	}{
 		{name: "read only", permissionMode: "read-only", wantType: "readOnly"},
-		{name: "workspace write", permissionMode: " workspace-write ", artifactDir: " /outputs/session-1 ", wantType: "workspaceWrite", wantRoot: "/outputs/session-1"},
+		{name: "workspace write", permissionMode: " workspace-write ", workspaceWrite: &workspaceWriteSettings{WritableRoots: []string{"/cache/go-build", "/outputs/session-1"}}, wantType: "workspaceWrite", wantRoots: []string{"/cache/go-build", "/outputs/session-1"}},
 		{name: "full access", permissionMode: "danger-full-access", wantType: "dangerFullAccess"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			policy := appServerSandboxPolicy(test.permissionMode, test.artifactDir)
+			policy := appServerSandboxPolicy(test.permissionMode, test.workspaceWrite)
 			if policy["type"] != test.wantType {
 				t.Fatalf("sandbox policy = %#v", policy)
 			}
 			roots, _ := policy["writableRoots"].([]string)
-			if test.wantRoot == "" && len(roots) != 0 {
+			if len(test.wantRoots) == 0 && len(roots) != 0 {
 				t.Fatalf("writable roots = %#v", roots)
 			}
-			if test.wantRoot != "" && (len(roots) != 1 || roots[0] != test.wantRoot) {
-				t.Fatalf("writable roots = %#v", roots)
+			if len(test.wantRoots) > 0 && !reflect.DeepEqual(roots, test.wantRoots) {
+				t.Fatalf("writable roots = %#v, want %#v", roots, test.wantRoots)
 			}
 		})
 	}
-	if policy := appServerSandboxPolicy("", "/outputs/session-1"); policy != nil {
+	if policy := appServerSandboxPolicy("", nil); policy != nil {
 		t.Fatalf("empty permission sandbox policy = %#v", policy)
+	}
+}
+
+func TestWorkspaceWriteSettingsAppendConfiguredRootsAndArtifact(t *testing.T) {
+	settings := newWorkspaceWriteSettings(
+		" workspace-write ",
+		[]string{"/cache/go-build", " /go ", "/cache/go-build", "/outputs/session-1"},
+		"/outputs/session-1",
+	)
+	want := []string{"/cache/go-build", "/go", "/outputs/session-1"}
+	if settings == nil || !reflect.DeepEqual(settings.WritableRoots, want) {
+		t.Fatalf("workspace-write settings = %#v, want %#v", settings, want)
+	}
+	if settings := newWorkspaceWriteSettings("read-only", []string{"/cache/go-build"}, "/outputs/session-1"); settings != nil {
+		t.Fatalf("read-only settings = %#v", settings)
 	}
 }
 

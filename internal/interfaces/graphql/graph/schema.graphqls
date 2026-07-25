@@ -145,10 +145,12 @@ enum AppearanceSolidTheme {
 
 type GeneralSettings {
   agentMaxConcurrent: Int!
+  agentWritableRoots: [String!]!
 }
 
 input UpdateGeneralSettingsInput {
   agentMaxConcurrent: Int!
+  agentWritableRoots: [String!]!
 }
 
 type AppearanceSettings {

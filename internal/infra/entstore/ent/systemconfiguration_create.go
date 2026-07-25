@@ -34,6 +34,12 @@ func (_c *SystemConfigurationCreate) SetNillableAgentMaxConcurrent(v *int) *Syst
 	return _c
 }
 
+// SetAgentWritableRoots sets the "agent_writable_roots" field.
+func (_c *SystemConfigurationCreate) SetAgentWritableRoots(v []string) *SystemConfigurationCreate {
+	_c.mutation.SetAgentWritableRoots(v)
+	return _c
+}
+
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
 func (_c *SystemConfigurationCreate) SetWallpaperColorScheme(v string) *SystemConfigurationCreate {
 	_c.mutation.SetWallpaperColorScheme(v)
@@ -183,6 +189,10 @@ func (_c *SystemConfigurationCreate) defaults() {
 		v := systemconfiguration.DefaultAgentMaxConcurrent
 		_c.mutation.SetAgentMaxConcurrent(v)
 	}
+	if _, ok := _c.mutation.AgentWritableRoots(); !ok {
+		v := systemconfiguration.DefaultAgentWritableRoots
+		_c.mutation.SetAgentWritableRoots(v)
+	}
 	if _, ok := _c.mutation.BackgroundType(); !ok {
 		v := systemconfiguration.DefaultBackgroundType
 		_c.mutation.SetBackgroundType(v)
@@ -295,6 +305,10 @@ func (_c *SystemConfigurationCreate) createSpec() (*SystemConfiguration, *sqlgra
 	if value, ok := _c.mutation.AgentMaxConcurrent(); ok {
 		_spec.SetField(systemconfiguration.FieldAgentMaxConcurrent, field.TypeInt, value)
 		_node.AgentMaxConcurrent = value
+	}
+	if value, ok := _c.mutation.AgentWritableRoots(); ok {
+		_spec.SetField(systemconfiguration.FieldAgentWritableRoots, field.TypeJSON, value)
+		_node.AgentWritableRoots = value
 	}
 	if value, ok := _c.mutation.WallpaperColorScheme(); ok {
 		_spec.SetField(systemconfiguration.FieldWallpaperColorScheme, field.TypeString, value)

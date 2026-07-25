@@ -34,7 +34,10 @@ func (r *mutationResolver) UpdateGeneralSettings(ctx context.Context, input mode
 	if r.UseCases.Settings == nil {
 		return nil, missingUseCase("settings")
 	}
-	dto, err := r.UseCases.Settings.UpdateGeneralSettings(ctx, settingapp.UpdateGeneralSettingsInput{AgentMaxConcurrent: input.AgentMaxConcurrent})
+	dto, err := r.UseCases.Settings.UpdateGeneralSettings(ctx, settingapp.UpdateGeneralSettingsInput{
+		AgentMaxConcurrent: input.AgentMaxConcurrent,
+		AgentWritableRoots: input.AgentWritableRoots,
+	})
 	if err != nil {
 		return nil, err
 	}

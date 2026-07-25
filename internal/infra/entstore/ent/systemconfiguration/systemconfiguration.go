@@ -15,6 +15,8 @@ const (
 	FieldID = "id"
 	// FieldAgentMaxConcurrent holds the string denoting the agent_max_concurrent field in the database.
 	FieldAgentMaxConcurrent = "agent_max_concurrent"
+	// FieldAgentWritableRoots holds the string denoting the agent_writable_roots field in the database.
+	FieldAgentWritableRoots = "agent_writable_roots"
 	// FieldWallpaperColorScheme holds the string denoting the wallpaper_color_scheme field in the database.
 	FieldWallpaperColorScheme = "wallpaper_color_scheme"
 	// FieldBackgroundType holds the string denoting the background_type field in the database.
@@ -39,6 +41,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldAgentMaxConcurrent,
+	FieldAgentWritableRoots,
 	FieldWallpaperColorScheme,
 	FieldBackgroundType,
 	FieldSolidTheme,
@@ -62,6 +65,8 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultAgentMaxConcurrent holds the default value on creation for the "agent_max_concurrent" field.
 	DefaultAgentMaxConcurrent int
+	// DefaultAgentWritableRoots holds the default value on creation for the "agent_writable_roots" field.
+	DefaultAgentWritableRoots []string
 	// WallpaperColorSchemeValidator is a validator for the "wallpaper_color_scheme" field. It is called by the builders before save.
 	WallpaperColorSchemeValidator func(string) error
 	// DefaultBackgroundType holds the default value on creation for the "background_type" field.

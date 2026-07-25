@@ -12995,24 +12995,26 @@ func (m *StagedAttachmentMutation) ResetEdge(name string) error {
 // SystemConfigurationMutation represents an operation that mutates the SystemConfiguration nodes in the graph.
 type SystemConfigurationMutation struct {
 	config
-	op                      Op
-	typ                     string
-	id                      *string
-	agent_max_concurrent    *int
-	addagent_max_concurrent *int
-	wallpaper_color_scheme  *string
-	background_type         *string
-	solid_theme             *string
-	background_mask         *int
-	addbackground_mask      *int
-	wallpaper_id            *string
-	wallpaper_filename      *string
-	wallpaper_mime_type     *string
-	updated_at              *time.Time
-	clearedFields           map[string]struct{}
-	done                    bool
-	oldValue                func(context.Context) (*SystemConfiguration, error)
-	predicates              []predicate.SystemConfiguration
+	op                         Op
+	typ                        string
+	id                         *string
+	agent_max_concurrent       *int
+	addagent_max_concurrent    *int
+	agent_writable_roots       *[]string
+	appendagent_writable_roots []string
+	wallpaper_color_scheme     *string
+	background_type            *string
+	solid_theme                *string
+	background_mask            *int
+	addbackground_mask         *int
+	wallpaper_id               *string
+	wallpaper_filename         *string
+	wallpaper_mime_type        *string
+	updated_at                 *time.Time
+	clearedFields              map[string]struct{}
+	done                       bool
+	oldValue                   func(context.Context) (*SystemConfiguration, error)
+	predicates                 []predicate.SystemConfiguration
 }
 
 var _ ent.Mutation = (*SystemConfigurationMutation)(nil)
@@ -13173,6 +13175,57 @@ func (m *SystemConfigurationMutation) AddedAgentMaxConcurrent() (r int, exists b
 func (m *SystemConfigurationMutation) ResetAgentMaxConcurrent() {
 	m.agent_max_concurrent = nil
 	m.addagent_max_concurrent = nil
+}
+
+// SetAgentWritableRoots sets the "agent_writable_roots" field.
+func (m *SystemConfigurationMutation) SetAgentWritableRoots(s []string) {
+	m.agent_writable_roots = &s
+	m.appendagent_writable_roots = nil
+}
+
+// AgentWritableRoots returns the value of the "agent_writable_roots" field in the mutation.
+func (m *SystemConfigurationMutation) AgentWritableRoots() (r []string, exists bool) {
+	v := m.agent_writable_roots
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAgentWritableRoots returns the old "agent_writable_roots" field's value of the SystemConfiguration entity.
+// If the SystemConfiguration object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SystemConfigurationMutation) OldAgentWritableRoots(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAgentWritableRoots is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAgentWritableRoots requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAgentWritableRoots: %w", err)
+	}
+	return oldValue.AgentWritableRoots, nil
+}
+
+// AppendAgentWritableRoots adds s to the "agent_writable_roots" field.
+func (m *SystemConfigurationMutation) AppendAgentWritableRoots(s []string) {
+	m.appendagent_writable_roots = append(m.appendagent_writable_roots, s...)
+}
+
+// AppendedAgentWritableRoots returns the list of values that were appended to the "agent_writable_roots" field in this mutation.
+func (m *SystemConfigurationMutation) AppendedAgentWritableRoots() ([]string, bool) {
+	if len(m.appendagent_writable_roots) == 0 {
+		return nil, false
+	}
+	return m.appendagent_writable_roots, true
+}
+
+// ResetAgentWritableRoots resets all changes to the "agent_writable_roots" field.
+func (m *SystemConfigurationMutation) ResetAgentWritableRoots() {
+	m.agent_writable_roots = nil
+	m.appendagent_writable_roots = nil
 }
 
 // SetWallpaperColorScheme sets the "wallpaper_color_scheme" field.
@@ -13517,9 +13570,12 @@ func (m *SystemConfigurationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SystemConfigurationMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.agent_max_concurrent != nil {
 		fields = append(fields, systemconfiguration.FieldAgentMaxConcurrent)
+	}
+	if m.agent_writable_roots != nil {
+		fields = append(fields, systemconfiguration.FieldAgentWritableRoots)
 	}
 	if m.wallpaper_color_scheme != nil {
 		fields = append(fields, systemconfiguration.FieldWallpaperColorScheme)
@@ -13555,6 +13611,8 @@ func (m *SystemConfigurationMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case systemconfiguration.FieldAgentMaxConcurrent:
 		return m.AgentMaxConcurrent()
+	case systemconfiguration.FieldAgentWritableRoots:
+		return m.AgentWritableRoots()
 	case systemconfiguration.FieldWallpaperColorScheme:
 		return m.WallpaperColorScheme()
 	case systemconfiguration.FieldBackgroundType:
@@ -13582,6 +13640,8 @@ func (m *SystemConfigurationMutation) OldField(ctx context.Context, name string)
 	switch name {
 	case systemconfiguration.FieldAgentMaxConcurrent:
 		return m.OldAgentMaxConcurrent(ctx)
+	case systemconfiguration.FieldAgentWritableRoots:
+		return m.OldAgentWritableRoots(ctx)
 	case systemconfiguration.FieldWallpaperColorScheme:
 		return m.OldWallpaperColorScheme(ctx)
 	case systemconfiguration.FieldBackgroundType:
@@ -13613,6 +13673,13 @@ func (m *SystemConfigurationMutation) SetField(name string, value ent.Value) err
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAgentMaxConcurrent(v)
+		return nil
+	case systemconfiguration.FieldAgentWritableRoots:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAgentWritableRoots(v)
 		return nil
 	case systemconfiguration.FieldWallpaperColorScheme:
 		v, ok := value.(string)
@@ -13748,6 +13815,9 @@ func (m *SystemConfigurationMutation) ResetField(name string) error {
 	switch name {
 	case systemconfiguration.FieldAgentMaxConcurrent:
 		m.ResetAgentMaxConcurrent()
+		return nil
+	case systemconfiguration.FieldAgentWritableRoots:
+		m.ResetAgentWritableRoots()
 		return nil
 	case systemconfiguration.FieldWallpaperColorScheme:
 		m.ResetWallpaperColorScheme()

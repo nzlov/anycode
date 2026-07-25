@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"slices"
 	"testing"
 	"time"
 
@@ -92,11 +93,15 @@ func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	service := New(repo, WithConcurrencyLimitChanged(func() { changed++ }))
 
 	got, err := service.GetGeneralSettings(context.Background())
-	if err != nil || got.AgentMaxConcurrent != 2 {
+	if err != nil || got.AgentMaxConcurrent != 2 || len(got.AgentWritableRoots) != 0 {
 		t.Fatalf("GetGeneralSettings() = %#v, %v", got, err)
 	}
-	got, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 4})
-	if err != nil || got.AgentMaxConcurrent != 4 || repo.configuration.AgentMaxConcurrent != 4 || changed != 1 {
+	got, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{
+		AgentMaxConcurrent: 4,
+		AgentWritableRoots: []string{" /home/anycode/.cache/go-build ", "/home/anycode/go", "/home/anycode/go"},
+	})
+	wantRoots := []string{"/home/anycode/.cache/go-build", "/home/anycode/go"}
+	if err != nil || got.AgentMaxConcurrent != 4 || !slices.Equal(got.AgentWritableRoots, wantRoots) || !slices.Equal(repo.configuration.AgentWritableRoots, wantRoots) || changed != 1 {
 		t.Fatalf("UpdateGeneralSettings() = %#v, %v; stored=%#v changed=%d", got, err, repo.configuration, changed)
 	}
 	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 0})
@@ -104,6 +109,10 @@ func TestGeneralSettingsDefaultUpdateAndValidation(t *testing.T) {
 	if changed != 1 {
 		t.Fatalf("invalid update callback count = %d", changed)
 	}
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"relative/path"}})
+	assertAppError(t, err, apperror.CodeValidationFailed)
+	_, err = service.UpdateGeneralSettings(context.Background(), UpdateGeneralSettingsInput{AgentMaxConcurrent: 2, AgentWritableRoots: []string{"/"}})
+	assertAppError(t, err, apperror.CodeValidationFailed)
 }
 
 func TestUploadAppearanceWallpaperStoresImageAndSelectsIt(t *testing.T) {
@@ -300,8 +309,9 @@ func (r *fakeRepository) SaveSystemConfiguration(_ context.Context, configuratio
 	return nil
 }
 
-func (r *fakeRepository) UpdateAgentMaxConcurrent(_ context.Context, max int) error {
+func (r *fakeRepository) UpdateGeneralSettings(_ context.Context, max int, writableRoots []string) error {
 	r.configuration.AgentMaxConcurrent = max
+	r.configuration.AgentWritableRoots = append([]string(nil), writableRoots...)
 	return nil
 }
 

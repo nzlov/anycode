@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -19,6 +20,8 @@ type SystemConfiguration struct {
 	ID string `json:"id,omitempty"`
 	// AgentMaxConcurrent holds the value of the "agent_max_concurrent" field.
 	AgentMaxConcurrent int `json:"agent_max_concurrent,omitempty"`
+	// AgentWritableRoots holds the value of the "agent_writable_roots" field.
+	AgentWritableRoots []string `json:"agent_writable_roots,omitempty"`
 	// WallpaperColorScheme holds the value of the "wallpaper_color_scheme" field.
 	WallpaperColorScheme string `json:"wallpaper_color_scheme,omitempty"`
 	// BackgroundType holds the value of the "background_type" field.
@@ -43,6 +46,8 @@ func (*SystemConfiguration) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case systemconfiguration.FieldAgentWritableRoots:
+			values[i] = new([]byte)
 		case systemconfiguration.FieldAgentMaxConcurrent, systemconfiguration.FieldBackgroundMask:
 			values[i] = new(sql.NullInt64)
 		case systemconfiguration.FieldID, systemconfiguration.FieldWallpaperColorScheme, systemconfiguration.FieldBackgroundType, systemconfiguration.FieldSolidTheme, systemconfiguration.FieldWallpaperID, systemconfiguration.FieldWallpaperFilename, systemconfiguration.FieldWallpaperMimeType:
@@ -75,6 +80,14 @@ func (_m *SystemConfiguration) assignValues(columns []string, values []any) erro
 				return fmt.Errorf("unexpected type %T for field agent_max_concurrent", values[i])
 			} else if value.Valid {
 				_m.AgentMaxConcurrent = int(value.Int64)
+			}
+		case systemconfiguration.FieldAgentWritableRoots:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field agent_writable_roots", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.AgentWritableRoots); err != nil {
+					return fmt.Errorf("unmarshal field agent_writable_roots: %w", err)
+				}
 			}
 		case systemconfiguration.FieldWallpaperColorScheme:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -162,6 +175,9 @@ func (_m *SystemConfiguration) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("agent_max_concurrent=")
 	builder.WriteString(fmt.Sprintf("%v", _m.AgentMaxConcurrent))
+	builder.WriteString(", ")
+	builder.WriteString("agent_writable_roots=")
+	builder.WriteString(fmt.Sprintf("%v", _m.AgentWritableRoots))
 	builder.WriteString(", ")
 	builder.WriteString("wallpaper_color_scheme=")
 	builder.WriteString(_m.WallpaperColorScheme)
