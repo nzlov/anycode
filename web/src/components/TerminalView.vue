@@ -125,7 +125,9 @@ onMounted(async () => {
   themeObserver = new MutationObserver(() => {
     if (terminal) terminal.options.theme = terminalTheme();
   });
-  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  // GLUE: xterm cannot consume CSS variables directly; keep its imperative palette at the CSS theme boundary.
+  themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
   connection = connectTerminal(props.sessionId, {
     onReady() {
       outputQueue = [];
@@ -260,12 +262,31 @@ function drainOutputQueue() {
 }
 
 function terminalTheme() {
-  const style = getComputedStyle(document.documentElement);
+  const style = getComputedStyle(terminalHost.value ?? document.body);
+  const color = (name: string) => style.getPropertyValue(name).trim();
   return {
-    background: style.getPropertyValue('--ac-surface').trim(),
-    foreground: style.getPropertyValue('--ac-text').trim(),
-    cursor: style.getPropertyValue('--q-primary').trim(),
-    selectionBackground: style.getPropertyValue('--ac-border-strong').trim(),
+    background: color('--ac-terminal-bg'),
+    foreground: color('--ac-terminal-fg'),
+    cursor: color('--ac-primary'),
+    cursorAccent: color('--ac-terminal-bg'),
+    selectionBackground: color('--ac-surface-selected'),
+    selectionForeground: color('--ac-text'),
+    black: color('--ac-ansi-black'),
+    red: color('--ac-ansi-red'),
+    green: color('--ac-ansi-green'),
+    yellow: color('--ac-ansi-yellow'),
+    blue: color('--ac-ansi-blue'),
+    magenta: color('--ac-ansi-magenta'),
+    cyan: color('--ac-ansi-cyan'),
+    white: color('--ac-ansi-white'),
+    brightBlack: color('--ac-ansi-bright-black'),
+    brightRed: color('--ac-ansi-bright-red'),
+    brightGreen: color('--ac-ansi-bright-green'),
+    brightYellow: color('--ac-ansi-bright-yellow'),
+    brightBlue: color('--ac-ansi-bright-blue'),
+    brightMagenta: color('--ac-ansi-bright-magenta'),
+    brightCyan: color('--ac-ansi-bright-cyan'),
+    brightWhite: color('--ac-ansi-bright-white'),
   };
 }
 </script>
@@ -279,7 +300,7 @@ function terminalTheme() {
   flex: 1 1 auto;
   flex-direction: column;
   overflow: hidden;
-  background: var(--ac-surface);
+  background: var(--ac-terminal-bg);
 }
 
 .terminal-view__host {

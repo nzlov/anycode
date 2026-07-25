@@ -44,6 +44,17 @@ test('terminal view covers resize, output acknowledgement, touch scrolling, and 
   assert.match(source, /label="Ctrl"[\s\S]*:aria-pressed="isModifierPressed\('ctrl'\)"/);
   assert.match(source, /pressedModifiers\.value = new Set\(\)/);
   assert.match(source, /sendKey\('\\u001b\[A'\)/);
+  assert.match(source, /getComputedStyle\(terminalHost\.value \?\? document\.body\)/);
+  assert.match(source, /background: color\('--ac-terminal-bg'\)/);
+  assert.match(source, /brightWhite: color\('--ac-ansi-bright-white'\)/);
+  assert.match(
+    source,
+    /themeObserver\.observe\(document\.body, \{ attributes: true, attributeFilter: \['class'\] \}\)/,
+  );
+  assert.match(
+    source,
+    /themeObserver\.observe\(document\.documentElement, \{ attributes: true, attributeFilter: \['style'\] \}\)/,
+  );
   assert.match(sessionView, /aria-label="Terminal 状态控制"/);
   assert.match(sessionView, /class="terminal-session-mobile-actions"[\s\S]*label="停止"/);
   assert.match(sessionView, /height:\s*calc\(100dvh - 50px\)/);

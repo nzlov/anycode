@@ -413,7 +413,8 @@ test('static ANSI rendering uses theme colors and preserves extended RGB colors'
   );
   assert.deepEqual(styled?.decorations, ['bold', 'italic', 'underline']);
   assert.match(themeSource, /:root[\s\S]*--ac-terminal-bg:[\s\S]*--ac-ansi-bright-white:/);
-  assert.match(themeSource, /:root[\s\S]*--ac-terminal-bg: #111827/);
+  assert.match(themeSource, /:root[\s\S]*--ac-terminal-bg: var\(--ac-surface\)/);
+  assert.match(themeSource, /:root[\s\S]*--ac-terminal-fg: var\(--ac-text\)/);
   assert.match(themeSource, /\.body--dark[\s\S]*--ac-terminal-bg:[\s\S]*--ac-ansi-bright-white:/);
 });
 
