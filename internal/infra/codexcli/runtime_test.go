@@ -742,6 +742,10 @@ func TestMindMapDynamicToolsAreInjectedOnlyWhenEnabled(t *testing.T) {
 	if len(realtime) != 7 || realtime[6]["name"] != string(process.DynamicToolMindMapUpdate) {
 		t.Fatalf("realtime tools = %#v", realtime)
 	}
+	description, _ := realtime[6]["description"].(string)
+	if !strings.Contains(description, "Do not create nodes solely to record errors") {
+		t.Fatalf("mind map update description = %q", description)
+	}
 	updateSchema := realtime[6]["inputSchema"].(map[string]any)
 	operations := updateSchema["properties"].(map[string]any)["operations"].(map[string]any)
 	operation := operations["items"].(map[string]any)

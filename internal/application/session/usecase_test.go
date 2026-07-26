@@ -57,7 +57,7 @@ func TestMindMapCodexContextSeparatesRealtimeAndAsyncTools(t *testing.T) {
 	session := domain.Session{ID: "session-1", ProjectID: "project-1"}
 
 	tools, guidance, err := service.mindMapCodexContext(context.Background(), session)
-	if err != nil || len(tools) != 2 || tools[0] != processdomain.DynamicToolMindMapGet || tools[1] != processdomain.DynamicToolMindMapUpdate || !strings.Contains(guidance, "必须及时") || !strings.Contains(guidance, "project-root") {
+	if err != nil || len(tools) != 2 || tools[0] != processdomain.DynamicToolMindMapGet || tools[1] != processdomain.DynamicToolMindMapUpdate || !strings.Contains(guidance, "必须及时") || !strings.Contains(guidance, "project-root") || !strings.Contains(guidance, "禁止创建仅用于记录错误") {
 		t.Fatalf("realtime context = tools:%#v guidance:%q err:%v", tools, guidance, err)
 	}
 	settings.configuration.Mode = settingdomain.MindMapModeAsync

@@ -4251,7 +4251,7 @@ const anyCodePromptGuidance = "AnyCode 提供 `questions` App Server 动态工�
 const questionsWaitPromptGuidance = "调用 `questions` 时，承载调用的 `exec` 源码首行必须设置 `// @exec: {\"yield_time_ms\": 300000}`，并等待 `tools.questions(...)` 返回。五分钟内收到答案后，必须读取答案并继续本轮工作，不得重复输出“请选择”或提前发送 final。若五分钟后 `exec` 返回 `Script running with cell ID ...`，不要调用 `wait` 延长本轮，也不要重复提问；结束当前 Codex 运行，让 AnyCode 保留待回答请求，并在用户回答后通过持久化恢复继续。"
 const managedWorktreePromptGuidance = "当前工作目录是 AnyCode 管理的卡片工作树。不得删除、移动、重建或清理当前工作树，也不得执行会移除该工作树的命令；卡片关闭时由 AnyCode 负责清理仍存在的工作树。"
 const artifactPromptGuidance = "本卡片生成的图片、截图、PDF、音视频、压缩包和其他临时文件统一写入环境变量 `ANYCODE_ARTIFACT_DIR` 指向的目录。需要生图时直接使用 Codex 可用的图片生成能力，并将结果保存到该目录；不要把生成物写入项目工作树。"
-const realtimeMindMapPromptGuidance = "本项目已开启实时思维图。开始处理前调用 `mind_map_get` 了解项目；当需求、功能、决策或关联关系发生变化时，必须及时调用 `mind_map_update` 更新本卡片的隔离思维图，无需请求用户批准。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容、布局与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。"
+const realtimeMindMapPromptGuidance = "本项目已开启实时思维图。开始处理前调用 `mind_map_get` 了解项目；当需求、功能、决策或关联关系发生变化时，必须及时调用 `mind_map_update` 更新本卡片的隔离思维图，无需请求用户批准。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容、布局与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。禁止创建仅用于记录错误、异常、失败或临时调试状态的节点；思维图只保留稳定的项目结构、需求、功能、决策和关联关系。"
 const asyncMindMapQueryPromptGuidance = "本项目使用异步思维图维护。当前常规会话只可调用 `mind_map_get` 查询项目思维图以辅助理解，不得尝试修改；会话关闭后将由独立思维图分析任务整理并更新。"
 
 func anyCodeDeveloperInstructions(session domain.Session, artifactDir string) string {

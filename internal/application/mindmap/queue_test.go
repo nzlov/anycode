@@ -3,6 +3,7 @@ package mindmap
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -74,6 +75,9 @@ func TestAsyncQueueUsesIndependentGlobalConcurrencyAndConfiguredModel(t *testing
 	for _, input := range codex.inputs() {
 		if input.Model != "mind-map-model" || input.ReasoningEffort != "xhigh" || input.PermissionMode != "read-only" {
 			t.Fatalf("start input = %#v", input)
+		}
+		if !strings.Contains(input.DeveloperInstructions, "禁止创建仅用于记录错误") {
+			t.Fatalf("developer instructions = %q", input.DeveloperInstructions)
 		}
 		if len(input.DynamicTools) != 2 || input.DynamicTools[0] != processdomain.DynamicToolMindMapGet || input.DynamicTools[1] != processdomain.DynamicToolMindMapUpdate {
 			t.Fatalf("dynamic tools = %#v", input.DynamicTools)

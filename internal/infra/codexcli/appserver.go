@@ -301,7 +301,7 @@ func mindMapUpdateTool() map[string]any {
 	}
 	return map[string]any{
 		"type": "function", "name": string(process.DynamicToolMindMapUpdate),
-		"description": "Apply node and relationship changes to this card's isolated mind map. Use project-root as the immutable project-name center node; all other nodes and relationship labels are free-form.",
+		"description": "Apply node and relationship changes to this card's isolated mind map. Use project-root as the immutable project-name center node; all other nodes and relationship labels are free-form. Do not create nodes solely to record errors, exceptions, failures, or transient debugging state; keep stable project structure, requirements, features, decisions, and relationships.",
 		"inputSchema": map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"operations"},
 			"properties": map[string]any{"operations": map[string]any{"type": "array", "minItems": 1, "items": operation}},

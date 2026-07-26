@@ -19,7 +19,7 @@ import (
 	settingdomain "github.com/nzlov/anycode/internal/domain/setting"
 )
 
-const asyncTaskPromptGuidance = "你正在执行异步项目思维图整理任务。先调用 `mind_map_get` 读取项目主图与本会话隔离变更，再结合当前会话上下文整理需求、功能、决策与关联关系，并调用 `mind_map_update` 完成必要更新。不要询问用户。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容、布局与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。完成更新后直接结束。"
+const asyncTaskPromptGuidance = "你正在执行异步项目思维图整理任务。先调用 `mind_map_get` 读取项目主图与本会话隔离变更，再结合当前会话上下文整理需求、功能、决策与关联关系，并调用 `mind_map_update` 完成必要更新。不要询问用户。唯一固定节点是标题为项目名、ID 为 `project-root` 的中心根节点；不得修改、删除或移动它。其他节点、内容、布局与自由文本关系均由你根据项目实际情况自主维护，不要套用固定节点模板。禁止创建仅用于记录错误、异常、失败或临时调试状态的节点；思维图只保留稳定的项目结构、需求、功能、决策和关联关系。完成更新后直接结束。"
 
 type Queue struct {
 	repo      domain.Repository
