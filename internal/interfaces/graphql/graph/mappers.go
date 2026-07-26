@@ -116,7 +116,9 @@ func mapProject(dto projectapp.DTO) *model.Project {
 func mapMindMapGraph(dto mindmapapp.GraphDTO) *model.MindMapGraph {
 	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
 	for _, node := range dto.Nodes {
-		nodes = append(nodes, &model.MindMapNode{ID: string(node.ID), Title: node.Title, Content: node.Content})
+		nodes = append(nodes, &model.MindMapNode{
+			ID: string(node.ID), Title: node.Title, Content: node.Content, ChangeType: string(node.ChangeType),
+		})
 	}
 	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
 	for _, edge := range dto.Edges {
@@ -136,9 +138,30 @@ func mapMindMapCard(dto mindmapapp.CardDTO) *model.MindMapCard {
 		value := string(dto.TaskID)
 		taskID = &value
 	}
+	nodes := make([]*model.MindMapNode, 0, len(dto.Nodes))
+	for _, node := range dto.Nodes {
+		nodes = append(nodes, &model.MindMapNode{
+			ID: string(node.ID), Title: node.Title, Content: node.Content, ChangeType: string(node.ChangeType),
+		})
+	}
+	edges := make([]*model.MindMapEdge, 0, len(dto.Edges))
+	for _, edge := range dto.Edges {
+		edges = append(edges, &model.MindMapEdge{
+			ID: string(edge.ID), SourceID: string(edge.SourceID), TargetID: string(edge.TargetID), Label: edge.Label,
+		})
+	}
+	modifiedNodeIDs := make([]string, 0, len(dto.ModifiedNodeIDs))
+	for _, id := range dto.ModifiedNodeIDs {
+		modifiedNodeIDs = append(modifiedNodeIDs, string(id))
+	}
+	deletedNodeIDs := make([]string, 0, len(dto.DeletedNodeIDs))
+	for _, id := range dto.DeletedNodeIDs {
+		deletedNodeIDs = append(deletedNodeIDs, string(id))
+	}
 	return &model.MindMapCard{
 		SessionID: string(dto.SessionID), Requirement: dto.Requirement, UpdatedAt: dto.UpdatedAt,
 		TaskID: taskID, TaskStatus: string(dto.TaskStatus), TaskError: dto.TaskError,
+		Nodes: nodes, Edges: edges, ModifiedNodeIds: modifiedNodeIDs, DeletedNodeIds: deletedNodeIDs,
 	}
 }
 

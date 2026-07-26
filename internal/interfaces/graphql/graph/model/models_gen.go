@@ -240,12 +240,16 @@ type MergeConfigInput struct {
 }
 
 type MindMapCard struct {
-	SessionID   string    `json:"sessionId"`
-	Requirement string    `json:"requirement"`
-	UpdatedAt   time.Time `json:"updatedAt"`
-	TaskID      *string   `json:"taskId,omitempty"`
-	TaskStatus  string    `json:"taskStatus"`
-	TaskError   string    `json:"taskError"`
+	SessionID       string         `json:"sessionId"`
+	Requirement     string         `json:"requirement"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
+	TaskID          *string        `json:"taskId,omitempty"`
+	TaskStatus      string         `json:"taskStatus"`
+	TaskError       string         `json:"taskError"`
+	Nodes           []*MindMapNode `json:"nodes"`
+	Edges           []*MindMapEdge `json:"edges"`
+	ModifiedNodeIds []string       `json:"modifiedNodeIds"`
+	DeletedNodeIds  []string       `json:"deletedNodeIds"`
 }
 
 type MindMapEdge struct {
@@ -264,9 +268,10 @@ type MindMapGraph struct {
 }
 
 type MindMapNode struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Content string `json:"content"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	ChangeType string `json:"changeType"`
 }
 
 type MindMapOperationInput struct {

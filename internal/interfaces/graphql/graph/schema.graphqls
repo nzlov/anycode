@@ -852,6 +852,7 @@ type MindMapNode {
   id: ID!
   title: String!
   content: String!
+  changeType: String!
 }
 
 type MindMapEdge {
@@ -868,6 +869,10 @@ type MindMapCard {
   taskId: ID
   taskStatus: String!
   taskError: String!
+  nodes: [MindMapNode!]!
+  edges: [MindMapEdge!]!
+  modifiedNodeIds: [ID!]!
+  deletedNodeIds: [ID!]!
 }
 
 input UpdateMindMapInput {

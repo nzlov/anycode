@@ -60,10 +60,20 @@ type GraphDTO struct {
 }
 
 type NodeDTO struct {
-	ID      domain.NodeID
-	Title   string
-	Content string
+	ID         domain.NodeID
+	Title      string
+	Content    string
+	ChangeType NodeChangeType
 }
+
+type NodeChangeType string
+
+const (
+	NodeUnchanged NodeChangeType = "unchanged"
+	NodeAdded     NodeChangeType = "added"
+	NodeModified  NodeChangeType = "modified"
+	NodeDeleted   NodeChangeType = "deleted"
+)
 
 type EdgeDTO struct {
 	ID       domain.EdgeID
@@ -89,12 +99,16 @@ type NodeMatchDTO struct {
 }
 
 type CardDTO struct {
-	SessionID   domain.SessionID
-	Requirement string
-	UpdatedAt   time.Time
-	TaskID      domain.TaskID
-	TaskStatus  domain.TaskStatus
-	TaskError   string
+	SessionID       domain.SessionID
+	Requirement     string
+	UpdatedAt       time.Time
+	TaskID          domain.TaskID
+	TaskStatus      domain.TaskStatus
+	TaskError       string
+	Nodes           []NodeDTO
+	Edges           []EdgeDTO
+	ModifiedNodeIDs []domain.NodeID
+	DeletedNodeIDs  []domain.NodeID
 }
 
 type ChangeDTO struct {
@@ -127,7 +141,7 @@ func New(repo domain.Repository, projects projectdomain.Repository, sessions ses
 }
 
 func (s *Service) Watch(ctx context.Context, input GetInput) (<-chan ChangeDTO, error) {
-	current, err := s.Get(ctx, input)
+	current, err := s.watchSnapshot(ctx, input)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +160,7 @@ func (s *Service) Watch(ctx context.Context, input GetInput) (<-chan ChangeDTO, 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				next, err := s.Get(ctx, input)
+				next, err := s.watchSnapshot(ctx, input)
 				if err != nil {
 					return
 				}
@@ -166,6 +180,23 @@ func (s *Service) Watch(ctx context.Context, input GetInput) (<-chan ChangeDTO, 
 	return out, nil
 }
 
+func (s *Service) watchSnapshot(ctx context.Context, input GetInput) (GraphDTO, error) {
+	graph, err := s.Get(ctx, input)
+	if err != nil || input.SessionID != "" {
+		return graph, err
+	}
+	overlays, err := s.repo.ListOverlays(ctx, input.ProjectID)
+	if err != nil {
+		return GraphDTO{}, fmt.Errorf("list card mind maps: %w", err)
+	}
+	for _, overlay := range overlays {
+		if overlay.UpdatedAt.After(graph.UpdatedAt) {
+			graph.UpdatedAt = overlay.UpdatedAt
+		}
+	}
+	return graph, nil
+}
+
 func (s *Service) Get(ctx context.Context, input GetInput) (GraphDTO, error) {
 	project, err := s.requireEnabledProject(ctx, input.ProjectID)
 	if err != nil {
@@ -176,10 +207,10 @@ func (s *Service) Get(ctx context.Context, input GetInput) (GraphDTO, error) {
 			return GraphDTO{}, err
 		}
 	}
-	return s.loadGraph(ctx, project, input.SessionID)
+	return s.loadGraph(ctx, project, input.SessionID, true)
 }
 
-func (s *Service) loadGraph(ctx context.Context, project projectdomain.Project, sessionID domain.SessionID) (GraphDTO, error) {
+func (s *Service) loadGraph(ctx context.Context, project projectdomain.Project, sessionID domain.SessionID, withChanges bool) (GraphDTO, error) {
 	projectID := domain.ProjectID(project.ID)
 	graph, _, err := s.repo.FindGraph(ctx, projectID)
 	if err != nil {
@@ -187,27 +218,42 @@ func (s *Service) loadGraph(ctx context.Context, project projectdomain.Project, 
 	}
 	graph.ProjectID = projectID
 	domain.EnsureRoot(&graph, project.Name, project.UpdatedAt)
+	base := domain.Visible(graph)
 	if sessionID != "" {
 		overlay, found, err := s.repo.FindOverlay(ctx, sessionID)
 		if err != nil {
 			return GraphDTO{}, fmt.Errorf("find card mind map: %w", err)
 		}
 		if found {
-			graph = domain.Materialize(graph, overlay.Changes)
-			if overlay.UpdatedAt.After(graph.UpdatedAt) {
-				graph.UpdatedAt = overlay.UpdatedAt
+			current := domain.Materialize(graph, overlay.Changes)
+			if overlay.UpdatedAt.After(current.UpdatedAt) {
+				current.UpdatedAt = overlay.UpdatedAt
 			}
+			if withChanges {
+				return toDiffDTO(base, current, sessionID), nil
+			}
+			graph = current
+		} else {
+			graph = base
 		}
 	} else {
-		graph = domain.Visible(graph)
+		graph = base
 	}
 	return toDTO(graph, sessionID), nil
 }
 
 func (s *Service) ListCards(ctx context.Context, projectID domain.ProjectID) ([]CardDTO, error) {
-	if _, err := s.requireEnabledProject(ctx, projectID); err != nil {
+	project, err := s.requireEnabledProject(ctx, projectID)
+	if err != nil {
 		return nil, err
 	}
+	graph, _, err := s.repo.FindGraph(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("find project mind map: %w", err)
+	}
+	graph.ProjectID = projectID
+	domain.EnsureRoot(&graph, project.Name, project.UpdatedAt)
+	base := domain.Visible(graph)
 	overlays, err := s.repo.ListOverlays(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list card mind maps: %w", err)
@@ -235,9 +281,11 @@ func (s *Service) ListCards(ctx context.Context, projectID domain.ProjectID) ([]
 			}
 		}
 		task := taskBySession[overlay.SessionID]
+		nodes, edges, modifiedNodeIDs, deletedNodeIDs := cardDeltaDTO(base, domain.Materialize(graph, overlay.Changes))
 		items = append(items, CardDTO{
 			SessionID: overlay.SessionID, Requirement: session.Requirement, UpdatedAt: overlay.UpdatedAt,
 			TaskID: task.ID, TaskStatus: task.Status, TaskError: task.Error,
+			Nodes: nodes, Edges: edges, ModifiedNodeIDs: modifiedNodeIDs, DeletedNodeIDs: deletedNodeIDs,
 		})
 		seen[overlay.SessionID] = struct{}{}
 	}
@@ -315,13 +363,10 @@ func (s *Service) RetryTask(ctx context.Context, taskID domain.TaskID) (CardDTO,
 }
 
 func (s *Service) Update(ctx context.Context, input UpdateInput) (GraphDTO, error) {
-	return s.update(ctx, input, true, false)
+	return s.update(ctx, input, true, false, true)
 }
 
-func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSession bool, allowDisabled bool) (GraphDTO, error) {
-	if len(input.Operations) == 0 {
-		return s.Get(ctx, GetInput{ProjectID: input.ProjectID, SessionID: input.SessionID})
-	}
+func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSession bool, allowDisabled bool, withChanges bool) (GraphDTO, error) {
 	if len(input.Operations) > 100 {
 		return GraphDTO{}, errors.New("mind map update cannot contain more than 100 operations")
 	}
@@ -339,6 +384,9 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 		if err := s.requireSession(ctx, input.ProjectID, input.SessionID, !allowClosedSession); err != nil {
 			return GraphDTO{}, err
 		}
+	}
+	if len(input.Operations) == 0 {
+		return s.loadGraph(ctx, project, input.SessionID, withChanges)
 	}
 	changes, err := s.buildChanges(input)
 	if err != nil {
@@ -373,6 +421,7 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 			return err
 		}
 		overlay.Changes = append(overlay.Changes, changes...)
+		overlay = domain.CompactOverlay(graph, overlay)
 		currentUpdatedAt := graph.UpdatedAt
 		if overlay.UpdatedAt.After(currentUpdatedAt) {
 			currentUpdatedAt = overlay.UpdatedAt
@@ -387,10 +436,7 @@ func (s *Service) update(ctx context.Context, input UpdateInput, allowClosedSess
 	} else if err := apply(ctx, s.repo); err != nil {
 		return GraphDTO{}, err
 	}
-	if allowDisabled {
-		return s.loadGraph(ctx, project, input.SessionID)
-	}
-	return s.Get(ctx, GetInput{ProjectID: input.ProjectID, SessionID: input.SessionID})
+	return s.loadGraph(ctx, project, input.SessionID, withChanges)
 }
 
 func (s *Service) GetForSession(ctx context.Context, sessionID domain.SessionID) (GraphDTO, error) {
@@ -398,7 +444,11 @@ func (s *Service) GetForSession(ctx context.Context, sessionID domain.SessionID)
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find session: %w", err)
 	}
-	return s.Get(ctx, GetInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID})
+	project, err := s.requireEnabledProject(ctx, domain.ProjectID(session.ProjectID))
+	if err != nil {
+		return GraphDTO{}, err
+	}
+	return s.loadGraph(ctx, project, sessionID, false)
 }
 
 func (s *Service) UpdateForSession(ctx context.Context, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error) {
@@ -413,7 +463,7 @@ func (s *Service) UpdateForSession(ctx context.Context, sessionID domain.Session
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find session: %w", err)
 	}
-	return s.Update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations})
+	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, false, false)
 }
 
 func (s *Service) UpdateForTask(ctx context.Context, processRunID string, sessionID domain.SessionID, operations []OperationInput) (GraphDTO, error) {
@@ -428,7 +478,7 @@ func (s *Service) UpdateForTask(ctx context.Context, processRunID string, sessio
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find session: %w", err)
 	}
-	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, true)
+	return s.update(ctx, UpdateInput{ProjectID: domain.ProjectID(session.ProjectID), SessionID: sessionID, Operations: operations}, true, true, false)
 }
 
 func (s *Service) getForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID) (GraphDTO, error) {
@@ -447,7 +497,7 @@ func (s *Service) getForProcess(ctx context.Context, processRunID string, sessio
 	if err != nil {
 		return GraphDTO{}, fmt.Errorf("find project: %w", err)
 	}
-	return s.loadGraph(ctx, project, sessionID)
+	return s.loadGraph(ctx, project, sessionID, false)
 }
 
 func (s *Service) SearchForProcess(ctx context.Context, processRunID string, sessionID domain.SessionID, query string, limit int) (SearchResultDTO, error) {
@@ -738,13 +788,78 @@ func toDTO(graph domain.Graph, sessionID domain.SessionID) GraphDTO {
 	dto := GraphDTO{ProjectID: graph.ProjectID, SessionID: sessionID, UpdatedAt: graph.UpdatedAt}
 	dto.Nodes = make([]NodeDTO, 0, len(graph.Nodes))
 	for _, node := range graph.Nodes {
-		dto.Nodes = append(dto.Nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content})
+		dto.Nodes = append(dto.Nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, ChangeType: NodeUnchanged})
 	}
 	dto.Edges = make([]EdgeDTO, 0, len(graph.Edges))
 	for _, edge := range graph.Edges {
 		dto.Edges = append(dto.Edges, EdgeDTO{ID: edge.ID, SourceID: edge.SourceID, TargetID: edge.TargetID, Label: edge.Label})
 	}
 	return dto
+}
+
+func toDiffDTO(base, current domain.Graph, sessionID domain.SessionID) GraphDTO {
+	dto := toDTO(current, sessionID)
+	baseByID := make(map[domain.NodeID]domain.Node, len(base.Nodes))
+	currentIDs := make(map[domain.NodeID]struct{}, len(current.Nodes))
+	for _, node := range base.Nodes {
+		baseByID[node.ID] = node
+	}
+	for index := range dto.Nodes {
+		node := &dto.Nodes[index]
+		currentIDs[node.ID] = struct{}{}
+		baseNode, found := baseByID[node.ID]
+		if !found {
+			node.ChangeType = NodeAdded
+		} else if node.Title != baseNode.Title || node.Content != baseNode.Content {
+			node.ChangeType = NodeModified
+		}
+	}
+	for _, node := range base.Nodes {
+		if _, found := currentIDs[node.ID]; found {
+			continue
+		}
+		dto.Nodes = append(dto.Nodes, NodeDTO{
+			ID: node.ID, Title: node.Title, Content: node.Content, ChangeType: NodeDeleted,
+		})
+	}
+	return dto
+}
+
+func cardDeltaDTO(base, current domain.Graph) ([]NodeDTO, []EdgeDTO, []domain.NodeID, []domain.NodeID) {
+	baseNodes := make(map[domain.NodeID]domain.Node, len(base.Nodes))
+	currentNodes := make(map[domain.NodeID]domain.Node, len(current.Nodes))
+	for _, node := range base.Nodes {
+		baseNodes[node.ID] = node
+	}
+	addedNodeIDs := make(map[domain.NodeID]struct{})
+	nodes := make([]NodeDTO, 0)
+	modifiedNodeIDs := make([]domain.NodeID, 0)
+	for _, node := range current.Nodes {
+		currentNodes[node.ID] = node
+		baseNode, found := baseNodes[node.ID]
+		if !found {
+			addedNodeIDs[node.ID] = struct{}{}
+			nodes = append(nodes, NodeDTO{ID: node.ID, Title: node.Title, Content: node.Content, ChangeType: NodeAdded})
+		} else if node.Title != baseNode.Title || node.Content != baseNode.Content {
+			modifiedNodeIDs = append(modifiedNodeIDs, node.ID)
+		}
+	}
+	deletedNodeIDs := make([]domain.NodeID, 0)
+	for _, node := range base.Nodes {
+		if _, found := currentNodes[node.ID]; !found {
+			deletedNodeIDs = append(deletedNodeIDs, node.ID)
+		}
+	}
+	edges := make([]EdgeDTO, 0)
+	for _, edge := range current.Edges {
+		_, sourceAdded := addedNodeIDs[edge.SourceID]
+		_, targetAdded := addedNodeIDs[edge.TargetID]
+		if !sourceAdded && !targetAdded {
+			continue
+		}
+		edges = append(edges, EdgeDTO{ID: edge.ID, SourceID: edge.SourceID, TargetID: edge.TargetID, Label: edge.Label})
+	}
+	return nodes, edges, modifiedNodeIDs, deletedNodeIDs
 }
 
 func generateID() (domain.ChangeID, error) {

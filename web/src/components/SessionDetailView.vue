@@ -251,19 +251,10 @@
                   <q-item>
                     <q-item-section>
                       <q-item-label caption>分支</q-item-label>
-                      <q-item-label>{{ session?.branch ?? '-' }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                  <q-item>
-                    <q-item-section>
-                      <q-item-label caption>工作分支</q-item-label>
-                      <q-item-label>{{ session?.worktreeBranch || '-' }}</q-item-label>
-                    </q-item-section>
-                  </q-item>
-                  <q-item>
-                    <q-item-section>
-                      <q-item-label caption>更新时间</q-item-label>
-                      <q-item-label>{{ session?.updatedAt ?? '-' }}</q-item-label>
+                      <q-item-label class="session-branch-summary">
+                        <span>基础：{{ session?.branch ?? '-' }}</span>
+                        <span>当前：{{ session?.worktreeBranch || '-' }}</span>
+                      </q-item-label>
                     </q-item-section>
                   </q-item>
                   <q-item>
@@ -333,10 +324,10 @@
                       </q-item-label>
                     </q-item-section>
                   </q-item>
-                  <q-item>
+                  <q-item v-if="sessionTunnels.length">
                     <q-item-section>
                       <q-item-label caption>隧道</q-item-label>
-                      <q-item-label v-if="sessionTunnels.length" class="session-tunnel-list">
+                      <q-item-label class="session-tunnel-list">
                         <a
                           v-for="tunnel in sessionTunnels"
                           :key="tunnel.id"
@@ -348,16 +339,27 @@
                           <span>{{ tunnel.name }}</span>
                         </a>
                       </q-item-label>
-                      <q-item-label v-else>-</q-item-label>
                     </q-item-section>
                   </q-item>
                 </q-list>
 
-                <SessionTerminalButton
-                  v-if="session && !isClosed"
-                  :source-session-id="sessionId"
-                  full-width
-                />
+                <div v-if="session && !isClosed" class="session-detail-tool-row">
+                  <SessionTerminalButton
+                    class="session-detail-tool-button"
+                    :source-session-id="sessionId"
+                    full-width
+                  />
+                  <q-btn
+                    v-if="mindMapAvailable"
+                    class="session-detail-tool-button q-mt-md app-command-btn"
+                    outline
+                    color="primary"
+                    icon="hub"
+                    label="思维图"
+                    no-caps
+                    :to="mindMapRoute"
+                  />
+                </div>
 
                 <q-btn
                   v-if="mindMapRealtime"
@@ -653,11 +655,13 @@ const props = withDefaults(
     sessionId: string;
     layout?: 'responsive' | 'mobile' | 'desktop';
     page?: boolean;
+    mindMapAvailable?: boolean;
     mindMapRealtime?: boolean;
   }>(),
   {
     layout: 'responsive',
     page: false,
+    mindMapAvailable: false,
     mindMapRealtime: false,
   },
 );
@@ -963,7 +967,8 @@ const latestTokenUsage = computed(() => tokenUsage.value);
 const sessionTunnels = ref<Tunnel[]>([]);
 const latestTunnelEventId = computed(() => {
   const event = events.value.at(-1);
-  if (event?.content.__typename !== 'TranscriptToolContent' || event.phase !== 'completed') return '';
+  if (event?.content.__typename !== 'TranscriptToolContent' || event.phase !== 'completed')
+    return '';
   return ['tunnel_create', 'tunnel_close'].includes(event.content.qualifiedName) ? event.id : '';
 });
 const contextUsagePercent = (usage: TranscriptTokenUsage) => {
@@ -1076,6 +1081,11 @@ const workflowProgressLabel = computed(() => {
 const allDiffRoute = computed(() => ({
   path: '/diff',
   query: { sessionId, mode: 'all' },
+}));
+const mindMapRoute = computed(() => ({
+  name: 'project-mind-map',
+  params: { projectId: session.value?.projectId ?? '' },
+  query: { card: sessionId },
 }));
 function modeLabel(mode: SessionMode) {
   return mode === 'workflow' ? '流程模式' : '会话模式';
@@ -1625,6 +1635,23 @@ async function scrollEventsToBottom() {
   gap: 4px 12px;
   color: var(--ac-text);
   font-size: 12px;
+}
+
+.session-branch-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.session-detail-tool-row {
+  display: flex;
+  gap: 8px;
+}
+
+.session-detail-tool-button {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 0;
 }
 
 .session-tunnel-list {

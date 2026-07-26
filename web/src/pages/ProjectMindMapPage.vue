@@ -1,17 +1,6 @@
 <template>
   <q-page class="mind-map-page">
     <PageToolbar :title="project ? `${project.name} · 思维图` : '项目思维图'" title-icon="hub">
-      <q-select
-        v-model="scopeSessionId"
-        dense
-        outlined
-        emit-value
-        map-options
-        options-dense
-        :options="scopeOptions"
-        aria-label="思维图范围"
-        class="mind-map-scope"
-      />
       <q-btn
         flat
         round
@@ -33,21 +22,59 @@
       />
     </PageToolbar>
 
-    <q-banner v-if="activeCard?.taskStatus" dense rounded class="mind-map-task-banner">
-      <template #avatar><q-icon name="manage_history" color="primary" /></template>
-      异步整理：{{ taskStatusLabel(activeCard.taskStatus) }}
-      <span v-if="activeCard.taskError"> · {{ activeCard.taskError }}</span>
-      <template v-if="activeCard.taskStatus === 'failed' && activeCard.taskId" #action>
-        <q-btn
-          flat
-          dense
-          icon="refresh"
-          label="重试"
-          no-caps
-          @click="retryTask(activeCard.taskId)"
-        />
-      </template>
-    </q-banner>
+    <section v-if="cards.length" class="mind-map-card-strip" aria-label="卡片思维图">
+      <q-card
+        v-for="card in cards"
+        :key="card.sessionId"
+        flat
+        bordered
+        clickable
+        tabindex="0"
+        role="button"
+        class="mind-map-card"
+        :class="{ 'mind-map-card--active': activeCardSessionId === card.sessionId }"
+        :aria-pressed="activeCardSessionId === card.sessionId"
+        @click="toggleCardHighlight(card.sessionId)"
+        @keyup.enter.self="toggleCardHighlight(card.sessionId)"
+        @keyup.space.self.prevent="toggleCardHighlight(card.sessionId)"
+      >
+        <q-card-section class="mind-map-card__body">
+          <div class="mind-map-card__badges">
+            <q-badge
+              v-if="card.taskStatus"
+              outline
+              :color="taskStatusColor(card.taskStatus)"
+              :label="taskStatusLabel(card.taskStatus)"
+            />
+            <span class="text-positive">+{{ card.nodes.length }}</span>
+            <span class="text-warning">~{{ card.modifiedNodeIds.length }}</span>
+            <span class="text-negative">−{{ card.deletedNodeIds.length }}</span>
+          </div>
+          <div class="mind-map-card__title">{{ card.requirement || card.sessionId }}</div>
+          <div v-if="card.taskError" class="mind-map-card__error">{{ card.taskError }}</div>
+          <q-btn
+            v-if="card.taskStatus === 'failed' && card.taskId"
+            flat
+            round
+            dense
+            icon="refresh"
+            aria-label="重试思维图整理"
+            class="mind-map-card__retry"
+            @click.stop="retryTask(card.taskId)"
+          />
+        </q-card-section>
+      </q-card>
+    </section>
+
+    <div v-if="cards.length" class="mind-map-change-legend" aria-label="节点变更状态">
+      <span><i class="mind-map-change-legend__dot mind-map-change-legend__dot--added" />新增</span>
+      <span
+        ><i class="mind-map-change-legend__dot mind-map-change-legend__dot--modified" />修改</span
+      >
+      <span
+        ><i class="mind-map-change-legend__dot mind-map-change-legend__dot--deleted" />删除</span
+      >
+    </div>
 
     <div class="mind-map-canvas">
       <VueFlow
@@ -85,7 +112,10 @@
               type="source"
               :position="handlePosition(side)"
             />
-            <span>{{ data.label }}</span>
+            <span class="mind-map-node-content__title">{{ data.label }}</span>
+            <small v-if="data.cardLabel" class="mind-map-node-content__card">
+              {{ data.cardLabel }}
+            </small>
             <q-menu
               no-parent-event
               anchor="top right"
@@ -124,7 +154,7 @@
                 <q-item
                   v-close-popup
                   clickable
-                  :disable="id === rootNodeId"
+                  :disable="id === rootNodeId || data.changeType === 'deleted'"
                   @click="openNodeEditor(id)"
                 >
                   <q-item-section avatar><q-icon name="edit" /></q-item-section>
@@ -133,7 +163,7 @@
                 <q-item
                   v-close-popup
                   clickable
-                  :disable="id === rootNodeId"
+                  :disable="id === rootNodeId || data.changeType === 'deleted'"
                   class="text-negative"
                   @click="openDeleteDialog(id)"
                 >
@@ -197,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute } from 'vue-router';
 import { Background } from '@vue-flow/background';
@@ -224,9 +254,27 @@ import {
   subscribeMindMapUpdates,
   updateProjectMindMap,
   type MindMapCard,
+  type MindMapEdge,
   type MindMapGraph,
+  type MindMapNode,
   type MindMapOperation,
 } from '@/services/mindMaps';
+
+type DisplayMindMapNode = MindMapNode & {
+  entityId: string;
+  sessionId: string;
+  cardLabel: string;
+};
+
+type DisplayMindMapEdge = MindMapEdge & {
+  entityId: string;
+  sessionId: string;
+};
+
+type DisplayMindMapGraph = Omit<MindMapGraph, 'nodes' | 'edges'> & {
+  nodes: DisplayMindMapNode[];
+  edges: DisplayMindMapEdge[];
+};
 
 const rootNodeId = 'project-root';
 const $q = useQuasar();
@@ -237,9 +285,10 @@ const projectId = computed(() => String(route.params.projectId ?? ''));
 const project = computed(() => projects.value.find((item) => item.id === projectId.value));
 const loading = ref(false);
 const saving = ref(false);
-const graph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updatedAt: '' });
+const mainGraph = ref<MindMapGraph>({ projectId: '', nodes: [], edges: [], updatedAt: '' });
 const cards = ref<MindMapCard[]>([]);
-const scopeSessionId = ref('');
+const activeCardSessionId = ref('');
+let routeCardHighlightApplied = false;
 const selectedNodeId = ref('');
 const infoNodeId = ref('');
 const menuNodeId = ref('');
@@ -258,16 +307,7 @@ let subscriptionReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let taskRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 let disposed = false;
 
-const scopeOptions = computed(() => [
-  { label: '项目主图', value: '' },
-  ...cards.value.map((card) => ({
-    label: `${card.requirement || card.sessionId}${card.taskStatus ? ` · ${taskStatusLabel(card.taskStatus)}` : ''}`,
-    value: card.sessionId,
-  })),
-]);
-const activeCard = computed(() =>
-  cards.value.find((card) => card.sessionId === scopeSessionId.value),
-);
+const graph = computed<DisplayMindMapGraph>(() => combineMindMaps(mainGraph.value, cards.value));
 const radialLayout = computed(() =>
   buildRadialLayout(graph.value.nodes, graph.value.edges, rootNodeId),
 );
@@ -291,6 +331,50 @@ const directlyRelatedEdgeIds = computed(() => {
       .map((edge) => edge.id),
   );
 });
+const activeCardElementIds = computed(() => {
+  const nodeIds = new Set<string>();
+  const edgeIds = new Set<string>();
+  const card = cards.value.find((item) => item.sessionId === activeCardSessionId.value);
+  if (!card) return { nodeIds, edgeIds };
+
+  const addedNodeIds = new Set(card.nodes.map((node) => node.id));
+  const changedMainNodeIds = new Set([...card.modifiedNodeIds, ...card.deletedNodeIds]);
+  for (const node of card.nodes) nodeIds.add(cardDisplayId(card.sessionId, node.id));
+  for (const nodeId of changedMainNodeIds) nodeIds.add(nodeId);
+  for (const edge of card.edges) {
+    edgeIds.add(cardDisplayId(card.sessionId, edge.id));
+    nodeIds.add(
+      addedNodeIds.has(edge.sourceId)
+        ? cardDisplayId(card.sessionId, edge.sourceId)
+        : edge.sourceId,
+    );
+    nodeIds.add(
+      addedNodeIds.has(edge.targetId)
+        ? cardDisplayId(card.sessionId, edge.targetId)
+        : edge.targetId,
+    );
+  }
+  for (const edge of graph.value.edges) {
+    if (
+      edge.sessionId === '' &&
+      (changedMainNodeIds.has(edge.sourceId) || changedMainNodeIds.has(edge.targetId))
+    ) {
+      edgeIds.add(edge.id);
+      nodeIds.add(edge.sourceId);
+      nodeIds.add(edge.targetId);
+    }
+  }
+  return { nodeIds, edgeIds };
+});
+const highlightedNodeIds = computed(() =>
+  selectedNodeId.value ? directlyRelatedNodeIds.value : activeCardElementIds.value.nodeIds,
+);
+const highlightedEdgeIds = computed(() =>
+  selectedNodeId.value ? directlyRelatedEdgeIds.value : activeCardElementIds.value.edgeIds,
+);
+const hasElementHighlight = computed(() =>
+  Boolean(selectedNodeId.value || activeCardElementIds.value.nodeIds.size),
+);
 const deletingNode = computed(() =>
   graph.value.nodes.find((node) => node.id === deletingNodeId.value),
 );
@@ -306,18 +390,29 @@ const flowNodes = computed({
       id: node.id,
       type: 'radial',
       label: node.title,
-      data: { label: node.title, content: node.content },
+      data: {
+        label: node.title,
+        content: node.content,
+        changeType: node.changeType,
+        cardLabel: node.cardLabel,
+      },
       position: radialLayout.value[node.id] ?? { x: 0, y: 0 },
       draggable: false,
+      connectable: node.changeType !== 'deleted',
       class: {
         'mind-map-node--root': node.id === rootNodeId,
         'mind-map-node--active': node.id === selectedNodeId.value,
+        'mind-map-node--added': node.changeType === 'added',
+        'mind-map-node--modified': node.changeType === 'modified',
+        'mind-map-node--deleted': node.changeType === 'deleted',
         'mind-map-node--related':
           Boolean(selectedNodeId.value) &&
           node.id !== selectedNodeId.value &&
           directlyRelatedNodeIds.value.has(node.id),
+        'mind-map-element--highlighted':
+          hasElementHighlight.value && highlightedNodeIds.value.has(node.id),
         'mind-map-element--muted':
-          Boolean(selectedNodeId.value) && !directlyRelatedNodeIds.value.has(node.id),
+          hasElementHighlight.value && !highlightedNodeIds.value.has(node.id),
       },
     })),
   set: () => undefined,
@@ -333,12 +428,84 @@ const flowEdges = computed({
       ...radialEdgeHandles(edge, radialLayout.value),
       class: {
         'mind-map-edge--active': directlyRelatedEdgeIds.value.has(edge.id),
+        'mind-map-element--highlighted':
+          hasElementHighlight.value && highlightedEdgeIds.value.has(edge.id),
         'mind-map-element--muted':
-          Boolean(selectedNodeId.value) && !directlyRelatedEdgeIds.value.has(edge.id),
+          hasElementHighlight.value && !highlightedEdgeIds.value.has(edge.id),
       },
     })),
   set: () => undefined,
 });
+
+function combineMindMaps(base: MindMapGraph, cardGraphs: MindMapCard[]): DisplayMindMapGraph {
+  const modifiedNodeIds = new Set(cardGraphs.flatMap((card) => card.modifiedNodeIds));
+  const deletedNodeIds = new Set(cardGraphs.flatMap((card) => card.deletedNodeIds));
+  const nodes: DisplayMindMapNode[] = base.nodes.map((node) => ({
+    ...node,
+    changeType: deletedNodeIds.has(node.id)
+      ? 'deleted'
+      : modifiedNodeIds.has(node.id)
+        ? 'modified'
+        : 'unchanged',
+    entityId: node.id,
+    sessionId: '',
+    cardLabel: '',
+  }));
+  const edges: DisplayMindMapEdge[] = base.edges.map((edge) => ({
+    ...edge,
+    entityId: edge.id,
+    sessionId: '',
+  }));
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
+  for (const card of cardGraphs) {
+    const addedNodeIds = new Set(card.nodes.map((node) => node.id));
+    const cardLabel = card.requirement || card.sessionId;
+    for (const node of card.nodes) {
+      const id = cardDisplayId(card.sessionId, node.id);
+      nodes.push({
+        ...node,
+        id,
+        changeType: 'added',
+        entityId: node.id,
+        sessionId: card.sessionId,
+        cardLabel,
+      });
+      nodeIds.add(id);
+    }
+    for (const edge of card.edges) {
+      const sourceId = addedNodeIds.has(edge.sourceId)
+        ? cardDisplayId(card.sessionId, edge.sourceId)
+        : edge.sourceId;
+      const targetId = addedNodeIds.has(edge.targetId)
+        ? cardDisplayId(card.sessionId, edge.targetId)
+        : edge.targetId;
+      if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) continue;
+      edges.push({
+        ...edge,
+        id: cardDisplayId(card.sessionId, edge.id),
+        sourceId,
+        targetId,
+        entityId: edge.id,
+        sessionId: card.sessionId,
+      });
+    }
+  }
+
+  return {
+    ...base,
+    nodes,
+    edges,
+    updatedAt: cardGraphs.reduce(
+      (latest, card) => (card.updatedAt > latest ? card.updatedAt : latest),
+      base.updatedAt,
+    ),
+  };
+}
+
+function cardDisplayId(sessionId: string, entityId: string) {
+  return `card:${encodeURIComponent(sessionId)}:${encodeURIComponent(entityId)}`;
+}
 
 onMounted(async () => {
   await loadProjects();
@@ -354,39 +521,45 @@ onBeforeUnmount(() => {
   if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
 });
 
-watch(scopeSessionId, () => {
-  startMindMapSubscription();
-  void refreshMindMap();
-});
-
 async function loadCards() {
   const requestedProjectId = projectId.value;
   const requestRevision = ++cardRequestRevision;
   const result = await listProjectMindMapCards(requestedProjectId);
-  if (disposed || requestRevision !== cardRequestRevision || requestedProjectId !== projectId.value) return;
+  if (disposed || requestRevision !== cardRequestRevision || requestedProjectId !== projectId.value)
+    return;
   cards.value = result;
+  if (!routeCardHighlightApplied) {
+    routeCardHighlightApplied = true;
+    const requestedCardSessionId = typeof route.query.card === 'string' ? route.query.card : '';
+    if (result.some((card) => card.sessionId === requestedCardSessionId)) {
+      activeCardSessionId.value = requestedCardSessionId;
+    }
+  }
+  if (
+    activeCardSessionId.value &&
+    !result.some((card) => card.sessionId === activeCardSessionId.value)
+  ) {
+    activeCardSessionId.value = '';
+  }
   scheduleTaskRefresh();
 }
 
 async function loadGraph() {
   if (!projectId.value) return;
   const requestedProjectId = projectId.value;
-  const requestedSessionId = scopeSessionId.value;
   const requestRevision = ++graphRequestRevision;
   loading.value = true;
   try {
-    const result = await getProjectMindMap(requestedProjectId, requestedSessionId);
+    const result = await getProjectMindMap(requestedProjectId);
     if (
       disposed ||
       requestRevision !== graphRequestRevision ||
-      requestedProjectId !== projectId.value ||
-      requestedSessionId !== scopeSessionId.value
+      requestedProjectId !== projectId.value
     ) {
       return;
     }
-    graph.value = result;
+    mainGraph.value = result;
     clearSelection();
-    fitGraph();
   } finally {
     if (requestRevision === graphRequestRevision) loading.value = false;
   }
@@ -394,12 +567,14 @@ async function loadGraph() {
 
 async function refreshMindMap() {
   await Promise.all([loadCards(), loadGraph()]);
+  fitGraph();
 }
 
 function scheduleTaskRefresh() {
   if (taskRefreshTimer) clearTimeout(taskRefreshTimer);
   taskRefreshTimer = null;
-  if (!cards.value.some((card) => card.taskStatus === 'queued' || card.taskStatus === 'running')) return;
+  if (!cards.value.some((card) => card.taskStatus === 'queued' || card.taskStatus === 'running'))
+    return;
   taskRefreshTimer = setTimeout(() => {
     taskRefreshTimer = null;
     void loadCards();
@@ -410,11 +585,10 @@ function startMindMapSubscription() {
   if (disposed || !projectId.value) return;
   const currentRevision = ++subscriptionRevision;
   const requestedProjectId = projectId.value;
-  const requestedSessionId = scopeSessionId.value;
   if (subscriptionReconnectTimer) clearTimeout(subscriptionReconnectTimer);
   subscriptionReconnectTimer = null;
   mindMapSubscription?.unsubscribe();
-  mindMapSubscription = subscribeMindMapUpdates(requestedProjectId, requestedSessionId, {
+  mindMapSubscription = subscribeMindMapUpdates(requestedProjectId, '', {
     onData: () => {
       if (currentRevision === subscriptionRevision) void refreshMindMap();
     },
@@ -439,18 +613,15 @@ function stopMindMapSubscription() {
   subscriptionReconnectTimer = null;
 }
 
-async function applyOperations(operations: MindMapOperation[]) {
+async function applyOperations(operations: MindMapOperation[], sessionId = '') {
   const requestedProjectId = projectId.value;
-  const requestedSessionId = scopeSessionId.value;
-  const result = await updateProjectMindMap({
+  await updateProjectMindMap({
     projectId: requestedProjectId,
-    ...(requestedSessionId ? { sessionId: requestedSessionId } : {}),
+    ...(sessionId ? { sessionId } : {}),
     operations,
   });
-  if (requestedProjectId !== projectId.value || requestedSessionId !== scopeSessionId.value) return;
-  graph.value = result;
-  fitGraph();
-  await loadCards();
+  if (requestedProjectId !== projectId.value) return;
+  await refreshMindMap();
 }
 
 function fitGraph() {
@@ -460,6 +631,11 @@ function fitGraph() {
 function selectNode({ node }: NodeMouseEvent) {
   selectedNodeId.value = node.id;
   if ($q.platform.is.mobile) showNodeInfo(node.id);
+}
+
+function toggleCardHighlight(sessionId: string) {
+  activeCardSessionId.value = activeCardSessionId.value === sessionId ? '' : sessionId;
+  clearSelection();
 }
 
 function showNodeInfo(nodeId: string) {
@@ -500,7 +676,7 @@ function openNewNodeDialog() {
 
 function openNodeEditor(nodeId: string) {
   const node = graph.value.nodes.find((item) => item.id === nodeId);
-  if (!node || node.id === rootNodeId) return;
+  if (!node || node.id === rootNodeId || node.changeType === 'deleted') return;
   editingNodeId.value = node.id;
   nodeTitle.value = node.title;
   nodeContent.value = node.content;
@@ -508,7 +684,8 @@ function openNodeEditor(nodeId: string) {
 }
 
 function openDeleteDialog(nodeId: string) {
-  if (nodeId === rootNodeId || !graph.value.nodes.some((node) => node.id === nodeId)) return;
+  const node = graph.value.nodes.find((item) => item.id === nodeId);
+  if (!node || node.id === rootNodeId || node.changeType === 'deleted') return;
   deletingNodeId.value = nodeId;
   deleteDialog.value = true;
 }
@@ -518,15 +695,16 @@ async function saveNode() {
   if (!title || editingNodeId.value === rootNodeId) return;
   saving.value = true;
   try {
-    const nodeId = editingNodeId.value || crypto.randomUUID();
+    const editingNode = graph.value.nodes.find((node) => node.id === editingNodeId.value);
+    const nodeId = editingNode?.entityId || crypto.randomUUID();
     const operation: MindMapOperation = {
       kind: 'upsert_node',
       id: nodeId,
       title,
       content: nodeContent.value,
     };
-    await applyOperations([operation]);
-    selectedNodeId.value = nodeId;
+    await applyOperations([operation], editingNode?.sessionId);
+    selectedNodeId.value = editingNode?.id || nodeId;
     editDialog.value = false;
   } finally {
     saving.value = false;
@@ -534,11 +712,17 @@ async function saveNode() {
 }
 
 async function deleteNode() {
-  if (!deletingNode.value || deletingNode.value.id === rootNodeId) return;
-  const nodeId = deletingNode.value.id;
+  if (
+    !deletingNode.value ||
+    deletingNode.value.id === rootNodeId ||
+    deletingNode.value.changeType === 'deleted'
+  )
+    return;
+  const nodeId = deletingNode.value.entityId;
+  const sessionId = deletingNode.value.sessionId;
   saving.value = true;
   try {
-    await applyOperations([{ kind: 'delete_node', id: nodeId }]);
+    await applyOperations([{ kind: 'delete_node', id: nodeId }], sessionId);
     deleteDialog.value = false;
     deletingNodeId.value = '';
     clearSelection();
@@ -549,15 +733,28 @@ async function deleteNode() {
 
 async function createEdge(connection: Connection) {
   if (!connection.source || !connection.target || connection.source === connection.target) return;
-  await applyOperations([
-    {
-      kind: 'upsert_edge',
-      id: crypto.randomUUID(),
-      sourceId: connection.source,
-      targetId: connection.target,
-      label: '',
-    },
-  ]);
+  const source = graph.value.nodes.find((node) => node.id === connection.source);
+  const target = graph.value.nodes.find((node) => node.id === connection.target);
+  if (!source || !target || source.changeType === 'deleted' || target.changeType === 'deleted')
+    return;
+  const cardSessionIds = new Set([source.sessionId, target.sessionId].filter(Boolean));
+  if (cardSessionIds.size > 1) {
+    $q.notify({ type: 'warning', message: '不同卡片的节点不能直接建立关系' });
+    return;
+  }
+  const sessionId = [...cardSessionIds][0] ?? '';
+  await applyOperations(
+    [
+      {
+        kind: 'upsert_edge',
+        id: crypto.randomUUID(),
+        sourceId: source.entityId,
+        targetId: target.entityId,
+        label: '',
+      },
+    ],
+    sessionId,
+  );
 }
 
 function handlePosition(side: (typeof handleSides)[number]) {
@@ -581,6 +778,13 @@ function taskStatusLabel(status: string) {
     { queued: '排队中', running: '整理中', failed: '失败', completed: '已完成' }[status] ?? status
   );
 }
+
+function taskStatusColor(status: string) {
+  return (
+    { queued: 'grey-7', running: 'primary', failed: 'negative', completed: 'positive' }[status] ??
+    'grey-7'
+  );
+}
 </script>
 
 <style scoped>
@@ -592,16 +796,125 @@ function taskStatusLabel(status: string) {
   overflow: hidden;
 }
 
-.mind-map-scope {
-  width: min(340px, 45vw);
+.mind-map-card-strip {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--ac-border);
+  background: var(--ac-page-bg);
+  scrollbar-width: thin;
 }
 
-.mind-map-task-banner {
+.mind-map-card {
+  width: 240px;
+  min-width: 240px;
+  border-radius: 14px;
+  background: var(--ac-surface);
+  box-shadow: var(--ac-shadow-card);
+  cursor: pointer;
+  transition:
+    filter 160ms ease,
+    transform 160ms ease;
+}
+
+.mind-map-card:hover,
+.mind-map-card:focus-visible {
+  filter: brightness(1.04);
+}
+
+.mind-map-card:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: -2px;
+}
+
+.mind-map-card--active {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.mind-map-card__body {
+  position: relative;
+  min-height: 82px;
+  padding: 10px 36px 10px 12px;
+}
+
+.mind-map-card__badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ac-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mind-map-card__title {
+  display: -webkit-box;
+  margin-top: 7px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mind-map-card__error {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--q-negative);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mind-map-card__retry {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+}
+
+.mind-map-change-legend {
   position: absolute;
   z-index: 5;
-  top: 12px;
+  bottom: 12px;
   left: 16px;
-  max-width: calc(100% - 96px);
+  display: flex;
+  max-width: calc(100% - 32px);
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 7px 10px;
+  border: 1px solid var(--ac-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ac-surface) 92%, transparent);
+  box-shadow: var(--ac-shadow-card);
+  color: var(--ac-text-muted);
+  font-size: 12px;
+}
+
+.mind-map-change-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mind-map-change-legend__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.mind-map-change-legend__dot--added {
+  background: var(--q-positive);
+}
+
+.mind-map-change-legend__dot--modified {
+  background: var(--q-warning);
+}
+
+.mind-map-change-legend__dot--deleted {
+  background: var(--q-negative);
 }
 
 .mind-map-canvas {
@@ -628,6 +941,7 @@ function taskStatusLabel(status: string) {
   display: flex;
   width: 172px;
   min-height: 48px;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 10px 14px;
@@ -645,8 +959,21 @@ function taskStatusLabel(status: string) {
     opacity 160ms ease;
 }
 
-.mind-map-node-content > span {
+.mind-map-node-content__title {
+  max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mind-map-node-content__card {
+  display: block;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--ac-text-muted);
+  font-size: 10px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -673,8 +1000,11 @@ function taskStatusLabel(status: string) {
   white-space: pre-wrap;
 }
 
-.mind-map-canvas :deep(.vue-flow__node) {
-  transition: opacity 160ms ease;
+.mind-map-canvas :deep(.vue-flow__node),
+.mind-map-canvas :deep(.vue-flow__edge) {
+  transition:
+    filter 160ms ease,
+    opacity 160ms ease;
 }
 
 .mind-map-canvas :deep(.mind-map-node--root .mind-map-node-content) {
@@ -695,8 +1025,36 @@ function taskStatusLabel(status: string) {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--q-primary) 14%, transparent);
 }
 
+.mind-map-canvas :deep(.mind-map-node--added .mind-map-node-content) {
+  border-color: var(--q-positive);
+  background: color-mix(in srgb, var(--q-positive) 12%, var(--ac-surface));
+}
+
+.mind-map-canvas :deep(.mind-map-node--modified .mind-map-node-content) {
+  border-color: var(--q-warning);
+  background: color-mix(in srgb, var(--q-warning) 14%, var(--ac-surface));
+}
+
+.mind-map-canvas :deep(.mind-map-node--deleted .mind-map-node-content) {
+  border-color: var(--q-negative);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--q-negative) 10%, var(--ac-surface));
+  color: var(--q-negative);
+  text-decoration: line-through;
+}
+
+.mind-map-canvas :deep(.mind-map-node--deleted .vue-flow__handle) {
+  display: none;
+}
+
+.mind-map-canvas :deep(.mind-map-element--highlighted) {
+  filter: brightness(1.14);
+  opacity: 1;
+}
+
 .mind-map-canvas :deep(.mind-map-element--muted) {
-  opacity: 0.16;
+  filter: brightness(0.58);
+  opacity: 0.2;
 }
 
 .mind-map-canvas :deep(.vue-flow__edge-path) {
@@ -731,13 +1089,20 @@ function taskStatusLabel(status: string) {
 }
 
 @media (max-width: 699px) {
-  .mind-map-scope {
-    width: 180px;
+  .mind-map-card-strip {
+    gap: 8px;
+    padding: 8px;
   }
 
-  .mind-map-task-banner {
+  .mind-map-card {
+    width: min(76vw, 250px);
+    min-width: min(76vw, 250px);
+  }
+
+  .mind-map-change-legend {
+    bottom: 8px;
     left: 8px;
-    max-width: calc(100% - 64px);
+    max-width: calc(100% - 16px);
   }
 }
 </style>

@@ -91,7 +91,7 @@ test('mind map node long-press menu edits in a dialog and confirms cascading del
   assert.match(page, /<q-dialog v-model="editDialog">/);
   assert.match(page, /<q-dialog v-model="deleteDialog">/);
   assert.match(page, /确认删除/);
-  assert.match(page, /applyOperations\(\[\{ kind: 'delete_node', id: nodeId \}\]\)/);
+  assert.match(page, /applyOperations\(\[\{ kind: 'delete_node', id: nodeId \}\], sessionId\)/);
   assert.doesNotMatch(page, /\.map\(\(edge\) => \(\{ kind: 'delete_edge'/);
 });
 
@@ -105,6 +105,74 @@ test('mind map node information opens on desktop hover and mobile click with a c
   assert.match(page, /\{\{ data\.content \|\| '暂无节点内容' \}\}/);
   assert.match(page, /aria-label="关闭节点信息"/);
   assert.match(page, /@click="closeNodeInfo"/);
+});
+
+test('mind map combines compact card deltas without a graph selector', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+  const service = readSource('../src/services/mindMaps.ts');
+  const schema = readSource('../../internal/interfaces/graphql/graph/schema.graphqls');
+
+  assert.match(service, /changeType: 'unchanged' \| 'added' \| 'modified' \| 'deleted'/);
+  assert.match(service, /nodes \{ id title content changeType \}/);
+  assert.match(schema, /type MindMapNode \{[\s\S]*changeType: String!/);
+  assert.match(service, /nodes: MindMapNode\[\]/);
+  assert.match(service, /modifiedNodeIds: string\[\]/);
+  assert.match(service, /deletedNodeIds: string\[\]/);
+  assert.match(
+    schema,
+    /type MindMapCard \{[\s\S]*nodes: \[MindMapNode!\]![\s\S]*edges: \[MindMapEdge!\]![\s\S]*modifiedNodeIds: \[ID!\]![\s\S]*deletedNodeIds: \[ID!\]!/,
+  );
+  assert.doesNotMatch(page, /<q-select/);
+  assert.doesNotMatch(page, /scopeSessionId/);
+  assert.match(page, /v-for="card in cards"/);
+  assert.match(page, /combineMindMaps\(mainGraph\.value, cards\.value\)/);
+  assert.match(page, /cardDisplayId\(card\.sessionId, node\.id\)/);
+  assert.match(page, /v-if="cards\.length" class="mind-map-change-legend"/);
+  assert.match(page, /data\.cardLabel/);
+  assert.match(page, /mind-map-node--added/);
+  assert.match(page, /mind-map-node--modified/);
+  assert.match(page, /mind-map-node--deleted/);
+  assert.match(page, /connectable: node\.changeType !== 'deleted'/);
+  assert.match(page, /data\.changeType === 'deleted'/);
+  assert.match(page, /var\(--q-positive\)/);
+  assert.match(page, /var\(--q-warning\)/);
+  assert.match(page, /var\(--q-negative\)/);
+});
+
+test('mind map cards toggle related elements with brightness without replacing operation colors', () => {
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+
+  assert.match(page, /:aria-pressed="activeCardSessionId === card\.sessionId"/);
+  assert.match(page, /@click="toggleCardHighlight\(card\.sessionId\)"/);
+  assert.match(page, /@keyup\.enter\.self="toggleCardHighlight\(card\.sessionId\)"/);
+  assert.match(page, /@keyup\.space\.self\.prevent="toggleCardHighlight\(card\.sessionId\)"/);
+  assert.match(page, /const activeCardElementIds = computed/);
+  assert.match(page, /card\.modifiedNodeIds, \.\.\.card\.deletedNodeIds/);
+  assert.match(page, /cardDisplayId\(card\.sessionId, edge\.id\)/);
+  assert.match(page, /'mind-map-element--highlighted'/);
+  assert.match(page, /\.mind-map-element--highlighted[\s\S]*filter: brightness\(1\.14\)/);
+  assert.match(page, /\.mind-map-element--muted[\s\S]*filter: brightness\(0\.58\)/);
+  assert.match(page, /\.mind-map-node--added[\s\S]*var\(--q-positive\)/);
+  assert.match(page, /\.mind-map-node--modified[\s\S]*var\(--q-warning\)/);
+  assert.match(page, /\.mind-map-node--deleted[\s\S]*var\(--q-negative\)/);
+  assert.doesNotMatch(page, /mind-map-element--highlighted[^{]*\{[^}]*color:/s);
+  assert.doesNotMatch(page, /mind-map-element--highlighted[^{]*\{[^}]*stroke:/s);
+});
+
+test('session detail links to its mind map card and the page applies the route highlight once', () => {
+  const detail = readSource('../src/components/SessionDetailView.vue');
+  const detailPage = readSource('../src/pages/SessionDetailPage.vue');
+  const page = readSource('../src/pages/ProjectMindMapPage.vue');
+
+  assert.match(detailPage, /:mind-map-available="mindMapAvailable"/);
+  assert.match(detailPage, /mindMapRealtime\.value = mindMapAvailable\.value/);
+  assert.match(detail, /name: 'project-mind-map'/);
+  assert.match(detail, /params: \{ projectId: session\.value\?\.projectId \?\? '' \}/);
+  assert.match(detail, /query: \{ card: sessionId \}/);
+  assert.match(detail, /v-if="mindMapAvailable"[\s\S]*label="思维图"[\s\S]*:to="mindMapRoute"/);
+  assert.match(page, /let routeCardHighlightApplied = false/);
+  assert.match(page, /typeof route\.query\.card === 'string' \? route\.query\.card : ''/);
+  assert.match(page, /activeCardSessionId\.value = requestedCardSessionId/);
 });
 
 test('radial layout centers the root, groups connected depths into rings, and curves edges by facing handles', () => {
@@ -160,13 +228,13 @@ test('GraphQL exposes project main and card graphs plus async task state', () =>
   assert.match(schema, /taskError: String!/);
 });
 
-test('mind map refresh rejects stale scope responses and follows graph and task changes', () => {
+test('mind map refresh rejects stale project responses and follows all graph and task changes', () => {
   const page = readSource('../src/pages/ProjectMindMapPage.vue');
   const service = readSource('../src/services/mindMaps.ts');
 
   assert.match(page, /requestRevision !== graphRequestRevision/);
-  assert.match(page, /requestedSessionId !== scopeSessionId\.value/);
-  assert.match(page, /subscribeMindMapUpdates/);
+  assert.match(page, /subscribeMindMapUpdates\(requestedProjectId, '',/);
+  assert.doesNotMatch(page, /requestedSessionId/);
   assert.match(page, /card\.taskStatus === 'queued' \|\| card\.taskStatus === 'running'/);
   assert.match(page, /Promise\.all\(\[loadCards\(\), loadGraph\(\)\]\)/);
   assert.match(service, /subscription MindMapUpdates/);

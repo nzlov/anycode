@@ -182,6 +182,98 @@ func TestTouchAlwaysAdvancesGraphRevision(t *testing.T) {
 	}
 }
 
+func TestCompactOverlayKeepsOnlyEffectiveEntityDeltas(t *testing.T) {
+	baseTime := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	root, existing, removed := RootNodeID, NodeID("existing"), NodeID("removed")
+	base := Graph{
+		ProjectID: "project-1",
+		Nodes: []Node{
+			{ID: root, Title: "AnyCode", TitleUpdatedAt: baseTime},
+			{ID: existing, Title: "Existing", Content: "old", TitleUpdatedAt: baseTime, ContentUpdatedAt: baseTime},
+			{ID: removed, Title: "Removed", TitleUpdatedAt: baseTime},
+		},
+		Edges: []Edge{{ID: "root-removed", SourceID: root, TargetID: removed, SourceUpdatedAt: baseTime, TargetUpdatedAt: baseTime}},
+	}
+	added, ghost := NodeID("added"), NodeID("ghost")
+	addedTitle, addedContent, ghostTitle := "Added", "details", "Ghost"
+	newContent, oldContent := "new", "old"
+	label := "contains"
+	overlay := Overlay{ProjectID: "project-1", SessionID: "session-1", Changes: []Change{
+		{ID: "1", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertNode, EntityID: string(added), Title: &addedTitle, OccurredAt: baseTime.Add(time.Minute)},
+		{ID: "2", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertNode, EntityID: string(added), Content: &addedContent, OccurredAt: baseTime.Add(2 * time.Minute)},
+		{ID: "3", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertNode, EntityID: string(existing), Content: &newContent, OccurredAt: baseTime.Add(3 * time.Minute)},
+		{ID: "4", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertNode, EntityID: string(existing), Content: &oldContent, OccurredAt: baseTime.Add(4 * time.Minute)},
+		{ID: "5", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertEdge, EntityID: "root-added", SourceID: &root, TargetID: &added, Label: &label, OccurredAt: baseTime.Add(5 * time.Minute)},
+		{ID: "6", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeDeleteNode, EntityID: string(removed), OccurredAt: baseTime.Add(6 * time.Minute)},
+		{ID: "7", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertNode, EntityID: string(ghost), Title: &ghostTitle, OccurredAt: baseTime.Add(7 * time.Minute)},
+		{ID: "8", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeDeleteNode, EntityID: string(ghost), OccurredAt: baseTime.Add(8 * time.Minute)},
+	}}
+
+	compacted := CompactOverlay(base, overlay)
+	if len(compacted.Changes) != 4 {
+		t.Fatalf("compacted changes = %#v", compacted.Changes)
+	}
+	byEntity := make(map[string][]Change, len(compacted.Changes))
+	for _, change := range compacted.Changes {
+		byEntity[change.EntityID] = append(byEntity[change.EntityID], change)
+	}
+	addedChanges := byEntity[string(added)]
+	if len(addedChanges) != 2 || addedChanges[0].Title == nil || addedChanges[1].Content == nil || *addedChanges[0].Title != addedTitle || *addedChanges[1].Content != addedContent {
+		t.Fatalf("added node changes = %#v", addedChanges)
+	}
+	if changes := byEntity["root-added"]; len(changes) != 1 || changes[0].Kind != ChangeUpsertEdge || changes[0].SourceID == nil || changes[0].TargetID == nil {
+		t.Fatalf("added edge change = %#v", changes)
+	}
+	if changes := byEntity[string(removed)]; len(changes) != 1 || changes[0].Kind != ChangeDeleteNode {
+		t.Fatalf("deleted node change = %#v", changes)
+	}
+	if _, found := byEntity[string(existing)]; found {
+		t.Fatalf("reverted node retained a delta: %#v", compacted.Changes)
+	}
+	if _, found := byEntity[string(ghost)]; found {
+		t.Fatalf("added then deleted node retained a delta: %#v", compacted.Changes)
+	}
+
+	want := Materialize(base, overlay.Changes)
+	got := Materialize(base, compacted.Changes)
+	if len(got.Nodes) != len(want.Nodes) || len(got.Edges) != len(want.Edges) {
+		t.Fatalf("materialized compact graph = %#v, want %#v", got, want)
+	}
+	gotAdded := got.Nodes[nodeIndex(got.Nodes, added)]
+	wantAdded := want.Nodes[nodeIndex(want.Nodes, added)]
+	if !gotAdded.TitleUpdatedAt.Equal(wantAdded.TitleUpdatedAt) || !gotAdded.ContentUpdatedAt.Equal(wantAdded.ContentUpdatedAt) {
+		t.Fatalf("compacted node timestamps = %#v, want %#v", gotAdded, wantAdded)
+	}
+}
+
+func TestCompactOverlayPreservesCascadedEdgeDeletionAfterNodeRecreation(t *testing.T) {
+	baseTime := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
+	root, child := RootNodeID, NodeID("child")
+	base := Graph{
+		ProjectID: "project-1",
+		Nodes: []Node{
+			{ID: root, Title: "AnyCode", TitleUpdatedAt: baseTime},
+			{ID: child, Title: "Child", TitleUpdatedAt: baseTime},
+		},
+		Edges: []Edge{{ID: "root-child", SourceID: root, TargetID: child, SourceUpdatedAt: baseTime, TargetUpdatedAt: baseTime}},
+	}
+	title := "Child"
+	overlay := Overlay{ProjectID: "project-1", SessionID: "session-1", Changes: []Change{
+		{ID: "delete", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeDeleteNode, EntityID: string(child), OccurredAt: baseTime.Add(time.Minute)},
+		{ID: "recreate", ProjectID: "project-1", SessionID: "session-1", Kind: ChangeUpsertNode, EntityID: string(child), Title: &title, OccurredAt: baseTime.Add(2 * time.Minute)},
+	}}
+
+	compacted := CompactOverlay(base, overlay)
+	if len(compacted.Changes) != 1 || compacted.Changes[0].Kind != ChangeDeleteEdge || compacted.Changes[0].EntityID != "root-child" {
+		t.Fatalf("compacted changes = %#v", compacted.Changes)
+	}
+	want := Materialize(base, overlay.Changes)
+	got := Materialize(base, compacted.Changes)
+	if len(got.Nodes) != len(want.Nodes) || len(got.Edges) != len(want.Edges) {
+		t.Fatalf("materialized compact graph = %#v, want %#v", got, want)
+	}
+}
+
 func timePointer(value time.Time) *time.Time {
 	return &value
 }

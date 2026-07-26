@@ -8,6 +8,7 @@
     v-else-if="mode"
     :session-id="sessionId"
     layout="responsive"
+    :mind-map-available="mindMapAvailable"
     :mind-map-realtime="mindMapRealtime"
     page
     @session-title="emit('session-title', $event)"
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 const route = useRoute();
 const sessionId = computed(() => String(route.params.id ?? ''));
 const mode = ref<SessionMode | ''>('');
+const mindMapAvailable = ref(false);
 const mindMapRealtime = ref(false);
 const sessionProjectId = ref('');
 const generalSettingsInvalidation = useGeneralSettingsInvalidation();
@@ -57,9 +59,9 @@ async function refreshMindMapMode() {
     getGeneralSettings().catch(() => null),
     listProjects().catch(() => []),
   ]);
-  mindMapRealtime.value =
+  mindMapAvailable.value =
     Boolean(settings?.mindMapEnabled) &&
-    settings?.mindMapMode === 'realtime' &&
     projects.some((project) => project.id === sessionProjectId.value && project.mindMapEnabled);
+  mindMapRealtime.value = mindMapAvailable.value && settings?.mindMapMode === 'realtime';
 }
 </script>

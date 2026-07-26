@@ -85,6 +85,59 @@ func TestServiceMaintainsFreeFormGraphWithSystemRoot(t *testing.T) {
 	}
 }
 
+func TestCardGraphDerivesNodeChangesWithoutExposingDeletedNodesToAgentQueries(t *testing.T) {
+	ctx := context.Background()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{
+		Enabled: true, Mode: settingdomain.MindMapModeRealtime, MaxConcurrent: 1,
+	}}
+	project, session := saveMindMapTestProjectAndSession(t, store, "session-diff")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
+	service.generateID = func() (domain.ChangeID, error) { return "change", nil }
+	unchangedTitle, modifiedTitle, deletedTitle := "Unchanged", "Modified", "Deleted"
+	if _, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID),
+		Operations: []OperationInput{
+			{Kind: domain.ChangeUpsertNode, ID: "unchanged", Title: &unchangedTitle},
+			{Kind: domain.ChangeUpsertNode, ID: "modified", Title: &modifiedTitle},
+			{Kind: domain.ChangeUpsertNode, ID: "deleted", Title: &deletedTitle},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	modifiedContent, addedTitle := "Updated in card", "Added"
+	cardGraph, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID),
+		Operations: []OperationInput{
+			{Kind: domain.ChangeUpsertNode, ID: "modified", Content: &modifiedContent},
+			{Kind: domain.ChangeUpsertNode, ID: "added", Title: &addedTitle},
+			{Kind: domain.ChangeDeleteNode, ID: "deleted"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeByID := make(map[domain.NodeID]NodeChangeType, len(cardGraph.Nodes))
+	for _, node := range cardGraph.Nodes {
+		changeByID[node.ID] = node.ChangeType
+	}
+	if changeByID[domain.RootNodeID] != NodeUnchanged || changeByID["unchanged"] != NodeUnchanged ||
+		changeByID["modified"] != NodeModified || changeByID["added"] != NodeAdded || changeByID["deleted"] != NodeDeleted {
+		t.Fatalf("card changes = %#v", changeByID)
+	}
+
+	agentGraph, err := service.GetForSession(ctx, domain.SessionID(session.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, node := range agentGraph.Nodes {
+		if node.ID == "deleted" || node.ChangeType != NodeUnchanged {
+			t.Fatalf("agent graph contains diff-only node state: %#v", agentGraph.Nodes)
+		}
+	}
+}
+
 func TestActiveAsyncTaskCanFinishAfterGlobalModeIsDisabled(t *testing.T) {
 	ctx := context.Background()
 	store := openMindMapTestStore(t)
@@ -181,6 +234,39 @@ func TestSearchGraphMatchesContentAndReturnsOneHopRelationships(t *testing.T) {
 	}
 }
 
+func TestCardDeltaContainsOnlyAddedNodesAndTheirRelationships(t *testing.T) {
+	base := domain.Graph{
+		Nodes: []domain.Node{
+			{ID: domain.RootNodeID, Title: "AnyCode"},
+			{ID: "modified", Title: "Before"},
+			{ID: "deleted", Title: "Deleted"},
+		},
+	}
+	current := domain.Graph{
+		Nodes: []domain.Node{
+			{ID: domain.RootNodeID, Title: "AnyCode"},
+			{ID: "modified", Title: "After"},
+			{ID: "added", Title: "Added"},
+		},
+		Edges: []domain.Edge{{ID: "root-added", SourceID: domain.RootNodeID, TargetID: "added", Label: "contains"}},
+	}
+
+	nodes, edges, modifiedNodeIDs, deletedNodeIDs := cardDeltaDTO(base, current)
+
+	if len(nodes) != 1 || nodes[0].ID != "added" || nodes[0].ChangeType != NodeAdded {
+		t.Fatalf("card nodes = %#v", nodes)
+	}
+	if len(edges) != 1 || edges[0].ID != "root-added" {
+		t.Fatalf("card edges = %#v", edges)
+	}
+	if len(modifiedNodeIDs) != 1 || modifiedNodeIDs[0] != "modified" {
+		t.Fatalf("modified node ids = %#v", modifiedNodeIDs)
+	}
+	if len(deletedNodeIDs) != 1 || deletedNodeIDs[0] != "deleted" {
+		t.Fatalf("deleted node ids = %#v", deletedNodeIDs)
+	}
+}
+
 func TestWatchEmitsMinimalChangeAfterGraphUpdate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,6 +292,37 @@ func TestWatchEmitsMinimalChangeAfterGraphUpdate(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for mind map change")
+	}
+}
+
+func TestProjectWatchEmitsAfterCardOverlayUpdate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := openMindMapTestStore(t)
+	settings := &testMindMapSettings{configuration: settingdomain.MindMapConfiguration{Enabled: true, Mode: settingdomain.MindMapModeRealtime}}
+	project, session := saveMindMapTestProjectAndSession(t, store, "session-card-watch")
+	service := New(store.MindMaps(), store.Projects(), store.Sessions(), settings, store)
+	service.watchInterval = 5 * time.Millisecond
+	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
+	service.generateID = func() (domain.ChangeID, error) { return "card-watch-change", nil }
+	changes, err := service.Watch(ctx, GetInput{ProjectID: domain.ProjectID(project.ID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "card feature"
+	if _, err := service.Update(ctx, UpdateInput{
+		ProjectID: domain.ProjectID(project.ID), SessionID: domain.SessionID(session.ID),
+		Operations: []OperationInput{{Kind: domain.ChangeUpsertNode, ID: "card-feature", Title: &title}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case change := <-changes:
+		if change.ProjectID != domain.ProjectID(project.ID) || change.SessionID != "" || change.UpdatedAt.IsZero() {
+			t.Fatalf("change = %#v", change)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for card mind map change")
 	}
 }
 

@@ -255,6 +255,196 @@ func MergeOverlay(graph *Graph, overlay Overlay) {
 	}
 }
 
+// CompactOverlay replaces an operation history with the effective per-entity delta from the project graph.
+func CompactOverlay(base Graph, overlay Overlay) Overlay {
+	candidate := cloneGraph(base)
+	ordered := append([]Change(nil), overlay.Changes...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].OccurredAt.Before(ordered[j].OccurredAt) })
+	type nodeChanges struct {
+		title   *Change
+		content *Change
+		deleted *Change
+	}
+	type edgeChanges struct {
+		endpoints *Change
+		label     *Change
+		deleted   *Change
+	}
+	latestNodeChanges := make(map[NodeID]nodeChanges)
+	latestEdgeChanges := make(map[EdgeID]edgeChanges)
+	for _, change := range ordered {
+		Apply(&candidate, change)
+		switch change.Kind {
+		case ChangeUpsertNode:
+			id := NodeID(change.EntityID)
+			fields := latestNodeChanges[id]
+			if change.Title != nil {
+				value := change
+				fields.title = &value
+			}
+			if change.Content != nil {
+				value := change
+				fields.content = &value
+			}
+			latestNodeChanges[id] = fields
+		case ChangeDeleteNode:
+			id := NodeID(change.EntityID)
+			fields := latestNodeChanges[id]
+			value := change
+			fields.deleted = &value
+			latestNodeChanges[id] = fields
+		case ChangeUpsertEdge:
+			id := EdgeID(change.EntityID)
+			fields := latestEdgeChanges[id]
+			if change.SourceID != nil || change.TargetID != nil {
+				value := change
+				fields.endpoints = &value
+			}
+			if change.Label != nil {
+				value := change
+				fields.label = &value
+			}
+			latestEdgeChanges[id] = fields
+		case ChangeDeleteEdge:
+			id := EdgeID(change.EntityID)
+			fields := latestEdgeChanges[id]
+			value := change
+			fields.deleted = &value
+			latestEdgeChanges[id] = fields
+		}
+	}
+	base = Visible(base)
+	current := Visible(candidate)
+	baseNodes := make(map[NodeID]Node, len(base.Nodes))
+	currentNodes := make(map[NodeID]Node, len(current.Nodes))
+	for _, node := range base.Nodes {
+		baseNodes[node.ID] = node
+	}
+	for _, node := range current.Nodes {
+		currentNodes[node.ID] = node
+	}
+	baseEdges := make(map[EdgeID]Edge, len(base.Edges))
+	currentEdges := make(map[EdgeID]Edge, len(current.Edges))
+	for _, edge := range base.Edges {
+		baseEdges[edge.ID] = edge
+	}
+	for _, edge := range current.Edges {
+		currentEdges[edge.ID] = edge
+	}
+
+	compacted := make([]Change, 0, len(latestNodeChanges)+len(latestEdgeChanges))
+	for _, node := range current.Nodes {
+		baseNode, found := baseNodes[node.ID]
+		fields := latestNodeChanges[node.ID]
+		titleChanged := !found || node.Title != baseNode.Title
+		contentChanged := (!found && node.Content != "") || (found && node.Content != baseNode.Content)
+		if titleChanged && contentChanged && fields.title != nil && fields.content != nil && fields.title.ID == fields.content.ID && fields.title.OccurredAt.Equal(fields.content.OccurredAt) {
+			change := *fields.title
+			title, content := node.Title, node.Content
+			change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
+			change.Title, change.Content = &title, &content
+			change.SourceID, change.TargetID, change.Label = nil, nil, nil
+			compacted = append(compacted, change)
+			continue
+		}
+		if titleChanged && fields.title != nil {
+			change := *fields.title
+			title := node.Title
+			change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
+			change.Title, change.Content = &title, nil
+			change.SourceID, change.TargetID, change.Label = nil, nil, nil
+			compacted = append(compacted, change)
+		}
+		if contentChanged && fields.content != nil {
+			change := *fields.content
+			content := node.Content
+			change.Kind, change.EntityID = ChangeUpsertNode, string(node.ID)
+			change.Title, change.Content = nil, &content
+			change.SourceID, change.TargetID, change.Label = nil, nil, nil
+			compacted = append(compacted, change)
+		}
+	}
+	for _, edge := range current.Edges {
+		baseEdge, found := baseEdges[edge.ID]
+		fields := latestEdgeChanges[edge.ID]
+		endpointsChanged := !found || edge.SourceID != baseEdge.SourceID || edge.TargetID != baseEdge.TargetID
+		labelChanged := (!found && edge.Label != "") || (found && edge.Label != baseEdge.Label)
+		if endpointsChanged && labelChanged && fields.endpoints != nil && fields.label != nil && fields.endpoints.ID == fields.label.ID && fields.endpoints.OccurredAt.Equal(fields.label.OccurredAt) {
+			change := *fields.endpoints
+			sourceID, targetID, label := edge.SourceID, edge.TargetID, edge.Label
+			change.Kind, change.EntityID = ChangeUpsertEdge, string(edge.ID)
+			change.Title, change.Content = nil, nil
+			change.SourceID, change.TargetID, change.Label = &sourceID, &targetID, &label
+			compacted = append(compacted, change)
+			continue
+		}
+		if endpointsChanged && fields.endpoints != nil {
+			change := *fields.endpoints
+			sourceID, targetID := edge.SourceID, edge.TargetID
+			change.Kind, change.EntityID = ChangeUpsertEdge, string(edge.ID)
+			change.Title, change.Content, change.Label = nil, nil, nil
+			change.SourceID, change.TargetID = &sourceID, &targetID
+			compacted = append(compacted, change)
+		}
+		if labelChanged && fields.label != nil {
+			change := *fields.label
+			label := edge.Label
+			change.Kind, change.EntityID = ChangeUpsertEdge, string(edge.ID)
+			change.Title, change.Content, change.SourceID, change.TargetID = nil, nil, nil, nil
+			change.Label = &label
+			compacted = append(compacted, change)
+		}
+	}
+	for _, edge := range base.Edges {
+		if _, found := currentEdges[edge.ID]; found {
+			continue
+		}
+		if _, sourceExists := currentNodes[edge.SourceID]; !sourceExists {
+			continue
+		}
+		if _, targetExists := currentNodes[edge.TargetID]; !targetExists {
+			continue
+		}
+		fields := latestEdgeChanges[edge.ID]
+		var change Change
+		if fields.deleted != nil {
+			change = *fields.deleted
+		} else {
+			sourceDelete := latestNodeChanges[edge.SourceID].deleted
+			targetDelete := latestNodeChanges[edge.TargetID].deleted
+			switch {
+			case sourceDelete == nil && targetDelete == nil:
+				continue
+			case targetDelete == nil || (sourceDelete != nil && sourceDelete.OccurredAt.Before(targetDelete.OccurredAt)):
+				change = *sourceDelete
+			default:
+				change = *targetDelete
+			}
+			change.ID = ChangeID(string(change.ID) + ":edge:" + string(edge.ID))
+		}
+		change.Kind = ChangeDeleteEdge
+		change.EntityID = string(edge.ID)
+		change.Title, change.Content, change.SourceID, change.TargetID, change.Label = nil, nil, nil, nil, nil
+		compacted = append(compacted, change)
+	}
+	for _, node := range base.Nodes {
+		if _, found := currentNodes[node.ID]; found {
+			continue
+		}
+		change := latestNodeChanges[node.ID].deleted
+		if change == nil {
+			continue
+		}
+		value := *change
+		value.Kind = ChangeDeleteNode
+		value.EntityID = string(node.ID)
+		value.Title, value.Content, value.SourceID, value.TargetID, value.Label = nil, nil, nil, nil, nil
+		compacted = append(compacted, value)
+	}
+	overlay.Changes = compacted
+	return overlay
+}
+
 func applyNode(graph *Graph, change Change) {
 	id := NodeID(change.EntityID)
 	index := nodeIndex(graph.Nodes, id)

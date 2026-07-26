@@ -68,9 +68,17 @@ test('session tunnel entry opens one tunnel directly and offers named choices fo
 test('session information shows named tunnels below token usage and removes obsolete blocks', () => {
   assert.match(
     detail,
+    /caption>分支<\/q-item-label>[\s\S]*基础：\{\{ session\?\.branch \?\? '-' \}\}[\s\S]*当前：\{\{ session\?\.worktreeBranch \|\| '-' \}\}/,
+  );
+  assert.doesNotMatch(detail, /caption>工作分支<\/q-item-label>/);
+  assert.doesNotMatch(detail, /caption>更新时间<\/q-item-label>/);
+  assert.match(
+    detail,
     /<q-item-label caption>Token 用量<\/q-item-label>[\s\S]*<q-item-label caption>隧道<\/q-item-label>/,
   );
+  assert.match(detail, /<q-item v-if="sessionTunnels\.length">[\s\S]*caption>隧道</);
   assert.match(detail, /v-for="tunnel in sessionTunnels"[\s\S]*\{\{ tunnel\.name \}\}/);
+  assert.doesNotMatch(detail, /<q-item-label v-else>-<\/q-item-label>/);
   assert.doesNotMatch(detail, /<q-item-label caption>工作树清理<\/q-item-label>/);
   assert.doesNotMatch(detail, /<q-item-label caption>状态<\/q-item-label>/);
   assert.doesNotMatch(detail, /<q-item-label caption>权限<\/q-item-label>/);

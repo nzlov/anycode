@@ -8,6 +8,7 @@ export interface MindMapNode {
   id: string;
   title: string;
   content: string;
+  changeType: 'unchanged' | 'added' | 'modified' | 'deleted';
 }
 
 export interface MindMapEdge {
@@ -32,6 +33,10 @@ export interface MindMapCard {
   taskId?: string | null;
   taskStatus: string;
   taskError: string;
+  nodes: MindMapNode[];
+  edges: MindMapEdge[];
+  modifiedNodeIds: string[];
+  deletedNodeIds: string[];
 }
 
 export interface MindMapUpdate {
@@ -53,7 +58,7 @@ export interface MindMapOperation {
 const graphFields = `
   projectId
   sessionId
-  nodes { id title content }
+  nodes { id title content changeType }
   edges { id sourceId targetId label }
   updatedAt
 `;
@@ -65,6 +70,10 @@ const cardFields = `
   taskId
   taskStatus
   taskError
+  nodes { id title content changeType }
+  edges { id sourceId targetId label }
+  modifiedNodeIds
+  deletedNodeIds
 `;
 
 export async function getProjectMindMap(projectId: string, sessionId = '') {
@@ -99,10 +108,7 @@ export async function updateProjectMindMap(input: {
   sessionId?: string;
   operations: MindMapOperation[];
 }) {
-  const data = await graphqlFetch<
-    { updateProjectMindMap: MindMapGraph },
-    { input: typeof input }
-  >({
+  const data = await graphqlFetch<{ updateProjectMindMap: MindMapGraph }, { input: typeof input }>({
     query: `
       mutation UpdateProjectMindMap($input: UpdateMindMapInput!) {
         updateProjectMindMap(input: $input) { ${graphFields} }
